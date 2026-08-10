@@ -74,6 +74,30 @@ the site-wide queue is at Site administration → Courses → Manage enrolment a
 every course, at course level that course, and in a user's own user context it covers
 that user's applications, which is what allows mentor-style delegation.
 
+### Setting up a mentor
+
+A mentor is somebody who decides on the applications of specific users, wherever those
+users apply, without holding the capability in the course or at system level. Moodle's
+standard mentor pattern configures this in three steps:
+
+1. **Site administration → Users → Permissions → Define roles → Add a new role.** Give it
+   a name such as "Application mentor" and allow `enrol/apply:manageapplications`.
+2. On the same form, under **Context types where this role may be assigned**, tick
+   **User**. Without this the role cannot be attached to a person.
+3. Open the mentee's profile and use **Preferences → Roles → Assign roles relative to
+   this user** to give the mentor that role.
+
+The mentor then sees exactly those users' applications at Site administration → Courses →
+Manage enrolment applications, and can decide on them.
+
+One limitation is worth knowing before you rely on it. A Moodle capability declares a
+single context level, and this one declares `CONTEXT_COURSE`; the user-context override
+screen lists only capabilities declared at `CONTEXT_USER`, so this capability does not
+appear there. Defining and assigning the role works exactly as described above — what you
+cannot do is override the capability for one individual mentee. Core lives with the same
+constraint for `moodle/grade:viewall`, which its own declaration marks as
+"CONTEXT_COURSE // and CONTEXT_USER".
+
 ## Privacy
 
 The plugin stores the comment submitted with an application in

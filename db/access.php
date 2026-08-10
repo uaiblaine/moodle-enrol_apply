@@ -41,7 +41,20 @@ $capabilities = [
 
     /* Decide on enrolment applications.
      * Granted at system level it covers every course, which is what the
-     * Site administration -> Courses -> Manage enrolment applications page uses. */
+     * Site administration -> Courses -> Manage enrolment applications page uses.
+     *
+     * This capability is also evaluated against the applicant's own user context, which
+     * is what lets a mentor decide for the users assigned to them. A capability can only
+     * declare one context level, so CONTEXT_COURSE is the one recorded here; core has the
+     * same situation with moodle/grade:viewall, whose declaration in lib/db/access.php
+     * carries the comment "and CONTEXT_USER".
+     *
+     * The consequence is limited to one screen: context_user::get_capabilities() lists
+     * only capabilities declared at CONTEXT_USER (plus a hardcoded moodle/grade:viewall
+     * that a plugin cannot extend), so this one does not appear when overriding
+     * permissions on a user. Defining the mentor role still works, because
+     * admin/roles/define.php runs in the system context, where every capability is
+     * listed. See the README for the three steps. */
     'enrol/apply:manageapplications' => [
         'captype' => 'write',
         'contextlevel' => CONTEXT_COURSE,
