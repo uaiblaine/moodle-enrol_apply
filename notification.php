@@ -15,16 +15,39 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
+ * Message sent by the enrolment upon approval plugin.
+ *
  * @package    enrol_apply
+ * @copyright  2026 Anderson Blaine
  * @copyright  2016 sudile GbR (http://www.sudile.com)
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @author     Johannes Burk <johannes.burk@sudile.com>
  */
 
-defined('MOODLE_INTERNAL') || die();
 
+/**
+ * Message sent by the enrolment upon approval plugin.
+ *
+ * @package    enrol_apply
+ * @copyright  2026 Anderson Blaine
+ * @copyright  2016 sudile GbR (http://www.sudile.com)
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
 class enrol_apply_notification extends \core\message\message {
-    public function __construct($to, $from, $type, $subject, $content, $url,$courseid) {
+    /**
+     * Build a notification of the given type.
+     *
+     * @param stdClass $to Recipient user record.
+     * @param stdClass $from Sender user record.
+     * @param string $type One of application, confirmation, cancelation or waitinglist.
+     * @param string $subject Message subject.
+     * @param string $content Message body as HTML.
+     * @param moodle_url $url Link offered as the message context.
+     * @param int $courseid Course the message is about.
+     * @throws invalid_parameter_exception When the notification type is not supported.
+     */
+    public function __construct($to, $from, $type, $subject, $content, $url, $courseid) {
+        // Note: \core\message\message declares no constructor, so there is none to chain to.
         $this->component = 'enrol_apply';
 
         switch ($type) {
@@ -46,7 +69,6 @@ class enrol_apply_notification extends \core\message\message {
                 break;
             default:
                 throw new invalid_parameter_exception('Invalid enrol_apply notification type.');
-                break;
         }
 
         $this->userfrom = $from;
@@ -57,7 +79,7 @@ class enrol_apply_notification extends \core\message\message {
         $this->fullmessageformat = FORMAT_PLAIN;
         $this->fullmessagehtml = $content;
 
-        $this->notification = true;
+        $this->notification = 1;
         $this->contexturl = $url;
         $this->contexturlname = get_string('course');
         $this->courseid = $courseid;

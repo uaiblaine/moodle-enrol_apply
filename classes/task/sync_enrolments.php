@@ -14,20 +14,33 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+namespace enrol_apply\task;
+
 /**
- * Version details for the enrolment upon approval plugin.
+ * Applies the configured expiry action to expired enrolments.
  *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine
- * @copyright  emeneo.com (http://emeneo.com/)
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+class sync_enrolments extends \core\task\scheduled_task {
+    /**
+     * Name shown for this task in the scheduled tasks admin screen.
+     *
+     * @return string Task name.
+     */
+    public function get_name() {
+        return get_string('syncenrolmentstask', 'enrol_apply');
+    }
 
-defined('MOODLE_INTERNAL') || die();
-
-$plugin->component = 'enrol_apply';
-$plugin->version = 2026081000;
-$plugin->requires = 2025100600;
-$plugin->supported = [501, 502];
-$plugin->maturity = MATURITY_STABLE;
-$plugin->release = 'v2.0';
+    /**
+     * Process expired enrolments of every apply instance.
+     *
+     * @return void
+     */
+    public function execute() {
+        $enrol = enrol_get_plugin('apply');
+        $trace = new \text_progress_trace();
+        $enrol->process_expirations($trace);
+    }
+}

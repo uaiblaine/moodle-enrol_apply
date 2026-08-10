@@ -15,7 +15,17 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
+ * Review pending enrolment applications and decide on them.
+ *
+ * Three scopes are served by this page:
+ *  - id=<enrolid>      the applications of one course enrolment instance;
+ *  - userenrol=<ueid>  a single application, reachable by a mentor holding the
+ *                      capability in the applicant's user context;
+ *  - no parameter      every application the current user may decide on, either
+ *                      site-wide or for the users they mentor.
+ *
  * @package    enrol_apply
+ * @copyright  2026 Anderson Blaine
  * @copyright  emeneo.com (http://emeneo.com/)
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @author     emeneo.com (http://emeneo.com/)
@@ -23,63 +33,62 @@
  */
 
 require_once('../../config.php');
-require_once($CFG->dirroot.'/enrol/apply/lib.php');
-require_once($CFG->dirroot.'/enrol/apply/manage_table.php');
-require_once($CFG->dirroot.'/enrol/apply/renderer.php');
+require_once($CFG->dirroot . '/enrol/apply/lib.php');
+require_once($CFG->dirroot . '/enrol/apply/manage_table.php');
+require_once($CFG->dirroot . '/enrol/apply/renderer.php');
 
-$id = optional_param('id', null, PARAM_INT);
-$userenrol = optional_param('userenrol', null, PARAM_INT);
-$formaction = optional_param('formaction', null, PARAM_TEXT);
-$userenrolments = optional_param_array('userenrolments', null, PARAM_INT);
+$id = optional_param('id', 0, PARAM_INT);
+$userenrol = optional_param('userenrol', 0, PARAM_INT);
+$formaction = optional_param('formaction', '', PARAM_ALPHA);
+$userenrolments = optional_param_array('userenrolments', [], PARAM_INT);
 
 require_login();
 
-$manageurlparams = array();
-if($id) {
-    $instance = $DB->get_record('enrol', array('id' => $id, 'enrol' => 'apply'), '*', MUST_EXIST);
-    require_course_login($instance->courseid);
+$manageurlparams = [];
+$instance = null;
+$mentees = null;
+
+if ($id) {
+    // Scope: one course enrolment instance.
+    $instance = $DB->get_record('enrol', ['id' => $id, 'enrol' => 'apply'], '*', MUST_EXIST);
     $course = get_course($instance->courseid);
+    require_login($course);
     $context = context_course::instance($course->id, MUST_EXIST);
     require_capability('enrol/apply:manageapplications', $context);
     $manageurlparams['id'] = $instance->id;
-    $pageheading = $course->fullname;
-}elseif(is_int($userenrol)&&$userenrol>0){
-    $instance = $DB->get_record_sql("SELECT ue.userid,ue.status from {user_enrolments} ue
-                        JOIN {enrol} e ON e.id = ue.enrolid
-                        where enrol='apply' and ue.id ={$userenrol}");
-    if($instance){
-        $user = $DB->get_record("user",array("id"=>$instance->userid));
-        $contexti = $DB->get_record("context",array("instanceid"=>$instance->userid,"contextlevel"=>CONTEXT_USER));
-        $context = context::instance_by_id($contexti->id);
-        require_capability('enrol/apply:manageapplications', context::instance_by_id($context->id));
-        $manageurlparams['userenrol'] = $userenrol;
-        $pageheading = $user->fisrtname." ".$user->lastname;
-    }
-}else{
-    //check if he is a choort
-    $sql = "SELECT distinct mc.userid FROM {cohort_members} mc
-                WHERE mc.userid <>{$USER->id} and mc.cohortid 
-                in (SELECT cohortid FROM {cohort_members} cm WHERE cm.userid ={$USER->id})";
-    $cohortsusers = $DB->get_records_sql($sql);
-    
-    $useradm = array();
-    
-    if($cohortsusers){
-        foreach($cohortsusers as $userchort){
-            $contexti = $DB->get_record("context",array("instanceid"=>$userchort->userid,"contextlevel"=>CONTEXT_USER));
-            if(has_capability('enrol/apply:manageapplications', context::instance_by_id($contexti->id))){
-                $useradm[] = $userchort->userid;
-            }
+    $pageheading = format_string($course->fullname);
+} else if ($userenrol) {
+    /* Scope: one application. The applicant is derived from the user enrolment id
+       server-side; the context is never taken from the request. */
+    $applicantid = $DB->get_field_sql(
+        "SELECT ue.userid
+           FROM {user_enrolments} ue
+           JOIN {enrol} e ON e.id = ue.enrolid
+          WHERE ue.id = :ueid AND e.enrol = :enrol",
+        ['ueid' => $userenrol, 'enrol' => 'apply'],
+        MUST_EXIST
+    );
+    $applicant = core_user::get_user($applicantid, '*', MUST_EXIST);
+    $context = context_user::instance($applicantid, MUST_EXIST);
+    require_capability('enrol/apply:manageapplications', $context);
+    $manageurlparams['userenrol'] = $userenrol;
+    $pageheading = fullname($applicant);
+} else {
+    /* Scope: everything the current user may decide on. Site-wide for holders of the
+       capability at system level; otherwise restricted to the users they mentor, which
+       here means users sharing a cohort with them over whose user context they hold the
+       capability. */
+    $context = context_system::instance();
+    if (!has_capability('enrol/apply:manageapplications', $context)) {
+        /* No site-wide capability, so fall back to the mentees. A null restriction means
+           "every application"; an empty list would silently widen the query the same way,
+           which is why the capability check has to come first. */
+        $mentees = \enrol_apply\local\applications::get_mentees();
+        if (!$mentees) {
+            require_capability('enrol/apply:manageapplications', $context);
         }
     }
-    
-    
-    $context = context_system::instance();
-    if(count($useradm)==0){
-        require_capability('enrol/apply:manageapplications', $context);
-    }
     $pageheading = get_string('confirmusers', 'enrol_apply');
-    $instance = null;
 }
 
 $manageurl = new moodle_url('/enrol/apply/manage.php', $manageurlparams);
@@ -90,9 +99,13 @@ $PAGE->set_pagelayout('admin');
 $PAGE->set_heading($pageheading);
 $PAGE->navbar->add(get_string('confirmusers', 'enrol_apply'));
 $PAGE->set_title(get_string('confirmusers', 'enrol_apply'));
-$PAGE->requires->css('/enrol/apply/style.css');
 
-if ($formaction != null && $userenrolments != null) {
+if ($formaction !== '' && $userenrolments) {
+    /* State change: reject anything that is not a sesskey-carrying POST. Without this
+       the whole queue can be confirmed by getting a manager to follow a crafted link,
+       because optional_param() reads GET just as happily as POST. */
+    require_sesskey();
+
     $enrolapply = enrol_get_plugin('apply');
     switch ($formaction) {
         case 'confirm':
@@ -104,11 +117,13 @@ if ($formaction != null && $userenrolments != null) {
         case 'cancel':
             $enrolapply->cancel_enrolment($userenrolments);
             break;
+        default:
+            throw new moodle_exception('invalidformaction', 'enrol_apply');
     }
-    redirect($manageurl);
+    redirect($manageurl, get_string('applicationsupdated', 'enrol_apply'), null, \core\output\notification::NOTIFY_SUCCESS);
 }
 
-$table = new enrol_apply_manage_table($id,$userenrol,$useradm);
+$table = new enrol_apply_manage_table($id, $userenrol, $mentees);
 $table->define_baseurl($manageurl);
 
 $renderer = $PAGE->get_renderer('enrol_apply');

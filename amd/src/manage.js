@@ -14,25 +14,54 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * @package    enrol_apply
+ * Select-all handling for the enrolment application queue.
+ *
+ * The form submits through its own button, so this module is a progressive enhancement
+ * only: with JavaScript disabled every checkbox is still operable one by one.
+ *
+ * @module     enrol_apply/manage
+ * @copyright  2026 Anderson Blaine
  * @copyright  2016 sudile GbR (http://www.sudile.com)
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @author     Johannes Burk <johannes.burk@sudile.com>
  */
+
+const SELECTORS = {
+    FORM: '#enrol_apply_manage_form',
+    TOGGLE_ALL: '[data-action="toggleall"]',
+    ROW_CHECKBOX: 'input[name="userenrolments[]"]',
+};
 
 /**
- * @module enrol_apply/manage
+ * Wire the select-all checkbox to the per-row checkboxes.
+ *
+ * @return {void}
  */
-define(['jquery'], function($) {
-    return {
-        init: function() {
-            $('#toggleall').on('change', function() {
-                $('input[name="userenrolments[]"]').prop('checked', $('#toggleall').prop('checked'));
-            });
+export const init = () => {
+    const form = document.querySelector(SELECTORS.FORM);
+    if (!form) {
+        return;
+    }
 
-            $('#formaction').on('change', function() {
-                $('#enrol_apply_manage_form').submit();
-            });
+    const toggleall = form.querySelector(SELECTORS.TOGGLE_ALL);
+    if (!toggleall) {
+        return;
+    }
+
+    const rows = () => Array.from(form.querySelectorAll(SELECTORS.ROW_CHECKBOX));
+
+    toggleall.addEventListener('change', () => {
+        rows().forEach((checkbox) => {
+            checkbox.checked = toggleall.checked;
+        });
+    });
+
+    form.addEventListener('change', (event) => {
+        if (!event.target.matches(SELECTORS.ROW_CHECKBOX)) {
+            return;
         }
-    };
-});
+        const all = rows();
+        const checked = all.filter((checkbox) => checkbox.checked);
+        toggleall.checked = all.length > 0 && checked.length === all.length;
+        toggleall.indeterminate = checked.length > 0 && checked.length < all.length;
+    });
+};

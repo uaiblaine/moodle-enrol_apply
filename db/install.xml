@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<XMLDB PATH="enrol/apply/db" VERSION="20210702" COMMENT="XMLDB file for Moodle enrol/apply"
+<XMLDB PATH="enrol/apply/db" VERSION="20260810" COMMENT="XMLDB file for Moodle enrol/apply"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:noNamespaceSchemaLocation="../../../lib/xmldb/xmldb.xsd"
 >
   <TABLES>
-    <TABLE NAME="enrol_apply_applicationinfo" COMMENT="Table containing additional information for each enrolment application.">
+    <TABLE NAME="enrol_apply_applicationinfo" COMMENT="Additional information submitted with each enrolment application.">
       <FIELDS>
         <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
         <FIELD NAME="userenrolmentid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="user enrolment id this entry belongs to"/>
@@ -15,11 +15,11 @@
         <KEY NAME="userenrolment" TYPE="foreign-unique" FIELDS="userenrolmentid" REFTABLE="user_enrolments" REFFIELDS="id"/>
       </KEYS>
     </TABLE>
-    <TABLE NAME="enrol_apply_groups" COMMENT="Default comment for the table, please edit me">
+    <TABLE NAME="enrol_apply_groups" COMMENT="Groups an applicant is added to once their enrolment application is approved.">
       <FIELDS>
         <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
-        <FIELD NAME="enrolid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
-        <FIELD NAME="groupid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="enrolid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="enrol instance the mapping belongs to"/>
+        <FIELD NAME="groupid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="group the approved applicant joins"/>
       </FIELDS>
       <KEYS>
         <KEY NAME="primary" TYPE="primary" FIELDS="id"/>

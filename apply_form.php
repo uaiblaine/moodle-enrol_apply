@@ -15,7 +15,10 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
+ * Form a user fills in to apply for a course enrolment.
+ *
  * @package    enrol_apply
+ * @copyright  2026 Anderson Blaine
  * @copyright  emeneo.com (http://emeneo.com/)
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @author     emeneo.com (http://emeneo.com/)
@@ -24,59 +27,74 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-require_once($CFG->libdir.'/formslib.php');
-require_once($CFG->dirroot.'/user/editlib.php');
-require_once($CFG->dirroot.'/user/profile/lib.php');
+require_once($CFG->libdir . '/formslib.php');
+require_once($CFG->dirroot . '/user/editlib.php');
+require_once($CFG->dirroot . '/user/profile/lib.php');
 
+/**
+ * Form a user fills in to apply for a course enrolment.
+ *
+ * @package    enrol_apply
+ * @copyright  2026 Anderson Blaine
+ * @copyright  emeneo.com (http://emeneo.com/)
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
 class enrol_apply_apply_form extends moodleform {
+    /** @var stdClass The enrol instance this form applies to. */
     protected $instance;
 
     /**
-     * Overriding this function to get unique form id for multiple apply enrolments
+     * Give each instance its own form id so several instances can coexist on one page.
      *
-     * @return string form identifier
+     * @return string Form identifier.
      */
     protected function get_form_identifier() {
-        $formid = $this->_customdata->id.'_'.get_class($this);
-        return $formid;
+        return $this->_customdata->id . '_' . get_class($this);
     }
 
+    /**
+     * Build the application form.
+     *
+     * @return void
+     */
     public function definition() {
-        global $USER, $DB;
+        global $DB, $OUTPUT, $USER;
 
         $mform = $this->_form;
         $instance = $this->_customdata;
         $this->instance = $instance;
         $plugin = enrol_get_plugin('apply');
 
-        $heading = $plugin->get_instance_name($instance);
-        $mform->addElement('header', 'selfheader', $heading);
+        $mform->addElement('header', 'selfheader', $plugin->get_instance_name($instance));
 
         if ($instance->customint3 > 0) {
-            $count = $DB->count_records('user_enrolments', array('enrolid' => $instance->id));
+            $count = $DB->count_records('user_enrolments', ['enrolid' => $instance->id]);
             if ($count < $instance->customint3) {
-                $mform->addElement('html', '<div class="alert alert-info">'.$count.' '.get_string('maxenrolled_tip_1', 'enrol_apply').' '.$instance->customint3.' '.get_string('maxenrolled_tip_2', 'enrol_apply').'</div>');
+                $tip = get_string('maxenrolled_tip', 'enrol_apply', (object) [
+                    'count' => $count,
+                    'max' => $instance->customint3,
+                ]);
+                $mform->addElement('html', $OUTPUT->notification($tip, \core\output\notification::NOTIFY_INFO, false));
             }
         }
 
-        $mform->addElement('html', '<p>'.$instance->customtext1.'</p>');
-        $comment_title = get_string('comment', 'enrol_apply');
-        if($instance->customtext2 != ''){
-            $comment_title = $instance->customtext2;
+        if (!empty($instance->customtext1)) {
+            $mform->addElement('html', format_text($instance->customtext1, FORMAT_HTML));
         }
 
-        // Optionnal commentary zone
-        // Start modification
-        if (($instance->customint7) == 1) {
-            $mform->addElement('textarea', 'applydescription', $comment_title, 'cols="80"');
+        if ($instance->customint7) {
+            $commenttitle = get_string('comment', 'enrol_apply');
+            if (!empty($instance->customtext2)) {
+                $commenttitle = format_string($instance->customtext2);
+            }
+            $mform->addElement('textarea', 'applydescription', $commenttitle, ['cols' => 80, 'rows' => 5]);
             $mform->setType('applydescription', PARAM_TEXT);
         }
-        // End modification
 
-        // User profile...
-        $editoroptions = $filemanageroptions = null;
-
+        // Standard and extra user profile fields, when the instance collects them.
         if ($instance->customint1) {
+            $editoroptions = null;
+            $filemanageroptions = null;
             useredit_shared_definition($mform, $editoroptions, $filemanageroptions, $USER);
         }
 
@@ -84,7 +102,7 @@ class enrol_apply_apply_form extends moodleform {
             profile_definition($mform, $USER->id);
         }
 
-        $mform->setDefaults((array)$USER);
+        $mform->setDefaults((array) $USER);
 
         $this->add_action_buttons(false, get_string('enrolme', 'enrol_self'));
 
@@ -95,6 +113,5 @@ class enrol_apply_apply_form extends moodleform {
         $mform->addElement('hidden', 'instance');
         $mform->setType('instance', PARAM_INT);
         $mform->setDefault('instance', $instance->id);
-
     }
 }

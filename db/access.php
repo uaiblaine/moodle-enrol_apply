@@ -15,7 +15,10 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
+ * Capabilities of the enrolment upon approval plugin.
+ *
  * @package    enrol_apply
+ * @copyright  2026 Anderson Blaine
  * @copyright  emeneo.com (http://emeneo.com/)
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @author     emeneo.com (http://emeneo.com/)
@@ -24,57 +27,56 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-$capabilities = array(
+$capabilities = [
 
-    /* Add, edit or remove manual enrol instance. */
-    'enrol/apply:config' => array(
+    /* Add, edit or remove an apply enrol instance. */
+    'enrol/apply:config' => [
         'captype' => 'write',
         'contextlevel' => CONTEXT_COURSE,
-        'archetypes' => array(
+        'archetypes' => [
             'editingteacher' => CAP_ALLOW,
             'manager' => CAP_ALLOW,
-        )
-    ),
+        ],
+    ],
 
-    /* Enrolment approval.
-     * If granted on CONTEXT_SYSTEM level it allows approval for all courses
-     * at Site Administration -> Courses -> Manage enrolment applications.
-     */
-    'enrol/apply:manageapplications' => array(
+    /* Decide on enrolment applications.
+     * Granted at system level it covers every course, which is what the
+     * Site administration -> Courses -> Manage enrolment applications page uses. */
+    'enrol/apply:manageapplications' => [
         'captype' => 'write',
         'contextlevel' => CONTEXT_COURSE,
-        'archetypes' => array(
+        'archetypes' => [
             'editingteacher' => CAP_ALLOW,
             'manager' => CAP_ALLOW,
-        )
-    ),
+        ],
+    ],
 
-    /* Manage enrolments of users. */
-    'enrol/apply:manage' => array(
+    /* Manage the enrolments of users. */
+    'enrol/apply:manage' => [
         'captype' => 'write',
         'contextlevel' => CONTEXT_COURSE,
-        'archetypes' => array(
-            'manager' => CAP_ALLOW,
-            'editingteacher' => CAP_ALLOW,
-        )
-    ),
-
-    /* Unenrol a user */
-    'enrol/apply:unenrol' => array(
-        'captype' => 'write',
-        'contextlevel' => CONTEXT_COURSE,
-        'archetypes' => array(
+        'archetypes' => [
             'editingteacher' => CAP_ALLOW,
             'manager' => CAP_ALLOW,
-        )
-    ),
+        ],
+    ],
 
-    /* Allow a user to unenrol himself */
-    'enrol/apply:unenrolself' => array(
+    /* Unenrol anybody from the course - watch out for data loss. */
+    'enrol/apply:unenrol' => [
         'captype' => 'write',
         'contextlevel' => CONTEXT_COURSE,
-        'archetypes' => array(
+        'archetypes' => [
+            'editingteacher' => CAP_ALLOW,
+            'manager' => CAP_ALLOW,
+        ],
+    ],
+
+    /* Voluntarily unenrol self from the course - watch out for data loss. */
+    'enrol/apply:unenrolself' => [
+        'captype' => 'write',
+        'contextlevel' => CONTEXT_COURSE,
+        'archetypes' => [
             'student' => CAP_ALLOW,
-        )
-    ),
-);
+        ],
+    ],
+];

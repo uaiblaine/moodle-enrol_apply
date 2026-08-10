@@ -1,0 +1,79 @@
+{{!
+    This file is part of Moodle - http://moodle.org/
+
+    Moodle is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Moodle is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+}}
+{{!
+    @template enrol_apply/application_notification
+
+    HTML body of the notification sent when a user applies for a course enrolment.
+
+    Profile values arrive already escaped or already formatted by the renderer, because a
+    custom profile field may legitimately hold rich text, so they are output with a triple
+    stash. Labels come from language strings and are escaped normally.
+
+    Context variables required for this template:
+    * coursenamelabel string - label of the course row
+    * coursename string - formatted course full name
+    * applicantlabel string - label of the applicant row
+    * applicant string - applicant full name
+    * commentlabel string - label of the comment row
+    * comment string - escaped comment submitted with the application
+    * profilelabel string - heading of the standard profile section
+    * hasprofile boolean - whether standard profile fields were collected
+    * profile array - list of label and value pairs for the standard profile fields
+    * hasextra boolean - whether custom profile fields were collected
+    * extra array - list of label and value pairs for the custom profile fields
+    * manageurl string - link to the screen where the application can be decided
+    * managelabel string - link text
+
+    Example context (json):
+    {
+        "coursenamelabel": "Course",
+        "coursename": "Introduction to Astronomy",
+        "applicantlabel": "First name / Surname",
+        "applicant": "Student 1",
+        "commentlabel": "Comment",
+        "comment": "Please let me in",
+        "profilelabel": "User Profile",
+        "hasprofile": true,
+        "profile": [
+            {"label": "Email address", "value": "student1@example.com"},
+            {"label": "City/town", "value": "Belo Horizonte"}
+        ],
+        "hasextra": true,
+        "extra": [
+            {"label": "Registration number", "value": "2026-0042"}
+        ],
+        "manageurl": "https://example.com/enrol/apply/manage.php?id=7",
+        "managelabel": "Manage enrolment applications"
+    }
+}}
+<div class="enrol_apply-notification">
+    <p>{{coursenamelabel}}: {{coursename}}</p>
+    <p>{{applicantlabel}}: {{applicant}}</p>
+    <p>{{commentlabel}}: {{{comment}}}</p>
+    {{#hasprofile}}
+        <p><strong>{{profilelabel}}</strong></p>
+        {{#profile}}
+            <p>{{label}}: {{{value}}}</p>
+        {{/profile}}
+    {{/hasprofile}}
+    {{#hasextra}}
+        {{#extra}}
+            <p>{{{label}}}: {{{value}}}</p>
+        {{/extra}}
+    {{/hasextra}}
+    <p><a href="{{manageurl}}">{{managelabel}}</a></p>
+</div>

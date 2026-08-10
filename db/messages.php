@@ -15,7 +15,10 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
+ * Message providers of the enrolment upon approval plugin.
+ *
  * @package    enrol_apply
+ * @copyright  2026 Anderson Blaine
  * @copyright  2016 sudile GbR (http://www.sudile.com)
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @author     Johannes Burk <johannes.burk@sudile.com>
@@ -23,22 +26,46 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-$messageproviders = array (
-    // Notify teacher/manager that a student has applied for a course enrolment.
-    'application' => array (
-        'capability'  => 'enrol/apply:manageapplications'
-    ),
+$messageproviders = [
 
-    // Notify student that his application was confirmed.
-    'confirmation' => array (),
+    // Tells a teacher or manager that a user applied for a course enrolment.
+    'application' => [
+        'capability' => 'enrol/apply:manageapplications',
+        'defaults' => [
+            'popup' => MESSAGE_PERMITTED + MESSAGE_DEFAULT_ENABLED,
+            'email' => MESSAGE_PERMITTED + MESSAGE_DEFAULT_ENABLED,
+        ],
+    ],
 
-    // Notify student that his application was canceled.
-    'cancelation' => array (),
+    // Tells an applicant that their application was approved.
+    'confirmation' => [
+        'defaults' => [
+            'popup' => MESSAGE_PERMITTED + MESSAGE_DEFAULT_ENABLED,
+            'email' => MESSAGE_PERMITTED + MESSAGE_DEFAULT_ENABLED,
+        ],
+    ],
 
-    // Notify student that his application was deferred (put on a waiting list).
-    'waitinglist' => array (),
+    // Tells an applicant that their application was cancelled.
+    'cancelation' => [
+        'defaults' => [
+            'popup' => MESSAGE_PERMITTED + MESSAGE_DEFAULT_ENABLED,
+            'email' => MESSAGE_PERMITTED + MESSAGE_DEFAULT_ENABLED,
+        ],
+    ],
 
-    // Start modification
-    'expiry_notification' => array(),
-    // End modification
-);
+    // Tells an applicant that they were put on the waiting list.
+    'waitinglist' => [
+        'defaults' => [
+            'popup' => MESSAGE_PERMITTED + MESSAGE_DEFAULT_ENABLED,
+            'email' => MESSAGE_PERMITTED + MESSAGE_DEFAULT_ENABLED,
+        ],
+    ],
+
+    // Sent by the core enrolment expiry machinery, see enrol_plugin::send_expiry_notifications().
+    'expiry_notification' => [
+        'defaults' => [
+            'popup' => MESSAGE_PERMITTED + MESSAGE_DEFAULT_ENABLED,
+            'email' => MESSAGE_PERMITTED + MESSAGE_DEFAULT_ENABLED,
+        ],
+    ],
+];

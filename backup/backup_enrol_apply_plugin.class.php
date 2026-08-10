@@ -13,44 +13,51 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+
 /**
- * Defines the backup_enrol_lti_plugin class.
+ * Backup support for the enrolment upon approval plugin.
  *
- * @package   enrol_lti
- * @copyright 2016 Mark Nelson <markn@moodle.com>
+ * @package   enrol_apply
+ * @category  backup
+ * @copyright 2026 Anderson Blaine
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-defined('MOODLE_INTERNAL') || die();
+
 
 /**
- * Provides the information to backup test enrol instances
+ * Adds the enrol_apply owned data to the enrolment backup structure.
+ *
+ * Only the instance configuration is backed up, namely the groups an approved applicant
+ * is added to. Pending applications are deliberately left out: they are keyed by
+ * user_enrolments.id, core registers no restore mapping for that table, and a half
+ * restored approval queue is worse than none. See CLAUDE.md for the full reasoning.
+ *
+ * @package   enrol_apply
+ * @category  backup
+ * @copyright 2026 Anderson Blaine
+ * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class backup_enrol_apply_plugin extends backup_enrol_plugin {
-
+    /**
+     * Append the enrol_apply structures to the enrolment backup.
+     *
+     * @return backup_plugin_element The plugin element with the plugin data attached.
+     */
     protected function define_enrol_plugin_structure() {
+        $plugin = $this->get_plugin_element();
 
-        // Define the virtual plugin element with the condition to fulfill
-        $plugin = $this->get_plugin_element(null, '../../enrol', $this->pluginname);
-
-        // Create one standard named plugin element (the visible container)
         $pluginwrapper = new backup_nested_element($this->get_recommended_name());
-
-        // connect the visible container ASAP
         $plugin->add_child($pluginwrapper);
 
-        $applymaps = new backup_nested_element('applymaps');
+        $applygroups = new backup_nested_element('applygroups');
+        $applygroup = new backup_nested_element('applygroup', ['id'], ['groupid']);
 
-        // Now create the enrol own structures
-        $applymap = new backup_nested_element('applymap', array('id'), array(
-            'enrol', 'status', 'courseid', 'sortorder', 'name', 'enrolperiod', 'enrolstartdate', 'enrolenddate', 'expirynotify', 'expirythreshold', 'notifyall', 'password', 'cost', 'currency', 'roleid', 'customint1', 'customint2', 'customint3', 'customint4', 'customint5', 'customint6', 'customint7', 'customint8', 'customchar1', 'customchar2', 'customchar3', 'customdec1', 'customdec2', 'customtext1', 'customtext2', 'customtext3', 'customtext4', 'timecreated', 'timemodified'));
+        $pluginwrapper->add_child($applygroups);
+        $applygroups->add_child($applygroup);
 
-        // Now the own termmap tree
-        $pluginwrapper->add_child($applymaps);
-        $applymaps->add_child($applymap);
+        $applygroup->set_source_table('enrol_apply_groups', ['enrolid' => backup::VAR_PARENTID]);
 
-        // set source to populate the data
-        $applymap->set_source_table('enrol_apply_applicationinfo',
-                array('enrol'  => backup::VAR_PARENTID));
+        $applygroup->annotate_ids('group', 'groupid');
 
         return $plugin;
     }

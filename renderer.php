@@ -15,197 +15,212 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
+ * Renderer for the enrolment upon approval plugin.
  *
  * @package    enrol_apply
+ * @copyright  2026 Anderson Blaine
  * @copyright  2016 sudile GbR (http://www.sudile.com)
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @author     Johannes Burk <johannes.burk@sudile.com>
  */
 
-defined('MOODLE_INTERNAL') || die();
 
+/**
+ * Renderer for the enrolment upon approval plugin.
+ *
+ * @package    enrol_apply
+ * @copyright  2026 Anderson Blaine
+ * @copyright  2016 sudile GbR (http://www.sudile.com)
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
 class enrol_apply_renderer extends plugin_renderer_base {
+    /**
+     * Standard user profile fields offered on the application form, in display order.
+     *
+     * Each entry maps the form field name to the core language string identifier used as
+     * its label. Fields removed from core (icq, skype, aim, yahoo, msn, all dropped in
+     * Moodle 4.0) are deliberately absent, and any field the site has hidden simply does
+     * not reach the notification because the loop skips properties that are not set.
+     *
+     * @var array
+     */
+    protected const STANDARD_USER_FIELDS = [
+        'firstname' => 'firstname',
+        'lastname' => 'lastname',
+        'email' => 'email',
+        'city' => 'city',
+        'country' => 'country',
+        'lang' => 'preferredlanguage',
+        'firstnamephonetic' => 'firstnamephonetic',
+        'lastnamephonetic' => 'lastnamephonetic',
+        'middlename' => 'middlename',
+        'alternatename' => 'alternatename',
+        'url' => 'webpage',
+        'idnumber' => 'idnumber',
+        'institution' => 'institution',
+        'department' => 'department',
+        'phone1' => 'phone1',
+        'phone2' => 'phone2',
+        'address' => 'address',
+    ];
+
+    /**
+     * Render the page listing the applications awaiting a decision.
+     *
+     * @param enrol_apply_manage_table $table Table listing the applications.
+     * @param moodle_url $manageurl Url the decision form posts back to.
+     * @param stdClass|null $instance Enrol instance when the page is scoped to one, null otherwise.
+     * @return void
+     */
     public function manage_page($table, $manageurl, $instance) {
         echo $this->header();
         echo $this->heading(get_string('confirmusers', 'enrol_apply'));
-        echo get_string('confirmusers_desc', 'enrol_apply');
-        $this->manage_form($table, $manageurl, $instance);
+        echo html_writer::tag('p', get_string('confirmusers_desc', 'enrol_apply'));
+        echo $this->manage_form($table, $manageurl);
         echo $this->footer();
     }
 
+    /**
+     * Render the decision form wrapping the applications table.
+     *
+     * @param enrol_apply_manage_table $table Table listing the applications.
+     * @param moodle_url $manageurl Url the form posts back to.
+     * @return string Rendered markup.
+     */
+    public function manage_form($table, $manageurl) {
+        $tablehtml = $this->capture_table($table);
+
+        $actions = [
+            ['value' => 'confirm', 'label' => get_string('btnconfirm', 'enrol_apply')],
+            ['value' => 'wait', 'label' => get_string('btnwait', 'enrol_apply')],
+            ['value' => 'cancel', 'label' => get_string('btncancel', 'enrol_apply')],
+        ];
+
+        $context = [
+            'formurl' => $manageurl->out(false),
+            'sesskey' => sesskey(),
+            'tablehtml' => $tablehtml,
+            'hasrows' => $table->totalrows > 0,
+            'actionlabel' => get_string('withselectedusers'),
+            'choosedots' => get_string('choosedots'),
+            'golabel' => get_string('go'),
+            'actions' => $actions,
+        ];
+
+        if ($context['hasrows']) {
+            $this->page->requires->js_call_amd('enrol_apply/manage', 'init');
+        }
+
+        return $this->render_from_template('enrol_apply/manage', $context);
+    }
+
+    /**
+     * Render the page listing the comments submitted with the applications.
+     *
+     * @param enrol_apply_info_table $table Table listing the applications and their comments.
+     * @param moodle_url $manageurl Base url of the page.
+     * @param stdClass|null $instance Enrol instance when the page is scoped to one, null otherwise.
+     * @return void
+     */
+    public function info_page($table, $manageurl, $instance) {
+        echo $this->header();
+        echo $this->heading(get_string('submitted_info', 'enrol_apply'));
+        echo $this->render_from_template('enrol_apply/info', [
+            'tablehtml' => $this->capture_table($table),
+        ]);
+        echo $this->footer();
+    }
+
+    /**
+     * Render a table to a string.
+     *
+     * table_sql writes straight to the output buffer, so it has to be captured before it
+     * can be handed to a template.
+     *
+     * @param table_sql $table Table to render.
+     * @return string Rendered table markup.
+     */
+    protected function capture_table($table) {
+        ob_start();
+        $table->out(50, true);
+        return ob_get_clean();
+    }
+
+    /**
+     * Build the HTML body of the "new application" notification.
+     *
+     * @param stdClass $course Course applied for.
+     * @param stdClass $user Applicant.
+     * @param moodle_url $manageurl Link to the screen where the application can be decided.
+     * @param string $applydescription Comment submitted with the application.
+     * @param stdClass|null $standarduserfields Submitted standard profile fields, null when not collected.
+     * @param array|null $extrauserfields Custom profile fields, null when not collected.
+     * @return string Rendered HTML body.
+     */
+    public function application_notification_mail_body(
+        $course,
+        $user,
+        $manageurl,
+        $applydescription,
+        $standarduserfields = null,
+        $extrauserfields = null
+    ) {
+        $profile = [];
+        if ($standarduserfields) {
+            foreach (self::STANDARD_USER_FIELDS as $field => $stringid) {
+                if (!isset($standarduserfields->{$field}) || $standarduserfields->{$field} === '') {
+                    continue;
+                }
+                $profile[] = [
+                    'label' => get_string($stringid),
+                    'value' => s($standarduserfields->{$field}),
+                ];
+            }
+            if (!empty($standarduserfields->description_editor['text'])) {
+                $profile[] = [
+                    'label' => get_string('description'),
+                    'value' => format_text(
+                        $standarduserfields->description_editor['text'],
+                        $standarduserfields->description_editor['format'] ?? FORMAT_HTML
+                    ),
+                ];
+            }
+        }
+
+        $extra = [];
+        if ($extrauserfields) {
+            foreach ($extrauserfields as $key => $value) {
+                $extra[] = ['label' => s($key), 'value' => s($value)];
+            }
+        }
+
+        return $this->render_from_template('enrol_apply/application_notification', [
+            'coursenamelabel' => get_string('coursename', 'enrol_apply'),
+            'coursename' => format_string($course->fullname),
+            'applicantlabel' => get_string('applyuser', 'enrol_apply'),
+            'applicant' => fullname($user),
+            'commentlabel' => get_string('comment', 'enrol_apply'),
+            'comment' => s($applydescription),
+            'profilelabel' => get_string('user_profile', 'enrol_apply'),
+            'hasprofile' => (bool) $profile,
+            'profile' => $profile,
+            'hasextra' => (bool) $extra,
+            'extra' => $extra,
+            'manageurl' => $manageurl->out(false),
+            'managelabel' => get_string('applymanage', 'enrol_apply'),
+        ]);
+    }
+
+    /**
+     * Render the instance edit form.
+     *
+     * @param moodleform $mform Instance edit form.
+     * @return void
+     */
     public function edit_page($mform) {
         echo $this->header();
         echo $this->heading(get_string('pluginname', 'enrol_apply'));
-        $mform->display();
+        echo $mform->render();
         echo $this->footer();
-    }
-
-    public function manage_form($table, $manageurl, $instance) {
-        echo html_writer::start_tag('form', array(
-            'id' => 'enrol_apply_manage_form',
-            'method' => 'post',
-            'action' => $manageurl->out()));
-
-        $this->manage_table($table, $instance);
-
-        if ($table->totalrows > 0) {
-            echo html_writer::empty_tag('br');
-            echo html_writer::start_tag('div', array('class' => 'formaction'));
-
-            $formactions = array(
-                'confirm' => get_string('btnconfirm', 'enrol_apply'),
-                'wait' => get_string('btnwait', 'enrol_apply'),
-                'cancel' => get_string('btncancel', 'enrol_apply'));
-            echo html_writer::tag('label', get_string('withselectedusers'), array('for' => 'formaction'));
-            echo html_writer::select($formactions, 'formaction', '', array('' => 'choosedots'), array('id' => 'formaction'));
-            echo html_writer::tag('noscript',
-                html_writer::empty_tag('input', array('type' => 'submit', get_string('submit'))),
-                array('style' => 'display: inline;'));
-
-            echo html_writer::end_tag('div');
-
-            $this->page->requires->js_call_amd('enrol_apply/manage', 'init');
-        }
-        echo html_writer::end_tag('form');
-    }
-
-    public function info_page($table, $manageurl,$instance) {
-        echo $this->header();
-        echo $this->heading(get_string('submitted_info', 'enrol_apply'));
-        echo get_string('submitted_info', 'enrol_apply');
-        $this->info_form($table, $manageurl,$instance);
-        echo $this->footer();
-    }
-
-    public function manage_table($table, $instance) {
-        global $DB;
-        $extra = get_config('enrol_apply', 'profileoption');
-        if($extra) {
-            $field = $DB->get_record("user_info_field", array("id" => $extra));
-            $columns = array(
-                'checkboxcolumn',
-                'course',
-                'fullname', // Magic happens here: The column heading will automatically be set.
-                'email',
-                'applydate',
-                'field',
-                'applycomment');
-
-            $headers = array(
-                html_writer::checkbox('toggleall', 'toggleall', false, '', array('id' => 'toggleall')),
-                get_string('course'),
-                'fullname', // Magic happens here: The column heading will automatically be set due to column name 'fullname'.
-                get_string('email'),
-                get_string('applydate', 'enrol_apply'),
-                $field->name,
-                get_string('applycomment', 'enrol_apply'),
-            );
-        }
-        else{
-            $columns = array(
-                'checkboxcolumn',
-                'course',
-                'fullname', // Magic happens here: The column heading will automatically be set.
-                'email',
-                'applydate',
-                'applycomment');
-
-            $headers = array(
-                html_writer::checkbox('toggleall', 'toggleall', false, '', array('id' => 'toggleall')),
-                get_string('course'),
-                'fullname', // Magic happens here: The column heading will automatically be set due to column name 'fullname'.
-                get_string('email'),
-                get_string('applydate', 'enrol_apply'),
-                get_string('applycomment', 'enrol_apply'),
-            );
-        }
-        $table->define_columns($columns);
-        $table->define_headers($headers);
-
-        $table->sortable(true, 'id');
-
-        $table->out(50, true);
-    }
-
-    public function info_form($table, $manageurl,$instance) {
-        echo html_writer::start_tag('form', array(
-            'id' => 'enrol_apply_info_form',
-            'method' => 'post',
-            'action' => $manageurl->out()));
-
-        $this->info_table($table,$instance);
-
-        if ($table->totalrows > 0) {
-            echo html_writer::empty_tag('br');
-            echo html_writer::start_tag('div', array('class' => 'formaction'));
-
-
-            echo html_writer::end_tag('div');
-
-            $this->page->requires->js_call_amd('enrol_apply/info', 'init');
-        }
-        echo html_writer::end_tag('form');
-    }
-
-    public function info_table($table,$instance) {
-        $columns = array(
-            'fullname',
-            'applycomment');
-        $headers = array(
-            'User', // Magic happens here: The column heading will automatically be set due to column name 'fullname'.
-            $instance->customtext2);
-        $table->define_columns($columns);
-        $table->define_headers($headers);
-
-        $table->sortable(true, 'id');
-
-        $table->out(50, true);
-    }
-
-    public function application_notification_mail_body(
-        $course, $user, $manageurl, $applydescription, $standarduserfields = null, $extrauserfields = null) {
-
-        $body = '<p>'. get_string('coursename', 'enrol_apply') .': '.format_string($course->fullname).'</p>';
-        $body .= '<p>'. get_string('applyuser', 'enrol_apply') .': '.$user->firstname.' '.$user->lastname.'</p>';
-        $body .= '<p>'. get_string('comment', 'enrol_apply') .': '.$applydescription.'</p>';
-        if ($standarduserfields) {
-            $body .= '<p><strong>'. get_string('user_profile', 'enrol_apply').'</strong></p>';
-            $body .= '<p>'. get_string('firstname') .': '.$standarduserfields->firstname.'</p>';
-            $body .= '<p>'. get_string('lastname') .': '.$standarduserfields->lastname.'</p>';
-            $body .= '<p>'. get_string('email') .': '.$standarduserfields->email.'</p>';
-            $body .= '<p>'. get_string('city') .': '.$standarduserfields->city.'</p>';
-            $body .= '<p>'. get_string('country') .': '.$standarduserfields->country.'</p>';
-            if(isset($standarduserfields->lang)){
-                $body .= '<p>'. get_string('preferredlanguage') .': '.$standarduserfields->lang.'</p>';
-            }
-            $body .= '<p>'. get_string('description') .': '.$standarduserfields->description_editor['text'].'</p>';
-
-            $body .= '<p>'. get_string('firstnamephonetic') .': '.$standarduserfields->firstnamephonetic.'</p>';
-            $body .= '<p>'. get_string('lastnamephonetic') .': '.$standarduserfields->lastnamephonetic.'</p>';
-            $body .= '<p>'. get_string('middlename') .': '.$standarduserfields->middlename.'</p>';
-            $body .= '<p>'. get_string('alternatename') .': '.$standarduserfields->alternatename.'</p>';
-            $body .= '<p>'. get_string('url') .': '.$standarduserfields->url.'</p>';
-            $body .= '<p>'. get_string('icqnumber') .': '.$standarduserfields->icq.'</p>';
-            $body .= '<p>'. get_string('skypeid') .': '.$standarduserfields->skype.'</p>';
-            $body .= '<p>'. get_string('aimid') .': '.$standarduserfields->aim.'</p>';
-            $body .= '<p>'. get_string('yahooid') .': '.$standarduserfields->yahoo.'</p>';
-            $body .= '<p>'. get_string('msnid') .': '.$standarduserfields->msn.'</p>';
-            $body .= '<p>'. get_string('idnumber') .': '.$standarduserfields->idnumber.'</p>';
-            $body .= '<p>'. get_string('institution') .': '.$standarduserfields->institution.'</p>';
-            $body .= '<p>'. get_string('department') .': '.$standarduserfields->department.'</p>';
-            $body .= '<p>'. get_string('phone') .': '.$standarduserfields->phone1.'</p>';
-            $body .= '<p>'. get_string('phone2') .': '.$standarduserfields->phone2.'</p>';
-            $body .= '<p>'. get_string('address') .': '.$standarduserfields->address.'</p>';
-        }
-
-        if ($extrauserfields) {
-            foreach ($extrauserfields as $key => $value) {
-                $body .= '<p>'. $key .': '.$value.'</p>';
-            }
-        }
-
-        $body .= '<p>'. html_writer::link($manageurl, get_string('applymanage', 'enrol_apply')).'</p>';
-
-        return $body;
     }
 }

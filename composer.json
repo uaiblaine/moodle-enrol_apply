@@ -1,8 +1,8 @@
 {
-    "name": "emeneo/moodle-enrol_apply",
-    "description": "An enrol plugin for Moodle that adds an approval step into the course enrolment process.",
+    "name": "uaiblaine/moodle-enrol_apply",
+    "description": "A Moodle enrolment plugin that adds an approval step to the course enrolment process.",
     "type": "moodle-enrol",
-    "license": "GPLv3",
+    "license": "GPL-3.0-or-later",
     "require": {
         "composer/installers": "*"
     },

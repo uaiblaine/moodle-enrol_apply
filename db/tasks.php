@@ -15,17 +15,33 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Task definition for enrol_apply.
- * @author    Romain DELEAU
- * @copyright IMT Lille Douai <imt-lille-douai.fr>
- * @package   enrol_apply
- * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * Scheduled tasks of the enrolment upon approval plugin.
+ *
+ * @package    enrol_apply
+ * @copyright  2026 Anderson Blaine
+ * @copyright  IMT Lille Douai <imt-lille-douai.fr>
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @author     Romain DELEAU
  */
 
 defined('MOODLE_INTERNAL') || die();
 
-$tasks = array(
-    array(
+$tasks = [
+    [
+        /* Applies the configured expiry action to enrolments whose timeend has passed.
+           Without this task the 'expiredaction' setting would never take effect: the
+           legacy enrol_plugin::cron() hook it used to rely on is no longer called by
+           core (lib/enrollib.php declares an empty cron(), nothing invokes it). */
+        'classname' => '\enrol_apply\task\sync_enrolments',
+        'blocking' => 0,
+        'minute' => '*/10',
+        'hour' => '*',
+        'day' => '*',
+        'month' => '*',
+        'dayofweek' => '*',
+        'disabled' => 0,
+    ],
+    [
         'classname' => '\enrol_apply\task\send_expiry_notifications',
         'blocking' => 0,
         'minute' => '*/10',
@@ -33,7 +49,6 @@ $tasks = array(
         'day' => '*',
         'month' => '*',
         'dayofweek' => '*',
-        'disabled' => 0
-    )
-);
-
+        'disabled' => 0,
+    ],
+];

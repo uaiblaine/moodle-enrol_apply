@@ -15,183 +15,169 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
+ * Form used to add or edit an enrolment upon approval instance.
+ *
  * @package    enrol_apply
+ * @copyright  2026 Anderson Blaine
  * @copyright  emeneo.com (http://emeneo.com/)
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @author     emeneo.com (http://emeneo.com/)
  * @author     Johannes Burk <johannes.burk@sudile.com>
  */
 
-use mod_forum\local\exporters\group;
-
 defined('MOODLE_INTERNAL') || die();
 
-require_once($CFG->libdir.'/formslib.php');
+require_once($CFG->libdir . '/formslib.php');
 
+/**
+ * Form used to add or edit an enrolment upon approval instance.
+ *
+ * @package    enrol_apply
+ * @copyright  2026 Anderson Blaine
+ * @copyright  emeneo.com (http://emeneo.com/)
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
 class enrol_apply_edit_form extends moodleform {
-
+    /**
+     * Build the instance edit form.
+     *
+     * @return void
+     */
     protected function definition() {
         global $DB;
+
         $mform = $this->_form;
 
-        list($instance, $plugin, $context) = $this->_customdata;
+        [$instance, $plugin, $context] = $this->_customdata;
 
         $mform->addElement('header', 'header', get_string('pluginname', 'enrol_apply'));
 
         $mform->addElement('text', 'name', get_string('custominstancename', 'enrol'));
         $mform->setType('name', PARAM_TEXT);
 
-        $mform->addElement('select', 'status', get_string('status', 'enrol_apply'), array(
+        $yesno = [1 => get_string('yes'), 0 => get_string('no')];
+
+        $mform->addElement('select', 'status', get_string('status', 'enrol_apply'), [
             ENROL_INSTANCE_ENABLED => get_string('yes'),
-            ENROL_INSTANCE_DISABLED  => get_string('no')));
-        // $mform->addHelpButton('status', 'status', 'enrol_apply');
+            ENROL_INSTANCE_DISABLED => get_string('no'),
+        ]);
         $mform->setDefault('status', $plugin->get_config('status'));
 
-        $mform->addElement('select', 'customint6', get_string('newenrols', 'enrol_apply'), array(
-                1 => get_string('yes'),
-                0 => get_string('no')
-        ));
-        $mform->setDefault('newenrols', $plugin->get_config('newenrols'));
+        $mform->addElement('select', 'customint6', get_string('newenrols', 'enrol_apply'), $yesno);
+        $mform->setDefault('customint6', $plugin->get_config('newenrols'));
 
-        if ($instance->id) {
-            $roles = get_default_enrol_roles($context, $instance->roleid);
-        } else {
-            $roles = get_default_enrol_roles($context, $plugin->get_config('roleid'));
-        }
-        $mform->addElement('select', 'roleid', get_string('defaultrole', 'role'), $roles);
+        $roleid = $instance->id ? $instance->roleid : $plugin->get_config('roleid');
+        $mform->addElement('select', 'roleid', get_string('defaultrole', 'role'), get_default_enrol_roles($context, $roleid));
         $mform->setDefault('roleid', $plugin->get_config('roleid'));
 
-
-        // Add fields for group affectation and enrol duration
-        // Start modification
-
-        // Group affectation field
-        $courseid = required_param('courseid', PARAM_INT);
-        $groups = groups_get_all_groups($courseid);
-
-        $groups2 = array();
-        foreach ($groups as $value) {
-            $groups2[$value->id] = $value->name;
+        // Groups the applicant joins once their application is approved.
+        $groups = [];
+        foreach (groups_get_all_groups($instance->courseid) as $group) {
+            $groups[$group->id] = format_string($group->name, true, ['context' => $context]);
         }
-
-
-        $groupselector = $mform->addElement('autocomplete', 'groupselect', get_string('group', 'enrol_apply'), $groups2);
-        $groupselector->setMultiple(true);
+        $groupselect = $mform->addElement('autocomplete', 'groupselect', get_string('group', 'enrol_apply'), $groups);
+        $groupselect->setMultiple(true);
         $mform->addHelpButton('groupselect', 'group', 'enrol_apply');
-        $contains = $DB->get_records(
-            'enrol_apply_groups',
-            array('enrolid' => $instance->id),
-            null,
-            'groupid',
-            null,
-            null
-        );
-        $defaults = array();
-        foreach ($contains as $value) {
-            array_push($defaults, $value->groupid);
-        }
-        $groupselector->setSelected($defaults);
 
-        // Enrol duration fields
-        $options = array('optional' => true, 'defaultunit' => 86400);
-        $mform->addElement('duration', 'enrolperiod', get_string('defaultperiod', 'enrol_apply'), $options);
+        // Enrolment duration.
+        $mform->addElement('duration', 'enrolperiod', get_string('defaultperiod', 'enrol_apply'), [
+            'optional' => true,
+            'defaultunit' => DAYSECS,
+        ]);
         $mform->setDefault('enrolperiod', $plugin->get_config('enrolperiod'));
         $mform->addHelpButton('enrolperiod', 'defaultperiod', 'enrol_apply');
 
-        // Information field
-
-        $options = array(
+        // Expiry notification, stored across the expirynotify and notifyall instance fields.
+        $mform->addElement('select', 'expirynotify', get_string('expirynotify', 'core_enrol'), [
             0 => get_string('no'),
             1 => get_string('expirynotifyenroller', 'enrol_apply'),
-            2 => get_string('expirynotifyall', 'enrol_apply')
-        );
-        if (isset($instance->notifyall)) {
-            if ($instance->notifyall and $instance->expirynotify) {
-                $instance->expirynotify = 2;
-            }
-            unset($instance->notifyall);
-        }
-
-        $mform->addElement('select', 'expirynotify', get_string('expirynotify', 'core_enrol'), $options);
+            2 => get_string('expirynotifyall', 'enrol_apply'),
+        ]);
         $mform->addHelpButton('expirynotify', 'expirynotify', 'core_enrol');
 
-        // Notification threshold
-        $options = array('optional' => false, 'defaultunit' => 86400);
-        $mform->addElement('duration', 'expirythreshold', get_string('expirythreshold', 'core_enrol'), $options);
+        $mform->addElement('duration', 'expirythreshold', get_string('expirythreshold', 'core_enrol'), [
+            'optional' => false,
+            'defaultunit' => DAYSECS,
+        ]);
         $mform->addHelpButton('expirythreshold', 'expirythreshold', 'core_enrol');
         $mform->disabledIf('expirythreshold', 'expirynotify', 'eq', 0);
-
-        if (!isset($instance->notifythreshold)) {
-            $mform->setDefault('expirythreshold', 86400);
-        }
-
-        // End modification
+        $mform->setDefault('expirythreshold', DAYSECS);
 
         $mform->addElement('textarea', 'customtext1', get_string('editdescription', 'enrol_apply'));
+        $mform->setType('customtext1', PARAM_RAW);
 
-        // Add checkbox for optionnal commentary zone
-        // Start modification
-        $options = array(
-            1 => get_string('yes'),
-            0 => get_string('no'),
-        );
-        $mform->addElement('select', 'customint7', get_string('opt_commentaryzone', 'enrol_apply'), $options);
+        $mform->addElement('select', 'customint7', get_string('opt_commentaryzone', 'enrol_apply'), $yesno);
         $mform->setDefault('customint7', 0);
         $mform->addHelpButton('customint7', 'opt_commentaryzone', 'enrol_apply');
-        // End modification
 
+        $mform->addElement('text', 'customtext2', get_string('custom_label', 'enrol_apply'));
+        $mform->setType('customtext2', PARAM_TEXT);
+        $mform->setDefault('customtext2', get_string('comment', 'enrol_apply'));
 
+        $mform->addElement('select', 'customint1', get_string('show_standard_user_profile', 'enrol_apply'), $yesno);
+        $mform->setDefault('customint1', $plugin->get_config('show_standard_user_profile'));
 
-        //new added requirement_20190110
-        //$title_customtext2 = str_replace("{replace_title}",$instance->customtext2,get_string('custom_label', 'enrol_apply'));
-        $title_customtext2 = get_string('custom_label', 'enrol_apply');
-        $mform->addElement('text', 'customtext2', $title_customtext2);
-        $mform->setDefault('customtext2', "Comment");
+        $mform->addElement('select', 'customint2', get_string('show_extra_user_profile', 'enrol_apply'), $yesno);
+        $mform->setDefault('customint2', $plugin->get_config('show_extra_user_profile'));
 
-        $options = array(1 => get_string('yes'),
-                         0 => get_string('no'));
-
-        $mform->addElement('select', 'customint1', get_string('show_standard_user_profile', 'enrol_apply'), $options);
-        $mform->setDefault('customint1', $plugin->get_config('customint1'));
-
-        $mform->addElement('select', 'customint2', get_string('show_extra_user_profile', 'enrol_apply'), $options);
-        $mform->setDefault('customint2', $plugin->get_config('customint2'));
-
-        $choices = array(
+        $choices = [
             '$@NONE@$' => get_string('nobody'),
-            '$@ALL@$' => get_string('everyonewhocan', 'admin', get_capability_string('enrol/apply:manageapplications')));
-        $users = get_enrolled_users($context, 'enrol/apply:manageapplications');
-        foreach ($users as $userid => $user) {
+            '$@ALL@$' => get_string('everyonewhocan', 'admin', get_capability_string('enrol/apply:manageapplications')),
+        ];
+        foreach (get_enrolled_users($context, 'enrol/apply:manageapplications') as $userid => $user) {
             $choices[$userid] = fullname($user);
         }
-        $select = $mform->addElement('select', 'notify', get_string('notify_desc', 'enrol_apply'), $choices);
-        $select->setMultiple(true);
-        $userid = $DB->get_field('enrol', 'customtext3', array('id' => $instance->id), IGNORE_MISSING);
-        if(!empty($userid)) {
-            if($userid == '$@ALL@$') {
-                $select->setSelected('$@ALL@$');
-            }
-            else if($userid == '$@NONE@$') {
-                $select->setSelected('$@NONE@$');
-            }
-            else {
-                $userid = explode(",", $userid);
-                $select->setSelected($userid);
-            }
-        }
+        $notify = $mform->addElement('select', 'notify', get_string('notify_desc', 'enrol_apply'), $choices);
+        $notify->setMultiple(true);
 
         $mform->addElement('text', 'customint3', get_string('maxenrolled', 'enrol_apply'));
         $mform->setType('customint3', PARAM_INT);
-        $mform->setDefault('customint3', $plugin->get_config('customint3'));
+        $mform->setDefault('customint3', $plugin->get_config('maxenrolled', 0));
+        $mform->addHelpButton('customint3', 'maxenrolled', 'enrol_apply');
 
         $mform->addElement('hidden', 'id');
         $mform->setType('id', PARAM_INT);
         $mform->addElement('hidden', 'courseid');
         $mform->setType('courseid', PARAM_INT);
 
-        $this->add_action_buttons(true, ($instance->id ? null : get_string('addinstance', 'enrol')));
-        //echo "<pre>";print_r($instance);exit;
-        $this->set_data($instance);
+        $this->add_action_buttons(true, $instance->id ? null : get_string('addinstance', 'enrol'));
+
+        $this->set_data($this->prepare_instance_data($instance, $DB));
     }
 
+    /**
+     * Map the stored instance fields onto the form element names.
+     *
+     * The notification recipients live in customtext3 as a comma separated list, and the
+     * configured groups live in their own table, so both have to be unpacked before
+     * set_data() can populate the multi-select elements.
+     *
+     * @param stdClass $instance Instance record, or the defaults for a new instance.
+     * @param moodle_database $db Database connection.
+     * @return stdClass Instance data ready for set_data().
+     */
+    protected function prepare_instance_data($instance, $db) {
+        $data = clone $instance;
+
+        $stored = isset($data->customtext3) ? (string) $data->customtext3 : '';
+        $data->notify = $stored === '' ? ['$@NONE@$'] : explode(',', $stored);
+
+        $data->groupselect = [];
+        if (!empty($instance->id)) {
+            $data->groupselect = array_map(
+                'intval',
+                $db->get_fieldset_select('enrol_apply_groups', 'groupid', 'enrolid = :enrolid', [
+                    'enrolid' => $instance->id,
+                ])
+            );
+        }
+
+        // The stored pair of flags collapses into the tri-state expirynotify select.
+        if (!empty($data->notifyall) && !empty($data->expirynotify)) {
+            $data->expirynotify = 2;
+        }
+        unset($data->notifyall);
+
+        return $data;
+    }
 }

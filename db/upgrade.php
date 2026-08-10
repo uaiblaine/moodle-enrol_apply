@@ -15,134 +15,144 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
+ * Upgrade steps of the enrolment upon approval plugin.
+ *
  * @package    enrol_apply
+ * @copyright  2026 Anderson Blaine
  * @copyright  emeneo.com (http://emeneo.com/)
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @author     Johannes Burk <johannes.burk@sudile.com>
  */
 
-defined('MOODLE_INTERNAL') || die;
-
+/**
+ * Upgrade the enrol_apply plugin database.
+ *
+ * @param int $oldversion Version the site is upgrading from.
+ * @return bool Always true.
+ */
 function xmldb_enrol_apply_upgrade($oldversion) {
-    global $CFG, $DB;
+    global $DB;
 
     $dbman = $DB->get_manager();
 
     if ($oldversion < 2016012801) {
-
         // Define table enrol_apply_applicationinfo to be created.
         $table = new xmldb_table('enrol_apply_applicationinfo');
 
-        // Adding fields to table enrol_apply_applicationinfo.
         $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
         $table->add_field('userenrolmentid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
         $table->add_field('comment', XMLDB_TYPE_TEXT, null, null, null, null, null);
 
-        // Adding keys to table enrol_apply_applicationinfo.
-        $table->add_key('primary', XMLDB_KEY_PRIMARY, array('id'));
-        $table->add_key('userenrolment', XMLDB_KEY_FOREIGN_UNIQUE, array('userenrolmentid'), 'user_enrolments', array('id'));
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_key('userenrolment', XMLDB_KEY_FOREIGN_UNIQUE, ['userenrolmentid'], 'user_enrolments', ['id']);
 
-        // Conditionally launch create table for enrol_apply_applicationinfo.
         if (!$dbman->table_exists($table)) {
             $dbman->create_table($table);
         }
 
-        // Apply savepoint reached.
         upgrade_plugin_savepoint(true, 2016012801, 'enrol', 'apply');
     }
 
     if ($oldversion < 2016042202) {
-        // Invert settings for showing standard and extra user profile fields.
+        // Invert the settings for showing standard and extra user profile fields.
         $enrolapply = enrol_get_plugin('apply');
-        $showstandarduserprofile = $enrolapply->get_config('show_standard_user_profile') == 0 ? true : false;
-        $enrolapply->set_config('show_standard_user_profile', $showstandarduserprofile);
-        $showextrauserprofile = $enrolapply->get_config('show_extra_user_profile') == 0 ? true : false;
-        $enrolapply->set_config('show_extra_user_profile', $showextrauserprofile);
+        $enrolapply->set_config('show_standard_user_profile', $enrolapply->get_config('show_standard_user_profile') == 0);
+        $enrolapply->set_config('show_extra_user_profile', $enrolapply->get_config('show_extra_user_profile') == 0);
 
-        $instances = $DB->get_records('enrol', array('enrol' => 'apply'));
+        $instances = $DB->get_records('enrol', ['enrol' => 'apply']);
         foreach ($instances as $instance) {
             $instance->customint1 = !$instance->customint1;
             $instance->customint2 = !$instance->customint2;
             $DB->update_record('enrol', $instance, true);
         }
+
+        upgrade_plugin_savepoint(true, 2016042202, 'enrol', 'apply');
     }
 
     if ($oldversion < 2016060803) {
-        // Convert old notification settings.
+        // Convert the old notification settings.
         $enrolapply = enrol_get_plugin('apply');
 
-        $sendmailtoteacher = $enrolapply->get_config('sendmailtoteacher');
-        $notifycoursebased = $sendmailtoteacher;
-        $enrolapply->set_config('notifycoursebased', $notifycoursebased);
+        $enrolapply->set_config('notifycoursebased', $enrolapply->get_config('sendmailtoteacher'));
         $enrolapply->set_config('sendmailtoteacher', null);
 
-        $sendmailtomanager = $enrolapply->get_config('sendmailtomanager');
-        $notifyglobal = $sendmailtomanager ? '$@ALL@$' : '';
-        $enrolapply->set_config('notifyglobal', $notifyglobal);
+        $enrolapply->set_config('notifyglobal', $enrolapply->get_config('sendmailtomanager') ? '$@ALL@$' : '');
         $enrolapply->set_config('sendmailtomanager', null);
 
-        $instances = $DB->get_records('enrol', array('enrol' => 'apply'));
+        $instances = $DB->get_records('enrol', ['enrol' => 'apply']);
         foreach ($instances as $instance) {
-            $sendmailtoteacher = $instance->customint3;
-            $notify = $sendmailtoteacher ? '$@ALL@$' : '';
-            $instance->customtext3 = $notify;
+            $instance->customtext3 = $instance->customint3 ? '$@ALL@$' : '';
             $instance->customint3 = null;
             $instance->customint4 = null;
             $DB->update_record('enrol', $instance, true);
         }
+
+        upgrade_plugin_savepoint(true, 2016060803, 'enrol', 'apply');
     }
 
     if ($oldversion < 2017032400) {
-        $enrolapply = enrol_get_plugin('apply');
+        $DB->set_field('enrol', 'customint3', 0, ['enrol' => 'apply']);
 
-        $instances = $DB->get_records('enrol', array('enrol' => 'apply'));
-        foreach ($instances as $instance) {
-            $instance->customint3 = 0;
-            $DB->update_record('enrol', $instance, true);
-        }
+        upgrade_plugin_savepoint(true, 2017032400, 'enrol', 'apply');
     }
 
     if ($oldversion < 2018112603) {
-        $instances = $DB->get_records('enrol', array('enrol' => 'apply'));
-        foreach ($instances as $instance) {
-            $instance->customint6 = 1;
-            $DB->update_record('enrol', $instance, true);
-        }
+        $DB->set_field('enrol', 'customint6', 1, ['enrol' => 'apply']);
+
+        upgrade_plugin_savepoint(true, 2018112603, 'enrol', 'apply');
     }
 
     if ($oldversion < 2021120501) {
-
-        // Define table
+        // Define table enrol_apply_groups to be created.
         $table = new xmldb_table('enrol_apply_groups');
 
-        // Adding fields
-        $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null, null);
+        $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
         $table->add_field('enrolid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null, 'id');
-        $table->add_field('groupid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null, 'id');
+        $table->add_field('groupid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null, 'enrolid');
 
-        // Adding keys
         $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
         $table->add_key('enrol', XMLDB_KEY_FOREIGN, ['enrolid'], 'enrol', ['id']);
         $table->add_key('group', XMLDB_KEY_FOREIGN, ['groupid'], 'groups', ['id']);
 
-        // Create table if not exist
         if (!$dbman->table_exists($table)) {
             $dbman->create_table($table);
         }
 
-        // Apply savepoint reached.
         upgrade_plugin_savepoint(true, 2021120501, 'enrol', 'apply');
     }
 
     if ($oldversion < 2021120607) {
-        $day = 86400;
-        $DB->set_field('enrol',
-            'expirythreshold',
-            $day,
-            array('enrol' => 'apply')
+        $DB->set_field('enrol', 'expirythreshold', DAYSECS, ['enrol' => 'apply']);
+
+        upgrade_plugin_savepoint(true, 2021120607, 'enrol', 'apply');
+    }
+
+    if ($oldversion < 2026081000) {
+        $enrolapply = enrol_get_plugin('apply');
+
+        /* Two instance defaults are now configurable site wide. They were read from
+           settings that never existed, so every new instance silently got null. */
+        if ($enrolapply->get_config('maxenrolled') === false) {
+            $enrolapply->set_config('maxenrolled', 0);
+        }
+        if ($enrolapply->get_config('opt_commentaryzone') === false) {
+            $enrolapply->set_config('opt_commentaryzone', 0);
+        }
+
+        // Drop group mappings whose group has been deleted in the meantime.
+        $DB->delete_records_select(
+            'enrol_apply_groups',
+            'groupid NOT IN (SELECT id FROM {groups})'
         );
+
+        // Drop application info rows whose user enrolment has already gone away.
+        $DB->delete_records_select(
+            'enrol_apply_applicationinfo',
+            'userenrolmentid NOT IN (SELECT id FROM {user_enrolments})'
+        );
+
+        upgrade_plugin_savepoint(true, 2026081000, 'enrol', 'apply');
     }
 
     return true;
-
 }
