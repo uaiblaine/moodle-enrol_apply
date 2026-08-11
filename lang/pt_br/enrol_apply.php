@@ -103,6 +103,7 @@ $string['newenrols_desc'] = 'Permitir, por padrão, que usuários solicitem matr
 $string['notification'] = 'Solicitação de matrícula enviada com sucesso. Você será notificado por e-mail quando a sua matrícula for confirmada.';
 $string['notify_desc'] = 'Defina quem é notificado sobre novas solicitações de matrícula.';
 $string['notify_heading'] = 'Configurações de notificação';
+$string['notifyapprovaltask'] = 'Envio de notificação de aprovação de matrícula';
 $string['notifycoursebased'] = 'Notificação de nova solicitação de matrícula (por instância, ex.: professores do curso)';
 $string['notifycoursebased_desc'] = 'Padrão para novas instâncias: notificar todos que possuem a capacidade \'Gerenciar solicitações de matrícula\' no curso correspondente (ex.: professores e gerentes)';
 $string['notifyglobal'] = 'Notificação de nova solicitação de matrícula (global, ex.: gerentes e administradores)';

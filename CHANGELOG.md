@@ -50,6 +50,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **A previously approved user reappeared in the approval queue once their enrolment
+  expired.** With the expiry action set to "suspend", `process_expirations()` re-suspends
+  an expired active enrolment, and the queue selected purely on `status != active`. The
+  queue and the comments listing now also require the enrolment period not to have run
+  out; a pending or deferred application always carries `timeend = 0`, so only a
+  once-approved row can be excluded by that.
+- **An application approved from core's "Edit enrolment" screen left inconsistent data.**
+  `enrol/editenrolment.php` requires only `enrol/apply:manage` and drives
+  `update_user_enrol()` directly, so the applicant became active while still carrying an
+  application row and without the groups the instance grants. A
+  `\core_enrol\hook\before_user_enrolment_updated` observer now reconciles that,
+  whichever route the approval took. It deliberately does not notify the applicant: the
+  manager on core's screen is given no reason to expect a message.
 - **A pending application could be deleted before anyone reviewed it.** Applications were
   stamped with `timeend = now + enrolperiod` at submission, and the
   `ENROL_EXT_REMOVED_UNENROL` branch of `enrol_plugin::process_expirations()` selects on
@@ -94,11 +107,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `get_enroller()` used `$lasternoller` and `$lasternollerinstanceid` without declaring
   them, which PHP 8.2 reports as deprecated dynamic property creation.
 - `renderer::info_form()` loaded an AMD module, `enrol_apply/info`, that has never existed.
-- Backup and restore were broken end to end: the backup declared
-  `enrol_apply_applicationinfo` as its source but listed the columns of the `enrol` table
-  and filtered on an `enrol` column that table does not have, and the restore inserted
-  `enrolid` and `courseid` into a table with neither. Backup and restore now cover the
-  configured group mappings, with proper id mapping.
+- **Backup and restore never ran at all.** The two plugin classes sat in `backup/`, but
+  core looks for them in `backup/moodle2/` (`backup_structure_step.class.php`), so they
+  were never loaded — which is why nobody had noticed that the backup declared
+  `enrol_apply_applicationinfo` as its source while listing the columns of the `enrol`
+  table and filtering on an `enrol` column that table does not have, and the restore
+  inserted `enrolid` and `courseid` into a table with neither. The classes have moved to
+  `backup/moodle2/`, the code they contain has been rewritten, and `tests/backup_test.php`
+  now performs a real backup and restore so this cannot rot unnoticed again.
+- Backup and restore now carry the configured group mappings, with proper id remapping,
+  and the comments submitted with applications when the backup includes users. A restored
+  course already carried its pending and waiting-list applications regardless, because
+  core restores the user_enrolments rows with their status; only the comments were lost.
 - `restore_instance()` overwrote `customint1`, the "show standard profile fields" flag,
   with a remapped role id, and `backup_annotate_custom_fields()` annotated the same field
   as a role.

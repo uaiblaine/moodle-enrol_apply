@@ -46,6 +46,7 @@ manage.php / manage_table.php   the approval queue and its bulk actions
 info.php / info_table.php    read-only listing of submitted comments
 renderer.php                 page rendering plus the notification e-mail body
 templates/                   manage, info, application_notification
+classes/hook_callbacks.php   reconciles approvals made outside confirm_enrolment()
 classes/local/applications.php  mentee lookup shared by the queue
 classes/privacy/provider.php full provider: the plugin does store personal data
 classes/task/                sync_enrolments (expiry action) + send_expiry_notifications
@@ -89,6 +90,17 @@ backup/                      group mappings only, see the gotcha below
   itemid). Dropping it leaves memberships behind whenever the user has another
   enrolment in the course.
 
+- **`confirm_enrolment()` is not the only way an application becomes active.** Core's
+  participants page offers "Edit enrolment", which posts to `enrol/editenrolment.php`;
+  that page requires only `enrol/apply:manage` and drives
+  `enrol_plugin::update_user_enrol()` directly, so it knows nothing about groups or the
+  application row. `classes/hook_callbacks.php` observes
+  `\core_enrol\hook\before_user_enrolment_updated` and calls `complete_approval()`
+  whichever route was taken. Put any new post-approval side effect in
+  `complete_approval()`, never inline in `confirm_enrolment()`, or the two paths drift.
+  The observer deliberately does not notify: the manager on core's screen is given no
+  reason to expect a message to be sent.
+
 - **`enrol_plugin::cron()` is dead.** Core declares it empty and nothing calls it. The
   `expiredaction` setting only works because `classes/task/sync_enrolments.php` calls
   `process_expirations()` on a schedule. If expiry stops working, look at the task, not
@@ -120,11 +132,25 @@ backup/                      group mappings only, see the gotcha below
   mentor approving. `has_capability()` is deliberately kept instead of joining
   `role_capabilities`, because only it honours overrides, prohibits and the admin bypass.
 
-- **Backup covers the group mappings only.** Pending applications are keyed by
-  `user_enrolments.id` and core registers no restore mapping for that table
-  (`backup/moodle2/restore_stepslib.php` sets no `user_enrolment` mapping), so there is
-  no supported way to re-point the rows after a restore. This is a known, deliberate
-  gap: a course copy carries the group configuration, not the approval queue.
+- **The backup classes live in `backup/moodle2/`, not `backup/`.** Core resolves them as
+  `<plugin>/backup/moodle2/backup_<type>_<name>_plugin.class.php`
+  (`backup/util/plan/backup_structure_step.class.php`). Upstream had them one directory
+  up, so they were silently never loaded: no error, no warning, just an `enrolments.xml`
+  with no plugin element in it. If plugin data stops appearing in a backup, check the
+  path before reading the code.
+
+- **A restored course carries a live approval queue — with comments only if the backup
+  had users.** Core restores every `user_enrolments` row through
+  `restore_user_enrolment()`, and this plugin passes `$data->status` straight through, so
+  `ENROL_USER_SUSPENDED` and `ENROL_APPLY_USER_WAIT` rows come back pending whatever the
+  plugin does. The comments are keyed by `user_enrolments.id`, for which core registers no
+  mapping, so `restore_user_enrolment()` registers one (`enrol_apply_userenrolment`) that
+  `restore_enrol_apply_plugin` then resolves. That works because core writes
+  `<user_enrolments>` into the enrol element before `add_plugin_structure()` appends the
+  plugin's own data; if that order ever changes, `get_mappingid()` returns false and the
+  comment is skipped rather than mis-attached. `tests/backup_test.php` pins the whole
+  round trip — and note it needs `MODE_SAMESITE` plus an explicit unzip, because
+  `MODE_IMPORT` produces no `enrolments.xml` at all.
 
 - **The notification e-mail must not hardcode profile fields.** `icq`, `skype`, `aim`,
   `yahoo` and `msn` were removed from the user table in Moodle 4.0 and reading them cost

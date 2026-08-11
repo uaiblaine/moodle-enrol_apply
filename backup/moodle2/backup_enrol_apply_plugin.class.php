@@ -27,10 +27,11 @@
 /**
  * Adds the enrol_apply owned data to the enrolment backup structure.
  *
- * Only the instance configuration is backed up, namely the groups an approved applicant
- * is added to. Pending applications are deliberately left out: they are keyed by
- * user_enrolments.id, core registers no restore mapping for that table, and a half
- * restored approval queue is worse than none. See CLAUDE.md for the full reasoning.
+ * Two things travel: the groups an approved applicant is added to, which are instance
+ * configuration, and the comments submitted with applications, which are user data and so
+ * are only included when the backup includes users. The comments are keyed by
+ * user_enrolments.id, for which core registers no mapping; the plugin registers its own
+ * from restore_user_enrolment(), see enrol_apply_plugin::restore_user_enrolment().
  *
  * @package   enrol_apply
  * @category  backup
@@ -52,10 +53,28 @@ class backup_enrol_apply_plugin extends backup_enrol_plugin {
         $applygroups = new backup_nested_element('applygroups');
         $applygroup = new backup_nested_element('applygroup', ['id'], ['groupid']);
 
+        $applications = new backup_nested_element('applications');
+        $application = new backup_nested_element('application', ['id'], ['userenrolmentid', 'comment']);
+
         $pluginwrapper->add_child($applygroups);
         $applygroups->add_child($applygroup);
+        $pluginwrapper->add_child($applications);
+        $applications->add_child($application);
 
         $applygroup->set_source_table('enrol_apply_groups', ['enrolid' => backup::VAR_PARENTID]);
+
+        /* The comment is personal data, so it follows the same setting as the user
+           enrolment it belongs to: without users in the backup there is nothing for it to
+           attach to on restore either. */
+        if ($this->task->get_setting_value('users')) {
+            $application->set_source_sql(
+                "SELECT ai.id, ai.userenrolmentid, ai.comment
+                   FROM {enrol_apply_applicationinfo} ai
+                   JOIN {user_enrolments} ue ON ue.id = ai.userenrolmentid
+                  WHERE ue.enrolid = ?",
+                [backup::VAR_PARENTID]
+            );
+        }
 
         $applygroup->annotate_ids('group', 'groupid');
 

@@ -41,7 +41,41 @@ class restore_enrol_apply_plugin extends restore_enrol_plugin {
     protected function define_enrol_plugin_structure() {
         return [
             new restore_path_element('enrol_apply_applygroup', $this->get_pathfor('/applygroups/applygroup')),
+            new restore_path_element('enrol_apply_application', $this->get_pathfor('/applications/application')),
         ];
+    }
+
+    /**
+     * Restore the comment submitted with one application.
+     *
+     * The row is keyed by user_enrolments.id, which core does not map, so this relies on
+     * the mapping enrol_apply_plugin::restore_user_enrolment() registers as each
+     * enrolment is restored. Core writes the user enrolments into the backup file before
+     * the plugin's own data, so that mapping already exists by the time this runs; if it
+     * does not, the comment is skipped rather than attached to the wrong person.
+     *
+     * @param array $data Backup data of the application.
+     * @return void
+     */
+    public function process_enrol_apply_application($data) {
+        global $DB;
+
+        $data = (object) $data;
+
+        $userenrolmentid = $this->get_mappingid('enrol_apply_userenrolment', $data->userenrolmentid);
+        if (!$userenrolmentid) {
+            return;
+        }
+
+        // The table is unique on userenrolmentid, so a repeated restore must not insert twice.
+        if ($DB->record_exists('enrol_apply_applicationinfo', ['userenrolmentid' => $userenrolmentid])) {
+            return;
+        }
+
+        $DB->insert_record('enrol_apply_applicationinfo', (object) [
+            'userenrolmentid' => $userenrolmentid,
+            'comment' => $data->comment,
+        ]);
     }
 
     /**

@@ -219,6 +219,78 @@ class enrol_apply_plugin extends enrol_plugin {
     }
 
     /**
+     * Apply everything that must follow an application becoming active.
+     *
+     * Called both by confirm_enrolment() and by the before_user_enrolment_updated
+     * observer, so an approval made from core's "Edit enrolment" screen leaves the same
+     * state behind as one made from the plugin's own queue. Idempotent by construction:
+     * groups_add_member() is a no-op for an existing membership and the delete matches
+     * nothing the second time.
+     *
+     * @param stdClass $instance Course enrol instance.
+     * @param int $userid Applicant user id.
+     * @param int $userenrolmentid User enrolment the application belongs to.
+     * @return void
+     */
+    public function complete_approval($instance, $userid, $userenrolmentid) {
+        global $DB;
+
+        // Group membership follows approval, never the bare application.
+        $this->add_instance_groups($instance, $userid);
+
+        $DB->delete_records('enrol_apply_applicationinfo', ['userenrolmentid' => $userenrolmentid]);
+
+        /* The applicant is told by an ad-hoc task rather than from here. The hook route
+           runs before the enrolment row is written, so notifying inline would announce an
+           approval that a failed write could still undo; the task re-reads the enrolment
+           and stays silent unless it really is active. Queueing is deduplicated on
+           classname + component + customdata (\core\task\manager::get_queued_adhoc_task_record),
+           so the two callers of this method cannot produce two messages. */
+        $task = new \enrol_apply\task\notify_approval();
+        $task->set_component('enrol_apply');
+        $task->set_custom_data(['userenrolmentid' => (int) $userenrolmentid]);
+        \core\task\manager::queue_adhoc_task($task, true);
+    }
+
+    /**
+     * Tell an applicant that their application was approved.
+     *
+     * Called from the ad-hoc task, so it re-establishes everything from the database and
+     * does nothing unless the enrolment is really active on an apply instance. That guard
+     * is what makes it safe to queue the task from a "before" hook.
+     *
+     * @param int $userenrolmentid User enrolment that was approved.
+     * @return void
+     */
+    public function notify_confirmed_application($userenrolmentid) {
+        global $DB;
+
+        $sql = "SELECT ue.*
+                  FROM {user_enrolments} ue
+                  JOIN {enrol} e ON e.id = ue.enrolid AND e.enrol = :enrol
+                 WHERE ue.id = :id AND ue.status = :active";
+        $userenrolment = $DB->get_record_sql($sql, [
+            'enrol' => 'apply',
+            'id' => $userenrolmentid,
+            'active' => ENROL_USER_ACTIVE,
+        ]);
+        if (!$userenrolment) {
+            // Approved and then undone, or never written. Nothing to announce.
+            return;
+        }
+
+        $instance = $DB->get_record('enrol', ['id' => $userenrolment->enrolid], '*', MUST_EXIST);
+
+        $this->notify_applicant(
+            $instance,
+            $userenrolment,
+            'confirmation',
+            get_config('enrol_apply', 'confirmmailsubject'),
+            get_config('enrol_apply', 'confirmmailcontent')
+        );
+    }
+
+    /**
      * Add the applicant to every group configured on the instance.
      *
      * Memberships are tagged with this plugin as their component so that core removes
@@ -444,6 +516,12 @@ class enrol_apply_plugin extends enrol_plugin {
                 $userenrolment->timeend = $userenrolment->timestart + $instance->enrolperiod;
             }
 
+            /* update_user_enrol() dispatches before_user_enrolment_updated, so the
+               observer in classes/hook_callbacks.php has usually already run
+               complete_approval() by the time this returns. It is called again below on
+               purpose: complete_approval() is idempotent, and this method must leave the
+               right state behind even if the hook is not registered — after an upgrade
+               that has not yet had its caches rebuilt, for instance. */
             $this->update_user_enrol(
                 $instance,
                 $userenrolment->userid,
@@ -452,18 +530,8 @@ class enrol_apply_plugin extends enrol_plugin {
                 $userenrolment->timeend
             );
 
-            // Group membership follows approval, never the bare application.
-            $this->add_instance_groups($instance, $userenrolment->userid);
-
-            $DB->delete_records('enrol_apply_applicationinfo', ['userenrolmentid' => $userenrolment->id]);
-
-            $this->notify_applicant(
-                $instance,
-                $userenrolment,
-                'confirmation',
-                get_config('enrol_apply', 'confirmmailsubject'),
-                get_config('enrol_apply', 'confirmmailcontent')
-            );
+            // The applicant's notification is queued by complete_approval(); see it for why.
+            $this->complete_approval($instance, (int) $userenrolment->userid, (int) $userenrolment->id);
         }
     }
 
@@ -872,7 +940,22 @@ class enrol_apply_plugin extends enrol_plugin {
         $userid,
         $oldinstancestatus
     ) {
+        global $DB;
+
         $this->enrol_user($instance, $userid, null, $data->timestart, $data->timeend, $data->status);
+
+        /* Core registers no mapping for user_enrolments, so the plugin builds its own:
+           the application comments are keyed by user enrolment id and have no other way
+           back. This works because core writes <user_enrolments> into the enrol element
+           before add_plugin_structure() appends the plugin's own data
+           (backup/moodle2/backup_stepslib.php), so this method has already run by the
+           time restore_enrol_apply_plugin processes an application. Should that order
+           ever change, get_mappingid() simply returns false there and the comment is
+           dropped — the behaviour before comments were backed up at all. */
+        $newid = $DB->get_field('user_enrolments', 'id', ['enrolid' => $instance->id, 'userid' => $userid]);
+        if ($newid) {
+            $step->set_mapping('enrol_apply_userenrolment', $data->id, $newid);
+        }
     }
 
     /**

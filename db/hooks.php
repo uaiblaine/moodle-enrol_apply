@@ -15,19 +15,18 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Version details for the enrolment upon approval plugin.
+ * Hook callbacks of the enrolment upon approval plugin.
  *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine
- * @copyright  emeneo.com (http://emeneo.com/)
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->component = 'enrol_apply';
-$plugin->version = 2026081101;
-$plugin->requires = 2025100600;
-$plugin->supported = [501, 502];
-$plugin->maturity = MATURITY_STABLE;
-$plugin->release = 'v2.0';
+$callbacks = [
+    [
+        'hook' => \core_enrol\hook\before_user_enrolment_updated::class,
+        'callback' => '\enrol_apply\hook_callbacks::before_user_enrolment_updated',
+    ],
+];

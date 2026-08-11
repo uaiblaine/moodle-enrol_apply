@@ -46,8 +46,9 @@ class enrol_apply_info_table extends table_sql {
     public function __construct($enrolid = 0, $commentlabel = '') {
         parent::__construct('enrol_apply_info_table');
 
-        $wheres = ['ue.status != :active'];
-        $params = ['active' => ENROL_USER_ACTIVE];
+        // Same "undecided application" predicate as the approval queue, see manage_table.php.
+        $wheres = ['ue.status != :active', '(ue.timeend = 0 OR ue.timeend > :now)'];
+        $params = ['active' => ENROL_USER_ACTIVE, 'now' => time()];
 
         if ($enrolid) {
             $wheres[] = 'e.id = :enrolid';

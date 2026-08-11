@@ -105,6 +105,7 @@ $string['newenrols_desc'] = 'Allow users to apply for an enrolment in new instan
 $string['notification'] = 'Enrolment application successfully sent. You will be informed by email when your enrolment has been confirmed.';
 $string['notify_desc'] = 'Define who gets notified about new enrolment applications.';
 $string['notify_heading'] = 'Notification settings';
+$string['notifyapprovaltask'] = 'Apply enrolment send approval notification task';
 $string['notifycoursebased'] = 'New enrolment application notification (instance based, eg. course teachers)';
 $string['notifycoursebased_desc'] = 'Default for new instances: Notify everyone who have the \'Manage apply enrolment\' capability for the corresponding course (eg. teachers and managers)';
 $string['notifyglobal'] = 'New enrolment application notification (global, eg. global managers and admins)';

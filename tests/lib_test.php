@@ -119,15 +119,20 @@ final class lib_test extends \advanced_testcase {
         global $DB;
 
         $this->setAdminUser();
-        set_config('expiredaction', ENROL_EXT_REMOVED_UNENROL, 'enrol_apply');
-        $DB->set_field('enrol', 'enrolperiod', DAYSECS, ['id' => $this->instance->id]);
-        $this->instance = $DB->get_record('enrol', ['id' => $this->instance->id], '*', MUST_EXIST);
+        /* The plugin caches its own config on the instance (enrol_plugin::get_config
+           reads $this->config), so the global set_config() would leave this object
+           believing the action is still "keep" and the sweep would do nothing at all —
+           a test that passes without exercising anything. */
+        $this->plugin->set_config('expiredaction', ENROL_EXT_REMOVED_UNENROL);
 
+        // The control: an approved enrolment whose period has run out. The sweep must eat it.
+        [, $controlueid] = $this->create_application();
+        $this->plugin->confirm_enrolment([$controlueid]);
+        $DB->set_field('user_enrolments', 'timeend', time() - DAYSECS, ['id' => $controlueid]);
+
+        // The subject: a pending application, which carries no period by construction.
         $applicant = $this->getDataGenerator()->create_user();
-        $this->setUser($applicant);
         $this->apply_as_current_user($applicant);
-        $this->setAdminUser();
-
         $ueid = (int) $DB->get_field(
             'user_enrolments',
             'id',
@@ -136,12 +141,211 @@ final class lib_test extends \advanced_testcase {
         );
         $this->assertEquals(0, (int) $DB->get_field('user_enrolments', 'timeend', ['id' => $ueid]));
 
-        // Wind the clock past any plausible period and run the sweep the scheduled task runs.
-        $DB->set_field('user_enrolments', 'timestart', time() - (30 * DAYSECS), ['id' => $ueid]);
         $this->plugin->process_expirations(new \null_progress_trace());
 
+        $this->assertFalse(
+            $DB->record_exists('user_enrolments', ['id' => $controlueid]),
+            'the control proves the sweep actually ran'
+        );
         $this->assertTrue($DB->record_exists('user_enrolments', ['id' => $ueid]));
         $this->assertEquals(ENROL_USER_SUSPENDED, (int) $DB->get_field('user_enrolments', 'status', ['id' => $ueid]));
+    }
+
+    /**
+     * An approved enrolment that later expires must not come back as an application.
+     *
+     * With expiredaction = suspend, process_expirations() re-suspends an expired ACTIVE
+     * enrolment. The queue selects on status != ACTIVE, so without the timeend predicate
+     * a long-approved user would reappear as a fresh application.
+     *
+     * @return void
+     */
+    public function test_expired_enrolment_does_not_reappear_in_the_queue(): void {
+        global $DB;
+
+        $this->setAdminUser();
+        $this->plugin->set_config('expiredaction', ENROL_EXT_REMOVED_SUSPEND);
+        [$user, $ueid] = $this->create_application();
+        $this->plugin->confirm_enrolment([$ueid]);
+
+        // Approve, then wind the enrolment period into the past and run the expiry sweep.
+        $DB->set_field('user_enrolments', 'timestart', time() - (10 * DAYSECS), ['id' => $ueid]);
+        $DB->set_field('user_enrolments', 'timeend', time() - DAYSECS, ['id' => $ueid]);
+        $this->plugin->process_expirations(new \null_progress_trace());
+
+        $ue = $DB->get_record('user_enrolments', ['id' => $ueid], '*', MUST_EXIST);
+        $this->assertEquals(ENROL_USER_SUSPENDED, (int) $ue->status, 'core should have re-suspended it');
+        $this->assertNotContains((int) $user->id, $this->queued_user_ids());
+    }
+
+    /**
+     * A genuinely pending application is still listed by the same query.
+     *
+     * Guards the predicate added for the expiry case from being written too broadly.
+     *
+     * @return void
+     */
+    public function test_pending_application_is_listed_in_the_queue(): void {
+        [$user] = $this->create_application();
+
+        $this->assertContains((int) $user->id, $this->queued_user_ids());
+    }
+
+    /**
+     * A deferred application stays in the queue.
+     *
+     * @return void
+     */
+    public function test_waiting_list_application_is_listed_in_the_queue(): void {
+        $this->setAdminUser();
+        [$user, $ueid] = $this->create_application();
+        $this->plugin->wait_enrolment([$ueid]);
+
+        $this->assertContains((int) $user->id, $this->queued_user_ids());
+    }
+
+    /**
+     * Approving through core's "Edit enrolment" screen completes the approval.
+     *
+     * enrol/editenrolment.php never calls confirm_enrolment(); it drives
+     * update_user_enrol() directly. The hook observer is what keeps the group membership
+     * and the application row in step on that path.
+     *
+     * @return void
+     */
+    public function test_activating_outside_confirm_enrolment_completes_the_approval(): void {
+        global $DB;
+
+        $this->setAdminUser();
+        $group = $this->getDataGenerator()->create_group(['courseid' => $this->course->id]);
+        $DB->insert_record('enrol_apply_groups', (object) [
+            'enrolid' => $this->instance->id,
+            'groupid' => $group->id,
+        ]);
+        [$user, $ueid] = $this->create_application();
+
+        // Exactly what course_enrolment_manager::edit_enrolment() does.
+        $this->plugin->update_user_enrol($this->instance, $user->id, ENROL_USER_ACTIVE);
+
+        $this->assertFalse(
+            $DB->record_exists('enrol_apply_applicationinfo', ['userenrolmentid' => $ueid]),
+            'the application row should have been cleared'
+        );
+        $this->assertTrue(
+            $DB->record_exists('groups_members', [
+                'groupid' => $group->id,
+                'userid' => $user->id,
+                'component' => 'enrol_apply',
+            ]),
+            'the configured group membership should have been granted'
+        );
+    }
+
+    /**
+     * Approving queues exactly one notification task, whichever route was taken.
+     *
+     * @return void
+     */
+    public function test_approval_queues_one_notification_task(): void {
+        global $DB;
+
+        $this->setAdminUser();
+        [, $ueid] = $this->create_application();
+
+        $this->plugin->confirm_enrolment([$ueid]);
+
+        $tasks = $DB->get_records('task_adhoc', ['classname' => '\enrol_apply\task\notify_approval']);
+        $this->assertCount(1, $tasks, 'the hook and confirm_enrolment must not queue two');
+        $this->assertEquals($ueid, (int) json_decode(reset($tasks)->customdata)->userenrolmentid);
+    }
+
+    /**
+     * The queued task tells the applicant their application was approved.
+     *
+     * @return void
+     */
+    public function test_notification_task_messages_the_applicant(): void {
+        $this->setAdminUser();
+        $this->preventResetByRollback();
+        [$user, $ueid] = $this->create_application();
+        $this->plugin->confirm_enrolment([$ueid]);
+
+        $sink = $this->redirectMessages();
+        $task = new \enrol_apply\task\notify_approval();
+        $task->set_custom_data(['userenrolmentid' => $ueid]);
+        $task->execute();
+        $messages = $sink->get_messages();
+        $sink->close();
+
+        $this->assertCount(1, $messages);
+        $this->assertEquals($user->id, $messages[0]->useridto);
+        $this->assertEquals('confirmation', $messages[0]->eventtype);
+    }
+
+    /**
+     * The task stays silent when the approval did not survive.
+     *
+     * The hook that queues it runs before the enrolment row is written, so the task must
+     * never assume the approval actually happened.
+     *
+     * @return void
+     */
+    public function test_notification_task_is_silent_when_the_enrolment_is_not_active(): void {
+        $this->setAdminUser();
+        $this->preventResetByRollback();
+        [, $ueid] = $this->create_application();
+
+        $sink = $this->redirectMessages();
+        $task = new \enrol_apply\task\notify_approval();
+        $task->set_custom_data(['userenrolmentid' => $ueid]);
+        $task->execute();
+        $messages = $sink->get_messages();
+        $sink->close();
+
+        $this->assertCount(0, $messages);
+    }
+
+    /**
+     * Suspending an active enrolment must not be mistaken for an approval.
+     *
+     * @return void
+     */
+    public function test_suspending_an_enrolment_does_not_trigger_the_approval_work(): void {
+        global $DB;
+
+        $this->setAdminUser();
+        $group = $this->getDataGenerator()->create_group(['courseid' => $this->course->id]);
+        $DB->insert_record('enrol_apply_groups', (object) [
+            'enrolid' => $this->instance->id,
+            'groupid' => $group->id,
+        ]);
+        [$user, $ueid] = $this->create_application();
+
+        $this->plugin->update_user_enrol($this->instance, $user->id, ENROL_USER_SUSPENDED);
+
+        $this->assertTrue($DB->record_exists('enrol_apply_applicationinfo', ['userenrolmentid' => $ueid]));
+        $this->assertFalse($DB->record_exists('groups_members', ['groupid' => $group->id, 'userid' => $user->id]));
+    }
+
+    /**
+     * The applicant user ids the approval queue would list for this course instance.
+     *
+     * @return array Array of user ids.
+     */
+    protected function queued_user_ids(): array {
+        global $CFG;
+
+        // Not autoloaded: the table classes live in plain files, not under classes/.
+        require_once($CFG->dirroot . '/enrol/apply/manage_table.php');
+
+        $table = new \enrol_apply_manage_table($this->instance->id);
+        $table->define_baseurl(new \moodle_url('/enrol/apply/manage.php'));
+
+        ob_start();
+        $table->out(50, false);
+        ob_end_clean();
+
+        return array_map(static fn($row) => (int) $row->userid, array_values($table->rawdata));
     }
 
     /**
