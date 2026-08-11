@@ -76,8 +76,8 @@ if ($id) {
 } else {
     /* Scope: everything the current user may decide on. Site-wide for holders of the
        capability at system level; otherwise restricted to the users they mentor, which
-       here means users sharing a cohort with them over whose user context they hold the
-       capability. */
+       here means the users they hold a role assignment over in those users' own
+       contexts. */
     $context = context_system::instance();
     if (!has_capability('enrol/apply:manageapplications', $context)) {
         /* No site-wide capability, so fall back to the mentees. A null restriction means
