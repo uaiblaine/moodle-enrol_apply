@@ -229,11 +229,35 @@ final class backup_test extends \advanced_testcase {
         [$course, $instance] = $this->create_course_with_application();
         $cohort = $this->getDataGenerator()->create_cohort();
         $DB->set_field('enrol', 'customint5', $cohort->id, ['id' => $instance->id]);
+        $DB->set_field('enrol', 'name', 'Restricted', ['id' => $instance->id]);
+
+        /* A second, unrestricted instance in the same course. Without it the "there was a
+           restriction" half of the guard is unpinned: dropping it would rewrite EVERY
+           cross-site restore to the sentinel, so every restored course would refuse every
+           application with "restricted to a cohort that does not exist on this site" having
+           never been restricted at all - a worse failure than the one the sentinel prevents,
+           and the whole suite would stay green. The restricted instance's -1 below is what
+           proves the cross-site path really ran, so neither assertion can pass vacuously. */
+        $openid = $this->plugin->add_instance($course, $this->plugin->get_instance_defaults());
+        $DB->set_field('enrol', 'name', 'Unrestricted', ['id' => $openid]);
 
         $newcourseid = $this->backup_and_restore($course, false, true);
 
-        $restored = $DB->get_record('enrol', ['courseid' => $newcourseid, 'enrol' => 'apply'], '*', MUST_EXIST);
+        $restored = $DB->get_record(
+            'enrol',
+            ['courseid' => $newcourseid, 'enrol' => 'apply', 'name' => 'Restricted'],
+            '*',
+            MUST_EXIST
+        );
         $this->assertEquals(-1, (int) $restored->customint5);
+
+        $untouched = $DB->get_record(
+            'enrol',
+            ['courseid' => $newcourseid, 'enrol' => 'apply', 'name' => 'Unrestricted'],
+            '*',
+            MUST_EXIST
+        );
+        $this->assertEquals(0, (int) $untouched->customint5);
     }
 
     /**

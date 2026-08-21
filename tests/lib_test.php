@@ -573,6 +573,42 @@ final class lib_test extends \advanced_testcase {
     }
 
     /**
+     * A window that is currently open admits, which no other test proves.
+     *
+     * The two refusal tests above use "no window configured" as their control, and that is
+     * not the same statement: it leaves the comparison against the current time unpinned.
+     * Measured on 2026-08-21, a mutant reading "if ($startdate > 0)" - refusing every
+     * instance that carries an opening date, whether or not it has arrived - passed the
+     * whole suite green.
+     *
+     * @return void
+     */
+    public function test_allow_apply_admits_inside_an_open_application_window(): void {
+        global $DB;
+
+        $DB->set_field('enrol', 'enrolstartdate', time() - DAYSECS, ['id' => $this->instance->id]);
+        $DB->set_field('enrol', 'enrolenddate', time() + DAYSECS, ['id' => $this->instance->id]);
+
+        $this->assertTrue($this->plugin->allow_apply($this->reload_instance()));
+    }
+
+    /**
+     * An opening date that has passed admits even with no closing date, and the mirror.
+     *
+     * @return void
+     */
+    public function test_allow_apply_admits_on_a_half_open_window(): void {
+        global $DB;
+
+        $DB->set_field('enrol', 'enrolstartdate', time() - DAYSECS, ['id' => $this->instance->id]);
+        $this->assertTrue($this->plugin->allow_apply($this->reload_instance()));
+
+        $DB->set_field('enrol', 'enrolstartdate', 0, ['id' => $this->instance->id]);
+        $DB->set_field('enrol', 'enrolenddate', time() + DAYSECS, ['id' => $this->instance->id]);
+        $this->assertTrue($this->plugin->allow_apply($this->reload_instance()));
+    }
+
+    /**
      * A cohort restriction admits members and refuses everybody else.
      *
      * @return void
