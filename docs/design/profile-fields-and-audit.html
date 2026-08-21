@@ -1,0 +1,2480 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Architecture proposal for enrol_apply: profile fields, audit trail, reporting and cohort restriction.">
+<title>Application Record</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&display=swap">
+<style>
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0}
+img,svg{max-width:100%}
+</style>
+<style>
+:root {
+  --paper:      #F2F6F6;
+  --surface:    #FFFFFF;
+  --surface-2:  #E8EFEF;
+  --ink:        #12171A;
+  --ink-soft:   #3D4A4C;
+  --muted:      #667577;
+  --line:       #D3DEDE;
+  --line-soft:  #E4EBEB;
+  --accent:     #17616B;
+  --accent-ink: #0E4249;
+  --accent-bg:  #DFEDEE;
+  --ok:         #1B6F42;
+  --ok-bg:      #DDEFE4;
+  --warn:       #7E5300;
+  --warn-bg:    #F5E9D0;
+  --danger:     #A81F19;
+  --danger-bg:  #F7E0DE;
+  --moodle:     #0f6cbf;
+  --moodle-bg:  #FFFFFF;
+  --moodle-ink: #1d2125;
+  --moodle-line:#dee2e6;
+  --moodle-mut: #6a737b;
+  --shadow:     0 1px 2px rgba(18,23,26,.06), 0 8px 24px -12px rgba(18,23,26,.18);
+  --measure:    68ch;
+  --wide:       1140px;
+}
+:root:not([data-theme="light"]) {
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper:      #0D1315;
+    --surface:    #141C1E;
+    --surface-2:  #1C2629;
+    --ink:        #E7EEEE;
+    --ink-soft:   #C0CCCC;
+    --muted:      #8B9B9C;
+    --line:       #2A3639;
+    --line-soft:  #212B2E;
+    --accent:     #5BB8C4;
+    --accent-ink: #A6DCE3;
+    --accent-bg:  #133238;
+    --ok:         #62C48C;
+    --ok-bg:      #12301F;
+    --warn:       #D8A64A;
+    --warn-bg:    #33260B;
+    --danger:     #EF8079;
+    --danger-bg:  #3A1512;
+    --moodle:     #6BB4F0;
+    --moodle-bg:  #101719;
+    --moodle-ink: #DDE6E7;
+    --moodle-line:#2C3A3D;
+    --moodle-mut: #93A2A4;
+    --shadow:     0 1px 2px rgba(0,0,0,.4), 0 8px 28px -14px rgba(0,0,0,.7);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper:      #0D1315;
+  --surface:    #141C1E;
+  --surface-2:  #1C2629;
+  --ink:        #E7EEEE;
+  --ink-soft:   #C0CCCC;
+  --muted:      #8B9B9C;
+  --line:       #2A3639;
+  --line-soft:  #212B2E;
+  --accent:     #5BB8C4;
+  --accent-ink: #A6DCE3;
+  --accent-bg:  #133238;
+  --ok:         #62C48C;
+  --ok-bg:      #12301F;
+  --warn:       #D8A64A;
+  --warn-bg:    #33260B;
+  --danger:     #EF8079;
+  --danger-bg:  #3A1512;
+  --moodle:     #6BB4F0;
+  --moodle-bg:  #101719;
+  --moodle-ink: #DDE6E7;
+  --moodle-line:#2C3A3D;
+  --moodle-mut: #93A2A4;
+  --shadow:     0 1px 2px rgba(0,0,0,.4), 0 8px 28px -14px rgba(0,0,0,.7);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  font-size: 16.5px;
+  line-height: 1.62;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap {
+  max-width: var(--wide);
+  margin: 0 auto;
+  padding: 0 24px 120px;
+}
+.col {
+  max-width: var(--measure);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ---------- masthead ---------- */
+.mast {
+  max-width: var(--wide);
+  margin: 0 auto;
+  padding: 72px 24px 40px;
+}
+.mast .kicker {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 12px;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0 0 18px;
+}
+.mast h1 {
+  font-family: "IBM Plex Serif", Georgia, serif;
+  font-weight: 600;
+  font-size: clamp(2.1rem, 5.2vw, 3.3rem);
+  line-height: 1.08;
+  letter-spacing: -.018em;
+  text-wrap: balance;
+  margin: 0 0 20px;
+  max-width: 20ch;
+}
+.mast .dek {
+  font-size: 1.12rem;
+  color: var(--ink-soft);
+  max-width: 62ch;
+  margin: 0;
+}
+.mast .meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 26px;
+  margin-top: 30px;
+  padding-top: 22px;
+  border-top: 1px solid var(--line);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.mast .meta b { color: var(--ink-soft); font-weight: 500; }
+
+/* ---------- sections ---------- */
+section { margin-top: 72px; }
+.eyebrow {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 11.5px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 14px;
+}
+.eyebrow::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+h2 {
+  font-family: "IBM Plex Serif", Georgia, serif;
+  font-weight: 600;
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  line-height: 1.16;
+  letter-spacing: -.012em;
+  text-wrap: balance;
+  margin: 0 0 18px;
+}
+h3 {
+  font-family: "IBM Plex Sans", sans-serif;
+  font-weight: 600;
+  font-size: 1.06rem;
+  letter-spacing: -.005em;
+  margin: 38px 0 10px;
+}
+h4 {
+  font-family: "IBM Plex Mono", monospace;
+  font-weight: 500;
+  font-size: 12.5px;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 26px 0 8px;
+}
+p { margin: 0 0 16px; }
+ul, ol { margin: 0 0 16px; padding-left: 1.35em; }
+li { margin-bottom: 7px; }
+li::marker { color: var(--muted); }
+strong { font-weight: 600; }
+a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+
+code, .mono {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: .87em;
+}
+p code, li code, td code {
+  background: var(--surface-2);
+  border: 1px solid var(--line-soft);
+  padding: .08em .34em;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+/* ---------- toc ---------- */
+.toc {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 22px 26px;
+  box-shadow: var(--shadow);
+}
+.toc ol { margin: 0; padding-left: 0; list-style: none; counter-reset: t; }
+.toc li {
+  counter-increment: t;
+  display: flex;
+  gap: 14px;
+  align-items: baseline;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line-soft);
+  margin: 0;
+}
+.toc li:last-child { border-bottom: 0; }
+.toc li::before {
+  content: counter(t, decimal-leading-zero);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11.5px;
+  color: var(--accent);
+  min-width: 2.2em;
+}
+.toc a { text-decoration: none; font-weight: 500; }
+.toc a:hover { text-decoration: underline; }
+.toc span { color: var(--muted); font-size: .9rem; margin-left: auto; text-align: right; }
+
+/* ---------- callouts ---------- */
+.callout {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: 3px;
+  padding: 20px 24px;
+  margin: 26px 0;
+}
+.callout.alarm { border-left-color: var(--danger); }
+.callout.warn  { border-left-color: var(--warn); }
+.callout > :last-child { margin-bottom: 0; }
+.callout .label {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+  color: var(--accent);
+  display: block;
+  margin-bottom: 8px;
+}
+.callout.alarm .label { color: var(--danger); }
+.callout.warn .label  { color: var(--warn); }
+
+/* ---------- code block ---------- */
+pre {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 18px 20px;
+  overflow-x: auto;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 13px;
+  line-height: 1.62;
+  margin: 20px 0;
+  color: var(--ink-soft);
+  tab-size: 2;
+}
+pre b { color: var(--accent); font-weight: 500; }
+pre i { color: var(--muted); font-style: normal; }
+
+/* ---------- table ---------- */
+.tablewrap { overflow-x: auto; margin: 24px 0; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+th, td { text-align: left; padding: 11px 16px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+thead th {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 500;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+tbody tr:last-child td { border-bottom: 0; }
+td.mono, th.mono { font-family: "IBM Plex Mono", monospace; font-size: 12.5px; }
+.num { font-variant-numeric: tabular-nums; }
+
+/* ---------- chips ---------- */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10.5px;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 3px;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+.chip.ok     { background: var(--ok-bg);     color: var(--ok);     border-color: color-mix(in srgb, var(--ok) 30%, transparent); }
+.chip.bad    { background: var(--danger-bg); color: var(--danger); border-color: color-mix(in srgb, var(--danger) 30%, transparent); }
+.chip.warn   { background: var(--warn-bg);   color: var(--warn);   border-color: color-mix(in srgb, var(--warn) 30%, transparent); }
+.chip.neutral{ background: var(--surface-2); color: var(--muted);  border-color: var(--line); }
+.chip.acc    { background: var(--accent-bg); color: var(--accent-ink); border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
+
+/* ---------- mockup frame ---------- */
+.figure { margin: 34px auto; max-width: var(--wide); }
+.figure figcaption {
+  font-size: 13.5px;
+  color: var(--muted);
+  margin-top: 12px;
+  max-width: 76ch;
+}
+.figure figcaption b { color: var(--ink-soft); font-weight: 500; }
+.browser {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  background: var(--moodle-bg);
+}
+.browser .bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line);
+}
+.browser .dots { display: flex; gap: 5px; }
+.browser .dots i { width: 9px; height: 9px; border-radius: 50%; background: var(--line); display: block; }
+.browser .url {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11.5px;
+  color: var(--muted);
+  background: var(--moodle-bg);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 3px 10px;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.browser .tag {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10.5px;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.viewport {
+  padding: 22px;
+  background: var(--moodle-bg);
+  color: var(--moodle-ink);
+  font-size: 14.5px;
+  line-height: 1.5;
+  overflow-x: auto;
+}
+
+/* ---------- moodle-ish UI primitives ---------- */
+.m-h { font-size: 1.28rem; font-weight: 600; margin: 0 0 16px; color: var(--moodle-ink); }
+.m-card {
+  border: 1px solid var(--moodle-line);
+  border-radius: 6px;
+  background: var(--moodle-bg);
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+.m-card > .hd {
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--moodle-line);
+  font-weight: 600;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.m-card > .bd { padding: 16px 18px; }
+.m-card > .ft { padding: 0 18px 16px; }
+.m-mut { color: var(--moodle-mut); font-size: 13.5px; }
+.m-btn {
+  display: inline-block;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 7px 16px;
+  border-radius: 4px;
+  border: 1px solid var(--moodle);
+  background: var(--moodle);
+  color: #fff;
+  cursor: default;
+}
+.m-btn.sec { background: transparent; color: var(--moodle); }
+.m-btn.sm { font-size: 13px; padding: 4px 11px; }
+.m-note {
+  border: 1px solid color-mix(in srgb, var(--moodle) 35%, transparent);
+  background: color-mix(in srgb, var(--moodle) 8%, transparent);
+  border-radius: 4px;
+  padding: 10px 14px;
+  font-size: 13.5px;
+  margin-bottom: 14px;
+}
+.m-note.bad { border-color: color-mix(in srgb, var(--danger) 40%, transparent); background: var(--danger-bg); color: var(--danger); }
+
+.m-row { padding: 12px 0; border-bottom: 1px solid var(--line-soft); }
+.m-row:last-child { border-bottom: 0; }
+.m-lab {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-weight: 500;
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+.m-req { color: var(--danger); font-weight: 700; }
+.m-in {
+  display: block;
+  width: 100%;
+  max-width: 420px;
+  font: inherit;
+  font-size: 14px;
+  padding: 6px 11px;
+  border: 1px solid var(--moodle-line);
+  border-radius: 4px;
+  background: var(--moodle-bg);
+  color: var(--moodle-ink);
+}
+.m-in.err { border-color: var(--danger); border-width: 2px; }
+.m-in.frozen { background: var(--surface-2); color: var(--muted); }
+.m-err { color: var(--danger); font-size: 12.5px; margin-top: 5px; }
+.m-check { display: flex; align-items: flex-start; gap: 8px; margin-top: 8px; font-size: 13.5px; }
+.m-check input { margin: 3px 0 0; accent-color: var(--moodle); }
+.m-check label { color: var(--moodle-ink); }
+
+.m-tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.m-tbl th, .m-tbl td { padding: 8px 12px; border-bottom: 1px solid var(--moodle-line); text-align: left; white-space: nowrap; }
+.m-tbl thead th { font-size: 12px; color: var(--moodle-mut); font-weight: 600; background: color-mix(in srgb, var(--moodle) 5%, transparent); }
+
+.split { display: flex; flex-wrap: wrap; gap: 20px; }
+.split > * { flex: 1 1 45%; min-width: 19rem; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 14px 0 0; font-size: 13px; color: var(--muted); }
+.legend > span { display: inline-flex; align-items: center; gap: 7px; }
+
+.beforeafter-label {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  margin: 0 0 10px;
+}
+.beforeafter-label.b { color: var(--danger); }
+.beforeafter-label.a { color: var(--ok); }
+
+/* ---------- steps ---------- */
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 26px 0; }
+.steps > li {
+  counter-increment: s;
+  position: relative;
+  padding: 0 0 26px 52px;
+  margin: 0;
+  border-left: 1px solid var(--line);
+  margin-left: 15px;
+}
+.steps > li:last-child { border-left-color: transparent; padding-bottom: 0; }
+.steps > li::before {
+  content: counter(s);
+  position: absolute;
+  left: -15px;
+  top: -2px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--accent);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12.5px;
+  display: grid;
+  place-items: center;
+}
+.steps h3 { margin: 0 0 6px; font-size: 1rem; }
+.steps p { margin-bottom: 10px; }
+
+/* ---------- decision box ---------- */
+.opts { display: flex; flex-wrap: wrap; gap: 16px; margin: 24px 0; }
+.opt {
+  flex: 1 1 45%;
+  min-width: 19rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+  padding: 18px 20px;
+}
+.opt.pick { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.opt h4 { margin-top: 0; }
+.opt p:last-child { margin-bottom: 0; }
+
+footer.end {
+  max-width: var(--measure);
+  margin: 90px auto 0;
+  padding-top: 26px;
+  border-top: 1px solid var(--line);
+  font-size: 13.5px;
+  color: var(--muted);
+}
+
+@media (max-width: 620px) {
+  body { font-size: 16px; }
+  .mast { padding-top: 48px; }
+  .viewport { padding: 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body>
+<header class="mast">
+  <p class="kicker">enrol_apply · architecture proposal</p>
+  <h1>Profile fields, done right</h1>
+  <p class="dek">
+    Today the two profile options dump the entire user-editing page underneath the title of the enrolment
+    method — twice, if there are two methods. This proposal replaces that with an explicit choice of fields,
+    a review screen of its own, real saving into the profile, an auditable JSON snapshot, a report through
+    Report Builder and the cohort restriction that <em>Self enrolment</em> already has.
+  </p>
+  <div class="meta">
+    <span><b>Target</b> Moodle 5.1 + 5.2</span>
+    <span><b>Baseline</b> 97818a7</span>
+    <span><b>Research</b> 8 sweeps · 3 designs · 11 adversarial reviews</span>
+    <span><b>Date</b> 21 Aug 2026</span>
+  </div>
+</header>
+
+<div class="wrap">
+
+<div class="col">
+  <nav class="toc" aria-label="Contents">
+    <ol>
+      <li><a href="#s1">What is wrong today</a><span>diagnosis</span></li>
+      <li><a href="#s2">The discovery that changes the design</a><span>schema</span></li>
+      <li><a href="#s3">The applicant's flow</a><span>mockup</span></li>
+      <li><a href="#s4">Choosing fields in the configuration</a><span>mockup</span></li>
+      <li><a href="#s5">Optional saving and lifecycle</a><span>security</span></li>
+      <li><a href="#s6">Report and entities</a><span>mockup</span></li>
+      <li><a href="#s7">Cohort restriction</a><span>code</span></li>
+      <li><a href="#s8">Traps measured in the code</a><span>reference</span></li>
+      <li><a href="#s9">Slicing the delivery</a><span>plan</span></li>
+      <li><a href="#s10">What to take from enrol_gapply</a><span>prior art</span></li>
+    </ol>
+  </nav>
+</div>
+
+<!-- ============================================================ 1 -->
+<section id="s1">
+  <div class="col">
+    <p class="eyebrow">01 — Diagnosis</p>
+    <h2>What is wrong today</h2>
+    <p>
+      <code>customint1</code> and <code>customint2</code> switch on two whole, indivisible blocks.
+      <code>useredit_shared_definition()</code> is all‑or‑nothing: along with city and phone come the email
+      display selector, timezone, theme, the description editor, the profile picture <em>filemanager</em> and the
+      interest <em>tags</em>. <code>profile_definition()</code> takes no field filter — it renders every custom
+      profile field, or none.
+    </p>
+    <p>
+      And none of it is saved. The values only travel into the notification email. Worse: the custom fields the
+      approver receives come from the <em>database</em>, not from the form — <code>profile_load_custom_fields()</code> at
+      <code>lib.php:700</code> — so what the applicant typed never reaches anyone.
+    </p>
+  </div>
+
+  <figure class="figure">
+    <div class="split">
+      <div>
+        <p class="beforeafter-label b">Today — two methods, two complete blocks</p>
+        <div class="browser">
+          <div class="bar"><span class="dots"><i></i><i></i><i></i></span><span class="url">/enrol/index.php?id=42</span></div>
+          <div class="viewport">
+            <p class="m-h">Enrolment options</p>
+            <div class="m-card">
+              <div class="hd">Course enrol confirmation</div>
+              <div class="bd">
+                <div class="m-row"><div class="m-lab">First name</div><span class="m-in">Ana</span></div>
+                <div class="m-row"><div class="m-lab">Surname</div><span class="m-in">Ribeiro</span></div>
+                <div class="m-row"><div class="m-lab">Email address</div><span class="m-in">ana@escola.br</span></div>
+                <div class="m-row"><div class="m-lab">Email display</div><span class="m-in">Hide from everyone</span></div>
+                <div class="m-row"><div class="m-lab">City/town</div><span class="m-in"></span></div>
+                <div class="m-row"><div class="m-lab">Timezone</div><span class="m-in">America/Sao_Paulo</span></div>
+                <div class="m-row"><div class="m-lab">Description</div><span class="m-in" style="height:52px"></span></div>
+                <div class="m-row"><div class="m-lab">User picture</div><span class="m-in" style="height:38px"></span></div>
+                <div class="m-row"><div class="m-lab">Interests</div><span class="m-in"></span></div>
+                <p class="m-mut" style="margin:12px 0 0">…9 more fields…</p>
+              </div>
+              <div class="ft"><span class="m-btn">Enrol me</span></div>
+            </div>
+            <div class="m-card">
+              <div class="hd">Course enrol confirmation — afternoon group</div>
+              <div class="bd">
+                <div class="m-row"><div class="m-lab">First name</div><span class="m-in">Ana</span></div>
+                <div class="m-row"><div class="m-lab">Surname</div><span class="m-in">Ribeiro</span></div>
+                <p class="m-mut" style="margin:12px 0 0">…the same 16 fields, again…</p>
+              </div>
+              <div class="ft"><span class="m-btn">Enrol me</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <p class="beforeafter-label a">Proposed — one short card per method</p>
+        <div class="browser">
+          <div class="bar"><span class="dots"><i></i><i></i><i></i></span><span class="url">/enrol/index.php?id=42</span></div>
+          <div class="viewport">
+            <p class="m-h">Enrolment options</p>
+            <div class="m-card">
+              <div class="hd">Course enrol confirmation</div>
+              <div class="bd">
+                <p style="margin:0 0 10px">Places are confirmed by a coordinator. The application takes about a minute.</p>
+                <p class="m-mut" style="margin:0">Before applying you will check <b>4 details</b> from your profile and confirm they are up to date.</p>
+              </div>
+              <div class="ft"><span class="m-btn">Start application</span></div>
+            </div>
+            <div class="m-card">
+              <div class="hd">Course enrol confirmation — afternoon group</div>
+              <div class="bd">
+                <p style="margin:0 0 10px">Afternoon group, 2pm to 5pm.</p>
+                <p class="m-mut" style="margin:0">Before applying you will check <b>2 details</b> from your profile.</p>
+              </div>
+              <div class="ft"><span class="m-btn">Start application</span></div>
+            </div>
+            <div class="m-card">
+              <div class="hd">Course enrol confirmation — extension</div>
+              <div class="bd">
+                <div class="m-note bad" style="margin:0">Only members of the cohort <b>Servidores 2026</b> may apply for enrolment.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <figcaption>
+      The card on the right is <code>\core_enrol\output\enrol_page</code> — the same structure <em>Self enrolment</em>
+      uses on 5.1+, with a header, an explanatory body and a single button. <b>The duplication disappears by construction:</b>
+      there is no field left on that page to duplicate. The third card shows the cohort refusal, rendered without a button.
+    </figcaption>
+  </figure>
+
+  <div class="col">
+    <div class="callout">
+      <span class="label">Measured, not assumed</span>
+      <p style="margin:0">
+        With two methods enabled, the page today emits <code>id_firstname</code>, <code>id_description_editor</code>,
+        <code>id_imagefile</code>, <code>id_category_N</code> and twenty more <em>identical</em> ids twice — including the
+        <em>name</em> of the hidden field <code>mform_isexpanded_id_moodle_picture</code>. Clicking the “First name” label on the
+        second card focuses the first card's field. That is a WCAG 1.3.1/4.1.1 failure, on top of two TinyMCE instances and two
+        <em>file pickers</em> fighting over the same ids.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 2 -->
+<section id="s2">
+  <div class="col">
+    <p class="eyebrow">02 — Schema</p>
+    <h2>The discovery that changes the design</h2>
+    <p>
+      Storing <code>userinfodata</code> as JSON is the right idea. The place is what does not work:
+      the <code>enrol_apply_applicationinfo</code> row is <strong>deleted on approval</strong>.
+    </p>
+    <pre><i>// lib.php:241, inside complete_approval()</i>
+$DB-&gt;delete_records('enrol_apply_applicationinfo', ['userenrolmentid' =&gt; $userenrolmentid]);</pre>
+    <p>
+      And on cancellation too (<code>lib.php:598</code>) and in <code>unenrol_user()</code> (<code>lib.php:899</code>).
+      On top of that, <code>hook_callbacks.php:68</code> uses the <em>existence</em> of that row as proof that a status
+      change to active was an approval and not an ordinary enrolment edit:
+    </p>
+    <pre><i>// classes/hook_callbacks.php:68</i>
+if (!$DB-&gt;record_exists('enrol_apply_applicationinfo', ['userenrolmentid' =&gt; $userenrolment-&gt;id])) {
+    return;
+}</pre>
+
+    <div class="callout alarm">
+      <span class="label">Consequence</span>
+      <p style="margin:0">
+        A snapshot stored there destroys itself at exactly the moment it acquires audit value. And if the row stops
+        being deleted in order to preserve it, <code>complete_approval()</code> starts firing again on every status
+        edit of an already approved user — rewriting groups and requeueing the confirmation message.
+      </p>
+    </div>
+
+    <h3>The fix: its own column, in a row that survives</h3>
+    <p>
+      <code>enrol_apply_applicationinfo</code> stays <strong>untouched</strong> — the hook's marker keeps working and
+      none of the four deletion paths changes. The <code>userinfodata</code> column moves to a new, durable table,
+      written in the same transaction. The queue and the notification read it through a <em>join</em>. Duplicating the
+      JSON across both tables was considered and discarded: it would be a second copy whose only defence would be a test
+      created to police the redundancy the design itself introduced.
+    </p>
+
+    <div class="callout alarm">
+      <span class="label">The key cannot be <code>userenrolmentid</code></span>
+      <p style="margin:0 0 12px">
+        It was the first thing the design tried, and it is fatal. <code>unenrol_user()</code>
+        (<code>lib.php:891‑903</code>) deletes by that key, and <code>cancel_applications()</code>
+        (<code>lib.php:597‑598</code>) calls <code>unenrol_user()</code>. A “cancelled” audit entry would be destroyed
+        <strong>by the very cancellation it exists to record</strong>; an “approved” one, by any later unenrolment.
+      </p>
+      <p style="margin:0">
+        The key is <code>courseid</code> + <code>userid</code> (plus <code>enrolid</code> for convenience). That also
+        changes the <em>backup</em>: <code>annotate_ids('user', 'userid')</code> and <code>annotate_ids('user',
+        'decidedby')</code>, resolving through core's <code>user</code> mapping — and not reusing the
+        <code>enrol_apply_userenrolment</code> one the plugin registers today (<code>lib.php:936‑959</code>).
+      </p>
+    </div>
+
+    <h4>Proposed schema</h4>
+    <pre><b>NEW</b> enrol_apply_submission          <i>-- durable: updated on decision, never deleted</i>
+  id
+  <b>courseid  int</b>   <i>-- the ONLY key that survives until the course_deleted event</i>
+  <b>userid    int</b>
+  enrolid   int
+  userenrolmentid int   <i>-- reference only; NEVER the key to anything</i>
+  comment
+  <b>userinfodata     text</b>  <i>-- the snapshot, as JSON</i>
+  status           int   <i>-- 0 pending · 1 approved · 2 waiting · 3 cancelled</i>
+  timecreated, timedecided, decidedby
+  <b>UNIQUE (courseid, userid)</b>  <i>-- without this, "one row per application" is just a phrase (see below)</i>
+
+<b>NEW</b> enrol_apply_submission_field    <i>-- slice 9, deferred: zero SQL over JSON in the report</i>
+  submissionid, sortorder
+  <b>userid</b>      int        <i>-- denormalised ON PURPOSE (see the privacy box)</i>
+  fieldkey    char 100   <i>-- 's_city' | 'c_7'</i>
+  fieldsource, fieldid
+  fieldlabel  text       <i>-- label FROZEN at submission time (text, not char 255)</i>
+  fielddatatype
+  fieldvisible int       <i>-- PROFILE_VISIBLE_* frozen</i>
+  state       char 20    <i>-- confirmed | updated | declined | prefilled | locked | blocked</i>
+  valuebefore, valueafter, timeconfirmed</pre>
+    <p>
+      The child table is <strong>deferred</strong> (slice 9), but the ground is prepared now: the JSON envelope is
+      versioned and carries label, type, visibility, state and values per field, so that the child can be backfilled
+      from it in an <em>upgrade</em> step, with no painful migration. And the state vocabulary lives in a class constant
+      from the start — not in a comment.
+    </p>
+
+    <div class="callout alarm">
+      <span class="label">The <code>userid</code> on the child table is not convenience</span>
+      <p style="margin:0 0 12px">
+        Core's privacy compliance test <strong>only</strong> forces the declaration of tables that have a column
+        literally named <code>userid</code> or a single-column foreign key to
+        <code>{user}.id</code> — <code>privacy/tests/privacy/provider_test.php:245‑266</code>, used at
+        <code>:293‑315</code>.
+      </p>
+      <p style="margin:0">
+        Without that column, the table holding the <em>actual profile values</em> — the most sensitive one in the whole
+        design — is <strong>not</strong> forced, and forgetting its <em>provider</em> would pass CI green. A
+        denormalised <code>userid</code> turns core's safety net into something that actually catches.
+      </p>
+    </div>
+
+    <p>
+      No denormalised counters. A report that disagrees with its own detail rows is worse than a slow report — Report
+      Builder's aggregation handles it.
+    </p>
+
+    <h3>Mask by availability, not by <em>callback</em></h3>
+    <p>
+      The temptation is to mask sensitive values in the column's <code>add_callback()</code>, row by row. <strong>That
+      protects nothing.</strong> Filtering and sorting are SQL and never go through a <em>callback</em>: anyone building
+      a custom report recovers a value they cannot see by adding a text filter (“<em>valueafter contains X</em>”) and
+      reading the row count, or simply by sorting on the column. And under aggregation the <em>callback</em> receives
+      nulls, because <code>column::get_fields()</code> collapses the aggregated column into a single field.
+    </p>
+    <p>
+      The correct model is core's own: decide <strong>once</strong>, with
+      <code>set_is_available()</code>, on the column <em>and</em> the filter <em>and</em> the condition. And the masking
+      applies to <em>every</em> row of a masked field, never only those that hold a value — a marker that appears only
+      where there is data is a presence oracle, a defect <code>local_groupdist</code> has already shipped and fixed
+      (<code>CHANGELOG.md:229‑233</code>).
+    </p>
+    <p>
+      <strong>Frozen vs live.</strong> Label, type, visibility level, values and state are frozen at write time — so
+      deleting a custom field does not delete its history. What is evaluated live is only whether the reader holds the
+      capability, and that evaluation happens when the report is assembled, not per row.
+    </p>
+
+    <div class="callout warn">
+      <span class="label">A race between two tabs</span>
+      <p style="margin:0">
+        “One row per application” is an assertion, not a guarantee. Two simultaneous submissions both pass the
+        already‑applied <code>record_exists</code> and both reach <code>apply()</code>. Today the
+        <em>foreign‑unique</em> key on <code>applicationinfo</code> makes the second <em>insert</em> blow up; the new
+        table needs a unique key of its own. The <code>customint3</code> places cap
+        (<code>lib.php:150‑156</code>) has the same race and deserves a short <em>lock</em> around
+        <code>apply()</code>.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 3 -->
+<section id="s3">
+  <div class="col">
+    <p class="eyebrow">03 — Flow</p>
+    <h2>One form class, two transports</h2>
+    <p>
+      The “second page or modal” request needs no decision: core already covers both with the same code.
+      <code>single_button</code> renders a real <code>&lt;form&gt;</code>; with JavaScript, the AMD module intercepts the
+      click and opens the <em>same</em> class in a modal.
+    </p>
+  </div>
+
+  <div class="col">
+    <ol class="steps">
+      <li>
+        <h3>Card on <code>enrol/index.php</code></h3>
+        <p><code>enrol_page_hook()</code> returns an <code>enrol_page</code> with a heading, the explanatory text
+        (<code>customtext1</code> + “you are about to check N details”) and a button to
+        <code>/enrol/apply/apply.php?instance=N</code>.</p>
+      </li>
+      <li>
+        <h3>Modal, when JavaScript is there</h3>
+        <p><code>enrol_apply/enrol_page</code> opens <code>core_form/modalform</code> with
+        <code>\enrol_apply\form\application_form</code>. Without JavaScript the button navigates to the page — same class,
+        rendered outside AJAX.</p>
+      </li>
+      <li>
+        <h3>Checking the fields</h3>
+        <p><code>set_data_for_dynamic_submission()</code> pre‑loads the user's current values and those of the chosen
+        custom fields — it is what makes the screen show “what is already there”. Today that pre‑load is
+        <code>$mform-&gt;setDefaults((array) $USER)</code> in <code>apply_form.php:105</code>, and it goes away with the file.</p>
+      </li>
+      <li>
+        <h3>Saving and snapshot</h3>
+        <p>Profile saved in core's canonical order, then <code>apply()</code> — the single write point for an
+        application (<code>lib.php:201‑232</code>) — with both inserts in one transaction.</p>
+      </li>
+      <li>
+        <h3>Acknowledgement page</h3>
+        <p><code>/enrol/apply/applied.php</code>: plain <code>require_login()</code>, checks that the current user really
+        does have a <em>user enrolment</em> on that instance — otherwise it is a free page telling strangers the
+        instance exists — and never <code>/course/view.php</code>, which bounces a suspended user straight back.
+        This is where the offer <em>“Save these profile details for future applications?”</em> appears, and only when
+        there is a real difference between what was typed and the live profile (§5).</p>
+      </li>
+    </ol>
+  </div>
+
+  <figure class="figure">
+    <div class="browser">
+      <div class="bar">
+        <span class="dots"><i></i><i></i><i></i></span>
+        <span class="url">/enrol/apply/apply.php?instance=17</span>
+        <span class="tag">= modal content</span>
+      </div>
+      <div class="viewport">
+        <p class="m-h">Enrolment subject to approval</p>
+        <div class="m-card">
+          <div class="hd">Check your details before applying</div>
+          <div class="bd">
+            <div class="m-note">
+              The coordinator will assess your application using these details. Fields marked with
+              <span class="m-req">*</span> must be filled in. For those that already have a value, confirm they are still
+              correct — what you submit <b>updates your profile</b>.
+            </div>
+
+            <h4 style="margin:18px 0 4px">Contact details</h4>
+
+            <div class="m-row">
+              <div class="m-lab">City/town <span class="chip ok">filled in</span></div>
+              <span class="m-in">Campinas</span>
+              <div class="m-check"><input type="checkbox" checked disabled id="k1"><label for="k1">City/town is up to date</label></div>
+            </div>
+
+            <div class="m-row">
+              <div class="m-lab">Mobile phone <span class="m-req">*</span> <span class="chip bad">empty</span></div>
+              <span class="m-in err"></span>
+              <div class="m-err">This field is required to apply for enrolment on this course.</div>
+            </div>
+
+            <div class="m-row">
+              <div class="m-lab">Institution <span class="chip ok">filled in</span></div>
+              <span class="m-in">Ada Lovelace State School</span>
+              <div class="m-check"><input type="checkbox" disabled id="k3"><label for="k3">Institution is up to date</label></div>
+              <div class="m-err">Confirm this value or correct it before continuing.</div>
+            </div>
+
+            <h4 style="margin:22px 0 4px">Employment details</h4>
+
+            <div class="m-row">
+              <div class="m-lab">Department <span class="chip ok">filled in</span></div>
+              <span class="m-in">Teaching Coordination</span>
+              <div class="m-check"><input type="checkbox" checked disabled id="k5"><label for="k5">Department is up to date</label></div>
+            </div>
+
+            <div class="m-row">
+              <div class="m-lab">Why do you want to take part?</div>
+              <span class="m-in" style="height:64px;max-width:100%"></span>
+            </div>
+
+            <h4 style="margin:22px 0 4px">These details travel with your application</h4>
+            <p class="m-mut" style="margin:0 0 10px">They come from the institution's identity system and cannot be changed here.</p>
+            <div style="display:grid;gap:6px;font-size:13.5px;border-left:2px solid var(--moodle-line);padding-left:14px">
+              <div><strong>Staff ID number</strong> — 1180422 <span class="chip neutral">locked by LDAP</span></div>
+              <div><strong>Home institution</strong> — Department of Education <span class="chip neutral">locked by LDAP</span></div>
+            </div>
+          </div>
+          <div class="ft">
+            <span class="m-btn">Submit application</span>
+            <span class="m-btn sec">Cancel</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col" style="margin:0">
+      <div class="legend">
+        <span><span class="chip ok">filled in</span> confirm or correct</span>
+        <span><span class="chip bad">empty</span> blocks submission when required</span>
+        <span><span class="chip neutral">locked</span> read‑only, enters the snapshot, never saved</span>
+      </div>
+    </div>
+    <figcaption>
+      Note that each confirmation checkbox <b>names its own field</b> (“City/town is up to date”), rather than repeating
+      “This detail is up to date”. That is not style: an <code>advcheckbox</code> with an empty element label gets no
+      <em>accessible name</em> at all — <code>element-advcheckbox.mustache</code> emits only an
+      <code>aria-describedby</code>, which is a description, not a name. With six fields, a screen reader would announce
+      six identical controls.
+    </figcaption>
+  </figure>
+
+  <div class="col">
+    <div class="callout alarm">
+      <span class="label">Locked field: three states, not two</span>
+      <p style="margin:0 0 12px">
+        The rule “what the user cannot edit does not appear at all” needs a third bucket, or it turns into a leak.
+        This plugin <em>already</em> e‑mails profile fields to the approver; hiding a field from the screen and
+        snapshotting it and passing it on anyway is disclosing a value the applicant never saw.
+      </p>
+      <div class="tablewrap" style="margin:0 0 12px">
+        <table>
+          <thead><tr><th>State</th><th>On screen</th><th>In the snapshot</th><th>Saved</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Editable</strong></td><td>field + confirmation checkbox</td><td><span class="chip ok">yes</span></td><td><span class="chip ok">yes</span></td></tr>
+            <tr><td><strong>Locked</strong><br><span class="m-mut">auth lock, <code>user_info_field.locked</code></span></td><td><code>static</code>, read‑only, under a heading of its own</td><td><span class="chip ok">yes</span></td><td><span class="chip bad">never</span></td></tr>
+            <tr><td><strong>Absent</strong><br><span class="m-mut">guest, MNet, <code>!can_edit_profile()</code>, <code>PROFILE_VISIBLE_NONE</code>, <code>lang</code></span></td><td><span class="chip bad">nothing</span></td><td><span class="chip bad">nothing</span></td><td><span class="chip bad">never</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="margin:0">
+        The “absent” bucket is the one a two‑bucket design gets wrong: a <code>PROFILE_VISIBLE_NONE</code> field is invisible
+        <em>to its own owner</em>, and <code>lang</code> is never editable by a real user. Those are values the applicant
+        has nowhere to read anywhere in Moodle. Note that core's answer to a locked field is the
+        <strong>opposite</strong> of hiding it: <code>hardFreeze()</code> renders label and value with no <em>input</em>.
+      </p>
+    </div>
+
+    <div class="callout warn">
+      <span class="label">Decide <em>before</em> the <code>addElement</code> — do not hide afterwards</span>
+      <p style="margin:0 0 12px">
+        <code>required</code> rules are attached when the element is created, and
+        <code>HTML_QuickForm::validate()</code> walks <code>$_rules</code> <strong>by name, without checking whether the
+        element still exists</strong>. Any “add then remove” technique, or hiding with CSS, leaves the form permanently
+        unsubmittable <em>with no visible field</em> to explain why.
+      </p>
+      <p style="margin:0">
+        And do not call <code>useredit_shared_definition()</code> at all: it adds four section headings unconditionally,
+        before and independently of the fields. On an SSO site where everything is locked, the result is an accordion of
+        empty sections.
+      </p>
+    </div>
+
+    <div class="callout warn">
+      <span class="label">The red does not come for free</span>
+      <p style="margin:0 0 12px">
+        The red marker in <code>element-template.mustache</code> comes from <code>{{#required}}</code>, which is switched on by
+        <code>addRule(..., 'required', ...)</code> and appears on <em>every</em> required field — filled in or not. And
+        <code>.invalid-feedback</code> only paints after a rejected POST. In other words: on the <strong>first</strong>
+        render, a required field that is filled in and one that is empty look identical.
+      </p>
+      <p style="margin:0">
+        So it is two things, not a choice between them: <code>addRule</code> for the marker <em>and</em> the check in
+        <code>validation()</code> to make it stick (a client‑side rule never blocks a POST) — plus a treatment of its own for
+        “empty right now”, which is what you asked for. That brings the fleet's CSS rules with it: theme <em>tokens</em> with a
+        <code>var(--bs-*, var(--*, …))</code> chain, no <code>!important</code>, and correct dark mode.
+      </p>
+    </div>
+
+    <div class="callout alarm">
+      <span class="label">A new hole the design has to close</span>
+      <p style="margin:0 0 12px">
+        <code>enrol/index.php:63‑65</code> refuses any enrolment during a “log in as” session
+        (<code>loginasnoenrol</code>). Today that file is the <strong>only</strong> way into the form —
+        <code>enrol_page_hook()</code> has no other caller anywhere in core.
+      </p>
+      <p style="margin:0">
+        The two new routes — the <code>apply.php</code> page and the web service
+        <code>core_form_dynamic_form</code> (<code>ajax =&gt; true</code>) — <em>do not go through it</em>. Without the guard
+        reproduced in both, an administrator logged in as somebody else submits an application in their name.
+        <code>enrol_self</code>'s own form has that flaw, so copying it verbatim inherits it.
+      </p>
+    </div>
+
+    <div class="callout">
+      <span class="label">The detail that makes the modal work</span>
+      <p style="margin:0 0 12px">
+        The <code>final</code> constructor of <code>dynamic_form</code> runs
+        <code>external_api::validate_context()</code>, which ends in <code>require_login()</code>. For an applicant
+        <em>not yet enrolled</em> that throws <code>require_login_exception('Not enrolled')</code> — the modal would fail for
+        exactly the people it exists for. That is why both of core's enrolment forms return the
+        <strong>category context</strong>, not the course one, and say so in a comment.
+      </p>
+      <p style="margin:0">
+        Since the category is a context where this plugin declares no capability at all
+        (<code>db/access.php</code> is entirely <code>CONTEXT_COURSE</code>), <code>check_access_for_dynamic_submission()</code>
+        resolves the instance by id server‑side and re‑evaluates everything in the <em>course</em> context: “log in as”,
+        <code>isguestuser()</code>, <code>can_view_course_info()</code>, <code>allow_apply()</code>, already‑applied and the
+        <code>customint3</code> cap.
+      </p>
+    </div>
+    <figure class="figure" style="margin-top:38px">
+      <div class="browser">
+        <div class="bar">
+          <span class="dots"><i></i><i></i><i></i></span>
+          <span class="url">/enrol/apply/profile.php?instance=17</span>
+          <span class="tag">after “Submit application”</span>
+        </div>
+        <div class="viewport">
+          <p class="m-h">Application submitted</p>
+          <div class="m-card">
+            <div class="bd">
+              <div class="m-note" style="border-color:color-mix(in srgb, var(--ok) 40%, transparent);background:var(--ok-bg);color:var(--ok)">
+                <strong>We have received your application for Introduction to Statistics.</strong>
+                You will be notified by e‑mail when a coordinator decides.
+              </div>
+
+              <p style="margin:16px 0 4px"><strong>Save these profile details for future applications?</strong></p>
+              <p class="m-mut" style="margin:0 0 12px">
+                You changed <b>2 details</b> while filling in this application. We can save them to your profile so you do not
+                have to type them again.
+              </p>
+
+              <div style="border:1px solid var(--moodle-line);border-radius:6px;padding:12px 16px;margin-bottom:16px">
+                <div style="display:grid;gap:9px;font-size:13.5px">
+                  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:baseline">
+                    <span style="min-width:9rem"><strong>Mobile phone</strong></span>
+                    <span class="m-mut" style="text-decoration:line-through">(empty)</span>
+                    <span>→</span>
+                    <span>(19) 99812‑4407</span>
+                  </div>
+                  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:baseline">
+                    <span style="min-width:9rem"><strong>Institution</strong></span>
+                    <span class="m-mut" style="text-decoration:line-through">Ada Lovelace School</span>
+                    <span>→</span>
+                    <span>Ada Lovelace School — Annex II</span>
+                  </div>
+                </div>
+              </div>
+
+              <div style="display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start">
+                <div>
+                  <p class="beforeafter-label" style="color:var(--muted)">state 1 · the offer</p>
+                  <span class="m-btn">Update profile</span>
+                </div>
+                <div>
+                  <p class="beforeafter-label" style="color:var(--muted)">state 2 · saving</p>
+                  <span class="m-btn" style="opacity:.75">
+                    <span style="display:inline-block;width:11px;height:11px;border:2px solid rgba(255,255,255,.45);border-top-color:#fff;border-radius:50%;vertical-align:-1px;margin-right:7px"></span>Saving…
+                  </span>
+                </div>
+                <div>
+                  <p class="beforeafter-label" style="color:var(--muted)">state 3 · done</p>
+                  <span class="m-btn" style="background:var(--ok);border-color:var(--ok)">✓ Details updated</span>
+                </div>
+              </div>
+            </div>
+            <div class="ft" style="border-top:1px solid var(--moodle-line);padding-top:16px;margin-top:4px">
+              <span class="m-btn sec">Go to the Dashboard</span>
+              <span class="m-mut" style="margin-left:10px">← label and destination come from <code>get_home_page()</code></span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <figcaption>
+        The mockup shows the three states side by side; on the real screen it is a single button that swaps in place. <b>This
+        needs a page of its own</b> — today the button would live in the output of <code>enrol_page_hook()</code>, and as soon
+        as the application row exists the <em>hook</em> returns early with nothing but a notification (<code>lib.php:146‑148</code>):
+        without JavaScript, the POST would reload <code>enrol/index.php</code> and show neither the button nor any
+        confirmation. With a page of its own, the in‑place swap becomes progressive enhancement over a real POST+redirect — and
+        the link survives to be reused in the approval message.
+      </figcaption>
+    </figure>
+
+    <div class="callout warn">
+      <span class="label">Two cautions on the CTA</span>
+      <p style="margin:0 0 12px">
+        <strong>“Never redirects to <code>/user/edit.php</code>” is not a promise the plugin can make.</strong>
+        <code>require_login()</code> redirects there whenever <code>user_not_fully_set_up()</code> — and every <em>home</em>
+        destination except the site home goes through <code>require_login()</code>. The honest sentence is: <em>the plugin</em>
+        never redirects there.
+      </p>
+      <p style="margin:0">
+        <strong>And <code>defaulthomepage</code> can point somewhere the applicant cannot get into.</strong>
+        <code>get_default_home_page_url()</code> accepts any local path — <code>/course/view.php?id=N</code> included. The right
+        route is <code>get_home_page()</code> plus the whole integer→URL mapping copied from <code>login/lib.php:356‑372</code>,
+        with a <em>fallback</em> to <code>/</code> in the <code>HOMEPAGE_URL</code> case. Do not call
+        <code>core_login_get_return_url()</code> (it clears <code>$SESSION-&gt;wantsurl</code>) or
+        <code>user_get_default_homepage_options()</code> (it only exists on 5.2).
+      </p>
+    </div>
+
+    <p>
+      A detail easily lost in the rewrite: the comment field
+      (<code>customint7</code> with a label from <code>customtext2</code>, today in <code>apply_form.php:85‑92</code>) has to
+      move to the new form — <code>manage_table.php:93</code> and <code>info_table.php:66</code> still read
+      <code>ai.comment</code>. And its label becomes the <strong>escaped</strong> spelling, because a
+      <em>moodleform</em> label renders in <code>{{{label}}}</code>; today <code>apply_form.php:88</code> uses the plain one.
+    </p>
+  </div>
+</section>
+
+<!-- ============================================================ 4 -->
+<section id="s4">
+  <div class="col">
+    <p class="eyebrow">04 — Configuration</p>
+    <h2>Choosing the fields, at two levels</h2>
+    <p>
+      The site level defines what a teacher <em>may</em> choose; the instance level defines what they
+      <em>chose</em>. This is not bureaucracy: it is what makes writing to the profile safe, because the allowed set is
+      recomputed on the server on every read.
+    </p>
+  </div>
+
+  <figure class="figure">
+    <div class="split">
+      <div>
+        <p class="beforeafter-label" style="color:var(--muted)">Level 1 — site administration</p>
+        <div class="browser">
+          <div class="bar"><span class="dots"><i></i><i></i><i></i></span><span class="url">/admin/settings.php?section=enrolsettingsapply</span></div>
+          <div class="viewport">
+            <div class="m-lab" style="font-size:15px">Fields available to courses</div>
+            <p class="m-mut" style="margin:0 0 12px">
+              Limits what each teacher may ask for on the application form.
+              <code>admin_setting_configmulticheckbox</code>
+            </p>
+            <div style="display:grid;gap:6px;font-size:13.5px">
+              <label><input type="checkbox" checked disabled> City/town</label>
+              <label><input type="checkbox" checked disabled> Country</label>
+              <label><input type="checkbox" checked disabled> Mobile phone</label>
+              <label><input type="checkbox" disabled> Phone</label>
+              <label><input type="checkbox" checked disabled> Institution</label>
+              <label><input type="checkbox" checked disabled> Department</label>
+              <label><input type="checkbox" disabled> Address</label>
+              <p class="m-mut" style="margin:8px 0 4px;font-size:12px">CUSTOM FIELDS</p>
+              <label><input type="checkbox" checked disabled> SIAPE staff number *</label>
+              <label><input type="checkbox" checked disabled> Assigned unit *</label>
+              <label><input type="checkbox" disabled> Start date *</label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <p class="beforeafter-label" style="color:var(--muted)">Level 2 — enrolment method configuration in the course</p>
+        <div class="browser">
+          <div class="bar"><span class="dots"><i></i><i></i><i></i></span><span class="url">/enrol/apply/edit.php?courseid=42&amp;id=17</span></div>
+          <div class="viewport">
+            <div class="m-lab" style="font-size:15px">Data requested from the applicant</div>
+            <p class="m-mut" style="margin:0 0 14px">Tick the field to show it; tick “required” to block submission while it is empty.</p>
+
+            <p style="font-size:12px;letter-spacing:.08em;color:var(--moodle-mut);margin:0 0 8px">CONTACT DETAILS</p>
+            <div style="display:grid;gap:10px;font-size:13.5px">
+              <div>
+                <label><input type="checkbox" checked disabled> <b>City/town</b></label>
+                <div style="margin:4px 0 0 24px"><label class="m-mut"><input type="checkbox" disabled> required</label></div>
+              </div>
+              <div>
+                <label><input type="checkbox" checked disabled> <b>Mobile phone</b></label>
+                <div style="margin:4px 0 0 24px"><label class="m-mut"><input type="checkbox" checked disabled> required</label></div>
+              </div>
+              <div><label class="m-mut"><input type="checkbox" disabled> Country</label></div>
+              <div>
+                <label><input type="checkbox" checked disabled> <b>Institution</b></label>
+                <div style="margin:4px 0 0 24px"><label class="m-mut"><input type="checkbox" disabled> required</label></div>
+              </div>
+            </div>
+
+            <p style="font-size:12px;letter-spacing:.08em;color:var(--moodle-mut);margin:18px 0 8px">EMPLOYMENT DETAILS</p>
+            <div style="display:grid;gap:10px;font-size:13.5px">
+              <div>
+                <label><input type="checkbox" checked disabled> <b>SIAPE staff number</b></label>
+                <div style="margin:4px 0 0 24px"><label class="m-mut"><input type="checkbox" checked disabled> required</label></div>
+              </div>
+              <div>
+                <label><input type="checkbox" checked disabled> <b>Assigned unit</b></label>
+                <div style="margin:4px 0 0 24px"><label class="m-mut"><input type="checkbox" disabled> required</label></div>
+              </div>
+            </div>
+
+            <p style="font-size:12px;letter-spacing:.08em;color:var(--moodle-mut);margin:20px 0 8px">RESTRICTION</p>
+            <div class="m-lab">Cohort members only</div>
+            <span class="m-in">Staff 2026</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <figcaption>
+      The “required” checkbox uses <code>hideIf</code> on the field's own checkbox, and the category headers are
+      <code>fieldcat_&lt;id&gt;</code> — <b>not</b> <code>category_&lt;id&gt;</code>, which is the namespace
+      <code>profile_definition()</code> already emits. All of it inserted <em>before</em>
+      <code>set_data()</code> at <code>edit_form.php:145</code>: an element added afterwards is never populated.
+      If the pair of checkboxes per field turns out too long in practice, the alternative consistent with the existing code is
+      two multiple <code>autocomplete</code> elements (“shown”, “required”), like the <code>groupselect</code> at
+      <code>edit_form.php:78</code>.
+    </figcaption>
+  </figure>
+
+  <div class="col">
+    <div class="callout alarm">
+      <span class="label">The site setting's default is load-bearing, not a detail</span>
+      <p style="margin:0">
+        <code>admin_setting_configmulticheckbox</code> stores <strong>only the ticked keys</strong>. If the default comes out
+        empty, the intersection in <code>resolve()</code> zeroes everything and <em>every migrated instance stops collecting the
+        fields it collected before the upgrade</em> — no error, no warning. And the precedent being copied,
+        <code>showuseridentity</code>, defaults to <code>['email' =&gt; 1]</code>… and <code>email</code> is on this proposal's
+        hard exclusion list. The default has to be declared explicitly and seeded by the upgrade step itself,
+        with a test that <em>upgrades</em> a <code>customint1=1</code> instance on a site where
+        <code>allowedfields</code> was never written and asserts that the fields still resolve.
+      </p>
+    </div>
+
+    <h3>Key vocabulary</h3>
+    <p>
+      Standard <code>s_&lt;column&gt;</code>, custom <code>c_&lt;user_info_field.id&gt;</code>.
+      <strong>Id, not <em>shortname</em>:</strong> <code>user_info_field</code> has no unique index on
+      <code>shortname</code> and core compares <em>shortnames</em> case-insensitively
+      (<code>$DB-&gt;sql_equal(..., false)</code>) — renaming a field would silently re-point the choice.
+      The <code>profileoption</code> the plugin already has today stores an id, so this is consistency, not invention.
+    </p>
+    <p>
+      Default set = <code>\core_user::AUTHSYNCFIELDS</code> (17 names, byte for byte identical on both <em>branches</em>)
+      minus four exclusions, which gives <strong>13 keys</strong>. Against what core actually renders in
+      <code>user/editlib.php</code>, that is <strong>12 plain text fields and one <code>select</code></strong> (country) —
+      not “nine, seven of them text”. Worth writing the list as an explicit constant rather than deriving it, so that the
+      configuration and the renderer cannot drift apart.
+    </p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Excluded</th><th>Measured reason</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">email</td><td>With <code>authloginviaemail</code> the email address is the login identifier; changing it is a flow of its own, with confirmation. A <em>self‑service</em> rewrite on an enrolment screen is account-takeover surface.</td></tr>
+          <tr><td class="mono">idnumber</td><td>Account-matching key for <code>tool_uploaduser</code> and external sync — and it is <code>PARAM_RAW</code>, not <code>PARAM_TEXT</code>.</td></tr>
+          <tr><td class="mono">lang</td><td>Core only renders it when <code>$user-&gt;id &lt; 0</code>. It was never collectable — even though it is in <code>renderer.php</code>'s constant today.</td></tr>
+          <tr><td class="mono">description</td><td>Requires the full editor cycle: <code>file_prepare_standard_editor</code> on load and <code>file_postupdate_standard_editor</code> <em>before</em> <code>user_update_user()</code>, with the user context. Out of scope for v1, and said so in the help string — which means nothing in the form may emit an editor for it.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      Two warnings about the list. The four phonetic/middle/alternate name fields are still subject to
+      <code>useredit_get_enabled_name_fields()</code>: if <code>$CFG-&gt;fullnamedisplay</code> does not use them, they drop
+      out of the set. And <code>url</code> is not included because it <strong>does not exist</strong> — it became a
+      <code>social</code> field in Moodle 4.0. It is dead in <code>renderer.php</code>'s constant and should go in the same <em>commit</em>.
+    </p>
+
+    <h3>What has to be retired alongside it</h3>
+    <p>
+      <code>show_standard_user_profile</code> and <code>show_extra_user_profile</code> (settings at
+      <code>settings.php:200‑214</code>, feeding <code>get_instance_defaults()</code> at
+      <code>lib.php:445‑446</code>) become dead configuration that still seeds retired columns into every new
+      instance. They come out of <code>settings.php</code>, out of <code>lib.php</code> and out of <strong>both</strong> language tables in the
+      same <em>commit</em> — CI's <code>validate</code> step reads the alphabetical ordering, so half a removal fails.
+    </p>
+    <p>
+      And there is a decision to take about <code>profileoption</code>: today it offers any text field
+      (<code>settings.php:39‑52</code>) and prints it in the queue (<code>manage_table.php:100‑108</code>,
+      <code>:247‑249</code>) <strong>with no visibility check at all</strong>. With the new field picker there would be
+      two unrelated mechanisms for “show a profile field in the queue”, and the old one is the one that leaks. Either it is
+      retired in favour of the chosen set, or it goes through the same visibility helper.
+    </p>
+  </div>
+</section>
+
+<!-- ============================================================ 5 -->
+<section id="s5">
+  <div class="col">
+    <p class="eyebrow">05 — Security</p>
+    <h2>Optional write and the data lifecycle</h2>
+
+    <div class="callout">
+      <span class="label">Owner's decision · the optional button</span>
+      <p style="margin:0 0 12px">
+        <strong>The silent write is gone.</strong> The applicant submits the application and, on the receipt page, is
+        offered: <em>“Save the profile data for future applications?”</em> → <strong>[Update profile]</strong>.
+      </p>
+      <p style="margin:0">
+        That changes the design for the better — the write becomes explicit and user-initiated. But it does not change a
+        line of the security obligations below: <strong>the validation is owed by the write, not by the widget.</strong>
+      </p>
+    </div>
+
+    <div class="callout alarm">
+      <span class="label">Literally as asked: it cannot be done</span>
+      <p style="margin:0 0 12px">
+        <code>/user/edit.php</code> accepts <strong>four</strong> parameters — <code>id</code>, <code>course</code>,
+        <code>returnto</code>, <code>cancelemailchange</code> (<code>user/edit.php:32‑35</code>, identical on both
+        <em>branches</em>) — and none of them carries a field value. <code>$user</code> is read from <code>{user}</code>
+        and enriched only from server-side sources; the form ends in <code>set_data($user)</code>. There is no
+        <em>hook</em>, session key or draft: <code>user/</code> dispatches six <em>hooks</em> and none of them touches
+        the edit form.
+      </p>
+      <p style="margin:0">
+        And <code>returnto</code> is <code>PARAM_ALPHA</code> tested against the literal <code>'profile'</code> — there
+        is no arbitrary return URL. After saving, the applicant lands on their own profile or on their preferences, never
+        back in the course.
+      </p>
+    </div>
+
+    <h3>The shape that works</h3>
+    <p>
+      A page of the plugin's own (<code>/enrol/apply/profile.php?instance=N</code>) showing the
+      <strong>difference</strong> between what was typed and the live profile → the button writes → the button itself
+      turns into <em>“Profile updated”</em> and the CTA leads to the configured <em>home</em>. No trip to the profile
+      page. The mockup is in <b>§3</b>.
+    </p>
+
+    <div class="callout warn">
+      <span class="label">Two findings that change the screen</span>
+      <p style="margin:0 0 12px">
+        <strong>1. The button is inert in the common case.</strong> Today's form is pre‑filled from
+        <code>$USER</code> (<code>apply_form.php:105</code>): anyone who edited nothing posts back their own record.
+        Without a diff, the page lists the data the user already has and asks permission to save it. It has to compare
+        against the live record, show <strong>only what changed</strong> and <strong>hide the button when the delta is
+        empty</strong>.
+      </p>
+      <p style="margin:0">
+        <strong>2. Only a subset can be written.</strong> Picture, description, interests, theme and timezone are
+        collected today and would need core's own dedicated calls (<code>core_user::update_picture</code>,
+        <code>useredit_update_interests</code>, <code>useredit_update_user_preference</code>). The confirmation page
+        enumerates exactly what will be written — and the field picker already fixes this at the root: <em>stop
+        collecting what will never be saved</em>.
+      </p>
+    </div>
+
+    <div class="callout">
+      <span class="label">A simplification the button unlocks</span>
+      <p style="margin:0">
+        The submitted values are in the <em>same request</em> that renders the confirmation. Carrying them into the
+        confirmation form as hidden fields makes a new table unnecessary <strong>for the offer</strong>: no privacy
+        metadata, no retention, no <code>test_table_coverage</code>. And nothing is lost to a reload — a
+        <em>reload</em> already hits the “already applied” short‑circuit (<code>lib.php:146‑147</code>), where no button
+        is rendered at all. The audit snapshot remains a separate thing, written either way.
+      </p>
+    </div>
+
+    <p>
+      The plugin's <code>CLAUDE.md</code> says today that <em>not</em> saving is deliberate: “turning it into a real
+      profile edit would let an enrolment form rewrite user records”. The objection is correct, and this proposal answers
+      it point by point rather than removing it.
+    </p>
+
+    <div class="callout alarm">
+      <span class="label">The attack that nearly got through</span>
+      <p style="margin:0 0 12px">
+        <code>customtext4</code> <strong>is not plugin configuration — it is untrusted input.</strong> Core
+        <em>backs up</em> <code>customtext1..4</code> literally
+        (<code>backup_stepslib.php:692‑695</code>), <code>restore_instance()</code> passes <code>$data</code> straight to
+        <code>add_instance()</code>, and that one copies <em>every</em> key with no allowlist whatsoever
+        (<code>enrollib.php:2618‑2625</code>).
+      </p>
+      <p style="margin:0 0 12px">
+        In other words: whoever can restore a course — an ordinary teacher, on most sites — chooses the content of
+        <code>customtext4</code>. And <code>user_update_user()</code> skips only keys that are not columns of
+        <code>{user}</code>, so <code>auth</code>, <code>suspended</code>, <code>policyagreed</code> and
+        <code>confirmed</code> would be written. A denylist is not enough.
+      </p>
+      <p style="margin:0">
+        <strong>And the same channel carries the switch.</strong> <code>customint8</code> travels the same way:
+        it is in <code>update_instance()</code>'s property list and <code>add_instance()</code> copies it
+        unconditionally. A course restored into a category the attacker controls turns the profile write on by itself.
+        Either the switch is a <em>site</em> setting — with no restore surface — or it goes into
+        <code>restore_instance()</code>'s revalidation block beside <code>customtext3</code> and is reset on every
+        restore.
+      </p>
+    </div>
+
+    <h3>The rule: intersection, not negation</h3>
+    <pre><i>// classes/local/fields.php — on EVERY read, never only on the write</i>
+public static function resolve(\stdClass $instance, \context $context): array {
+    $picked = fieldset::from_json($instance-&gt;customtext4);
+    <b>$pool   = self::pool($context);</b>   <i>// recomputed server-side: site setting ∩ live fields</i>
+    return array_values(array_filter(
+        $picked,
+        static fn($f) =&gt; isset($pool[$f-&gt;k]) &amp;&amp; !in_array($f-&gt;k, self::DENY, true)
+    ));
+}</pre>
+    <p>
+      It is exactly what <code>\core_user\fields::get_identity_fields()</code> does at
+      <code>user/classes/fields.php:382‑387</code> with <em>shortnames</em> that have disappeared. The denylist stays,
+      as a second barrier, with the minimum core itself keeps in
+      <code>update_user_record_by_id()</code> — <code>username, id, auth, mnethostid, deleted</code> — plus
+      <code>password, policyagreed, confirmed, suspended, secret, trustbitmask</code>.
+      And <code>restore_instance()</code> revalidates <code>customtext4</code> against the destination site, in the same
+      block that already degrades <code>customtext3</code>.
+    </p>
+
+    <h3>The two locks today's form does not have</h3>
+    <p>
+      <code>apply_form.php</code> has no <code>definition_after_data()</code>, and the whole repository never mentions
+      <code>field_lock</code>, <code>hardFreeze</code> or <code>can_edit_profile</code>. Today that is harmless because
+      nothing is written. The moment it starts writing, a field locked by the <em>auth</em> plugin becomes writable.
+    </p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Lock</th><th>Source</th><th>Reproduced by</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><em>auth</em> lock</td>
+            <td class="mono">$authplugin-&gt;config-&gt;{'field_lock_'.$f}</td>
+            <td><code>hardFreeze()</code> <strong>and</strong> <code>setConstant()</code></td>
+          </tr>
+          <tr>
+            <td>Field's own lock</td>
+            <td class="mono">user_info_field.locked</td>
+            <td>the semantics of <code>profile_definition_after_data()</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout warn">
+      <span class="label">Both calls are load-bearing, not decoration</span>
+      <p style="margin:0">
+        <code>hardFreeze()</code> erases every rule and makes <code>exportValues()</code> export an empty string;
+        <code>setConstant()</code> lays the original value back over it. Copying only the first
+        <strong>erases</strong> the locked value on the write — a silent failure, in exactly the opposite direction from
+        the one intended.
+      </p>
+    </div>
+
+    <div class="callout alarm">
+      <span class="label">“Render it read‑only” does not come for free</span>
+      <p style="margin:0 0 12px">
+        <code>profile_field_base::edit_field()</code> returns <code>false</code> and <strong>adds no element at
+        all</strong> when <code>is_editable()</code> is false — and <code>is_editable()</code> is false exactly when
+        <code>moodle/user:editownprofile</code> is missing, which is the same condition under which the design promised
+        “everything read‑only”. The field simply <em>disappears</em>, while the <code>confirm_&lt;chave&gt;</code>
+        checkbox stays on screen with nothing to confirm — and the “confirm before submitting” validation blocks a form
+        the user has no way to satisfy.
+      </p>
+      <p style="margin:0">
+        Fix: the read‑only state is rendered <em>by the plugin</em>, with a
+        <code>static</code> element carrying <code>$field-&gt;display_data()</code>; and
+        <code>confirm_&lt;chave&gt;</code> is emitted only for keys that actually produced an element — by testing
+        <code>edit_field()</code>'s boolean return.
+      </p>
+    </div>
+
+    <h3>Write order — core's own</h3>
+    <pre><i>// user/edit.php does it in this order, and for these reasons</i>
+get_auth_plugin($USER-&gt;auth)-&gt;can_edit_profile()                     <i>// auth says "the profile is not edited here"</i>
+&amp;&amp; has_capability('moodle/user:editownprofile', context_system::instance())
+
+$usernew = <b>explicit allowlist</b>;   <i>// NEVER (array) $data</i>
+$authplugin-&gt;user_update($user, $usernew);      <i>// otherwise LDAP/AD goes stale</i>
+user_update_user($usernew, <b>false</b>, <b>false</b>);       <i>// $updatepassword=false, $triggerevent=false</i>
+profile_save_data($usernew);                    <i>// fires no event at all</i>
+\core\event\user_updated::create_from_userid($USER-&gt;id)-&gt;trigger();  <i>// one event, after everything</i></pre>
+    <p>
+      Without <code>$triggerevent = false</code>, the event would be born in the middle of the write. And
+      <code>profile_save_data()</code> performs no authorisation check of any kind — whatever is on the object is written
+      to <code>user_info_data</code>. All of the security on the custom-field side sits with whoever builds that object.
+      The event, incidentally, carries ids and counts; <strong>never values</strong> — the <em>log store</em> is covered
+      by no <em>provider</em> and no deletion request reaches it.
+    </p>
+
+    <h3>Reclassify at write time</h3>
+    <div class="callout alarm">
+      <span class="label">Locks are UI only</span>
+      <p style="margin:0">
+        <code>user_update_user()</code> never consults <code>field_lock_*</code>, and
+        <code>profile_save_data()</code> performs no check at all. Core's only defence against a forged POST is
+        <code>setConstant()</code> winning in <code>exportValues()</code> — and the rule “a locked field is not even
+        rendered” <strong>removes exactly that defence</strong>, because there is no element to carry the constant. So:
+        re-run the classification <em>at write time</em> and write only the keys classified
+        <code>editable</code>, never the set of keys submitted. Plus <code>require_sesskey()</code> and a check that a
+        non‑active <code>user_enrolments</code> row really does exist on that instance.
+      </p>
+    </div>
+    <p>
+      There is no core helper for “can this user edit this field right now”: the standard field lock is evaluated
+      <em>exactly once</em> in the whole of Moodle, embedded in the profile form's <code>definition_after_data()</code>.
+      The plugin has to write the predicate, and the config key for a custom field is
+      <code>auth_&lt;auth&gt;/field_lock_profile_field_&lt;shortname&gt;</code>. Two details that bite:
+      <code>unlockedifempty</code>'s emptiness test is the loose <code>!= ''</code> — a stored <code>'0'</code> counts as
+      <em>filled</em>, and therefore locked, whereas <code>!empty('0')</code> would invert the decision; and
+      <code>auth_manual</code> merges a legacy config component, so reading only
+      <code>get_config('auth_manual', …)</code> misses locks the core form honours.
+    </p>
+
+    <h3><code>strictformsrequired</code>: the reasoning runs backwards</h3>
+    <div class="callout warn">
+      <span class="label">It does not protect the write — it loosens it</span>
+      <p style="margin:0 0 12px">
+        The setting is read in exactly two places (<code>formslib.php:3623</code> server side,
+        <code>:3641</code> client side), applies to <code>addRule(…, 'required')</code> on both sides automatically — a
+        <code>dynamic_form</code> inherits it for free — and is identical on 5.1 and 5.2. There is nothing to “honour”
+        beyond using the standard rule instead of inventing an emptiness test in <code>validation()</code>.
+      </p>
+      <p style="margin:0">
+        But the <strong>default is off</strong>. With it off, <code>' '</code> (a single space) satisfies a required
+        field — and that is what would go into the profile. The decision that actually matters is a different one and has
+        to be taken separately: <strong>what does the writer do with a whitespace-only value?</strong> I recommend
+        <code>trim()</code> before comparing and before writing, and treating the empty result as “not filled in”.
+      </p>
+    </div>
+    <p>
+      Collateral care: <code>hardFreeze()</code> erases the <code>required</code> rule along with all the others. And a
+      required custom field of type <em>checkbox</em> does not use the <code>required</code> rule, so
+      <code>strictformsrequired</code> never reaches it.
+    </p>
+
+    <h3>Erasing by accident</h3>
+    <p>
+      A submitted value is ignored only when it is <em>absent</em> from the form data — that is core's own boundary
+      (<code>edit_save_data()</code> returns at <code>if (!isset($usernew-&gt;{$this-&gt;inputname}))</code>).
+      An <em>empty</em> value is written, and erases. For <code>checkbox</code> and <code>menu</code>, any posted value —
+      including <code>'0'</code> — is real; for text fields, <code>''</code> is discarded only when a stored value
+      already exists. This becomes a test, not a comment.
+    </p>
+    <p>
+      One last one on validation: <code>profile_validation()</code> walks <strong>every</strong> field that has data, not
+      only the chosen ones. Its return has to be intersected with <code>elementExists()</code>, otherwise a
+      <code>forceunique</code> field nobody picked blocks the form with an error that appears nowhere.
+    </p>
+
+    <h3>The <em>backup</em>: what travels, and under which key</h3>
+    <div class="callout">
+      <span class="label">Direct answer to your question</span>
+      <p style="margin:0 0 12px">
+        <strong>Yes, the enrolment method travels in both cases.</strong> The <code>{enrol}</code> rows are included
+        <em>unconditionally</em>; “Include enrolled users” gates only
+        <code>{user_enrolments}</code>.
+      </p>
+      <p style="margin:0">
+        But on <strong>restore</strong> the story is different: when the users are left out,
+        <code>process_enrol()</code> converts the instance to <em>manual</em> and
+        <code>enrol_apply::restore_instance()</code> <strong>is never called</strong> — no plugin element is processed at
+        all. So: the audit trail travels <em>only</em> with users included. A test of the
+        “back up without users and assert the audit trail did not come across” kind passes vacuously; it has to assert
+        that <em>no apply instance</em> exists in the restored course.
+      </p>
+    </div>
+    <p>
+      On the gate itself: the earlier decision to use <code>logs</code> is still inverted — both defaults of
+      <code>logs</code> are 0 and <code>users</code> gates <code>logs</code>, so the gate is strictly narrower and would
+      bring the comments across without the record of the decisions. It stays in the <code>users</code> block.
+    </p>
+
+    <div class="callout alarm">
+      <span class="label">A real contradiction between “travel in the backup” and “have its own retention”</span>
+      <p style="margin:0 0 12px">
+        The only attachment point an enrolment plugin has in the <em>backup</em> is the per-instance
+        <code>&lt;enrol&gt;</code> element — which pushes the key towards <code>enrolid</code>. Except that a table keyed
+        by <code>enrolid</code> is destroyed by <code>delete_instance()</code>, which runs on <strong>every</strong>
+        instance deletion, not only on course deletion. That is the opposite of a trail with a lifecycle of its own.
+      </p>
+      <p style="margin:0">
+        <strong>Your decision, and both are defensible:</strong>
+        <b>(a)</b> carry <code>enrolid</code> <em>and</em> <code>courseid</code>, and change
+        <code>delete_instance()</code> to <strong>not</strong> delete the audit rows — documenting that the trail
+        outlives the enrolment method; or <b>(b)</b> key by <code>courseid</code> and accept that the trail
+        <em>does not</em> travel in the <em>backup</em>. Since you want both things, it is <b>(a)</b> — but it has to be
+        written down, because it inverts the current cleanup behaviour.
+      </p>
+    </div>
+
+    <h4>Restore must not trigger a profile update</h4>
+    <p>
+      It does not, and the argument has to be about mechanism, not intent: <code>restore_instance()</code> always creates
+      a new instance, <code>{user_enrolments}</code>'s unique <code>enrolid‑userid</code> key forces
+      <code>enrol_user()</code> down the <em>INSERT</em> branch, and
+      <code>before_user_enrolment_updated</code> is dispatched only by <code>update_user_enrol()</code>. No
+      <em>UPDATE</em>, no <em>hook</em>, no task.
+    </p>
+    <div class="callout warn">
+      <span class="label">Two wrong sentences in the repository itself</span>
+      <p style="margin:0">
+        The plugin's <code>CLAUDE.md</code> and the <em>docblock</em> at <code>hook_callbacks.php:44‑47</code> both state
+        that “the observer deliberately does not notify”. It <strong>does notify</strong>: it calls
+        <code>complete_approval()</code>, which queues <code>\enrol_apply\task\notify_approval</code>
+        (<code>lib.php:249‑252</code>). Fix both in the same <em>commit</em> — it is exactly the kind of sentence a
+        reviewer would lean on to approve this design.
+      </p>
+    </div>
+
+    <p>
+      On a cross-site restore, the rows need <code>annotate_ids('user', 'userid')</code> and
+      <code>annotate_ids('user', 'decidedby')</code>; when the mapping fails, the row is <strong>dropped</strong>,
+      not written with <code>userid</code> 0 — an ownerless profile snapshot is not an audit trail, it is loose personal
+      data.
+    </p>
+
+    <h3>Deletion: “when the recycle bin is emptied” does not exist as a state</h3>
+    <p>
+      With the recycle bin on, the course is <strong>deleted in full, immediately</strong>. The recycle bin keeps only a
+      <em>zip</em> of the <em>backup</em> plus a row in <code>tool_recyclebin_category</code>; emptying it deletes that file and
+      that row, and nothing else. Core's own test asserts that the course row is gone the instant
+      <code>delete_course()</code> returns. So both branches of your decision collapse into a single moment: course
+      deletion.
+    </p>
+    <div class="callout alarm">
+      <span class="label">The hole: plugin disabled</span>
+      <p style="margin:0">
+        <code>enrol_course_delete()</code> calls <code>delete_instance()</code> only for <strong>enabled</strong> plugins
+        (<code>enrol_get_plugins(true)</code>, <code>enrollib.php:1177,1190</code>) — and then deletes the
+        <code>enrol</code> and <code>user_enrolments</code> rows anyway (<code>:1194‑1196</code>). If
+        <code>enrol_apply</code> is disabled when a course is deleted, the rows are orphaned
+        <em>permanently</em>, with no key left to find them by. No error, no warning.
+      </p>
+    </div>
+    <p>
+      Hence the <code>courseid</code> column on the new table: it is the only key that survives as far as the
+      <code>course_deleted</code> event, which fires <em>after</em> the course, the context and the enrolments are
+      already gone. The cleanup lives in two places, and both are needed:
+    </p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Route</th><th>Covers</th><th>Does not cover</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>Primary</strong><br><code>delete_instance()</code></td>
+            <td>Direct deletion, deletion through the recycle bin, a category <code>delete_full()</code>, manual deletion of the instance, and <em>restoring over an existing course deleting its content</em> — a path no event observer sees, because the course is not deleted and <code>course_deleted</code> never fires.</td>
+            <td>Plugin disabled.</td>
+          </tr>
+          <tr>
+            <td><strong>Safety net</strong><br><code>course_deleted</code> observer</td>
+            <td>Exactly the disabled-plugin case — observers are registered by every installed plugin, enabled or not.</td>
+            <td>The restore‑deleting‑content case above.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      The observer normally finds zero rows, so its test needs a control row in another course that <em>has</em> to
+      survive — otherwise it passes without exercising anything. And a new <code>db/events.php</code> requires a version
+      <em>bump</em> to register.
+    </p>
+    <div class="callout warn">
+      <span class="label">A correction to the sentence “deleting the course deletes the data”</span>
+      <p style="margin:0">
+        It does not: it deletes the <em>live</em> rows. A full copy stays inside the recycle bin's <em>zip</em> until
+        that <em>backup</em> is removed — and the cleanup task <strong>returns immediately when the recycle bin is
+        disabled</strong>, which leaves every existing item stranded indefinitely. Worth saying so in the documentation
+        instead of promising the opposite.
+      </p>
+    </div>
+    <p>
+      The privacy <em>provider</em> is not a cleanup mechanism: core never calls
+      <code>delete_data_for_all_users_in_context()</code> when deleting a course or a context — only
+      <code>tool_dataprivacy</code> does, by retention or by request. It remains a separate obligation, and now has to
+      cover <strong>two</strong> roles, the applicant and whoever decided.
+    </p>
+
+    <h3>A configurable lifecycle driven by a scheduled task — yes, it makes sense</h3>
+    <p>
+      It does, and there are three precedents in the fleet plus one in core. A days setting with <code>0</code> = keep
+      forever, a daily scheduled task in <code>db/tasks.php</code>. But with two corrections that decide whether it is
+      honest:
+    </p>
+    <div class="callout alarm">
+      <span class="label">An audit row must not outlive the course <em>carrying personal data</em></span>
+      <p style="margin:0 0 12px">
+        <code>contextlist::add_from_sql()</code> wraps every <em>provider</em> query in a <em>JOIN</em> against
+        <code>{context}</code>, and the course context is destroyed <em>before</em> <code>course_deleted</code> fires.
+        A retained row is therefore <strong>invisible to the data subject's access request and unreachable by a deletion
+        request</strong> — silently.
+      </p>
+      <p style="margin:0">
+        Fix: act in the <em>hook</em> <code>\core_course\hook\before_course_deleted</code>, which is dispatched while the
+        context is still alive — not in the <code>course_deleted</code> event. And there: either delete, or
+        <strong>pseudonymise properly</strong> — zero out <code>userid</code> <em>and</em> <code>decidedby</code> and
+        discard the snapshot, keeping only dates and status. Anything less than that leaves personal data nobody can
+        reach.
+      </p>
+    </div>
+    <div class="callout warn">
+      <span class="label">Sweep by <code>timecreated</code>, not by <code>timedecided</code></span>
+      <p style="margin:0 0 12px">
+        An undecided row has <code>timedecided = 0</code>: a sweep on that column would keep exactly the abandoned
+        applications forever. And the task has to run in chunks, with a time budget, logging and skipping a bad row —
+        <strong>never throwing</strong>: a failure applies exponential backoff up to 24 h and a single poisoned row
+        freezes the whole retention.
+      </p>
+      <p style="margin:0">
+        <span class="chip warn">fleet correction</span> The <code>~/dev/CLAUDE.md</code> rule that “a throwing
+        ad‑hoc task is retried forever” is <strong>wrong</strong> on both <em>branches</em>:
+        <code>attemptsavailable</code> is decremented, <code>queue_adhoc_task()</code> sets it to 1 when
+        <code>retry_until_success()</code> is false, and exhausted rows are deleted after four weeks. Worth fixing that
+        sentence there, since it guides the whole fleet.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 6 -->
+<section id="s6">
+  <div class="col">
+    <p class="eyebrow">06 — Reporting</p>
+    <h2>A report in the course, a <em>datasource</em> at the site</h2>
+    <div class="callout alarm">
+      <span class="label">Core restriction</span>
+      <p style="margin:0">
+        <strong>A custom report cannot be scoped to a course.</strong> The <code>contextid</code> of the
+        <em>persistent</em> is born in the system context and the creation form offers no context at all;
+        <code>set_condition_values()</code> writes to the <em>shared</em> record, so there is no per-viewer condition.
+        The “embed a custom report in the course page” route does not deliver what was asked for.
+      </p>
+    </div>
+    <p>
+      The answer is to ship <strong>both</strong> surfaces, which is what the request describes once you look closely:
+    </p>
+    <ul>
+      <li>
+        <strong><code>system_report</code> <code>course_applications</code></strong> — created with
+        <code>context_course::instance($course-&gt;id)</code>. It does not go through
+        <code>$CFG-&gt;enablecustomreports</code>: on a site that has turned custom reports off, this one keeps
+        working.
+      </li>
+      <li>
+        <strong><code>datasource</code> <code>applications</code></strong> — discovered automatically by the class map
+        from the path and the <em>namespace</em> alone. There is no <code>db/reportbuilder.php</code>; what there is
+        is the need to bump <code>version.php</code> so the map is rebuilt.
+      </li>
+    </ul>
+
+    <div class="callout alarm">
+      <span class="label"><code>can_view()</code> is the whole gate — not “defence in depth”</span>
+      <p style="margin:0 0 12px">
+        The temptation is to validate everything in <code>report.php</code> before creating the report. Except that
+        <code>report.php</code> <strong>does not run on page 2</strong>: every sort, filter and page re‑instantiates the
+        report through <code>core_reportbuilder_retrieve_report</code>, which receives <em>source</em>, context,
+        component, area, <em>itemid</em> and parameters <strong>straight from the client</strong>, calls only
+        <code>validate_context()</code> and then <code>require_can_view()</code>.
+      </p>
+      <p style="margin:0">
+        So <code>can_view()</code> has to carry everything: assert that <code>$this-&gt;get_context()</code> is a
+        <code>context_course</code> and require <code>enrol/apply:viewreports</code> on it. And neither
+        <code>get_parameter()</code> nor the <em>persistent</em>'s <em>itemid</em> may scope the query — the base
+        condition comes from <code>$this-&gt;get_context()-&gt;instanceid</code> and from nothing else.
+      </p>
+    </div>
+  </div>
+
+  <figure class="figure">
+    <div class="browser">
+      <div class="bar"><span class="dots"><i></i><i></i><i></i></span><span class="url">/enrol/apply/report.php?id=17</span><span class="tag">system report</span></div>
+      <div class="viewport">
+        <p class="m-h">Enrolment applications · Introduction to Statistics</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+          <span class="m-btn sec sm">Filters</span>
+          <span class="m-btn sec sm">Download ▾</span>
+          <span class="m-mut" style="align-self:center">4 of 128 applications</span>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="m-tbl">
+            <thead>
+              <tr>
+                <th>Applicant</th><th>Submitted</th><th>Status</th>
+                <th>City</th><th>Mobile phone</th><th>Department</th>
+                <th>Decided by</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Ana Ribeiro</td><td class="num">14/08 09:12</td>
+                <td><span class="chip ok">approved</span></td>
+                <td>Campinas <span class="chip neutral">conf.</span></td>
+                <td>(19) 9•••• <span class="chip warn">stale</span></td>
+                <td>Academic Coordination</td>
+                <td>M. Souza</td>
+              </tr>
+              <tr>
+                <td>Bruno Tavares</td><td class="num">14/08 11:40</td>
+                <td><span class="chip warn">waiting list</span></td>
+                <td>Sorocaba <span class="chip neutral">conf.</span></td>
+                <td>(15) 9•••• <span class="chip neutral">conf.</span></td>
+                <td>—</td>
+                <td>M. Souza</td>
+              </tr>
+              <tr>
+                <td>Célia Nunes</td><td class="num">15/08 08:03</td>
+                <td><span class="chip acc">pending</span></td>
+                <td>Campinas <span class="chip warn">stale</span></td>
+                <td>(19) 9•••• <span class="chip warn">stale</span></td>
+                <td><span class="m-mut">—</span></td>
+                <td>—</td>
+              </tr>
+              <tr>
+                <td>Davi Correia</td><td class="num">15/08 16:27</td>
+                <td><span class="chip bad">cancelled</span></td>
+                <td>Jundiaí <span class="chip neutral">conf.</span></td>
+                <td>—</td>
+                <td>Registry Office</td>
+                <td>R. Lima</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="m-mut" style="margin:14px 0 0">
+          A field this reader may not see <b>does not appear as a column</b> — nor as a filter, nor as a condition.
+        </p>
+      </div>
+    </div>
+    <figcaption>
+      Per-field columns come out of the child table, with no SQL over JSON — filters and sorting come for free, and
+      <em>cross‑DB</em> comes for free. The JSON still exists as the “snapshot” column, printed in readable form.
+      Reached through a third <code>i/report</code> icon in <code>get_action_icons()</code> plus a node in
+      <code>add_course_navigation()</code>.
+    </figcaption>
+  </figure>
+
+  <div class="col">
+    <div class="callout warn">
+      <span class="label">The new capability needs more than one line</span>
+      <p style="margin:0">
+        <code>enrol/apply:viewreports</code> grants access to the frozen profile values of every applicant in scope.
+        <code>db/access.php</code> today declares no <code>riskbitmask</code> on any capability — defensible for config
+        and manage, not for this. Declare <code>RISK_PERSONAL</code> and state the archetypes explicitly
+        (<code>manager</code> only, if the report carries profile values): inheriting the neighbours'
+        <code>editingteacher</code> default hands the report to every editing teacher by omission.
+      </p>
+    </div>
+
+    <h3>Report Builder traps between 5.1 and 5.2</h3>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Item</th><th>5.1</th><th>5.2</th><th>Rule</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="mono">initialise()</td>
+            <td><span class="chip bad">abstract</span></td>
+            <td><span class="chip ok">concrete</span></td>
+            <td><strong>Always</strong> override it. A 5.2-style entity (only <code>get_available_columns()</code>) is <em>fatal</em> on 5.1.</td>
+          </tr>
+          <tr>
+            <td class="mono">add_all_from_entities()</td>
+            <td>iterates the registered entities and filters by name</td>
+            <td>iterates the array it receives, in the order given</td>
+            <td>Pass <strong>names</strong> (an object does not match on 5.1) and register in the same order you pass them — otherwise column order differs by <em>branch</em>.</td>
+          </tr>
+          <tr>
+            <td class="mono">get_default_table_aliases()</td>
+            <td>deprecated</td>
+            <td>removed</td>
+            <td>Never implement it; the <em>aliases</em> generate themselves.</td>
+          </tr>
+          <tr>
+            <td class="mono">enrolment:status</td>
+            <td colspan="2">labels <code>ENROL_APPLY_USER_WAIT = 2</code> as <b>“Not current”</b></td>
+            <td>Worse than a raw “2”: a legitimate label that is wrong, invisible in review. <strong>Own</strong> column and filter, and core's kept out of the default columns.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      That last one deserves the full sentence: <code>enrolment_formatter::enrolment_status()</code> returns
+      <code>null</code> for an unknown value, but <code>2</code> <em>is</em> known — it is
+      <code>status_field::STATUS_NOT_CURRENT</code>. The plugin's waiting list collides with a core constant that means
+      something else, and the three-option filter never reaches those rows.
+    </p>
+    <p>
+      More: every parameter bound in the report's SQL has to come from
+      <code>database::generate_param_name()</code> (validated against <code>/^rbparam[\d]+/</code>);
+      column names are <code>PARAM_ALPHANUMEXT</code> and unique, on pain of <code>coding_exception</code>;
+      <code>lang_string</code> validates in the <em>constructor</em>, inside <code>initialise()</code>, so every string
+      has to exist before the first PHPUnit run (CI runs <code>--fail-on-warning</code>);
+      and the <em>callback</em> that prints the JSON has to keep its first parameter <strong>untyped</strong>, because
+      <code>datasource_stress_test_columns_aggregation()</code> applies every compatible aggregation and
+      <code>groupconcat</code> re-applies the <em>callback</em> value by value.
+    </p>
+    <p>
+      The user entity to reuse is <code>core_reportbuilder\local\entities\user</code> — there is no user entity under
+      <code>core_user</code> on either <em>branch</em>. The other two are
+      <code>core_enrol\reportbuilder\local\entities\enrol</code> and
+      <code>core_course\reportbuilder\local\entities\enrolment</code>.
+    </p>
+    <h3>Filters, pagination and <em>lazy loading</em></h3>
+    <p>
+      AJAX pagination, sorting, “show all” and per-user persisted filters come for free in the
+      <code>system_report</code> — there is nothing to build. Just <code>set_default_per_page(30)</code> and the choice
+      of filters. One warning: filter values live in <code>reportbuilder_user_filter</code> keyed by
+      (report, user), which has two consequences — the export task <strong>must run as the user who asked for
+      it</strong>, or it exports the unfiltered report; and a test that sets filters as admin and checks them as a
+      teacher proves nothing.
+    </p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Filter</th><th>Type</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td>Applicant</td><td class="mono">filters\user</td><td>“any / me / choose” with an AJAX picker. An <em>autocomplete</em> over every user on the site does not scale.</td></tr>
+          <tr><td>Status</td><td class="mono">filters\select</td><td>Three explicit options. <strong>Never <code>boolean_select</code></strong>: <code>ENROL_APPLY_USER_WAIT = 2</code> would vanish, which is the defect the plugin's <code>CLAUDE.md</code> already documents.</td></tr>
+          <tr><td>Submitted on</td><td class="mono">filters\date</td><td>Range, last N, current period.</td></tr>
+          <tr><td>Decided on</td><td class="mono">filters\date</td><td>With <code>DATE_EMPTY</code> — “still pending” is the most frequent question an audit report is asked, and it is one click.</td></tr>
+          <tr><td>Decided by</td><td class="mono">filters\user</td><td>“everything Marta approved” in one click. Filter name distinct from the applicant one.</td></tr>
+          <tr><td>Method</td><td class="mono">filters\select</td><td>Only when the course has more than one <em>apply</em> instance; otherwise it disappears rather than becoming a one-option picker.</td></tr>
+          <tr><td>Comment</td><td class="mono">filters\text</td><td>Contains / empty. It is what <code>info.php</code> users are looking for today.</td></tr>
+          <tr><td>Course</td><td class="mono">filters\course_selector</td><td><strong>Site view only.</strong> In the course report, <code>courseid</code> is a base condition — as a filter, a manager pages sideways into another course.</td></tr>
+          <tr><td><s>JSON snapshot</s></td><td class="mono">—</td><td>No filter: it would be a table scan and hostile to <em>cross‑DB</em>. A <code>TYPE_LONGTEXT</code> column, not sortable. Once the child table arrives, filter <em>it</em>, which is indexable.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Asynchronous download</h3>
+    <p>
+      Core has asynchronous export <strong>only</strong> for custom report schedules, and it is blocked by
+      <code>$CFG-&gt;enablecustomreports</code> — so there is nothing to reuse. But
+      <code>tool_dataprivacy</code> is the exact template for “your export is ready, download it here”, and the progress
+      indicator is a core part: <code>stored_progress_task_trait</code> + <code>\core\output\task_indicator</code>,
+      without a line of JS or a plugin web service.
+    </p>
+    <div class="callout">
+      <span class="label">Recommended order</span>
+      <p style="margin:0">
+        <strong>Synchronous first</strong> — <code>set_downloadable(true)</code> costs one line and covers most
+        courses. The asynchronous path comes afterwards, gated on a row threshold. That way the slice delivers value
+        before paying for a task, a message, a file area, cleanup and <em>pluginfile</em>.
+      </p>
+    </div>
+    <div class="callout alarm">
+      <span class="label">The hole in the asynchronous path is <em>failure</em>, not success</span>
+      <p style="margin:0 0 12px">
+        <code>task_indicator</code> looks the task up with <code>$includefailed = true</code> by default. An exhausted
+        task survives <strong>four weeks</strong> in the queue, while the progress record is deleted after 24 h —
+        result: the page keeps saying “your export is in progress” indefinitely, with no bar and no final state. The
+        page has to call <code>get_queued_adhoc_task_record($task, false)</code> itself and treat “no live task and no
+        file” as <em>failure</em>, with a message of its own.
+      </p>
+      <p style="margin:0">
+        And <code>retry_until_success()</code> has to be overridden to <code>false</code>: with the default, a task that
+        fails <em>after</em> writing the file either collides on the same <em>pathnamehash</em> (permanent failure, 12
+        attempts, backoff up to 24 h) or — if the name carries a timestamp — leaves up to 12 orphan copies, each firing
+        its own notification.
+      </p>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Part</th><th>The detail that bites</th></tr></thead>
+        <tbody>
+          <tr><td>File</td><td>Its own area in the <strong>user context</strong> of whoever asked — so one manager's export is never fetchable by another. Do not use the draft area: it is swept after 4 days, and you do not control that.</td></tr>
+          <tr><td>Name</td><td><code>write_data_to_filearea()</code> appends the extension itself. Passing <code>audit.csv</code> produces <code>audit.csv.csv</code>.</td></tr>
+          <tr><td>Progress</td><td>The indicator matches on <em>classname + component + customdata + userid</em>. Queueing and displaying have to build the task through the <strong>same static <code>create()</code></strong>, or the indicator finds nothing and the page looks broken while the export runs fine.</td></tr>
+          <tr><td>Queue</td><td><code>queue_adhoc_task($task, true)</code> returns <code>false</code> — not an id — when an identical task already exists. That is “already running”, not an error; <code>set_id(false)</code> would write a garbage progress record.</td></tr>
+          <tr><td>48 h cleanup</td><td>A scheduled task sweeping <code>{files}</code> by area. As a <em>duration setting</em>, not a constant — which is what <code>tool_dataprivacy</code> does.</td></tr>
+          <tr><td>Serving</td><td><code>file_pluginfile</code> <strong>does no login and no capability check</strong> on the generic branch. Everything sits in <code>enrol_apply_pluginfile()</code>: <code>require_login</code>, ownership of the user context, a re-check of <code>enrol/apply:manageapplications</code> in the course, a validity check and <code>send_stored_file()</code>.</td></tr>
+          <tr><td>Privacy</td><td>A new file area = <code>add_subsystem_link('core_files', …)</code> in the <em>provider</em>, or core's compliance test fails.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Refactoring <code>info.php</code></h3>
+    <p>
+      It fits, keeping the URL and the <code>id</code> parameter so neither the action icon nor the Behat context has to
+      be touched. Two losses are structural and have to be accepted explicitly: the comment column header coming from
+      <code>customtext2</code> is <strong>inexpressible</strong> (<code>column::set_title()</code> accepts only a
+      <code>lang_string</code> and the class is <code>final</code>) — it moves to
+      <code>set_report_info_container()</code>; and the A‑Z initials bar is switched off in the
+      <code>system_report_table</code> code, offset by the user and text filters, which are strictly more capable.
+    </p>
+    <div class="callout warn">
+      <span class="label">Do not copy <code>manage.php</code>'s <code>can_view()</code></span>
+      <p style="margin:0">
+        <code>info.php</code>'s authorisation is <strong>narrower</strong>: course or system only, without the mentor's
+        user-context branch. Copying <code>manage.php</code> would silently widen who reads the submitted comments.
+      </p>
+    </div>
+
+    <p>
+      Finally: the CSV export strips the <em>tags</em> without inserting a separator, so
+      <code>&lt;dt&gt;País&lt;/dt&gt;&lt;dd&gt;Brasil&lt;/dd&gt;</code> exports as <code>PaísBrasil</code>. The
+      <em>callback</em> has to emit a literal separator. And the <em>datasource</em> tests extend
+      <code>\core_reportbuilder\tests\core_reportbuilder_testcase</code> and call both <em>stress</em> helpers — that is
+      what catches the untyped-parameter rule and the strings rule, not prose.
+    </p>
+  </div>
+</section>
+
+<!-- ============================================================ 7 -->
+<section id="s7">
+  <div class="col">
+    <p class="eyebrow">07 — Cohort</p>
+    <h2>“Cohort members only”</h2>
+    <p>
+      <code>customint5</code> is free and it is the same column <code>enrol_self</code> uses — same vocabulary:
+      <code>0</code> for no restriction, a real id, or the <code>-1</code> sentinel on a restore to another site.
+      No XMLDB change: the column already exists on every site.
+    </p>
+    <p>
+      The check goes in <strong><code>allow_apply()</code></strong>, not in <code>enrol_page_hook()</code>. It is the method
+      every present and future caller goes through, and the one the
+      <code>test_allow_apply_respects_instance_state</code> test already exercises; leaving it in the <em>hook</em> would make
+      <code>allow_apply()</code> blind to the restriction.
+    </p>
+
+    <h4>Three things to copy verbatim</h4>
+    <pre><i>// 1. The FOUR arguments. $limit defaults to 25 — without the fourth, the picker</i>
+<i>//    silently truncates on a site with many cohorts.</i>
+$allcohorts = cohort_get_available_cohorts($context, 0, 0, <b>0</b>);
+
+<i>// 2. No cohort available: hidden + constant. This is NOT defensive noise —</i>
+<i>//    update_instance() only copies the property when isset($data-&gt;$key), so</i>
+<i>//    omitting the element makes an existing restriction impossible to remove.</i>
+$mform-&gt;addElement('hidden', 'customint5');
+$mform-&gt;setType('customint5', PARAM_INT);
+$mform-&gt;setConstant('customint5', 0);
+
+<i>// 3. Cross-site restore: the -1 sentinel, not 0. Zero would REMOVE the restriction — failing open.</i>
+if (!$step-&gt;get_task()-&gt;is_samesite()) { $data-&gt;customint5 = -1; }</pre>
+
+    <div class="callout warn">
+      <span class="label">Two things NOT to copy</span>
+      <p style="margin:0 0 12px">
+        <strong>The validation.</strong> <code>enrol_self</code> treats <code>customint5</code> as <code>PARAM_INT</code>
+        and nothing else (<code>lib.php:1123</code>) — no check of existence, visibility or membership of the list
+        offered. Copied verbatim, that is a hidden-cohort name and membership oracle for anyone holding
+        <code>enrol/apply:config</code>. Copy <code>enrol_cohort</code>’s guard instead: <code>array_diff</code> against the
+        option keys → <code>get_string('invaliddata', 'error')</code>.
+      </p>
+      <p style="margin:0">
+        <strong>The “keep it selectable” <em>fallback</em>.</strong> When the stored value is not in the available list,
+        <code>enrol_self</code> re-reads the cohort with a raw <code>get_record</code> — which <em>ignores</em> the
+        parent‑context and visibility rules <code>cohort_get_cohort()</code> applies — and hands the real name to the
+        form. Exempting the stored value would only be safe if it could only have got there through the form, and it
+        cannot: <code>customint5</code> also arrives by restore, through the same allowlist-free copy.
+        Put the stored value through <code>cohort_get_cohort($id, $context)</code> as well, and when that refuses, keep the
+        option selectable with the label <code>get_string('unknowncohort', 'cohort', $id)</code> — never with the raw name.
+      </p>
+    </div>
+    <p>
+      A third <code>enrol_self</code> detail that is not copied either: when the cohort has been deleted it returns
+      <code>null</code>, and the enrolment method <em>disappears</em> from the page with no message to anyone. Here a real
+      string has to come back — this plugin’s <code>enrol_page_hook()</code> would pass <code>null</code> to
+      <code>notification()</code> and paint an empty red box.
+    </p>
+  </div>
+</section>
+
+<!-- ============================================================ 8 -->
+<section id="s8">
+  <div class="col">
+    <p class="eyebrow">08 — Reference</p>
+    <h2>Traps measured in the code</h2>
+    <p>Every line below was verified by opening the file, on both <em>branches</em> where it matters.</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Where</th><th>What bites</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">tests/behat/<br>enrol_apply.feature</td><td>All three scenarios do <code>I press "Enrol me"</code> — a label that comes from <code>apply_form.php:107</code>, the file the proposal deletes. Rewrite them <strong>in the same commit</strong>; every Behat round costs minutes.</td></tr>
+          <tr><td class="mono">tests/privacy/<br>provider_test.php:108</td><td>Asserts <code>assertCount(1, $items)</code>. Any new table in the metadata collection fails <em>every</em> CI leg — update it in the same <em>commit</em>.</td></tr>
+          <tr><td class="mono">classes/privacy/<br>provider.php:138‑147</td><td>Exports every application in a context to the <strong>same path</strong>. With two <em>apply</em> methods in one course, the second export overwrites the first. It is already a defect today.</td></tr>
+          <tr><td class="mono">tests/lib_test.php:341</td><td>Builds <code>enrol_apply_manage_table($instanceid)</code> directly. That is <b>one</b> place in the tests, plus <code>manage.php:126</code> — not worth hunting for others.</td></tr>
+          <tr><td class="mono">enrollib.php</td><td><code>get_config()</code> memoises <code>$this-&gt;config</code>. A test that calls <code>set_config(...)</code> after creating the plugin object exercises the default branch and <strong>passes vacuously</strong>. Use <code>$plugin-&gt;set_config()</code>.</td></tr>
+          <tr><td class="mono">backup/moodle2/</td><td>A new table has to enter the <em>backup</em> structure (gated on the <code>users</code> setting) <strong>and</strong> the restore side. Forgetting is silent: the audit trail vanishes on a restore and the report comes back empty, with no error. If the decision is “the audit trail is site-local”, that has to be <em>written down</em>.</td></tr>
+          <tr><td class="mono">db/install.xml:2</td><td>The <code>VERSION</code> attribute goes up together with <code>version.php</code> and the <em>savepoint</em> — in every slice that touches the schema. And <code>xmllint --noout --schema …/lib/xmldb/xmldb.xsd db/install.xml</code> before the commit.</td></tr>
+          <tr><td class="mono">templates/<br>manage.mustache:58‑59</td><td>Carries <code>mr-2</code> and <code>custom-select</code> beside the BS5 spellings — they resolve only through <code>bs4-compat.scss</code> under <code>deprecated-styles()</code> and disappear in Moodle 6.0. Clean them up <em>before</em> adding a <code>bootstrap_compat_test</code>, or the new test fails on those two lines.</td></tr>
+          <tr><td class="mono">profile_field_textarea</td><td>Declares <code>PARAM_RAW</code> (“We MUST clean this before display!”, core's own comment). An applicant with <code>&lt;3</code> in one of those fields brings down <code>clean_returnvalue()</code> and kills the whole page for everyone. Every sink goes through <code>format_string(..., ['escape' =&gt; false])</code>.</td></tr>
+          <tr><td class="mono">Escaping</td><td>A <em>moodleform</em> label renders in <code>{{{label}}}</code> and wants the <strong>escaped</strong> spelling; a Mustache <em>double stash</em>, a <code>{{#str}}</code> parameter and a WS <code>PARAM_TEXT</code> field want the <strong>plain</strong> one. One single helper with an <code>$escape</code> switch, and a test pinning both directions — <code>local_groupdist</code> shipped that defect four times in five <em>commits</em>.</td></tr>
+          <tr><td class="mono">CLAUDE.md +<br>hook_callbacks.php:44</td><td>Both state that “the observer deliberately does not notify”. It does notify — it calls <code>complete_approval()</code>, which queues <code>notify_approval</code> (<code>lib.php:249‑252</code>). A sentence a reviewer would lean on; fix it in the same <em>commit</em>.</td></tr>
+          <tr><td class="mono">~/dev/CLAUDE.md</td><td>“An ad‑hoc task that throws is retried forever” is wrong on both <em>branches</em>: <code>attemptsavailable</code> is decremented and exhausted tasks are deleted after four weeks. Worth fixing — that sentence guides the whole fleet.</td></tr>
+          <tr><td class="mono">phpcs</td><td>No blank line after <code>class X {</code>. It has already been reintroduced three times in this repository. <code>rg -U -n 'class [^\n]*\{\n\n' --glob '*.php' .</code></td></tr>
+          <tr><td class="mono">version.php</td><td>Any new <code>db/*</code>, <code>amd/build</code> or <em>datasource</em> requires a version bump — and bumping the version stales the PHPUnit and Behat sites. A stale Behat prints “outdated” and <strong>exits with code 0 and zero scenarios run</strong>.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      One worth calling out because it never shows up in review: <code>*_extend_settings_navigation()</code>
+      is <strong>not dispatched for enrolment plugins</strong> — core only calls it for <code>local</code> plugins and for
+      activity modules. Such a function would pass phpcs, phpdoc and the whole of CI while doing absolutely nothing.
+    </p>
+    <p>
+      And one about the report that only the matrix catches: the <code>initialise()</code> difference between 5.1 and 5.2 does not show up
+      in a default local run. <code>mdl ci moodle-enrol_apply --matrix</code> on this slice specifically.
+    </p>
+  </div>
+</section>
+
+<!-- ============================================================ 9 -->
+<section id="s9">
+  <div class="col">
+    <p class="eyebrow">09 — Plan</p>
+    <h2>Delivery slicing</h2>
+    <p>
+      Eight slices, each one standing on its own and with green CI. The order matters: the cleanup comes before the UI, the UI before the user
+      data, and slice 4 already answers three of the five complaints <em>without writing anything</em> into a user record.
+    </p>
+  </div>
+
+  <div class="col">
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>#</th><th>Delivery</th><th>Risk</th><th>Size</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="num"><strong>1</strong></td>
+            <td><strong>Cohort + application window.</strong> <code>customint5</code>, <code>allow_apply()</code>, form, validation, restore — plus core's <code>enrolstartdate</code>/<code>enrolenddate</code>, which fall into the same branch and cost no column. <span class="m-mut">Answers request 5 and idea 4.</span></td>
+            <td><span class="chip ok">low</span></td>
+            <td class="num">~1 day</td>
+          </tr>
+          <tr>
+            <td class="num"><strong>2</strong></td>
+            <td><strong>Bootstrap cleanup + <code>bootstrap_compat_test</code>.</strong> Unrelated maintenance, but the test has to exist <em>before</em> the new templates.</td>
+            <td><span class="chip ok">low</span></td>
+            <td class="num">~½ day</td>
+          </tr>
+          <tr>
+            <td class="num"><strong>3</strong></td>
+            <td><strong>Storing the field set, with no visible change.</strong> <code>classes/local/fields.php</code>, <code>customtext4</code>, migration of <code>customint1/2</code>, removal of the two orphan settings and retirement of <code>profileoption</code>. The old form keeps rendering, now driven by the resolved set.</td>
+            <td><span class="chip warn">medium</span></td>
+            <td class="num">~2 days</td>
+          </tr>
+          <tr>
+            <td class="num"><strong>4</strong></td>
+            <td><strong>Card + page/modal.</strong> End of the duplication and of the dump. <span class="m-mut">Answers requests 1 and 3.</span> The three Behat scenarios rewritten in the same <em>commit</em>.</td>
+            <td><span class="chip warn">medium</span></td>
+            <td class="num">~3 days</td>
+          </tr>
+          <tr>
+            <td class="num"><strong>5</strong></td>
+            <td><strong>Review + optional save.</strong> The three-state classification, the canonical order, the reclassification on write, the diff computation and the <code>profile.php</code> page with the button — plus the <strong>incomplete-profile gate</strong> as the “save switched off” branch. <span class="m-mut">Answers request 2, decision 1 and idea 3.</span></td>
+            <td><span class="chip bad">high</span></td>
+            <td class="num">~3 days</td>
+          </tr>
+          <tr>
+            <td class="num"><strong>6</strong></td>
+            <td><strong>Snapshot + privacy + lifecycle.</strong> <code>enrol_apply_submission</code> with <code>courseid</code>+<code>userid</code>+<code>enrolid</code>, a <em>provider</em> for both roles, both sides of the <em>backup</em> inside the <code>users</code> block, pseudonymisation in <code>before_course_deleted</code>, the <strong>outcome message</strong> column, and the retention task with a 30-day setting.</td>
+            <td><span class="chip bad">high</span></td>
+            <td class="num">~3 days</td>
+          </tr>
+          <tr>
+            <td class="num"><strong>7</strong></td>
+            <td><strong><em>System report</em> in the course.</strong> Entity, <code>report.php</code>, the eight filters, AJAX paging for free, <strong>synchronous</strong> download, <code>set_checkbox_toggleall()</code> + bulk bar in the <em>sticky footer</em>, node via <code>extend_navigation_course()</code>, capability with <code>RISK_PERSONAL</code>, and <code>info.php</code> refactored onto the same surface.</td>
+            <td><span class="chip warn">medium</span></td>
+            <td class="num">~2–3 days</td>
+          </tr>
+          <tr>
+            <td class="num"><strong>8</strong></td>
+            <td><strong><em>Datasource</em> at site level.</strong> Automatic discovery, core's <em>stress</em> tests. <span class="m-mut">Closes request 4.</span></td>
+            <td><span class="chip warn">medium</span></td>
+            <td class="num">~1–2 days</td>
+          </tr>
+          <tr>
+            <td class="num"><strong>9</strong></td>
+            <td><strong>Asynchronous download.</strong> Ad‑hoc task with progress, message, file area in the user context, <code>enrol_apply_pluginfile()</code> and 48 h cleanup. Conditional on a row-count threshold.</td>
+            <td><span class="chip warn">medium</span></td>
+            <td class="num">~2–3 days</td>
+          </tr>
+          <tr>
+            <td class="num"><strong>I</strong></td>
+            <td><strong>Enriched decision</strong> <span class="chip acc">ideas 1 and 2</span> — role, dates and groups chosen at approval time (with a <em>server-side</em> allowlist), outcome message for the applicant, and previous/next navigation in the review. Depends on <b>6</b>, to record the parameters on the durable row.</td>
+            <td><span class="chip warn">medium</span></td>
+            <td class="num">~3 days</td>
+          </tr>
+          <tr>
+            <td class="num"><strong>J</strong></td>
+            <td><strong>Bulk actions on the participants page.</strong> <code>get_bulk_operations()</code>, the extension point core already offers and that we return empty today. <span class="chip neutral">outside the four</span> Only once <b>I</b> has proved the decision path.</td>
+            <td><span class="chip warn">medium</span></td>
+            <td class="num">~2 days</td>
+          </tr>
+          <tr>
+            <td class="num"><strong>10</strong></td>
+            <td><strong>Deferred by your own decision.</strong> <code>enrol_apply_submission_field</code> with per-field columns and filters, and the retention sweep. The ground is already laid in slice 6: the JSON envelope is back‑fillable.</td>
+            <td><span class="chip neutral">optional</span></td>
+            <td class="num">~3 days</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="m-mut" style="font-size:14px">
+      Slices 1–9 plus I and J: ~25 to 28 days of implementation, ~23 new files and ~20 changed. Add ~half a day per slice for the
+      repeated tail — version bump, CHANGELOG, <code>mdl phpunit-init</code>, <code>mdl behat-init</code> and
+      <code>mdl ci --matrix</code> before each <em>push</em> — which comes to ~21 days end to end.
+      <code>tests/lib_test.php</code> is 545 lines today and goes past 1200: worth splitting into
+      <code>tests/local/fields_test.php</code> and <code>tests/form/application_form_test.php</code> rather than letting one
+      file carry everything.
+    </p>
+
+    <h3>The five decisions, and what verification did to them</h3>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Decision</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>1.</strong> Optional “Save the profile data” button, leading to the profile edit form with the fields populated</td>
+            <td>
+              <span class="chip warn">adjusted</span> The silent write goes away — good. But <code>/user/edit.php</code>
+              cannot be pre‑filled: the shape that works is <em>confirm → save → redirect</em>, and the
+              values show up because they have just been saved. Without the <code>course</code> parameter, with a diff
+              computation, and with the button hidden when nothing changed. <b>§5</b>
+            </td>
+          </tr>
+          <tr>
+            <td><strong>2.</strong> Goes into the <em>backup</em> if “Include course logs” is on</td>
+            <td>
+              <span class="chip bad">inverted</span> Both <code>logs</code> defaults are 0, and
+              <code>users</code> locks <code>logs</code> — the gate is strictly narrower. Result: the
+              comments would come back and the record of the decisions would not. It goes in the <code>users</code> block. <b>§5</b>
+            </td>
+          </tr>
+          <tr>
+            <td><strong>3.</strong> Delete when the recycle bin is emptied; and also when the course is deleted outright</td>
+            <td>
+              <span class="chip warn">adjusted</span> There is no “in the recycle bin” state — the course is deleted straight away and the
+              recycle bin only keeps a <em>zip</em>. The two branches become one: course deletion, in
+              <code>delete_instance()</code> plus a safety-net observer. <b>§5</b>
+            </td>
+          </tr>
+          <tr>
+            <td><strong>4.</strong> Lay the ground for the child table and retention; implement later</td>
+            <td>
+              <span class="chip ok">accepted</span> Versioned JSON envelope, with label, type, visibility, state and
+              per-field values — back‑fillable in an <em>upgrade</em> step. State vocabulary in a constant
+              from the start. <b>§2, slice 9</b>
+            </td>
+          </tr>
+          <tr>
+            <td><strong>5.</strong> Retire <code>profileoption</code></td>
+            <td>
+              <span class="chip ok">accepted</span> It closes an existing leak for free: it prints a profile field value
+              in the queue with no visibility check whatsoever. <b>§4, slice 3</b>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Second round of decisions — all closed</h3>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Question</th><th>Decision</th></tr></thead>
+        <tbody>
+          <tr><td>Does the audit trail survive the enrolment method?</td><td><span class="chip ok">yes</span> It carries <code>courseid</code> <em>and</em> <code>enrolid</code>; <code>delete_instance()</code> stops deleting audit data. That inverts the current behaviour — it ships documented and with a mutation test.</td></tr>
+          <tr><td>A deletion request landing on an audit row</td><td><span class="chip bad">deletes everything</span> Erasure beats permanence. Consequence to record: the trail is <strong>not</strong> tamper-proof against a data subject's request — and that is how it should be.</td></tr>
+          <tr><td>Default retention</td><td><span class="chip acc">30 days</span> A setting on the plugin's page (<code>admin_setting_configduration</code>), counted from <code>timecreated</code>, with <code>0</code> = forever.</td></tr>
+          <tr><td><code>backup_auto_users</code> off loses the trail</td><td><span class="chip neutral">accept</span> Documented in the README and in the retention setting's <em>help</em>. No plugin code changes that.</td></tr>
+          <tr><td>Whitespace-only value</td><td><span class="chip ok"><code>trim()</code></span> The plugin trims and treats it as empty, without relying on <code>strictformsrequired</code> — which, when on, blocks exactly “a space or a line break only” in a required field, but ships <strong>off</strong> by default.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Scope closed</h3>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Question</th><th>Decision</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>The four ideas taken from <code>enrol_gapply</code></td>
+            <td><span class="chip ok">all in</span> Decision parameters and outcome message in slice <b>I</b>; the incomplete-profile gate becomes the “save switched off” branch of slice <b>5</b>; the application window alongside the cohort in slice <b>1</b>.</td>
+          </tr>
+          <tr>
+            <td>Attachments on the application</td>
+            <td><span class="chip bad">out</span> It avoids a file area, <em>pluginfile</em>, antivirus and the pair of privacy declarations — and avoids exactly the surface where <code>gapply</code> has its worst flaw (§10).</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="m-mut" style="font-size:14px">
+      Slice <b>J</b> (bulk actions on the participants page) was <strong>not</strong> one of the four and stays deferred — it
+      depends on <b>I</b> proving the decision path first, and core's extension point has a trap of its
+      own: <code>enrol_self</code>'s bulk operation writes <code>user_enrolments</code> with a raw <em>UPDATE</em>
+      and builds the event by hand, so <code>before_user_enrolment_updated</code> is <strong>not</strong> dispatched —
+      and our out‑of‑band approval observer would not fire.
+    </p>
+  </div>
+</section>
+
+
+<!-- ============================================================ 10 -->
+<section id="s10">
+  <div class="col">
+    <p class="eyebrow">10 — Prior art</p>
+    <h2>What to take from <code>enrol_gapply</code></h2>
+    <div class="callout">
+      <span class="label">Verdict</span>
+      <p style="margin:0">
+        <strong>Learn from it and reimplement — do not copy code.</strong> It is worth a great deal as a requirements
+        document and as a catalogue of security anti‑patterns. As a source of code, almost nothing is portable:
+        <strong>3.3 MB</strong> of bundled DataTables + JSZip + Select2 (90% of the JS+CSS weight against 188 KB of
+        PHP), jQuery in 4 of the 5 own modules, <strong>zero tests</strong>, no <em>backup</em>, no event on any write,
+        and an unauthenticated <em>pluginfile</em>.
+      </p>
+    </div>
+
+    <h3>The four ideas that really are worth it <span class="chip ok">all adopted</span></h3>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Idea</th><th>Why it matters</th><th>Where it lands</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>Parameters at decision time</strong><br><span class="m-mut">role, dates and groups chosen at approval</span></td>
+            <td>The most valuable capability they have and the one we structurally lack. Today <code>confirm_enrolment()</code> stamps <code>timestart = time()</code> and the instance period, and <code>complete_approval()</code> uses the frozen group list. A course with two classes needs two instances.</td>
+            <td>new slice <b>I</b></td>
+          </tr>
+          <tr>
+            <td><strong>Outcome message</strong><br><span class="m-mut">free text the applicant reads</span></td>
+            <td>A real gap: someone cancelled or sent to the waiting list gets a bare status, and the manager has nowhere to write the reason. One <code>TEXT</code> column beside <code>status</code>/<code>timedecided</code>/<code>decidedby</code>.</td>
+            <td>slices <b>6</b> + <b>I</b></td>
+          </tr>
+          <tr>
+            <td><strong>Incomplete profile as a <em>gate</em></strong><br><span class="m-mut">blocks, names what is missing, sends you to the profile, writes nothing</span></td>
+            <td>The strongest architectural idea in the plugin, and a direct challenge to our §5: zero write surface, zero locked-field handling, zero deletion semantics — <em>because core itself does the writing half</em>. It is exactly the right behaviour for the “writing disabled” branch.</td>
+            <td>slice <b>5</b> — becomes the “writing disabled” branch</td>
+          </tr>
+          <tr>
+            <td><strong>Application window</strong><br><span class="m-mut">when you may apply ≠ when the enrolment is valid</span></td>
+            <td>A clean distinction we do not have: today a course that wants to take applications for two weeks has to switch the enrolment method on and off by hand. And it comes for free — <code>enrolstartdate</code>/<code>enrolenddate</code> already exist on <code>{enrol}</code>.</td>
+            <td>slice <b>1</b>, in the same <code>allow_apply()</code> as the cohort</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout alarm">
+      <span class="label">Adopt idea 1 without inheriting the privilege escalation</span>
+      <p style="margin:0 0 12px">
+        In <code>gapply</code> the <code>roleid</code> arrives as <code>PARAM_INT</code> defaulting to 0 and goes
+        <em>straight</em> into <code>enrol_user()</code> and from there into <code>role_assign()</code> — which does no
+        assignability check at all, it only confirms that the role and the user exist. The
+        <code>get_assignable_roles()</code> check is <strong>client-side only</strong>. Since their management
+        capability is <code>editingteacher</code> by default, any editing teacher can assign themselves <em>manager</em>
+        by forging an AJAX call.
+      </p>
+      <p style="margin:0">
+        Our version: <code>\core_form\dynamic_form</code> (the pattern §3 already establishes), a
+        <em>server-side</em> allowlist of the <code>roleid</code> against <code>get_assignable_roles($coursecontext)</code>
+        and of the groups against <code>groups_get_all_groups($courseid)</code>, per-row re-authorisation via
+        <code>can_manage_application()</code> for <strong>every</strong> posted id, and
+        <code>groups_add_member($gid, $uid, 'enrol_apply', $instance-&gt;id)</code> with the component stamp they omit.
+        The right way is in core: <code>enrol/manual/externallib.php:98‑104</code>.
+      </p>
+    </div>
+
+    <div class="callout">
+      <span class="label">The application window costs no column at all</span>
+      <p style="margin:0 0 12px">
+        <code>gapply</code> spends <code>customint7</code> and <code>customint8</code> on the two dates. We cannot copy
+        that — <code>customint7</code> is already the comment zone and <code>customint8</code> is the write switch — and
+        we do not need to: <code>{enrol}</code> has native <code>enrolstartdate</code> and <code>enrolenddate</code>,
+        which are <em>exactly</em> “when you can apply”. It is how <code>enrol_self</code> uses them
+        (<code>lib.php:317‑322</code>), and we <strong>use neither of them today</strong>.
+      </p>
+      <p style="margin:0">
+        As a bonus: they already go into core's <em>backup</em>, they already have a string and <em>help</em> ready, and
+        the “end before start” validation is copyable from <code>enrol/self/lib.php:1091‑1092</code>. What changes
+        relative to <code>gapply</code> is where the check lives: in <code>allow_apply()</code>, not in
+        <code>enrol_page_hook()</code> — they check inside the <em>hook</em>, so any other caller bypasses it.
+      </p>
+    </div>
+
+    <div class="callout warn">
+      <span class="label">Two defects not to inherit in the profile gate</span>
+      <p style="margin:0">
+        <strong>1.</strong> <code>profile_user_record($id)</code> assumes <code>$onlyinuserobject = true</code>, and
+        <code>profile_field_textarea::is_user_object_data()</code> returns <code>false</code> — a chosen
+        <em>textarea</em> field vanishes from the record, reads as empty forever and the applicant is
+        <strong>permanently locked out</strong>, with no way at all to satisfy the gate. Pass
+        <code>false</code>, or read through <code>profile_get_user_fields_with_data()</code>.
+        <strong>2.</strong> They apply <code>format_text()</code> to the field <em>name</em>; a name wants
+        <code>format_string()</code>.
+      </p>
+    </div>
+
+    <h3>The “bulk actions in a dropdown” you liked — core already has them</h3>
+    <p>
+      This is the part not to copy from <code>gapply</code>, but to build anyway. Three of their wins are wins only
+      because <strong>we</strong> hand-built what core ships ready:
+    </p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Piece</th><th>In core</th><th>Where we stand today</th></tr></thead>
+        <tbody>
+          <tr><td>Select all / row</td><td><code>system_report::set_checkbox_toggleall()</code> over <code>\core\output\checkbox_toggleall</code></td><td>By hand, in <code>manage_table.php</code> + 67 lines of AMD. <span class="chip bad">worse</span></td></tr>
+          <tr><td>Action disabled until something is selected</td><td><code>checkbox-toggleall.js</code> disables every <code>[data-toggle="action"]</code> in the group</td><td>Does not exist: the “Go” in <code>manage.mustache:58</code> is always live. <span class="chip bad">trap</span></td></tr>
+          <tr><td>Action bar that appears with the selection</td><td><code>\core\output\sticky_footer</code> + the example in <code>bulkedittools.mustache</code></td><td>Does not exist. <span class="chip warn">to build</span></td></tr>
+          <tr><td>Bulk dropdown wired to the table</td><td><code>admin/amd/src/bulk_user_actions.js</code> — 97 lines, no jQuery</td><td>Does not exist. <span class="chip warn">to build</span></td></tr>
+          <tr><td>Each row announced by name</td><td><code>define_header_column()</code></td><td>We never call it. <span class="chip bad">one line</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      <code>gapply</code>'s floating bar is a <em>good idea</em> — not least because it shows only the actions valid for
+      the current filter, which matches our three-state vocabulary. But the implementation hardcodes a palette
+      (<code>#2b303b</code>, <code>#009688</code>…), with no theme <em>token</em> and no path to dark mode: on a dark
+      page it becomes a light slab. Take the shape, use core's container.
+    </p>
+
+    <div class="callout warn">
+      <span class="label">Correction to our own §6</span>
+      <p style="margin:0">
+        I had written that <code>*_extend_settings_navigation()</code> is not dispatched to enrolment plugins — still
+        true. But <code>gapply</code> shows the route I had not found:
+        <code>enrol_&lt;name&gt;_extend_navigation_course()</code> <strong>is</strong> dispatched, and it puts the node
+        in the course administration menu instead of burying it under the enrolment methods. It is the right entry
+        point for the report.
+      </p>
+    </div>
+
+    <h3>Anti‑pattern catalogue — for our own review checklist</h3>
+    <ul>
+      <li><strong>Unauthenticated file disclosure.</strong> The <em>pluginfile</em> <em>callback</em> reaches <code>send_stored_file()</code> with no <code>require_login</code>, no enrolment check, no capability check and no ownership check. It is exactly the trap in our §6 about the generic branch of <code>file_pluginfile</code> — now with a real case to cite.</li>
+      <li><strong>Attachments travelling to Google and Microsoft.</strong> The viewer falls back to <code>docs.google.com/viewer?url=…</code> and <code>view.officeapps.live.com</code>. Added to the item above, that is a working exfiltration path, not a theoretical one.</li>
+      <li><strong>Leak in the profile summary.</strong> It loads the custom fields and prints them all, with the management capability as the only barrier — no <code>is_visible()</code>, no <code>viewalldetails</code>. It is the defect our §2 design of “frozen visibility, live capability” exists to prevent.</li>
+      <li><strong>Status vocabulary in <code>char(255)</code></strong> assembled by concatenation and read back with a dynamic <code>get_string()</code> — forbidden by the fleet standard.</li>
+      <li><strong>Duplication solved by prohibition:</strong> <code>can_add_instance()</code> prevents a second instance in the course. It gets it wrong twice — it forbids the use case and does not even close the hole, because restore and course copy go around it.</li>
+      <li><strong><code>groups_add_member()</code> without the component argument</strong> — the defect we have already fixed and that the plugin's <code>CLAUDE.md</code> documents.</li>
+    </ul>
+
+    <div class="callout">
+      <span class="label">Licence</span>
+      <p style="margin:0">
+        Both are GPLv3, so copying is permitted in both directions — the obligation is attribution and notice
+        preservation, and our practice is already the stricter one (<code>lib.php</code> stacks our
+        <code>@copyright</code> on top of emeneo's; <code>unenrolself.php</code> does the same with Petr Skoda's). In
+        practice it is a moot argument here: <strong>nothing on the adoption list is a substantial file</strong>. They
+        are ideas and patterns, which are not copyrightable — naming <code>enrol_gapply</code> in the
+        <code>CHANGELOG</code> of the <em>commit</em> they inform is enough.
+      </p>
+    </div>
+  </div>
+</section>
+
+<footer class="end">
+  <p>
+    Surveyed against <code>moodle-502</code>, <code>moodle-501</code>, this repository itself and the sibling plugins
+    <code>local_groupdist</code>, <code>local_awareness</code>, <code>auth_loginsp</code>,
+    <code>local_activitysetting</code> and <code>profilefield_repeatable</code>. File and line citations are from the
+    state on 21 Aug 2026. Where two readings disagreed, the file was opened and the disagreement settled at the source.
+  </p>
+</footer>
+
+</div>
+
+</body>
+</html>
