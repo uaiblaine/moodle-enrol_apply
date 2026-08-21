@@ -524,6 +524,310 @@ final class lib_test extends \advanced_testcase {
     }
 
     /**
+     * Reload the instance record so that a directly written column is visible to the plugin.
+     *
+     * @return \stdClass The instance as it now stands in the database.
+     */
+    protected function reload_instance(): \stdClass {
+        global $DB;
+
+        return $DB->get_record('enrol', ['id' => $this->instance->id], '*', MUST_EXIST);
+    }
+
+    /**
+     * Applications are refused before the application window opens.
+     *
+     * @return void
+     */
+    public function test_allow_apply_refuses_before_the_application_window_opens(): void {
+        global $DB;
+
+        // The control: with no window configured the same instance accepts applications.
+        $this->assertTrue($this->plugin->allow_apply($this->instance));
+
+        $opens = time() + DAYSECS;
+        $DB->set_field('enrol', 'enrolstartdate', $opens, ['id' => $this->instance->id]);
+
+        $refusal = $this->plugin->allow_apply($this->reload_instance());
+        $this->assertIsString($refusal);
+        $this->assertSame(get_string('canntenrolearly', 'enrol_apply', userdate($opens)), $refusal);
+    }
+
+    /**
+     * Applications are refused after the application window closes.
+     *
+     * @return void
+     */
+    public function test_allow_apply_refuses_after_the_application_window_closes(): void {
+        global $DB;
+
+        // The control: with no window configured the same instance accepts applications.
+        $this->assertTrue($this->plugin->allow_apply($this->instance));
+
+        $closed = time() - DAYSECS;
+        $DB->set_field('enrol', 'enrolenddate', $closed, ['id' => $this->instance->id]);
+
+        $refusal = $this->plugin->allow_apply($this->reload_instance());
+        $this->assertIsString($refusal);
+        $this->assertSame(get_string('canntenrollate', 'enrol_apply', userdate($closed)), $refusal);
+    }
+
+    /**
+     * A cohort restriction admits members and refuses everybody else.
+     *
+     * @return void
+     */
+    public function test_allow_apply_admits_only_cohort_members(): void {
+        global $DB;
+
+        $cohort = $this->getDataGenerator()->create_cohort(['name' => 'Servidores 2026']);
+        $member = $this->getDataGenerator()->create_user();
+        $outsider = $this->getDataGenerator()->create_user();
+        cohort_add_member($cohort->id, $member->id);
+
+        /* The control: with no restriction the outsider is admitted, which is what proves
+           the restriction is the reason they are refused below and not the fixture. */
+        $this->setUser($outsider);
+        $this->assertTrue($this->plugin->allow_apply($this->instance));
+
+        $DB->set_field('enrol', 'customint5', $cohort->id, ['id' => $this->instance->id]);
+        $restricted = $this->reload_instance();
+
+        $this->setUser($member);
+        $this->assertTrue($this->plugin->allow_apply($restricted));
+
+        $this->setUser($outsider);
+        $refusal = $this->plugin->allow_apply($restricted);
+        $this->assertIsString($refusal);
+        $this->assertSame(get_string('cohortnonmemberinfo', 'enrol_apply', 'Servidores 2026'), $refusal);
+    }
+
+    /**
+     * A restriction naming a cohort that no longer exists refuses with a real message.
+     *
+     * enrol_self returns null in this situation and its enrolment method then vanishes
+     * from the page; here the return value is rendered straight into a notification, so a
+     * null would paint an empty red box.
+     *
+     * @return void
+     */
+    public function test_allow_apply_returns_a_string_when_the_cohort_was_deleted(): void {
+        global $DB;
+
+        $user = $this->getDataGenerator()->create_user();
+        $this->setUser($user);
+
+        $missing = (int) $DB->get_field_sql('SELECT COALESCE(MAX(id), 0) FROM {cohort}') + 1;
+        $DB->set_field('enrol', 'customint5', $missing, ['id' => $this->instance->id]);
+
+        $refusal = $this->plugin->allow_apply($this->reload_instance());
+        $this->assertNotNull($refusal);
+        $this->assertIsString($refusal);
+        $this->assertNotSame('', $refusal);
+    }
+
+    /**
+     * The sentinel a cross-site restore writes is a live refusal, not "no restriction".
+     *
+     * @return void
+     */
+    public function test_allow_apply_refuses_on_the_restore_sentinel(): void {
+        global $DB;
+
+        $user = $this->getDataGenerator()->create_user();
+        $this->setUser($user);
+
+        // The control: zero really does mean "no restriction".
+        $this->assertTrue($this->plugin->allow_apply($this->instance));
+
+        $DB->set_field('enrol', 'customint5', -1, ['id' => $this->instance->id]);
+
+        $refusal = $this->plugin->allow_apply($this->reload_instance());
+        $this->assertIsString($refusal);
+        $this->assertNotSame('', $refusal);
+    }
+
+    /**
+     * The edit form refuses a cohort it never offered.
+     *
+     * The element is a picker over the cohorts the editor may see; without a server side
+     * check the submitted value is any cohort id on the site, which makes the form a
+     * membership oracle for anybody holding enrol/apply:config.
+     *
+     * @return void
+     */
+    public function test_edit_form_rejects_a_cohort_outside_the_offered_list(): void {
+        global $CFG;
+
+        require_once($CFG->dirroot . '/enrol/apply/edit_form.php');
+
+        $this->setAdminUser();
+        $context = \context_course::instance($this->course->id);
+
+        // A cohort in a category context the course does not descend from is never offered.
+        $othercategory = $this->getDataGenerator()->create_category();
+        $hidden = $this->getDataGenerator()->create_cohort([
+            'contextid' => \context_coursecat::instance($othercategory->id)->id,
+        ]);
+
+        $form = new \enrol_apply_edit_form(null, [$this->instance, $this->plugin, $context]);
+
+        $errors = $form->validation([
+            'status' => ENROL_INSTANCE_ENABLED,
+            'enrolstartdate' => 0,
+            'enrolenddate' => 0,
+            'customint5' => $hidden->id,
+        ], []);
+        $this->assertArrayHasKey('customint5', $errors);
+
+        // The control: a cohort the form does offer passes the same check.
+        $offered = $this->getDataGenerator()->create_cohort([
+            'contextid' => \context_system::instance()->id,
+        ]);
+        $errors = $form->validation([
+            'status' => ENROL_INSTANCE_ENABLED,
+            'enrolstartdate' => 0,
+            'enrolenddate' => 0,
+            'customint5' => $offered->id,
+        ], []);
+        $this->assertArrayNotHasKey('customint5', $errors);
+    }
+
+    /**
+     * A forged cohort id never survives a real submission of the edit form.
+     *
+     * The direct call above pins the plugin's own guard; this one pins the whole path,
+     * because that guard is deliberately the second barrier and not the first. Whichever
+     * of the two acts, what must never happen is a restriction naming a cohort the editor
+     * was not offered.
+     *
+     * @return void
+     */
+    public function test_the_form_never_carries_a_cohort_it_did_not_offer(): void {
+        global $CFG;
+
+        require_once($CFG->dirroot . '/enrol/apply/edit_form.php');
+
+        $this->setAdminUser();
+        $context = \context_course::instance($this->course->id);
+
+        $othercategory = $this->getDataGenerator()->create_category();
+        $foreign = $this->getDataGenerator()->create_cohort([
+            'contextid' => \context_coursecat::instance($othercategory->id)->id,
+        ]);
+        // An offered cohort, so that the element really is a select and not the hidden fallback.
+        $offered = $this->getDataGenerator()->create_cohort(['contextid' => \context_system::instance()->id]);
+
+        /* The forged id does not merely arrive as zero: the key is dropped from the export
+           altogether, because exportValue() returns null for a value that is not one of the
+           element's options and moodleform omits a null. enrol_plugin::update_instance()
+           copies a property only when isset(), so an existing restriction is left exactly
+           as it was rather than being cleared by the forgery. */
+        $forged = $this->submit_edit_form($context, $foreign->id);
+        $this->assertObjectNotHasProperty('customint5', $forged);
+
+        /* The control: the same submission carrying an offered cohort does come through
+           with that id, which is what proves the element can carry a restriction at all
+           rather than dropping customint5 unconditionally. */
+        $accepted = $this->submit_edit_form($context, $offered->id);
+        $this->assertEquals($offered->id, (int) $accepted->customint5);
+
+        /* And zero is a real option, so a restriction stays removable. This is what the
+           hidden setConstant(0) fallback in definition() exists to preserve on a site that
+           offers no cohorts at all. */
+        $cleared = $this->submit_edit_form($context, 0);
+        $this->assertObjectHasProperty('customint5', $cleared);
+        $this->assertSame(0, (int) $cleared->customint5);
+    }
+
+    /**
+     * Drive a real submission of the instance edit form and return what it exports.
+     *
+     * @param \context_course $context Course context the instance belongs to.
+     * @param int $cohortid Value to submit for the cohort restriction.
+     * @return \stdClass The data the form exports.
+     */
+    protected function submit_edit_form(\context_course $context, int $cohortid): \stdClass {
+        /* _process_submission() reads the sesskey through optional_param() rather than from
+           the data it is handed, and Moodle's PHPUnit harness does not reset $_POST between
+           tests — so this is put back afterwards, or a later test inherits a live sesskey it
+           never set and can pass without exercising its own guard. */
+        $hadsesskey = array_key_exists('sesskey', $_POST);
+        $previoussesskey = $_POST['sesskey'] ?? null;
+        $_POST['sesskey'] = sesskey();
+
+        $submitted = [
+            '_qf__enrol_apply_edit_form' => 1,
+            'sesskey' => sesskey(),
+            'name' => '',
+            'status' => ENROL_INSTANCE_ENABLED,
+            'customint5' => $cohortid,
+            'customint6' => 1,
+            'roleid' => $this->instance->roleid,
+            'notify' => ['$@NONE@$'],
+            'customint3' => 0,
+            'id' => $this->instance->id,
+            'courseid' => $this->course->id,
+        ];
+
+        try {
+            /* The constructor is where the sesskey is checked: _process_submission() runs
+               from it, and discards the whole submission when confirm_sesskey() fails. */
+            $form = new \enrol_apply_edit_form(
+                null,
+                [$this->instance, $this->plugin, $context],
+                'post',
+                '',
+                null,
+                true,
+                $submitted
+            );
+            $data = $form->get_data();
+        } finally {
+            if ($hadsesskey) {
+                $_POST['sesskey'] = $previoussesskey;
+            } else {
+                unset($_POST['sesskey']);
+            }
+        }
+        $this->assertNotNull($data, 'the simulated submission should reach the form');
+
+        return $data;
+    }
+
+    /**
+     * The form refuses a window whose closing date precedes its opening date.
+     *
+     * @return void
+     */
+    public function test_edit_form_rejects_a_window_that_closes_before_it_opens(): void {
+        global $CFG;
+
+        require_once($CFG->dirroot . '/enrol/apply/edit_form.php');
+
+        $this->setAdminUser();
+        $context = \context_course::instance($this->course->id);
+        $form = new \enrol_apply_edit_form(null, [$this->instance, $this->plugin, $context]);
+
+        $errors = $form->validation([
+            'status' => ENROL_INSTANCE_ENABLED,
+            'enrolstartdate' => time() + DAYSECS,
+            'enrolenddate' => time(),
+            'customint5' => 0,
+        ], []);
+        $this->assertArrayHasKey('enrolenddate', $errors);
+
+        // The control: the same two dates the right way round are accepted.
+        $errors = $form->validation([
+            'status' => ENROL_INSTANCE_ENABLED,
+            'enrolstartdate' => time(),
+            'enrolenddate' => time() + DAYSECS,
+            'customint5' => 0,
+        ], []);
+        $this->assertArrayNotHasKey('enrolenddate', $errors);
+    }
+
+    /**
      * Applications are refused while the instance is disabled or closed to new enrolments.
      *
      * @return void

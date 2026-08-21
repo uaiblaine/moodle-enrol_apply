@@ -81,12 +81,19 @@ class enrol_apply_plugin extends enrol_plugin {
     }
 
     /**
-     * Check whether the given instance currently accepts applications.
+     * Check whether the given instance currently accepts applications from the current user.
+     *
+     * Every caller routes through this method, so each restriction is checked here rather
+     * than in enrol_page_hook(): the hook is only one of the callers and the return value
+     * is rendered raw by core's notification output, which is why the cohort name below is
+     * escaped by format_string() before it is substituted into the message.
      *
      * @param stdClass $instance Course enrol instance.
      * @return bool|string True when applications are accepted, otherwise the reason to show the user.
      */
     public function allow_apply(stdClass $instance) {
+        global $CFG, $DB, $USER;
+
         if ($instance->status != ENROL_INSTANCE_ENABLED) {
             return get_string('cantenrol', 'enrol_apply');
         }
@@ -94,6 +101,42 @@ class enrol_apply_plugin extends enrol_plugin {
             // New enrolments are not allowed on this instance.
             return get_string('cantenrol', 'enrol_apply');
         }
+
+        $now = time();
+        $startdate = (int) ($instance->enrolstartdate ?? 0);
+        if ($startdate > 0 && $startdate > $now) {
+            return get_string('canntenrolearly', 'enrol_apply', userdate($startdate));
+        }
+        $enddate = (int) ($instance->enrolenddate ?? 0);
+        if ($enddate > 0 && $enddate < $now) {
+            return get_string('canntenrollate', 'enrol_apply', userdate($enddate));
+        }
+
+        $cohortid = (int) ($instance->customint5 ?? 0);
+        if ($cohortid < 0) {
+            /* The sentinel restore_instance() writes when a restricted instance lands on
+               another site: there WAS a restriction and this site cannot honour it. Reading
+               it as "no restriction" would fail open and defeat the sentinel entirely. */
+            return get_string('cohortunresolved', 'enrol_apply');
+        }
+        if ($cohortid > 0) {
+            require_once($CFG->dirroot . '/cohort/lib.php');
+
+            /* Read the cohort with a plain get_record() rather than cohort_get_cohort():
+               the applicant holds moodle/cohort:view nowhere, so the visibility-aware
+               helper would refuse every cohort and turn each restriction into "unresolved".
+               enrol_self names the gating cohort to the applicant the same way. */
+            $cohort = $DB->get_record('cohort', ['id' => $cohortid], 'id, name, contextid');
+            if (!$cohort) {
+                // The cohort was deleted. Fail closed, and with a string the caller can render.
+                return get_string('cohortunresolved', 'enrol_apply');
+            }
+            if (!cohort_is_member($cohortid, $USER->id)) {
+                $name = format_string($cohort->name, true, ['context' => context::instance_by_id($cohort->contextid)]);
+                return get_string('cohortnonmemberinfo', 'enrol_apply', $name);
+            }
+        }
+
         return true;
     }
 
@@ -445,6 +488,7 @@ class enrol_apply_plugin extends enrol_plugin {
         $fields['customint1'] = $this->get_config('show_standard_user_profile');
         $fields['customint2'] = $this->get_config('show_extra_user_profile');
         $fields['customint3'] = (int) $this->get_config('maxenrolled', 0);
+        $fields['customint5'] = 0;
         $fields['customint6'] = $this->get_config('newenrols');
         $fields['customint7'] = (int) $this->get_config('opt_commentaryzone', 0);
         $fields['customtext2'] = '';
@@ -917,6 +961,14 @@ class enrol_apply_plugin extends enrol_plugin {
            marker degrades to "nobody" on a cross-site restore. */
         if (!empty($data->customtext3) && $data->customtext3 !== '$@ALL@$' && !$step->get_task()->is_samesite()) {
             $data->customtext3 = '';
+        }
+
+        /* A cohort id from another site names a different group of people here, so the
+           restriction degrades to the -1 sentinel rather than to 0: allow_apply() reads it
+           as a live refusal, where a 0 would quietly drop the restriction the course was
+           backed up with. */
+        if (!empty($data->customint5) && !$step->get_task()->is_samesite()) {
+            $data->customint5 = -1;
         }
 
         $instanceid = $this->add_instance($course, (array) $data);

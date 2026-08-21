@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Applications can be restricted to the members of one cohort, through a per-instance
+  `Only cohort members` setting. A course restored into another site keeps the restriction
+  as a live refusal rather than silently dropping it: the cohort id is replaced by a
+  sentinel that `allow_apply()` reads as "restricted, and unresolvable here".
+- An application window, `Applications open` / `Applications close`, stored in the
+  `enrolstartdate` and `enrolenddate` columns core already carries in its backup. It is
+  separate from the enrolment duration, which decides how long an approved enrolment
+  lasts. The idea comes from the `enrol_gapply` plugin, whose own window check sits in
+  `enrol_page_hook()`; here it sits in `allow_apply()`, the method every caller routes
+  through.
 - Moodle 5.1 and 5.2 support, declared through `$plugin->supported = [501, 502]`, with
   one moodle-an-hochschulen CI job per supported branch.
 - A full privacy provider (metadata, request and userlist). The plugin stores the comment
