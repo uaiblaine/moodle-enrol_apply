@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Courses choose which profile fields an application asks for, at two levels. An
+  administrator sets the site-wide pool in a new `Profile fields courses may ask for`
+  setting; a teacher picks from that pool for each enrolment method, and may mark any
+  field required. The picked set is intersected with the pool on every read, so narrowing
+  the pool narrows every existing method at once.
+
 - `tests/local/bootstrap_compat_test.php`, which fails when the plugin reintroduces a
   Bootstrap 4 class name, ships a background utility without an explicit text colour,
   hardcodes a colour outside a `var()` fallback, declares a custom property in core's
@@ -73,6 +79,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `$plugin->requires` moved from `2011080100` to the Moodle 5.1 release.
 
 ### Fixed
+
+- The approver's notification now shows **what the applicant typed**. The custom profile
+  fields were previously read back out of the database, so an approver reviewing an
+  application saw whatever was already on the account rather than the answers in front of
+  them — and because the standard fields did come from the form, the two halves of the same
+  message could disagree. Values are also no longer put through `format_string()`, which
+  runs `strip_tags()` and silently deleted everything after a bare `<`.
+- The application queue no longer prints an arbitrary profile field value with no
+  visibility check of any kind. The `profileoption` setting that drove it is removed.
 
 - The application queue and the submitted-comments listing now name the cell that
   identifies each row, so a screen reader announces every other cell against the
@@ -162,6 +177,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `enrol_apply_groups` carried the placeholder table comment left by the XMLDB editor.
 
 ### Removed
+
+- `show_standard_user_profile`, `show_extra_user_profile` and `profileoption`. The first
+  two were all-or-nothing switches replaced by the per-field picker; existing instances are
+  migrated, and an instance that collected custom fields keeps collecting them because the
+  upgrade widens the site pool to match what the site was already doing.
 
 - The `ca`, `de`, `en_us`, `es`, `fr`, `it`, `ja` and `zh_cn` language packs. They were
   between 12 and 45 keys against 101 in English, unmaintained since 2016, and translation

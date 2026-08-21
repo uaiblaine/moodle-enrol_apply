@@ -25,6 +25,8 @@
 
 defined('MOODLE_INTERNAL') || die();
 
+$string['allowedfields'] = 'Campos de perfil que os cursos podem solicitar';
+$string['allowedfields_desc'] = 'O conjunto de campos de perfil que um curso pode coletar em uma solicitação de matrícula. O professor escolhe nesta lista em cada método de matrícula; desmarcar um campo aqui também o remove de todos os métodos existentes, pois o conjunto escolhido é verificado contra esta lista a cada uso.';
 $string['applicationcancelednotification'] = 'Sua solicitação de matrícula no curso foi cancelada.';
 $string['applicationconfirmednotification'] = 'Sua solicitação de matrícula no curso foi confirmada.';
 $string['applicationdeferrednotification'] = 'Sua solicitação de matrícula no curso foi adiada (você está na lista de espera).';
@@ -95,6 +97,7 @@ $string['expirymessageenrollersubject'] = 'Notificação de expiração de matr�
 $string['expirynotifyall'] = 'Professor e usuário matriculado';
 $string['expirynotifyenroller'] = 'Somente o professor';
 $string['expirynotifyhour_desc'] = 'Hora do dia em que as notificações de expiração de matrícula são enviadas.';
+$string['fieldrequired'] = 'Obrigatório';
 $string['group'] = 'Atribuição de grupos';
 $string['group_help'] = 'Você pode atribuir nenhum ou vários grupos. Os membros são adicionados quando a solicitação de matrícula é aprovada.';
 $string['invalidformaction'] = 'Ação desconhecida solicitada para as matrículas selecionadas.';
@@ -111,6 +114,7 @@ $string['messageprovider:waitinglist'] = 'Notificações de adiamento de solicit
 $string['newapplicationnotification'] = 'Há uma nova solicitação de matrícula aguardando análise.';
 $string['newenrols'] = 'Permitir novas solicitações de matrícula no curso';
 $string['newenrols_desc'] = 'Permitir, por padrão, que usuários solicitem matrícula em novas instâncias.';
+$string['nofieldsoffered'] = 'No momento a administração não permite coletar nenhum campo de perfil junto com a solicitação.';
 $string['notification'] = 'Solicitação de matrícula enviada com sucesso. Você será notificado por e-mail quando a sua matrícula for confirmada.';
 $string['notify_desc'] = 'Defina quem é notificado sobre novas solicitações de matrícula.';
 $string['notify_heading'] = 'Configurações de notificação';
@@ -127,14 +131,10 @@ $string['privacy:applicationpath'] = 'Solicitação de matrícula';
 $string['privacy:metadata:enrol_apply_applicationinfo'] = 'Informações enviadas junto com uma solicitação de matrícula em curso.';
 $string['privacy:metadata:enrol_apply_applicationinfo:comment'] = 'O comentário escrito pelo usuário ao solicitar a matrícula no curso.';
 $string['privacy:metadata:enrol_apply_applicationinfo:userenrolmentid'] = 'A matrícula à qual a solicitação pertence, que identifica o usuário solicitante e o curso.';
-$string['profileoption'] = 'Campo de perfil a exibir na tabela';
-$string['profileoption_desc'] = 'Um campo de perfil de texto adicional para exibir como coluna na fila de solicitações de matrícula.';
+$string['requestedfields'] = 'Campos de perfil solicitados';
+$string['requestedfields_help'] = 'Os campos de perfil que o solicitante deve preencher. Somente os campos permitidos pela administração do site são oferecidos aqui. Marcar um campo como obrigatório impede o envio da solicitação sem ele.';
 $string['selectapplicant'] = 'Selecionar {$a}';
 $string['sendexpirynotificationstask'] = 'Envio de notificações de expiração de matrícula';
-$string['show_extra_user_profile'] = 'Exibir campos de perfil adicionais na tela de matrícula';
-$string['show_extra_user_profile_desc'] = 'Padrão para novas instâncias: coletar os campos de perfil personalizados no formulário de solicitação.';
-$string['show_standard_user_profile'] = 'Exibir campos padrão do perfil na tela de matrícula';
-$string['show_standard_user_profile_desc'] = 'Padrão para novas instâncias: coletar os campos padrão do perfil no formulário de solicitação.';
 $string['status'] = 'Aceitar matrícula após aprovação';
 $string['status_desc'] = 'Permitir o acesso ao curso a usuários matriculados internamente.';
 $string['submitted_info'] = 'Informações da solicitação';

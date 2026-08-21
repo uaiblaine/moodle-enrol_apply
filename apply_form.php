@@ -91,15 +91,32 @@ class enrol_apply_apply_form extends moodleform {
             $mform->setType('applydescription', PARAM_TEXT);
         }
 
-        // Standard and extra user profile fields, when the instance collects them.
-        if ($instance->customint1) {
-            $editoroptions = null;
-            $filemanageroptions = null;
-            useredit_shared_definition($mform, $editoroptions, $filemanageroptions, $USER);
-        }
-
-        if ($instance->customint2) {
-            profile_definition($mform, $USER->id);
+        /* Only the fields this instance asks for, resolved against the site on every render.
+           useredit_shared_definition() is deliberately NOT called: it adds four section
+           headings unconditionally, before and independently of any field, so on a site where
+           everything is locked it produces an accordion of empty sections. profile_definition()
+           is not called either - it renders EVERY visible custom field, which is the
+           all-or-nothing behaviour the field set replaces. */
+        $resolved = \enrol_apply\local\fields::resolve($instance);
+        foreach ($resolved->keys() as $key) {
+            if (\enrol_apply\local\fields::classify($key, $USER) !== \enrol_apply\local\fields::STATE_EDITABLE) {
+                continue;
+            }
+            $name = \enrol_apply\local\fields::form_element_name($key);
+            if ($name === '') {
+                continue;
+            }
+            $label = \enrol_apply\local\fields::label($key, true);
+            if ($key === \enrol_apply\local\fields::standard_key('country')) {
+                $countries = ['' => get_string('selectacountry')] + get_string_manager()->get_list_of_countries();
+                $mform->addElement('select', $name, $label, $countries);
+            } else {
+                $mform->addElement('text', $name, $label, 'maxlength="255" size="30"');
+                $mform->setType($name, PARAM_TEXT);
+            }
+            if ($resolved->is_required($key)) {
+                $mform->addRule($name, get_string('required'), 'required', null, 'client');
+            }
         }
 
         $mform->setDefaults((array) $USER);

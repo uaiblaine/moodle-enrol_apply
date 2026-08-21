@@ -864,6 +864,159 @@ final class lib_test extends \advanced_testcase {
     }
 
     /**
+     * The approver reads what the applicant typed, not what was already on their account.
+     *
+     * The custom half of the notification used to be read back out of {user_info_data}
+     * through profile_load_custom_fields(), while the standard half came from the submitted
+     * form - so the two halves of the same message disagreed, and the half that mattered
+     * most showed the approver a value the applicant had not entered.
+     *
+     * @return void
+     */
+    public function test_the_notification_carries_the_submitted_value_not_the_stored_one(): void {
+        global $DB;
+
+        $field = $this->create_text_profile_field('typedfield');
+        $key = \enrol_apply\local\fields::custom_key((int) $field->id);
+        set_config('allowedfields', $key . ',s_city', 'enrol_apply');
+        $DB->set_field(
+            'enrol',
+            'customtext4',
+            \enrol_apply\local\fieldset::from_keys([$key, 's_city'])->to_json(),
+            ['id' => $this->instance->id]
+        );
+
+        $applicant = $this->getDataGenerator()->create_user(['city' => 'StoredCity']);
+        $DB->insert_record('user_info_data', (object) [
+            'userid' => $applicant->id,
+            'fieldid' => $field->id,
+            'data' => 'StoredAnswer',
+            'dataformat' => 0,
+        ]);
+
+        // Somebody in the course has to be notified, or no message is built at all.
+        $approver = $this->getDataGenerator()->create_user();
+        $this->getDataGenerator()->enrol_user($approver->id, $this->course->id, 'editingteacher');
+        $DB->set_field('enrol', 'customtext3', '$@ALL@$', ['id' => $this->instance->id]);
+        $instance = $DB->get_record('enrol', ['id' => $this->instance->id], '*', MUST_EXIST);
+
+        $sink = $this->redirectMessages();
+        $this->invoke_apply($instance, $applicant->id, (object) [
+            'applydescription' => 'Please let me in',
+            'city' => 'TypedCity',
+            'profile_field_typedfield' => 'TypedAnswer',
+        ]);
+        $messages = $sink->get_messages();
+        $sink->close();
+
+        $this->assertNotEmpty($messages, 'the approver should have been notified');
+        $body = $messages[0]->fullmessagehtml;
+
+        $this->assertStringContainsString('TypedAnswer', $body);
+        $this->assertStringNotContainsString('StoredAnswer', $body);
+        $this->assertStringContainsString('TypedCity', $body);
+        $this->assertStringNotContainsString('StoredCity', $body);
+    }
+
+    /**
+     * A raw angle bracket in a submitted value does not break the notification.
+     *
+     * A custom field of the textarea datatype is PARAM_RAW, and core's own comment on it is
+     * "We MUST clean this before display!". A value holding a bare "<" followed by a
+     * non-space renders as markup in an HTML mail body and kills clean_returnvalue() on any
+     * web service hop.
+     *
+     * @return void
+     */
+    public function test_the_notification_survives_a_raw_angle_bracket(): void {
+        global $DB;
+
+        $field = $this->create_text_profile_field('rawfield');
+        $key = \enrol_apply\local\fields::custom_key((int) $field->id);
+        set_config('allowedfields', $key, 'enrol_apply');
+        $DB->set_field(
+            'enrol',
+            'customtext4',
+            \enrol_apply\local\fieldset::from_keys([$key])->to_json(),
+            ['id' => $this->instance->id]
+        );
+
+        $applicant = $this->getDataGenerator()->create_user();
+        $approver = $this->getDataGenerator()->create_user();
+        $this->getDataGenerator()->enrol_user($approver->id, $this->course->id, 'editingteacher');
+        $DB->set_field('enrol', 'customtext3', '$@ALL@$', ['id' => $this->instance->id]);
+        $instance = $DB->get_record('enrol', ['id' => $this->instance->id], '*', MUST_EXIST);
+
+        $sink = $this->redirectMessages();
+        $this->invoke_apply($instance, $applicant->id, (object) [
+            'applydescription' => '',
+            'profile_field_rawfield' => 'A<B and R&D',
+        ]);
+        $messages = $sink->get_messages();
+        $sink->close();
+
+        $this->assertNotEmpty($messages);
+        $body = $messages[0]->fullmessagehtml;
+
+        /* The whole answer arrives, escaped exactly once. Asserting only that "A<B" is
+           absent would pass against a body that had silently truncated the value to "A",
+           which is precisely the defect this test exists to catch. */
+        $this->assertStringContainsString('A&lt;B and R&amp;D', $body);
+        $this->assertStringNotContainsString('A&lt;B and R&amp;amp;D', $body);
+        // And the bare bracket is not sitting in the body as the start of a tag.
+        $this->assertStringNotContainsString('A<B', $body);
+    }
+
+    /**
+     * Submit an application the way enrol_page_hook() does.
+     *
+     * apply() is protected, and it is called through reflection rather than by widening it:
+     * the production API should not grow a public method because a test found it convenient,
+     * and the form class that will call it from outside arrives with a later slice.
+     *
+     * @param \stdClass $instance Enrol instance applied to.
+     * @param int $userid Applicant.
+     * @param \stdClass $data Submitted form data.
+     * @return void
+     */
+    protected function invoke_apply(\stdClass $instance, int $userid, \stdClass $data): void {
+        $method = new \ReflectionMethod($this->plugin, 'apply');
+        $method->setAccessible(true);
+        $method->invoke($this->plugin, $instance, $userid, $data);
+    }
+
+    /**
+     * Create a text custom profile field and return its record.
+     *
+     * @param string $shortname Field shortname.
+     * @return \stdClass The created {user_info_field} record.
+     */
+    protected function create_text_profile_field(string $shortname): \stdClass {
+        global $CFG, $DB;
+
+        require_once($CFG->dirroot . '/user/profile/lib.php');
+
+        $categoryid = $DB->insert_record('user_info_category', (object) ['name' => 'Extra', 'sortorder' => 1]);
+        $id = $DB->insert_record('user_info_field', (object) [
+            'shortname' => $shortname,
+            'name' => 'Extra ' . $shortname,
+            'datatype' => 'text',
+            'categoryid' => $categoryid,
+            'sortorder' => 1,
+            'required' => 0,
+            'locked' => 0,
+            'visible' => PROFILE_VISIBLE_ALL,
+            'forceunique' => 0,
+            'signup' => 0,
+            'defaultdata' => '',
+            'param1' => 30,
+            'param2' => 2048,
+        ]);
+
+        return $DB->get_record('user_info_field', ['id' => $id], '*', MUST_EXIST);
+    }
+
+    /**
      * Applications are refused while the instance is disabled or closed to new enrolments.
      *
      * @return void

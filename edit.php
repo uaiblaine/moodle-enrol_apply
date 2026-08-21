@@ -78,6 +78,24 @@ if ($mform->is_cancelled()) {
     $notify = array_diff($notify, ['$@NONE@$']);
     $data->customtext3 = implode(',', $notify);
 
+    /* Collect the picked field set into its envelope. The pool is read again here rather
+       than trusted from the submission: hideIf is a browser behaviour, and a "required" flag
+       posted for a field that is not itself ticked, or a key that is not in the pool at all,
+       must not survive. */
+    $pool = \enrol_apply\local\fields::pool();
+    $picked = [];
+    $required = [];
+    foreach ($pool as $key) {
+        if (empty($data->{'field_' . $key})) {
+            continue;
+        }
+        $picked[] = $key;
+        if (!empty($data->{'fieldreq_' . $key})) {
+            $required[] = $key;
+        }
+    }
+    $data->customtext4 = \enrol_apply\local\fieldset::from_keys($picked, $required)->to_json();
+
     // The tri-state expiry select expands back into the two instance flags.
     $data->notifyall = ($data->expirynotify == 2) ? 1 : 0;
     $data->expirynotify = ($data->expirynotify > 0) ? 1 : 0;

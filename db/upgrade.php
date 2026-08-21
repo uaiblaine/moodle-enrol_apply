@@ -31,7 +31,7 @@
  * @return bool Always true.
  */
 function xmldb_enrol_apply_upgrade($oldversion) {
-    global $DB;
+    global $CFG, $DB;
 
     $dbman = $DB->get_manager();
 
@@ -152,6 +152,23 @@ function xmldb_enrol_apply_upgrade($oldversion) {
         );
 
         upgrade_plugin_savepoint(true, 2026081000, 'enrol', 'apply');
+    }
+
+    if ($oldversion < 2026082102) {
+        require_once($CFG->dirroot . '/enrol/apply/db/upgradelib.php');
+
+        enrol_apply_seed_field_pool();
+        enrol_apply_migrate_field_switches();
+
+        /* The two switches and the queue's profile-field column are retired. The column
+           printed a profile field value with no visibility check of any kind, so dropping it
+           closes an existing disclosure as well as a dead setting. */
+        $enrolapply = enrol_get_plugin('apply');
+        $enrolapply->set_config('show_standard_user_profile', null);
+        $enrolapply->set_config('show_extra_user_profile', null);
+        $enrolapply->set_config('profileoption', null);
+
+        upgrade_plugin_savepoint(true, 2026082102, 'enrol', 'apply');
     }
 
     return true;

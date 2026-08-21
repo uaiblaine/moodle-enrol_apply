@@ -37,9 +37,6 @@ require_once($CFG->libdir . '/tablelib.php');
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class enrol_apply_manage_table extends table_sql {
-    /** @var stdClass|null Extra user profile field shown as a column, when configured. */
-    protected $profilefield = null;
-
     /**
      * Build the table for the requested scope.
      *
@@ -97,16 +94,6 @@ class enrol_apply_manage_table extends table_sql {
                  JOIN {enrol} e ON e.id = ue.enrolid
                  JOIN {course} c ON c.id = e.courseid";
 
-        $profilefieldid = (int) get_config('enrol_apply', 'profileoption');
-        if ($profilefieldid) {
-            $this->profilefield = $DB->get_record('user_info_field', ['id' => $profilefieldid], '*', IGNORE_MISSING);
-        }
-        if ($this->profilefield) {
-            $fields .= ', uid.data AS profilefield';
-            $from .= "\n            LEFT JOIN {user_info_data} uid ON uid.userid = u.id AND uid.fieldid = :profilefieldid";
-            $params['profilefieldid'] = $this->profilefield->id;
-        }
-
         $this->set_sql($fields, $from, implode(' AND ', $wheres), $params);
 
         $this->define_table_columns();
@@ -128,11 +115,6 @@ class enrol_apply_manage_table extends table_sql {
             get_string('applydate', 'enrol_apply'),
         ];
 
-        if ($this->profilefield) {
-            $columns[] = 'profilefield';
-            $headers[] = format_string($this->profilefield->name);
-        }
-
         $columns[] = 'applycomment';
         $headers[] = get_string('applycomment', 'enrol_apply');
 
@@ -144,9 +126,6 @@ class enrol_apply_manage_table extends table_sql {
         $this->define_header_column('fullname');
         $this->no_sorting('checkboxcolumn');
         $this->no_sorting('applycomment');
-        if ($this->profilefield) {
-            $this->no_sorting('profilefield');
-        }
         $this->sortable(true, 'applydate', SORT_ASC);
     }
 
@@ -240,16 +219,6 @@ class enrol_apply_manage_table extends table_sql {
      */
     public function col_applydate($row) {
         return userdate($row->applydate, get_string('strftimedatetimeshort', 'langconfig'));
-    }
-
-    /**
-     * The extra user profile field column.
-     *
-     * @param stdClass $row Row data.
-     * @return string Rendered cell.
-     */
-    public function col_profilefield($row) {
-        return s($row->profilefield);
     }
 
     /**

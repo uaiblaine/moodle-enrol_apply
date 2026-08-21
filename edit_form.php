@@ -130,11 +130,38 @@ class enrol_apply_edit_form extends moodleform {
         $mform->setType('customtext2', PARAM_TEXT);
         $mform->setDefault('customtext2', get_string('comment', 'enrol_apply'));
 
-        $mform->addElement('select', 'customint1', get_string('show_standard_user_profile', 'enrol_apply'), $yesno);
-        $mform->setDefault('customint1', $plugin->get_config('show_standard_user_profile'));
+        /* The profile fields this instance asks an applicant for, picked from the pool the
+           administrator allows. Two checkboxes per field: collect it, and require it. The
+           "required" box is hidden until the field itself is ticked, which is presentation
+           only - edit.php recomputes the pair server side, because hideIf is a browser
+           behaviour and decides nothing about what is submitted. */
+        $pool = \enrol_apply\local\fields::pool();
+        $offerable = array_intersect_key(\enrol_apply\local\fields::offerable(), array_flip($pool));
 
-        $mform->addElement('select', 'customint2', get_string('show_extra_user_profile', 'enrol_apply'), $yesno);
-        $mform->setDefault('customint2', $plugin->get_config('show_extra_user_profile'));
+        if ($offerable) {
+            $mform->addElement('header', 'requestedfieldsheader', get_string('requestedfields', 'enrol_apply'));
+            $mform->addHelpButton('requestedfieldsheader', 'requestedfields', 'enrol_apply');
+            $mform->setExpanded('requestedfieldsheader', true);
+
+            foreach ($offerable as $key => $label) {
+                /* The label is the escaped spelling: a moodleform element label renders
+                   through a triple stash in element-template.mustache. */
+                $escaped = \enrol_apply\local\fields::label($key, true);
+                $group = [
+                    $mform->createElement('advcheckbox', 'field_' . $key, '', $escaped),
+                    $mform->createElement('advcheckbox', 'fieldreq_' . $key, '', get_string('fieldrequired', 'enrol_apply')),
+                ];
+                $mform->addGroup($group, 'fieldgroup_' . $key, $escaped, ' ', false);
+                $mform->hideIf('fieldreq_' . $key, 'field_' . $key, 'notchecked');
+            }
+        } else {
+            $mform->addElement(
+                'static',
+                'nofieldsoffered',
+                get_string('requestedfields', 'enrol_apply'),
+                get_string('nofieldsoffered', 'enrol_apply')
+            );
+        }
 
         $choices = [
             '$@NONE@$' => get_string('nobody'),
@@ -271,6 +298,15 @@ class enrol_apply_edit_form extends moodleform {
 
         $stored = isset($data->customtext3) ? (string) $data->customtext3 : '';
         $data->notify = $stored === '' ? ['$@NONE@$'] : explode(',', $stored);
+
+        /* Unpack the stored envelope onto the picker's checkbox pairs. resolve() rather than
+           the raw envelope, so a key the site no longer allows shows as unticked instead of
+           as a ticked box the applicant would never be asked. */
+        $resolved = \enrol_apply\local\fields::resolve($data);
+        foreach ($resolved->keys() as $key) {
+            $data->{'field_' . $key} = 1;
+            $data->{'fieldreq_' . $key} = $resolved->is_required($key) ? 1 : 0;
+        }
 
         $data->groupselect = [];
         if (!empty($instance->id)) {

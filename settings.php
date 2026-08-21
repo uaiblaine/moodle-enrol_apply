@@ -34,21 +34,26 @@ if ($ADMIN->fulltree) {
         get_string('pluginname_desc', 'enrol_apply')
     ));
 
-    /* Extra profile field shown as a column on the application queue. The field list is
-       read from the database, which is only safe once the install has finished. */
-    $fieldoptions = [0 => get_string('none')];
+    /* The pool of profile fields courses may ask an applicant for. A teacher picks from this
+       list per instance and the picked set is intersected with it again on every read, so
+       narrowing it here narrows every existing instance at once.
+
+       The choices read {user_info_field}, which is only safe once the install has finished -
+       hence the guard, without which admin_apply_default_settings() breaks a fresh install.
+       The default is deliberately the full standard set and not an empty array: the setting
+       stores only the ticked keys, so an empty default would make the intersection in
+       fields::resolve() zero everything and every migrated instance would silently stop
+       collecting what it collected before the upgrade. */
+    $allowedchoices = [];
     if (!during_initial_install()) {
-        $fields = $DB->get_records('user_info_field', ['datatype' => 'text'], 'name ASC', 'id, name');
-        foreach ($fields as $field) {
-            $fieldoptions[$field->id] = format_string($field->name);
-        }
+        $allowedchoices = \enrol_apply\local\fields::offerable();
     }
-    $settings->add(new admin_setting_configselect(
-        'enrol_apply/profileoption',
-        get_string('profileoption', 'enrol_apply'),
-        get_string('profileoption_desc', 'enrol_apply'),
-        0,
-        $fieldoptions
+    $settings->add(new admin_setting_configmulticheckbox(
+        'enrol_apply/allowedfields',
+        get_string('allowedfields', 'enrol_apply'),
+        get_string('allowedfields_desc', 'enrol_apply'),
+        array_fill_keys(\enrol_apply\local\fields::DEFAULT_SET, 1),
+        $allowedchoices
     ));
 
     // Confirmation mail settings.
@@ -193,22 +198,6 @@ if ($ADMIN->fulltree) {
         'enrol_apply/newenrols',
         get_string('newenrols', 'enrol_apply'),
         get_string('newenrols_desc', 'enrol_apply'),
-        1,
-        $yesno
-    ));
-
-    $settings->add(new admin_setting_configselect(
-        'enrol_apply/show_standard_user_profile',
-        get_string('show_standard_user_profile', 'enrol_apply'),
-        get_string('show_standard_user_profile_desc', 'enrol_apply'),
-        1,
-        $yesno
-    ));
-
-    $settings->add(new admin_setting_configselect(
-        'enrol_apply/show_extra_user_profile',
-        get_string('show_extra_user_profile', 'enrol_apply'),
-        get_string('show_extra_user_profile_desc', 'enrol_apply'),
         1,
         $yesno
     ));
