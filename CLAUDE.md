@@ -161,13 +161,33 @@ backup/                      group mappings only, see the gotcha below
   `ob_start()` so it can be handed to a Mustache template as a triple stash. That is the
   one place raw HTML is passed through a template on purpose.
 
-- **The profile fields on the application form are never saved.** With `customint1` or
-  `customint2` on, `apply_form.php` renders the standard and custom profile fields, but
-  nothing calls `useredit_update_user_profile()` or `profile_save_data()`. The submitted
-  values only travel into the notification the approver receives. That is upstream
-  behaviour and it is deliberate here: turning it into a real profile edit would let an
-  enrolment form rewrite user records, which is a much larger change than it looks and a
-  privacy question of its own. Do not "fix" it without deciding that explicitly.
+- **The profile fields on the application form are never saved.** The form renders the
+  fields the instance asks for, but nothing calls `profile_save_data()` or writes to
+  `{user}`. The submitted values only travel into the notification the approver receives.
+  That is upstream behaviour and it is deliberate here: turning it into a real profile edit
+  would let an enrolment form rewrite user records, which is a much larger change than it
+  looks and a privacy question of its own. Do not "fix" it without deciding that
+  explicitly. (An earlier version of this note also named
+  `useredit_update_user_profile()`; that function exists on neither 5.1 nor 5.2, so it was
+  proving nothing.)
+
+- **Which fields are asked for is decided at two levels, and read as an intersection.** An
+  administrator sets the site pool in `enrol_apply/allowedfields`; a teacher picks from it
+  per instance, stored as a JSON envelope in `customtext4`. `\enrol_apply\local\fields::resolve()`
+  recomputes the pool on every read and keeps only the picked keys that survive it. That is
+  not defensive style: `customtext4` is carried verbatim by core's backup and copied onto a
+  restored instance by `enrol_plugin::add_instance()` with no allowlist, so anyone who can
+  restore a course chooses its contents. The deny list is enforced in `pool()` and nowhere
+  else, deliberately — a second check inside `resolve()` is unreachable, and an unreachable
+  guard no test can hold reads as protection while proving nothing.
+
+- **The notification carries what the applicant typed, and is not put through
+  `format_string()`.** Both halves come from the submitted data. `format_string()` runs
+  `strip_tags()`, which deletes everything from a bare `<` onwards — so an applicant typing
+  `A<B and R&D` would have the approver read `A`, silently. The notification template
+  escapes every value through a double stash instead, which is lossless and correct. A
+  value that later has to satisfy `PARAM_TEXT` — a web service return, a report column —
+  must be stripped at *that* boundary, where losing the tail is a deliberate cost.
 
 ## The phpcs trap that keeps costing a CI round
 

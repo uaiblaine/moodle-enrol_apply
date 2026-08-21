@@ -19,9 +19,11 @@
 
     HTML body of the notification sent when a user applies for a course enrolment.
 
-    Profile values arrive already escaped or already formatted by the renderer, because a
-    custom profile field may legitimately hold rich text, so they are output with a triple
-    stash. Labels come from language strings and are escaped normally.
+    Every label and value arrives in its PLAIN spelling and is output through a double stash,
+    so Mustache escapes it exactly once. The renderer strips markup from a submitted value
+    with format_string() before it gets here, which is what makes that safe: a custom profile
+    field of the textarea datatype is PARAM_RAW, so a value can otherwise carry a bare "<".
+    Do not convert any of these to a triple stash.
 
     Context variables required for this template:
     * coursenamelabel string - label of the course row
@@ -29,12 +31,10 @@
     * applicantlabel string - label of the applicant row
     * applicant string - applicant full name
     * commentlabel string - label of the comment row
-    * comment string - escaped comment submitted with the application
-    * profilelabel string - heading of the standard profile section
-    * hasprofile boolean - whether standard profile fields were collected
-    * profile array - list of label and value pairs for the standard profile fields
-    * hasextra boolean - whether custom profile fields were collected
-    * extra array - list of label and value pairs for the custom profile fields
+    * comment string - plain comment submitted with the application
+    * profilelabel string - heading of the submitted profile section
+    * hasprofile boolean - whether any profile field was collected and filled in
+    * profile array - list of label and value pairs, in the order the instance asks for them
     * manageurl string - link to the screen where the application can be decided
     * managelabel string - link text
 
@@ -49,11 +49,7 @@
         "profilelabel": "User Profile",
         "hasprofile": true,
         "profile": [
-            {"label": "Email address", "value": "student1@example.com"},
-            {"label": "City/town", "value": "Belo Horizonte"}
-        ],
-        "hasextra": true,
-        "extra": [
+            {"label": "City/town", "value": "Belo Horizonte"},
             {"label": "Registration number", "value": "2026-0042"}
         ],
         "manageurl": "https://example.com/enrol/apply/manage.php?id=7",
@@ -63,17 +59,12 @@
 <div class="enrol_apply-notification">
     <p>{{coursenamelabel}}: {{coursename}}</p>
     <p>{{applicantlabel}}: {{applicant}}</p>
-    <p>{{commentlabel}}: {{{comment}}}</p>
+    <p>{{commentlabel}}: {{comment}}</p>
     {{#hasprofile}}
         <p><strong>{{profilelabel}}</strong></p>
         {{#profile}}
-            <p>{{label}}: {{{value}}}</p>
+            <p>{{label}}: {{value}}</p>
         {{/profile}}
     {{/hasprofile}}
-    {{#hasextra}}
-        {{#extra}}
-            <p>{{{label}}}: {{{value}}}</p>
-        {{/extra}}
-    {{/hasextra}}
     <p><a href="{{manageurl}}">{{managelabel}}</a></p>
 </div>

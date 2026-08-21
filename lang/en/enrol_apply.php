@@ -27,6 +27,8 @@
 
 defined('MOODLE_INTERNAL') || die();
 
+$string['allowedfields'] = 'Profile fields courses may ask for';
+$string['allowedfields_desc'] = 'The pool of profile fields a course may collect with an enrolment application. A teacher picks from this list for each enrolment method; unticking a field here removes it from every existing method as well, because the picked set is checked against this list on every use.';
 $string['applicationcancelednotification'] = 'Your course enrolment application was canceled.';
 $string['applicationconfirmednotification'] = 'Your course enrolment application was confirmed.';
 $string['applicationdeferrednotification'] = 'Your course enrolment application was deferred (you are currently on the waiting list).';
@@ -97,6 +99,7 @@ $string['expirymessageenrollersubject'] = 'Apply enrolment expiry notification';
 $string['expirynotifyall'] = 'Teacher and enrolled user';
 $string['expirynotifyenroller'] = 'Teacher only';
 $string['expirynotifyhour_desc'] = 'Hour of the day at which the enrolment expiry notifications are sent.';
+$string['fieldrequired'] = 'Required';
 $string['group'] = 'Group assignment';
 $string['group_help'] = 'You can assign none or multiples groups. Members are added once the enrolment application is approved.';
 $string['invalidformaction'] = 'Unknown action requested for the selected enrolment applications.';
@@ -113,6 +116,7 @@ $string['messageprovider:waitinglist'] = 'Course enrolment application defer not
 $string['newapplicationnotification'] = 'There is a new course enrolment application awaiting review.';
 $string['newenrols'] = 'Allow new course enrol request';
 $string['newenrols_desc'] = 'Allow users to apply for an enrolment in new instances by default.';
+$string['nofieldsoffered'] = 'The administrator does not currently allow any profile field to be collected with an application.';
 $string['notification'] = 'Enrolment application successfully sent. You will be informed by email when your enrolment has been confirmed.';
 $string['notify_desc'] = 'Define who gets notified about new enrolment applications.';
 $string['notify_heading'] = 'Notification settings';
@@ -129,14 +133,10 @@ $string['privacy:applicationpath'] = 'Enrolment application';
 $string['privacy:metadata:enrol_apply_applicationinfo'] = 'Information submitted with a course enrolment application.';
 $string['privacy:metadata:enrol_apply_applicationinfo:comment'] = 'The comment the user wrote when applying for the course enrolment.';
 $string['privacy:metadata:enrol_apply_applicationinfo:userenrolmentid'] = 'The enrolment the application belongs to, which identifies the applying user and the course.';
-$string['profileoption'] = 'Profile Field to Show in Table';
-$string['profileoption_desc'] = 'An extra text profile field to show as a column on the enrolment application queue.';
+$string['requestedfields'] = 'Profile fields requested';
+$string['requestedfields_help'] = 'The profile fields the applicant is asked to fill in. Only fields the administrator allows site wide are offered here. Marking a field as required means an application cannot be submitted without it.';
 $string['selectapplicant'] = 'Select {$a}';
 $string['sendexpirynotificationstask'] = 'Apply enrolment send expiry notifications task';
-$string['show_extra_user_profile'] = 'Show extra user profile fields on enrolment screen';
-$string['show_extra_user_profile_desc'] = 'Default for new instances: collect the custom user profile fields on the application form.';
-$string['show_standard_user_profile'] = 'Show standard user profile fields on enrolment screen';
-$string['show_standard_user_profile_desc'] = 'Default for new instances: collect the standard user profile fields on the application form.';
 $string['status'] = 'Allow Course enrol confirmation';
 $string['status_desc'] = 'Allow course access of internally enrolled users.';
 $string['submitted_info'] = 'Enrol info';

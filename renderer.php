@@ -35,36 +35,6 @@
  */
 class enrol_apply_renderer extends plugin_renderer_base {
     /**
-     * Standard user profile fields offered on the application form, in display order.
-     *
-     * Each entry maps the form field name to the core language string identifier used as
-     * its label. Fields removed from core (icq, skype, aim, yahoo, msn, all dropped in
-     * Moodle 4.0) are deliberately absent, and any field the site has hidden simply does
-     * not reach the notification because the loop skips properties that are not set.
-     *
-     * @var array
-     */
-    protected const STANDARD_USER_FIELDS = [
-        'firstname' => 'firstname',
-        'lastname' => 'lastname',
-        'email' => 'email',
-        'city' => 'city',
-        'country' => 'country',
-        'lang' => 'preferredlanguage',
-        'firstnamephonetic' => 'firstnamephonetic',
-        'lastnamephonetic' => 'lastnamephonetic',
-        'middlename' => 'middlename',
-        'alternatename' => 'alternatename',
-        'url' => 'webpage',
-        'idnumber' => 'idnumber',
-        'institution' => 'institution',
-        'department' => 'department',
-        'phone1' => 'phone1',
-        'phone2' => 'phone2',
-        'address' => 'address',
-    ];
-
-    /**
      * Render the page listing the applications awaiting a decision.
      *
      * @param enrol_apply_manage_table $table Table listing the applications.
@@ -153,8 +123,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
      * @param stdClass $user Applicant.
      * @param moodle_url $manageurl Link to the screen where the application can be decided.
      * @param string $applydescription Comment submitted with the application.
-     * @param stdClass|null $standarduserfields Submitted standard profile fields, null when not collected.
-     * @param array|null $extrauserfields Custom profile fields, null when not collected.
+     * @param array $submitted Label and value pairs the applicant typed, from fields::submitted_values().
      * @return string Rendered HTML body.
      */
     public function application_notification_mail_body(
@@ -162,36 +131,18 @@ class enrol_apply_renderer extends plugin_renderer_base {
         $user,
         $manageurl,
         $applydescription,
-        $standarduserfields = null,
-        $extrauserfields = null
+        array $submitted = []
     ) {
+        /* Labels and values are both the plain spelling. The template renders each through a
+           double stash, so Mustache escapes them exactly once - which is both correct and
+           lossless, where stripping them here would delete an applicant's answer from the
+           first "<" onwards. */
         $profile = [];
-        if ($standarduserfields) {
-            foreach (self::STANDARD_USER_FIELDS as $field => $stringid) {
-                if (!isset($standarduserfields->{$field}) || $standarduserfields->{$field} === '') {
-                    continue;
-                }
-                $profile[] = [
-                    'label' => get_string($stringid),
-                    'value' => s($standarduserfields->{$field}),
-                ];
-            }
-            if (!empty($standarduserfields->description_editor['text'])) {
-                $profile[] = [
-                    'label' => get_string('description'),
-                    'value' => format_text(
-                        $standarduserfields->description_editor['text'],
-                        $standarduserfields->description_editor['format'] ?? FORMAT_HTML
-                    ),
-                ];
-            }
-        }
-
-        $extra = [];
-        if ($extrauserfields) {
-            foreach ($extrauserfields as $key => $value) {
-                $extra[] = ['label' => s($key), 'value' => s($value)];
-            }
+        foreach ($submitted as $pair) {
+            $profile[] = [
+                'label' => $pair['label'],
+                'value' => $pair['value'],
+            ];
         }
 
         return $this->render_from_template('enrol_apply/application_notification', [
@@ -200,12 +151,11 @@ class enrol_apply_renderer extends plugin_renderer_base {
             'applicantlabel' => get_string('applyuser', 'enrol_apply'),
             'applicant' => fullname($user),
             'commentlabel' => get_string('comment', 'enrol_apply'),
-            'comment' => s($applydescription),
+            // Plain, because the template double-stashes it. See the note above on stripping.
+            'comment' => $applydescription,
             'profilelabel' => get_string('user_profile', 'enrol_apply'),
             'hasprofile' => (bool) $profile,
             'profile' => $profile,
-            'hasextra' => (bool) $extra,
-            'extra' => $extra,
             'manageurl' => $manageurl->out(false),
             'managelabel' => get_string('applymanage', 'enrol_apply'),
         ]);

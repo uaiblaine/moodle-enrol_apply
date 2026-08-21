@@ -485,14 +485,15 @@ class enrol_apply_plugin extends enrol_plugin {
         $fields = [];
         $fields['status'] = $this->get_config('status');
         $fields['roleid'] = $this->get_config('roleid', 0);
-        $fields['customint1'] = $this->get_config('show_standard_user_profile');
-        $fields['customint2'] = $this->get_config('show_extra_user_profile');
         $fields['customint3'] = (int) $this->get_config('maxenrolled', 0);
         $fields['customint5'] = 0;
         $fields['customint6'] = $this->get_config('newenrols');
         $fields['customint7'] = (int) $this->get_config('opt_commentaryzone', 0);
         $fields['customtext2'] = '';
         $fields['customtext3'] = $this->get_config('notifycoursebased') ? '$@ALL@$' : '';
+        $fields['customtext4'] = \enrol_apply\local\fieldset::from_keys(
+            \enrol_apply\local\fields::pool()
+        )->to_json();
         $fields['enrolperiod'] = $this->get_config('enrolperiod', 0);
 
         return $fields;
@@ -731,20 +732,13 @@ class enrol_apply_plugin extends enrol_plugin {
         $applicant = core_user::get_user($userid);
         $applydescription = isset($data->applydescription) ? $data->applydescription : '';
 
-        // Include the standard user profile fields?
-        $standarduserfields = null;
-        if ($instance->customint1) {
-            $standarduserfields = clone $data;
-            unset($standarduserfields->applydescription);
-        }
-
-        // Include the extra user profile fields?
-        $extrauserfields = null;
-        if ($instance->customint2) {
-            require_once($CFG->dirroot . '/user/profile/lib.php');
-            profile_load_custom_fields($applicant);
-            $extrauserfields = $applicant->profile;
-        }
+        /* What the applicant typed, keyed by the fields this instance actually asks for.
+           Both halves come from the submitted data. They did not always: the custom fields
+           used to be read back out of {user_info_data} through profile_load_custom_fields(),
+           so an approver reviewing an application saw whatever was already on the account
+           rather than the answers in front of them - and because the standard fields DID
+           come from the form, the two halves of the same message disagreed. */
+        $submitted = \enrol_apply\local\fields::submitted_values($instance, $data);
 
         // Notify users holding the capability in the course context.
         $recipients = $this->get_notifycoursebased_users($instance);
@@ -756,8 +750,7 @@ class enrol_apply_plugin extends enrol_plugin {
                 $applicant,
                 $manageurl,
                 $applydescription,
-                $standarduserfields,
-                $extrauserfields
+                $submitted
             );
             foreach ($recipients as $user) {
                 $this->send_application_notification_to($user, $applicant, $content, $manageurl, $instance->courseid);
@@ -775,8 +768,7 @@ class enrol_apply_plugin extends enrol_plugin {
                 $applicant,
                 $manageurl,
                 $applydescription,
-                $standarduserfields,
-                $extrauserfields
+                $submitted
             );
             foreach ($recipients as $user) {
                 if (isset($notified[$user->id])) {
@@ -796,8 +788,7 @@ class enrol_apply_plugin extends enrol_plugin {
                 $applicant,
                 $manageurl,
                 $applydescription,
-                $standarduserfields,
-                $extrauserfields
+                $submitted
             );
             foreach ($recipients as $user) {
                 if (isset($notified[$user->id])) {
@@ -969,6 +960,15 @@ class enrol_apply_plugin extends enrol_plugin {
            backed up with. */
         if (!empty($data->customint5) && !$step->get_task()->is_samesite()) {
             $data->customint5 = -1;
+        }
+
+        /* customtext4 names fields by site-local id for custom fields, so an envelope from
+           another site can name fields that do not exist here or that this site does not
+           allow. resolve() intersects against this site on every read anyway, but rewriting
+           it now means the stored value matches what the instance will actually collect
+           rather than carrying a set nobody can see. */
+        if (!empty($data->customtext4)) {
+            $data->customtext4 = \enrol_apply\local\fields::resolve($data)->to_json();
         }
 
         $instanceid = $this->add_instance($course, (array) $data);
