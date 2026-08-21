@@ -72,9 +72,10 @@ final class backup_test extends \advanced_testcase {
      *
      * @param \stdClass $course Course to copy.
      * @param bool $userdata Whether to include users in the backup.
+     * @param bool $crosssite Whether to move the site identifier first, so the restore reads as cross-site.
      * @return int Id of the restored course.
      */
-    protected function backup_and_restore($course, bool $userdata): int {
+    protected function backup_and_restore($course, bool $userdata, bool $crosssite = false): int {
         global $CFG, $USER;
 
         $CFG->backup_file_logger_level = backup::LOG_NONE;
@@ -107,6 +108,15 @@ final class backup_test extends \advanced_testcase {
                 get_file_packer('application/vnd.moodle.backup'),
                 $backupbasepath
             );
+        }
+
+        /* restore_controller works out whether the backup came from this site by comparing
+           md5(get_site_identifier()) against the hash the backup recorded, and it does so
+           while loading the plan in its constructor. Moving the identifier here is
+           therefore the whole of "restore this into another site": nothing else about the
+           archive changes, which is exactly the situation restore_instance() degrades for. */
+        if ($crosssite) {
+            set_config('siteidentifier', 'another-site-entirely');
         }
 
         $newcourseid = restore_dbops::create_new_course(
@@ -202,6 +212,70 @@ final class backup_test extends \advanced_testcase {
 
         $comment = $DB->get_field('enrol_apply_applicationinfo', 'comment', ['userenrolmentid' => $newueid]);
         $this->assertEquals('I would like to join this course', $comment);
+    }
+
+    /**
+     * A cohort restriction restored into another site becomes a live refusal, not "no restriction".
+     *
+     * A cohort id names a different group of people on every other site, so it cannot be
+     * carried across. Degrading it to zero would quietly open a course the backup had
+     * closed; the sentinel keeps it closed until somebody re-picks a local cohort.
+     *
+     * @return void
+     */
+    public function test_restore_into_another_site_disables_the_cohort_restriction(): void {
+        global $DB;
+
+        [$course, $instance] = $this->create_course_with_application();
+        $cohort = $this->getDataGenerator()->create_cohort();
+        $DB->set_field('enrol', 'customint5', $cohort->id, ['id' => $instance->id]);
+
+        $newcourseid = $this->backup_and_restore($course, false, true);
+
+        $restored = $DB->get_record('enrol', ['courseid' => $newcourseid, 'enrol' => 'apply'], '*', MUST_EXIST);
+        $this->assertEquals(-1, (int) $restored->customint5);
+    }
+
+    /**
+     * A cohort restriction restored on the same site is kept exactly as it was.
+     *
+     * The control for the test above: without it, a restore_instance() that zeroed the
+     * column unconditionally would still look correct on one half of the behaviour.
+     *
+     * @return void
+     */
+    public function test_restore_on_the_same_site_keeps_the_cohort_restriction(): void {
+        global $DB;
+
+        [$course, $instance] = $this->create_course_with_application();
+        $cohort = $this->getDataGenerator()->create_cohort();
+        $DB->set_field('enrol', 'customint5', $cohort->id, ['id' => $instance->id]);
+
+        $newcourseid = $this->backup_and_restore($course, false);
+
+        $restored = $DB->get_record('enrol', ['courseid' => $newcourseid, 'enrol' => 'apply'], '*', MUST_EXIST);
+        $this->assertEquals((int) $cohort->id, (int) $restored->customint5);
+    }
+
+    /**
+     * The application window travels with the course, because core backs both columns up itself.
+     *
+     * @return void
+     */
+    public function test_the_application_window_survives_a_restore(): void {
+        global $DB;
+
+        [$course, $instance] = $this->create_course_with_application();
+        $opens = time() + DAYSECS;
+        $closes = time() + (2 * DAYSECS);
+        $DB->set_field('enrol', 'enrolstartdate', $opens, ['id' => $instance->id]);
+        $DB->set_field('enrol', 'enrolenddate', $closes, ['id' => $instance->id]);
+
+        $newcourseid = $this->backup_and_restore($course, false);
+
+        $restored = $DB->get_record('enrol', ['courseid' => $newcourseid, 'enrol' => 'apply'], '*', MUST_EXIST);
+        $this->assertEquals($opens, (int) $restored->enrolstartdate);
+        $this->assertEquals($closes, (int) $restored->enrolenddate);
     }
 
     /**

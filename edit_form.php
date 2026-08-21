@@ -103,6 +103,22 @@ class enrol_apply_edit_form extends moodleform {
         $mform->disabledIf('expirythreshold', 'expirynotify', 'eq', 0);
         $mform->setDefault('expirythreshold', DAYSECS);
 
+        /* The window during which applications are accepted. It is separate from the
+           enrolment period above: enrolperiod measures how long an approved enrolment
+           lasts, these two decide when an application may be submitted at all. Both live
+           on {enrol} already and are carried by core's own backup. */
+        $mform->addElement('date_time_selector', 'enrolstartdate', get_string('enrolstartdate', 'enrol_apply'), [
+            'optional' => true,
+        ]);
+        $mform->setDefault('enrolstartdate', 0);
+        $mform->addHelpButton('enrolstartdate', 'enrolstartdate', 'enrol_apply');
+
+        $mform->addElement('date_time_selector', 'enrolenddate', get_string('enrolenddate', 'enrol_apply'), [
+            'optional' => true,
+        ]);
+        $mform->setDefault('enrolenddate', 0);
+        $mform->addHelpButton('enrolenddate', 'enrolenddate', 'enrol_apply');
+
         $mform->addElement('textarea', 'customtext1', get_string('editdescription', 'enrol_apply'));
         $mform->setType('customtext1', PARAM_RAW);
 
@@ -135,6 +151,20 @@ class enrol_apply_edit_form extends moodleform {
         $mform->setDefault('customint3', $plugin->get_config('maxenrolled', 0));
         $mform->addHelpButton('customint3', 'maxenrolled', 'enrol_apply');
 
+        /* Restrict applications to one cohort. The element is emitted even when there is
+           nothing to choose from, as a hidden constant zero: enrol_plugin::update_instance()
+           copies a property only when it is set on the submitted data, so omitting the
+           element would make an existing restriction impossible to remove. */
+        $cohorts = $this->get_cohort_options($instance, $context);
+        if (count($cohorts) > 1) {
+            $mform->addElement('select', 'customint5', get_string('cohortonly', 'enrol_apply'), $cohorts);
+            $mform->addHelpButton('customint5', 'cohortonly', 'enrol_apply');
+        } else {
+            $mform->addElement('hidden', 'customint5');
+            $mform->setType('customint5', PARAM_INT);
+            $mform->setConstant('customint5', 0);
+        }
+
         $mform->addElement('hidden', 'id');
         $mform->setType('id', PARAM_INT);
         $mform->addElement('hidden', 'courseid');
@@ -143,6 +173,86 @@ class enrol_apply_edit_form extends moodleform {
         $this->add_action_buttons(true, $instance->id ? null : get_string('addinstance', 'enrol'));
 
         $this->set_data($this->prepare_instance_data($instance, $DB));
+    }
+
+    /**
+     * Reject a submission whose dates or cohort do not hold up server side.
+     *
+     * @param array $data Submitted form data.
+     * @param array $files Submitted files.
+     * @return array Errors keyed by element name.
+     */
+    public function validation($data, $files) {
+        $errors = parent::validation($data, $files);
+
+        [$instance, , $context] = $this->_customdata;
+
+        /* Every read below defaults rather than indexing: a select whose submitted value is
+           not one of its options exports as null, so a key present on screen can be missing
+           here, and reaching for it directly would raise a warning that fails the build. */
+        if (($data['status'] ?? ENROL_INSTANCE_ENABLED) == ENROL_INSTANCE_ENABLED) {
+            $opens = (int) ($data['enrolstartdate'] ?? 0);
+            $closes = (int) ($data['enrolenddate'] ?? 0);
+            if ($closes > 0 && $closes < $opens) {
+                $errors['enrolenddate'] = get_string('enrolenddaterror', 'enrol_apply');
+            }
+        }
+
+        /* The second barrier, not the first. HTML_QuickForm_select::exportValue() already
+           intersects the submitted value with the options registered on the element, so a
+           forged cohort id reaches this method as null and never becomes a restriction. The
+           check below is what keeps that true if the element is ever changed to the ajax
+           `cohort` autocomplete, whose exportValue() short-circuits and filters nothing —
+           the reason enrol_cohort carries the same array_diff. The offered list is rebuilt
+           here rather than read from a property stashed at definition() time, because a
+           stashed list is whatever the last render happened to hold. */
+        $submitted = (int) ($data['customint5'] ?? 0);
+        if ($submitted !== 0) {
+            $offered = array_map('intval', array_keys($this->get_cohort_options($instance, $context)));
+            if (array_diff([$submitted], $offered)) {
+                $errors['customint5'] = get_string('invaliddata', 'error');
+            }
+        }
+
+        return $errors;
+    }
+
+    /**
+     * The cohorts this user may restrict the instance to, keyed by cohort id.
+     *
+     * The list always carries a leading "no restriction" entry. A stored restriction the
+     * current user cannot see — a hidden cohort, a deleted one, or the -1 sentinel a
+     * cross-site restore writes — stays selectable so that editing an unrelated setting
+     * does not silently lift it, but it is labelled by id rather than by name: resolving
+     * the name through a plain get_record() here would turn the picker into a hidden-cohort
+     * name oracle for anybody holding enrol/apply:config.
+     *
+     * @param stdClass $instance Instance record, or the defaults for a new instance.
+     * @param context $context Course context the instance belongs to.
+     * @return array Cohort names keyed by cohort id.
+     */
+    protected function get_cohort_options($instance, $context) {
+        global $CFG;
+
+        require_once($CFG->dirroot . '/cohort/lib.php');
+
+        $options = [0 => get_string('no')];
+
+        // The fourth argument is the limit, and it defaults to 25 — without it the picker truncates.
+        foreach (cohort_get_available_cohorts($context, 0, 0, 0) as $cohort) {
+            $name = format_string($cohort->name, true, ['context' => context::instance_by_id($cohort->contextid)]);
+            if ($cohort->idnumber !== '' && $cohort->idnumber !== null) {
+                $name .= ' [' . s($cohort->idnumber) . ']';
+            }
+            $options[$cohort->id] = $name;
+        }
+
+        $stored = (int) ($instance->customint5 ?? 0);
+        if ($stored !== 0 && !isset($options[$stored])) {
+            $options[$stored] = get_string('unknowncohort', 'cohort', $stored);
+        }
+
+        return $options;
     }
 
     /**
