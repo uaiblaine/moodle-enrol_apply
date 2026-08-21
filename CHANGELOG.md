@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- `tests/local/bootstrap_compat_test.php`, which fails when the plugin reintroduces a
+  Bootstrap 4 class name, ships a background utility without an explicit text colour,
+  hardcodes a colour outside a `var()` fallback, declares a custom property in core's
+  `--mds-` namespace, or drops a table's row-header column. None of these are visible to
+  any other gate: phpcs reads PHP, the mustache lint reads structure and stylelint reads
+  CSS, and none of them knows what a class name resolves to or what colour it renders.
 - Applications can be restricted to the members of one cohort, through a per-instance
   `Only cohort members` setting. A course restored into another site keeps the restriction
   as a live refusal rather than silently dropping it: the cohort id is replaced by a
@@ -34,6 +40,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- The bulk action bar no longer writes Bootstrap 4 class names beside their Bootstrap 5
+  spellings. `mr-2` and `custom-select` do resolve on 5.1 and 5.2, but only through
+  `theme/boost/scss/moodle/bs4-compat.scss`, which wraps them in `@include
+  deprecated-styles()` and which Moodle 6.0 removes; the Bootstrap 5 spelling alone is
+  correct on every supported branch.
+- The waiting-list row marker reads the theme's own colour token instead of a literal
+  `grey`. Both supported branches ship dark mode, where a light literal paints a light bar
+  inside a dark page.
 - Group assignment now happens when an application is **approved**, not when it is
   submitted. Applicants no longer appear in course groups while still pending.
 - Group memberships are created with `enrol_apply` as their component, so core removes
@@ -60,6 +74,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- The application queue and the submitted-comments listing now name the cell that
+  identifies each row, so a screen reader announces every other cell against the
+  applicant's name rather than reading a row of bare values.
 - **A previously approved user reappeared in the approval queue once their enrolment
   expired.** With the expiry action set to "suspend", `process_expirations()` re-suspends
   an expired active enrolment, and the queue selected purely on `status != active`. The

@@ -81,6 +81,10 @@ class enrol_apply_info_table extends table_sql {
             $commentlabel !== '' ? $commentlabel : get_string('applycomment', 'enrol_apply'),
         ]);
         $this->no_sorting('applycomment');
+        /* Names the cell that identifies each row, so table_sql emits it as a
+           <th scope="row"> and a screen reader announces the date and the comment against
+           the applicant's name rather than reading them as free-standing values. */
+        $this->define_header_column('fullname');
         $this->sortable(true, 'applydate', SORT_ASC);
     }
 
