@@ -3,7 +3,10 @@ form#enrol_apply_manage_form tr {
 }
 
 form#enrol_apply_manage_form tr.enrol_apply_waitinglist_highlight {
-    border-color: grey;
+    /* Read the theme's own token: 5.1 and 5.2 both ship dark mode, and a literal grey
+       renders as a light bar inside a dark page. The chain falls back to the Bootstrap 4
+       name and then to a literal, because neither branch defines both spellings. */
+    border-color: var(--bs-secondary-color, var(--gray, #6c757d));
 }
 
 .path-enrol-apply .formaction {

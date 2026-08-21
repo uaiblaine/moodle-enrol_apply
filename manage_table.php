@@ -138,6 +138,10 @@ class enrol_apply_manage_table extends table_sql {
 
         $this->define_columns($columns);
         $this->define_headers($headers);
+        /* Names the cell that identifies each row, so table_sql emits it as a
+           <th scope="row"> and a screen reader announces every other cell of the row
+           against the applicant's name rather than reading a wall of bare values. */
+        $this->define_header_column('fullname');
         $this->no_sorting('checkboxcolumn');
         $this->no_sorting('applycomment');
         if ($this->profilefield) {
