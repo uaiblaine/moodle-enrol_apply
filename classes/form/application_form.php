@@ -154,44 +154,8 @@ class application_form extends dynamic_form {
             }
         }
 
-        if ($editable) {
-            $mform->addElement('header', 'detailsheader', get_string('detailsthattravel', 'enrol_apply'));
-            $mform->setExpanded('detailsheader', true);
-            $mform->addElement(
-                'static',
-                'detailsintro',
-                '',
-                get_string('detailsthattravel_desc', 'enrol_apply')
-            );
-
-            $confirmeach = count($editable) <= self::CONFIRM_EACH_UP_TO;
-            foreach ($editable as $key) {
-                $this->add_editable_field($key, $resolved->is_required($key), $confirmeach);
-            }
-            if (!$confirmeach) {
-                $mform->addElement(
-                    'advcheckbox',
-                    'confirmall',
-                    '',
-                    get_string('confirmalldetails', 'enrol_apply')
-                );
-            }
-        }
-
-        if ($locked) {
-            $mform->addElement('header', 'lockedheader', get_string('lockedby', 'enrol_apply'));
-            $mform->setExpanded('lockedheader', true);
-            foreach ($locked as $key) {
-                /* Rendered, read-only, and never written back. Hiding it instead would mean
-                   snapshotting and mailing an approver a value the applicant never saw. */
-                $mform->addElement(
-                    'static',
-                    'locked_' . $key,
-                    fields::label($key, true),
-                    s(fields::current_value($key, $USER))
-                );
-            }
-        }
+        $this->add_editable_section($editable, $resolved);
+        $this->add_locked_section($locked, $USER);
 
         if ($instance->customint7) {
             $label = get_string('comment', 'enrol_apply');
@@ -210,6 +174,60 @@ class application_form extends dynamic_form {
                can submit — which looks entirely normal in review and shows up only in a
                browser. The page transport asks for them explicitly. */
             $this->add_action_buttons(true, get_string('submitapplication', 'enrol_apply'));
+        }
+    }
+
+    /**
+     * Add the fields the applicant may edit, and however they are asked to confirm them.
+     *
+     * @param array $editable Field keys in the editable state.
+     * @param \enrol_apply\local\fieldset $resolved The instance's resolved field set.
+     * @return void
+     */
+    protected function add_editable_section(array $editable, $resolved): void {
+        if (!$editable) {
+            return;
+        }
+
+        $mform = $this->_form;
+        $mform->addElement('header', 'detailsheader', get_string('detailsthattravel', 'enrol_apply'));
+        $mform->setExpanded('detailsheader', true);
+        $mform->addElement('static', 'detailsintro', '', get_string('detailsthattravel_desc', 'enrol_apply'));
+
+        $confirmeach = count($editable) <= self::CONFIRM_EACH_UP_TO;
+        foreach ($editable as $key) {
+            $this->add_editable_field($key, $resolved->is_required($key), $confirmeach);
+        }
+        if (!$confirmeach) {
+            $mform->addElement('advcheckbox', 'confirmall', '', get_string('confirmalldetails', 'enrol_apply'));
+        }
+    }
+
+    /**
+     * Add the fields the applicant may see but not change.
+     *
+     * Rendered read-only rather than hidden. Hiding one would still snapshot it and mail it
+     * to an approver, disclosing a value the applicant was never shown.
+     *
+     * @param array $locked Field keys in the locked state.
+     * @param \stdClass $user The applicant.
+     * @return void
+     */
+    protected function add_locked_section(array $locked, \stdClass $user): void {
+        if (!$locked) {
+            return;
+        }
+
+        $mform = $this->_form;
+        $mform->addElement('header', 'lockedheader', get_string('lockedby', 'enrol_apply'));
+        $mform->setExpanded('lockedheader', true);
+        foreach ($locked as $key) {
+            $mform->addElement(
+                'static',
+                'locked_' . $key,
+                fields::label($key, true),
+                s(fields::current_value($key, $user))
+            );
         }
     }
 
@@ -423,7 +441,12 @@ class application_form extends dynamic_form {
         global $USER;
 
         $instance = $this->get_instance();
-        $this->get_plugin()->submit_application($instance, $USER->id, $this->get_data());
+        $data = $this->get_data();
+        $this->get_plugin()->submit_application($instance, $USER->id, $data);
+
+        /* What the applicant typed is carried to the acknowledgement page so it can offer to
+           save it. Nothing is written here: the offer is theirs to accept. */
+        \enrol_apply\local\offer::stash($instance, $USER, (array) $data);
 
         return (string) new moodle_url('/enrol/apply/applied.php', ['instance' => $instance->id]);
     }

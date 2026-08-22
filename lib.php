@@ -545,6 +545,7 @@ class enrol_apply_plugin extends enrol_plugin {
         $fields['customint5'] = 0;
         $fields['customint6'] = $this->get_config('newenrols');
         $fields['customint7'] = (int) $this->get_config('opt_commentaryzone', 0);
+        $fields['customint8'] = 0;
         $fields['customtext2'] = '';
         $fields['customtext3'] = $this->get_config('notifycoursebased') ? '$@ALL@$' : '';
         $fields['customtext4'] = \enrol_apply\local\fieldset::from_keys(
@@ -1026,6 +1027,13 @@ class enrol_apply_plugin extends enrol_plugin {
         if (!empty($data->customtext4)) {
             $data->customtext4 = \enrol_apply\local\fields::resolve($data)->to_json();
         }
+
+        /* Unconditionally, and not only when the restore is cross-site. is_samesite() falls
+           back to comparing a wwwroot string taken from the archive itself when the site
+           identifier hash is absent, so it is forgeable - and the thing being switched off
+           here writes to {user}. Somebody restoring a course they built elsewhere re-ticks
+           the box if they meant it. */
+        $data->customint8 = 0;
 
         $instanceid = $this->add_instance($course, (array) $data);
         $step->set_mapping('enrol', $oldid, $instanceid);
