@@ -421,6 +421,41 @@ class enrol_apply_plugin extends enrol_plugin {
     }
 
     /**
+     * Re-create a group membership this plugin owns, when a course is restored.
+     *
+     * Without this override the membership is silently lost. Core routes any groups_members
+     * row whose component starts with "enrol_" to this method
+     * (backup/moodle2/restore_stepslib.php), and enrol_plugin's base implementation is empty
+     * - deliberately, because the plugins core had in mind re-derive their memberships from a
+     * cohort or a linked course and do not need the row. This plugin does not: the membership
+     * follows a one-off approval decision that nothing re-runs. Unlike the generic branch
+     * beside it, that path has no groups_add_member() fallback and logs no warning, so the
+     * loss is completely silent.
+     *
+     * The stamp is re-applied rather than dropped, so core's unenrol_user() can still clean
+     * the membership up again by component and itemid.
+     *
+     * @param stdClass $instance Enrol instance the membership belongs to.
+     * @param int $groupid Group to join.
+     * @param int $userid User to add.
+     * @return void
+     */
+    public function restore_group_member($instance, $groupid, $userid) {
+        global $CFG, $DB;
+
+        require_once($CFG->dirroot . '/group/lib.php');
+
+        /* The group must still exist and still belong to this course. A restore can carry a
+           membership whose group did not survive, and groups_add_member() throws on an
+           unknown group id - which would abort the whole restore over one membership. */
+        if (!$DB->record_exists('groups', ['id' => $groupid, 'courseid' => $instance->courseid])) {
+            return;
+        }
+
+        groups_add_member($groupid, $userid, 'enrol_apply', $instance->id);
+    }
+
+    /**
      * Returns the action icons shown for this instance on the course enrolment methods page.
      *
      * @param stdClass $instance Course enrol instance.
