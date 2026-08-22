@@ -16,6 +16,7 @@
 
 namespace enrol_apply;
 
+use core_course\hook\before_course_deleted;
 use core_enrol\hook\before_user_enrolment_updated;
 
 /**
@@ -41,9 +42,11 @@ class hook_callbacks {
      * enrolments" capability and denying it would remove legitimate date editing too —
      * this observer reconciles the state afterwards, whichever route was taken.
      *
-     * Only the state is reconciled. No notification is sent, because the decision was not
-     * taken through the plugin's own screen and the manager there is given no opportunity
-     * to expect one; confirm_enrolment() remains the path that notifies the applicant.
+     * The applicant IS notified, and that is worth stating because this docblock used to
+     * claim the opposite: complete_approval() queues \enrol_apply\task\notify_approval for
+     * every route an approval can take, this one included. Queueing is deduplicated on
+     * classname, component and custom data, so the manager who approves from core's screen
+     * and the one who approves from the plugin's queue each produce exactly one message.
      *
      * @param before_user_enrolment_updated $hook The dispatched hook.
      * @return void
@@ -71,5 +74,31 @@ class hook_callbacks {
 
         $plugin = enrol_get_plugin('apply');
         $plugin->complete_approval($hook->enrolinstance, (int) $userenrolment->userid, (int) $userenrolment->id);
+    }
+
+    /**
+     * Strip the personal data out of a deleted course's application trail.
+     *
+     * The trail survives every other deletion path on purpose - approval, cancellation,
+     * unenrolment, and the removal of the enrolment method itself - but a deleted course is
+     * where it has to stop being personal data, because after this point it can no longer be
+     * reached by a data subject at all.
+     *
+     * It must be this hook and not the course_deleted event. delete_course()
+     * (lib/moodlelib.php) dispatches the hook first, then empties the course, then calls
+     * context_helper::delete_instance(CONTEXT_COURSE, ...), and only then triggers the event.
+     * Every privacy provider query is wrapped in a JOIN against {context} by
+     * contextlist::add_from_sql(), so a row still carrying a real userid once that context
+     * row is gone is invisible to subject access and unreachable by erasure - with nothing
+     * anywhere to say so. The event is too late by two statements.
+     *
+     * What is kept is the dates and the status, which identify nobody; what goes is both
+     * user ids and the whole snapshot the applicant submitted.
+     *
+     * @param before_course_deleted $hook The dispatched hook.
+     * @return void
+     */
+    public static function before_course_deleted(before_course_deleted $hook): void {
+        \enrol_apply\local\submission::pseudonymise((int) $hook->course->id);
     }
 }

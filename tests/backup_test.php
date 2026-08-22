@@ -42,6 +42,9 @@ use restore_dbops;
  * @covers     \restore_enrol_apply_plugin
  */
 final class backup_test extends \advanced_testcase {
+    /** @var int Fixed submission timestamp, so a restored row can be matched to its original. */
+    protected const SUBMITTED_AT = 1750000000;
+
     /** @var \enrol_apply_plugin The plugin under test. */
     protected $plugin;
 
@@ -73,9 +76,17 @@ final class backup_test extends \advanced_testcase {
      * @param \stdClass $course Course to copy.
      * @param bool $userdata Whether to include users in the backup.
      * @param bool $crosssite Whether to move the site identifier first, so the restore reads as cross-site.
+     * @param bool|null $restoreusers Users setting on the RESTORE side, null to match the backup.
+     * @param int $enrolments One of the backup::ENROL_* constants for the restore.
      * @return int Id of the restored course.
      */
-    protected function backup_and_restore($course, bool $userdata, bool $crosssite = false): int {
+    protected function backup_and_restore(
+        $course,
+        bool $userdata,
+        bool $crosssite = false,
+        ?bool $restoreusers = null,
+        int $enrolments = backup::ENROL_ALWAYS
+    ): int {
         global $CFG, $USER;
 
         $CFG->backup_file_logger_level = backup::LOG_NONE;
@@ -132,10 +143,14 @@ final class backup_test extends \advanced_testcase {
             $USER->id,
             backup::TARGET_NEW_COURSE
         );
-        /* Default is ENROL_WITHUSERS, under which a restore without users converts every
-           enrol instance into a manual one (restore_stepslib.php, process_enrol), so the
-           apply instance would not exist in the copy. */
-        $rc->get_plan()->get_setting('enrolments')->set_value(backup::ENROL_ALWAYS);
+        /* Without ENROL_ALWAYS a users-excluded restore does not merely degrade: restore_course_task
+           does not schedule the enrolments step at all (its default drops to ENROL_NEVER when users
+           cannot be restored), so no enrol instance of any kind would come across and the assertions
+           below would throw rather than fail. */
+        $rc->get_plan()->get_setting('enrolments')->set_value($enrolments);
+        if ($restoreusers !== null) {
+            $rc->get_plan()->get_setting('users')->set_value($restoreusers);
+        }
         $this->assertTrue($rc->execute_precheck());
         $rc->execute_plan();
         $rc->destroy();
@@ -144,11 +159,164 @@ final class backup_test extends \advanced_testcase {
     }
 
     /**
+     * Back a course up and return the enrolments.xml it produced.
+     *
+     * A restore cannot see the backup-side users gate at all: with users left out there is no
+     * user mapping either, so the plugin's restore handler drops the record whatever the
+     * backup did. The gate exists to keep personal data OUT OF THE ARCHIVE FILE, and the
+     * archive is therefore the only place it can be observed.
+     *
+     * @param \stdClass $course Course to back up.
+     * @param bool $userdata Whether to include users.
+     * @return string Contents of course/enrolments.xml.
+     */
+    protected function backup_enrolments_xml($course, bool $userdata): string {
+        global $CFG, $USER;
+
+        $CFG->backup_file_logger_level = backup::LOG_NONE;
+
+        $bc = new backup_controller(
+            backup::TYPE_1COURSE,
+            $course->id,
+            backup::FORMAT_MOODLE,
+            backup::INTERACTIVE_NO,
+            backup::MODE_SAMESITE,
+            $USER->id
+        );
+        $bc->get_plan()->get_setting('users')->set_status(backup_setting::NOT_LOCKED);
+        $bc->get_plan()->get_setting('users')->set_value($userdata);
+        $basepath = $bc->get_plan()->get_basepath();
+        $bc->execute_plan();
+        $results = $bc->get_results();
+        $bc->destroy();
+
+        if (!file_exists($basepath . '/moodle_backup.xml')) {
+            $results['backup_destination']->extract_to_pathname(
+                get_file_packer('application/vnd.moodle.backup'),
+                $basepath
+            );
+        }
+
+        $xml = $basepath . '/course/enrolments.xml';
+        $this->assertFileExists($xml, 'MODE_SAMESITE must produce an enrolments file');
+
+        return file_get_contents($xml);
+    }
+
+    /**
+     * The archive carries the durable record only when the backup includes users.
+     *
+     * The gate is on the backup side and nothing downstream can stand in for it: restoring a
+     * users-excluded archive drops the record because no user mapping exists, so a
+     * restore-based test passes with the gate deleted. This one reads the file.
+     *
+     * @return void
+     */
+    public function test_the_audit_trail_is_only_written_to_the_archive_with_users(): void {
+        [$course] = $this->create_course_with_application();
+
+        $withusers = $this->backup_enrolments_xml($course, true);
+        // The control: the record really is written when it should be, so absence means something.
+        $this->assertStringContainsString('<submission id=', $withusers);
+        $this->assertStringContainsString('I would like to join this course', $withusers);
+
+        $withoutusers = $this->backup_enrolments_xml($course, false);
+        $this->assertStringNotContainsString('<submission id=', $withoutusers);
+        $this->assertStringNotContainsString('I would like to join this course', $withoutusers);
+
+        /* The second control: instance configuration is NOT gated and still travels, so the
+           assertions above are about the gate rather than about an empty backup. */
+        $this->assertStringContainsString('<applygroup id=', $withoutusers);
+    }
+
+    /**
+     * Restore a backup of one course into another, existing course.
+     *
+     * @param \stdClass $course Course to back up.
+     * @param int $targetid Course to restore into.
+     * @return void
+     */
+    protected function restore_into_existing($course, int $targetid): void {
+        global $CFG, $USER;
+
+        $CFG->backup_file_logger_level = backup::LOG_NONE;
+
+        $bc = new backup_controller(
+            backup::TYPE_1COURSE,
+            $course->id,
+            backup::FORMAT_MOODLE,
+            backup::INTERACTIVE_NO,
+            backup::MODE_SAMESITE,
+            $USER->id
+        );
+        $bc->get_plan()->get_setting('users')->set_status(backup_setting::NOT_LOCKED);
+        $bc->get_plan()->get_setting('users')->set_value(true);
+        $backupid = $bc->get_backupid();
+        $basepath = $bc->get_plan()->get_basepath();
+        $bc->execute_plan();
+        $results = $bc->get_results();
+        $bc->destroy();
+
+        if (!file_exists($basepath . '/moodle_backup.xml')) {
+            $results['backup_destination']->extract_to_pathname(
+                get_file_packer('application/vnd.moodle.backup'),
+                $basepath
+            );
+        }
+
+        $rc = new restore_controller(
+            $backupid,
+            $targetid,
+            backup::INTERACTIVE_NO,
+            backup::MODE_GENERAL,
+            $USER->id,
+            backup::TARGET_EXISTING_ADDING
+        );
+        $rc->get_plan()->get_setting('enrolments')->set_value(backup::ENROL_ALWAYS);
+        $this->assertTrue($rc->execute_precheck());
+        $rc->execute_plan();
+        $rc->destroy();
+    }
+
+    /**
+     * Restoring the same course twice into one target does not double the trail.
+     *
+     * The only way the de-duplication check is reachable at all: a restore into a NEW course
+     * can never collide, and a restore always creates a fresh enrol instance, so the check
+     * cannot be keyed on the instance either - it would then be comparing against an id no
+     * existing record can possibly carry.
+     *
+     * @return void
+     */
+    public function test_restoring_the_same_course_twice_does_not_double_the_trail(): void {
+        global $DB;
+
+        [$course, , $user] = $this->create_course_with_application();
+        $target = $this->getDataGenerator()->create_course();
+
+        $this->restore_into_existing($course, $target->id);
+        $this->assertEquals(
+            1,
+            $DB->count_records('enrol_apply_submission', ['courseid' => $target->id]),
+            'the first restore must bring the record across at all'
+        );
+
+        $this->restore_into_existing($course, $target->id);
+
+        $this->assertEquals(1, $DB->count_records('enrol_apply_submission', ['courseid' => $target->id]));
+        // The record is the right one, not merely one of two.
+        $row = $DB->get_record('enrol_apply_submission', ['courseid' => $target->id], '*', MUST_EXIST);
+        $this->assertEquals($user->id, (int) $row->userid);
+        $this->assertEquals(self::SUBMITTED_AT, (int) $row->timecreated);
+    }
+
+    /**
      * Set up a course with an apply instance, one configured group and one application.
      *
+     * @param \stdClass|null $decider User to record as having decided the application, null for none.
      * @return array Course record, instance record and applicant user record.
      */
-    protected function create_course_with_application(): array {
+    protected function create_course_with_application(?\stdClass $decider = null): array {
         global $DB;
 
         $course = $this->getDataGenerator()->create_course();
@@ -164,6 +332,25 @@ final class backup_test extends \advanced_testcase {
         $DB->insert_record('enrol_apply_applicationinfo', (object) [
             'userenrolmentid' => $ueid,
             'comment' => 'I would like to join this course',
+        ]);
+
+        /* The durable record of the same application, seeded rather than produced by apply()
+           so that the decider and the snapshot are fixed values the assertions can name. */
+        $DB->insert_record('enrol_apply_submission', (object) [
+            'courseid' => $course->id,
+            'userid' => $user->id,
+            'enrolid' => $instanceid,
+            'userenrolmentid' => $ueid,
+            'comment' => 'I would like to join this course',
+            'userinfodata' => json_encode([
+                'version' => \enrol_apply\local\submission::SNAPSHOT_VERSION,
+                'fields' => [['key' => 's_city', 'label' => 'City', 'value' => 'Recife']],
+            ]),
+            'status' => \enrol_apply\local\submission::STATUS_PENDING,
+            'outcomemessage' => '',
+            'timecreated' => self::SUBMITTED_AT,
+            'timedecided' => 0,
+            'decidedby' => $decider ? $decider->id : 0,
         ]);
 
         return [$course, $instance, $user];
@@ -320,5 +507,118 @@ final class backup_test extends \advanced_testcase {
         $newinstanceid = $DB->get_field('enrol', 'id', ['courseid' => $newcourseid, 'enrol' => 'apply'], MUST_EXIST);
         $this->assertEquals(0, $DB->count_records('user_enrolments', ['enrolid' => $newinstanceid]));
         $this->assertEquals($before, $DB->count_records('enrol_apply_applicationinfo'));
+    }
+
+    /**
+     * A copy including users carries the durable application record, decider and all.
+     *
+     * @return void
+     */
+    public function test_the_audit_trail_travels_when_users_are_included(): void {
+        global $DB;
+
+        $decider = $this->getDataGenerator()->create_user();
+        [$course, , $user] = $this->create_course_with_application($decider);
+
+        $newcourseid = $this->backup_and_restore($course, true);
+
+        $newinstanceid = $DB->get_field('enrol', 'id', ['courseid' => $newcourseid, 'enrol' => 'apply'], MUST_EXIST);
+        $row = $DB->get_record('enrol_apply_submission', ['courseid' => $newcourseid], '*', MUST_EXIST);
+
+        $this->assertEquals($user->id, (int) $row->userid);
+        $this->assertEquals($decider->id, (int) $row->decidedby);
+        $this->assertEquals($newinstanceid, (int) $row->enrolid);
+        $this->assertEquals(self::SUBMITTED_AT, (int) $row->timecreated);
+        $this->assertSame('I would like to join this course', (string) $row->comment);
+
+        // The snapshot travels whole: it is the answer as given, not a reference to resolve later.
+        $snapshot = \enrol_apply\local\submission::read_snapshot($row->userinfodata);
+        $this->assertCount(1, $snapshot);
+        $this->assertSame('Recife', $snapshot[0]['value']);
+
+        /* The reference is remapped rather than carried, so it names the restored enrolment
+           and not one in the original course. */
+        $newueid = $DB->get_field('user_enrolments', 'id', ['enrolid' => $newinstanceid, 'userid' => $user->id]);
+        $this->assertEquals((int) $newueid, (int) $row->userenrolmentid);
+    }
+
+    /**
+     * A copy without users carries no durable application record either.
+     *
+     * The control is what makes this non-vacuous, and it is not the absence of a submission
+     * row: with no users in the archive there would be nothing to restore whatever the
+     * plugin did. It is the group mapping, which is instance configuration and DOES come
+     * across in the same restore - so the plugin's restore handlers demonstrably ran, and
+     * chose not to write the trail.
+     *
+     * @return void
+     */
+    public function test_the_audit_trail_is_absent_without_users(): void {
+        global $DB;
+
+        [$course] = $this->create_course_with_application();
+        $before = $DB->count_records('enrol_apply_submission');
+
+        $newcourseid = $this->backup_and_restore($course, false);
+
+        $newinstanceid = $DB->get_field('enrol', 'id', ['courseid' => $newcourseid, 'enrol' => 'apply'], MUST_EXIST);
+        $this->assertTrue($DB->record_exists('enrol_apply_groups', ['enrolid' => $newinstanceid]));
+
+        $this->assertEquals($before, $DB->count_records('enrol_apply_submission'));
+        $this->assertEquals(0, $DB->count_records('enrol_apply_submission', ['courseid' => $newcourseid]));
+    }
+
+    /**
+     * A record whose applicant cannot be mapped is dropped, never written ownerless.
+     *
+     * The archive carries the record - it was taken with users - but the restore leaves users
+     * out, so no user mapping exists when the plugin's handler runs. Core registers the
+     * plugin's restore paths unconditionally, unlike its own enrolment path, so the handler
+     * really is called with data whose parents did not restore.
+     *
+     * The control is again the group mapping: it proves the handlers ran at all, so "no row
+     * written" cannot be confused with "nothing happened".
+     *
+     * @return void
+     */
+    public function test_a_row_whose_user_mapping_fails_is_dropped(): void {
+        global $DB;
+
+        [$course] = $this->create_course_with_application();
+
+        $newcourseid = $this->backup_and_restore($course, true, false, false);
+
+        $newinstanceid = $DB->get_field('enrol', 'id', ['courseid' => $newcourseid, 'enrol' => 'apply'], MUST_EXIST);
+        $this->assertTrue($DB->record_exists('enrol_apply_groups', ['enrolid' => $newinstanceid]));
+
+        $this->assertEquals(0, $DB->count_records('enrol_apply_submission', ['courseid' => $newcourseid]));
+        // Nothing anywhere is left ownerless, which is the alternative this guards against.
+        $this->assertEquals(0, $DB->count_records('enrol_apply_submission', ['userid' => 0]));
+    }
+
+    /**
+     * Plugin data is never restored onto another enrolment method's instance.
+     *
+     * Core wires a plugin's restore handlers to every enrol element in the archive, and a
+     * restore with enrolments set to "never" maps every old enrol id onto the course's MANUAL
+     * instance - so get_new_parentid('enrol') returns a valid id that belongs to somebody
+     * else. Measured before the guard existed: this restore wrote an enrol_apply_groups row
+     * against the manual instance, which nothing owns and nothing ever cleans up.
+     *
+     * @return void
+     */
+    public function test_plugin_data_is_not_restored_onto_another_enrolment_method(): void {
+        global $DB;
+
+        [$course] = $this->create_course_with_application();
+
+        $newcourseid = $this->backup_and_restore($course, true, false, null, backup::ENROL_NEVER);
+
+        // The precondition: this restore really did convert the instances, so the trap was set.
+        $this->assertFalse($DB->record_exists('enrol', ['courseid' => $newcourseid, 'enrol' => 'apply']));
+        $manualid = $DB->get_field('enrol', 'id', ['courseid' => $newcourseid, 'enrol' => 'manual'], MUST_EXIST);
+
+        $this->assertFalse($DB->record_exists('enrol_apply_groups', ['enrolid' => $manualid]));
+        $this->assertEquals(0, $DB->count_records('enrol_apply_submission', ['courseid' => $newcourseid]));
     }
 }

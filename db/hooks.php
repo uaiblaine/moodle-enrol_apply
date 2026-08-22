@@ -29,4 +29,13 @@ $callbacks = [
         'hook' => \core_enrol\hook\before_user_enrolment_updated::class,
         'callback' => '\enrol_apply\hook_callbacks::before_user_enrolment_updated',
     ],
+    [
+        /* Pseudonymises the application trail while the course context still exists. It
+           cannot be done from the course_deleted event: that fires after
+           context_helper::delete_instance() has removed the context row, and every privacy
+           provider query joins {context}, so the retained rows would become personal data
+           that no subject access or erasure request can reach. */
+        'hook' => \core_course\hook\before_course_deleted::class,
+        'callback' => '\enrol_apply\hook_callbacks::before_course_deleted',
+    ],
 ];

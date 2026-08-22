@@ -86,10 +86,24 @@ class enrol_apply_manage_table extends table_sql {
         $userfieldsapi = \core_user\fields::for_userpic()->including('username');
         $userfields = $userfieldsapi->get_sql('u', false, '', 'userid', false)->selects;
 
+        /* The comment is read from the durable record first and from the application info
+           row only as a fallback. The two hold the same text, but the application info row is
+           deleted the moment a decision is taken, and a decided enrolment can come back to
+           this queue: suspending an approved participant from core's participants page
+           leaves status != active with timeend = 0, which is exactly the predicate above.
+           Before this join those rows showed an empty comment; the fallback is what keeps
+           applications that predate the durable record readable.
+
+           Joined on the user enrolment and not on courseid + userid, which is the natural
+           key of that table but is deliberately not unique: an applicant who was cancelled
+           and applied again has two records for the same course, and joining on the pair
+           would show each of their rows twice. */
         $fields = "ue.id AS userenrolmentid, ue.status AS enrolstatus, ue.timecreated AS applydate,
-                   ai.comment AS applycomment, c.fullname AS course, c.id AS courseid, {$userfields}";
+                   COALESCE(s.comment, ai.comment) AS applycomment, c.fullname AS course,
+                   c.id AS courseid, {$userfields}";
         $from = "{user_enrolments} ue
             LEFT JOIN {enrol_apply_applicationinfo} ai ON ai.userenrolmentid = ue.id
+            LEFT JOIN {enrol_apply_submission} s ON s.userenrolmentid = ue.id
                  JOIN {user} u ON u.id = ue.userid
                  JOIN {enrol} e ON e.id = ue.enrolid
                  JOIN {course} c ON c.id = e.courseid";

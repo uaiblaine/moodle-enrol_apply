@@ -49,9 +49,11 @@ renderer.php                 page rendering plus the notification e-mail body
 templates/                   manage, info, application_notification
 classes/hook_callbacks.php   reconciles approvals made outside confirm_enrolment()
 classes/local/applications.php  mentee lookup shared by the queue
-classes/privacy/provider.php full provider: the plugin does store personal data
-classes/task/                sync_enrolments (expiry action) + send_expiry_notifications
-backup/                      group mappings only, see the gotcha below
+classes/local/submission.php the durable application record: constants, writes, reads
+classes/observers.php        course_deleted, orphan cleanup for the plugin-disabled case
+classes/privacy/provider.php full provider: two tables, two personal-data roles
+classes/task/                sync_enrolments, send_expiry_notifications, purge_submissions
+backup/                      group mappings, comments and the durable trail, see below
 ```
 
 ## Architecture gotchas
@@ -99,8 +101,11 @@ backup/                      group mappings only, see the gotcha below
   `\core_enrol\hook\before_user_enrolment_updated` and calls `complete_approval()`
   whichever route was taken. Put any new post-approval side effect in
   `complete_approval()`, never inline in `confirm_enrolment()`, or the two paths drift.
-  The observer deliberately does not notify: the manager on core's screen is given no
-  reason to expect a message to be sent.
+  The observer **does** notify, and the sentence that used to stand here said the opposite.
+  `complete_approval()` queues `\enrol_apply\task\notify_approval` (`lib.php`), which is
+  reached from both routes; queueing is deduplicated on classname, component and custom data,
+  so the two callers cannot produce two messages. It is exactly the kind of sentence a
+  reviewer leans on, which is why it is called out rather than quietly corrected.
 
 - **`enrol_plugin::cron()` is dead.** Core declares it empty and nothing calls it. The
   `expiredaction` setting only works because `classes/task/sync_enrolments.php` calls
@@ -244,6 +249,143 @@ backup/                      group mappings only, see the gotcha below
   told to fill in a field they already filled in, forever, with no way to satisfy the gate.
   `enrol_gapply` has exactly that defect. Read each field with `fields::current_value()`.
 
+- **`enrol_apply_submission` is the one table nothing deletes on the way past.** Everything
+  else the plugin owns is destroyed exactly when it becomes interesting: the
+  `enrol_apply_applicationinfo` row goes on approval, on cancellation and in `unenrol_user()`,
+  and the `user_enrolments` row goes with the enrolment. So the durable record is keyed by
+  `courseid` + `userid`, with `enrolid` and `userenrolmentid` as references that are allowed to
+  dangle. Two consequences a reader keeps rediscovering:
+
+  **`delete_instance()` no longer deletes it**, which inverts what that method used to do to
+  the plugin's data as a whole. It stays responsible for `enrol_apply_applicationinfo` and
+  `enrol_apply_groups`. `test_delete_instance_keeps_the_submission_rows` pins it, with those
+  two tables as the controls.
+
+  **The natural key is deliberately NOT unique**, though the slice plan specified
+  `UNIQUE (courseid, userid)`. Course deletion pseudonymises by zeroing `userid`, so a deleted
+  course with two applicants gives two rows with the same pair — measured, not reasoned: with
+  the key in place PostgreSQL says `duplicate key value violates unique constraint`. Cancelling
+  and re-applying is a second, independent collision. Uniqueness of a *live* application is
+  enforced by the lock in `submit_application()`, which is what the plan credited the key with
+  providing. Note that `mdl phpunit-init` alone does **not** rebuild an existing table, so a
+  mutation of `install.xml` runs against the old schema and reads as harmless — drop the test
+  database first (`admin/tool/phpunit/cli/util.php --drop`) and confirm the index really
+  changed before believing the result.
+
+- **Only the two user columns carry a foreign key, and that is what core's privacy test
+  reads.** `core_privacy\privacy\provider_test::test_table_coverage` decides a table holds
+  personal data by looking for a column literally named `userid`, or a single-field
+  `<KEY TYPE="foreign">` to `user.id`. Nothing else — indexes are never inspected. So `decidedby`
+  is invisible without its key: measured, the failure message goes from
+  `enrol_apply_submission (userid)` to `enrol_apply_submission (userid, decidedby)` once the key
+  is added. `courseid`, `enrolid` and `userenrolmentid` get plain indexes instead, because the
+  row outlives all three on purpose and a foreign key would document an integrity claim the
+  design breaks by construction.
+
+  Two traps around this. An `<INDEX>` and a `<KEY>` over the same field set is a real defect:
+  `install.xml` loads it silently but `xmldb_table::addKey()` throws the moment the matching
+  `db/upgrade.php` step builds the object. And **this test does not run in the plugin's CI** —
+  moodle-plugin-ci resolves to `--testsuite enrol_apply_testsuite`, which is this repo's
+  `tests/` directory only. Invoke it deliberately:
+
+  ```sh
+  docker exec m502-webserver-1 php /var/www/html/vendor/bin/phpunit --no-coverage \
+    --filter test_table_coverage --testsuite core_privacy_testsuite
+  ```
+
+- **Pseudonymise from `\core_course\hook\before_course_deleted`, never from the
+  `course_deleted` event.** `delete_course()` (`lib/moodlelib.php`) dispatches the hook, then
+  empties the course, then calls `context_helper::delete_instance(CONTEXT_COURSE, ...)`, and only
+  then triggers the event. Every privacy provider query is wrapped in a JOIN against `{context}`
+  by `contextlist::add_from_sql()`, so a row still carrying a real `userid` after that point is
+  personal data no subject access request can reach and no erasure request can delete — silently.
+  Core also swallows an observer exception with nothing but a `debugging()` call.
+
+  **Both routes leave the row looking identical**, because both complete inside
+  `delete_course()`. So every straightforward test passes with the call moved to the observer.
+  `test_the_pseudonymisation_runs_from_the_hook_and_not_from_the_event` is what tells them apart:
+  it silences the hook with `redirectHook()` and asserts the row is then NOT pseudonymised.
+
+- **The `course_deleted` observer sweeps orphans, not the trail.** Hook callbacks are loaded
+  from every plugin directory on disk with no enabled check, so the pseudonymisation above runs
+  whatever the plugin's state — which means the observer is not the safety net for that. The gap
+  it does close is different: `enrol_course_delete()` (`lib/enrollib.php`) resolves its plugin
+  objects from `enrol_get_plugins(true)`, so a **disabled** plugin's `delete_instance()` never
+  runs, yet core deletes the `enrol` and `user_enrolments` rows anyway and leaves the two tables
+  that key off them pointing at nothing. The observer deletes rows whose parent is gone, rather
+  than rows of one course, because by then there is no `enrol` row left to join a courseid to.
+
+- **The retention setting stores SECONDS despite being called `retentiondays`.**
+  `admin_setting_configduration` always does, whatever unit the administrator picks in the
+  dropdown. `\enrol_apply\local\submission::retention_seconds()` is its only reader for that
+  reason, and `test_the_retention_setting_is_read_as_seconds` pins it.
+
+- **The backup's `users` gate cannot be tested through a restore.** With users excluded there is
+  no user mapping either, so the restore drops the record whatever the backup did — a
+  restore-based test passes with the gate deleted. The gate exists to keep personal data out of
+  the archive *file*, so the test reads `course/enrolments.xml` directly
+  (`test_the_audit_trail_is_only_written_to_the_archive_with_users`).
+
+  Note the gate is `users` alone, while core gates `<user_enrolments>` on
+  `empty($keptroles) && $users`. In a course copy that keeps roles they disagree, and the plugin
+  writes comments for users core excluded. That is a separate live defect with its own fix.
+
+- **Core wires a plugin's restore handlers to every `<enrol>` element, not just its own.** A
+  restore with `enrolments` set to "never" maps every old enrol id onto the course's **manual**
+  instance, so `get_new_parentid('enrol')` returns a valid id belonging to another enrolment
+  method. Measured before the guard existed: an `enrol_apply_groups` row was written against a
+  manual instance, which nothing owns and nothing ever cleans up. `get_apply_instanceid()` in
+  `restore_enrol_apply_plugin` is the one check both handlers go through.
+
+- **On restore, a record whose applicant cannot be mapped is dropped, not zeroed.** An ownerless
+  profile snapshot is not an audit trail, it is loose personal data. A missing *decider* is only
+  zeroed, because the record is still the applicant's and still means what it says.
+
+- **The two privacy roles are erased and exported differently, and neither is symmetric.** A
+  record belongs to its APPLICANT: it carries that person's comment and profile snapshot. So a
+  decider's subject access export gets the decision — status, dates, which method — and never
+  the applicant's words, and an erasure request from a decider only zeroes `decidedby` rather
+  than deleting the row. Deleting it would destroy a third party's data under a request that
+  third party never made. An applicant's own erasure does delete the row whole.
+
+- **The export path needs a per-record discriminator, not a per-instance one.** The state
+  machine deliberately produces more than one record per course and user — cancelling and
+  re-applying is the ordinary route — so a path keyed on the enrolment method silently exports
+  the newest record over all the others. That is the same defect this slice fixed for
+  `enrol_apply_applicationinfo`, arriving again by a different route. The row id is what keys it.
+
+- **The retention sweep spares a record whose application is still in the queue.** Nothing ever
+  expires a pending application (`apply()` enrols with `timeend = 0` precisely so
+  `process_expirations()` cannot reach it), so age alone does not make one finished. Purging the
+  record of an application a manager can still see would leave the decision taken tomorrow with
+  no row to stamp, and it would be recorded nowhere at all.
+
+- **The restore de-duplication cannot be keyed on `enrolid`.** `restore_instance()` ends in
+  `add_instance()`, so every restore creates a brand-new enrol row and no existing record can
+  carry the id the restore just made — the check would be dead code that always inserts. Key it
+  on `courseid` + `userid` + `timecreated`, and note that only a restore into an EXISTING course
+  can reach it at all, which is what `test_restoring_the_same_course_twice_does_not_double_the_trail`
+  sets up.
+
+- **An upgrade step's DDL guard does not make its DML idempotent.** `upgrade_plugin_savepoint()`
+  runs after the whole step, so a failure part way through a backfill loop leaves the rows
+  already written committed and the stored version unchanged — and re-running the upgrade, which
+  is the standard recovery, re-enters the step with `table_exists()` now true. The backfill needs
+  its own per-row existence check. Measured on the live m502 database: two extra runs of the
+  2026082300 step change nothing.
+
+- **A backfill's predicate must be the queue's predicate, timeend clause included.** "Not
+  active" is strictly weaker: `process_expirations()` re-suspends an ACTIVE enrolment whose
+  period ran out, so somebody approved long ago reads as `status != active` and would be
+  backfilled as an application nobody ever decided. A false audit row is the one thing this
+  table must never hold.
+
+- **Do not add a `<> 0` filter to the privacy user lists.** `decidedby` is 0 on every undecided
+  application and `userid` is 0 on every pseudonymised one, so the filter looks necessary — but
+  `userlist::add_from_sql()` wraps the query in `JOIN {user} u ON u.id = target.<field>` and no
+  user has id 0. The filter would be unreachable, so no test could hold it. What matters is the
+  API: `add_userids()` does no such filtering.
+
 ## The phpcs trap that keeps costing a CI round
 
 `PSR12.Classes.OpeningBraceSpace` rejects a blank line between `class X {` and the first
@@ -266,6 +408,10 @@ Expect no matches. `phpcbf` fixes it too, but the grep is faster than a CI round
   and `test_confirm_enrolment_is_scoped_to_the_course` red, and nothing else.
 - `enrol_page_hook()` is not unit tested: it needs a submitted `moodleform`. The Behat
   feature covers that path instead.
+- `lib_test.php`'s `create_application()` bypasses `apply()` — it calls `enrol_user()` and
+  inserts the applicationinfo row by hand — so it leaves **no** `enrol_apply_submission` row.
+  Anything about the durable record must go through `apply_as_current_user()`, which drives
+  the real path. A test that quietly uses the wrong helper asserts on a table that is empty.
 
 ## When in doubt
 

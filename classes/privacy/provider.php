@@ -25,13 +25,16 @@ use core_privacy\local\request\contextlist;
 use core_privacy\local\request\transform;
 use core_privacy\local\request\userlist;
 use core_privacy\local\request\writer;
+use enrol_apply\local\submission;
 
 /**
  * Privacy Subsystem implementation for enrol_apply.
  *
- * The plugin stores the free-text comment a user submits with an enrolment application,
- * keyed by the user enrolment the application belongs to, so it holds personal data and
- * cannot use the null provider.
+ * Two tables and two roles. enrol_apply_applicationinfo holds the comment submitted with an
+ * application still awaiting a decision, keyed by the user enrolment. enrol_apply_submission
+ * is the durable record of the same application, which outlives the enrolment, the enrolment
+ * method and every decision taken on it, and which names two people: the applicant in userid
+ * and whoever decided in decidedby. Both roles are exported and both are erased.
  *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine
@@ -57,35 +60,66 @@ class provider implements
             'privacy:metadata:enrol_apply_applicationinfo'
         );
 
+        $items->add_database_table(
+            'enrol_apply_submission',
+            [
+                'courseid' => 'privacy:metadata:enrol_apply_submission:courseid',
+                'userid' => 'privacy:metadata:enrol_apply_submission:userid',
+                'enrolid' => 'privacy:metadata:enrol_apply_submission:enrolid',
+                'userenrolmentid' => 'privacy:metadata:enrol_apply_submission:userenrolmentid',
+                'comment' => 'privacy:metadata:enrol_apply_submission:comment',
+                'userinfodata' => 'privacy:metadata:enrol_apply_submission:userinfodata',
+                'status' => 'privacy:metadata:enrol_apply_submission:status',
+                'outcomemessage' => 'privacy:metadata:enrol_apply_submission:outcomemessage',
+                'timecreated' => 'privacy:metadata:enrol_apply_submission:timecreated',
+                'timedecided' => 'privacy:metadata:enrol_apply_submission:timedecided',
+                'decidedby' => 'privacy:metadata:enrol_apply_submission:decidedby',
+            ],
+            'privacy:metadata:enrol_apply_submission'
+        );
+
         return $items;
     }
 
     /**
-     * Course contexts in which the given user has a pending enrolment application.
+     * Course contexts in which the given user applied, or decided on somebody's application.
      *
      * @param int $userid User to look up.
      * @return contextlist The contexts holding data for this user.
      */
     public static function get_contexts_for_userid(int $userid): contextlist {
+        $contextlist = new contextlist();
+
         $sql = "SELECT ctx.id
                   FROM {enrol_apply_applicationinfo} ai
                   JOIN {user_enrolments} ue ON ue.id = ai.userenrolmentid
                   JOIN {enrol} e ON e.id = ue.enrolid AND e.enrol = :enrol
                   JOIN {context} ctx ON ctx.instanceid = e.courseid AND ctx.contextlevel = :contextlevel
                  WHERE ue.userid = :userid";
-
-        $contextlist = new contextlist();
         $contextlist->add_from_sql($sql, [
             'enrol' => 'apply',
             'contextlevel' => CONTEXT_COURSE,
             'userid' => $userid,
         ]);
 
+        /* Both roles, and two placeholders bound to the same value rather than one reused:
+           fix_sql_params() counts occurrences and throws duplicateparaminsql when the total
+           does not match the parameter array. */
+        $sql = "SELECT ctx.id
+                  FROM {enrol_apply_submission} s
+                  JOIN {context} ctx ON ctx.instanceid = s.courseid AND ctx.contextlevel = :contextlevel
+                 WHERE s.userid = :userid OR s.decidedby = :decidedby";
+        $contextlist->add_from_sql($sql, [
+            'contextlevel' => CONTEXT_COURSE,
+            'userid' => $userid,
+            'decidedby' => $userid,
+        ]);
+
         return $contextlist;
     }
 
     /**
-     * Users holding an application in the given context.
+     * Users holding an application, or named as its decider, in the given context.
      *
      * @param userlist $userlist Userlist to add the matching users to.
      * @return void
@@ -101,8 +135,26 @@ class provider implements
                   JOIN {user_enrolments} ue ON ue.id = ai.userenrolmentid
                   JOIN {enrol} e ON e.id = ue.enrolid AND e.enrol = :enrol
                  WHERE e.courseid = :courseid";
-
         $userlist->add_from_sql('userid', $sql, ['enrol' => 'apply', 'courseid' => $context->instanceid]);
+
+        /* No "<> 0" filter on either column, deliberately. Both are 0 in normal operation -
+           decidedby on every application nobody has decided yet, userid on every record whose
+           course has been deleted - but userlist::add_from_sql() wraps the query in
+           "JOIN {user} u ON u.id = target.<field>", and no user has id 0. A filter here would
+           be unreachable, so no test could hold it, and an unreachable guard reads as
+           protection while proving nothing. What must not change is the API: add_userids()
+           does no such filtering. */
+        $userlist->add_from_sql(
+            'userid',
+            "SELECT s.userid FROM {enrol_apply_submission} s WHERE s.courseid = :courseid",
+            ['courseid' => $context->instanceid]
+        );
+
+        $userlist->add_from_sql(
+            'decidedby',
+            "SELECT s.decidedby FROM {enrol_apply_submission} s WHERE s.courseid = :courseid",
+            ['courseid' => $context->instanceid]
+        );
     }
 
     /**
@@ -128,23 +180,122 @@ class provider implements
         $params['enrol'] = 'apply';
         $params['userid'] = $user->id;
 
-        $sql = "SELECT ai.id, ai.comment, ue.timecreated, e.courseid
+        $sql = "SELECT ai.id, ai.comment, ue.timecreated, e.courseid, e.id AS enrolid
                   FROM {enrol_apply_applicationinfo} ai
                   JOIN {user_enrolments} ue ON ue.id = ai.userenrolmentid
                   JOIN {enrol} e ON e.id = ue.enrolid AND e.enrol = :enrol
                  WHERE ue.userid = :userid AND e.courseid {$insql}";
 
-        $applications = $DB->get_records_sql($sql, $params);
-        foreach ($applications as $application) {
+        foreach ($DB->get_records_sql($sql, $params) as $application) {
             $context = context_course::instance($application->courseid);
             writer::with_context($context)->export_data(
-                [get_string('privacy:applicationpath', 'enrol_apply')],
+                self::application_subcontext((int) $application->enrolid),
                 (object) [
                     'comment' => $application->comment,
                     'timecreated' => transform::datetime($application->timecreated),
                 ]
             );
         }
+
+        self::export_submissions($contextlist, $courseids, true);
+        self::export_submissions($contextlist, $courseids, false);
+    }
+
+    /**
+     * Export the durable application records naming the user in one of the two roles.
+     *
+     * @param approved_contextlist $contextlist Approved contexts to export.
+     * @param array $courseids Course ids of those contexts.
+     * @param bool $asapplicant True to export the rows the user applied on, false for the ones they decided.
+     * @return void
+     */
+    protected static function export_submissions(
+        approved_contextlist $contextlist,
+        array $courseids,
+        bool $asapplicant
+    ) {
+        global $DB;
+
+        [$insql, $params] = $DB->get_in_or_equal($courseids, SQL_PARAMS_NAMED, 'course');
+        $params['userid'] = $contextlist->get_user()->id;
+        $column = $asapplicant ? 'userid' : 'decidedby';
+
+        $sql = "SELECT s.*
+                  FROM {enrol_apply_submission} s
+                 WHERE s.{$column} = :userid AND s.courseid {$insql}";
+
+        foreach ($DB->get_records_sql($sql, $params) as $row) {
+            $context = context_course::instance($row->courseid, IGNORE_MISSING);
+            if (!$context) {
+                // Should be unreachable: the context is what put this course in the list.
+                continue;
+            }
+
+            $export = (object) [
+                'role' => $asapplicant
+                    ? get_string('privacy:roleapplicant', 'enrol_apply')
+                    : get_string('privacy:roledecider', 'enrol_apply'),
+                'enrolid' => (int) $row->enrolid,
+                'status' => submission::status_label((int) $row->status),
+                'timecreated' => transform::datetime($row->timecreated),
+                'timedecided' => $row->timedecided ? transform::datetime($row->timedecided) : null,
+            ];
+
+            /* The comment and the profile snapshot belong to the APPLICANT, and only ever go
+               into the applicant's own export. A decider's subject access request is about
+               the decision they took, not about the person they took it on: handing them
+               somebody else's free text and profile details is a disclosure the request never
+               asked for, and one the applicant never consented to. */
+            if ($asapplicant) {
+                $export->comment = $row->comment;
+                $export->submittedfields = submission::read_snapshot($row->userinfodata);
+            }
+
+            $subcontext = self::submission_subcontext((int) $row->id, $asapplicant);
+            writer::with_context($context)->export_data($subcontext, $export);
+        }
+    }
+
+    /**
+     * Where an application belonging to one enrolment method is written in the export.
+     *
+     * The enrolment method id is part of the path, and that is a fix rather than decoration:
+     * every application in a context used to be exported to the same path, so a course
+     * carrying two apply methods exported the first and then overwrote it with the second.
+     *
+     * @param int $enrolid Enrol instance the application was submitted to.
+     * @return array Subcontext path.
+     */
+    protected static function application_subcontext(int $enrolid): array {
+        return [
+            get_string('privacy:applicationpath', 'enrol_apply'),
+            get_string('privacy:methodpath', 'enrol_apply', $enrolid),
+        ];
+    }
+
+    /**
+     * Where a durable application record is written in the export.
+     *
+     * Two discriminators, and both are needed. The role, because one person can legitimately
+     * be the applicant on one record and the decider on another in the same course. And the
+     * record's own id, because the state machine deliberately produces MORE THAN ONE record
+     * per course and user - cancelling and re-applying is the ordinary way - so a path keyed
+     * on the enrolment method alone silently exports the last one over all the others. That
+     * is the same defect this slice set out to fix for enrol_apply_applicationinfo, and it
+     * reappears here for a different reason.
+     *
+     * @param int $recordid Id of the enrol_apply_submission row.
+     * @param bool $asapplicant True for the applicant's own record, false for one they decided.
+     * @return array Subcontext path.
+     */
+    protected static function submission_subcontext(int $recordid, bool $asapplicant): array {
+        return [
+            get_string('privacy:trailpath', 'enrol_apply'),
+            $asapplicant
+                ? get_string('privacy:roleapplicant', 'enrol_apply')
+                : get_string('privacy:roledecider', 'enrol_apply'),
+            get_string('privacy:recordpath', 'enrol_apply', $recordid),
+        ];
     }
 
     /**
@@ -168,6 +319,8 @@ class provider implements
 
         $ids = $DB->get_fieldset_sql($sql, ['enrol' => 'apply', 'courseid' => $context->instanceid]);
         self::delete_by_id($ids);
+
+        $DB->delete_records('enrol_apply_submission', ['courseid' => $context->instanceid]);
     }
 
     /**
@@ -195,6 +348,7 @@ class provider implements
                  WHERE ue.userid = :userid AND e.courseid {$insql}";
 
         self::delete_by_id($DB->get_fieldset_sql($sql, $params));
+        self::delete_submissions($courseids, [$contextlist->get_user()->id]);
     }
 
     /**
@@ -227,6 +381,52 @@ class provider implements
                  WHERE e.courseid = :courseid AND ue.userid {$insql}";
 
         self::delete_by_id($DB->get_fieldset_sql($sql, $params));
+        self::delete_submissions([$context->instanceid], $userids);
+    }
+
+    /**
+     * Erase the given users from the durable application records of the given courses.
+     *
+     * The two roles are erased differently, and the difference is the whole point.
+     *
+     * As the APPLICANT, the record is theirs and it goes whole. Erasure wins over permanence:
+     * the trail exists to tell a manager what was decided, not to be evidence against the
+     * person it describes, so it is deliberately not tamper-evident against the data subject.
+     *
+     * As the DECIDER, only their name goes. The record belongs to somebody else - it carries
+     * that person's comment and profile snapshot - and deleting it would destroy a third
+     * party's data under a request that third party never made. Zeroing decidedby is the
+     * whole of what the decider can ask for here, and it is exactly what course deletion does
+     * to the same column.
+     *
+     * @param array $courseids Courses to erase within.
+     * @param array $userids Users to erase, in either role.
+     * @return void
+     */
+    protected static function delete_submissions(array $courseids, array $userids) {
+        global $DB;
+
+        if (!$courseids || !$userids) {
+            return;
+        }
+
+        [$courseinsql, $courseparams] = $DB->get_in_or_equal($courseids, SQL_PARAMS_NAMED, 'course');
+        [$userinsql, $userparams] = $DB->get_in_or_equal($userids, SQL_PARAMS_NAMED, 'user');
+
+        $DB->delete_records_select(
+            'enrol_apply_submission',
+            "courseid {$courseinsql} AND userid {$userinsql}",
+            $courseparams + $userparams
+        );
+
+        [$deciderinsql, $deciderparams] = $DB->get_in_or_equal($userids, SQL_PARAMS_NAMED, 'decider');
+        $DB->set_field_select(
+            'enrol_apply_submission',
+            'decidedby',
+            0,
+            "courseid {$courseinsql} AND decidedby {$deciderinsql}",
+            $courseparams + $deciderparams
+        );
     }
 
     /**
