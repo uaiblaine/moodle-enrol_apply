@@ -57,6 +57,44 @@ echo $OUTPUT->notification(
     false
 );
 
+if (\enrol_apply\local\profilewriter::is_enabled($instance)) {
+    // Writing is allowed: offer to save what was just typed, and write nothing until asked.
+    $changes = \enrol_apply\local\offer::peek($instance->id);
+    if ($changes) {
+        echo $OUTPUT->render_from_template('enrol_apply/profile_offer', [
+            'heading' => get_string('saveforfuture', 'enrol_apply'),
+            'intro' => get_string('saveforfuture_desc', 'enrol_apply'),
+            'fieldlabel' => get_string('requestedfields', 'enrol_apply'),
+            'beforelabel' => get_string('profilenow', 'enrol_apply'),
+            'afterlabel' => get_string('whatyouentered', 'enrol_apply'),
+            'changes' => $changes,
+            'formurl' => (new moodle_url('/enrol/apply/profile.php'))->out(false),
+            'sesskey' => sesskey(),
+            'instanceid' => $instance->id,
+            'savelabel' => get_string('updateprofile', 'enrol_apply'),
+        ]);
+    }
+} else {
+    /* Writing is switched off, so the applicant is told exactly what is missing and sent to
+       their own profile page. Nothing is written by this plugin at all. Note that
+       /user/edit.php cannot be pre-filled - it accepts id, course, returnto and
+       cancelemailchange, and none of them carries a value - so the list below is the only
+       thing telling them what to go and fill in. */
+    $missing = \enrol_apply\local\completeness::missing($instance, $USER);
+    if ($missing) {
+        echo $OUTPUT->heading(get_string('profileincomplete', 'enrol_apply'), 3);
+        echo html_writer::tag('p', get_string('profileincomplete_desc', 'enrol_apply'));
+        echo html_writer::alist(array_map(static function (array $field): string {
+            return s($field['label']);
+        }, $missing));
+        echo $OUTPUT->single_button(
+            new moodle_url('/user/edit.php', ['id' => $USER->id, 'returnto' => 'profile']),
+            get_string('gotoprofile', 'enrol_apply'),
+            'get'
+        );
+    }
+}
+
 /* Never /course/view.php: the applicant is suspended on this course, so that destination
    bounces them straight back here. get_home_page() is what core itself uses to decide where
    a user belongs when there is nowhere specific to send them. */

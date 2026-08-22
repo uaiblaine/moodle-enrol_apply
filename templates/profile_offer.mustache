@@ -1,0 +1,85 @@
+{{!
+    This file is part of Moodle - http://moodle.org/
+
+    Moodle is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Moodle is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+}}
+{{!
+    @template enrol_apply/profile_offer
+
+    Offers to save the details an applicant just typed to their own profile.
+
+    Every label and value is the plain spelling and is rendered through a double stash, so
+    Mustache escapes each exactly once. Do not convert any of these to a triple stash: a
+    custom profile field of the textarea datatype is PARAM_RAW and can carry a bare angle
+    bracket.
+
+    Context variables required for this template:
+    * heading string - heading of the offer
+    * intro string - one line explaining that nothing has been saved yet
+    * beforelabel string - column heading for the current value
+    * afterlabel string - column heading for the submitted value
+    * fieldlabel string - column heading for the field name
+    * changes array - list of label, before and after, one per field that would change
+    * formurl string - url the confirmation posts to
+    * sesskey string - session key
+    * instanceid number - enrol instance the application belongs to
+    * savelabel string - text of the save button
+
+    Example context (json):
+    {
+        "heading": "Save these details for next time?",
+        "intro": "Nothing has been saved to your profile yet.",
+        "fieldlabel": "Detail",
+        "beforelabel": "Your profile now",
+        "afterlabel": "What you entered",
+        "changes": [
+            {"label": "City/town", "before": "Campinas", "after": "Belo Horizonte"},
+            {"label": "Institution", "before": "", "after": "UFMG"}
+        ],
+        "formurl": "https://example.com/enrol/apply/profile.php",
+        "sesskey": "abc123",
+        "instanceid": 7,
+        "savelabel": "Save to my profile"
+    }
+}}
+<div class="enrol_apply-profile-offer">
+    <h3>{{heading}}</h3>
+    <p>{{intro}}</p>
+    <div class="table-responsive">
+        <table class="table table-sm">
+            <caption class="visually-hidden">{{heading}}</caption>
+            <thead>
+                <tr>
+                    <th scope="col">{{fieldlabel}}</th>
+                    <th scope="col">{{beforelabel}}</th>
+                    <th scope="col">{{afterlabel}}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{#changes}}
+                    <tr>
+                        <th scope="row">{{label}}</th>
+                        <td>{{before}}</td>
+                        <td>{{after}}</td>
+                    </tr>
+                {{/changes}}
+            </tbody>
+        </table>
+    </div>
+    <form method="post" action="{{formurl}}">
+        <input type="hidden" name="sesskey" value="{{sesskey}}">
+        <input type="hidden" name="instance" value="{{instanceid}}">
+        <button type="submit" class="btn btn-primary">{{savelabel}}</button>
+    </form>
+</div>

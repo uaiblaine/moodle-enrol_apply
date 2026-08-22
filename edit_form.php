@@ -192,6 +192,20 @@ class enrol_apply_edit_form extends moodleform {
             $mform->setConstant('customint5', 0);
         }
 
+        /* The per-instance half of the profile-write switch. Emitted either way, as a hidden
+           constant zero when the site switch is off, for the same reason as the cohort
+           element above: update_instance() copies a property only when it is set on the
+           submitted data, so omitting it would make an existing opt-in impossible to clear. */
+        if (get_config('enrol_apply', 'allowprofilewrite')) {
+            $mform->addElement('advcheckbox', 'customint8', get_string('saveforfutureinstance', 'enrol_apply'));
+            $mform->addHelpButton('customint8', 'saveforfutureinstance', 'enrol_apply');
+            $mform->setDefault('customint8', 0);
+        } else {
+            $mform->addElement('hidden', 'customint8');
+            $mform->setType('customint8', PARAM_INT);
+            $mform->setConstant('customint8', 0);
+        }
+
         $mform->addElement('hidden', 'id');
         $mform->setType('id', PARAM_INT);
         $mform->addElement('hidden', 'courseid');

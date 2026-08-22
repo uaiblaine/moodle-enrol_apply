@@ -42,8 +42,6 @@ class destination {
      * @return moodle_url Somewhere the applicant can actually land.
      */
     public static function home_page_url(): moodle_url {
-        global $CFG;
-
         switch (get_home_page()) {
             case HOMEPAGE_MY:
                 return new moodle_url('/my/');

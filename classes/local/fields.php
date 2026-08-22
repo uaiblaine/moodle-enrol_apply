@@ -338,10 +338,15 @@ class fields {
      * Whether an auth plugin locks the named field for a user who currently holds a value.
      *
      * The lock is read through the auth plugin object rather than through get_config(), which
-     * is not a stylistic preference: auth_manual builds its own config by merging the legacy
-     * component under the modern one, so get_config('auth_manual', ...) alone misses locks the
-     * core user edit form honours, and every other auth plugin constructs its config its own
-     * way. Note also that unlockedifempty tests emptiness with a loose comparison against the
+     * is not a stylistic preference. auth_manual builds its config as
+     * array_merge((array) legacy, (array) modern), so on a normally installed site - where
+     * every field_lock_* already exists under auth_manual as 'unlocked' - the modern value
+     * wins and the two reads agree. They diverge exactly where the modern key is ABSENT: then
+     * the legacy auth/manual value decides, the core user edit form honours it, and a direct
+     * get_config('auth_manual', ...) sees nothing at all. Every other auth plugin builds its
+     * config its own way, so the object is the only reliable source in general.
+     *
+     * Note also that unlockedifempty tests emptiness with a loose comparison against the
      * empty string, so a stored '0' counts as FILLED and therefore locked - the opposite of
      * what !empty() would decide.
      *

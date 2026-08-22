@@ -224,6 +224,26 @@ backup/                      group mappings only, see the gotcha below
   read-only and never confirmed — and with nothing filled in there is nothing to confirm in
   either mode.
 
+- **Nothing below the form honours a field lock.** `user_update_user()` consults no capability
+  and no `field_lock_*` setting; `profile_save_data()` performs no authorisation check of any
+  kind and writes whatever is on the object. Core's only defence against a forged post is
+  `setConstant()` winning in `exportValues()`, and this plugin does not render a locked field
+  as an input at all, so there is no constant to win. `\enrol_apply\local\profilewriter`
+  therefore recomputes the writable set from the instance and the user and never trusts the
+  keys it was handed — that recomputation *is* the guard, and deleting it reddens six tests.
+
+- **An enrolment form may add to a profile but never empty it.** Core's own boundary would
+  erase: `profile_field_base::edit_save_data()` ignores a value only when the property is
+  ABSENT, so an empty string is written straight through. Blanking somebody's stored details
+  as a side effect of applying for a course is not something an applicant asked for.
+
+- **The completeness gate must not read through `profile_user_record()`.** Its
+  `$onlyinuserobject` parameter defaults to true and
+  `profile_field_textarea::is_user_object_data()` returns false, so a textarea custom field is
+  simply absent from what it returns — it reads as permanently empty, and the applicant is
+  told to fill in a field they already filled in, forever, with no way to satisfy the gate.
+  `enrol_gapply` has exactly that defect. Read each field with `fields::current_value()`.
+
 ## The phpcs trap that keeps costing a CI round
 
 `PSR12.Classes.OpeningBraceSpace` rejects a blank line between `class X {` and the first

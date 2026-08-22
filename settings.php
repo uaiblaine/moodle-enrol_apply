@@ -48,6 +48,16 @@ if ($ADMIN->fulltree) {
     if (!during_initial_install()) {
         $allowedchoices = \enrol_apply\local\fields::offerable();
     }
+    /* Whether a course may offer to save an applicant's answers to their own profile. Off by
+       default, and deliberately a site setting rather than anything an instance carries alone:
+       it has no backup or restore surface at all, so no restored course can turn it on. */
+    $settings->add(new admin_setting_configcheckbox(
+        'enrol_apply/allowprofilewrite',
+        get_string('allowprofilewrite', 'enrol_apply'),
+        get_string('allowprofilewrite_desc', 'enrol_apply'),
+        0
+    ));
+
     $settings->add(new admin_setting_configmulticheckbox(
         'enrol_apply/allowedfields',
         get_string('allowedfields', 'enrol_apply'),

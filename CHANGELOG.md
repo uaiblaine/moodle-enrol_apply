@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- After submitting an application, an applicant can be offered the chance to save the details
+  they entered to their own profile. It is off unless a site administrator allows it **and**
+  the enrolment method opts in, the applicant is always asked first, and only the fields they
+  are actually allowed to edit are ever written. The offer lists exactly what would change,
+  before and after, and shows no button at all when nothing would.
+- When profile writing is not allowed, the same page instead names the details missing from
+  the applicant's profile and links to their profile page, writing nothing.
+
 - The application form now opens in a modal from the course enrolment page, or on a page of
   its own for a browser with no JavaScript. Both transports render the same
   `\core_form\dynamic_form`, so the two routes cannot drift apart, and an acknowledgement
@@ -210,6 +218,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   did. `lang/en` and `lang/pt_br` remain, in lockstep.
 
 ### Security
+
+- The profile write recomputes what it may write from the instance and the user rather than
+  trusting the keys it was given. Core offers no protection here at all: `user_update_user()`
+  consults no capability and no field lock, and `profile_save_data()` performs no
+  authorisation check whatsoever — it writes whatever is on the object it is handed.
+- A cross-site restore switches the per-instance opt-in off unconditionally, not merely when
+  the restore reports itself as cross-site. `backup_is_samesite()` falls back to comparing a
+  wwwroot string taken from the archive itself, so that report is forgeable, and what is being
+  switched off writes to the user table.
 
 - See the CSRF, XSS and SQL interpolation entries above. Sites running any earlier
   version of this plugin should treat the CSRF fix as the reason to upgrade.
