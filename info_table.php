@@ -61,11 +61,13 @@ class enrol_apply_info_table extends table_sql {
         $userfieldsapi = \core_user\fields::for_userpic();
         $userfields = $userfieldsapi->get_sql('u', false, '', 'userid', false)->selects;
 
+        // Same comment source and the same reason as the approval queue, see manage_table.php.
         $this->set_sql(
             "ue.id AS userenrolmentid, ue.status AS enrolstatus, ue.timecreated AS applydate,
-             ai.comment AS applycomment, c.fullname AS course, {$userfields}",
+             COALESCE(s.comment, ai.comment) AS applycomment, c.fullname AS course, {$userfields}",
             "{user_enrolments} ue
         LEFT JOIN {enrol_apply_applicationinfo} ai ON ai.userenrolmentid = ue.id
+        LEFT JOIN {enrol_apply_submission} s ON s.userenrolmentid = ue.id
              JOIN {user} u ON u.id = ue.userid
              JOIN {enrol} e ON e.id = ue.enrolid
              JOIN {course} c ON c.id = e.courseid",

@@ -446,9 +446,14 @@ class fields {
      * has to satisfy PARAM_TEXT - a web service return, a report column - must be stripped at
      * THAT boundary, where losing the tail is a deliberate cost rather than an accident.
      *
+     * The field key travels beside the label because the durable snapshot in
+     * {@see submission::snapshot()} stores both: a label is a fact about this site today and
+     * a custom field can be renamed, so an audit row that kept only the label would show a
+     * question that was never asked.
+     *
      * @param \stdClass $instance Enrol instance the application was submitted to.
      * @param \stdClass $data Submitted form data.
-     * @return array List of arrays with 'label' and 'value' keys, in the instance's field order.
+     * @return array List of arrays with 'key', 'label' and 'value' entries, in the instance's field order.
      */
     public static function submitted_values(\stdClass $instance, \stdClass $data): array {
         $values = [];
@@ -467,6 +472,7 @@ class fields {
                 continue;
             }
             $values[] = [
+                'key' => $key,
                 'label' => self::label($key, false),
                 'value' => $value,
             ];

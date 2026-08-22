@@ -269,6 +269,12 @@ class enrol_apply_plugin extends enrol_plugin {
         $applicationinfo->comment = isset($data->applydescription) ? $data->applydescription : '';
         $DB->insert_record('enrol_apply_applicationinfo', $applicationinfo);
 
+        /* The durable record of the same application. It is a second row rather than a
+           column on the one above because that one is deleted the moment a decision is
+           taken - on approval, on cancellation and in unenrol_user() - and a snapshot there
+           would self-destruct exactly when it acquires audit value. */
+        \enrol_apply\local\submission::create($instance, $userid, (int) $userenrolment->id, $data);
+
         $this->send_application_notification($instance, $userid, $data);
     }
 
@@ -332,10 +338,20 @@ class enrol_apply_plugin extends enrol_plugin {
      * @return void
      */
     public function complete_approval($instance, $userid, $userenrolmentid) {
-        global $DB;
+        global $DB, $USER;
 
         // Group membership follows approval, never the bare application.
         $this->add_instance_groups($instance, $userid);
+
+        /* Stamped here rather than in confirm_enrolment() so that an approval made from
+           core's "Edit enrolment" screen records its decider too: that route reaches this
+           method through the before_user_enrolment_updated hook and never touches
+           confirm_enrolment() at all. */
+        \enrol_apply\local\submission::decide(
+            (int) $userenrolmentid,
+            \enrol_apply\local\submission::STATUS_APPROVED,
+            (int) $USER->id
+        );
 
         $DB->delete_records('enrol_apply_applicationinfo', ['userenrolmentid' => $userenrolmentid]);
 
@@ -527,6 +543,19 @@ class enrol_apply_plugin extends enrol_plugin {
      * Core removes the user_enrolments rows, which cascades nothing on its own, so the
      * application info and group mapping rows have to be dropped here.
      *
+     * The enrol_apply_submission rows are deliberately NOT dropped, which inverts what this
+     * method used to do to the plugin's data as a whole. Deleting an enrolment method is an
+     * administrative act on the course's configuration; the record of who applied, what they
+     * were asked, and what was decided is not part of that configuration and outlives it.
+     * The two ways it does go are the two that should end it: the course being deleted, which
+     * pseudonymises through \enrol_apply\hook_callbacks::before_course_deleted(), and an
+     * erasure request, which deletes it through the privacy provider.
+     *
+     * This route also covers a case no course-deletion path sees: a restore into an existing
+     * course with "delete its contents first" reaches enrol_course_delete() through
+     * restore_dbops::delete_course_content(), where the course survives and neither the hook
+     * nor the course_deleted event ever fires.
+     *
      * @param stdClass $instance Course enrol instance.
      * @return void
      */
@@ -679,7 +708,7 @@ class enrol_apply_plugin extends enrol_plugin {
      * @return void
      */
     public function wait_enrolment($enrols) {
-        global $DB;
+        global $DB, $USER;
 
         foreach ($enrols as $enrol) {
             $userenrolment = $DB->get_record(
@@ -700,6 +729,12 @@ class enrol_apply_plugin extends enrol_plugin {
 
             $this->update_user_enrol($instance, $userenrolment->userid, ENROL_APPLY_USER_WAIT);
 
+            \enrol_apply\local\submission::decide(
+                (int) $userenrolment->id,
+                \enrol_apply\local\submission::STATUS_WAITING,
+                (int) $USER->id
+            );
+
             $this->notify_applicant(
                 $instance,
                 $userenrolment,
@@ -717,7 +752,7 @@ class enrol_apply_plugin extends enrol_plugin {
      * @return void
      */
     public function cancel_enrolment($enrols) {
-        global $DB;
+        global $DB, $USER;
 
         foreach ($enrols as $enrol) {
             $userenrolment = $this->get_pending_user_enrolment($enrol);
@@ -730,6 +765,16 @@ class enrol_apply_plugin extends enrol_plugin {
             if (!$this->can_manage_application($instance->courseid, $userenrolment->userid)) {
                 continue;
             }
+
+            /* Stamped before the unenrolment, not after: unenrol_user() deletes the
+               user_enrolments row, and the id it carried is how the durable record is
+               matched. The record itself is untouched by the unenrolment on purpose - a
+               cancelled application is exactly the outcome the trail exists to hold. */
+            \enrol_apply\local\submission::decide(
+                (int) $userenrolment->id,
+                \enrol_apply\local\submission::STATUS_CANCELLED,
+                (int) $USER->id
+            );
 
             $this->unenrol_user($instance, $userenrolment->userid);
             $DB->delete_records('enrol_apply_applicationinfo', ['userenrolmentid' => $userenrolment->id]);

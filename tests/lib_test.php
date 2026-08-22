@@ -1035,4 +1035,429 @@ final class lib_test extends \advanced_testcase {
         $disabled = $DB->get_record('enrol', ['id' => $this->instance->id], '*', MUST_EXIST);
         $this->assertIsString($this->plugin->allow_apply($disabled));
     }
+
+    /**
+     * The single durable record of one applicant, failing the test when there is not exactly one.
+     *
+     * @param \stdClass $user Applicant.
+     * @return \stdClass The enrol_apply_submission row.
+     */
+    protected function submission_of(\stdClass $user): \stdClass {
+        global $DB;
+
+        $rows = $DB->get_records('enrol_apply_submission', [
+            'courseid' => $this->course->id,
+            'userid' => $user->id,
+        ]);
+        $this->assertCount(1, $rows);
+
+        return reset($rows);
+    }
+
+    /**
+     * Applying writes a durable record beside the application info row.
+     *
+     * @return void
+     */
+    public function test_applying_writes_a_submission_row(): void {
+        $applicant = $this->getDataGenerator()->create_user();
+        $this->apply_as_current_user($applicant);
+
+        $row = $this->submission_of($applicant);
+        $this->assertEquals($this->instance->id, (int) $row->enrolid);
+        $this->assertEquals(\enrol_apply\local\submission::STATUS_PENDING, (int) $row->status);
+        $this->assertEquals(0, (int) $row->timedecided);
+        $this->assertEquals(0, (int) $row->decidedby);
+        $this->assertGreaterThan(0, (int) $row->timecreated);
+        // Ships unused in this slice, so every row must start empty for its first writer.
+        $this->assertSame('', (string) $row->outcomemessage);
+    }
+
+    /**
+     * Approving an application keeps its durable record and stamps the decision on it.
+     *
+     * @return void
+     */
+    public function test_a_submission_row_survives_approval(): void {
+        global $DB;
+
+        $approver = $this->getDataGenerator()->create_user();
+        $this->getDataGenerator()->enrol_user(
+            $approver->id,
+            $this->course->id,
+            $DB->get_field('role', 'id', ['shortname' => 'editingteacher'], MUST_EXIST)
+        );
+        $this->setUser($approver);
+
+        $applicant = $this->getDataGenerator()->create_user();
+        $this->apply_as_current_user($applicant);
+        $ueid = (int) $DB->get_field(
+            'user_enrolments',
+            'id',
+            ['userid' => $applicant->id, 'enrolid' => $this->instance->id],
+            MUST_EXIST
+        );
+
+        $sink = $this->redirectMessages();
+        $this->plugin->confirm_enrolment([$ueid]);
+        $sink->close();
+
+        /* The control. The application info row is deleted on approval, which is the whole
+           reason the durable record cannot live on that table - without this assertion the
+           test would not distinguish "the trail survives" from "nothing is ever deleted". */
+        $this->assertFalse($DB->record_exists('enrol_apply_applicationinfo', ['userenrolmentid' => $ueid]));
+
+        $row = $this->submission_of($applicant);
+        $this->assertEquals(\enrol_apply\local\submission::STATUS_APPROVED, (int) $row->status);
+        $this->assertGreaterThan(0, (int) $row->timedecided);
+        $this->assertEquals($approver->id, (int) $row->decidedby);
+        $this->assertSame('', (string) $row->outcomemessage);
+    }
+
+    /**
+     * Cancelling an application keeps its durable record, though it unenrols the applicant.
+     *
+     * @return void
+     */
+    public function test_a_submission_row_survives_cancellation(): void {
+        global $DB;
+
+        $this->setAdminUser();
+        $applicant = $this->getDataGenerator()->create_user();
+        $this->apply_as_current_user($applicant);
+        $ueid = (int) $DB->get_field(
+            'user_enrolments',
+            'id',
+            ['userid' => $applicant->id, 'enrolid' => $this->instance->id],
+            MUST_EXIST
+        );
+
+        $sink = $this->redirectMessages();
+        $this->plugin->cancel_enrolment([$ueid]);
+        $sink->close();
+
+        // The control: cancellation really did unenrol, so the record outlived a real deletion.
+        $this->assertFalse($DB->record_exists('user_enrolments', ['id' => $ueid]));
+        $this->assertFalse($DB->record_exists('enrol_apply_applicationinfo', ['userenrolmentid' => $ueid]));
+
+        $row = $this->submission_of($applicant);
+        $this->assertEquals(\enrol_apply\local\submission::STATUS_CANCELLED, (int) $row->status);
+        $this->assertGreaterThan(0, (int) $row->timedecided);
+        $this->assertEquals(get_admin()->id, (int) $row->decidedby);
+    }
+
+    /**
+     * Deferring an application to the waiting list stamps its durable record.
+     *
+     * @return void
+     */
+    public function test_a_submission_row_records_a_deferral(): void {
+        global $DB;
+
+        $this->setAdminUser();
+        $applicant = $this->getDataGenerator()->create_user();
+        $this->apply_as_current_user($applicant);
+        $ueid = (int) $DB->get_field(
+            'user_enrolments',
+            'id',
+            ['userid' => $applicant->id, 'enrolid' => $this->instance->id],
+            MUST_EXIST
+        );
+
+        $sink = $this->redirectMessages();
+        $this->plugin->wait_enrolment([$ueid]);
+        $sink->close();
+
+        $row = $this->submission_of($applicant);
+        $this->assertEquals(\enrol_apply\local\submission::STATUS_WAITING, (int) $row->status);
+        $this->assertEquals(get_admin()->id, (int) $row->decidedby);
+    }
+
+    /**
+     * Unenrolling an approved applicant leaves the durable record behind.
+     *
+     * @return void
+     */
+    public function test_a_submission_row_survives_unenrolment(): void {
+        global $DB;
+
+        $this->setAdminUser();
+        $applicant = $this->getDataGenerator()->create_user();
+        $this->apply_as_current_user($applicant);
+        $ueid = (int) $DB->get_field(
+            'user_enrolments',
+            'id',
+            ['userid' => $applicant->id, 'enrolid' => $this->instance->id],
+            MUST_EXIST
+        );
+
+        $sink = $this->redirectMessages();
+        $this->plugin->confirm_enrolment([$ueid]);
+        $sink->close();
+
+        $this->plugin->unenrol_user($this->instance, $applicant->id);
+
+        // The control: the enrolment really is gone, so this is not a no-op.
+        $this->assertFalse($DB->record_exists('user_enrolments', ['id' => $ueid]));
+
+        $row = $this->submission_of($applicant);
+        $this->assertEquals(\enrol_apply\local\submission::STATUS_APPROVED, (int) $row->status);
+    }
+
+    /**
+     * Deleting the enrolment method keeps the durable records, and only those.
+     *
+     * This inverts what delete_instance() used to do to the plugin's data as a whole, so the
+     * controls matter more than the subject: the two tables that ARE instance configuration
+     * must still be cleaned up, or "the trail survived" would just mean "nothing is deleted".
+     *
+     * @return void
+     */
+    public function test_delete_instance_keeps_the_submission_rows(): void {
+        global $DB;
+
+        $this->setAdminUser();
+        $applicant = $this->getDataGenerator()->create_user();
+        $this->apply_as_current_user($applicant);
+        $ueid = (int) $DB->get_field(
+            'user_enrolments',
+            'id',
+            ['userid' => $applicant->id, 'enrolid' => $this->instance->id],
+            MUST_EXIST
+        );
+
+        $group = $this->getDataGenerator()->create_group(['courseid' => $this->course->id]);
+        $DB->insert_record('enrol_apply_groups', (object) [
+            'enrolid' => $this->instance->id,
+            'groupid' => $group->id,
+        ]);
+
+        $this->plugin->delete_instance($this->instance);
+
+        // The controls: instance configuration and the pending comment are still cleaned up.
+        $this->assertFalse($DB->record_exists('enrol_apply_groups', ['enrolid' => $this->instance->id]));
+        $this->assertFalse($DB->record_exists('enrol_apply_applicationinfo', ['userenrolmentid' => $ueid]));
+        $this->assertFalse($DB->record_exists('enrol', ['id' => $this->instance->id]));
+
+        // The subject: the record of who applied and what they wrote outlives the method.
+        $row = $this->submission_of($applicant);
+        $this->assertEquals($this->instance->id, (int) $row->enrolid);
+    }
+
+    /**
+     * A decision already recorded is not restamped, so the record keeps the first one.
+     *
+     * complete_approval() runs TWICE for every approval made through the plugin's own queue -
+     * once from the before_user_enrolment_updated hook, once from confirm_enrolment() - and
+     * decide() is called each time. Without the already-at-this-status check, timedecided
+     * would record the last write rather than the moment of the decision, and a record could
+     * be re-attributed to whoever happened to touch the enrolment next.
+     *
+     * @return void
+     */
+    public function test_a_recorded_decision_is_not_restamped(): void {
+        global $DB;
+
+        $this->setAdminUser();
+        $applicant = $this->getDataGenerator()->create_user();
+        $this->apply_as_current_user($applicant);
+        $ueid = (int) $DB->get_field(
+            'user_enrolments',
+            'id',
+            ['userid' => $applicant->id, 'enrolid' => $this->instance->id],
+            MUST_EXIST
+        );
+
+        $sink = $this->redirectMessages();
+        $this->plugin->confirm_enrolment([$ueid]);
+        $sink->close();
+
+        $first = $this->submission_of($applicant);
+        $this->assertEquals(get_admin()->id, (int) $first->decidedby);
+
+        /* Somebody else touches the same, already-approved enrolment. The decision belongs to
+           whoever took it, not to whoever edited the row afterwards. */
+        $later = $this->getDataGenerator()->create_user();
+        $this->setUser($later);
+        $DB->set_field('enrol_apply_submission', 'timedecided', 111, ['id' => $first->id]);
+        \enrol_apply\local\submission::decide(
+            $ueid,
+            \enrol_apply\local\submission::STATUS_APPROVED,
+            (int) $later->id
+        );
+
+        $again = $this->submission_of($applicant);
+        $this->assertEquals(get_admin()->id, (int) $again->decidedby);
+        $this->assertEquals(111, (int) $again->timedecided);
+
+        // The control: a genuine change of decision IS recorded, so this is not a dead write.
+        \enrol_apply\local\submission::decide(
+            $ueid,
+            \enrol_apply\local\submission::STATUS_CANCELLED,
+            (int) $later->id
+        );
+        $changed = $this->submission_of($applicant);
+        $this->assertEquals(\enrol_apply\local\submission::STATUS_CANCELLED, (int) $changed->status);
+        $this->assertEquals($later->id, (int) $changed->decidedby);
+    }
+
+    /**
+     * An unknown status is refused rather than written.
+     *
+     * @return void
+     */
+    public function test_deciding_with_an_unknown_status_throws(): void {
+        $this->setAdminUser();
+        $applicant = $this->getDataGenerator()->create_user();
+        $this->apply_as_current_user($applicant);
+
+        $this->expectException(\coding_exception::class);
+        \enrol_apply\local\submission::decide(1, 99, 1);
+    }
+
+    /**
+     * A second application for the same course and user is refused before it reaches apply().
+     *
+     * The plan for this slice specified a UNIQUE (courseid, userid) key to enforce it. That
+     * key is incompatible with pseudonymising a deleted course by zeroing userid, so the
+     * guarantee lives where it always did: the lock and the already-applied check in
+     * submit_application(). This test is what holds it now that no key does.
+     *
+     * @return void
+     */
+    public function test_a_second_application_for_the_same_course_and_user_is_refused(): void {
+        global $DB;
+
+        $applicant = $this->getDataGenerator()->create_user();
+        $this->setUser($applicant);
+
+        $sink = $this->redirectMessages();
+        $first = $this->plugin->submit_application($this->instance, $applicant->id, (object) ['applydescription' => 'One']);
+        $second = $this->plugin->submit_application($this->instance, $applicant->id, (object) ['applydescription' => 'Two']);
+        $sink->close();
+
+        $this->assertTrue($first);
+        $this->assertFalse($second);
+        $this->assertCount(1, $DB->get_records('enrol_apply_submission', ['userid' => $applicant->id]));
+    }
+
+    /**
+     * Applying again after a cancellation is allowed, and produces a second record.
+     *
+     * The other half of the reason the natural key is not unique: the first record is a
+     * cancelled application that must not be overwritten by the second attempt.
+     *
+     * @return void
+     */
+    public function test_re_applying_after_a_cancellation_adds_a_second_record(): void {
+        global $DB;
+
+        $this->setAdminUser();
+        $applicant = $this->getDataGenerator()->create_user();
+        $this->apply_as_current_user($applicant);
+        $ueid = (int) $DB->get_field(
+            'user_enrolments',
+            'id',
+            ['userid' => $applicant->id, 'enrolid' => $this->instance->id],
+            MUST_EXIST
+        );
+
+        $sink = $this->redirectMessages();
+        $this->plugin->cancel_enrolment([$ueid]);
+        $this->apply_as_current_user($applicant);
+        $sink->close();
+
+        $rows = $DB->get_records('enrol_apply_submission', [
+            'courseid' => $this->course->id,
+            'userid' => $applicant->id,
+        ], 'id ASC');
+        $this->assertCount(2, $rows);
+
+        $statuses = array_map(static function (\stdClass $row): int {
+            return (int) $row->status;
+        }, array_values($rows));
+        $this->assertSame(
+            [\enrol_apply\local\submission::STATUS_CANCELLED, \enrol_apply\local\submission::STATUS_PENDING],
+            $statuses
+        );
+    }
+
+    /**
+     * An approval made outside the plugin's own queue stamps the record too.
+     *
+     * complete_approval() is reached from core's "Edit enrolment" screen through the
+     * before_user_enrolment_updated hook, and never touches confirm_enrolment(). Stamping the
+     * decision there rather than in confirm_enrolment() is what makes the two routes agree.
+     *
+     * @return void
+     */
+    public function test_an_out_of_band_approval_stamps_the_submission_row(): void {
+        global $DB;
+
+        $approver = $this->getDataGenerator()->create_user();
+        $this->setUser($approver);
+
+        $applicant = $this->getDataGenerator()->create_user();
+        $this->apply_as_current_user($applicant);
+
+        $this->plugin->update_user_enrol($this->instance, $applicant->id, ENROL_USER_ACTIVE);
+
+        $row = $this->submission_of($applicant);
+        $this->assertEquals(\enrol_apply\local\submission::STATUS_APPROVED, (int) $row->status);
+        $this->assertEquals($approver->id, (int) $row->decidedby);
+        $this->assertFalse($DB->record_exists('enrol_apply_applicationinfo', ['userenrolmentid' => $row->userenrolmentid]));
+    }
+
+    /**
+     * Editing an already-approved enrolment does not run the approval work a second time.
+     *
+     * This is the guard the untouched enrol_apply_applicationinfo row provides, and the
+     * reason that table is not repurposed to hold the durable record: hook_callbacks uses its
+     * EXISTENCE as proof that a status change to active was an approval. Were the row to stop
+     * being deleted, every later status edit of an approved user would re-add their groups
+     * and queue another confirmation message.
+     *
+     * @return void
+     */
+    public function test_the_out_of_band_approval_path_still_short_circuits(): void {
+        global $DB;
+
+        $this->setAdminUser();
+
+        $group = $this->getDataGenerator()->create_group(['courseid' => $this->course->id]);
+        $DB->insert_record('enrol_apply_groups', (object) [
+            'enrolid' => $this->instance->id,
+            'groupid' => $group->id,
+        ]);
+
+        $applicant = $this->getDataGenerator()->create_user();
+        $this->apply_as_current_user($applicant);
+        $ueid = (int) $DB->get_field(
+            'user_enrolments',
+            'id',
+            ['userid' => $applicant->id, 'enrolid' => $this->instance->id],
+            MUST_EXIST
+        );
+
+        $sink = $this->redirectMessages();
+        $this->plugin->confirm_enrolment([$ueid]);
+        $sink->close();
+
+        /* The control for the whole test: the first approval really did do the work, so a
+           later assertion that it did not happen again is about the short circuit and not
+           about the approval never having run. */
+        $notify = ['classname' => '\enrol_apply\task\notify_approval'];
+        $this->assertCount(1, $DB->get_records('task_adhoc', $notify));
+        $this->assertTrue(groups_is_member($group->id, $applicant->id));
+
+        $DB->delete_records('task_adhoc', $notify);
+        groups_remove_member($group->id, $applicant->id);
+
+        // Suspend and re-activate: a second status edit of an already-approved enrolment.
+        $this->plugin->update_user_enrol($this->instance, $applicant->id, ENROL_USER_SUSPENDED);
+        $this->plugin->update_user_enrol($this->instance, $applicant->id, ENROL_USER_ACTIVE);
+
+        $this->assertCount(0, $DB->get_records('task_adhoc', $notify));
+        $this->assertFalse(groups_is_member($group->id, $applicant->id));
+    }
 }

@@ -8,6 +8,51 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Every application now leaves a durable record — the comment, the profile details entered,
+  the decision, who took it and when — in a new `enrol_apply_submission` table. It survives
+  approval, deferral, cancellation and unenrolment, travels in a course backup that includes
+  users, and is reachable by both subject access and erasure requests in **two** roles: the
+  applicant, and whoever decided the application. The two roles are treated differently and
+  deliberately so — an applicant's export carries their own comment and profile details and
+  an erasure deletes their record whole, while a decider's export carries the decision without
+  the applicant's words and an erasure only removes the decider's name.
+- A retention period for those records, `Keep application records for`, 30 days by default,
+  applied by a new daily scheduled task. Zero keeps them forever. The sweep takes decided and
+  abandoned records alike, but spares one whose application is still awaiting a decision —
+  nothing expires a pending application, so age alone does not make it finished. It is chunked,
+  time budgeted, and skips a record it cannot delete rather than abandoning the run.
+- Deleting a course now strips its records of everything personal — both user ids zeroed, the
+  comment and the profile snapshot emptied — keeping only the dates and the outcome. This runs
+  before the course context is destroyed, because afterwards no privacy request could reach the
+  rows at all.
+
+### Changed
+
+- **Deleting an enrolment method no longer deletes the record of the applications made to
+  it.** It still removes the pending comments and the group mappings, which are configuration.
+  Removing an enrolment method is a change to the course's setup; the record of who applied and
+  what was decided is not part of that setup. An erasure request, a course deletion or the
+  retention period are what end it.
+- The approval queue and the read-only comment listing read the comment from the durable
+  record, falling back to the pending row. A participant suspended from core's participants
+  page reappears in the queue, and used to do so with an empty comment because the pending row
+  is deleted on approval.
+
+### Fixed
+
+- Restoring a course with enrolment methods excluded wrote this plugin's group mappings against
+  the restored course's **manual** enrolment instance. Core wires a plugin's restore handlers to
+  every enrolment method in the archive, and that restore maps every old instance id onto the
+  manual one, so `get_new_parentid('enrol')` returned a valid id belonging to somebody else. The
+  rows it produced were owned by nothing and cleaned up by nothing.
+- The privacy export wrote every application in a course to the same path, so a course carrying
+  two enrolment-upon-approval methods exported the first and then replaced it with the second.
+  The subject received half their data with nothing to say so. Each application now exports to
+  its own path, which also covers the case of one person applying, being cancelled and
+  applying again.
+- `classes/hook_callbacks.php` and `CLAUDE.md` both stated that the out-of-band approval
+  observer does not notify the applicant. It does, through `complete_approval()`.
+
 - After submitting an application, an applicant can be offered the chance to save the details
   they entered to their own profile. It is off unless a site administrator allows it **and**
   the enrolment method opts in, the applicant is always asked first, and only the fields they

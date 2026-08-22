@@ -42,7 +42,105 @@ class restore_enrol_apply_plugin extends restore_enrol_plugin {
         return [
             new restore_path_element('enrol_apply_applygroup', $this->get_pathfor('/applygroups/applygroup')),
             new restore_path_element('enrol_apply_application', $this->get_pathfor('/applications/application')),
+            new restore_path_element('enrol_apply_submission', $this->get_pathfor('/submissions/submission')),
         ];
+    }
+
+    /**
+     * The apply instance this element belongs to, or 0 when it is not one.
+     *
+     * The check is not defensive style. Core wires a plugin's restore handlers to EVERY
+     * <enrol> element in the archive, not only to this plugin's own, and when a restore
+     * converts the instances to manual it maps every old enrol id onto the course's manual
+     * instance - so get_new_parentid('enrol') can return a perfectly valid id belonging to
+     * another enrolment method. Measured: without this guard, restoring a users-included
+     * backup with enrolments set to "never" wrote an enrol_apply_groups row pointing at the
+     * restored course's MANUAL instance, which nothing owns and nothing ever cleans up.
+     *
+     * @return int Enrol instance id, or 0 when this element did not land on an apply instance.
+     */
+    protected function get_apply_instanceid(): int {
+        global $DB;
+
+        $enrolid = (int) $this->get_new_parentid('enrol');
+        if (!$enrolid) {
+            // The enrol instance itself was not restored, so there is nothing to attach to.
+            return 0;
+        }
+        if (!$DB->record_exists('enrol', ['id' => $enrolid, 'enrol' => 'apply'])) {
+            return 0;
+        }
+
+        return $enrolid;
+    }
+
+    /**
+     * Restore one durable application record.
+     *
+     * The applicant is mandatory and the decider is not, and that asymmetry is the whole
+     * design. A row whose applicant cannot be mapped - a cross-site restore where that
+     * person has no account here - is DROPPED rather than written with userid = 0: an
+     * ownerless profile snapshot is not an audit trail, it is loose personal data that no
+     * subject access request can ever reach. A decider who cannot be mapped is only zeroed,
+     * because the record is still the applicant's and still means what it says without a
+     * name on the decision.
+     *
+     * @param array $data Backup data of the application record.
+     * @return void
+     */
+    public function process_enrol_apply_submission($data) {
+        global $DB;
+
+        $data = (object) $data;
+
+        $enrolid = $this->get_apply_instanceid();
+        if (!$enrolid) {
+            return;
+        }
+
+        $userid = $this->get_mappingid('user', $data->userid);
+        if (!$userid) {
+            return;
+        }
+
+        /* Rebuilt from this restore rather than carried: the record belongs to the course it
+           lands in, whatever course it was taken from. */
+        $courseid = (int) $DB->get_field('enrol', 'courseid', ['id' => $enrolid], MUST_EXIST);
+
+        /* Best effort. The mapping exists only for enrolments this plugin itself restored,
+           so a cancelled application - whose user enrolment was deleted long before the
+           backup was taken - legitimately has none, and the reference is simply left empty. */
+        $userenrolmentid = (int) $this->get_mappingid('enrol_apply_userenrolment', $data->userenrolmentid);
+
+        /* A repeated restore into the same course must not double the trail. The check keys
+           on the COURSE and not on $enrolid, which would make it dead code: restoring an
+           apply instance always runs enrol_apply_plugin::restore_instance(), which calls
+           add_instance() and therefore produces a brand new enrol row every time, so no
+           record already in the table can ever carry the id this restore just created.
+           timecreated is what identifies one application among a user's several - the state
+           machine allows more than one per course and user on purpose. */
+        $exists = $DB->record_exists('enrol_apply_submission', [
+            'courseid' => $courseid,
+            'userid' => $userid,
+            'timecreated' => (int) $data->timecreated,
+        ]);
+        if ($exists) {
+            return;
+        }
+
+        $DB->insert_record('enrol_apply_submission', (object) [
+            'courseid' => $courseid,
+            'userid' => $userid,
+            'enrolid' => $enrolid,
+            'userenrolmentid' => $userenrolmentid,
+            'comment' => $data->comment,
+            'userinfodata' => $data->userinfodata,
+            'status' => (int) $data->status,
+            'outcomemessage' => $data->outcomemessage,
+            'timecreated' => (int) $data->timecreated,
+            'timedecided' => (int) $data->timedecided,
+            'decidedby' => (int) $this->get_mappingid('user', $data->decidedby),
+        ]);
     }
 
     /**
@@ -89,9 +187,8 @@ class restore_enrol_apply_plugin extends restore_enrol_plugin {
 
         $data = (object) $data;
 
-        $enrolid = $this->get_new_parentid('enrol');
+        $enrolid = $this->get_apply_instanceid();
         if (!$enrolid) {
-            // The enrol instance itself was not restored, so there is nothing to attach to.
             return;
         }
 

@@ -15,19 +15,26 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Version details for the enrolment upon approval plugin.
+ * Event observers of the enrolment upon approval plugin.
  *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine
- * @copyright  emeneo.com (http://emeneo.com/)
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->component = 'enrol_apply';
-$plugin->version = 2026082300;
-$plugin->requires = 2025100600;
-$plugin->supported = [501, 502];
-$plugin->maturity = MATURITY_STABLE;
-$plugin->release = 'v2.0';
+$observers = [
+    [
+        /* The safety net for a course deleted while this plugin is installed but disabled.
+           enrol_course_delete() only calls delete_instance() for plugins in
+           enrol_get_plugins(true), yet deletes the enrol and user_enrolments rows either
+           way, so the plugin's two enrolment-keyed tables are orphaned with nobody
+           consulted. Observers are registered whatever the plugin's state, which is what
+           makes this reachable at all. The durable trail is handled by the
+           before_course_deleted hook instead, because by the time this fires the course
+           context is already gone. */
+        'eventname' => '\core\event\course_deleted',
+        'callback' => '\enrol_apply\observers::course_deleted',
+    ],
+];

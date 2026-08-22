@@ -98,11 +98,54 @@ cannot do is override the capability for one individual mentee. Core lives with 
 constraint for `moodle/grade:viewall`, which its own declaration marks as
 "CONTEXT_COURSE // and CONTEXT_USER".
 
+## The record of an application
+
+Every application leaves a durable record in `enrol_apply_submission`: what the applicant
+wrote, the profile details they entered, the decision taken, who took it and when. Unlike
+the pending comment in `enrol_apply_applicationinfo`, which is deleted as soon as a
+decision is taken, this record survives approval, deferral, cancellation and unenrolment —
+and, from this release, **deleting the enrolment method no longer removes it either**.
+Removing an enrolment method is a change to the course's configuration; the record of who
+applied and what was decided is not part of that configuration.
+
+Three things do end it:
+
+- **Deleting the course.** The records are kept but stripped of everything personal: both
+  user ids are zeroed and the comment and profile snapshot are emptied, leaving only the
+  dates and the outcome. This happens before the course context is destroyed, because
+  afterwards no subject access or erasure request could reach the rows at all.
+- **An erasure request**, differently for each of the two roles. A record the person
+  *submitted* goes outright: erasure wins over permanence here on purpose, because the trail
+  exists to tell a manager what was decided, not to be evidence against the person it
+  describes. A record they merely *decided* keeps everything except their name — the record
+  belongs to the applicant and carries the applicant's own words, so erasing the decider must
+  not take somebody else's data with it.
+- **The retention period.** *Site administration ▸ Plugins ▸ Enrolments ▸ Enrolment upon
+  approval* offers **Keep application records for**, 30 days by default. A daily scheduled
+  task deletes records older than that — decided or abandoned alike, because an application
+  nobody ever looked at is exactly the kind that would otherwise be kept forever. The one
+  exception is a record whose application is **still in the queue**: nothing expires a pending
+  application, so age alone does not make it finished, and deleting its record would leave the
+  decision taken later with nothing to record it against. Set the period to zero to keep
+  everything forever.
+
+Two consequences worth knowing before you rely on a backup:
+
+- A record travels **only when the backup includes users**. With the site-wide *Include
+  enrolled users* backup default switched off, a course that goes through the recycle bin and
+  is restored comes back without its application records.
+- A record travels **only while its enrolment method still exists**. Backup data for an
+  enrolment plugin is written per enrolment method, so a record kept after the method was
+  deleted has nothing to attach itself to and stays behind. It is still on the site, still
+  reachable by a privacy request and still swept by the retention period — it simply does not
+  follow the course into a copy.
+
 ## Privacy
 
-The plugin stores the comment submitted with an application in
-`enrol_apply_applicationinfo`, so it implements the full privacy API: metadata, data
-export, and deletion for a user, for a list of users, and for a whole context.
+The plugin implements the full privacy API — metadata, data export, and deletion for a
+user, for a list of users, and for a whole context — over both of its personal-data tables.
+`enrol_apply_submission` names two people rather than one: the applicant, and whoever
+decided the application. Both roles are exported and both are erased.
 
 ## Development
 

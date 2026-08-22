@@ -146,6 +146,23 @@ if ($ADMIN->fulltree) {
         'enrol/apply:manageapplications'
     ));
 
+    // Retention of the application trail.
+    $settings->add(new admin_setting_heading(
+        'enrol_apply_retention',
+        get_string('retention_heading', 'enrol_apply'),
+        get_string('retention_desc', 'enrol_apply')
+    ));
+    /* A configduration, so the administrator picks the unit - but note it always STORES
+       seconds, whatever unit is chosen (lib/adminlib.php). Nothing reads this setting
+       directly for that reason: \enrol_apply\local\submission::retention_seconds() is its
+       only reader and states the unit in one place. */
+    $settings->add(new admin_setting_configduration(
+        'enrol_apply/retentiondays',
+        get_string('retentiondays', 'enrol_apply'),
+        get_string('retentiondays_desc', 'enrol_apply'),
+        30 * DAYSECS
+    ));
+
     // Expiry settings.
     $settings->add(new admin_setting_heading(
         'enrol_apply_expiry',

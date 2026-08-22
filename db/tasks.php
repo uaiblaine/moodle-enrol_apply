@@ -51,4 +51,17 @@ $tasks = [
         'dayofweek' => '*',
         'disabled' => 0,
     ],
+    [
+        /* Applies the retention period to the durable application trail. Daily and
+           off-peak: nothing depends on it running promptly, and it is the only task here
+           that deletes rather than reads. */
+        'classname' => '\enrol_apply\task\purge_submissions',
+        'blocking' => 0,
+        'minute' => '25',
+        'hour' => '3',
+        'day' => '*',
+        'month' => '*',
+        'dayofweek' => '*',
+        'disabled' => 0,
+    ],
 ];
