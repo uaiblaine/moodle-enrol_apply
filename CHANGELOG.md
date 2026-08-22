@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Fixed
+
+- **A course copy that keeps roles no longer writes the application data of users it was
+  meant to leave out.** Core backs up only the enrolments of users holding a kept role, but
+  the copy sets the site's `users` backup setting to 1 whenever roles are kept and user data
+  is wanted — so this plugin, which read that setting alone, wrote every applicant's comment
+  and profile snapshot into the archive, including those of people the copy exists to exclude.
+  The restore dropped them because their user mapping missed, so nothing ever looked wrong;
+  the exposure was the archive file. The mirror case is fixed too: a copy that keeps roles
+  without user data used to lose the comments for the enrolments it does carry.
+
 ### Added
 
 - Every application now leaves a durable record — the comment, the profile details entered,

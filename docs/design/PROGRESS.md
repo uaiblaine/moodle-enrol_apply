@@ -17,12 +17,16 @@ Last updated: 2026-08-22.
 | [#6](https://github.com/uaiblaine/moodle-enrol_apply/pull/6) | 4 | Card on the enrolment page, `dynamic_form`, two transports |
 | [#7](https://github.com/uaiblaine/moodle-enrol_apply/pull/7) | 5 | Optional profile write + completeness gate |
 | [#8](https://github.com/uaiblaine/moodle-enrol_apply/pull/8) | — | Stop losing an approved applicant's group membership on restore |
+| [#9](https://github.com/uaiblaine/moodle-enrol_apply/pull/9) | 6 | Durable snapshot, privacy, backup, lifecycle |
 
 ## In progress
 
-**Slice 6 — durable snapshot, privacy, backup, lifecycle.** Branch
-`feature/slice-6-durable-trail`. Complete; every file in the plan's table is written and every
-verification step in it has been run.
+**The kept-roles backup gate**, branch `fix/backup-kept-roles-gate` — the defect found while
+researching slice 6 and deliberately deferred out of it. See "Defects found and deferred".
+
+## Slice 6, as merged
+
+Every file in the plan's table is written and every verification step in it has been run.
 
 Verified: 162/162 PHPUnit on **both** m501 and m502; core's
 `core_privacy\privacy\provider_test` clean for `enrol_apply` on both branches (it does **not**
@@ -54,8 +58,7 @@ Every fix is mutation-checked and reddens exactly its own named test.
 
 ## Next
 
-Before slice 7, fix the backup gate defect found while researching this slice — see
-"Defects found and deferred" below. Its own branch and PR, in the style of #8.
+Slice 7 — the system report in the course — once the kept-roles fix has landed.
 
 ## Decisions taken that depart from the plan
 
@@ -143,15 +146,13 @@ Record them here so a later reader does not "fix" them back.
 
 ## Defects found and deferred
 
-- **The backup's `users` gate does not match core's.** `backup_enrol_apply_plugin` gates its
-  user data on `get_setting_value('users')` alone, while core gates `<user_enrolments>` on
-  `empty($keptroles) && $users` (`backup/moodle2/backup_stepslib.php`), with a separate
-  `role_assignments` join for the kept-roles branch. In an async course copy that keeps roles
-  **and** user data, `users` is 1, so this plugin writes every application comment while core
-  writes only the kept-role enrolments — free-text personal data of users the copy deliberately
-  excluded, inside the archive file. It is dropped on restore because the mapping misses, so
-  nothing looks wrong; the exposure is the archive. The mirror case loses comments for
-  enrolments the copy does carry. Own branch and PR, before slice 7.
+- ~~**The backup's `users` gate does not match core's.**~~ Fixed on
+  `fix/backup-kept-roles-gate`: core's whole predicate is reproduced, including the kept-roles
+  branch, for both the pending comments and the durable trail. Two traps were found writing the
+  test — `set_kept_roles()` throws outside `MODE_COPY`, so it needs its own backup helper, and
+  the assertion has to read `course/enrolments.xml` because a restore drops unmapped rows either
+  way and a restore-based test passes with the gate deleted. `EXISTS` is used rather than core's
+  `INNER JOIN`, because a user holding two kept roles matches the join twice.
 - **`local_unifiedgrader` fails core's `test_table_coverage`** on both m501 and m502 — the same
   defect class fixed here, in another fleet repo. Eleven `local_iv*` plugins fail
   `test_all_providers_compliant` on the same stacks. Neither is this repo's to fix; noted so the

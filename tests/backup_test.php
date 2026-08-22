@@ -230,6 +230,183 @@ final class backup_test extends \advanced_testcase {
     }
 
     /**
+     * Back a course up as a COPY that keeps only the given roles, and return its enrolments.xml.
+     *
+     * MODE_COPY is not a stylistic choice: backup_controller::set_kept_roles() throws
+     * cannot_set_keep_roles_wrong_mode in any other mode, so a copy controller is the only way
+     * to reach the branch under test. The roles reach the plan at execute_plan() time, just
+     * before the plan runs, which is why they are readable from define_structure().
+     *
+     * @param \stdClass $course Course to copy.
+     * @param array $keptroles Role ids whose holders' enrolments the copy keeps.
+     * @param bool $userdata Value of the users setting, as the copy task would set it.
+     * @return string Contents of course/enrolments.xml.
+     */
+    protected function copy_enrolments_xml($course, array $keptroles, bool $userdata): string {
+        global $CFG, $USER;
+
+        $CFG->backup_file_logger_level = backup::LOG_NONE;
+
+        $bc = new backup_controller(
+            backup::TYPE_1COURSE,
+            $course->id,
+            backup::FORMAT_MOODLE,
+            backup::INTERACTIVE_NO,
+            backup::MODE_COPY,
+            $USER->id
+        );
+        $bc->set_kept_roles($keptroles);
+        $bc->get_plan()->get_setting('users')->set_status(backup_setting::NOT_LOCKED);
+        $bc->get_plan()->get_setting('users')->set_value($userdata);
+
+        $basepath = $bc->get_plan()->get_basepath();
+        $bc->execute_plan();
+        $results = $bc->get_results();
+        $bc->destroy();
+
+        if (!file_exists($basepath . '/moodle_backup.xml')) {
+            $results['backup_destination']->extract_to_pathname(
+                get_file_packer('application/vnd.moodle.backup'),
+                $basepath
+            );
+        }
+
+        $xml = $basepath . '/course/enrolments.xml';
+        $this->assertFileExists($xml, 'a copy must still produce an enrolments file');
+
+        return file_get_contents($xml);
+    }
+
+    /**
+     * Seed a second applicant holding a role the copy will not keep.
+     *
+     * @param \stdClass $course Course to apply to.
+     * @param \stdClass $instance Apply instance to apply to.
+     * The pending comment and the durable record get DIFFERENT markers, suffixed rather than
+     * shared, so that an assertion can tell which of the two elements it is looking at. Both
+     * are gated separately and a test that could not distinguish them would hold only one.
+     *
+     * @param string $comment Marker to submit, suffixed per table.
+     * @param string $roleshortname Role to assign in the course.
+     * @return \stdClass The applicant.
+     */
+    protected function add_applicant($course, $instance, string $comment, string $roleshortname): \stdClass {
+        global $DB;
+
+        $user = $this->getDataGenerator()->create_user();
+        $this->getDataGenerator()->enrol_user(
+            $user->id,
+            $course->id,
+            $DB->get_field('role', 'id', ['shortname' => $roleshortname], MUST_EXIST)
+        );
+
+        $this->plugin->enrol_user($instance, $user->id, $instance->roleid, 0, 0, ENROL_USER_SUSPENDED);
+        $ueid = $DB->get_field('user_enrolments', 'id', ['enrolid' => $instance->id, 'userid' => $user->id], MUST_EXIST);
+        $DB->insert_record('enrol_apply_applicationinfo', (object) [
+            'userenrolmentid' => $ueid,
+            'comment' => $comment . 'PENDING',
+        ]);
+        $DB->insert_record('enrol_apply_submission', (object) [
+            'courseid' => $course->id,
+            'userid' => $user->id,
+            'enrolid' => $instance->id,
+            'userenrolmentid' => $ueid,
+            'comment' => $comment . 'RECORD',
+            'userinfodata' => '',
+            'status' => \enrol_apply\local\submission::STATUS_PENDING,
+            'outcomemessage' => '',
+            'timecreated' => self::SUBMITTED_AT,
+            'timedecided' => 0,
+            'decidedby' => 0,
+        ]);
+
+        return $user;
+    }
+
+    /**
+     * A course copy that keeps roles carries only the kept-role users' application data.
+     *
+     * The users setting is 1 for this copy - the copy task sets it whenever roles are kept and
+     * user data is wanted - so a gate reading that setting alone writes every applicant's
+     * comment and profile snapshot into the archive, including those of people the copy exists
+     * to leave out. The restore drops them, because their user mapping misses, so the only
+     * place this is ever visible is the archive file itself.
+     *
+     * @return void
+     */
+    public function test_a_kept_roles_copy_carries_only_the_kept_users_data(): void {
+        global $DB;
+
+        [$course, $instance] = $this->create_course_with_application();
+        $this->add_applicant($course, $instance, 'KEPTROLEAPPLICANT', 'editingteacher');
+        $this->add_applicant($course, $instance, 'DROPPEDROLEAPPLICANT', 'student');
+
+        $keptroleid = (int) $DB->get_field('role', 'id', ['shortname' => 'editingteacher'], MUST_EXIST);
+        $xml = $this->copy_enrolments_xml($course, [$keptroleid], true);
+
+        /* The control: the kept-role applicant's data really is written, so absence means
+           something. Both elements are asserted, because both are gated separately. */
+        $this->assertStringContainsString('KEPTROLEAPPLICANTPENDING', $xml);
+        $this->assertStringContainsString('KEPTROLEAPPLICANTRECORD', $xml);
+
+        $this->assertStringNotContainsString('DROPPEDROLEAPPLICANTPENDING', $xml);
+        $this->assertStringNotContainsString('DROPPEDROLEAPPLICANTRECORD', $xml);
+    }
+
+    /**
+     * A course copy that keeps roles without user data still carries their application data.
+     *
+     * The mirror failure, and the reason the fix is core's whole predicate rather than a
+     * narrowing of it: here the users setting is 0, yet core still writes the kept-role
+     * enrolments, so a gate reading the setting alone drops the comments for enrolments the
+     * copy does carry.
+     *
+     * @return void
+     */
+    public function test_a_kept_roles_copy_without_user_data_still_carries_their_data(): void {
+        global $DB;
+
+        [$course, $instance] = $this->create_course_with_application();
+        $this->add_applicant($course, $instance, 'KEPTROLEAPPLICANT', 'editingteacher');
+
+        $keptroleid = (int) $DB->get_field('role', 'id', ['shortname' => 'editingteacher'], MUST_EXIST);
+        $xml = $this->copy_enrolments_xml($course, [$keptroleid], false);
+
+        $this->assertStringContainsString('KEPTROLEAPPLICANTPENDING', $xml);
+        $this->assertStringContainsString('KEPTROLEAPPLICANTRECORD', $xml);
+    }
+
+    /**
+     * An applicant holding two kept roles is written once, not twice.
+     *
+     * Core's own kept-roles query joins {role_assignments}, so a user holding two of the kept
+     * roles matches twice. Nothing downstream would break, but the archive would carry the
+     * same application under the same id twice.
+     *
+     * @return void
+     */
+    public function test_an_applicant_with_two_kept_roles_is_written_once(): void {
+        global $DB;
+
+        [$course, $instance] = $this->create_course_with_application();
+        $applicant = $this->add_applicant($course, $instance, 'TWICEHELDROLES', 'editingteacher');
+        $this->getDataGenerator()->enrol_user(
+            $applicant->id,
+            $course->id,
+            $DB->get_field('role', 'id', ['shortname' => 'teacher'], MUST_EXIST)
+        );
+
+        $kept = [
+            (int) $DB->get_field('role', 'id', ['shortname' => 'editingteacher'], MUST_EXIST),
+            (int) $DB->get_field('role', 'id', ['shortname' => 'teacher'], MUST_EXIST),
+        ];
+        $xml = $this->copy_enrolments_xml($course, $kept, true);
+
+        $this->assertEquals(1, substr_count($xml, 'TWICEHELDROLESPENDING'));
+        $this->assertEquals(1, substr_count($xml, 'TWICEHELDROLESRECORD'));
+    }
+
+    /**
      * Restore a backup of one course into another, existing course.
      *
      * @param \stdClass $course Course to back up.

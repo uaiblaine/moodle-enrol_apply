@@ -330,6 +330,23 @@ backup/                      group mappings, comments and the durable trail, see
   `empty($keptroles) && $users`. In a course copy that keeps roles they disagree, and the plugin
   writes comments for users core excluded. That is a separate live defect with its own fix.
 
+- **"Are users included?" is not the users setting.** Core gates its own `<user_enrolments>` on
+  `empty($keptroles) && $users`, with a second branch for a course copy that keeps roles
+  (`backup/moodle2/backup_stepslib.php`, identical on 5.1 and 5.2). The async copy task sets the
+  `users` setting to `1` whenever roles are kept **and** user data is wanted, so reading that
+  setting alone disagrees with core in both directions: with kept roles and user data it writes
+  personal data for users core excluded, and with kept roles and no user data it writes nothing
+  while core still writes those enrolments. Reproduce core's whole predicate; do not narrow it.
+
+  Two things about testing it. `backup_controller::set_kept_roles()` throws
+  `cannot_set_keep_roles_wrong_mode` outside `backup::MODE_COPY`, so this needs its own backup
+  helper — the repo's existing one uses `MODE_SAMESITE`. And the assertion has to read
+  `course/enrolments.xml`, because the restore drops unmapped rows either way and a
+  restore-based test passes with the gate deleted.
+
+  Use `EXISTS` rather than core's `INNER JOIN {role_assignments}`: a user holding two of the
+  kept roles matches the join twice and the same row is written to the archive twice.
+
 - **Core wires a plugin's restore handlers to every `<enrol>` element, not just its own.** A
   restore with `enrolments` set to "never" maps every old enrol id onto the course's **manual**
   instance, so `get_new_parentid('enrol')` returns a valid id belonging to another enrolment
