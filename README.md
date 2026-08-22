@@ -101,10 +101,11 @@ constraint for `moodle/grade:viewall`, which its own declaration marks as
 ## The record of an application
 
 Every application leaves a durable record in `enrol_apply_submission`: what the applicant
-wrote, the profile details they entered, the decision taken, who took it and when. Unlike
-the pending comment in `enrol_apply_applicationinfo`, which is deleted as soon as a
-decision is taken, this record survives approval, deferral, cancellation and unenrolment —
-and, from this release, **deleting the enrolment method no longer removes it either**.
+wrote, the profile details they entered, the decision taken, who took it and when. The
+pending comment in `enrol_apply_applicationinfo` is deleted on approval, on cancellation and
+on unenrolment — deferring an application to the waiting list keeps it, because the
+application is still awaiting a decision. This record survives all four, and, from this
+release, **deleting the enrolment method no longer removes it either**.
 Removing an enrolment method is a change to the course's configuration; the record of who
 applied and what was decided is not part of that configuration.
 
@@ -120,8 +121,8 @@ Three things do end it:
   describes. A record they merely *decided* keeps everything except their name — the record
   belongs to the applicant and carries the applicant's own words, so erasing the decider must
   not take somebody else's data with it.
-- **The retention period.** *Site administration ▸ Plugins ▸ Enrolments ▸ Enrolment upon
-  approval* offers **Keep application records for**, 30 days by default. A daily scheduled
+- **The retention period.** *Site administration ▸ Plugins ▸ Enrolments ▸ Course enrol
+  confirmation* offers **Keep application records for**, 30 days by default. A daily scheduled
   task deletes records older than that — decided or abandoned alike, because an application
   nobody ever looked at is exactly the kind that would otherwise be kept forever. The one
   exception is a record whose application is **still in the queue**: nothing expires a pending
@@ -131,9 +132,12 @@ Three things do end it:
 
 Two consequences worth knowing before you rely on a backup:
 
-- A record travels **only when the backup includes users**. With the site-wide *Include
-  enrolled users* backup default switched off, a course that goes through the recycle bin and
-  is restored comes back without its application records.
+- A record travels **only when the backup includes users** — and which switch decides that
+  depends on how the backup was made. A manual backup is governed by the wizard's *Include
+  enrolled users* checkbox, defaulted from *Site administration ▸ Courses ▸ Backups ▸ General
+  backup defaults*. The recycle bin is not: it backs up in automated mode, so the switch that
+  governs it is *Automated backup setup ▸ Include users*. Turn that one off and a course that
+  goes through the recycle bin comes back without its application records.
 - A record travels **only while its enrolment method still exists**. Backup data for an
   enrolment plugin is written per enrolment method, so a record kept after the method was
   deleted has nothing to attach itself to and stays behind. It is still on the site, still

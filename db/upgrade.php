@@ -204,8 +204,9 @@ function xmldb_enrol_apply_upgrade($oldversion) {
            courseid and userid = 0 - measured against the database, not reasoned: the second
            insert raises dml_write_exception. Cancelling and re-applying, and restoring a
            course into one that already holds the trail, are both legitimate duplicates too.
-           One live application per course and user is enforced by the lock in
-           enrol_apply_plugin::submit_application() instead. */
+           The invariant that IS enforced is narrower: one live application per enrol
+           INSTANCE and user, by the lock in enrol_apply_plugin::submit_application(). A course
+           may hold more than one apply instance, so even that does not make the pair unique. */
         $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
         $table->add_key('user', XMLDB_KEY_FOREIGN, ['userid'], 'user', ['id']);
         $table->add_key('decidedby', XMLDB_KEY_FOREIGN, ['decidedby'], 'user', ['id']);

@@ -252,3 +252,33 @@ Record them here so a later reader does not "fix" them back.
   The practical rule: when a comment says a thing cannot happen, or cannot be tested, treat that
   as the highest-value claim in the diff and measure it. Prose in this repo is load-bearing by
   design, which is precisely what makes a wrong sentence worse than no sentence.
+
+  Acting on that, a third pass audited **144 factual claims** added by this work across
+  `CLAUDE.md`, the code comments, `README.md`, `CHANGELOG.md` and the test docblocks, with a
+  second agent trying to overturn each flag. Ten survived, and the shape of them is the useful
+  part:
+
+  - **One wrong fact, repeated in four places.** The lock in `submit_application()` was
+    described as enforcing one live application per *course* and user. It is keyed on the
+    INSTANCE and the user, and a course may carry several apply instances — so a user can hold
+    two pending rows sharing `courseid` and `userid`. That is a third, independent reason the
+    unique key could never have worked, and it had been written up as the reason the key was
+    not needed.
+  - **A claim about atomicity that was never true.** `submission::create()`'s docblock said the
+    row and the enrolment "are created together or not at all". There is no transaction: the
+    lock gives mutual exclusion, not atomicity.
+  - **A privacy claim that overstated itself.** Pseudonymisation was described as leaving a row
+    "nobody can be identified by". `userenrolmentid` is retained, and `logstore_standard` keys
+    enrolment events on exactly that id with the userid beside it — so on a site keeping its
+    standard log the row is re-identifiable. It is pseudonymisation, not anonymisation, and a
+    privacy note is the last place to blur that.
+  - **Three operational errors in the README**, each of which would send an administrator to
+    the wrong place: the settings page named by a title the plugin does not use (the same file
+    names it correctly two sections earlier), the recycle bin attributed to the general backup
+    default when it runs in automated mode and reads *Automated backup setup ▸ Include users*,
+    and deferral listed among the actions that delete the pending comment, which it does not.
+  - **A stale paragraph** still describing the kept-roles gate as an unfixed defect, two commits
+    after it was fixed, pointing readers away from the bullet that superseded it.
+
+  None of these was a bug. Every one of them would have cost the next reader time or sent them
+  somewhere wrong, which is the same currency a bug is paid in.

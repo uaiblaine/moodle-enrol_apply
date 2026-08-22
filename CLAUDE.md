@@ -265,9 +265,12 @@ backup/                      group mappings, comments and the durable trail, see
   `UNIQUE (courseid, userid)`. Course deletion pseudonymises by zeroing `userid`, so a deleted
   course with two applicants gives two rows with the same pair — measured, not reasoned: with
   the key in place PostgreSQL says `duplicate key value violates unique constraint`. Cancelling
-  and re-applying is a second, independent collision. Uniqueness of a *live* application is
-  enforced by the lock in `submit_application()`, which is what the plan credited the key with
-  providing. Note that `mdl phpunit-init` alone does **not** rebuild an existing table, so a
+  and re-applying is a second, independent collision. And a third: uniqueness is enforced per
+  enrolment METHOD, not per course. The lock in `submit_application()` is keyed on the instance
+  id and the user, and the guard behind it is a `{user_enrolments}` lookup by `enrolid`, so a
+  course carrying two apply instances — which the plugin supports on purpose — lets one user
+  hold two pending rows sharing `courseid` and `userid`. Measured: both `submit_application()`
+  calls return true. Note that `mdl phpunit-init` alone does **not** rebuild an existing table, so a
   mutation of `install.xml` runs against the old schema and reads as harmless — drop the test
   database first (`admin/tool/phpunit/cli/util.php --drop`) and confirm the index really
   changed before believing the result.
@@ -326,9 +329,10 @@ backup/                      group mappings, comments and the durable trail, see
   the archive *file*, so the test reads `course/enrolments.xml` directly
   (`test_the_audit_trail_is_only_written_to_the_archive_with_users`).
 
-  Note the gate is `users` alone, while core gates `<user_enrolments>` on
-  `empty($keptroles) && $users`. In a course copy that keeps roles they disagree, and the plugin
-  writes comments for users core excluded. That is a separate live defect with its own fix.
+  That test pins only the `users` axis, and `users` is not the whole gate — the kept-roles half
+  of core's predicate is the next bullet, pinned separately by
+  `test_a_kept_roles_copy_carries_only_the_kept_users_data` and
+  `test_an_excluded_applicant_does_not_reach_the_copied_course`.
 
 - **"Are users included?" is not the users setting.** Core gates its own `<user_enrolments>` on
   `empty($keptroles) && $users`, with a second branch for a course copy that keeps roles
