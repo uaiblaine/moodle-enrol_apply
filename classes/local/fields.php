@@ -493,6 +493,30 @@ class fields {
     }
 
     /**
+     * The value a user currently holds for a field.
+     *
+     * @param string $key Field key.
+     * @param \stdClass $user User to read.
+     * @return string The stored value, or an empty string when there is none.
+     */
+    public static function current_value(string $key, \stdClass $user): string {
+        global $DB;
+
+        if (self::is_standard($key)) {
+            $column = self::key_target($key);
+
+            return (string) ($user->{$column} ?? '');
+        }
+
+        $stored = $DB->get_field('user_info_data', 'data', [
+            'userid' => $user->id,
+            'fieldid' => (int) self::key_target($key),
+        ]);
+
+        return $stored === false ? '' : (string) $stored;
+    }
+
+    /**
      * The name-field keys the site's fullname format has switched off.
      *
      * The four phonetic, middle and alternate name fields are subject to

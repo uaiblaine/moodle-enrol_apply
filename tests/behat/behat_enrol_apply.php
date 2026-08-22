@@ -79,6 +79,30 @@ class behat_enrol_apply extends behat_base {
     }
 
     /**
+     * Set which profile fields an apply enrolment method asks for.
+     *
+     * The field set is a JSON envelope on the instance with no generator behind it, and
+     * driving the per-field picker through the edit form would make every scenario long and
+     * brittle for something tests/local/fields_test.php already covers exhaustively.
+     *
+     * @Given /^the "(?P<shortname_string>(?:[^"]|\\")*)" apply enrolment method asks for "(?P<keys_string>(?:[^"]|\\")*)"$/
+     * @param string $shortname Course shortname.
+     * @param string $keys Comma separated field keys, or an empty string for none.
+     * @return void
+     */
+    public function the_apply_enrolment_method_asks_for(string $shortname, string $keys): void {
+        global $DB;
+
+        $picked = array_filter(array_map('trim', explode(',', $keys)));
+        $DB->set_field(
+            'enrol',
+            'customtext4',
+            \enrol_apply\local\fieldset::from_keys($picked)->to_json(),
+            ['id' => $this->get_instance_id($shortname)]
+        );
+    }
+
+    /**
      * Return the apply enrolment instance id of the given course.
      *
      * @param string $shortname Course short name.

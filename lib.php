@@ -168,58 +168,69 @@ class enrol_apply_plugin extends enrol_plugin {
     }
 
     /**
-     * Render the application form on the course enrolment page and process its submission.
+     * Render this method's card on the course enrolment page.
+     *
+     * One short card per enrolment method, and a button that opens the application form -
+     * in a modal where JavaScript is available, and on a page of its own where it is not.
+     * The form itself is no longer rendered inline: two apply instances on one page emitted
+     * two copies of every profile element, so every id was duplicated.
      *
      * @param stdClass $instance Course enrol instance.
      * @return string|null Rendered markup, or null when the current user may not apply.
      */
     public function enrol_page_hook(stdClass $instance) {
-        global $CFG, $DB, $OUTPUT, $USER;
+        global $DB, $OUTPUT, $PAGE, $USER;
 
         if (isguestuser()) {
             // Guests can not apply.
             return null;
         }
 
+        $title = $this->get_instance_name($instance);
+        $buttonurl = null;
+        $buttonattrs = [];
+
+        $cap = (int) $instance->customint3;
+        $taken = $cap > 0 ? $DB->count_records('user_enrolments', ['enrolid' => $instance->id]) : 0;
+
         $allowapply = $this->allow_apply($instance);
         if ($allowapply !== true) {
-            return $OUTPUT->notification($allowapply, \core\output\notification::NOTIFY_ERROR);
+            $body = $allowapply;
+        } else if ($DB->record_exists('user_enrolments', ['userid' => $USER->id, 'enrolid' => $instance->id])) {
+            $body = get_string('notification', 'enrol_apply');
+        } else if ($cap > 0 && $taken >= $cap) {
+            $body = get_string('maxenrolledreached', 'enrol_apply', $taken);
+        } else {
+            $body = get_string('youwillchecknddetails', 'enrol_apply');
+            /* The href is the no-JavaScript transport and is a real destination, not a
+               placeholder: the AMD module below intercepts the click only when it loads. */
+            $buttonurl = new moodle_url('/enrol/apply/apply.php', ['instance' => $instance->id]);
+            $buttonattrs = [
+                'data-id' => $instance->courseid,
+                'data-instance' => $instance->id,
+                'data-form' => \enrol_apply\form\application_form::class,
+                'data-title' => $title,
+            ];
+            $PAGE->requires->js_call_amd('enrol_apply/enrol_page', 'init', [$instance->id]);
         }
 
-        if ($DB->record_exists('user_enrolments', ['userid' => $USER->id, 'enrolid' => $instance->id])) {
-            return $OUTPUT->notification(get_string('notification', 'enrol_apply'), \core\output\notification::NOTIFY_SUCCESS);
-        }
+        $notification = new \core\output\notification($body, \core\output\notification::NOTIFY_INFO, false);
+        $notification->set_extra_classes(['mb-0']);
 
-        if ($instance->customint3 > 0) {
-            // A maximum number of applicants is configured for this instance.
-            $count = $DB->count_records('user_enrolments', ['enrolid' => $instance->id]);
-            if ($count >= $instance->customint3) {
-                $message = get_string('maxenrolledreached', 'enrol_apply', $count);
-                return $OUTPUT->notification($message, \core\output\notification::NOTIFY_ERROR);
-            }
-        }
+        $page = new \core_enrol\output\enrol_page(
+            instance: $instance,
+            header: $title,
+            body: $OUTPUT->render($notification),
+            buttons: $buttonurl ? [new single_button(
+                $buttonurl,
+                get_string('startapplication', 'enrol_apply'),
+                'get',
+                single_button::BUTTON_PRIMARY,
+                $buttonattrs
+            )] : []
+        );
 
-        require_once($CFG->dirroot . '/enrol/apply/apply_form.php');
-
-        $form = new enrol_apply_apply_form(null, $instance);
-
-        $data = $form->get_data();
-        if ($data && $data->instance == $instance->id) {
-            // Only process the submission that belongs to this instance (multi-instance support).
-            $this->apply($instance, $USER->id, $data);
-
-            $notification = $OUTPUT->notification(
-                get_string('notification', 'enrol_apply'),
-                \core\output\notification::NOTIFY_SUCCESS
-            );
-            $button = $OUTPUT->single_button(
-                new moodle_url('/course/view.php', ['id' => $instance->courseid]),
-                get_string('continue')
-            );
-            return $notification . $button;
-        }
-
-        return $OUTPUT->box($form->render());
+        return $OUTPUT->render($page);
     }
 
     /**
@@ -259,6 +270,51 @@ class enrol_apply_plugin extends enrol_plugin {
         $DB->insert_record('enrol_apply_applicationinfo', $applicationinfo);
 
         $this->send_application_notification($instance, $userid, $data);
+    }
+
+    /**
+     * Submit an application, serialised so that two tabs cannot both get through.
+     *
+     * "One row per application" is an assertion, not a guarantee: two simultaneous
+     * submissions both pass the already-applied check in the form and both reach apply().
+     * Today the foreign-unique key on enrol_apply_applicationinfo makes the second insert
+     * blow up with a database error rather than a message anybody can act on, and the
+     * customint3 places cap has the same race with no key behind it at all.
+     *
+     * The lock is per instance and per user, so two people applying at once never wait on
+     * each other. A failure to acquire is treated as "the other request is already doing
+     * it", which is the truth: the caller's own already-applied check will see the row.
+     *
+     * @param stdClass $instance Course enrol instance.
+     * @param int $userid Applicant user id.
+     * @param stdClass $data Submitted application form data.
+     * @return bool True when this call created the application, false when it was already there.
+     */
+    public function submit_application($instance, $userid, $data) {
+        global $DB;
+
+        $factory = \core\lock\lock_config::get_lock_factory('enrol_apply_submit');
+        $lock = $factory->get_lock($instance->id . '_' . $userid, 10);
+        if (!$lock) {
+            return false;
+        }
+
+        try {
+            if ($DB->record_exists('user_enrolments', ['userid' => $userid, 'enrolid' => $instance->id])) {
+                return false;
+            }
+            if ($instance->customint3 > 0) {
+                $count = $DB->count_records('user_enrolments', ['enrolid' => $instance->id]);
+                if ($count >= $instance->customint3) {
+                    return false;
+                }
+            }
+            $this->apply($instance, $userid, $data);
+        } finally {
+            $lock->release();
+        }
+
+        return true;
     }
 
     /**

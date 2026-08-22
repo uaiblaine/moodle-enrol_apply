@@ -147,7 +147,7 @@ final class bootstrap_compat_test extends \basic_testcase {
                 $files[] = $file->getPathname();
             }
         }
-        foreach (['renderer.php', 'manage_table.php', 'info_table.php', 'apply_form.php', 'edit_form.php'] as $name) {
+        foreach (['renderer.php', 'manage_table.php', 'info_table.php', 'edit_form.php'] as $name) {
             if (is_file($root . '/' . $name)) {
                 $files[] = $root . '/' . $name;
             }

@@ -20,19 +20,27 @@ Feature: Enrolment upon approval
     And I add "Course enrol confirmation" enrolment method in "Course 1" with:
       | Custom instance name | Apply for this course |
     And I log out
+    # The field set has no generator behind it, and which fields are collected is covered
+    # exhaustively by tests/local/fields_test.php. One field keeps these scenarios thin.
+    And the "C1" apply enrolment method asks for "s_city"
 
   Scenario: A student applies and gets no course access until the application is approved
     Given I log in as "student1"
     When I am on "Course 1" course homepage
-    And I press "Enrol me"
-    Then I should see "Enrolment application successfully sent"
+    And I press "Start application"
+    Then I should see "Check your details"
+    And I set the field "City/town" to "Campinas"
+    And I set the field "'City/town' is up to date" to "1"
+    And I press "Submit application"
+    Then I should see "Application submitted"
     And I am on "Course 1" course homepage
     And I should not see "New section"
 
   Scenario: A teacher approves a pending application and the student gains access
     Given I log in as "student1"
     And I am on "Course 1" course homepage
-    And I press "Enrol me"
+    And I press "Start application"
+    And I press "Submit application"
     And I log out
     When I log in as "teacher1"
     And I am on the "C1" "enrol_apply > manage applications" page
@@ -48,7 +56,8 @@ Feature: Enrolment upon approval
   Scenario: A teacher cancels a pending application and the student stays out
     Given I log in as "student1"
     And I am on "Course 1" course homepage
-    And I press "Enrol me"
+    And I press "Start application"
+    And I press "Submit application"
     And I log out
     When I log in as "teacher1"
     And I am on the "C1" "enrol_apply > manage applications" page
