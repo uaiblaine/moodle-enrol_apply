@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- The application form now opens in a modal from the course enrolment page, or on a page of
+  its own for a browser with no JavaScript. Both transports render the same
+  `\core_form\dynamic_form`, so the two routes cannot drift apart, and an acknowledgement
+  page confirms the submission instead of dropping the applicant back where they started.
+- Each field the applicant is asked to check carries a confirmation. Up to three editable
+  fields get one checkbox each; above that they share a single confirmation, because a
+  checkbox per field turns into a wall of ticking at the size of the default field set.
+
 - Courses choose which profile fields an application asks for, at two levels. An
   administrator sets the site-wide pool in a new `Profile fields courses may ask for`
   setting; a teacher picks from that pool for each enrolment method, and may mark any
@@ -45,6 +53,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   and a pull request template.
 
 ### Changed
+
+- The course enrolment page shows one short card per apply method instead of rendering the
+  whole form inline. Two apply methods on one page previously emitted two copies of every
+  profile element, so every element id was duplicated — a WCAG 1.3.1 and 4.1.1 defect that
+  is now gone.
+- Submitting an application is serialised per instance and user, so two tabs cannot both
+  create one. The unique key behind the comment table used to turn that race into a database
+  error rather than a message anybody could act on.
 
 - The bulk action bar no longer writes Bootstrap 4 class names beside their Bootstrap 5
   spellings. `mr-2` and `custom-select` do resolve on 5.1 and 5.2, but only through
@@ -177,6 +193,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `enrol_apply_groups` carried the placeholder table comment left by the XMLDB editor.
 
 ### Removed
+
+- `apply_form.php`. Its work is done by `classes/form/application_form.php`, which renders
+  only the fields the instance asks for rather than calling `useredit_shared_definition()`
+  and `profile_definition()` wholesale.
 
 - `show_standard_user_profile`, `show_extra_user_profile` and `profileoption`. The first
   two were all-or-nothing switches replaced by the per-field picker; existing instances are

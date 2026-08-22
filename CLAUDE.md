@@ -40,7 +40,8 @@ mdl purge m502                           # after template or renderer changes
 
 ```
 lib.php                      enrol_apply_plugin: the whole state machine
-apply_form.php               what the applicant fills in (enrol_page_hook renders it)
+classes/form/application_form.php  what the applicant fills in, in a modal or on apply.php
+apply.php / applied.php      the no-JavaScript transport and the acknowledgement
 edit.php / edit_form.php     per-course instance configuration
 manage.php / manage_table.php   the approval queue and its bulk actions
 info.php / info_table.php    read-only listing of submitted comments
@@ -188,6 +189,40 @@ backup/                      group mappings only, see the gotcha below
   escapes every value through a double stash instead, which is lossless and correct. A
   value that later has to satisfy `PARAM_TEXT` — a web service return, a report column —
   must be stripped at *that* boundary, where losing the tail is a deliberate cost.
+
+- **One form class, two transports, and only one of them runs core's guards.**
+  `\enrol_apply\form\application_form` is a `\core_form\dynamic_form`. The modal reaches it
+  through core's `core_form_dynamic_form` web service; `apply.php` renders the same class on a
+  page for a browser with no JavaScript. `dynamic_form::__construct()` runs
+  `validate_context()` and `check_access_for_dynamic_submission()` **only when the AJAX web
+  service built it**, so `apply.php` calls the access check itself and the method is widened to
+  public for that reason. A guard the second transport cannot reach is not a guard.
+
+  Two things about that page transport bite hard and silently. A `dynamic_form` adds **no
+  action buttons** — the modal supplies its own Save — so rendered on a page it produces a form
+  nobody can submit; `apply.php` passes `showbuttons` to ask for them. And the instance id must
+  **not** be passed as the form's `$ajaxformdata` argument:
+  `moodleform::_process_submission()` treats a non-empty `$ajaxformdata` as the entire
+  submission, so the `_qf__` marker is never seen and the form silently never submits, with no
+  error anywhere.
+
+- **The form is built from the instance id alone.** The course is derived from it. Requiring a
+  course id alongside makes every real entry point throw `invalidenrolinstance`, because the
+  card's button links to `apply.php?instance=N` and nothing else — while any hand-built url
+  carrying both ids works perfectly, which is exactly how it survives both unit tests and
+  manual checking. `test_the_form_builds_from_the_instance_id_alone` pins it.
+
+- **The log-in-as guard here is deliberately stricter than core's.** `enrol/index.php` refuses
+  a log-in-as session only when `$USER->loginascontext->contextlevel == CONTEXT_COURSE`, so an
+  administrator who used "Log in as" from a profile page walks straight past it. Submitting an
+  application in somebody else's name is impersonation whichever screen it started from, so
+  `check_access_for_dynamic_submission()` refuses every log-in-as session.
+
+- **Confirmation scales with the field count.** At or below
+  `application_form::CONFIRM_EACH_UP_TO` (3) editable fields, each gets its own "is up to date"
+  checkbox; above that they share one. Only *editable* fields count — a locked field is
+  read-only and never confirmed — and with nothing filled in there is nothing to confirm in
+  either mode.
 
 ## The phpcs trap that keeps costing a CI round
 
