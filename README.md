@@ -122,8 +122,12 @@ Three things do end it:
   not take somebody else's data with it.
 - **The retention period.** *Site administration ▸ Plugins ▸ Enrolments ▸ Enrolment upon
   approval* offers **Keep application records for**, 30 days by default. A daily scheduled
-  task deletes records older than that, whether or not they were ever decided. Set it to
-  zero to keep them forever.
+  task deletes records older than that — decided or abandoned alike, because an application
+  nobody ever looked at is exactly the kind that would otherwise be kept forever. The one
+  exception is a record whose application is **still in the queue**: nothing expires a pending
+  application, so age alone does not make it finished, and deleting its record would leave the
+  decision taken later with nothing to record it against. Set the period to zero to keep
+  everything forever.
 
 Two consequences worth knowing before you rely on a backup:
 

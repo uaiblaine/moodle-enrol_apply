@@ -17,8 +17,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   an erasure deletes their record whole, while a decider's export carries the decision without
   the applicant's words and an erasure only removes the decider's name.
 - A retention period for those records, `Keep application records for`, 30 days by default,
-  applied by a new daily scheduled task. Zero keeps them forever. The sweep is chunked, time
-  budgeted, and skips a record it cannot delete rather than abandoning the run.
+  applied by a new daily scheduled task. Zero keeps them forever. The sweep takes decided and
+  abandoned records alike, but spares one whose application is still awaiting a decision —
+  nothing expires a pending application, so age alone does not make it finished. It is chunked,
+  time budgeted, and skips a record it cannot delete rather than abandoning the run.
 - Deleting a course now strips its records of everything personal — both user ids zeroed, the
   comment and the profile snapshot emptied — keeping only the dates and the outcome. This runs
   before the course context is destroyed, because afterwards no privacy request could reach the
