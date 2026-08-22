@@ -89,29 +89,34 @@ class backup_enrol_apply_plugin extends backup_enrol_plugin {
 
         $applygroup->set_source_table('enrol_apply_groups', ['enrolid' => backup::VAR_PARENTID]);
 
-        /* Which users' data travels is core's decision, not this plugin's, and the two are
-           easy to confuse because the obvious reading - "the users setting" - is wrong.
+        /* WHOSE data travels is core's decision, not this plugin's, and the obvious reading -
+           "the users setting" - is wrong.
 
-           Core gates its own <user_enrolments> on "empty($keptroles) && $users", with a
-           SECOND branch for a course copy that keeps roles (backup/moodle2/backup_stepslib.php,
-           byte-identical on 5.1 and 5.2). Kept roles come from the asynchronous course copy,
-           which sets the users setting to '1' whenever roles are kept AND user data is wanted
-           (lib/classes/task/asynchronous_copy_task.php).
+           A course copy can keep the enrolments of users holding chosen roles. Core gates its
+           own <user_enrolments> on "empty($keptroles) && $users" and has a SECOND branch that
+           joins {role_assignments} when roles are kept (backup/moodle2/backup_stepslib.php,
+           byte-identical on 5.1 and 5.2). The copy task sets the users setting to '1' whenever
+           roles are kept AND user data is wanted (lib/classes/task/asynchronous_copy_task.php).
 
-           Reading the setting alone therefore disagrees with core in both directions. With
-           kept roles and user data, the setting is 1 and this plugin would write EVERY
-           applicant's comment and profile snapshot while core writes only the enrolments of
-           users holding a kept role - free text belonging to people the copy deliberately
-           excluded, sitting in the archive file. It is dropped on restore, because the user
-           mapping misses, so nothing ever looks wrong. With kept roles and no user data, the
-           setting is 0 and this plugin would write nothing while core still writes those
-           enrolments, so the copy loses the comments for enrolments it does carry.
+           So "users is 1" does NOT mean "every user's data may travel". In a kept-roles copy
+           it means "the kept-role users' data may travel", and reading the setting alone put
+           every applicant's comment and profile snapshot into the archive - free text
+           belonging to the people the copy exists to exclude.
 
-           So the predicate below is core's, reproduced rather than approximated. */
+           WHETHER any of it travels is still the users setting, which is why the role check
+           is nested inside it rather than beside it. With user data off, the copy task sets
+           the setting to '0' and core forces the restore's own users setting off and its
+           enrolments setting to ENROL_NEVER: no apply instance and no user enrolment reaches
+           the destination, so nothing this plugin writes could ever be restored there. Core
+           still writes its <enrolment> rows in that cell - it re-enrols the kept-role users
+           through the MANUAL plugin after the restore instead - but for this plugin the same
+           write would be personal data in an archive with nowhere to go, which is the exact
+           exposure the rest of this method exists to prevent. Measured on 5.2: destination
+           enrol instances [manual, guest, self], zero user enrolments, zero submission rows. */
         $keptroles = $this->task->get_kept_roles();
         $users = $this->task->get_setting_value('users');
 
-        if (empty($keptroles) && $users) {
+        if ($users && empty($keptroles)) {
             $application->set_source_sql(
                 "SELECT ai.id, ai.userenrolmentid, ai.comment
                    FROM {enrol_apply_applicationinfo} ai
@@ -133,14 +138,19 @@ class backup_enrol_apply_plugin extends backup_enrol_plugin {
                instance-less record without inventing one; it is recorded in README.md rather
                than papered over. */
             $submission->set_source_table('enrol_apply_submission', ['enrolid' => backup::VAR_PARENTID]);
-        } else if (!empty($keptroles)) {
+        } else if ($users) {
             [$insql, $inparams] = $DB->get_in_or_equal($keptroles);
             $roleparams = [];
             foreach ($inparams as $inparam) {
                 $roleparams[] = backup_helper::is_sqlparam($inparam);
             }
 
-            /* EXISTS rather than core's INNER JOIN, and not as a stylistic preference: a user
+            /* Both halves of core's predicate matter and only one of them is obvious. The
+               role must be one of the kept ones, AND the assignment must be in THIS COURSE's
+               context - somebody who is a student here and a teacher elsewhere holds the kept
+               role, but not here, and core writes no enrolment for them.
+
+               EXISTS rather than core's INNER JOIN, and not as a stylistic preference: a user
                holding two of the kept roles matches the join twice, which would write the same
                application into the archive twice. Core tolerates that for its own enrolments;
                here it is free to avoid, and avoiding it keeps the element's ids unique. */

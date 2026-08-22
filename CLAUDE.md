@@ -338,14 +338,35 @@ backup/                      group mappings, comments and the durable trail, see
   personal data for users core excluded, and with kept roles and no user data it writes nothing
   while core still writes those enrolments. Reproduce core's whole predicate; do not narrow it.
 
-  Two things about testing it. `backup_controller::set_kept_roles()` throws
-  `cannot_set_keep_roles_wrong_mode` outside `backup::MODE_COPY`, so this needs its own backup
-  helper — the repo's existing one uses `MODE_SAMESITE`. And the assertion has to read
-  `course/enrolments.xml`, because the restore drops unmapped rows either way and a
-  restore-based test passes with the gate deleted.
+  **Nest the role check inside the users gate; do not put it beside one.** Core writes its own
+  kept-role `<enrolment>` rows even with user data off, and matching that is wrong here. With
+  user data off, core forces the restore's users setting off and its enrolments setting to
+  `ENROL_NEVER`, so no apply instance and no user enrolment reaches the destination — core
+  re-enrols the kept-role users through the manual plugin afterwards instead. Anything this
+  plugin wrote in that cell would be a comment and a profile snapshot in an archive with
+  nowhere to go, which is the exposure the gate exists to prevent.
+
+  **Both halves of the role predicate matter.** `ra.roleid IN (kept)` is the obvious one;
+  `ra.contextid = <course context>` is the one no fixture pins by accident, because the data
+  generator assigns every role at the course context. Somebody who is a student here and a
+  teacher elsewhere holds the kept role but not *here*, and core writes no enrolment for them —
+  a fixture with a role held in a second course is what keeps that half honest.
 
   Use `EXISTS` rather than core's `INNER JOIN {role_assignments}`: a user holding two of the
   kept roles matches the join twice and the same row is written to the archive twice.
+
+  **The leak reached the destination database, not only the archive — and believing otherwise
+  argues you out of the test that catches it.** `enrol_apply_applicationinfo` is keyed on the
+  `enrol_apply_userenrolment` mapping, which misses for an excluded user, so those rows really
+  are dropped on restore. `enrol_apply_submission` is keyed on the USER mapping, and a
+  kept-roles copy annotates every course-context role assignment into users.xml
+  (`backup_roles_structure_step`, ungated by kept roles), so that mapping resolves and the row
+  inserts. Drive `copy_helper::create_copy()` and its adhoc task and assert on the copied
+  course's rows.
+
+  Testing it needs its own backup helper: `backup_controller::set_kept_roles()` throws
+  `cannot_set_keep_roles_wrong_mode` outside `backup::MODE_COPY`, and the repo's existing helper
+  uses `MODE_SAMESITE`.
 
 - **Core wires a plugin's restore handlers to every `<enrol>` element, not just its own.** A
   restore with `enrolments` set to "never" maps every old enrol id onto the course's **manual**

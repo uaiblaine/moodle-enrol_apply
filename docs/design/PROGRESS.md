@@ -147,12 +147,22 @@ Record them here so a later reader does not "fix" them back.
 ## Defects found and deferred
 
 - ~~**The backup's `users` gate does not match core's.**~~ Fixed on
-  `fix/backup-kept-roles-gate`: core's whole predicate is reproduced, including the kept-roles
-  branch, for both the pending comments and the durable trail. Two traps were found writing the
-  test — `set_kept_roles()` throws outside `MODE_COPY`, so it needs its own backup helper, and
-  the assertion has to read `course/enrolments.xml` because a restore drops unmapped rows either
-  way and a restore-based test passes with the gate deleted. `EXISTS` is used rather than core's
-  `INNER JOIN`, because a user holding two kept roles matches the join twice.
+  `fix/backup-kept-roles-gate`. The role check is nested INSIDE the users gate rather than
+  placed beside it: core writes its own kept-role enrolments even with user data off, but in
+  that cell the restore reaches the destination with no apply instance and no user enrolment,
+  so anything this plugin wrote there would be personal data in an archive with nowhere to go.
+
+  **Two things I got wrong first, both caught by the review of the fix itself.** The first
+  version matched core exactly and so introduced that write — a regression in the one cell where
+  the fix buys nothing. And the whole PR, the CHANGELOG, `CLAUDE.md` and a test docblock all
+  stated that the leaked rows are "dropped on restore, so the only place this is visible is the
+  archive file", used as the argument for not writing a restore-based test. That is true for
+  `enrol_apply_applicationinfo` and **false** for `enrol_apply_submission`: the first is keyed on
+  the user-enrolment mapping, the second on the USER mapping, and a kept-roles copy annotates
+  every course-context role assignment into users.xml, so the second resolves. Measured against
+  the pre-fix code, the excluded applicants' comments and profile snapshots were inserted into
+  the copied course's database under live user ids. `test_an_excluded_applicant_does_not_reach_the_copied_course`
+  is the assertion that prose had argued out of existence, and it reddens against the pre-fix gate.
 - **`local_unifiedgrader` fails core's `test_table_coverage`** on both m501 and m502 — the same
   defect class fixed here, in another fleet repo. Eleven `local_iv*` plugins fail
   `test_all_providers_compliant` on the same stacks. Neither is this repo's to fix; noted so the
