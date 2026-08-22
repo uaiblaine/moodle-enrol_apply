@@ -215,6 +215,51 @@ final class backup_test extends \advanced_testcase {
     }
 
     /**
+     * An approved applicant's group membership survives a restore with users.
+     *
+     * It did not before. Group memberships are stamped with this plugin as their component so
+     * core's unenrol_user() can clean them up, and core routes any component starting with
+     * "enrol_" to enrol_plugin::restore_group_member() - whose base implementation is empty,
+     * with no fallback and no warning on that branch. The membership simply disappeared.
+     *
+     * @return void
+     */
+    public function test_an_approved_group_membership_survives_a_restore(): void {
+        global $DB;
+
+        [$course, $instance, $user] = $this->create_course_with_application();
+
+        $ueid = $DB->get_field('user_enrolments', 'id', ['enrolid' => $instance->id, 'userid' => $user->id], MUST_EXIST);
+        $this->plugin->confirm_enrolment([$ueid]);
+
+        $groupid = $DB->get_field('groups', 'id', ['courseid' => $course->id], IGNORE_MULTIPLE);
+        $this->assertTrue($DB->record_exists('groups_members', [
+            'groupid' => $groupid,
+            'userid' => $user->id,
+            'component' => 'enrol_apply',
+        ]), 'the approval should have created a stamped membership');
+
+        $newcourseid = $this->backup_and_restore($course, true);
+
+        $newgroupid = $DB->get_field('groups', 'id', ['courseid' => $newcourseid], IGNORE_MULTIPLE);
+        $this->assertNotEmpty($newgroupid);
+        $this->assertTrue(
+            $DB->record_exists('groups_members', ['groupid' => $newgroupid, 'userid' => $user->id]),
+            'the restored course should carry the membership'
+        );
+
+        /* And it keeps the stamp, so unenrol_user() can still remove it by component and
+           itemid - a membership restored without one is never cleaned up again. */
+        $newinstanceid = $DB->get_field('enrol', 'id', ['courseid' => $newcourseid, 'enrol' => 'apply'], MUST_EXIST);
+        $this->assertTrue($DB->record_exists('groups_members', [
+            'groupid' => $newgroupid,
+            'userid' => $user->id,
+            'component' => 'enrol_apply',
+            'itemid' => $newinstanceid,
+        ]));
+    }
+
+    /**
      * A cohort restriction restored into another site becomes a live refusal, not "no restriction".
      *
      * A cohort id names a different group of people on every other site, so it cannot be

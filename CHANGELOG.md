@@ -104,6 +104,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- An approved applicant's group membership is no longer silently lost when the course is
+  restored. Memberships are stamped with this plugin as their component so that core's
+  `unenrol_user()` can clean them up, and core routes any component starting with `enrol_` to
+  `enrol_plugin::restore_group_member()` — whose base implementation is empty. Unlike the
+  generic branch beside it, that path has no fallback and logs no warning, so the membership
+  simply disappeared. The base implementation is empty on purpose, because the plugins core
+  had in mind re-derive their memberships from a cohort or a linked course; this one cannot,
+  because the membership follows a one-off approval decision that nothing re-runs.
+
 - The approver's notification now shows **what the applicant typed**. The custom profile
   fields were previously read back out of the database, so an approver reviewing an
   application saw whatever was already on the account rather than the answers in front of
