@@ -237,4 +237,18 @@ Record them here so a later reader does not "fix" them back.
 - **A five-reviewer adversarial pass on a finished, green, mutation-checked slice still found
   nine real defects**, several of them in the privacy behaviour the slice existed to provide.
   Green tests and a clean matrix say the code does what the tests say; they say nothing about
-  whether the tests say the right thing.
+  whether the tests say the right thing. Reviewing the *fix* for the deferred defect then found
+  two more, one of them a regression that fix had introduced — so the pass is worth running on
+  small changes too, not only on slices.
+- **The most expensive thing in this repo is a confident wrong sentence, not a bug.** Both
+  adversarial passes found one, and both times it was load-bearing in the same way: it argued
+  the next person out of the test that catches the problem. "The observer deliberately does not
+  notify" (wrong, it does). "The leaked rows are dropped on restore, so the only place this is
+  visible is the archive file" (wrong for the durable trail, whose key is the user mapping —
+  and used explicitly as the reason not to write the restore-based test that reddens against
+  the unfixed code). Both survived review, because a sentence that explains *why* something
+  need not be checked reads exactly like diligence.
+
+  The practical rule: when a comment says a thing cannot happen, or cannot be tested, treat that
+  as the highest-value claim in the diff and measure it. Prose in this repo is load-bearing by
+  design, which is precisely what makes a wrong sentence worse than no sentence.
