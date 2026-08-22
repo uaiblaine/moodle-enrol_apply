@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<XMLDB PATH="enrol/apply/db" VERSION="20260810" COMMENT="XMLDB file for Moodle enrol/apply"
+<XMLDB PATH="enrol/apply/db" VERSION="20260822" COMMENT="XMLDB file for Moodle enrol/apply"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:noNamespaceSchemaLocation="../../../lib/xmldb/xmldb.xsd"
 >
@@ -14,6 +14,31 @@
         <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
         <KEY NAME="userenrolment" TYPE="foreign-unique" FIELDS="userenrolmentid" REFTABLE="user_enrolments" REFFIELDS="id"/>
       </KEYS>
+    </TABLE>
+    <TABLE NAME="enrol_apply_submission" COMMENT="Durable record of one enrolment application: what was submitted, what was decided, by whom and when.">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="courseid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="course applied for; half of the natural key"/>
+        <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="applicant; zeroed when the course is deleted"/>
+        <FIELD NAME="enrolid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="enrol instance applied to, for the backup"/>
+        <FIELD NAME="userenrolmentid" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="reference only, never a key: the row it points at is deleted on cancellation"/>
+        <FIELD NAME="comment" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="comment submitted with the application"/>
+        <FIELD NAME="userinfodata" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="frozen JSON snapshot of the profile values submitted"/>
+        <FIELD NAME="status" TYPE="int" LENGTH="4" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="0 pending, 1 approved, 2 waiting, 3 cancelled"/>
+        <FIELD NAME="outcomemessage" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="message the decider wrote to the applicant"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="when the application was submitted; the retention sweep reads this"/>
+        <FIELD NAME="timedecided" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="when it was decided, 0 while undecided"/>
+        <FIELD NAME="decidedby" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="who decided it; zeroed when the course is deleted"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="courseuser" UNIQUE="false" FIELDS="courseid, userid" COMMENT="the natural lookup key; deliberately NOT unique, see db/upgrade.php"/>
+        <INDEX NAME="enrolid" UNIQUE="false" FIELDS="enrolid"/>
+        <INDEX NAME="timecreated" UNIQUE="false" FIELDS="timecreated"/>
+        <INDEX NAME="decidedby" UNIQUE="false" FIELDS="decidedby"/>
+      </INDEXES>
     </TABLE>
     <TABLE NAME="enrol_apply_groups" COMMENT="Groups an applicant is added to once their enrolment application is approved.">
       <FIELDS>
