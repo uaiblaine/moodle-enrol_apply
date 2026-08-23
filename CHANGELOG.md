@@ -31,6 +31,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **A decider can choose which groups an approved applicant joins**, on the enrolment
+  applications queue, instead of the groups being fixed on the enrolment method. Choosing
+  nothing keeps the method's own list, so nothing changes for a site that does not use it. A
+  group belonging to another course is refused, and the choice is kept on the application's
+  durable record.
 - **A decider can write a message to the applicant**, on the enrolment applications queue, and it
   travels with whichever decision they take — approval, deferral or cancellation. It appears in
   the notification the applicant receives, below the standard wording, and is kept on the

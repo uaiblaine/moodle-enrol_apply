@@ -341,7 +341,7 @@ class enrol_apply_plugin extends enrol_plugin {
         global $DB, $USER;
 
         // Group membership follows approval, never the bare application.
-        $this->add_instance_groups($instance, $userid);
+        $this->add_instance_groups($instance, $userid, (int) $userenrolmentid);
 
         /* Stamped here rather than in confirm_enrolment() so that an approval made from
            core's "Edit enrolment" screen records its decider too: that route reaches this
@@ -406,33 +406,56 @@ class enrol_apply_plugin extends enrol_plugin {
     }
 
     /**
-     * Add the applicant to every group configured on the instance.
+     * Add the applicant to the groups the decider chose, or to the instance's own list.
      *
      * Memberships are tagged with this plugin as their component so that core removes
      * them again when the enrolment goes away (see unenrol_user() in lib/enrollib.php,
      * which only cleans up memberships carrying component 'enrol_apply').
      *
+     * The decider's choice is read from the stored record rather than received as an argument,
+     * and that is load bearing. An approval taken through the queue completes TWICE over: the
+     * enrolment update dispatches its hook before writing the row, so the hook callback finishes
+     * the approval first and the queue finishes it again afterwards. Were the two given
+     * different lists, the memberships would accumulate rather than replace one another, and a
+     * group the approver had deselected would be joined anyway with nothing left to remove it.
+     * Reading one stored answer is what makes both passes agree. Where nothing was recorded,
+     * the instance's own list applies.
+     *
      * @param stdClass $instance Course enrol instance.
-     * @param int $userid User to add to the configured groups.
+     * @param int $userid User to add to the groups.
+     * @param int $userenrolmentid User enrolment whose recorded choice wins, 0 for none.
      * @return void
      */
-    protected function add_instance_groups($instance, $userid) {
+    protected function add_instance_groups($instance, $userid, int $userenrolmentid = 0) {
         global $CFG, $DB;
 
         require_once($CFG->dirroot . '/group/lib.php');
 
-        /* Only groups that still belong to this course are used: a group deleted after
-           the instance was configured leaves its mapping row behind, and groups_add_member()
-           throws on an unknown group id. */
-        $groups = $DB->get_records_sql(
-            "SELECT g.id
-               FROM {enrol_apply_groups} eag
-               JOIN {groups} g ON g.id = eag.groupid AND g.courseid = :courseid
-              WHERE eag.enrolid = :enrolid",
-            ['courseid' => $instance->courseid, 'enrolid' => $instance->id]
-        );
-        foreach ($groups as $group) {
-            groups_add_member($group->id, $userid, 'enrol_apply', $instance->id);
+        // The decider's choice, read from the record and not received; see the docblock.
+        $chosen = \enrol_apply\local\submission::chosen_groups($userenrolmentid);
+
+        if ($chosen === null) {
+            /* Only groups that still belong to this course are used: a group deleted after
+               the instance was configured leaves its mapping row behind, and groups_add_member()
+               throws on an unknown group id. */
+            $groups = $DB->get_records_sql(
+                "SELECT g.id
+                   FROM {enrol_apply_groups} eag
+                   JOIN {groups} g ON g.id = eag.groupid AND g.courseid = :courseid
+                  WHERE eag.enrolid = :enrolid",
+                ['courseid' => $instance->courseid, 'enrolid' => $instance->id]
+            );
+            $groupids = array_keys($groups);
+        } else {
+            // Re-checked against the course even though the caller validated: the record can be
+            // older than the group it names, and groups_add_member() throws on an unknown id.
+            [$insql, $params] = $DB->get_in_or_equal($chosen, SQL_PARAMS_NAMED, 'gid');
+            $params['courseid'] = $instance->courseid;
+            $groupids = array_keys($DB->get_records_select('groups', "courseid = :courseid AND id {$insql}", $params));
+        }
+
+        foreach ($groupids as $groupid) {
+            groups_add_member($groupid, $userid, 'enrol_apply', $instance->id);
         }
     }
 
@@ -691,9 +714,10 @@ class enrol_apply_plugin extends enrol_plugin {
      *
      * @param array $enrols User enrolment ids to confirm.
      * @param string $message Message the decider wrote to the applicant, empty for none.
+     * @param array|null $decision Chosen groups and enrolment period, null for the instance defaults.
      * @return void
      */
-    public function confirm_enrolment($enrols, string $message = '') {
+    public function confirm_enrolment($enrols, string $message = '', ?array $decision = null) {
         global $DB;
 
         foreach ($enrols as $enrol) {
@@ -714,11 +738,35 @@ class enrol_apply_plugin extends enrol_plugin {
                carried any further than here is dropped in silence. */
             \enrol_apply\local\submission::record_outcome_message((int) $userenrolment->id, $message);
 
-            // Set timestart and timeend if an enrolment duration is configured.
+            /* Allowlisted here, per instance, and not once for the batch: the ids arrive from a
+               posted form and the batch can span courses, so a group that is legitimate for one
+               application is not necessarily legitimate for the next. groups_get_all_groups()
+               is keyed by group id, so the comparison is array_key_exists and never in_array,
+               which would compare an id against group names. */
+            if ($decision !== null && !empty($decision['groups'])) {
+                $allowed = groups_get_all_groups($instance->courseid);
+                $chosen = array_values(array_filter(
+                    array_map('intval', $decision['groups']),
+                    static function (int $groupid) use ($allowed): bool {
+                        return array_key_exists($groupid, $allowed);
+                    }
+                ));
+                \enrol_apply\local\submission::record_decided_groups((int) $userenrolment->id, $chosen);
+            }
+
+            /* The decider's period, falling back to the instance's. Recorded on the enrolment
+               and not on the record: core already holds an enrolment's dates, and duplicating
+               them would give the report two sources that can disagree. */
             $userenrolment->timestart = time();
             $userenrolment->timeend = 0;
             if ($instance->enrolperiod) {
                 $userenrolment->timeend = $userenrolment->timestart + $instance->enrolperiod;
+            }
+            if ($decision !== null && !empty($decision['timestart'])) {
+                $userenrolment->timestart = (int) $decision['timestart'];
+            }
+            if ($decision !== null && array_key_exists('timeend', $decision)) {
+                $userenrolment->timeend = (int) $decision['timeend'];
             }
 
             /* update_user_enrol() dispatches before_user_enrolment_updated, so the

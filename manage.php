@@ -112,10 +112,15 @@ if ($formaction !== '' && $userenrolments) {
        markup into the durable record, which the report and the privacy export both read. */
     $outcomemessage = trim(optional_param('outcomemessage', '', PARAM_TEXT));
 
+    /* Cleaned to integers here and allowlisted per instance inside confirm_enrolment(), not
+       here: the batch can span courses when the queue is opened site wide, so a group that is
+       legitimate for one application is not necessarily legitimate for the next. */
+    $decision = ['groups' => optional_param_array('groups', [], PARAM_INT)];
+
     $enrolapply = enrol_get_plugin('apply');
     switch ($formaction) {
         case 'confirm':
-            $enrolapply->confirm_enrolment($userenrolments, $outcomemessage);
+            $enrolapply->confirm_enrolment($userenrolments, $outcomemessage, $decision);
             break;
         case 'wait':
             $enrolapply->wait_enrolment($userenrolments, $outcomemessage);

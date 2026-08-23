@@ -324,6 +324,72 @@ class submission {
     }
 
     /**
+     * Record the groups the decider chose for the applicant to join.
+     *
+     * Stored rather than passed along, for the same reason the outcome message is:
+     * complete_approval() runs twice for a queue approval and only the second call would carry
+     * a chosen list. Two calls passing different lists would UNION them, because
+     * groups_add_member() adds and never replaces - so a group the approver deselected would be
+     * joined anyway and nothing would remove it. Both calls read this column instead, so both
+     * see the same answer.
+     *
+     * An empty list is stored as an empty string and means "the decider chose nothing", which
+     * chosen_groups() reports as null so the caller can fall back to the instance's own list.
+     * That is why this is not simply a comma-joined implode of whatever arrived.
+     *
+     * @param int $userenrolmentid User enrolment the decision applies to.
+     * @param array $groupids Group ids the decider chose, already validated by the caller.
+     * @return void
+     */
+    public static function record_decided_groups(int $userenrolmentid, array $groupids): void {
+        global $DB;
+
+        $clean = array_values(array_unique(array_filter(array_map('intval', $groupids))));
+        if (!$clean) {
+            return;
+        }
+
+        $rows = $DB->get_records('enrol_apply_submission', ['userenrolmentid' => $userenrolmentid], '', 'id');
+        foreach ($rows as $row) {
+            $DB->update_record('enrol_apply_submission', (object) [
+                'id' => $row->id,
+                'decidedgroups' => implode(',', $clean),
+            ]);
+        }
+    }
+
+    /**
+     * The groups the decider chose, or null when they chose none.
+     *
+     * Null and an empty array mean different things here and the caller depends on the
+     * difference: null is "no choice was recorded, use the instance's list", while an empty
+     * array would be "the decider chose no groups at all". Only the first is reachable today,
+     * because record_decided_groups() does not store an empty choice - but returning null for
+     * both would quietly make an explicit "no groups" impossible to add later.
+     *
+     * @param int $userenrolmentid User enrolment the decision applies to.
+     * @return array|null Group ids, or null when nothing was recorded.
+     */
+    public static function chosen_groups(int $userenrolmentid): ?array {
+        global $DB;
+
+        $rows = $DB->get_records(
+            'enrol_apply_submission',
+            ['userenrolmentid' => $userenrolmentid],
+            'timecreated DESC, id DESC',
+            'id, decidedgroups',
+            0,
+            1
+        );
+        $row = reset($rows);
+        if (!$row || trim((string) $row->decidedgroups) === '') {
+            return null;
+        }
+
+        return array_values(array_filter(array_map('intval', explode(',', (string) $row->decidedgroups))));
+    }
+
+    /**
      * The message the decider wrote, for the notification that announces the decision.
      *
      * Read from the record rather than passed along, which is what lets one lookup serve all
