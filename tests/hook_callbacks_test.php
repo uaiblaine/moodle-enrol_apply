@@ -26,6 +26,7 @@
 namespace enrol_apply;
 
 use enrol_apply\local\submission;
+use PHPUnit\Framework\Attributes\CoversClass;
 
 /**
  * Tests for what course deletion does to the durable application trail.
@@ -34,9 +35,9 @@ use enrol_apply\local\submission;
  * @category   test
  * @copyright  2026 Anderson Blaine
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers     \enrol_apply\hook_callbacks
- * @covers     \enrol_apply\observers
  */
+#[CoversClass(hook_callbacks::class)]
+#[CoversClass(observers::class)]
 final class hook_callbacks_test extends \advanced_testcase {
     /** @var \enrol_apply_plugin The plugin under test. */
     protected $plugin;

@@ -30,6 +30,7 @@ use backup_controller;
 use backup_setting;
 use restore_controller;
 use restore_dbops;
+use PHPUnit\Framework\Attributes\CoversClass;
 
 /**
  * Tests for backing up and restoring the plugin's own data.
@@ -38,9 +39,9 @@ use restore_dbops;
  * @category   test
  * @copyright  2026 Anderson Blaine
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers     \backup_enrol_apply_plugin
- * @covers     \restore_enrol_apply_plugin
  */
+#[CoversClass(\backup_enrol_apply_plugin::class)]
+#[CoversClass(\restore_enrol_apply_plugin::class)]
 final class backup_test extends \advanced_testcase {
     /** @var int Fixed submission timestamp, so a restored row can be matched to its original. */
     protected const SUBMITTED_AT = 1750000000;

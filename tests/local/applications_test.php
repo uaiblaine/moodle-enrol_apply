@@ -25,6 +25,8 @@
 
 namespace enrol_apply\local;
 
+use PHPUnit\Framework\Attributes\CoversClass;
+
 /**
  * Tests for the mentee lookup.
  *
@@ -32,8 +34,8 @@ namespace enrol_apply\local;
  * @category   test
  * @copyright  2026 Anderson Blaine
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers     \enrol_apply\local\applications
  */
+#[CoversClass(applications::class)]
 final class applications_test extends \advanced_testcase {
     /**
      * Create a role assignable in user contexts that grants the manage capability.
