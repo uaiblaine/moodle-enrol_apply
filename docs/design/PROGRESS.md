@@ -139,10 +139,15 @@ Every fix is mutation-checked and reddens exactly its own named test.
 
 ## Next
 
-**Slice 10** (the per-field snapshot columns) and **slice I** (decision-time enrolment
-parameters and the modern queue). Slice 9 is closed; slice 11 has not been re-read since the
-plan was written and should be checked against core before it is started, on the evidence of the
-last three slices.
+**Slice I** (decision-time enrolment parameters, the outcome message and the modern queue), then
+**slice J** (bulk actions on the participants page). Those are the last two.
+
+There is **no slice 10 and no slice 11**, and an earlier version of this section said there were.
+The plan is eleven slices — 1 to 9, then I and J (`implementation-plan.md:8`) — and slice 10, the
+`enrol_apply_submission_field` child table with its per-field columns and filters, is
+*"explicitly deferred by decision and is not planned here"* (`:9-11`). Slice 6 lays its ground and
+slice 7 records which report behaviour waits for it, which is why it is referred to by number in
+both; that is a forward reference, not a queued slice.
 
 `info.php` is now reconsiderable for the first time: slice 8 gave its site-wide scope somewhere
 to go, so the twelve costs recorded under "Deferred out of slice 7" can be weighed against a real
