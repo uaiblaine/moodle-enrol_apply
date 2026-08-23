@@ -32,10 +32,14 @@ use stdClass;
  *  - It is NOT unique. The design pseudonymises on course deletion by zeroing userid, so a
  *    deleted course with two applicants produces two rows with the same courseid and
  *    userid = 0. A unique key raises dml_write_exception on the second one - measured, not
- *    reasoned. Cancelling and re-applying legitimately produces a second row too, and so
- *    does restoring a course into one that already holds the trail. "One live application
- *    per course and user" is enforced where it can be: the lock in
- *    enrol_apply_plugin::submit_application().
+ *    reasoned. Cancelling and re-applying legitimately produces a second row too, so does
+ *    restoring a course into one that already holds the trail, and so does a course carrying
+ *    two apply instances - which the plugin supports on purpose. The invariant that IS
+ *    enforced is narrower than the key would have been: "one live application per enrol
+ *    INSTANCE and user", by the lock in enrol_apply_plugin::submit_application(), which is
+ *    keyed on the instance id and the user and guards a user_enrolments lookup by enrolid.
+ *    Nothing anywhere enforces one per course and user, so even without pseudonymisation the
+ *    key could not have been unique.
  *  - Only userid and decidedby carry a foreign key, and neither courseid, enrolid nor
  *    userenrolmentid does. A foreign key here is documentation and an index - Moodle's
  *    generators emit no database-level constraint (lib/ddl/sql_generator.php,
@@ -79,8 +83,14 @@ class submission {
     /**
      * Record a new application.
      *
-     * Called from enrol_apply_plugin::apply(), inside the same lock that serialises the
-     * enrolment itself, so the row and the enrolment are created together or not at all.
+     * Called from enrol_apply_plugin::apply(), inside the lock that serialises submissions for
+     * one instance and user, so two concurrent applications cannot both write a row.
+     *
+     * That lock gives mutual exclusion, NOT atomicity, and the difference matters: the
+     * enrolment, the applicationinfo row and this one are three separately committed writes
+     * with no transaction around them, so a failure part way through can leave an enrolment
+     * with no record behind it. That is why decide() leaves a row it cannot find alone rather
+     * than treating its absence as impossible.
      *
      * @param stdClass $instance Course enrol instance applied to.
      * @param int $userid Applicant.
@@ -160,9 +170,15 @@ class submission {
      * then the trigger). A row that kept a real userid past that point would be personal data
      * that no subject access request can reach and no erasure request can delete - silently.
      *
-     * What survives is what an audit needs and nobody can be identified by: the dates, the
-     * status, and the course, enrol and user enrolment ids, all of which now name rows that
-     * no longer exist.
+     * What survives is what an audit needs, with both user columns zeroed: the dates, the
+     * status, and the course, enrol and user enrolment ids.
+     *
+     * That is pseudonymisation and not anonymisation, and the distinction is not pedantry.
+     * userenrolmentid is retained, and logstore_standard records enrolment events with
+     * objecttable = 'user_enrolments', objectid = that same id and the userid alongside - so
+     * on a site keeping its standard log, a retained row can still be re-attached to a person
+     * by joining it. The row is stripped of everything that identifies somebody directly; it
+     * is not beyond re-identification by an administrator with the logs.
      *
      * @param int $courseid Course being deleted.
      * @return void

@@ -230,6 +230,291 @@ final class backup_test extends \advanced_testcase {
     }
 
     /**
+     * Back a course up as a COPY that keeps only the given roles, and return its enrolments.xml.
+     *
+     * MODE_COPY is not a stylistic choice: backup_controller::set_kept_roles() throws
+     * cannot_set_keep_roles_wrong_mode in any other mode, so a copy controller is the only way
+     * to reach the branch under test. The roles reach the plan at execute_plan() time, just
+     * before the plan runs, which is why they are readable from define_structure().
+     *
+     * @param \stdClass $course Course to copy.
+     * @param array $keptroles Role ids whose holders' enrolments the copy keeps.
+     * @param bool $userdata Value of the users setting, as the copy task would set it.
+     * @return string Contents of course/enrolments.xml.
+     */
+    protected function copy_enrolments_xml($course, array $keptroles, bool $userdata): string {
+        global $CFG, $USER;
+
+        $CFG->backup_file_logger_level = backup::LOG_NONE;
+
+        $bc = new backup_controller(
+            backup::TYPE_1COURSE,
+            $course->id,
+            backup::FORMAT_MOODLE,
+            backup::INTERACTIVE_NO,
+            backup::MODE_COPY,
+            $USER->id
+        );
+        $bc->set_kept_roles($keptroles);
+        $bc->get_plan()->get_setting('users')->set_status(backup_setting::NOT_LOCKED);
+        $bc->get_plan()->get_setting('users')->set_value($userdata);
+
+        $basepath = $bc->get_plan()->get_basepath();
+        $bc->execute_plan();
+        $results = $bc->get_results();
+        $bc->destroy();
+
+        if (!file_exists($basepath . '/moodle_backup.xml')) {
+            $results['backup_destination']->extract_to_pathname(
+                get_file_packer('application/vnd.moodle.backup'),
+                $basepath
+            );
+        }
+
+        $xml = $basepath . '/course/enrolments.xml';
+        $this->assertFileExists($xml, 'a copy must still produce an enrolments file');
+
+        return file_get_contents($xml);
+    }
+
+    /**
+     * Seed a second applicant holding a role the copy will not keep.
+     *
+     * @param \stdClass $course Course to apply to.
+     * @param \stdClass $instance Apply instance to apply to.
+     * The pending comment and the durable record get DIFFERENT markers, suffixed rather than
+     * shared, so that an assertion can tell which of the two elements it is looking at. Both
+     * are gated separately and a test that could not distinguish them would hold only one.
+     *
+     * @param string $comment Marker to submit, suffixed per table.
+     * @param string $roleshortname Role to assign.
+     * @param \stdClass|null $rolecourse Course to hold the role in, null for the applied-to course.
+     * @return \stdClass The applicant.
+     */
+    protected function add_applicant(
+        $course,
+        $instance,
+        string $comment,
+        string $roleshortname,
+        ?\stdClass $rolecourse = null
+    ): \stdClass {
+        global $DB;
+
+        $user = $this->getDataGenerator()->create_user();
+        $this->getDataGenerator()->enrol_user(
+            $user->id,
+            ($rolecourse ?? $course)->id,
+            $DB->get_field('role', 'id', ['shortname' => $roleshortname], MUST_EXIST)
+        );
+        if ($rolecourse) {
+            // Still an applicant here, just without the kept role in THIS course.
+            $this->getDataGenerator()->enrol_user(
+                $user->id,
+                $course->id,
+                $DB->get_field('role', 'id', ['shortname' => 'student'], MUST_EXIST)
+            );
+        }
+
+        $this->plugin->enrol_user($instance, $user->id, $instance->roleid, 0, 0, ENROL_USER_SUSPENDED);
+        $ueid = $DB->get_field('user_enrolments', 'id', ['enrolid' => $instance->id, 'userid' => $user->id], MUST_EXIST);
+        $DB->insert_record('enrol_apply_applicationinfo', (object) [
+            'userenrolmentid' => $ueid,
+            'comment' => $comment . 'PENDING',
+        ]);
+        $DB->insert_record('enrol_apply_submission', (object) [
+            'courseid' => $course->id,
+            'userid' => $user->id,
+            'enrolid' => $instance->id,
+            'userenrolmentid' => $ueid,
+            'comment' => $comment . 'RECORD',
+            'userinfodata' => '',
+            'status' => \enrol_apply\local\submission::STATUS_PENDING,
+            'outcomemessage' => '',
+            'timecreated' => self::SUBMITTED_AT,
+            'timedecided' => 0,
+            'decidedby' => 0,
+        ]);
+
+        return $user;
+    }
+
+    /**
+     * A course copy that keeps roles carries only the kept-role users' application data.
+     *
+     * The users setting is 1 for this copy - the copy task sets it whenever roles are kept and
+     * user data is wanted - so a gate reading that setting alone writes every applicant's
+     * comment and profile snapshot into the archive, including those of the people the copy
+     * exists to leave out.
+     *
+     * This reads the archive; test_an_excluded_applicant_does_not_reach_the_copied_course
+     * asserts the same gate against the copied course's database, which is where those rows
+     * were actually landing.
+     *
+     * @return void
+     */
+    public function test_a_kept_roles_copy_carries_only_the_kept_users_data(): void {
+        global $DB;
+
+        [$course, $instance] = $this->create_course_with_application();
+        $this->add_applicant($course, $instance, 'KEPTROLEAPPLICANT', 'editingteacher');
+        $this->add_applicant($course, $instance, 'DROPPEDROLEAPPLICANT', 'student');
+
+        /* The third applicant separates the two halves of core's predicate. They hold the kept
+           role, but in a DIFFERENT course, and are only a student here - so core writes no
+           enrolment for them. Without this fixture the "ra.contextid = ?" conjunct is
+           unguarded: deleting it leaves every assertion green while the plugin starts writing
+           the data of anyone holding the kept role anywhere on the site. */
+        $elsewhere = $this->getDataGenerator()->create_course();
+        $this->add_applicant($course, $instance, 'OTHERCONTEXTAPPLICANT', 'editingteacher', $elsewhere);
+
+        $keptroleid = (int) $DB->get_field('role', 'id', ['shortname' => 'editingteacher'], MUST_EXIST);
+        $xml = $this->copy_enrolments_xml($course, [$keptroleid], true);
+
+        /* The control: the kept-role applicant's data really is written, so absence means
+           something. Both elements are asserted, because both are gated separately. */
+        $this->assertStringContainsString('KEPTROLEAPPLICANTPENDING', $xml);
+        $this->assertStringContainsString('KEPTROLEAPPLICANTRECORD', $xml);
+
+        $this->assertStringNotContainsString('DROPPEDROLEAPPLICANTPENDING', $xml);
+        $this->assertStringNotContainsString('DROPPEDROLEAPPLICANTRECORD', $xml);
+
+        $this->assertStringNotContainsString('OTHERCONTEXTAPPLICANTPENDING', $xml);
+        $this->assertStringNotContainsString('OTHERCONTEXTAPPLICANTRECORD', $xml);
+    }
+
+    /**
+     * A course copy that keeps roles WITHOUT user data carries no application data at all.
+     *
+     * Core does write its own kept-role enrolments in this cell, and matching that was this
+     * fix's first instinct - wrongly. With user data off, core forces the restore's users
+     * setting off and its enrolments setting to ENROL_NEVER, so no apply instance and no user
+     * enrolment reaches the destination; core re-enrols the kept-role users through the manual
+     * plugin afterwards instead. Anything this plugin wrote there would be a comment and a
+     * profile snapshot in an archive with nowhere to go - the same exposure the gate exists to
+     * prevent, in the one cell where it buys nothing.
+     *
+     * The control is the cell above: with user data on, the same fixture DOES travel.
+     *
+     * @return void
+     */
+    public function test_a_kept_roles_copy_without_user_data_carries_nothing(): void {
+        global $DB;
+
+        [$course, $instance] = $this->create_course_with_application();
+        $this->add_applicant($course, $instance, 'KEPTROLEAPPLICANT', 'editingteacher');
+
+        $keptroleid = (int) $DB->get_field('role', 'id', ['shortname' => 'editingteacher'], MUST_EXIST);
+        $xml = $this->copy_enrolments_xml($course, [$keptroleid], false);
+
+        // The precondition: core really did write its own enrolment, so the archive is not empty.
+        $this->assertStringContainsString('<enrolment id=', $xml);
+
+        $this->assertStringNotContainsString('KEPTROLEAPPLICANTPENDING', $xml);
+        $this->assertStringNotContainsString('KEPTROLEAPPLICANTRECORD', $xml);
+    }
+
+    /**
+     * An applicant holding two kept roles is written once, not twice.
+     *
+     * Core's own kept-roles query joins {role_assignments}, so a user holding two of the kept
+     * roles matches twice. Nothing downstream would break, but the archive would carry the
+     * same application under the same id twice.
+     *
+     * @return void
+     */
+    public function test_an_applicant_with_two_kept_roles_is_written_once(): void {
+        global $DB;
+
+        [$course, $instance] = $this->create_course_with_application();
+        $applicant = $this->add_applicant($course, $instance, 'TWICEHELDROLES', 'editingteacher');
+        $this->getDataGenerator()->enrol_user(
+            $applicant->id,
+            $course->id,
+            $DB->get_field('role', 'id', ['shortname' => 'teacher'], MUST_EXIST)
+        );
+
+        $kept = [
+            (int) $DB->get_field('role', 'id', ['shortname' => 'editingteacher'], MUST_EXIST),
+            (int) $DB->get_field('role', 'id', ['shortname' => 'teacher'], MUST_EXIST),
+        ];
+        $xml = $this->copy_enrolments_xml($course, $kept, true);
+
+        $this->assertEquals(1, substr_count($xml, 'TWICEHELDROLESPENDING'));
+        $this->assertEquals(1, substr_count($xml, 'TWICEHELDROLESRECORD'));
+    }
+
+    /**
+     * The excluded applicant's record does not reach the copied course's database.
+     *
+     * This test exists because the note that used to stand here was wrong, and wrong in the
+     * direction that discourages writing it. It said the leaked rows were "dropped on restore,
+     * because the user mapping misses, so the only place this is ever visible is the archive
+     * file". That holds for enrol_apply_applicationinfo, which is keyed on the user-enrolment
+     * mapping - and NOT for enrol_apply_submission, which is keyed on the user mapping. In a
+     * kept-roles copy core's roles step annotates every course-context role assignment, so the
+     * excluded applicant IS in users.xml and their user mapping DOES resolve. Measured against
+     * the pre-fix code: their comment and profile snapshot were inserted into the destination
+     * course's table, under a live user id, for somebody with no enrolment there at all.
+     *
+     * So the blast radius was a live database, not only an archive, and the assertion below -
+     * which the old note argued would be vacuous - goes red without the gate.
+     *
+     * It drives copy_helper, not a hand-built controller pair, so the whole production path
+     * runs including the manual re-enrolment core performs after a copy.
+     *
+     * @return void
+     */
+    public function test_an_excluded_applicant_does_not_reach_the_copied_course(): void {
+        global $CFG, $DB;
+
+        require_once($CFG->dirroot . '/backup/util/helper/copy_helper.class.php');
+
+        $this->preventResetByRollback();
+        $CFG->backup_file_logger_level = backup::LOG_NONE;
+
+        [$course, $instance] = $this->create_course_with_application();
+        $kept = $this->add_applicant($course, $instance, 'KEPTROLEAPPLICANT', 'editingteacher');
+        $excluded = $this->add_applicant($course, $instance, 'DROPPEDROLEAPPLICANT', 'student');
+        $keptroleid = (int) $DB->get_field('role', 'id', ['shortname' => 'editingteacher'], MUST_EXIST);
+
+        $formdata = (object) [
+            'courseid' => $course->id,
+            'fullname' => 'Copy of the course',
+            'shortname' => $course->shortname . '_copy',
+            'category' => $course->category,
+            'visible' => 1,
+            'startdate' => $course->startdate,
+            'enddate' => 0,
+            'idnumber' => '',
+            'userdata' => 1,
+            'role_' . $keptroleid => $keptroleid,
+        ];
+        $result = \copy_helper::create_copy(\copy_helper::process_formdata($formdata));
+        $newcourseid = (int) \restore_controller::load_controller($result['restoreid'])->get_courseid();
+
+        $task = \core\task\manager::get_next_adhoc_task(time());
+        $this->assertInstanceOf(\core\task\asynchronous_copy_task::class, $task);
+        ob_start();
+        $task->execute();
+        ob_end_clean();
+        \core\task\manager::adhoc_task_complete($task);
+
+        $records = $DB->get_records('enrol_apply_submission', ['courseid' => $newcourseid]);
+        $userids = array_map(static function (\stdClass $row): int {
+            return (int) $row->userid;
+        }, array_values($records));
+
+        /* The control: the kept-role applicant's record really did make the journey, so the
+           excluded one's absence is the gate working rather than the copy failing. */
+        $this->assertContains((int) $kept->id, $userids);
+        $this->assertNotContains((int) $excluded->id, $userids);
+
+        foreach ($records as $record) {
+            $this->assertStringNotContainsString('DROPPEDROLEAPPLICANT', (string) $record->comment);
+        }
+    }
+
+    /**
      * Restore a backup of one course into another, existing course.
      *
      * @param \stdClass $course Course to back up.

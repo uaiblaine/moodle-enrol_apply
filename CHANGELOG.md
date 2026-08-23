@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Fixed
+
+- **A course copy that keeps roles no longer copies the application data of users it was
+  meant to leave out.** Core backs up only the enrolments of users holding a kept role, but the
+  copy sets the site's `users` backup setting to 1 whenever roles are kept and user data is
+  wanted — so this plugin, which read that setting alone, carried every applicant's comment and
+  profile snapshot, including those of the people the copy exists to exclude.
+
+  The excluded applicants' durable records did not merely sit in the archive: they were
+  **inserted into the copied course's database**, under live user ids, for people with no
+  enrolment in that course at all. Their pending comments were dropped, because those are keyed
+  on the user-enrolment mapping, but the durable records are keyed on the user mapping — and a
+  kept-roles copy puts every course-context role holder into the backup's user list, so that
+  mapping resolves.
+
 ### Added
 
 - Every application now leaves a durable record — the comment, the profile details entered,

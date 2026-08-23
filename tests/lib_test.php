@@ -1316,16 +1316,19 @@ final class lib_test extends \advanced_testcase {
     }
 
     /**
-     * A second application for the same course and user is refused before it reaches apply().
+     * A second application through the same enrolment method is refused before it reaches apply().
      *
-     * The plan for this slice specified a UNIQUE (courseid, userid) key to enforce it. That
-     * key is incompatible with pseudonymising a deleted course by zeroing userid, so the
-     * guarantee lives where it always did: the lock and the already-applied check in
-     * submit_application(). This test is what holds it now that no key does.
+     * The plan for this slice specified a UNIQUE (courseid, userid) key. That key is
+     * incompatible with pseudonymising a deleted course by zeroing userid - and what replaces
+     * it is narrower than the key would have been, which is worth being precise about. The
+     * lock in submit_application() is keyed on the INSTANCE and the user, and the check behind
+     * it looks up user_enrolments by enrolid, so what is enforced is one live application per
+     * enrolment method. A course carrying two apply instances lets the same person hold two,
+     * which is a further reason the key could never have been unique.
      *
      * @return void
      */
-    public function test_a_second_application_for_the_same_course_and_user_is_refused(): void {
+    public function test_a_second_application_through_the_same_method_is_refused(): void {
         global $DB;
 
         $applicant = $this->getDataGenerator()->create_user();

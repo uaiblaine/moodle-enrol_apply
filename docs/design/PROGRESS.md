@@ -17,12 +17,16 @@ Last updated: 2026-08-22.
 | [#6](https://github.com/uaiblaine/moodle-enrol_apply/pull/6) | 4 | Card on the enrolment page, `dynamic_form`, two transports |
 | [#7](https://github.com/uaiblaine/moodle-enrol_apply/pull/7) | 5 | Optional profile write + completeness gate |
 | [#8](https://github.com/uaiblaine/moodle-enrol_apply/pull/8) | — | Stop losing an approved applicant's group membership on restore |
+| [#9](https://github.com/uaiblaine/moodle-enrol_apply/pull/9) | 6 | Durable snapshot, privacy, backup, lifecycle |
 
 ## In progress
 
-**Slice 6 — durable snapshot, privacy, backup, lifecycle.** Branch
-`feature/slice-6-durable-trail`. Complete; every file in the plan's table is written and every
-verification step in it has been run.
+**The kept-roles backup gate**, branch `fix/backup-kept-roles-gate` — the defect found while
+researching slice 6 and deliberately deferred out of it. See "Defects found and deferred".
+
+## Slice 6, as merged
+
+Every file in the plan's table is written and every verification step in it has been run.
 
 Verified: 162/162 PHPUnit on **both** m501 and m502; core's
 `core_privacy\privacy\provider_test` clean for `enrol_apply` on both branches (it does **not**
@@ -54,8 +58,7 @@ Every fix is mutation-checked and reddens exactly its own named test.
 
 ## Next
 
-Before slice 7, fix the backup gate defect found while researching this slice — see
-"Defects found and deferred" below. Its own branch and PR, in the style of #8.
+Slice 7 — the system report in the course — once the kept-roles fix has landed.
 
 ## Decisions taken that depart from the plan
 
@@ -143,15 +146,23 @@ Record them here so a later reader does not "fix" them back.
 
 ## Defects found and deferred
 
-- **The backup's `users` gate does not match core's.** `backup_enrol_apply_plugin` gates its
-  user data on `get_setting_value('users')` alone, while core gates `<user_enrolments>` on
-  `empty($keptroles) && $users` (`backup/moodle2/backup_stepslib.php`), with a separate
-  `role_assignments` join for the kept-roles branch. In an async course copy that keeps roles
-  **and** user data, `users` is 1, so this plugin writes every application comment while core
-  writes only the kept-role enrolments — free-text personal data of users the copy deliberately
-  excluded, inside the archive file. It is dropped on restore because the mapping misses, so
-  nothing looks wrong; the exposure is the archive. The mirror case loses comments for
-  enrolments the copy does carry. Own branch and PR, before slice 7.
+- ~~**The backup's `users` gate does not match core's.**~~ Fixed on
+  `fix/backup-kept-roles-gate`. The role check is nested INSIDE the users gate rather than
+  placed beside it: core writes its own kept-role enrolments even with user data off, but in
+  that cell the restore reaches the destination with no apply instance and no user enrolment,
+  so anything this plugin wrote there would be personal data in an archive with nowhere to go.
+
+  **Two things I got wrong first, both caught by the review of the fix itself.** The first
+  version matched core exactly and so introduced that write — a regression in the one cell where
+  the fix buys nothing. And the whole PR, the CHANGELOG, `CLAUDE.md` and a test docblock all
+  stated that the leaked rows are "dropped on restore, so the only place this is visible is the
+  archive file", used as the argument for not writing a restore-based test. That is true for
+  `enrol_apply_applicationinfo` and **false** for `enrol_apply_submission`: the first is keyed on
+  the user-enrolment mapping, the second on the USER mapping, and a kept-roles copy annotates
+  every course-context role assignment into users.xml, so the second resolves. Measured against
+  the pre-fix code, the excluded applicants' comments and profile snapshots were inserted into
+  the copied course's database under live user ids. `test_an_excluded_applicant_does_not_reach_the_copied_course`
+  is the assertion that prose had argued out of existence, and it reddens against the pre-fix gate.
 - **`local_unifiedgrader` fails core's `test_table_coverage`** on both m501 and m502 — the same
   defect class fixed here, in another fleet repo. Eleven `local_iv*` plugins fail
   `test_all_providers_compliant` on the same stacks. Neither is this repo's to fix; noted so the
@@ -226,4 +237,48 @@ Record them here so a later reader does not "fix" them back.
 - **A five-reviewer adversarial pass on a finished, green, mutation-checked slice still found
   nine real defects**, several of them in the privacy behaviour the slice existed to provide.
   Green tests and a clean matrix say the code does what the tests say; they say nothing about
-  whether the tests say the right thing.
+  whether the tests say the right thing. Reviewing the *fix* for the deferred defect then found
+  two more, one of them a regression that fix had introduced — so the pass is worth running on
+  small changes too, not only on slices.
+- **The most expensive thing in this repo is a confident wrong sentence, not a bug.** Both
+  adversarial passes found one, and both times it was load-bearing in the same way: it argued
+  the next person out of the test that catches the problem. "The observer deliberately does not
+  notify" (wrong, it does). "The leaked rows are dropped on restore, so the only place this is
+  visible is the archive file" (wrong for the durable trail, whose key is the user mapping —
+  and used explicitly as the reason not to write the restore-based test that reddens against
+  the unfixed code). Both survived review, because a sentence that explains *why* something
+  need not be checked reads exactly like diligence.
+
+  The practical rule: when a comment says a thing cannot happen, or cannot be tested, treat that
+  as the highest-value claim in the diff and measure it. Prose in this repo is load-bearing by
+  design, which is precisely what makes a wrong sentence worse than no sentence.
+
+  Acting on that, a third pass audited **144 factual claims** added by this work across
+  `CLAUDE.md`, the code comments, `README.md`, `CHANGELOG.md` and the test docblocks, with a
+  second agent trying to overturn each flag. Ten survived, and the shape of them is the useful
+  part:
+
+  - **One wrong fact, repeated in four places.** The lock in `submit_application()` was
+    described as enforcing one live application per *course* and user. It is keyed on the
+    INSTANCE and the user, and a course may carry several apply instances — so a user can hold
+    two pending rows sharing `courseid` and `userid`. That is a third, independent reason the
+    unique key could never have worked, and it had been written up as the reason the key was
+    not needed.
+  - **A claim about atomicity that was never true.** `submission::create()`'s docblock said the
+    row and the enrolment "are created together or not at all". There is no transaction: the
+    lock gives mutual exclusion, not atomicity.
+  - **A privacy claim that overstated itself.** Pseudonymisation was described as leaving a row
+    "nobody can be identified by". `userenrolmentid` is retained, and `logstore_standard` keys
+    enrolment events on exactly that id with the userid beside it — so on a site keeping its
+    standard log the row is re-identifiable. It is pseudonymisation, not anonymisation, and a
+    privacy note is the last place to blur that.
+  - **Three operational errors in the README**, each of which would send an administrator to
+    the wrong place: the settings page named by a title the plugin does not use (the same file
+    names it correctly two sections earlier), the recycle bin attributed to the general backup
+    default when it runs in automated mode and reads *Automated backup setup ▸ Include users*,
+    and deferral listed among the actions that delete the pending comment, which it does not.
+  - **A stale paragraph** still describing the kept-roles gate as an unfixed defect, two commits
+    after it was fixed, pointing readers away from the bullet that superseded it.
+
+  None of these was a bug. Every one of them would have cost the next reader time or sent them
+  somewhere wrong, which is the same currency a bug is paid in.

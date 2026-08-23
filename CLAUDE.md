@@ -265,9 +265,12 @@ backup/                      group mappings, comments and the durable trail, see
   `UNIQUE (courseid, userid)`. Course deletion pseudonymises by zeroing `userid`, so a deleted
   course with two applicants gives two rows with the same pair — measured, not reasoned: with
   the key in place PostgreSQL says `duplicate key value violates unique constraint`. Cancelling
-  and re-applying is a second, independent collision. Uniqueness of a *live* application is
-  enforced by the lock in `submit_application()`, which is what the plan credited the key with
-  providing. Note that `mdl phpunit-init` alone does **not** rebuild an existing table, so a
+  and re-applying is a second, independent collision. And a third: uniqueness is enforced per
+  enrolment METHOD, not per course. The lock in `submit_application()` is keyed on the instance
+  id and the user, and the guard behind it is a `{user_enrolments}` lookup by `enrolid`, so a
+  course carrying two apply instances — which the plugin supports on purpose — lets one user
+  hold two pending rows sharing `courseid` and `userid`. Measured: both `submit_application()`
+  calls return true. Note that `mdl phpunit-init` alone does **not** rebuild an existing table, so a
   mutation of `install.xml` runs against the old schema and reads as harmless — drop the test
   database first (`admin/tool/phpunit/cli/util.php --drop`) and confirm the index really
   changed before believing the result.
@@ -326,9 +329,48 @@ backup/                      group mappings, comments and the durable trail, see
   the archive *file*, so the test reads `course/enrolments.xml` directly
   (`test_the_audit_trail_is_only_written_to_the_archive_with_users`).
 
-  Note the gate is `users` alone, while core gates `<user_enrolments>` on
-  `empty($keptroles) && $users`. In a course copy that keeps roles they disagree, and the plugin
-  writes comments for users core excluded. That is a separate live defect with its own fix.
+  That test pins only the `users` axis, and `users` is not the whole gate — the kept-roles half
+  of core's predicate is the next bullet, pinned separately by
+  `test_a_kept_roles_copy_carries_only_the_kept_users_data` and
+  `test_an_excluded_applicant_does_not_reach_the_copied_course`.
+
+- **"Are users included?" is not the users setting.** Core gates its own `<user_enrolments>` on
+  `empty($keptroles) && $users`, with a second branch for a course copy that keeps roles
+  (`backup/moodle2/backup_stepslib.php`, identical on 5.1 and 5.2). The async copy task sets the
+  `users` setting to `1` whenever roles are kept **and** user data is wanted, so reading that
+  setting alone disagrees with core in both directions: with kept roles and user data it writes
+  personal data for users core excluded, and with kept roles and no user data it writes nothing
+  while core still writes those enrolments. Reproduce core's whole predicate; do not narrow it.
+
+  **Nest the role check inside the users gate; do not put it beside one.** Core writes its own
+  kept-role `<enrolment>` rows even with user data off, and matching that is wrong here. With
+  user data off, core forces the restore's users setting off and its enrolments setting to
+  `ENROL_NEVER`, so no apply instance and no user enrolment reaches the destination — core
+  re-enrols the kept-role users through the manual plugin afterwards instead. Anything this
+  plugin wrote in that cell would be a comment and a profile snapshot in an archive with
+  nowhere to go, which is the exposure the gate exists to prevent.
+
+  **Both halves of the role predicate matter.** `ra.roleid IN (kept)` is the obvious one;
+  `ra.contextid = <course context>` is the one no fixture pins by accident, because the data
+  generator assigns every role at the course context. Somebody who is a student here and a
+  teacher elsewhere holds the kept role but not *here*, and core writes no enrolment for them —
+  a fixture with a role held in a second course is what keeps that half honest.
+
+  Use `EXISTS` rather than core's `INNER JOIN {role_assignments}`: a user holding two of the
+  kept roles matches the join twice and the same row is written to the archive twice.
+
+  **The leak reached the destination database, not only the archive — and believing otherwise
+  argues you out of the test that catches it.** `enrol_apply_applicationinfo` is keyed on the
+  `enrol_apply_userenrolment` mapping, which misses for an excluded user, so those rows really
+  are dropped on restore. `enrol_apply_submission` is keyed on the USER mapping, and a
+  kept-roles copy annotates every course-context role assignment into users.xml
+  (`backup_roles_structure_step`, ungated by kept roles), so that mapping resolves and the row
+  inserts. Drive `copy_helper::create_copy()` and its adhoc task and assert on the copied
+  course's rows.
+
+  Testing it needs its own backup helper: `backup_controller::set_kept_roles()` throws
+  `cannot_set_keep_roles_wrong_mode` outside `backup::MODE_COPY`, and the repo's existing helper
+  uses `MODE_SAMESITE`.
 
 - **Core wires a plugin's restore handlers to every `<enrol>` element, not just its own.** A
   restore with `enrolments` set to "never" maps every old enrol id onto the course's **manual**
