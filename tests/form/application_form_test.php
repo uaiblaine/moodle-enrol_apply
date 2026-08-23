@@ -52,6 +52,73 @@ final class application_form_test extends \advanced_testcase {
     protected $applicant;
 
     /**
+     * An instance that asks for nothing still renders something the applicant can act on.
+     *
+     * Both section builders return early when their list is empty, so an instance with no
+     * profile fields, no comment and no introduction produced a form of two hidden inputs -
+     * measured, the rendered body had no text in it at all. The applicant opened a modal that
+     * was blank apart from a Save button, with nothing saying what saving would do.
+     *
+     * The named element is the assertion rather than the rendered text, because the text is a
+     * language string and a test that greps for English pins the translation instead of the
+     * behaviour.
+     *
+     * @return void
+     */
+    public function test_an_instance_that_asks_for_nothing_still_says_what_submitting_does(): void {
+        global $DB;
+
+        $this->ask_for([]);
+        $DB->set_field('enrol', 'customint7', 0, ['id' => $this->instance->id]);
+        $DB->set_field('enrol', 'customtext1', '', ['id' => $this->instance->id]);
+        $this->instance = $DB->get_record('enrol', ['id' => $this->instance->id], '*', MUST_EXIST);
+
+        $names = $this->element_names($this->make_form());
+
+        $this->assertContains('nothingtoprovide', $names);
+    }
+
+    /**
+     * That line appears only when there really is nothing else.
+     *
+     * The control for the test above. Without it, the fix could have added the line to every
+     * form - which would read as a working feature and be wrong on every instance that does ask
+     * for something.
+     *
+     * @return void
+     */
+    public function test_the_nothing_to_provide_line_is_absent_when_a_field_is_asked_for(): void {
+        $this->ask_for([fields::standard_key('city')]);
+
+        $names = $this->element_names($this->make_form());
+
+        $this->assertContains(fields::form_element_name(fields::standard_key('city')), $names);
+        $this->assertNotContains('nothingtoprovide', $names);
+    }
+
+    /**
+     * Nor when the only thing asked for is the comment.
+     *
+     * The comment is the other reason a form can have content, and it is checked separately
+     * because it is a different branch of the same condition.
+     *
+     * @return void
+     */
+    public function test_the_nothing_to_provide_line_is_absent_when_only_the_comment_is_asked_for(): void {
+        global $DB;
+
+        $this->ask_for([]);
+        $DB->set_field('enrol', 'customint7', 1, ['id' => $this->instance->id]);
+        $DB->set_field('enrol', 'customtext1', '', ['id' => $this->instance->id]);
+        $this->instance = $DB->get_record('enrol', ['id' => $this->instance->id], '*', MUST_EXIST);
+
+        $names = $this->element_names($this->make_form());
+
+        $this->assertContains('applydescription', $names);
+        $this->assertNotContains('nothingtoprovide', $names);
+    }
+
+    /**
      * Course, instance, applicant, and a field set worth rendering.
      *
      * @return void

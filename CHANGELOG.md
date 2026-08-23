@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **An enrolment method that asks for nothing no longer opens an empty window.** Where the method
+  requests no profile fields, no comment and carries no introduction, the application form had
+  nothing in it at all — the applicant saw a blank window with a Save button and no indication of
+  what saving would do. It now says what submitting will do, and names the course.
+
 - **A restored application record holding a structured value no longer breaks the page that
   reads it.** The frozen snapshot is JSON that another site wrote and a restore copies in
   verbatim, so a field value could be an array or a nested object rather than a string. Casting

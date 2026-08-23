@@ -157,6 +157,21 @@ class application_form extends dynamic_form {
         $this->add_editable_section($editable, $resolved);
         $this->add_locked_section($locked, $USER);
 
+        /* An instance can legitimately ask for nothing at all: no profile fields, no comment
+           and no introduction. Both section builders above return early when their list is
+           empty, so without this the form is two hidden inputs and the applicant opens a modal
+           with nothing in it and a Save button that says only "Save" - measured, the rendered
+           body was empty of text entirely. There is still an action to confirm, so the form
+           says what it is. */
+        if (!$editable && !$locked && empty($instance->customint7) && empty($instance->customtext1)) {
+            $mform->addElement(
+                'static',
+                'nothingtoprovide',
+                '',
+                get_string('nothingtoprovide', 'enrol_apply', format_string($this->get_course_name()))
+            );
+        }
+
         if ($instance->customint7) {
             $label = get_string('comment', 'enrol_apply');
             if (!empty($instance->customtext2)) {
@@ -175,6 +190,18 @@ class application_form extends dynamic_form {
                browser. The page transport asks for them explicitly. */
             $this->add_action_buttons(true, get_string('submitapplication', 'enrol_apply'));
         }
+    }
+
+    /**
+     * The name of the course being applied to.
+     *
+     * Read through get_course() rather than carried on the instance, because an enrol row holds
+     * only the course id. Kept as its own method so definition() reads as one thing.
+     *
+     * @return string The course full name, unformatted.
+     */
+    protected function get_course_name(): string {
+        return (string) get_course($this->get_instance()->courseid)->fullname;
     }
 
     /**

@@ -131,6 +131,7 @@ $string['newapplicationnotification'] = 'Há uma nova solicitação de matrícul
 $string['newenrols'] = 'Permitir novas solicitações de matrícula no curso';
 $string['newenrols_desc'] = 'Permitir, por padrão, que usuários solicitem matrícula em novas instâncias.';
 $string['nofieldsoffered'] = 'No momento a administração não permite coletar nenhum campo de perfil junto com a solicitação.';
+$string['nothingtoprovide'] = 'Não há nada a preencher. Envie para solicitar inscrição em {$a}.';
 $string['notification'] = 'Solicitação de matrícula enviada com sucesso. Você será notificado por e-mail quando a sua matrícula for confirmada.';
 $string['notify_desc'] = 'Defina quem é notificado sobre novas solicitações de matrícula.';
 $string['notify_heading'] = 'Configurações de notificação';
