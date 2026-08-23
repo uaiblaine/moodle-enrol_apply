@@ -478,17 +478,28 @@ Each measured on both m501 and m502, not reasoned about.
 
 ## Working practices learned the hard way
 
-- **`mdl ci --matrix`'s per-leg PASS/FAIL column is not evidence, and now the reason is known.**
-  The per-leg runner script is echoed into each leg's log, so every log contains the literal
-  string `ALL STEPS PASSED` inside the script's own source line — and the summary decides each
-  leg with `grep -q "ALL STEPS PASSED"` (`moodle-dev/bin/mdl-ci:248`). It therefore prints PASS
-  for every leg, always. The **exit code is sound**: `rc` is set first by `wait` on each leg's
-  process, and the buggy grep can only ever add a failure, never clear one. So a red run still
-  exits non-zero and still keeps its logs — the column just will not tell you which leg.
-  A hand audit needs anchored patterns, because `grep ': FAILED'` matches the runner's own
-  `run_step` definition: use `^-- [a-z]+: (OK|FAILED)$` and `^==== mdl-ci: ALL STEPS PASSED ====$`.
-  And note the logs of a **passing** run are deleted (`rm -rf "$logdir"`), so snapshot them while
-  it runs if you intend to verify rather than trust.
+- **`mdl ci --matrix`'s per-leg PASS/FAIL column was not evidence, and is now fixed.** Recorded
+  because the diagnosis is worth keeping even though the bug is gone. The per-leg runner script
+  is echoed into each leg's log, so every log contained the literal string `ALL STEPS PASSED`
+  inside the script's own source line — and the summary decided each leg by grepping the log for
+  it, so it printed PASS for every leg, always. The exit code was never wrong: `rc` came from
+  `wait` on each leg's process, and the grep could only add a failure, never clear one. What the
+  column cost you was knowing *which* leg had failed.
+  Fixed in `moodle-dev` (`Decide matrix leg PASS/FAIL from an exit status, not the log`): each
+  leg now writes its status to `$logdir/$tag.rc` and the summary reads that file, treating a
+  missing status file as a failure rather than a pass. **The column can be trusted again.**
+  Two things that outlive the fix. A hand audit of a leg log still needs anchored patterns,
+  because `grep ': FAILED'` matches the runner's own `run_step` definition — use
+  `^-- [a-z]+: (OK|FAILED)$`. And the logs of a **passing** run are still deleted
+  (`rm -rf "$logdir"`), so snapshot them while it runs if you intend to verify rather than trust.
+- **The stacks are shared, and another session working in `moodle-dev` can stale this one's test
+  site.** Measured on 2026-08-23: a second session brought up m53 and landed a change to
+  `mdl upgrade`, and m502's PHPUnit environment began reporting "initialised for different
+  version" mid-session — twice, including once immediately after a successful `mdl phpunit-init`.
+  Running `admin/tool/phpunit/cli/init.php` in the container directly cleared it. Two corollaries:
+  a `mdl` invocation can also fail with a shell parse error while `bin/mdl` is being written, and
+  that failure has nothing to do with the plugin; and an unexplained environment change
+  invalidates a local run, so re-run rather than reason about it.
 
 - **Prune worktrees before any test run.** `isolation: "worktree"` creates them at
   `<repo>/.claude/worktrees/`, inside the directory bind-mounted into Moodle, so Moodle scans a
