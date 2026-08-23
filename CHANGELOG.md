@@ -23,6 +23,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **A site-wide report source for enrolment applications**, so an administrator can build custom
+  reports across every course from Site administration → Reports → Report builder. It reuses the
+  same data as the course report and adds a course filter and a course name column, which the
+  course report deliberately does not offer — a course-scoped report carrying a course filter
+  would let a manager page sideways into a course they were never given.
+
+  **The profile details an applicant submitted are withheld here unless the reader holds
+  `moodle/user:viewalldetails`**, and are withheld by removing the column rather than blanking
+  it, so it cannot be added, filtered or sorted either. The course report can ask that question
+  of the course; a custom report has no course and no per-request permission check of this
+  plugin's at all — access to it is governed by Moodle's own report capabilities and by the
+  report's audience. Be aware of what that means in practice: a report can be shared with an
+  audience wider than its creator, and a **scheduled** report is rendered once with the
+  creator's permissions and mailed to every recipient, so the file they receive carries the
+  creator's answer rather than their own.
+
+  This surface is switched off with the site's `Enable custom reports` setting. The course
+  report is not — it keeps working with custom reports disabled, which is why both exist and
+  why neither is redundant.
 - **A report of a course's enrolment applications**, at Course → Participants → Enrolment
   methods (the report icon) and on the course settings navigation. Built on Moodle's Report
   Builder, so it brings per-user filters, sorting, paging and a CSV or Excel download: who

@@ -64,7 +64,17 @@ class submission extends base {
     }
 
     /**
-     * Register every column and filter this entity offers.
+     * Register every column, filter and condition this entity offers.
+     *
+     * Each filter is registered as a CONDITION as well, which is what lets a site-level custom
+     * report fix a question rather than merely offer a control - "every pending application on
+     * the site" is a condition, not a filter. Core's own course entity registers the same object
+     * as both, so sharing one instance is the supported shape.
+     *
+     * This is inert for the course report, and that was measured rather than assumed:
+     * reportbuilder/classes/system_report.php contains no reference to conditions at all on
+     * either 5.1 or 5.2, so a system report never reads them. Its base conditions are a separate
+     * mechanism entirely.
      *
      * @return base This entity.
      */
@@ -74,6 +84,7 @@ class submission extends base {
         }
         foreach ($this->get_all_filters() as $filter) {
             $this->add_filter($filter);
+            $this->add_condition($filter);
         }
 
         return $this;
