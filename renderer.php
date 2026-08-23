@@ -74,6 +74,8 @@ class enrol_apply_renderer extends plugin_renderer_base {
             'actionlabel' => get_string('withselectedusers'),
             'choosedots' => get_string('choosedots'),
             'golabel' => get_string('go'),
+            'messagelabel' => get_string('outcomemessage', 'enrol_apply'),
+            'messagehelp' => get_string('outcomemessage_help', 'enrol_apply'),
             'actions' => $actions,
         ];
 
