@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **A restored application record holding a structured value no longer breaks the page that
+  reads it.** The frozen snapshot is JSON that another site wrote and a restore copies in
+  verbatim, so a field value could be an array or a nested object rather than a string. Casting
+  one to text emitted a PHP warning and rendered the literal word `Array` as though the
+  applicant had typed it. Such a field is now skipped, and the entry is dropped whole rather
+  than repaired — an entry whose key is unusable cannot be matched against the list of fields a
+  reader is allowed to see, so it must not be rendered at all.
+
 - **A course copy that keeps roles no longer copies the application data of users it was
   meant to leave out.** Core backs up only the enrolments of users holding a kept role, but the
   copy sets the site's `users` backup setting to 1 whenever roles are kept and user data is

@@ -260,9 +260,26 @@ class submission {
             if (!is_array($entry) || !isset($entry['value'])) {
                 continue;
             }
+
+            /* Every part is checked for being scalar BEFORE it is cast, and that is not
+               belt-and-braces. This envelope is JSON that another site wrote and a restore
+               copied in verbatim, so a 'value' holding an array or a nested object is
+               reachable - and (string) on one emits "Array to string conversion", a PHP
+               warning, which --fail-on-warning turns into a failed run. Measured on m502: the
+               cast yields the literal string "Array", so the reader is shown a word the
+               applicant never typed and nothing anywhere says so.
+               The whole entry is dropped rather than repaired. A key that is not a string
+               cannot be matched against the visible-key list the snapshot formatter masks with,
+               and an entry that cannot be masked correctly must not be rendered at all. */
+            $key = $entry['key'] ?? '';
+            $label = $entry['label'] ?? '';
+            if (!is_scalar($entry['value']) || !is_scalar($key) || !is_scalar($label)) {
+                continue;
+            }
+
             $entries[] = [
-                'key' => (string) ($entry['key'] ?? ''),
-                'label' => (string) ($entry['label'] ?? ''),
+                'key' => (string) $key,
+                'label' => (string) $label,
                 'value' => (string) $entry['value'],
             ];
         }
