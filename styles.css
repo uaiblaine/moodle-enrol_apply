@@ -12,3 +12,11 @@ form#enrol_apply_manage_form tr.enrol_apply_waitinglist_highlight {
 .path-enrol-apply .formaction {
     text-align: center;
 }
+
+.enrol_apply-linebreaks {
+    /* The report's two free-text cells separate their lines with a literal newline and carry no
+       markup at all, because the download path decodes entities before it strips tags - so a
+       line break written as markup would let an escaped "<" swallow the rest of its line. The
+       breaks are therefore drawn here, on the cell, where the export cannot see them. */
+    white-space: pre-line;
+}

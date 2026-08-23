@@ -512,6 +512,22 @@ class enrol_apply_plugin extends enrol_plugin {
             );
         }
 
+        /* Its own capability, checked separately: the report shows the frozen profile snapshot
+           of every applicant the course has ever had, which is a wider disclosure than deciding
+           on the applications currently in the queue. */
+        if (has_capability('enrol/apply:viewreports', $context)) {
+            $reportlink = new moodle_url('/enrol/apply/report.php', ['id' => $instance->id]);
+            $icons[] = $OUTPUT->action_icon(
+                $reportlink,
+                new pix_icon(
+                    'i/report',
+                    get_string('report:course_applications', 'enrol_apply'),
+                    'core',
+                    ['class' => 'iconsmall']
+                )
+            );
+        }
+
         return $icons;
     }
 
@@ -593,6 +609,22 @@ class enrol_apply_plugin extends enrol_plugin {
                 'id' => $instance->id,
             ]);
             $instancesnode->add($this->get_instance_name($instance), $managelink, navigation_node::TYPE_SETTING);
+        }
+
+        /* This method is core's own per-instance extension point for an enrol plugin,
+           dispatched by enrol_add_course_navigation() (lib/enrollib.php) from the course
+           settings navigation. A file-scope enrol_apply_extend_navigation_course() would look
+           equivalent and is not: it fires for every course whether or not the course has an
+           apply instance, and would duplicate this node where one does.
+           (For the record, *_extend_settings_navigation() is not dispatched for enrol plugins
+           at all, so it would pass the whole of CI while doing nothing.) */
+        if (has_capability('enrol/apply:viewreports', $context)) {
+            $reportlink = new moodle_url('/enrol/apply/report.php', ['id' => $instance->id]);
+            $instancesnode->add(
+                get_string('report:course_applications', 'enrol_apply'),
+                $reportlink,
+                navigation_node::TYPE_SETTING
+            );
         }
     }
 

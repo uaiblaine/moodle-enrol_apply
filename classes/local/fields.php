@@ -434,17 +434,29 @@ class fields {
      * of them, and since the standard fields came from the form, the two halves of the same
      * message disagreed with each other.
      *
-     * The value is returned EXACTLY as it was typed, and is deliberately not put through
-     * format_string(). That is a considered departure from the plugin's usual rule for
+     * The value is returned exactly as the form delivered it, and is deliberately not put
+     * through format_string(). That is a considered departure from the plugin's usual rule for
      * user-supplied profile values, and the reason is measurable: format_string() runs
-     * strip_tags(), which treats a bare "<" as the start of a tag and deletes everything
-     * after it - so an applicant who types "A<B and R&D" has their answer delivered to the
-     * approver as "A", silently, with nothing on either side to show that anything was lost.
+     * strip_tags(), which treats a bare "<" as the start of a tag and deletes everything after
+     * it, so "A<B and R&D" would become "A" with nothing on either side to show that anything
+     * was lost.
      *
-     * Escaping belongs at the sink, and the only sink here escapes for itself: the
-     * notification template renders every value through a double stash. A value that later
-     * has to satisfy PARAM_TEXT - a web service return, a report column - must be stripped at
-     * THAT boundary, where losing the tail is a deliberate cost rather than an accident.
+     * An earlier version of this docblock illustrated that with "an applicant who types
+     * A<B and R&D", and this note exists because that was wrong and travelled: it was repeated
+     * almost verbatim in the report's formatter. An applicant cannot type it. Every editable
+     * field on the form is PARAM_TEXT ({@see application_form}, and the comment likewise), and
+     * formslib cleans the whole submission through clean_param() before get_data() - measured,
+     * clean_param('A<B and R&D', PARAM_TEXT) is 'A'. The tail is already gone by the time this
+     * method runs.
+     *
+     * The rule still holds, for two reasons that do not depend on the illustration. A second
+     * strip is still lossy for anything PARAM_TEXT lets through, and stripping is the wrong
+     * treatment at the wrong place regardless: escaping belongs at the sink, and the sink here
+     * escapes for itself - the notification template renders every value through a double
+     * stash. Note that a REPORT COLUMN is such a sink too and does not have to satisfy
+     * PARAM_TEXT; a Report Builder cell is raw HTML, where escaping is both safe and lossless.
+     * Only a boundary that genuinely requires PARAM_TEXT - a web service return - has to strip,
+     * and there losing the tail is a deliberate cost rather than an accident.
      *
      * The field key travels beside the label because the durable snapshot in
      * {@see submission::snapshot()} stores both: a label is a fact about this site today and

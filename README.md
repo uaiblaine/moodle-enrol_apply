@@ -66,6 +66,7 @@ the site-wide queue is at Site administration → Courses → Manage enrolment a
 |------------|--------|
 | `enrol/apply:config` | add, edit and remove instances |
 | `enrol/apply:manageapplications` | decide on applications |
+| `enrol/apply:viewreports` | read the course's report of applications |
 | `enrol/apply:manage` | manage the resulting user enrolments |
 | `enrol/apply:unenrol` | unenrol other users |
 | `enrol/apply:unenrolself` | unenrol yourself |
@@ -73,6 +74,32 @@ the site-wide queue is at Site administration → Courses → Manage enrolment a
 `enrol/apply:manageapplications` is honoured at three levels: at system level it covers
 every course, at course level that course, and in a user's own user context it covers
 that user's applications, which is what allows mentor-style delegation.
+
+`enrol/apply:viewreports` is granted to managers only, and deliberately not to editing
+teachers the way the capabilities around it are. The report it opens shows the profile
+details every applicant submitted, for every application the course has ever had, decided
+ones included and long after the enrolment itself has gone — a wider disclosure than
+deciding on the queue in front of you. A site that wants its teachers to have it should
+grant it to them on purpose. It carries `RISK_PERSONAL`, so Moodle flags it as such on the
+role definition screens.
+
+Which profile details appear is a second, separate question, and the answer is core's:
+a reader without `moodle/site:viewuseridentity` in the course sees the applicant's name and
+nothing else. The identity fields are not blanked for them, they are absent — no column, no
+filter, no sort — because filtering and sorting are database operations and would otherwise
+let a reader recover a hidden value by narrowing on it and counting the rows.
+
+## The applications report
+
+Course → Participants → Enrolment methods carries a report icon beside each Course enrol
+confirmation method, and the course settings navigation carries the same link. It lists
+every application the course has recorded — who applied, when, the comment, the profile
+details submitted, the outcome, who decided it and when — with per-user filters, sorting,
+paging and a CSV or Excel download.
+
+It shows the course's applications rather than one enrolment method's, so both icons in a
+course with two apply methods open the same report; where a course has more than one, the
+report offers a filter to narrow by method.
 
 ### Setting up a mentor
 

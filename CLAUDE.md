@@ -187,13 +187,21 @@ backup/                      group mappings, comments and the durable trail, see
   else, deliberately — a second check inside `resolve()` is unreachable, and an unreachable
   guard no test can hold reads as protection while proving nothing.
 
-- **The notification carries what the applicant typed, and is not put through
+- **The notification carries what the form delivered, and is not put through
   `format_string()`.** Both halves come from the submitted data. `format_string()` runs
-  `strip_tags()`, which deletes everything from a bare `<` onwards — so an applicant typing
-  `A<B and R&D` would have the approver read `A`, silently. The notification template
-  escapes every value through a double stash instead, which is lossless and correct. A
-  value that later has to satisfy `PARAM_TEXT` — a web service return, a report column —
-  must be stripped at *that* boundary, where losing the tail is a deliberate cost.
+  `strip_tags()`, which deletes everything from a bare `<` onwards, so a second strip is lossy
+  for anything that reaches it. The notification template escapes every value through a double
+  stash instead, which is lossless and correct.
+
+  **Two things this entry used to say that are false, and both travelled into slice 7 before
+  they were caught.** It is *not* true that "an applicant typing `A<B and R&D` would have the
+  approver read `A`": every editable field on the form is `PARAM_TEXT` and formslib cleans the
+  submission through `clean_param()` before `get_data()`, so the tail is gone at submission —
+  measured, `clean_param('A<B and R&D', PARAM_TEXT)` is `'A'`. The value that really can hold
+  a bare `<` comes from a **restore**, which writes `userinfodata` and `comment` verbatim out
+  of a foreign archive. And a **report column does not have to satisfy `PARAM_TEXT`**: a Report
+  Builder cell is raw HTML, where escaping is safe and lossless, and stripping there is a
+  defect rather than a deliberate cost. Only a web service return genuinely has to strip.
 
 - **One form class, two transports, and only one of them runs core's guards.**
   `\enrol_apply\form\application_form` is a `\core_form\dynamic_form`. The modal reaches it
