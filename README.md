@@ -101,6 +101,27 @@ It shows the course's applications rather than one enrolment method's, so both i
 course with two apply methods open the same report; where a course has more than one, the
 report offers a filter to narrow by method.
 
+## Site-wide custom reports
+
+Site administration → Reports → Report builder offers **Enrolment applications** as a report
+source, for building ad-hoc reports across every course. It adds a course filter and a course
+name column that the course report deliberately does not have.
+
+The profile details an applicant submitted appear here only for a reader holding
+`moodle/user:viewalldetails`, and for anyone else the column is absent rather than empty — it
+cannot be added to a report, filtered or sorted. That is a deliberately different gate from the
+course report's, because a custom report has no course to ask about and no permission check of
+this plugin's on it at all: who may read one is decided by Moodle's report capabilities and by
+the report's audience.
+
+Two consequences worth knowing before relying on it. A report can be shared with an audience
+wider than the person who built it. And a **scheduled** report is rendered once using its
+creator's permissions and then mailed to every recipient, so what arrives in an inbox reflects
+what the creator may see, not what the reader may.
+
+This surface follows the site's `Enable custom reports` setting. The course report does not —
+it keeps working when custom reports are switched off.
+
 ### Setting up a mentor
 
 A mentor is somebody who decides on the applications of specific users, wherever those

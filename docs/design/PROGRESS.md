@@ -19,17 +19,55 @@ Last updated: 2026-08-23.
 | [#8](https://github.com/uaiblaine/moodle-enrol_apply/pull/8) | — | Stop losing an approved applicant's group membership on restore |
 | [#9](https://github.com/uaiblaine/moodle-enrol_apply/pull/9) | 6 | Durable snapshot, privacy, backup, lifecycle |
 | [#10](https://github.com/uaiblaine/moodle-enrol_apply/pull/10) | — | The kept-roles backup gate |
+| [#11](https://github.com/uaiblaine/moodle-enrol_apply/pull/11) | 7 | The course applications report |
+| [#12](https://github.com/uaiblaine/moodle-enrol_apply/pull/12) | — | Test metadata moved to PHPUnit attributes |
+| [#13](https://github.com/uaiblaine/moodle-enrol_apply/pull/13) | — | Corrected a note that went stale the same day |
 
 ## In progress
 
-**Slice 7 — the system report in the course**, branch `feature/slice-7-course-report`.
+**Slice 8 — the site-level datasource**, branch `feature/slice-8-site-datasource`.
+196/196 PHPUnit on both m501 and m502.
 
-The report itself is written: the entity, the formatters, the system report, `report.php`, the
-`enrol/apply:viewreports` capability and the two entry points in `lib.php`. 188/188 PHPUnit on
-both m501 and m502.
+The decision the plan does not contain, and the reason this slice is not a copy of slice 7:
+**a datasource has no `can_view()`**. `reportbuilder/classes/datasource.php` contains no
+capability call of any kind on either branch, and core offers a plugin no hook to add one. Who
+may read a custom report is decided by Moodle's report capabilities and by the report's
+audience — and `moodle/reportbuilder:view` carries the `user` archetype, so the surface is
+reachable by any authenticated account a single manager adds to an audience, downloadable as
+CSV, and mailable on a schedule that renders **once with the creator's permissions**.
 
-Two items in the plan's slice 7 are **deliberately not in it**, each for a reason found by
-measuring rather than by reading the plan. Both are recorded under "Deferred out of slice 7".
+So the frozen profile snapshot is **removed rather than masked** for a reader without
+`moodle/user:viewalldetails` at the system context. See "The snapshot at site level" below.
+
+## The snapshot at site level
+
+Three reasons for gating on `moodle/user:viewalldetails` and removing the column, each measured
+rather than reasoned:
+
+- **Absence is core's own move for exactly this problem.**
+  `reportbuilder\local\helpers\user_profile_fields` masks custom profile field columns *and*
+  filters with `set_is_available($field->is_visible(system::instance()))` (`:151`, `:214`, the
+  same lines on 5.1 and 5.2), and `profile_field_base::is_visible()` resolves the private and
+  hidden cases on `moodle/user:viewalldetails`. This snapshot can hold the value of any such
+  field and would otherwise walk straight past that gate.
+- **The capability fits the question.** `moodle/user:viewalldetails` is `RISK_PERSONAL`,
+  `CONTEXT_USER`, manager only — the same shape as `enrol/apply:viewreports`.
+  `moodle/site:viewuseridentity`, which the course report uses, is `CONTEXT_MODULE` with
+  teacher, editingteacher and manager archetypes: a course-shaped question that answers wrongly
+  at site scale in both directions.
+- **Whole-column is the only sound granularity.** Per-field visibility cannot be reconstructed
+  from a snapshot whose custom field has since been deleted — `fields::label()` returns the bare
+  key and there is no field object left to ask.
+
+And the trap on the other side: leaving the entity's fail-closed default in place would render
+the name parts alone, which `user:fullname` already shows. A column that can only ever repeat
+another column is worse than either shipping it or removing it.
+
+`get_columns()` filters on availability (`local/report/base.php:461` on 5.2, `:446` on 5.1),
+which is what makes removal complete — it takes the column out of the report editor's picker,
+out of `helpers\report::add_report_column()`, and out of the stress helpers. That last one is a
+trap of its own: a stress test run without the capability skips the column and stays green
+having tested nothing, which is why the test asserts the column is present before running them.
 
 ## Slice 6, as merged
 
@@ -65,8 +103,9 @@ Every fix is mutation-checked and reddens exactly its own named test.
 
 ## Next
 
-Slice 8 — the site-level datasource — which is also where `info.php` should be reconsidered,
-because it is the first point at which that page's site-wide scope has anywhere to go.
+Slice 9 — the asynchronous download. And `info.php`, which slice 8 now makes reconsiderable:
+its site-wide scope finally has somewhere to go, so the twelve costs recorded under "Deferred
+out of slice 7" can be weighed against a real destination rather than against nothing.
 
 Two things slice 8 inherits from slice 7 and should not rediscover:
 
@@ -475,6 +514,56 @@ Each measured on both m501 and m502, not reasoned about.
 - **`test_csv_export_separates_the_snapshot_fields` should not use `strip_tags()` as a proxy for
   the export.** They are different functions, and a proxy test passes against markup that
   measurably loses data in a real download.
+
+### Slice 8's own corrections to the plan
+
+- **"The version bump is what rebuilds the class map" is false**, and it is stated twice in the
+  slice 8 plan. `core_component::is_cache_valid()` compares the cache against **core's** version,
+  never a plugin's; what rebuilds it is `purge_caches()`. Measured in both directions: before a
+  purge the class was found by the classmap but fell out of
+  `manager::get_report_datasources()` anyway, because `get_name()` hit a stale **string** cache
+  and its `get_string()` failed. The version bump is still correct for release hygiene, and it
+  does stale the PHPUnit and Behat test sites — that is its real effect here.
+- **The class is a KEY in `get_report_datasources()`, not a value.** The structure is
+  `$sources[<component display name>][<class>] = <source name>` (`manager.php:149`). A test
+  asserting over the values compares class names against localised titles and fails for a
+  reason that has nothing to do with discovery.
+- **The plan's mutation check "delete the entity's `initialise()` override; m501 fatals while
+  m502 stays green" is half wrong.** m501 does fatal — `Class ... contains 1 abstract method and
+  must therefore be declared abstract`. But **m502 does not stay green**: it gives 21 errors and
+  4 failures, because 5.2's concrete `initialise()` drives from hooks this entity does not
+  implement, so it registers nothing at all.
+- **The plan wants the course filter added to the plugin's own entity**, which contradicts its
+  own trap bullet three lines later: anything on that entity is picked up by the course report's
+  `add_filters_from_entity('submission')`, which is precisely the sideways-paging filter the
+  trap forbids. The filter belongs to core's `course` entity, added by the datasource only.
+- **"Same `format_string(..., ['escape' => false])` rule as slice 7" is backwards.** Slice 7
+  deliberately does *not* use `format_string()` on the snapshot or the comment; it escapes,
+  because `format_string()`'s `strip_tags()` deletes from a bare `<` onwards. See "Defects found
+  in slice 7's own code".
+- **There are THREE stress helpers, not two.**
+  `datasource_stress_test_conditions(string $source, string $columnidentifier)` sits at
+  `core_reportbuilder_testcase.php:161` on both branches and the plan does not mention it. It is
+  vacuous unless the source offers conditions — which is why this slice's entity now registers
+  its filters as conditions too. That is inert for the course report: `system_report.php`
+  contains no reference to conditions at all on either branch.
+- **The plan's "Method filter disappears when the course has one instance" has no site-level
+  analogue.** That behaviour is built from `get_context()->instanceid`, which at site level is
+  the system context's instance id and not a courseid.
+- **The plan is silent on the two things that actually decide the slice**: that a datasource has
+  no `can_view()`, and where the pseudonymised-record exclusion goes.
+
+### The pseudonymised-record exclusion, and why it is not duplication
+
+The course report excludes `userid = 0` rows through its INNER join onto `{user}`, and slice 7
+deleted the explicit condition there because it was unreachable. **In the datasource the join is
+not redundant, it is absent.** A custom report emits an entity's joins only for the elements
+actually in use, so a report built from submission columns alone joins `{user}` not at all and
+would list the row. The base condition is applied unconditionally, whatever the report selects.
+The applicant entity is LEFT joined here for the same reason: with an INNER join the row set
+would silently shrink the moment an author added a user column.
+`test_a_pseudonymised_record_is_not_listed` in the datasource test selects **no user column**
+precisely so that the condition, not the join, is what it holds.
 
 ## Working practices learned the hard way
 

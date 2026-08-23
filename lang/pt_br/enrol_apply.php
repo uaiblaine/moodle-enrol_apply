@@ -76,6 +76,7 @@ $string['confirmusers'] = 'Confirmar matrículas';
 $string['confirmusers_desc'] = 'Os usuários nas linhas em cinza estão na lista de espera.';
 $string['coursename'] = 'Curso';
 $string['custom_label'] = 'Rótulo personalizado';
+$string['datasource:applications'] = 'Solicitações de inscrição';
 $string['defaultperiod'] = 'Duração padrão da matrícula';
 $string['defaultperiod_desc'] = 'Tempo padrão de validade da matrícula. Se for zero, a duração da matrícula será ilimitada por padrão.';
 $string['defaultperiod_help'] = 'Tempo padrão de validade da matrícula, contado a partir do momento em que o usuário é matriculado. Se desativado, a duração da matrícula será ilimitada por padrão.';
