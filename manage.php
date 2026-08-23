@@ -106,16 +106,22 @@ if ($formaction !== '' && $userenrolments) {
        because optional_param() reads GET just as happily as POST. */
     require_sesskey();
 
+    /* PARAM_TEXT and not PARAM_RAW: this reaches the applicant's notification, and the only
+       formatting it is allowed is the line breaks the decider typed. It is escaped again at
+       the sink in notify_applicant(); cleaning here as well keeps a forged post from putting
+       markup into the durable record, which the report and the privacy export both read. */
+    $outcomemessage = trim(optional_param('outcomemessage', '', PARAM_TEXT));
+
     $enrolapply = enrol_get_plugin('apply');
     switch ($formaction) {
         case 'confirm':
-            $enrolapply->confirm_enrolment($userenrolments);
+            $enrolapply->confirm_enrolment($userenrolments, $outcomemessage);
             break;
         case 'wait':
-            $enrolapply->wait_enrolment($userenrolments);
+            $enrolapply->wait_enrolment($userenrolments, $outcomemessage);
             break;
         case 'cancel':
-            $enrolapply->cancel_enrolment($userenrolments);
+            $enrolapply->cancel_enrolment($userenrolments, $outcomemessage);
             break;
         default:
             throw new moodle_exception('invalidformaction', 'enrol_apply');

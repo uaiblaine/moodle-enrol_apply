@@ -30,6 +30,8 @@
     * actionlabel string - label of the bulk action select
     * choosedots string - placeholder option of the bulk action select
     * golabel string - label of the submit button
+    * messagelabel string - label of the optional message to the applicant
+    * messagehelp string - hint explaining who reads the message and when
     * actions array - list of value and label pairs, one per bulk action
 
     Example context (json):
@@ -41,6 +43,8 @@
         "actionlabel": "With selected users...",
         "choosedots": "Choose...",
         "golabel": "Go",
+        "messagelabel": "Message to the applicant",
+        "messagehelp": "Included in the message they receive. Optional.",
         "actions": [
             {"value": "confirm", "label": "Confirm requests"},
             {"value": "wait", "label": "Defer requests"},
@@ -54,6 +58,12 @@
         {{{tablehtml}}}
     </div>
     {{#hasrows}}
+        <div class="enrol_apply-outcomemessage mt-3">
+            <label class="form-label" for="enrol_apply_outcomemessage">{{messagelabel}}</label>
+            <textarea class="form-control" id="enrol_apply_outcomemessage" name="outcomemessage"
+                rows="3" aria-describedby="enrol_apply_outcomemessage_help"></textarea>
+            <div class="form-text" id="enrol_apply_outcomemessage_help">{{messagehelp}}</div>
+        </div>
         <div class="formaction d-flex flex-wrap align-items-center justify-content-center mt-3">
             <label class="mb-0 me-2" for="enrol_apply_formaction">{{actionlabel}}</label>
             <select class="form-select me-2" id="enrol_apply_formaction" name="formaction">

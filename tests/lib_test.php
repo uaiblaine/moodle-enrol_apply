@@ -1071,7 +1071,7 @@ final class lib_test extends \advanced_testcase {
         $this->assertEquals(0, (int) $row->timedecided);
         $this->assertEquals(0, (int) $row->decidedby);
         $this->assertGreaterThan(0, (int) $row->timecreated);
-        // Ships unused in this slice, so every row must start empty for its first writer.
+        // No message was typed, so the column the decider writes to must still be empty.
         $this->assertSame('', (string) $row->outcomemessage);
     }
 

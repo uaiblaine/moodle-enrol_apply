@@ -288,6 +288,68 @@ class submission {
     }
 
     /**
+     * Record the message the decider wrote to the applicant.
+     *
+     * Kept apart from decide() rather than folded into it, and that separation is the whole
+     * point rather than tidiness. complete_approval() runs TWICE for an approval taken through
+     * the queue: enrol_plugin::update_user_enrol() dispatches
+     * \core_enrol\hook\before_user_enrolment_updated before it writes the row, so
+     * hook_callbacks reaches complete_approval() first - and that call has no message, because
+     * the hook carries none. decide() then skips any row already at the target status, so a
+     * message threaded through it on the SECOND call would be dropped in silence, with the
+     * status looking perfectly correct.
+     *
+     * Written before the decision for the same reason the decision is written before the
+     * unenrolment: unenrol_user() deletes the user_enrolments row, and the id it carried is how
+     * these rows are matched.
+     *
+     * @param int $userenrolmentid User enrolment the decision applies to.
+     * @param string $message What the decider typed, empty for none.
+     * @return void
+     */
+    public static function record_outcome_message(int $userenrolmentid, string $message): void {
+        global $DB;
+
+        if (trim($message) === '') {
+            return;
+        }
+
+        $rows = $DB->get_records('enrol_apply_submission', ['userenrolmentid' => $userenrolmentid], '', 'id');
+        foreach ($rows as $row) {
+            $DB->update_record('enrol_apply_submission', (object) [
+                'id' => $row->id,
+                'outcomemessage' => $message,
+            ]);
+        }
+    }
+
+    /**
+     * The message the decider wrote, for the notification that announces the decision.
+     *
+     * Read from the record rather than passed along, which is what lets one lookup serve all
+     * three decisions AND the approval notification - that one is sent from an adhoc task, long
+     * after any parameter would have gone out of scope.
+     *
+     * @param int $userenrolmentid User enrolment the decision applies to.
+     * @return string The message, empty when none was written.
+     */
+    public static function outcome_message(int $userenrolmentid): string {
+        global $DB;
+
+        $rows = $DB->get_records(
+            'enrol_apply_submission',
+            ['userenrolmentid' => $userenrolmentid],
+            'timecreated DESC, id DESC',
+            'id, outcomemessage',
+            0,
+            1
+        );
+        $row = reset($rows);
+
+        return $row ? (string) $row->outcomemessage : '';
+    }
+
+    /**
      * The language string naming a status.
      *
      * A literal per branch, never get_string('status_' . $status): a dynamic string id is

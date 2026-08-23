@@ -31,6 +31,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **A decider can write a message to the applicant**, on the enrolment applications queue, and it
+  travels with whichever decision they take — approval, deferral or cancellation. It appears in
+  the notification the applicant receives, below the standard wording, and is kept on the
+  application's durable record so it is visible in the reports and in a subject access request.
+  Leave the box empty and nothing changes.
 - **A site-wide report source for enrolment applications**, so an administrator can build custom
   reports across every course from Site administration → Reports → Report builder. It reuses the
   same data as the course report and adds a course filter and a course name column, which the

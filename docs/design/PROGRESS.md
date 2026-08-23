@@ -27,7 +27,47 @@ Last updated: 2026-08-23.
 
 ## In progress
 
-Nothing. Slices 1 to 8 are merged; **slice 9 is closed without being built** — see below.
+**Slice I, split into three PRs.** The plan bundles four things — decision-time parameters, the
+outcome message, previous/next navigation and replacing the bulk bar — that share almost nothing,
+and its Files table omits the schema, backup/restore, privacy and Report Builder entity work the
+first of them actually needs.
+
+1. **The outcome message** (this branch). No schema and no privacy work at all: the
+   `outcomemessage` column has shipped since slice 6, is already declared in the privacy provider
+   with strings in both languages, and was written as `''` by every path. Storage and privacy
+   were done; the feature was missing.
+2. **Role, dates and groups at decision time** — the schema change, the modal form, and the
+   server-side allowlists.
+3. **The modern queue** — the bulk bar on core's containers, previous/next, and the rewrite of
+   Behat scenarios 2 and 3, which drive `"Select Student 1"`, `"With selected users..."` and
+   `"Go"` — every one of them markup that bar replaces.
+
+### The ordering constraint that shapes all three
+
+**`complete_approval()` runs twice for a queue approval, and the call that would carry the
+operator's input runs second.** `enrol_plugin::update_user_enrol()` dispatches
+`before_user_enrolment_updated` *before* it writes the row, so `hook_callbacks` reaches
+`complete_approval()` first — with no parameters, because the hook has none. `submission::decide()`
+then skips any row already at the target status.
+
+So anything threaded through `decide()` on the second call is **dropped in silence, with the
+status still looking correct**. Groups are worse than dropped: two calls **union** rather than
+replace, so a group the approver deselected is joined anyway and nothing removes it.
+
+The shape that works, and which slice I's remaining PRs must follow: write the decision's own data
+before the enrolment is mutated, with its own writer, and have the consumer read it back off the
+record. That is also what makes the approval notification work at all — it is sent from an adhoc
+task, long after any argument would have gone out of scope.
+
+### An alarm that was raised and is false
+
+Research on this slice flagged the instance form's `roleid` as a live privilege escalation needing
+its own urgent PR. It is not one. `enrol_manual` and `enrol_fee` in core build their own
+default-role select from the same `get_default_enrol_roles($context, $instance->roleid)`, and
+`HTML_QuickForm_select::exportValue()` intersects a submitted value against the registered
+options — the mechanism this repo already documents for the cohort field. The escalation
+`enrol_gapply` really has is a different shape: a per-decision `roleid` arriving by AJAX with no
+form element to intersect against. That is the one PR 2's allowlist has to stop.
 
 ## Slice 9 is closed, and was not built
 

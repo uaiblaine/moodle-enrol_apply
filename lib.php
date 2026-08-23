@@ -690,9 +690,10 @@ class enrol_apply_plugin extends enrol_plugin {
      * on is skipped rather than failing the whole batch.
      *
      * @param array $enrols User enrolment ids to confirm.
+     * @param string $message Message the decider wrote to the applicant, empty for none.
      * @return void
      */
-    public function confirm_enrolment($enrols) {
+    public function confirm_enrolment($enrols, string $message = '') {
         global $DB;
 
         foreach ($enrols as $enrol) {
@@ -706,6 +707,12 @@ class enrol_apply_plugin extends enrol_plugin {
             if (!$this->can_manage_application($instance->courseid, $userenrolment->userid)) {
                 continue;
             }
+
+            /* Recorded before the status changes, never after and never through decide().
+               update_user_enrol() below dispatches the hook that reaches complete_approval()
+               first, and decide() skips a row already at the target status - so a message
+               carried any further than here is dropped in silence. */
+            \enrol_apply\local\submission::record_outcome_message((int) $userenrolment->id, $message);
 
             // Set timestart and timeend if an enrolment duration is configured.
             $userenrolment->timestart = time();
@@ -737,9 +744,10 @@ class enrol_apply_plugin extends enrol_plugin {
      * Move the given applications onto the waiting list.
      *
      * @param array $enrols User enrolment ids to defer.
+     * @param string $message Message the decider wrote to the applicant, empty for none.
      * @return void
      */
-    public function wait_enrolment($enrols) {
+    public function wait_enrolment($enrols, string $message = '') {
         global $DB, $USER;
 
         foreach ($enrols as $enrol) {
@@ -758,6 +766,8 @@ class enrol_apply_plugin extends enrol_plugin {
             if (!$this->can_manage_application($instance->courseid, $userenrolment->userid)) {
                 continue;
             }
+
+            \enrol_apply\local\submission::record_outcome_message((int) $userenrolment->id, $message);
 
             $this->update_user_enrol($instance, $userenrolment->userid, ENROL_APPLY_USER_WAIT);
 
@@ -781,9 +791,10 @@ class enrol_apply_plugin extends enrol_plugin {
      * Cancel the given applications, unenrolling the applicants.
      *
      * @param array $enrols User enrolment ids to cancel.
+     * @param string $message Message the decider wrote to the applicant, empty for none.
      * @return void
      */
-    public function cancel_enrolment($enrols) {
+    public function cancel_enrolment($enrols, string $message = '') {
         global $DB, $USER;
 
         foreach ($enrols as $enrol) {
@@ -797,6 +808,8 @@ class enrol_apply_plugin extends enrol_plugin {
             if (!$this->can_manage_application($instance->courseid, $userenrolment->userid)) {
                 continue;
             }
+
+            \enrol_apply\local\submission::record_outcome_message((int) $userenrolment->id, $message);
 
             /* Stamped before the unenrolment, not after: unenrol_user() deletes the
                user_enrolments row, and the id it carried is how the durable record is
@@ -867,6 +880,18 @@ class enrol_apply_plugin extends enrol_plugin {
         }
 
         $content = $this->update_mail_content($content, $course, $user, $userenrolment);
+
+        /* Read from the durable record rather than passed in, which is what lets one lookup
+           serve all three decisions and the approval notification alike - that one is sent from
+           an adhoc task, long after any argument would have gone out of scope.
+           s() and not format_text(): the surrounding body is the administrator's own template
+           and is trusted, while this is free text a decider typed, and it lands in
+           fullmessagehtml. nl2br so the paragraphs the decider typed survive; the plain-text
+           half of the message is derived from this by html_to_text() in the notification. */
+        $outcome = \enrol_apply\local\submission::outcome_message((int) $userenrolment->id);
+        if (trim($outcome) !== '') {
+            $content .= '<br><br>' . nl2br(s($outcome));
+        }
 
         $message = new enrol_apply_notification(
             $user,

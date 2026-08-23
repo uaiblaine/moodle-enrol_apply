@@ -436,6 +436,20 @@ backup/                      group mappings, comments and the durable trail, see
   user has id 0. The filter would be unreachable, so no test could hold it. What matters is the
   API: `add_userids()` does no such filtering.
 
+- **A decision's own data must be written BEFORE the enrolment is mutated, and never through
+  `submission::decide()`.** `complete_approval()` runs **twice** for a queue approval:
+  `enrol_plugin::update_user_enrol()` dispatches `before_user_enrolment_updated` *before* it
+  writes the row, so `hook_callbacks` reaches `complete_approval()` first — and that call carries
+  no operator input, because the hook has none. `decide()` then skips any row already at the
+  target status, so anything threaded through it on the second call is dropped in silence while
+  the status still looks correct. The outcome message is recorded by its own writer before the
+  status changes, and the notification reads it back off the record rather than being handed it —
+  which is also what lets the approval notification work at all, since that one is sent from an
+  adhoc task long after any argument would have gone out of scope. Anything slice I adds later
+  (role, dates, groups) has to follow the same shape; groups are the one where the naive version
+  is worst, because two calls **union** rather than replace, so a group the approver deselected
+  is joined anyway.
+
 ## The phpcs trap that keeps costing a CI round
 
 `PSR12.Classes.OpeningBraceSpace` rejects a blank line between `class X {` and the first
