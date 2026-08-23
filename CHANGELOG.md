@@ -23,6 +23,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **A report of a course's enrolment applications**, at Course → Participants → Enrolment
+  methods (the report icon) and on the course settings navigation. Built on Moodle's Report
+  Builder, so it brings per-user filters, sorting, paging and a CSV or Excel download: who
+  applied, when, their comment, the profile details they submitted, the outcome, who decided
+  it and when. It covers every application the course has recorded, not just the queue, and
+  it is scoped to the course rather than to one enrolment method — where a course has more
+  than one Course enrol confirmation method, the report offers a filter to narrow by it.
+- A capability of its own for that report, `enrol/apply:viewreports`, granted to managers and
+  **not** to editing teachers. The capabilities around it — configuring a method, deciding an
+  application, managing enrolments — all default to editing teacher, which is right for those
+  and wrong here:
+  the report carries the profile details of every applicant the course has ever had, long
+  after their enrolment has gone. It is declared `RISK_PERSONAL`. A reader who does not hold
+  `moodle/site:viewuseridentity` in the course sees the applicant's name and nothing more —
+  the identity fields are absent rather than blank, because a filter or a sort on a blanked
+  column would give the value back.
 - Every application now leaves a durable record — the comment, the profile details entered,
   the decision, who took it and when — in a new `enrol_apply_submission` table. It survives
   approval, deferral, cancellation and unenrolment, travels in a course backup that includes

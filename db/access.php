@@ -84,6 +84,27 @@ $capabilities = [
         ],
     ],
 
+    /* Read the report of applications made to a course.
+     *
+     * RISK_PERSONAL, and archetypes stated rather than inherited. The other five capabilities
+     * in this file carry no riskbitmask, and the four that are not unenrolself - which defaults
+     * to student - default to editingteacher. That is defensible for configuring a method or
+     * deciding an application. It is not defensible here: the
+     * report shows the frozen profile snapshot every applicant submitted, for every
+     * application the course has ever had, including those already decided and those whose
+     * enrolment is long gone. Inheriting the neighbours' default by omission would hand that
+     * to every editing teacher on the site.
+     *
+     * A site that wants teachers to have it grants it to them deliberately. */
+    'enrol/apply:viewreports' => [
+        'riskbitmask' => RISK_PERSONAL,
+        'captype' => 'read',
+        'contextlevel' => CONTEXT_COURSE,
+        'archetypes' => [
+            'manager' => CAP_ALLOW,
+        ],
+    ],
+
     /* Voluntarily unenrol self from the course - watch out for data loss. */
     'enrol/apply:unenrolself' => [
         'captype' => 'write',

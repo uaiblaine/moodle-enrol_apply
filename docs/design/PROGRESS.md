@@ -3,7 +3,7 @@
 Running state of the eleven-slice plan in
 [`implementation-plan.md`](implementation-plan.md). Update this file as slices land.
 
-Last updated: 2026-08-22.
+Last updated: 2026-08-23.
 
 ## Merged
 
@@ -18,11 +18,18 @@ Last updated: 2026-08-22.
 | [#7](https://github.com/uaiblaine/moodle-enrol_apply/pull/7) | 5 | Optional profile write + completeness gate |
 | [#8](https://github.com/uaiblaine/moodle-enrol_apply/pull/8) | — | Stop losing an approved applicant's group membership on restore |
 | [#9](https://github.com/uaiblaine/moodle-enrol_apply/pull/9) | 6 | Durable snapshot, privacy, backup, lifecycle |
+| [#10](https://github.com/uaiblaine/moodle-enrol_apply/pull/10) | — | The kept-roles backup gate |
 
 ## In progress
 
-**The kept-roles backup gate**, branch `fix/backup-kept-roles-gate` — the defect found while
-researching slice 6 and deliberately deferred out of it. See "Defects found and deferred".
+**Slice 7 — the system report in the course**, branch `feature/slice-7-course-report`.
+
+The report itself is written: the entity, the formatters, the system report, `report.php`, the
+`enrol/apply:viewreports` capability and the two entry points in `lib.php`. 188/188 PHPUnit on
+both m501 and m502.
+
+Two items in the plan's slice 7 are **deliberately not in it**, each for a reason found by
+measuring rather than by reading the plan. Both are recorded under "Deferred out of slice 7".
 
 ## Slice 6, as merged
 
@@ -58,7 +65,19 @@ Every fix is mutation-checked and reddens exactly its own named test.
 
 ## Next
 
-Slice 7 — the system report in the course — once the kept-roles fix has landed.
+Slice 8 — the site-level datasource — which is also where `info.php` should be reconsidered,
+because it is the first point at which that page's site-wide scope has anywhere to go.
+
+Two things slice 8 inherits from slice 7 and should not rediscover:
+
+- **The snapshot column's masking is fail-closed by default and will look broken.** A
+  datasource adds the entity's columns directly and never calls `set_callback()`, so the
+  snapshot renders the applicant's name parts and nothing else, for everybody including an
+  administrator. That is deliberate — see "Defects found in slice 7's own code" — and slice 8
+  has to open it on purpose, with a context to judge the reader in.
+- **A custom report over this entity has no `{user}` join forced on it**, so pseudonymised
+  records (`userid` 0, what a deleted course leaves behind) are not excluded for free the way
+  they are in the course report. Slice 8 needs its own exclusion.
 
 ## Decisions taken that depart from the plan
 
@@ -144,6 +163,185 @@ Record them here so a later reader does not "fix" them back.
     `test_an_undecided_application_does_not_report_user_zero` — which still catches a switch to
     `add_userids()`, which does no filtering.
 
+11. **The report is scoped by its context, not by the `id` in its URL** (slice 7). The `id`
+    chooses the course and authorises the request; the report then lists that *course's*
+    applications rather than that enrolment method's. A course's applications are a
+    course-level question, both icons in a course with two apply methods should open the same
+    thing, and where a course has more than one the report offers a filter to narrow by method.
+    The `id` is not carried into the query at all — it cannot be, because the pages that fetch
+    every subsequent row never see it.
+12. **Identity fields are masked by absence, never by a display callback** (slice 7). Core's
+    own `get_identity_columns($context)` and `get_identity_filters($context)` return nothing
+    without `moodle/site:viewuseridentity`, so the column, its filter and its sort are all
+    gone rather than blank. A callback would be unsound here: filtering and sorting are SQL and
+    never reach one, so a reader would recover a hidden value by narrowing on it and reading
+    the row count, or simply by sorting.
+13. **The snapshot column is the single exception to that rule, and only because it earns it**
+    (slice 7). It carries no filter and cannot be sorted, so there is no SQL path around its
+    callback. `test_the_snapshot_column_has_no_filter_and_is_not_sortable` holds that
+    precondition; if it ever reddens, the masking is unsound and has to move.
+    The decision about *what* the reader may see is taken in the report, where the course
+    context is in hand, and passed to the callback as its argument — an entity has no context
+    and could only ask about the system one, which would show nothing at all to a reader
+    legitimately granted the capability in their own course.
+
+
+## Deferred out of slice 7
+
+Both were in the plan's slice 7 and both are out of it deliberately. Neither is abandoned;
+each is recorded here with what a later reader would otherwise have to measure again.
+
+### The `info.php` refactor — wait for slice 8
+
+The plan and the previous session's handoff both expected two structural losses (the
+`customtext2` comment header and the A-Z initials bar). Measuring the page against the report
+surface found **ten** observable changes, three of them regressions rather than losses:
+
+- **Rows disappear.** `info_table.php` lists `{user_enrolments}` filtered to undecided. The
+  report reads `enrol_apply_submission`. The slice 6 backfill covered every row that existed at
+  upgrade time, and since slice 6 every application writes a record — so the gap is narrower
+  than it first looks, and worth stating precisely rather than loosely. `enrol/editenrolment.php`
+  **cannot create** anything: it takes `required_param('ue', PARAM_INT)` and loads an existing
+  row `MUST_EXIST`. What it can do is suspend an enrolment that never had a record — one
+  approved before the upgrade, which the backfill deliberately skipped because its predicate is
+  the queue's — and `hook_callbacks.php` returns early for any status that is not active, so
+  nothing writes one then either. Restoring an archive older than the trail is the second
+  route. Both leave rows `info.php` lists and the report does not.
+  **And note the converse on the same path**, which is a defect in its own right and is not
+  fixed: a *post*-upgrade application suspended through that screen keeps its record, still
+  stamped `STATUS_APPROVED`, so the report shows it with an outcome that is no longer true.
+- **Editing teachers lose the page** if it moves to `enrol/apply:viewreports`, which is
+  manager-only by archetype and deliberately so. That is a permission regression on upgrade
+  with no setting to restore it.
+- **The site-wide scope has nowhere to go.** `info.php` with no `id` lists every apply
+  instance on the site under a system-context capability check.
+  `course_applications::can_view()` refuses a non-course context, and its base condition binds
+  `courseid` to `get_context()->instanceid`, which is **0** for a system context — so it would
+  match nothing, not everything. Whatever happens to the `id` scope, the old table survives for
+  this one, and the plugin ends up with three listing surfaces instead of two.
+
+Also, and separately: a `manageapplications`-gated report **must not** inherit the entity's
+`submission:snapshot` column. That column is masked by `moodle/site:viewuseridentity`, which is
+a different question from `viewreports` — inheriting it hands every editing teacher exactly the
+disclosure the separate capability exists to withhold.
+
+The rest are real but ordinary: the user picture, the waiting-list row highlight
+(`system_report::get_row_class()` is available and not overridden), the per-instance
+`customtext2` header (`column::set_title()` takes only a `lang_string` and the class is
+`final`; `set_report_info_container()` is the slot), the A-Z bars
+(`system_report_table` calls `initialbars(false)` unconditionally — 5.1 `:173`, 5.2 `:170`),
+page size 50 to 30, sort flipping from `applydate` ASC to `timecreated` DESC, and orphaned
+table preferences keyed on the old uniqueid.
+
+One trap for whoever does it: `tests/local/bootstrap_compat_test.php` reads `info_table.php`
+with `file_get_contents()` and **no `is_file()` guard**, so deleting the file reddens
+`test_every_table_class_defines_a_header_column` with a warning that is fatal under
+`--fail-on-warning`.
+
+### The bulk-action bar — its own PR, and probably on `manage.php`
+
+The plan put a bulk bar on the report. Measured against the plugin's own methods, the report is
+the wrong surface for it:
+
+- **The identifiers do not match.** The only unambiguous per-row handle the report has is
+  `enrol_apply_submission.id`. `confirm_enrolment()`, `wait_enrolment()` and
+  `cancel_enrolment()` accept `user_enrolments.id` only, and `submission::decide()` fans out
+  across **every** record sharing that id. Posting `userenrolmentid` from the report is the one
+  design that cannot be made correct.
+- **Most of an aged report is inert, silently.** An approved record's enrolment is live but
+  *active*, and a cancelled one has none at all; either way all three methods `continue` past
+  them, because both lookups admit only `ENROL_USER_SUSPENDED` (plus `ENROL_APPLY_USER_WAIT` for
+  confirm and cancel) — while `manage.php` still redirects with a success notice.
+- **A foreign id is a fatal; a stale one is merely skipped.** `get_pending_user_enrolment()`
+  uses `IGNORE_MISSING` and the callers `continue` on a miss, so a dangling id is inert. But
+  that lookup carries no enrol-method predicate, so a suspended enrolment belonging to *another*
+  method passes it and then reaches `get_record('enrol', [..., 'enrol' => 'apply'], MUST_EXIST)`
+  and throws. Unreachable from the report's own rows; reachable from any hand-built POST.
+- **The capabilities disagree.** The report is gated on `viewreports` (manager); the actions on
+  `manageapplications` (editing teacher and manager). By default a manager can do both and an
+  editing teacher can act but cannot see the report.
+
+`manage.php`'s queue has none of these problems: every row is a live `{user_enrolments}` row by
+construction, and its checkbox value already *is* what the methods take. That is what the plan's
+slice I was for, and it is where the bar belongs.
+
+If it is ever wanted on the report anyway, the two things that make it possible are
+`set_checkbox_toggleall()`'s documented `null` return (suppresses the checkbox per row, which is
+how core's `cohorts` report does it) and resolving record id to live user-enrolment id
+server-side with a re-check. Note also that the report's **table** is not inside a form — the
+only `<form>` in the markup is the filters moodleform in the dropdown, which posts over AJAX and
+cannot host the bar — so the bar has to be a sibling that copies the checked values into its own
+field, and that paging,
+filtering and sorting all fire `core_table/dynamic:tableContentRefreshed` and wipe the selection.
+
+## Defects found in slice 7's own code
+
+Found by mutation testing during the slice, not by review afterwards. All fixed; each fix
+reddens exactly one named test.
+
+- **The snapshot masking was fail-open on every path that did not go through the report.** The
+  formatter's third parameter defaulted to `false`, and its docblock said at length that this
+  was the restrictive state and that an entity used without the report would therefore "show
+  less rather than more". It did the opposite. A column callback is never invoked with three
+  arguments: `column::format_value()` passes the registered argument **always**, and
+  `add_callback()`/`set_callback()` default it to `null` — so the parameter default was
+  unreachable and `null`, which the formatter read as "show everything", was what the entity's
+  own bare registration passed. `null` is now the restrictive state and `ALL_FIELDS` the
+  permissive one. This mattered beyond the slice: slice 8's datasource reuses this entity and
+  would have inherited the open version.
+- **The snapshot silently truncated any value containing a bare `<`.** It ran each label and
+  value through `format_string()`, which under the default `formatstringstriptags` calls
+  `strip_tags()`, which deletes from the `<` onwards. Measured: an applicant who typed
+  `A<B and R&D` had the cell render `City: A`. This plugin's own `fields::submitted_values()`
+  documents that exact loss and stores the value unstripped because of it, so the report was
+  undoing a decision already taken one layer up. It escapes instead, which is lossless and is
+  what a raw-HTML cell needs anyway.
+- **`s()` was not the right escaper, and the reason is the download.**
+  `base_export_format::format_text()` runs `html_entity_decode($text, ENT_COMPAT)` before it
+  strips, and `ENT_COMPAT` by definition leaves single quotes alone — so `s()`'s `&#039;`
+  reaches the CSV verbatim and a manager downloads `O&#039;Brien`. `htmlspecialchars()` with
+  `ENT_COMPAT` round-trips every case measured, and the value lands in a text node where a bare
+  apostrophe is harmless.
+- **The same decode-then-strip order rules out markup as a line separator.** An escaped `&lt;`
+  decodes back to a real `<` and the strip pattern then eats to the next `>` on that line, which
+  a `<br />` supplies. Measured: `nl2br()` turns `City: A&lt;B and R&amp;D` into `City: A` in the
+  export — but only when a further line follows, since `nl2br` inserts nothing after the last one
+  and the run needs a `>` to close on. A bare newline exports intact either way — the pattern excludes `\r\n` precisely so a
+  newline ends the run. The pairs are separated by a literal newline and the line breaks are
+  drawn in `styles.css` with `white-space: pre-line`, on the cell, where the export cannot see
+  them.
+- **The comment column had both defects the snapshot column was shaped to avoid.** It used
+  `format_text(FORMAT_PLAIN)`, which sounds like it strips markup and does not: its whole branch
+  is `s()`, `rebuildnolinktag()`, a double-space substitution and `nl2br()`
+  (`lib/classes/formatting.php:243-248`, identical on both branches). So `s()` put `&#039;` into
+  the download and the injected `<br />` supplied the `>` that lets a decoded `<` swallow the
+  rest of its line. It goes through the same escaper now. Nothing caught this for a while
+  because no test asserted the comment cell's contents at all — swapping the implementation left
+  the suite green, which is how it was found.
+- **The `userid <> 0` base condition was unreachable.** Deleting it left the whole suite green,
+  because the report's INNER join onto `{user}` already excludes id 0. Removed rather than kept:
+  a guard no test can hold reads as protection while proving nothing. The comment in its place
+  names the join as the mechanism, and the test still holds the behaviour end to end — widening
+  that join to a LEFT one reddens it, which was measured.
+
+### Tests that passed while proving nothing
+
+Every one of these was written for the defect it failed to catch.
+
+- The angle-bracket test asserted `assertNotEmpty()` and passed against a cell rendering a bare
+  `A`. Now `test_a_raw_angle_bracket_in_a_snapshot_value_reaches_the_reader_whole`.
+- The separator test used `strip_tags()` as a stand-in for the export. They are different
+  functions and the difference is the whole finding; it now runs the cell through
+  `base_export_format::format_text()` itself, as
+  `test_the_snapshot_pairs_survive_the_download`.
+- `test_a_pseudonymised_record_is_not_listed` passed against the deletion of the line it was
+  named after.
+- The identity-filter half of `test_an_identity_column_is_absent_without_viewuseridentity` was
+  unfalsifiable, because the report offered identity filters to nobody. It offers them now —
+  which is what the plan specified — so the assertion has a control.
+- The snapshot half of the masking had **no** test at all, which is what the previous session's
+  handoff opened with.
+
 ## Defects found and deferred
 
 - ~~**The backup's `users` gate does not match core's.**~~ Fixed on
@@ -195,7 +393,102 @@ Record them here so a later reader does not "fix" them back.
   `users` gate — a restore-based test passes with the gate deleted, because with users excluded
   the restore drops the record anyway; the archive file has to be read directly.
 
+### A correction to this plugin's own earlier documentation
+
+**An applicant cannot type a bare `<` into an application, and two places in this repo said
+otherwise.** `classes/local/fields.php` and this repo's `CLAUDE.md` both illustrate the
+`format_string()` trap with "an applicant who types `A<B and R&D` has their answer delivered as
+`A`", and use it to justify storing the submitted value unstripped. The justification survives;
+the illustration does not. Every editable field on the application form is `PARAM_TEXT`
+(`classes/form/application_form.php:260`, and `:168` for the comment), and `formslib` cleans the
+whole submission through `clean_param()` before `get_data()` — measured,
+`clean_param('A<B and R&D', PARAM_TEXT)` is `'A'`. The tail is gone at submission, whatever the
+storage layer then does.
+
+The route that really can put such a value in the table is a **restore**, which writes
+`userinfodata` and `comment` verbatim out of an archive this site did not produce
+(`backup/moodle2/restore_enrol_apply_plugin.class.php:136-137`). That is the reason the report's
+cells escape rather than strip, and it is a better reason than the one that was written down.
+
+Both sentences are corrected in this slice. It is worth noting how the error travelled: slice 7's
+formatter repeated it almost verbatim, because it read as settled fact in a neighbouring file.
+
+The same paragraph in `CLAUDE.md` also says a report column "has to satisfy `PARAM_TEXT`" and
+must therefore strip. It does not — a Report Builder cell is raw HTML, where escaping is both
+safe and lossless. `PARAM_TEXT` binds a web service return, not a report column.
+
+### Slice 7's own corrections to the plan
+
+Each measured on both m501 and m502, not reasoned about.
+
+- **The two stress helpers the plan mandates cannot be used.** `datasource_stress_test_columns()`
+  and `datasource_stress_test_columns_aggregation()` both hand their argument to the report
+  generator's `create_report()`, which reaches `helpers\report::create_report()` and forces
+  `$data->type = datasource::TYPE_CUSTOM_REPORT`. There is no core stress helper for a system
+  report on either branch. `test_every_column_renders_for_every_status` stands in for them.
+- **The plan names the wrong web service.** `core_reportbuilder_retrieve_report` is the *custom*
+  report service; system reports use `core_reportbuilder_retrieve_system_report`, and neither is
+  ajax-enabled, so neither is browser-reachable. Every sort, filter and page turn goes through
+  `core_table_get_dynamic_table_content`. The download is a third path and re-creates the report
+  through `system_report_factory::create()` in `reportbuilder/download.php`, so `can_view()`
+  gates it as well.
+- **`can_view()` runs earlier than the plan says.** On that service `set_filterset()` constructs
+  the report — and therefore calls `require_can_view()` — *before* the service's own
+  `validate_context()` and `has_capability()` two lines later
+  (`lib/table/classes/external/dynamic/get.php:229-231`, the same lines on 5.1 and 5.2). So
+  `can_view()` is the first gate and effectively the only one, and must not assume
+  `require_login()` ran against the course.
+- **`get_parameter()` is not merely untrusted, it is forgeable**: the filterset declares
+  `parameters` as `PARAM_RAW` and `set_filterset()` json_decodes it straight into the report.
+  Scope on `get_context()->instanceid` only.
+  `test_a_forged_itemid_or_parameter_cannot_widen_the_report` drives it as a forger would.
+- **The status trap is broader than one value.** Core's enrolment status map is wrong for all
+  four of this table's values, which is the reason not to borrow its column or its formatter.
+  `core_course\reportbuilder\local\formatters\enrolment` is additionally `@deprecated since
+  Moodle 5.2` (MDL-87000) and emits a notice per call that 5.1 does not — but **do not expect CI
+  to catch that half**: the notice arrives through `debugging()` at `DEBUG_DEVELOPER`, PHPUnit
+  re-emits it at teardown as `E_USER_NOTICE`, and Moodle's `phpunit.xml.dist` sets
+  `failOnDeprecation` and `failOnWarning` but not `failOnNotice`. An earlier draft of this note
+  claimed it reddens the 5.02 leg; it probably does not.
+- **A 5.2-shaped entity is a compile-time fatal on 5.1.** 5.1's `entities\base` has three
+  abstracts — `get_default_tables()`, `get_default_entity_title()`, `initialise()`; 5.2 has two
+  and drives the rest from `get_available_columns()`/`_filters()`/`_conditions()`, which **do not
+  exist on 5.1**. Overriding `initialise()` is the one shape both accept. Note which runner is
+  blind to this, because the intuition is backwards: `mdl ci` with no flags defaults to
+  **MOODLE_501_STABLE** (`moodle-dev/bin/mdl-ci:68`), so it is the leg that catches it. What
+  never sees it is the m502-only local loop — `mdl phpunit m502`, `mdl behat m502` — which is
+  how this repo is worked day to day.
+- **`set_is_available()` exists on `column` and `filter` only** — a condition *is* a filter. An
+  unavailable element is omitted entirely and contributes no SQL.
+- **The status filter needs four options, not the plan's three** (pending, approved, waiting,
+  cancelled).
+- **The capability did not exist.** `enrol/apply:viewreports` is added by this slice.
+- **"The CSV export strips tags" is true in effect and wrong in mechanism, and the mechanism is
+  what matters.** There is no `strip_tags()` anywhere on the system report download path. It is
+  `base_export_format::format_text()` (`lib/table/classes/base_export_format.php:82-88`,
+  identical on both branches), which runs `html_entity_decode($text, ENT_COMPAT)` **first** and
+  only then removes tag-shaped runs with a pattern that excludes `\r\n`. Three consequences the
+  plan could not have had: markup as a separator is worse than useless because an escaped `&lt;`
+  decodes back and the run eats to the next `>` on its line; `s()` is the wrong escaper because
+  `ENT_COMPAT` leaves `&#039;` undecoded; and a literal newline is both a working separator and
+  the thing that ends such a run.
+- **`test_csv_export_separates_the_snapshot_fields` should not use `strip_tags()` as a proxy for
+  the export.** They are different functions, and a proxy test passes against markup that
+  measurably loses data in a real download.
+
 ## Working practices learned the hard way
+
+- **`mdl ci --matrix`'s per-leg PASS/FAIL column is not evidence, and now the reason is known.**
+  The per-leg runner script is echoed into each leg's log, so every log contains the literal
+  string `ALL STEPS PASSED` inside the script's own source line — and the summary decides each
+  leg with `grep -q "ALL STEPS PASSED"` (`moodle-dev/bin/mdl-ci:248`). It therefore prints PASS
+  for every leg, always. The **exit code is sound**: `rc` is set first by `wait` on each leg's
+  process, and the buggy grep can only ever add a failure, never clear one. So a red run still
+  exits non-zero and still keeps its logs — the column just will not tell you which leg.
+  A hand audit needs anchored patterns, because `grep ': FAILED'` matches the runner's own
+  `run_step` definition: use `^-- [a-z]+: (OK|FAILED)$` and `^==== mdl-ci: ALL STEPS PASSED ====$`.
+  And note the logs of a **passing** run are deleted (`rm -rf "$logdir"`), so snapshot them while
+  it runs if you intend to verify rather than trust.
 
 - **Prune worktrees before any test run.** `isolation: "worktree"` creates them at
   `<repo>/.claude/worktrees/`, inside the directory bind-mounted into Moodle, so Moodle scans a
