@@ -22,22 +22,58 @@ Last updated: 2026-08-23.
 | [#11](https://github.com/uaiblaine/moodle-enrol_apply/pull/11) | 7 | The course applications report |
 | [#12](https://github.com/uaiblaine/moodle-enrol_apply/pull/12) | — | Test metadata moved to PHPUnit attributes |
 | [#13](https://github.com/uaiblaine/moodle-enrol_apply/pull/13) | — | Corrected a note that went stale the same day |
+| [#14](https://github.com/uaiblaine/moodle-enrol_apply/pull/14) | 8 | The site-wide report source |
+| [#15](https://github.com/uaiblaine/moodle-enrol_apply/pull/15) | — | A non-scalar snapshot value no longer fails the run |
 
 ## In progress
 
-**Slice 8 — the site-level datasource**, branch `feature/slice-8-site-datasource`.
-196/196 PHPUnit on both m501 and m502.
+Nothing. Slices 1 to 8 are merged; **slice 9 is closed without being built** — see below.
 
-The decision the plan does not contain, and the reason this slice is not a copy of slice 7:
-**a datasource has no `can_view()`**. `reportbuilder/classes/datasource.php` contains no
-capability call of any kind on either branch, and core offers a plugin no hook to add one. Who
-may read a custom report is decided by Moodle's report capabilities and by the report's
-audience — and `moodle/reportbuilder:view` carries the `user` archetype, so the surface is
-reachable by any authenticated account a single manager adds to an audience, downloadable as
-CSV, and mailable on a schedule that renders **once with the creator's permissions**.
+## Slice 9 is closed, and was not built
 
-So the frozen profile snapshot is **removed rather than masked** for a reader without
-`moodle/user:viewalldetails` at the system context. See "The snapshot at site level" below.
+**Its premise is false, and nothing downstream of the premise was re-examined.** The slice's
+stated goal is "a progress indicator, a notification when the file is ready, and a download link
+that only they can use — **instead of a PHP timeout**". There is no PHP timeout to avoid. The
+synchronous export slice 7 already ships:
+
+- calls `set_time_limit(0)` **unconditionally**, in `dataformat_export_format::__construct()`
+  (`lib/table/classes/dataformat_export_format.php:63`, identical on 5.1 and 5.2), with core's
+  own comment saying why: "The dataformat export time to first byte could take a while";
+- closes the session immediately afterwards (`:66`), so the user's other tabs are not blocked;
+- streams with `$DB->get_recordset_sql()` on the download branch
+  (`reportbuilder/classes/table/base_report_table.php:202`, same line on both), not
+  `get_records_sql()` — constant memory, however many rows.
+
+So a background task buys **no capacity at all**. What it would buy is a progress bar, a "your
+file is ready" message, and a re-fetchable artefact. Weighed against that: a new file area on
+`file_pluginfile()`'s generic branch, which does no login and no capability check of its own;
+`enrol_apply_pluginfile()` carrying every guard itself; privacy work across six provider methods;
+a retention sweep; and a failure branch core implements nowhere. The decision was to close it.
+
+**The design's reason for not reusing core is also wrong.** It says core's asynchronous export
+"is blocked by `$CFG->enablecustomreports` — so there is nothing to reuse". That setting
+**defaults to 1** (`admin/settings/subsystems.php:65-69`, identical on both branches), and slice 8
+shipped the datasource that makes a schedulable custom report possible. Core renders the file,
+mails it and cleans up, running as the schedule's creator
+(`reportbuilder/classes/task/send_schedule.php:85`).
+
+**And the plan's implementation point cannot work where it is written.** It puts a threshold
+branch in `report.php` — "below it, synchronous; above it, queue". `report.php` never sees the
+click: `system_report_table::download_buttons()` renders a selector pointing at
+`/reportbuilder/download.php` (5.1 `:308`, 5.2 `:305`), which re-creates the report and streams
+it. Intercepting it would mean `set_downloadable(false)`, deleting the working synchronous path
+the same slice is told to preserve.
+
+### The one real gap, recorded rather than fixed
+
+Moodle can only schedule **custom** reports — `permission::can_edit_report()` returns false for
+anything that is not `TYPE_CUSTOM_REPORT` (`reportbuilder/classes/permission.php`, both branches)
+— and editing them is governed at site level. So **a course manager cannot be given a recurring
+export of their own course's applications** without site-level report permissions. That is a
+genuine limitation and it is what a future slice should address if anyone wants it: per-course
+delegation of a *scheduled* export, which is a different feature from the on-demand asynchronous
+download slice 9 specified. It is written up in the README as a limit rather than left for
+somebody to rediscover.
 
 ## The snapshot at site level
 
@@ -103,20 +139,20 @@ Every fix is mutation-checked and reddens exactly its own named test.
 
 ## Next
 
-Slice 9 — the asynchronous download. And `info.php`, which slice 8 now makes reconsiderable:
-its site-wide scope finally has somewhere to go, so the twelve costs recorded under "Deferred
-out of slice 7" can be weighed against a real destination rather than against nothing.
+**Slice 10** (the per-field snapshot columns) and **slice I** (decision-time enrolment
+parameters and the modern queue). Slice 9 is closed; slice 11 has not been re-read since the
+plan was written and should be checked against core before it is started, on the evidence of the
+last three slices.
 
-Two things slice 8 inherits from slice 7 and should not rediscover:
+`info.php` is now reconsiderable for the first time: slice 8 gave its site-wide scope somewhere
+to go, so the twelve costs recorded under "Deferred out of slice 7" can be weighed against a real
+destination rather than against nothing.
 
-- **The snapshot column's masking is fail-closed by default and will look broken.** A
-  datasource adds the entity's columns directly and never calls `set_callback()`, so the
-  snapshot renders the applicant's name parts and nothing else, for everybody including an
-  administrator. That is deliberate — see "Defects found in slice 7's own code" — and slice 8
-  has to open it on purpose, with a context to judge the reader in.
-- **A custom report over this entity has no `{user}` join forced on it**, so pseudonymised
-  records (`userid` 0, what a deleted course leaves behind) are not excluded for free the way
-  they are in the course report. Slice 8 needs its own exclusion.
+**A standing note for whoever picks up the next slice.** The plan was written before core moved
+and has been wrong in eight to nine places in each of the last three slices — including, in slice
+9, about the problem the slice existed to solve. Read the traps, then verify each one on both
+branches before building on it. Every correction found so far is recorded under "Corrections
+found in the plan and in fleet documentation".
 
 ## Decisions taken that depart from the plan
 

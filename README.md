@@ -122,6 +122,21 @@ what the creator may see, not what the reader may.
 This surface follows the site's `Enable custom reports` setting. The course report does not —
 it keeps working when custom reports are switched off.
 
+### Large exports, and exports on a schedule
+
+Both reports download synchronously, and that is deliberate rather than a limitation to work
+around. Moodle's export path sets no time limit and streams rows one at a time rather than
+loading them all, so a large export takes longer but does not run out of time or memory.
+
+If you want an export to arrive **on a schedule** rather than on demand, build a custom report
+on the Enrolment applications source and use Report builder's own scheduling: Moodle produces the
+file, mails it and cleans it up, with nothing needed from this plugin.
+
+One limit worth knowing before planning around it: Moodle can only schedule **custom** reports,
+and who may edit them is decided at site level. So a course manager cannot be given a recurring
+export of their own course's applications without also being given site-level report permissions.
+For a one-off, the course report's own download is the answer.
+
 ### Setting up a mentor
 
 A mentor is somebody who decides on the applications of specific users, wherever those
