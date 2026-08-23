@@ -30,6 +30,7 @@ use core_privacy\local\request\approved_contextlist;
 use core_privacy\local\request\approved_userlist;
 use core_privacy\local\request\userlist;
 use core_privacy\local\request\writer;
+use PHPUnit\Framework\Attributes\CoversClass;
 
 /**
  * Tests for the enrol_apply privacy provider.
@@ -38,8 +39,8 @@ use core_privacy\local\request\writer;
  * @category   test
  * @copyright  2026 Anderson Blaine
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers     \enrol_apply\privacy\provider
  */
+#[CoversClass(provider::class)]
 final class provider_test extends \core_privacy\tests\provider_testcase {
     /** @var \stdClass Course carrying the apply instance. */
     protected $course;

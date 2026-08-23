@@ -26,6 +26,7 @@
 namespace enrol_apply\task;
 
 use enrol_apply\local\submission;
+use PHPUnit\Framework\Attributes\CoversClass;
 
 /**
  * Tests for the application record retention sweep.
@@ -34,8 +35,8 @@ use enrol_apply\local\submission;
  * @category   test
  * @copyright  2026 Anderson Blaine
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers     \enrol_apply\task\purge_submissions
  */
+#[CoversClass(purge_submissions::class)]
 final class purge_submissions_test extends \advanced_testcase {
     /** @var int Counter giving each seeded record its own applicant. */
     protected $seeded = 0;

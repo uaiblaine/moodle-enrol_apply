@@ -25,6 +25,8 @@
 
 namespace enrol_apply;
 
+use PHPUnit\Framework\Attributes\CoversClass;
+
 /**
  * Tests for the enrol_apply plugin application state machine.
  *
@@ -32,8 +34,8 @@ namespace enrol_apply;
  * @category   test
  * @copyright  2026 Anderson Blaine
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers     \enrol_apply_plugin
  */
+#[CoversClass(\enrol_apply_plugin::class)]
 final class lib_test extends \advanced_testcase {
     /** @var \stdClass Course the apply instance belongs to. */
     protected $course;

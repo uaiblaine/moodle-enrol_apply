@@ -450,6 +450,13 @@ Expect no matches. `phpcbf` fixes it too, but the grep is faster than a CI round
 
 ## Testing notes
 
+- **Test metadata lives in PHP attributes, not doc-comments, and the fleet's exception does not
+  apply here.** `~/dev/CLAUDE.md` keeps `@covers` docblocks alive for plugins that still support
+  Moodle 4.5, because moodle-cs on the 4.05 leg cannot see attributes and reports
+  `moodle.PHPUnit.TestCaseCovers.Missing` for every method in the file. This plugin declares
+  `$plugin->supported = [501, 502]` and `ci.yml` has no 4.05 job, so `#[CoversClass(...)]` is
+  the correct form. PHPUnit 11.5.55 raises one test-runner deprecation per file carrying
+  `@covers` in a docblock; the suite is at zero and a restored docblock puts them back.
 - `tests/lib_test.php` drives the state machine directly against the plugin object. Note
   that `enrol_apply` must be added to `enrol_plugins_enabled` in `setUp()`, otherwise
   `enrol_get_plugin('apply')` works but nothing core-side treats the instance as live.
