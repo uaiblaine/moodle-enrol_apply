@@ -46,7 +46,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
         echo $this->header();
         echo $this->heading(get_string('confirmusers', 'enrol_apply'));
         echo html_writer::tag('p', get_string('confirmusers_desc', 'enrol_apply'));
-        echo $this->manage_form($table, $manageurl);
+        echo $this->manage_form($table, $manageurl, $instance);
         echo $this->footer();
     }
 
@@ -55,9 +55,10 @@ class enrol_apply_renderer extends plugin_renderer_base {
      *
      * @param enrol_apply_manage_table $table Table listing the applications.
      * @param moodle_url $manageurl Url the form posts back to.
+     * @param stdClass|null $instance Enrol instance the queue is scoped to, null site wide.
      * @return string Rendered markup.
      */
-    public function manage_form($table, $manageurl) {
+    public function manage_form($table, $manageurl, $instance = null) {
         $tablehtml = $this->capture_table($table);
 
         $actions = [
@@ -65,6 +66,19 @@ class enrol_apply_renderer extends plugin_renderer_base {
             ['value' => 'wait', 'label' => get_string('btnwait', 'enrol_apply')],
             ['value' => 'cancel', 'label' => get_string('btncancel', 'enrol_apply')],
         ];
+
+        /* Offered only where the course actually has groups. A chooser with nothing in it is a
+           control that cannot be used, and the instance's own list still applies when nothing
+           is picked - so an empty chooser would also imply a choice the operator never made. */
+        $groups = [];
+        if ($instance !== null) {
+            foreach (groups_get_all_groups($instance->courseid) as $group) {
+                $groups[] = [
+                    'id' => $group->id,
+                    'name' => format_string($group->name, true, ['context' => \context_course::instance($instance->courseid)]),
+                ];
+            }
+        }
 
         $context = [
             'formurl' => $manageurl->out(false),
@@ -76,6 +90,10 @@ class enrol_apply_renderer extends plugin_renderer_base {
             'golabel' => get_string('go'),
             'messagelabel' => get_string('outcomemessage', 'enrol_apply'),
             'messagehelp' => get_string('outcomemessage_help', 'enrol_apply'),
+            'hasgroups' => (bool) $groups,
+            'grouplabel' => get_string('decisiongroups', 'enrol_apply'),
+            'grouphelp' => get_string('decisiongroups_help', 'enrol_apply'),
+            'groups' => $groups,
             'actions' => $actions,
         ];
 

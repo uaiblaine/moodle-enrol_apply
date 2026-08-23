@@ -288,5 +288,29 @@ function xmldb_enrol_apply_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026082300, 'enrol', 'apply');
     }
 
+    if ($oldversion < 2026082400) {
+        /* The groups a decider chose, so the approval can join those instead of the instance's
+           own list. Stored on the record rather than passed along, because complete_approval()
+           runs twice for a queue approval and two calls carrying different lists would UNION
+           them - a group the approver deselected would be joined anyway, and nothing removes
+           it. Both calls read this column instead. */
+        $table = new xmldb_table('enrol_apply_submission');
+        $field = new xmldb_field(
+            'decidedgroups',
+            XMLDB_TYPE_TEXT,
+            null,
+            null,
+            null,
+            null,
+            null,
+            'outcomemessage'
+        );
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        upgrade_plugin_savepoint(true, 2026082400, 'enrol', 'apply');
+    }
+
     return true;
 }

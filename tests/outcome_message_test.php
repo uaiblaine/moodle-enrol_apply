@@ -258,6 +258,168 @@ final class outcome_message_test extends \advanced_testcase {
     }
 
     /**
+     * The groups the decider chooses REPLACE the instance's list, and do not add to it.
+     *
+     * The defect this pins is silent and would look like a working feature. An approval taken
+     * through the queue completes twice: update_user_enrol() dispatches its hook before writing
+     * the row, so hook_callbacks finishes the approval first and confirm_enrolment() finishes it
+     * again. Had the chosen list been passed as an argument, the first pass would have joined
+     * the instance's groups and the second the chosen ones - a union, so a group the approver
+     * deselected is joined anyway and nothing removes it. The choice is stored and both passes
+     * read it.
+     *
+     * The instance group is the control. Without it this would pass against an implementation
+     * that simply ignored the instance list altogether, which is a different thing from
+     * replacing it.
+     *
+     * @return void
+     */
+    public function test_a_chosen_group_replaces_the_instance_list(): void {
+        global $DB;
+
+        $instancegroup = $this->getDataGenerator()->create_group(['courseid' => $this->course->id]);
+        $chosengroup = $this->getDataGenerator()->create_group(['courseid' => $this->course->id]);
+        $DB->insert_record('enrol_apply_groups', (object) [
+            'enrolid' => $this->instance->id,
+            'groupid' => $instancegroup->id,
+        ]);
+
+        [$applicant, $ueid] = $this->apply();
+        $this->setAdminUser();
+
+        $this->plugin->confirm_enrolment([$ueid], '', ['groups' => [$chosengroup->id]]);
+
+        $this->assertTrue(groups_is_member($chosengroup->id, $applicant->id));
+        $this->assertFalse(
+            groups_is_member($instancegroup->id, $applicant->id),
+            'the deselected instance group was joined anyway, so the two approval passes unioned'
+        );
+    }
+
+    /**
+     * With no choice made, the instance's own group list still applies.
+     *
+     * The other half of the test above: replacing must not become ignoring.
+     *
+     * @return void
+     */
+    public function test_no_chosen_group_leaves_the_instance_list_in_charge(): void {
+        global $DB;
+
+        $instancegroup = $this->getDataGenerator()->create_group(['courseid' => $this->course->id]);
+        $DB->insert_record('enrol_apply_groups', (object) [
+            'enrolid' => $this->instance->id,
+            'groupid' => $instancegroup->id,
+        ]);
+
+        [$applicant, $ueid] = $this->apply();
+        $this->setAdminUser();
+
+        $this->plugin->confirm_enrolment([$ueid]);
+
+        $this->assertTrue(groups_is_member($instancegroup->id, $applicant->id));
+    }
+
+    /**
+     * A group from another course never reaches the membership OR the durable record.
+     *
+     * Both halves are asserted because there are two guards and they defend different things.
+     * add_instance_groups() re-checks against the course before joining, so membership alone is
+     * already safe - and asserting only that made the allowlist in confirm_enrolment()
+     * unreachable, which was measured: removing it reddened nothing. Its job is the RECORD,
+     * which outlives the enrolment and is read by the reports and by a subject access request.
+     * A foreign id stored there is wrong even though it is never joined.
+     *
+     * groups_get_all_groups() is keyed by group id, so the allowlist compares KEYS. Comparing
+     * values would test the id against group names and let everything through.
+     *
+     * @return void
+     */
+    public function test_a_group_outside_the_course_reaches_neither_membership_nor_record(): void {
+        global $DB;
+
+        $othercourse = $this->getDataGenerator()->create_course();
+        $foreign = $this->getDataGenerator()->create_group(['courseid' => $othercourse->id]);
+        $mine = $this->getDataGenerator()->create_group(['courseid' => $this->course->id]);
+
+        [$applicant, $ueid] = $this->apply();
+        $this->setAdminUser();
+
+        $this->plugin->confirm_enrolment([$ueid], '', ['groups' => [$foreign->id, $mine->id]]);
+
+        // The control: the legitimate half of the same post was honoured, both times.
+        $this->assertTrue(groups_is_member($mine->id, $applicant->id));
+        $this->assertFalse(groups_is_member($foreign->id, $applicant->id));
+
+        $recorded = (string) $DB->get_field(
+            'enrol_apply_submission',
+            'decidedgroups',
+            ['courseid' => $this->course->id, 'userid' => $applicant->id],
+            MUST_EXIST
+        );
+        $ids = array_map('intval', array_filter(explode(',', $recorded)));
+        $this->assertContains((int) $mine->id, $ids);
+        $this->assertNotContains((int) $foreign->id, $ids, 'a foreign group id was written to the audit trail');
+    }
+
+    /**
+     * The membership carries this plugin's component stamp.
+     *
+     * Core's unenrol_user() deletes groups_members rows by component and itemid; without the
+     * stamp the membership survives every unenrolment where the user holds another enrolment
+     * in the course.
+     *
+     * @return void
+     */
+    public function test_a_chosen_group_membership_carries_the_component_stamp(): void {
+        global $DB;
+
+        $group = $this->getDataGenerator()->create_group(['courseid' => $this->course->id]);
+        [$applicant, $ueid] = $this->apply();
+        $this->setAdminUser();
+
+        $this->plugin->confirm_enrolment([$ueid], '', ['groups' => [$group->id]]);
+
+        $member = $DB->get_record(
+            'groups_members',
+            ['groupid' => $group->id, 'userid' => $applicant->id],
+            '*',
+            MUST_EXIST
+        );
+        $this->assertSame('enrol_apply', $member->component);
+        $this->assertEquals($this->instance->id, (int) $member->itemid);
+    }
+
+    /**
+     * The decider's enrolment period is stamped on approval, and never before it.
+     *
+     * A timeend on a pending row is swept by the ENROL_EXT_REMOVED_UNENROL branch of
+     * process_expirations(), which selects on timeend with no status filter - so the applicant
+     * would be unenrolled instead of decided.
+     *
+     * @return void
+     */
+    public function test_the_chosen_period_is_stamped_on_approval_only(): void {
+        global $DB;
+
+        [$applicant, $ueid] = $this->apply();
+
+        // The control: nothing is stamped while the application is still pending.
+        $pending = $DB->get_record('user_enrolments', ['id' => $ueid], '*', MUST_EXIST);
+        $this->assertEquals(0, (int) $pending->timestart);
+        $this->assertEquals(0, (int) $pending->timeend);
+
+        $this->setAdminUser();
+        $start = time() + 86400;
+        $end = $start + (7 * 86400);
+        $this->plugin->confirm_enrolment([$ueid], '', ['timestart' => $start, 'timeend' => $end]);
+
+        $approved = $DB->get_record('user_enrolments', ['id' => $ueid], '*', MUST_EXIST);
+        $this->assertEquals($start, (int) $approved->timestart);
+        $this->assertEquals($end, (int) $approved->timeend);
+    }
+
+    /**
      * The decider's text is escaped where it lands, and is not lost on the way.
      *
      * The body is assembled as HTML from the administrator's own template, which is trusted;

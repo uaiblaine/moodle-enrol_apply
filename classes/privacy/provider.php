@@ -69,6 +69,7 @@ class provider implements
                 'userenrolmentid' => 'privacy:metadata:enrol_apply_submission:userenrolmentid',
                 'comment' => 'privacy:metadata:enrol_apply_submission:comment',
                 'userinfodata' => 'privacy:metadata:enrol_apply_submission:userinfodata',
+                'decidedgroups' => 'privacy:metadata:enrol_apply_submission:decidedgroups',
                 'status' => 'privacy:metadata:enrol_apply_submission:status',
                 'outcomemessage' => 'privacy:metadata:enrol_apply_submission:outcomemessage',
                 'timecreated' => 'privacy:metadata:enrol_apply_submission:timecreated',

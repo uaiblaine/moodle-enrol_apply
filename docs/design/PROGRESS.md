@@ -32,13 +32,24 @@ outcome message, previous/next navigation and replacing the bulk bar — that sh
 and its Files table omits the schema, backup/restore, privacy and Report Builder entity work the
 first of them actually needs.
 
-1. **The outcome message** (this branch). No schema and no privacy work at all: the
+1. **The outcome message** (merged, PR #18). No schema and no privacy work at all: the
    `outcomemessage` column has shipped since slice 6, is already declared in the privacy provider
    with strings in both languages, and was written as `''` by every path. Storage and privacy
    were done; the feature was missing.
-2. **Role, dates and groups at decision time** — the schema change, the modal form, and the
-   server-side allowlists.
-3. **The modern queue** — the bulk bar on core's containers, previous/next, and the rewrite of
+2. **Groups and the enrolment period at decision time** (this branch) — one new column, the
+   server-side group allowlist, and the record-resolution that keeps the two approval passes
+   agreeing.
+
+   **The role is deliberately not here, and the reason is a design decision rather than
+   sequencing.** `enrol_apply::roles_protected()` returns **false** on purpose - the docblock
+   says "Roles assigned by this plugin may be tweaked afterwards" - so `enrol_user()` takes the
+   branch that calls `role_assign($roleid, $userid, $context->id)` with **no component and no
+   itemid**. There is no stamp to unassign by. Changing the role at approval therefore means
+   removing the instance's role explicitly, which would also remove it where the person holds
+   the same role from another source. It is also assigned at APPLICATION time, not at decision
+   time, so "choosing a role on approval" is a swap and not a fill-in. That belongs in its own
+   PR with its own decision.
+3. **The role at decision time**, and **the modern queue** — the bulk bar on core's containers, previous/next, and the rewrite of
    Behat scenarios 2 and 3, which drive `"Select Student 1"`, `"With selected users..."` and
    `"Go"` — every one of them markup that bar replaces.
 
