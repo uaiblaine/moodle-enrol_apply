@@ -133,6 +133,7 @@ $string['newapplicationnotification'] = 'There is a new course enrolment applica
 $string['newenrols'] = 'Allow new course enrol request';
 $string['newenrols_desc'] = 'Allow users to apply for an enrolment in new instances by default.';
 $string['nofieldsoffered'] = 'The administrator does not currently allow any profile field to be collected with an application.';
+$string['nothingtoprovide'] = 'There is nothing to fill in. Submit to apply for {$a}.';
 $string['notification'] = 'Enrolment application successfully sent. You will be informed by email when your enrolment has been confirmed.';
 $string['notify_desc'] = 'Define who gets notified about new enrolment applications.';
 $string['notify_heading'] = 'Notification settings';
