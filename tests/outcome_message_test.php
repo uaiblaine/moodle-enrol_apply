@@ -244,6 +244,130 @@ final class outcome_message_test extends \advanced_testcase {
     }
 
     /**
+     * A second approval after a manual suspension is recorded as a new decision.
+     *
+     * The trail used to deny it. decide() skips a row already at the target status, and a
+     * re-approved application never leaves STATUS_APPROVED - so timedecided and decidedby went
+     * on naming the FIRST decider while complete_approval() queued a second notification and the
+     * applicant was told, correctly, that they had been approved again. The record contradicted
+     * a message the plugin itself had sent.
+     *
+     * The skip is not the bug and is deliberately still there: it is what stops a later no-op
+     * touch of an already-decided enrolment re-attributing the decision, which
+     * test_a_recorded_decision_is_not_restamped pins. That test is the control for this one -
+     * both must pass, because together they say the new flag is narrow rather than a blanket
+     * removal.
+     *
+     * Mutation check: make decide() ignore $isfreshdecision and exactly this test goes red,
+     * with test_a_recorded_decision_is_not_restamped still green.
+     *
+     * @return void
+     */
+    public function test_a_second_approval_is_recorded_as_a_new_decision(): void {
+        global $DB;
+
+        [$applicant, $ueid] = $this->apply();
+
+        $first = $this->getDataGenerator()->create_user();
+        $this->getDataGenerator()->enrol_user($first->id, $this->course->id, 'editingteacher');
+        $this->setUser($first);
+        $sink = $this->redirectMessages();
+        $this->plugin->confirm_enrolment([$ueid]);
+        $sink->close();
+
+        $before = $this->record($applicant);
+        $this->assertEquals($first->id, (int) $before->decidedby);
+
+        /* Back into the queue the way core's participants page puts it there. The record is
+           untouched by this, which is the whole reason the second decision was invisible. */
+        $this->plugin->update_user_enrol($this->instance, (int) $applicant->id, ENROL_USER_SUSPENDED);
+        $DB->set_field('enrol_apply_submission', 'timedecided', 111, ['id' => $before->id]);
+
+        $second = $this->getDataGenerator()->create_user();
+        $this->getDataGenerator()->enrol_user($second->id, $this->course->id, 'editingteacher');
+        $this->setUser($second);
+        $sink = $this->redirectMessages();
+        $this->plugin->confirm_enrolment([$ueid]);
+        $sink->close();
+
+        $after = $this->record($applicant);
+        $this->assertEquals($second->id, (int) $after->decidedby, 'the trail names whoever decided last');
+        $this->assertGreaterThan(111, (int) $after->timedecided, 'and when they decided');
+    }
+
+    /**
+     * A later approval clears the group choice an earlier one recorded.
+     *
+     * record_decided_groups() used to return early on an empty list, so no path could clear a
+     * stored one: a decider approving a re-suspended application with the chooser left alone
+     * silently re-joined the groups somebody picked for the earlier decision. An empty value
+     * reads back as "no choice recorded", which puts the instance's own list in charge - so
+     * clearing means what an operator would expect.
+     *
+     * Mutation check: restore the early return in record_decided_groups() and exactly this test
+     * goes red.
+     *
+     * @return void
+     */
+    public function test_a_later_approval_clears_an_earlier_group_choice(): void {
+        global $DB;
+
+        [$applicant, $ueid] = $this->apply();
+        $this->setAdminUser();
+        $group = $this->getDataGenerator()->create_group(['courseid' => $this->course->id]);
+
+        $sink = $this->redirectMessages();
+        $this->plugin->confirm_enrolment([$ueid], '', ['groups' => [(int) $group->id]]);
+        $sink->close();
+        $this->assertSame(
+            (string) $group->id,
+            (string) $this->record($applicant)->decidedgroups,
+            'the premise: the first decision really did record a group'
+        );
+
+        $this->plugin->update_user_enrol($this->instance, (int) $applicant->id, ENROL_USER_SUSPENDED);
+
+        $sink = $this->redirectMessages();
+        $this->plugin->confirm_enrolment([$ueid], '', ['groups' => []]);
+        $sink->close();
+
+        $this->assertSame('', (string) $this->record($applicant)->decidedgroups);
+    }
+
+    /**
+     * A later decision clears the message an earlier one recorded.
+     *
+     * Same defect as the groups, and louder: the applicant received the earlier decision's
+     * wording again, attached to a decision nobody wrote it for.
+     *
+     * Mutation check: restore the early return in record_outcome_message() and exactly this test
+     * goes red - test_a_blank_message_is_not_recorded stays green either way, because that one
+     * is about whitespace not being a message rather than about clearing.
+     *
+     * @return void
+     */
+    public function test_a_later_decision_clears_an_earlier_message(): void {
+        [$applicant, $ueid] = $this->apply();
+        $this->setAdminUser();
+
+        $sink = $this->redirectMessages();
+        $this->plugin->confirm_enrolment([$ueid], 'Welcome aboard');
+        $sink->close();
+        $this->assertSame('Welcome aboard', (string) $this->record($applicant)->outcomemessage);
+
+        $this->plugin->update_user_enrol($this->instance, (int) $applicant->id, ENROL_USER_SUSPENDED);
+
+        $bodies = $this->bodies_of($applicant, function () use ($ueid): void {
+            $this->plugin->confirm_enrolment([$ueid], '');
+        });
+
+        $this->assertSame('', (string) $this->record($applicant)->outcomemessage);
+        $this->assertNotEmpty($bodies, 'the second decision still notifies');
+        $this->assertStringNotContainsString('Welcome aboard', implode(' ', $bodies));
+    }
+
+    /**
+     * Whitespace alone is not a message.    /**
      * Whitespace alone is not a message.
      *
      * @return void

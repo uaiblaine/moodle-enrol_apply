@@ -8,6 +8,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Approving an application a second time is now recorded as a second decision.** If an approved
+  participant was suspended from the participants page and then approved again, the applications
+  trail went on naming the first person to approve them and the date they did it — while the
+  applicant was told about the second approval, correctly. The record contradicted a message the
+  plugin itself had sent. It now names whoever decided last.
+
+  The protection that caused this is still in place and is still right: merely touching an
+  already-decided enrolment does not re-attribute the decision to whoever touched it. Only a
+  genuine change of enrolment counts as a new decision.
+
+- **A decision no longer inherits the groups and the message of the one before it.** Approving a
+  re-queued application with the group chooser and the message box left alone silently re-used
+  whatever had been chosen and typed for the earlier decision — re-joining groups nobody had
+  picked this time, and re-sending a message nobody had written for it. Leaving either control
+  alone now means what it looks like it means. Whitespace on its own is still not a message.
+
 - **A renamed role no longer reaches the approval queue's role chooser unescaped.** Moodle spells
   a role's name two different ways — a role that has been given a name of its own comes back
   escaped, while the eight roles a site ships with come back as plain language strings that have

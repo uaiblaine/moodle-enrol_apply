@@ -598,6 +598,34 @@ backup/                      group mappings, comments and the durable trail, see
   user has id 0. The filter would be unreachable, so no test could hold it. What matters is the
   API: `add_userids()` does no such filtering.
 
+- **`decide()`'s same-status skip is a guard, and it needed a narrow exception rather than
+  deletion.** The skip stops a later no-op touch of an already-decided enrolment re-attributing
+  the decision to whoever did the touching — `test_a_recorded_decision_is_not_restamped` pins
+  exactly that. But it was also swallowing genuine second decisions: approve, suspend from the
+  participants page, approve again, and the record never leaves `STATUS_APPROVED`, so the trail
+  kept naming the first decider while `complete_approval()` queued a second notification and the
+  applicant was told. The record denied a decision the plugin itself had announced.
+
+  What separates the two cases is knowledge the CALLER has and the record does not.
+  `confirm_enrolment()` only ever processes rows `get_pending_user_enrolment()` returned, which
+  admits suspended and waiting-list rows only; the hook callback only fires on a status change to
+  active. Both know the enrolment genuinely moved, so all three transition callers pass
+  `$isfreshdecision`. A bare `decide()` call knows nothing and keeps the conservative default,
+  which is why the pinned test still passes unchanged — it is the control that the exception is
+  narrow.
+
+  The double pass is safe: both run in one request with one `$USER`, so the second restamps the
+  same decider milliseconds later.
+
+- **The decision's own writers must be able to CLEAR, not only to set.** `record_decided_groups()`
+  and `record_outcome_message()` both returned early on an empty value, so no path could clear a
+  stored one and a re-queued application silently inherited the previous decision's groups and
+  message. `record_decided_role()` never had the defect. The message writer trims rather than
+  testing for blankness, which keeps the two properties apart: whitespace alone is still not a
+  message, and an empty decision still clears an earlier one. `confirm_enrolment()`'s gate is
+  `array_key_exists('groups', ...)` and not `!empty(...)` for the same reason — a caller with
+  nothing to say about the groups omits the key, which is what the out-of-band route does.
+
 - **A decision's own data must be written BEFORE the enrolment is mutated, and never through
   `submission::decide()`.** `complete_approval()` runs **twice** for a queue approval:
   `enrol_plugin::update_user_enrol()` dispatches `before_user_enrolment_updated` *before* it

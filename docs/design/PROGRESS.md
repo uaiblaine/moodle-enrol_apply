@@ -848,6 +848,12 @@ precisely so that the condition, not the join, is what it holds.
   contradicted its own detail.
 - **`gh pr create` targets the upstream fork parent.** Always pass
   `--repo uaiblaine/moodle-enrol_apply`.
+- **A mutation that reddens nothing may be a mutation that ran nothing.** A three-mutation loop
+  reported the third as "0 red"; the shared stack had staled the PHPUnit environment part way
+  through, so that leg printed "initialised for different version" and ran ZERO tests. The
+  grep for `^[0-9]+\) ` cannot tell no failures from no run. Re-initialised, the same mutation
+  reddened exactly its named test. Count the tests, never the failures alone — the fleet's
+  "judge Behat by the scenario count, not the exit status" rule applies verbatim to PHPUnit.
 - **A mutation that reddens nothing is a finding, not a formality.** Two of slice 6's seven
   produced no failure, and both times the test was at fault rather than the guard: one could not
   see which of two callbacks did the work, the other was watching the restored course instead of

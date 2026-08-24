@@ -128,17 +128,41 @@ class submission {
      * rather than guessed at - applications that predate this table, and the ones tests
      * create by calling enrol_user() directly, have none.
      *
-     * Idempotent: complete_approval() runs twice for every approval made through the
-     * plugin's own queue (once from the before_user_enrolment_updated hook, once from
-     * confirm_enrolment()), and a row already at the target status is not restamped, so
-     * timedecided records the first decision rather than the last write.
+     * A row already at the target status is not restamped by default, and that guard is not
+     * merely an optimisation: it is what stops a later no-op touch of an already-decided
+     * enrolment re-attributing the decision to whoever did the touching. The decision belongs
+     * to whoever took it. test_a_recorded_decision_is_not_restamped pins exactly that.
+     *
+     * $isfreshdecision is the narrow exception, and it exists because the guard was ALSO
+     * swallowing genuine second decisions. Approve, suspend from the participants page, approve
+     * again: the record never leaves STATUS_APPROVED, so the guard skipped the write and the
+     * trail went on naming the first decider and the first date - while the applicant was told
+     * about the second approval, because complete_approval() queues its notification either way.
+     * The trail denied a decision the applicant had already been notified of.
+     *
+     * What tells the two cases apart is knowledge the CALLER has and the record does not.
+     * confirm_enrolment() only ever processes rows get_pending_user_enrolment() returned, which
+     * admits suspended and waiting-list rows only; the hook callback only fires on a status
+     * change to active. Both therefore know the enrolment genuinely moved. A bare decide() call
+     * knows nothing, so the default stays conservative.
+     *
+     * Passing it is safe for the double pass complete_approval() makes on every queue approval:
+     * both passes run in one request with one $USER, so the second restamps the same decider a
+     * few milliseconds later.
      *
      * @param int $userenrolmentid User enrolment the decision applies to.
      * @param int $status One of the STATUS_ constants.
      * @param int $decidedby User who took the decision.
+     * @param bool $isfreshdecision True when the caller knows the enrolment actually moved, so a
+     *                              status that already matches is still a new decision.
      * @return void
      */
-    public static function decide(int $userenrolmentid, int $status, int $decidedby): void {
+    public static function decide(
+        int $userenrolmentid,
+        int $status,
+        int $decidedby,
+        bool $isfreshdecision = false
+    ): void {
         global $DB;
 
         if (!in_array($status, self::STATUSES, true)) {
@@ -147,7 +171,7 @@ class submission {
 
         $rows = $DB->get_records('enrol_apply_submission', ['userenrolmentid' => $userenrolmentid], '', 'id, status');
         foreach ($rows as $row) {
-            if ((int) $row->status === $status) {
+            if ((int) $row->status === $status && !$isfreshdecision) {
                 continue;
             }
             $DB->update_record('enrol_apply_submission', (object) [
@@ -310,15 +334,26 @@ class submission {
     public static function record_outcome_message(int $userenrolmentid, string $message): void {
         global $DB;
 
-        if (trim($message) === '') {
-            return;
-        }
+        /* An empty message is WRITTEN, not skipped, and that is the fix for a defect rather than
+           a style choice. Returning early made a stored message sticky: no path could clear one,
+           so a decider who approved a re-suspended application with the box left empty silently
+           re-sent the message somebody had typed for the earlier decision. The message belongs to
+           the decision being taken, so "nothing typed" has to be able to mean nothing. Callers
+           that have nothing to say about the message do not call this at all - the out-of-band
+           approval route passes no operator input and reaches no writer.
+
+           Trimmed rather than merely tested for blankness, which keeps the two properties apart:
+           whitespace alone is still not a message (it is stored as the empty string, which
+           test_a_blank_message_is_not_recorded pins), and an empty decision still clears an
+           earlier one. Before this, the same trim() decided whether to write at all, so the
+           second property was impossible. */
+        $clean = trim($message);
 
         $rows = $DB->get_records('enrol_apply_submission', ['userenrolmentid' => $userenrolmentid], '', 'id');
         foreach ($rows as $row) {
             $DB->update_record('enrol_apply_submission', (object) [
                 'id' => $row->id,
-                'outcomemessage' => $message,
+                'outcomemessage' => $clean,
             ]);
         }
     }
@@ -344,10 +379,12 @@ class submission {
     public static function record_decided_groups(int $userenrolmentid, array $groupids): void {
         global $DB;
 
+        /* An empty choice is WRITTEN, not skipped, for the same reason the outcome message is:
+           returning early made a stored list sticky, so a second approval with the chooser left
+           alone silently re-joined the groups picked for the earlier decision. An empty value is
+           what chosen_groups() reads back as "no choice recorded", which puts the instance's own
+           list back in charge - so clearing means what an operator would expect it to mean. */
         $clean = array_values(array_unique(array_filter(array_map('intval', $groupids))));
-        if (!$clean) {
-            return;
-        }
 
         $rows = $DB->get_records('enrol_apply_submission', ['userenrolmentid' => $userenrolmentid], '', 'id');
         foreach ($rows as $row) {
