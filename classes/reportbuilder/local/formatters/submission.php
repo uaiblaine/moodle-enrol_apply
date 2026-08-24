@@ -73,6 +73,119 @@ class submission {
     }
 
     /**
+     * What the enrolment is doing now, or why there is nothing to report.
+     *
+     * Three states have to be told apart and only two of them are obvious. A NULL live status
+     * means the join found nothing, which is a real "no longer enrolled". But a record restored
+     * from an archive whose enrolment could not be mapped carries userenrolmentid = 0
+     * (restore_enrol_apply_plugin.class.php casts a false mapping to 0), and zero also finds
+     * nothing - so reporting it as "no longer enrolled" would be a fresh falsehood of exactly
+     * the kind this column exists to remove. It is checked FIRST for that reason.
+     *
+     * @param mixed $value The live user_enrolments.status, null when there is no enrolment.
+     * @param stdClass $row Row being rendered, carrying liveueid.
+     * @return string Localised label.
+     */
+    public static function enrolment($value, stdClass $row): string {
+        global $CFG;
+
+        /* ENROL_APPLY_USER_WAIT lives in the plugin's lib.php, which is not autoloaded - nothing
+           guarantees it has been included by the time a report renders, and an undefined constant
+           is a fatal on PHP 8. This is the first autoloaded class in the plugin to need it.
+           Deliberately not substituted with submission::STATUS_WAITING, which also happens to be
+           2: one is the enrolment's status and the other the record's, and they are equal by
+           coincidence rather than by contract. */
+        require_once($CFG->dirroot . '/enrol/apply/lib.php');
+
+        if ((int) ($row->liveueid ?? 0) === 0) {
+            return get_string('enrolmentunknown', 'enrol_apply');
+        }
+
+        if ($value === null || $value === '') {
+            return get_string('enrolmentgone', 'enrol_apply');
+        }
+
+        return match ((int) $value) {
+            ENROL_USER_ACTIVE => get_string('enrolmentactive', 'enrol_apply'),
+            ENROL_USER_SUSPENDED => get_string('enrolmentsuspended', 'enrol_apply'),
+            ENROL_APPLY_USER_WAIT => get_string('enrolmentwaiting', 'enrol_apply'),
+            // Not a value this plugin or core writes: show it rather than inventing a label.
+            default => (string) $value,
+        };
+    }
+
+    /**
+     * What actually happened to this application, from the decision and the live enrolment.
+     *
+     * The stored status is the last decision this plugin's own state machine took, and it is
+     * not the whole story: the participants page, course reset, user deletion and the expiry
+     * sweep all change an enrolment without touching the record. Approved-and-enrolled and
+     * approved-then-unenrolled are otherwise literally the same row.
+     *
+     * The suspended case is split by timeend because the two mean opposite things to the
+     * operator. A suspension with no period is a manual one, and manage_table.php's predicate
+     * (status != active AND (timeend = 0 OR timeend > now)) puts that row straight back in the
+     * approval queue - so the report must say so, or the queue and the report disagree in public
+     * with neither mentioning the other. A suspension with a period in the past is the expiry
+     * sweep's work and does NOT re-queue.
+     *
+     * A record restored without a mappable enrolment is left at its stored status rather than
+     * being described: nothing is known about its enrolment, and guessing is what this column
+     * exists to stop.
+     *
+     * @param mixed $value The stored status.
+     * @param stdClass $row Row being rendered, carrying outcomeenrolstatus, outcomeenroltimeend
+     *                      and outcomeueid.
+     * @return string Localised sentence.
+     */
+    public static function outcome($value, stdClass $row): string {
+        $recordstatus = (int) $value;
+        $unknown = (int) ($row->outcomeueid ?? 0) === 0;
+        $enrolstatus = $row->outcomeenrolstatus ?? null;
+        $gone = !$unknown && ($enrolstatus === null || $enrolstatus === '');
+
+        if ($recordstatus === submissionhelper::STATUS_CANCELLED) {
+            return get_string('outcomecancelled', 'enrol_apply');
+        }
+
+        if ($unknown) {
+            return submissionhelper::status_label($recordstatus);
+        }
+
+        if ($recordstatus === submissionhelper::STATUS_PENDING) {
+            return $gone
+                ? get_string('outcomeneverdecided', 'enrol_apply')
+                : get_string('outcomeawaiting', 'enrol_apply');
+        }
+
+        if ($recordstatus === submissionhelper::STATUS_WAITING) {
+            return $gone
+                ? get_string('outcomeneverdecided', 'enrol_apply')
+                : get_string('outcomewaiting', 'enrol_apply');
+        }
+
+        if ($recordstatus !== submissionhelper::STATUS_APPROVED) {
+            // Not a vocabulary member; the status formatter's own rule applies.
+            return self::status($value, $row);
+        }
+
+        if ($gone) {
+            return get_string('outcomeunenrolled', 'enrol_apply');
+        }
+
+        if ((int) $enrolstatus === ENROL_USER_ACTIVE) {
+            return get_string('outcomeapproved', 'enrol_apply');
+        }
+
+        $timeend = (int) ($row->outcomeenroltimeend ?? 0);
+        if ($timeend > 0 && $timeend < time()) {
+            return get_string('outcomeexpired', 'enrol_apply');
+        }
+
+        return get_string('outcomesuspended', 'enrol_apply');
+    }
+
+    /**
      * A timestamp, or a dash where there is none.
      *
      * @param mixed $value Stored timestamp.
