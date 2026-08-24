@@ -1,0 +1,65 @@
+{{!
+    This file is part of Moodle - http://moodle.org/
+
+    Moodle is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Moodle is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+}}
+{{!
+    @template enrol_apply/manage_actions
+
+    The bulk action control of the applications queue, rendered into a core sticky footer.
+
+    Only the action itself lives here. The decision's own inputs - the message, the groups and
+    the role - stay in the page body, because a core sticky footer is a fixed 80px bar whose
+    .sticky-footer-content carries overflow hidden, so a three-row textarea would be clipped.
+
+    Both controls carry the toggle-all action vocabulary: data-action toggle, data-toggle action,
+    and the group name, which core matches EXACTLY rather than by prefix. Neither ships the
+    disabled attribute, unlike core's own participants page. That is deliberate and is explained
+    in the amd/src/manage.js docblock - this plugin's queue is operable without JavaScript, and an
+    attribute nothing can clear would take that away. It depends on the rule in styles.css that
+    brings the sticky footer on screen when no script ran, because core parks one off screen
+    until its own JavaScript slides it in.
+
+    Context variables required for this template:
+    * togglegroup string - name of the core/checkbox-toggleall group the table's rows belong to
+    * actionlabel string - label of the bulk action select
+    * choosedots string - placeholder option of the bulk action select
+    * golabel string - label of the submit button
+    * actions array - list of value and label pairs, one per bulk action
+
+    Example context (json):
+    {
+        "togglegroup": "enrol-apply-queue",
+        "actionlabel": "With selected users...",
+        "choosedots": "Choose...",
+        "golabel": "Go",
+        "actions": [
+            {"value": "confirm", "label": "Confirm requests"},
+            {"value": "wait", "label": "Defer requests"},
+            {"value": "cancel", "label": "Cancel requests"}
+        ]
+    }
+}}
+<div class="enrol_apply-formaction d-flex flex-wrap align-items-center gap-2">
+    <label class="mb-0" for="enrol_apply_formaction">{{actionlabel}}</label>
+    <select class="form-select w-auto" id="enrol_apply_formaction" name="formaction"
+        data-action="toggle" data-toggle="action" data-togglegroup="{{togglegroup}}">
+        <option value="">{{choosedots}}</option>
+        {{#actions}}
+            <option value="{{value}}">{{label}}</option>
+        {{/actions}}
+    </select>
+    <button type="submit" class="btn btn-primary"
+        data-action="toggle" data-toggle="action" data-togglegroup="{{togglegroup}}">{{golabel}}</button>
+</div>

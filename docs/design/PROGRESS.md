@@ -27,7 +27,7 @@ Last updated: 2026-08-23.
 
 ## In progress
 
-**Slice I, split into four PRs.** The plan bundles four things — decision-time parameters, the
+**Slice I, split into five PRs.** The plan bundles four things — decision-time parameters, the
 outcome message, previous/next navigation and replacing the bulk bar — that share almost nothing,
 and its Files table omits the schema, backup/restore, privacy and Report Builder entity work the
 first of them actually needs.
@@ -80,9 +80,68 @@ first of them actually needs.
    just as thoroughly. The stamp mutation left it green. Giving the second enrolment a *different*
    role puts core on its `count > 1` branch, whose whole content is the wrong guess.
 
-4. **The modern queue** — the bulk bar on core's containers, previous/next, and the rewrite of
-   Behat scenarios 2 and 3, which drive `"Select Student 1"`, `"With selected users..."` and
-   `"Go"` — every one of them markup that bar replaces.
+4. **The modern queue** (this branch) — the bulk bar on `\core\output\checkbox_toggleall` plus
+   `\core\output\sticky_footer`.
+
+   **The Behat rewrite the handoff insisted on turned out not to be needed, and the reason is
+   worth keeping.** It said scenarios 2 and 3 "drive exactly the markup the bar replaces". They
+   drive `"Select Student 1"`, `"With selected users..."` and `"Go"` — every one of which is a
+   LABEL, and `checkbox_toggleall` takes its label from the caller. Keeping `selectapplicant`,
+   the `userenrolments[]` field name and the row ids meant the markup changed underneath and the
+   contract did not: measured, all three scenarios passed against the new bar unchanged, 64
+   steps. Which also meant they proved nothing about the change, so they were strengthened rather
+   than rewritten — an assertion that the bar really is inside core's `sticky-footer` region, and
+   the redirect's own confirmation instead of the weaker "Nothing to display". 67 steps, still 3
+   scenarios.
+
+   The wiring's MARKUP is pinned in `tests/renderer_test.php`: the group name in all three
+   places, the action vocabulary, the footer being inside the form, and the decision inputs
+   staying out of it. Four mutations, each reddening exactly one.
+
+   **Its BEHAVIOUR needed Behat, and finding that out cost a shipped bug.** The first version of
+   `amd/src/manage.js` kept the header checkbox's tri-state by subscribing to
+   `core/checkbox-toggleall:checkboxToggled`, and it could never have worked: `core/pubsub` has
+   named exports and no default, so `import PubSub from 'core/pubsub'` compiles to
+   `_pubsub.default.subscribe` on `undefined`. Core's own ES importers write
+   `import * as PubSub`. **phpcs, eslint, grunt, PHPUnit and Behat all passed** — nothing in this
+   plugin's pipeline executed the file. It was caught by reading the built output against core's
+   export list, not by a gate.
+
+   Two things changed as a result. The tri-state is gone rather than fixed: core has no
+   `indeterminate` handling anywhere, and keeping a feature this repository cannot execute is
+   how the bug got in. And scenario 2 is now `@javascript`, which is the only automated proof
+   that the module runs at all — mutation-checked by making the disable a no-op, which reddens
+   `the "With selected users..." "field" should be disabled` and nothing else. That scenario also
+   picks up the application modal, which had no coverage before, while scenario 1 keeps the
+   no-JavaScript `apply.php` transport. Still 3 scenarios, 69 steps.
+
+   **Two claims in the design documents were measured false and are corrected in code comments.**
+   "Controls inside a sticky footer are not interactable" — under Behat core deliberately
+   un-sticks it (`theme/boost/scss/moodle/debug.scss`), and `theme_boost/sticky-footer.js` bails
+   out on a `behat-site` body; core presses a sticky-footer submit button in a scenario carrying
+   no `@javascript` tag at all. And "checkbox-toggleall disables every action element until
+   something is selected" — it only ever RE-enables; `init()` binds two click handlers and
+   nothing else, which is why every core caller hardcodes `disabled` server-side.
+
+5. **Previous/next navigation** — decided, not built. The owner chose to turn the `userenrol=`
+   scope into a real single-application review page and navigate between neighbours on the
+   `gradereport_singleview` shape (the neighbour's id in the href, resolved server side). It is
+   its own PR because that surface does not exist yet: `manage.php?userenrol=N` is the same
+   `enrol_apply_manage_table` filtered to one row, still carrying the whole bulk bar. Four things
+   have to be settled inside that PR, each measured:
+
+   - the group and role choosers are built only when `$instance !== null`, so the `userenrol=`
+     scope offers neither — the review page has to close that gap or it is a decision surface
+     with no decision controls;
+   - the three scopes resolve to three different contexts, so the neighbour set must be filtered
+     by the same authorisation the queue itself applies, or the links throw on arrival;
+   - the table's sort is operator-chosen and stored in `$SESSION->flextable` under a uniqueid
+     shared by all three scopes, so the navigation must read the same prefs or it walks a
+     different order than the visible list;
+   - `construct_order_by()` appends no tiebreaker and `ue.timecreated` is second-resolution, so
+     two applications submitted in the same second have undefined relative order and "next" can
+     skip or loop. The table's own ORDER BY needs the tiebreaker too, not just the neighbour
+     query.
 
 ### The ordering constraint that shapes all three
 

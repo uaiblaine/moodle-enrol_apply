@@ -100,7 +100,10 @@ backup/                      group mappings, comments and the durable trail, see
 
   **The stamp is what makes core clean up.** `unenrol_user()` unassigns by component and itemid
   unconditionally, and `process_expirations()` has the same line ("remove all roles that belong
-  to this instance and user"). Without a stamp, both fall back to guessing `$instance->roleid` —
+  to this instance and user"). Only `process_expirations()` guesses — `unenrol_user()` never
+  reads `$instance->roleid` at all, and a bare assignment survives it for a different reason:
+  the blanket sweep runs only when this was the user's last enrolment in the course. Where core
+  does guess, it guesses `$instance->roleid` —
   and once a decider can choose a *different* role that guess is wrong by construction. Measured
   on m502, with an unrelated manual enrolment in the same course so this was not the applicant's
   last one: a Teacher chosen against an instance defaulting to Student **survived** the sweep
@@ -215,6 +218,42 @@ backup/                      group mappings, comments and the durable trail, see
   `yahoo` and `msn` were removed from the user table in Moodle 4.0 and reading them cost
   five warnings per notification. `renderer.php` iterates `STANDARD_USER_FIELDS` and
   skips anything the form did not submit, which also covers fields a site has hidden.
+
+- **The queue's selection is core's `checkbox_toggleall`, and two things about it are not
+  obvious.** The header checkbox, every row checkbox and the bulk action share the one group
+  named by `enrol_apply_manage_table::TOGGLE_GROUP`. Targets are matched by PREFIX and the action
+  element by an EXACT string, so a mismatch disables nothing and reports nothing — which is why
+  `tests/renderer_test.php` asserts the group literal in all three places rather than reading the
+  constant.
+
+  **Core never sets the action control's initial state.** `checkbox-toggleall`'s `init()` binds
+  two delegated click handlers and nothing else, so a control is live until the first click;
+  every core caller closes that by hardcoding `disabled` in the server markup. This plugin does
+  not, and `amd/src/manage.js` does it on init instead — the queue is operable without
+  JavaScript, and an attribute only JavaScript can clear would remove a working path to buy an
+  affordance only JavaScript users see. **That holds only because `styles.css` polyfills the
+  footer's visibility.** Core parks a sticky footer at `bottom: calc(<height> * -1)` and slides
+  it in by adding `hasstickyfooter` from `theme_boost/sticky-footer.js`, so moving the bar there
+  without that rule would paint the queue's only submit control off screen for exactly the
+  operator the enabled control was left enabled for. The rule is gated on
+  `body:not(.jsenabled)`, which core writes from
+  `lib/classes/output/requirements/page_requirements_manager.php`. Nothing in this repository
+  renders CSS, so that pair is verified by reading the cascade and not by a test. That module now does nothing else, and the reason is worth keeping: core
+  has no `indeterminate` handling anywhere, so the header checkbox lost its tri-state, and the
+  first attempt to keep it — subscribing to `core/checkbox-toggleall:checkboxToggled` — shipped a
+  runtime error that **phpcs, eslint, grunt and Behat all passed**. `core/pubsub` has named
+  exports and no default, so `import PubSub from 'core/pubsub'` compiles to `_pubsub.default`,
+  which is `undefined`; core's own ES importers write `import * as PubSub`. Nothing in this
+  plugin's pipeline executes its JavaScript, so anything in that module has to be either
+  observable from Behat or not written.
+
+  **The sticky footer is NOT relocated in the DOM**, unlike `core/modal`. Its position is CSS,
+  so it is rendered inside `<form id="enrol_apply_manage_form">` and its controls post normally;
+  core does the same in `grade/templates/edit_tree.mustache`. Only the ACTION belongs in it — the
+  bar is a fixed 80px box whose `.sticky-footer-content` carries `overflow: hidden`, so the
+  message textarea and the two choosers stay in the page body. And `sticky_footer::add_classes()` builds
+  its concatenation and then assigns over it, so it replaces rather than appends: pass every
+  class through the constructor.
 
 - **`table_sql` writes to the output buffer.** The renderer captures it with
   `ob_start()` so it can be handed to a Mustache template as a triple stash. That is the

@@ -14,10 +14,25 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Select-all handling for the enrolment application queue.
+ * The one thing core/checkbox-toggleall does not do for the applications queue.
  *
- * The form submits through its own button, so this module is a progressive enhancement
- * only: with JavaScript disabled every checkbox is still operable one by one.
+ * Selecting rows, selecting all of them and re-enabling the bulk action are core's job. What
+ * core never does is set the action control's INITIAL state: checkbox-toggleall's init() binds
+ * two delegated click handlers and nothing else, and setActionElementStates() is reached only
+ * from those handlers, so a control is live until the first click.
+ *
+ * Every core caller closes that by hardcoding the disabled attribute in its server markup. This
+ * plugin does not, and that is the one place it departs from core on purpose: the queue is
+ * operable without JavaScript and was before the bar moved into a sticky footer, so an attribute
+ * only JavaScript can clear would take a working path away from a no-JS operator to buy an
+ * affordance only a JavaScript one can see. Doing it from here gives each audience what it can
+ * use.
+ *
+ * That only holds because styles.css puts the footer back on screen when no script ran. Core
+ * parks a sticky footer at "bottom: calc(<height> * -1)" and slides it in by adding a class from
+ * theme_boost/sticky-footer.js, so without that rule the control this module leaves enabled
+ * would be painted where nobody can see it - the departure from core would buy nothing and cost
+ * the affordance. The two live together or not at all.
  *
  * @module     enrol_apply/manage
  * @copyright  2026 Anderson Blaine
@@ -27,41 +42,21 @@
 
 const SELECTORS = {
     FORM: '#enrol_apply_manage_form',
-    TOGGLE_ALL: '[data-action="toggleall"]',
-    ROW_CHECKBOX: 'input[name="userenrolments[]"]',
+    ACTION: '[data-toggle="action"][data-togglegroup="{group}"]',
 };
 
 /**
- * Wire the select-all checkbox to the per-row checkboxes.
+ * Disable the bulk action until something is selected.
  *
+ * @param {String} group The checkbox-toggleall group the table and the bar share.
  * @return {void}
  */
-export const init = () => {
-    const form = document.querySelector(SELECTORS.FORM);
-    if (!form) {
+export const init = (group) => {
+    if (!document.querySelector(SELECTORS.FORM)) {
         return;
     }
 
-    const toggleall = form.querySelector(SELECTORS.TOGGLE_ALL);
-    if (!toggleall) {
-        return;
-    }
-
-    const rows = () => Array.from(form.querySelectorAll(SELECTORS.ROW_CHECKBOX));
-
-    toggleall.addEventListener('change', () => {
-        rows().forEach((checkbox) => {
-            checkbox.checked = toggleall.checked;
-        });
-    });
-
-    form.addEventListener('change', (event) => {
-        if (!event.target.matches(SELECTORS.ROW_CHECKBOX)) {
-            return;
-        }
-        const all = rows();
-        const checked = all.filter((checkbox) => checkbox.checked);
-        toggleall.checked = all.length > 0 && checked.length === all.length;
-        toggleall.indeterminate = checked.length > 0 && checked.length < all.length;
+    document.querySelectorAll(SELECTORS.ACTION.replace('{group}', group)).forEach((element) => {
+        element.disabled = true;
     });
 };

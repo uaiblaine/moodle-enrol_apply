@@ -36,6 +36,13 @@ Feature: Enrolment upon approval
     And I am on "Course 1" course homepage
     And I should not see "New section"
 
+  # The only scenario that runs with JavaScript, and it is the one that has to. Two paths exist
+  # nowhere else in this feature: the application modal, which is what a browser with JavaScript
+  # actually gets, and the queue's bulk bar, whose whole behaviour is JavaScript. The disabled
+  # assertions below are the only automated check that enrol_apply/manage runs at all - nothing
+  # else in this repository executes the plugin's JavaScript, and a module that only phpcs and
+  # eslint have read has been wrong here before.
+  @javascript
   Scenario: A teacher approves a pending application and the student gains access
     Given I log in as "student1"
     And I am on "Course 1" course homepage
@@ -45,9 +52,15 @@ Feature: Enrolment upon approval
     When I log in as "teacher1"
     And I am on the "C1" "enrol_apply > manage applications" page
     Then I should see "Student 1"
-    And I set the field "Select Student 1" to "1"
+    # The bar lives in core's sticky footer now, and the rows, the header checkbox and the bar
+    # are one core/checkbox-toggleall group. Selecting through the header is what proves it.
+    And I should see "Go" in the "sticky-footer" "region"
+    And the "With selected users..." "field" should be disabled
+    And I click on "Select all" "checkbox"
+    And the "With selected users..." "field" should be enabled
     And I set the field "With selected users..." to "Confirm requests"
     And I press "Go"
+    Then I should see "The selected enrolment applications have been updated."
     And I log out
     And I log in as "student1"
     And I am on "Course 1" course homepage
@@ -64,7 +77,8 @@ Feature: Enrolment upon approval
     And I set the field "Select Student 1" to "1"
     And I set the field "With selected users..." to "Cancel requests"
     And I press "Go"
-    Then I should see "Nothing to display"
+    Then I should see "The selected enrolment applications have been updated."
+    And I should see "Nothing to display"
     And I log out
     And I log in as "student1"
     And I am on "Course 1" course homepage

@@ -27,9 +27,11 @@
     * sesskey string - session key guarding the state change
     * tablehtml string - pre-rendered applications table
     * hasrows boolean - whether the table has at least one application
-    * actionlabel string - label of the bulk action select
-    * choosedots string - placeholder option of the bulk action select
-    * golabel string - label of the submit button
+    * stickyfooter string - the bulk action bar, already rendered into a core sticky footer by
+      the renderer and interpolated INSIDE this form, because the POST carries the row checkboxes
+      from the table and the action from the bar. Core does the same in grade/templates/edit_tree
+      and the sticky footer is never moved in the DOM - its placement is CSS, not JavaScript, so
+      the inputs inside it post normally.
     * messagelabel string - label of the optional message to the applicant
     * messagehelp string - hint explaining who reads the message and when
     * hasgroups boolean - whether the course has any group to offer
@@ -47,7 +49,6 @@
       element-select.mustache does. get_assignable_roles() returns format_string() output and
       offers no way to ask for the plain spelling, so a double stash here would escape a second
       time and a role renamed with an ampersand would read wrongly.
-    * actions array - list of value and label pairs, one per bulk action
 
     Example context (json):
     {
@@ -55,9 +56,7 @@
         "sesskey": "Ab12Cd34Ef",
         "tablehtml": "<table class=\"generaltable\"><tbody><tr><td>Student 1</td></tr></tbody></table>",
         "hasrows": true,
-        "actionlabel": "With selected users...",
-        "choosedots": "Choose...",
-        "golabel": "Go",
+        "stickyfooter": "<div id=\"sticky-footer\"><button type=\"submit\">Go</button></div>",
         "messagelabel": "Message to the applicant",
         "messagehelp": "Included in the message they receive. Optional.",
         "hasgroups": true,
@@ -74,11 +73,6 @@
         "roles": [
             {"id": 5, "name": "Student"},
             {"id": 3, "name": "R&amp;D &lt; Team"}
-        ],
-        "actions": [
-            {"value": "confirm", "label": "Confirm requests"},
-            {"value": "wait", "label": "Defer requests"},
-            {"value": "cancel", "label": "Cancel requests"}
         ]
     }
 }}
@@ -119,15 +113,6 @@
                 rows="3" aria-describedby="enrol_apply_outcomemessage_help"></textarea>
             <div class="form-text" id="enrol_apply_outcomemessage_help">{{messagehelp}}</div>
         </div>
-        <div class="formaction d-flex flex-wrap align-items-center justify-content-center mt-3">
-            <label class="mb-0 me-2" for="enrol_apply_formaction">{{actionlabel}}</label>
-            <select class="form-select me-2" id="enrol_apply_formaction" name="formaction">
-                <option value="">{{choosedots}}</option>
-                {{#actions}}
-                    <option value="{{value}}">{{label}}</option>
-                {{/actions}}
-            </select>
-            <button type="submit" class="btn btn-primary">{{golabel}}</button>
-        </div>
+        {{{stickyfooter}}}
     {{/hasrows}}
 </form>

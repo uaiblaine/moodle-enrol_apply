@@ -38,6 +38,16 @@ require_once($CFG->libdir . '/tablelib.php');
  */
 class enrol_apply_manage_table extends table_sql {
     /**
+     * @var string The core/checkbox-toggleall group tying the header checkbox, rows and bulk bar.
+     *
+     * getActionElements() matches this EXACTLY while the targets match by prefix, so the bar's
+     * control has to carry the same string character for character. It also must not be a
+     * prefix of any other group on the page: Report Builder uses 'report-select-all', which
+     * does not collide, and nothing else on manage.php renders one.
+     */
+    public const TOGGLE_GROUP = 'enrol-apply-queue';
+
+    /**
      * Build the table for the requested scope.
      *
      * @param int $enrolid Restrict to one enrol instance, 0 for no restriction.
@@ -146,21 +156,30 @@ class enrol_apply_manage_table extends table_sql {
     /**
      * The select-all checkbox shown in the header of the checkbox column.
      *
+     * Core's own renderable, so the queue is driven by core/checkbox-toggleall rather than by
+     * markup of this plugin's invention. The label text is pinned to the same string in both
+     * directions on purpose: the module rewrites the label's innerHTML on every toggle, and a
+     * header cell whose label alternates between "Select all" and "Deselect all" changes width
+     * under the reader. Core does the same, with the same comment, in the gradebook and in the
+     * participation report.
+     *
      * @return string Rendered checkbox with its accessible label.
      */
     protected function select_all_header() {
-        $checkbox = html_writer::empty_tag('input', [
-            'type' => 'checkbox',
-            'id' => 'enrol_apply_toggleall',
-            'class' => 'enrol_apply-toggleall',
-            'data-action' => 'toggleall',
-        ]);
-        $label = html_writer::tag('label', get_string('selectall'), [
-            'for' => 'enrol_apply_toggleall',
-            'class' => 'visually-hidden',
-        ]);
+        global $OUTPUT;
 
-        return $checkbox . $label;
+        $selectall = get_string('selectall');
+
+        return $OUTPUT->render(new \core\output\checkbox_toggleall(self::TOGGLE_GROUP, true, [
+            'id' => 'enrol_apply_toggleall',
+            'name' => 'enrol_apply_toggleall',
+            'label' => $selectall,
+            'labelclasses' => 'visually-hidden',
+            'classes' => 'm-1',
+            'checked' => false,
+            'selectall' => $selectall,
+            'deselectall' => $selectall,
+        ]));
     }
 
     /**
@@ -183,20 +202,19 @@ class enrol_apply_manage_table extends table_sql {
      * @return string Rendered checkbox with its accessible label.
      */
     public function col_checkboxcolumn($row) {
-        $id = 'enrol_apply_ue_' . $row->userenrolmentid;
-        $checkbox = html_writer::empty_tag('input', [
-            'type' => 'checkbox',
+        global $OUTPUT;
+
+        /* The name, the value and the label are unchanged from the hand-written markup this
+           replaces, which is what keeps the POST contract (userenrolments[]) and the Behat
+           locator ("Select Student 1") intact. Adopting core's renderable changes the data
+           attributes, not the contract. */
+        return $OUTPUT->render(new \core\output\checkbox_toggleall(self::TOGGLE_GROUP, false, [
+            'id' => 'enrol_apply_ue_' . $row->userenrolmentid,
             'name' => 'userenrolments[]',
             'value' => $row->userenrolmentid,
-            'id' => $id,
-            'class' => 'enrol_apply-select',
-        ]);
-        $label = html_writer::tag('label', get_string('selectapplicant', 'enrol_apply', fullname($row)), [
-            'for' => $id,
-            'class' => 'visually-hidden',
-        ]);
-
-        return $checkbox . $label;
+            'label' => get_string('selectapplicant', 'enrol_apply', fullname($row)),
+            'labelclasses' => 'visually-hidden',
+        ]));
     }
 
     /**

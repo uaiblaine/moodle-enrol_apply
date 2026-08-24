@@ -108,14 +108,34 @@ class enrol_apply_renderer extends plugin_renderer_base {
             }
         }
 
+        /* The bar goes into a core sticky footer, rendered here and interpolated INSIDE the
+           form by the template. Only the action belongs in it: the footer is a fixed bar whose
+           .sticky-footer-content carries overflow hidden, so the message textarea and the two
+           choosers stay in the page body. Core's own precedent for the placement is
+           grade/templates/edit_tree.mustache, and the footer is never moved in the DOM - unlike
+           core/modal, its position is CSS, so the controls inside it post with the form.
+
+           justify-content-end is passed rather than relied on. It is already the property's
+           default and the constructor only overwrites it when the argument is not null, so this
+           changes nothing today - it is written down because the alternative way to reach it is
+           a trap: sticky_footer::add_classes() looks like it appends and does not. It builds the
+           concatenation and then throws it away by assigning the argument over it, measured on
+           both branches, so a later "just add a class" would silently drop this one. */
+        $bar = $this->render_from_template('enrol_apply/manage_actions', [
+            'togglegroup' => \enrol_apply_manage_table::TOGGLE_GROUP,
+            'actionlabel' => get_string('withselectedusers'),
+            'choosedots' => get_string('choosedots'),
+            'golabel' => get_string('go'),
+            'actions' => $actions,
+        ]);
+        $stickyfooter = $this->render(new \core\output\sticky_footer($bar, 'justify-content-end'));
+
         $context = [
             'formurl' => $manageurl->out(false),
             'sesskey' => sesskey(),
             'tablehtml' => $tablehtml,
             'hasrows' => $table->totalrows > 0,
-            'actionlabel' => get_string('withselectedusers'),
-            'choosedots' => get_string('choosedots'),
-            'golabel' => get_string('go'),
+            'stickyfooter' => $stickyfooter,
             'messagelabel' => get_string('outcomemessage', 'enrol_apply'),
             'messagehelp' => get_string('outcomemessage_help', 'enrol_apply'),
             'hasgroups' => (bool) $groups,
@@ -127,11 +147,18 @@ class enrol_apply_renderer extends plugin_renderer_base {
             'rolehelp' => get_string('decisionrole_help', 'enrol_apply'),
             'roledefault' => get_string('decisionroledefault', 'enrol_apply'),
             'roles' => $roles,
-            'actions' => $actions,
         ];
 
         if ($context['hasrows']) {
-            $this->page->requires->js_call_amd('enrol_apply/manage', 'init');
+            /* core/checkbox-toggleall boots itself: the toggler template carries its own js
+               block, and js_amd_inline goes through $PAGE->requires rather than the output
+               buffer, so capture_table()'s ob_start() does not swallow it. This module is only
+               the two gaps core leaves; see its docblock. */
+            $this->page->requires->js_call_amd(
+                'enrol_apply/manage',
+                'init',
+                [\enrol_apply_manage_table::TOGGLE_GROUP]
+            );
         }
 
         return $this->render_from_template('enrol_apply/manage', $context);

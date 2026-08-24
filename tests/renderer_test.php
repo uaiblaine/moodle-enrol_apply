@@ -141,6 +141,151 @@ final class renderer_test extends \advanced_testcase {
     }
 
     /**
+     * Render the queue for one instance, with one pending application in it.
+     *
+     * @return string The rendered form.
+     */
+    private function render_queue(): string {
+        global $DB, $PAGE;
+
+        $this->setAdminUser();
+        $applicant = $this->getDataGenerator()->create_user();
+        $this->plugin->enrol_user($this->instance, $applicant->id, null, 0, 0, ENROL_USER_SUSPENDED);
+        $ueid = (int) $DB->get_field(
+            'user_enrolments',
+            'id',
+            ['userid' => $applicant->id, 'enrolid' => $this->instance->id],
+            MUST_EXIST
+        );
+        $DB->insert_record('enrol_apply_applicationinfo', (object) ['userenrolmentid' => $ueid, 'comment' => '']);
+
+        $url = new \moodle_url('/enrol/apply/manage.php', ['id' => $this->instance->id]);
+        $PAGE->set_url($url);
+        $PAGE->set_context(\context_course::instance($this->course->id));
+
+        $table = new \enrol_apply_manage_table($this->instance->id);
+        $table->define_baseurl($url);
+
+        return $PAGE->get_renderer('enrol_apply')->manage_form($table, $url, $this->instance);
+    }
+
+    /**
+     * Every checkbox in the queue speaks core/checkbox-toggleall's vocabulary, in one group.
+     *
+     * The three data attributes are what core's module matches on; the plugin's own markup
+     * carried none of them, so nothing in the queue was wired to core before this. The group
+     * name is asserted literally rather than through the constant, because the whole point is
+     * that the header, the rows and the bar agree on one string - reading the constant in the
+     * test would make a rename invisible.
+     *
+     * Mutation check, measured against the whole suite: renaming TOGGLE_GROUP reddens TWO tests,
+     * this one and test_the_bulk_action_is_wired_to_the_same_group, and nothing else. Two rather
+     * than one because the header, the rows and the bar all read the one constant - which is the
+     * property being pinned. Core itself gives no signal at all if they disagree: the targets
+     * match by prefix and the action element by an exact string, so a mismatch quietly stops
+     * working.
+     *
+     * @return void
+     */
+    public function test_the_queue_checkboxes_are_core_toggleall_targets(): void {
+        $html = $this->render_queue();
+
+        $this->assertMatchesRegularExpression(
+            '~<input[^>]*name="userenrolments\[\]"[^>]*>~',
+            $html,
+            'the POST field name must survive the move to core markup'
+        );
+
+        preg_match('~<input[^>]*name="userenrolments\[\]"[^>]*>~', $html, $row);
+        $this->assertStringContainsString('data-action="toggle"', $row[0]);
+        $this->assertStringContainsString('data-toggle="target"', $row[0]);
+        $this->assertStringContainsString('data-togglegroup="enrol-apply-queue"', $row[0]);
+
+        preg_match('~<input[^>]*id="enrol_apply_toggleall"[^>]*>~', $html, $header);
+        $this->assertNotEmpty($header, 'the header checkbox is still there');
+        $this->assertStringContainsString('data-toggle="toggler"', $header[0]);
+        $this->assertStringContainsString('data-togglegroup="enrol-apply-queue"', $header[0]);
+    }
+
+    /**
+     * The bulk action carries the toggle-all action vocabulary, in the same group.
+     *
+     * getActionElements() matches the group EXACTLY where the targets match by prefix, so a
+     * mismatch here disables nothing and reports nothing. That silence is the reason this is
+     * asserted rather than left to the browser.
+     *
+     * Mutation check, measured against the whole suite: removing the toggle-all attributes from
+     * the action select reddens exactly this test.
+     *
+     * @return void
+     */
+    public function test_the_bulk_action_is_wired_to_the_same_group(): void {
+        $html = $this->render_queue();
+
+        preg_match('~<select[^>]*name="formaction"[^>]*>~', $html, $select);
+        $this->assertNotEmpty($select, 'the action select is still there');
+        $this->assertStringContainsString('data-action="toggle"', $select[0]);
+        $this->assertStringContainsString('data-toggle="action"', $select[0]);
+        $this->assertStringContainsString('data-togglegroup="enrol-apply-queue"', $select[0]);
+    }
+
+    /**
+     * The action bar sits in core's sticky footer, and that footer sits inside the form.
+     *
+     * Both halves matter and only the second is obvious. A sticky footer rendered outside the
+     * form would post nothing - the action select and the Go button would simply not be part of
+     * the submission - and the page would look perfectly correct while every decision silently
+     * did nothing. Core places its own inside the form for the same reason
+     * (grade/templates/edit_tree.mustache).
+     *
+     * Mutation check, measured against the whole suite: rendering the footer outside the form
+     * reddens exactly this test.
+     *
+     * @return void
+     */
+    public function test_the_action_bar_is_inside_the_sticky_footer_and_the_form(): void {
+        $html = $this->render_queue();
+
+        $footerat = strpos($html, 'id="sticky-footer"');
+        $this->assertNotFalse($footerat, 'the bar is rendered into core\'s sticky footer');
+
+        $formopen = strpos($html, '<form ');
+        $formclose = strpos($html, '</form>');
+        $this->assertNotFalse($formopen);
+        $this->assertNotFalse($formclose);
+        $this->assertGreaterThan($formopen, $footerat, 'the footer opens after the form does');
+        $this->assertLessThan($formclose, $footerat, 'and closes before the form does');
+
+        // The action itself is in the footer, not merely on the page somewhere.
+        $footer = substr($html, $footerat, $formclose - $footerat);
+        $this->assertStringContainsString('name="formaction"', $footer);
+        $this->assertStringContainsString('type="submit"', $footer);
+    }
+
+    /**
+     * The decision inputs stay in the page body, above the bar.
+     *
+     * A core sticky footer is a fixed bar - height max(80px, 3rem) - whose
+     * .sticky-footer-content carries overflow hidden, so a three-row textarea put in it is
+     * clipped. The bar is for the action; the decision's own inputs are not actions.
+     *
+     * Mutation check, measured against the whole suite: rendering the footer above the decision
+     * inputs instead of below them reddens exactly this test.
+     *
+     * @return void
+     */
+    public function test_the_decision_inputs_stay_out_of_the_sticky_footer(): void {
+        $html = $this->render_queue();
+
+        $footerat = strpos($html, 'id="sticky-footer"');
+        $this->assertNotFalse($footerat);
+
+        $body = substr($html, 0, $footerat);
+        $this->assertStringContainsString('name="outcomemessage"', $body);
+        $this->assertStringContainsString('name="roleid"', $body);
+    }
+
+    /**
      * The course name reaches the new-application notification escaped exactly once.
      *
      * Mutation check: drop the 'escape' => false option from the course name in
