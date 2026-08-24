@@ -77,7 +77,8 @@ final class lib_test extends \advanced_testcase {
         global $DB;
 
         $user = $this->getDataGenerator()->create_user();
-        $this->plugin->enrol_user($this->instance, $user->id, $this->instance->roleid, 0, 0, ENROL_USER_SUSPENDED);
+        // No role, mirroring apply(): the role is assigned on approval, not on application.
+        $this->plugin->enrol_user($this->instance, $user->id, null, 0, 0, ENROL_USER_SUSPENDED);
         $ueid = (int) $DB->get_field(
             'user_enrolments',
             'id',

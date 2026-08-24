@@ -43,6 +43,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **A decider can choose which role an approved applicant is given**, on the enrolment
+  applications queue, instead of the role being fixed on the enrolment method. Choosing nothing
+  keeps the method's own role, so nothing changes for a site that does not use it. Only roles you
+  may assign in that course are offered, and a role posted by any other means is refused and the
+  method's own role used instead.
+
+  **The role is now assigned when an application is approved, not when it is submitted.** That is
+  what the setting has always said — "Role assigned to a user when their enrolment application is
+  approved" — and it is a real behaviour change, not only a tidier one. Until now a pending
+  applicant held the role while they waited, which meant they satisfied `has_capability()` in the
+  course and were returned by `get_users_by_capability()`: anything asking those questions without
+  also checking the enrolment treated somebody who had merely applied as a participant. A pending
+  applicant now holds no role at all, and their Roles cell on the participants page is empty until
+  they are approved.
+
+  **One transitional wart, stated rather than hidden.** An application already in the queue when
+  you upgrade keeps the role it was given on submission. There is deliberately no upgrade step to
+  strip it: those assignments carry no marker saying this plugin made them, so removing them in
+  bulk would also remove the same role from anyone who holds it from another source. Approving
+  such an application with a *different* role therefore leaves the person holding both, and the
+  older one has to be removed by hand from the participants page. Approving it without choosing a
+  role — which is the default — behaves exactly as before.
+
+  The new assignment is tagged with this plugin as its component, which the old one was not, so
+  core removes it again when the enrolment ends or expires. Roles remain unprotected, so a teacher
+  can still change one by hand on the participants page.
+
 - **A decider can choose which groups an approved applicant joins**, on the enrolment
   applications queue, instead of the groups being fixed on the enrolment method. Choosing
   nothing keeps the method's own list, so nothing changes for a site that does not use it. A

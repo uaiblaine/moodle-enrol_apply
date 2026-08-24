@@ -70,6 +70,7 @@ class provider implements
                 'comment' => 'privacy:metadata:enrol_apply_submission:comment',
                 'userinfodata' => 'privacy:metadata:enrol_apply_submission:userinfodata',
                 'decidedgroups' => 'privacy:metadata:enrol_apply_submission:decidedgroups',
+                'decidedrole' => 'privacy:metadata:enrol_apply_submission:decidedrole',
                 'status' => 'privacy:metadata:enrol_apply_submission:status',
                 'outcomemessage' => 'privacy:metadata:enrol_apply_submission:outcomemessage',
                 'timecreated' => 'privacy:metadata:enrol_apply_submission:timecreated',

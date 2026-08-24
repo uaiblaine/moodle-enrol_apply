@@ -316,7 +316,8 @@ final class backup_test extends \advanced_testcase {
             );
         }
 
-        $this->plugin->enrol_user($instance, $user->id, $instance->roleid, 0, 0, ENROL_USER_SUSPENDED);
+        // No role, mirroring apply(): the role is assigned on approval, not on application.
+        $this->plugin->enrol_user($instance, $user->id, null, 0, 0, ENROL_USER_SUSPENDED);
         $ueid = $DB->get_field('user_enrolments', 'id', ['enrolid' => $instance->id, 'userid' => $user->id], MUST_EXIST);
         $DB->insert_record('enrol_apply_applicationinfo', (object) [
             'userenrolmentid' => $ueid,
@@ -613,7 +614,8 @@ final class backup_test extends \advanced_testcase {
         $DB->insert_record('enrol_apply_groups', (object) ['enrolid' => $instanceid, 'groupid' => $group->id]);
 
         $user = $this->getDataGenerator()->create_user();
-        $this->plugin->enrol_user($instance, $user->id, $instance->roleid, 0, 0, ENROL_USER_SUSPENDED);
+        // No role, mirroring apply(): the role is assigned on approval, not on application.
+        $this->plugin->enrol_user($instance, $user->id, null, 0, 0, ENROL_USER_SUSPENDED);
         $ueid = $DB->get_field('user_enrolments', 'id', ['enrolid' => $instanceid, 'userid' => $user->id], MUST_EXIST);
         $DB->insert_record('enrol_apply_applicationinfo', (object) [
             'userenrolmentid' => $ueid,

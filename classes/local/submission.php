@@ -390,6 +390,74 @@ class submission {
     }
 
     /**
+     * Record the role the decider chose for the applicant to hold once approved.
+     *
+     * Stored rather than passed along, for the same reason the groups are, and the consequence
+     * of getting it wrong is worse. complete_approval() runs twice for a queue approval and only
+     * the second call could carry an argument; two calls carrying DIFFERENT roles would assign
+     * both, and a role assignment records nothing about which pass made it. Both calls read this
+     * column instead, so both compute the same role and role_assign() collapses them into one row.
+     *
+     * Unlike record_decided_groups(), this writer stores a zero rather than returning early on
+     * one, and the difference is deliberate. A zero here means "no role was chosen, use the
+     * instance's own", which is exactly what an approval submitted with the select left alone
+     * means - so writing it lets a later decision REPLACE an earlier one. Returning early would
+     * make a stored role sticky: a row that comes back to the queue, which core's "Edit enrolment"
+     * screen and an expiredaction of "suspend" both do, would be approved a second time with the
+     * superseded role and nothing on screen to say so. (record_decided_groups() has that
+     * stickiness today; it is recorded in PROGRESS.md rather than changed here, because changing
+     * it is a behaviour change to a shipped feature and belongs in its own review.)
+     *
+     * @param int $userenrolmentid User enrolment the decision applies to.
+     * @param int $roleid Role the decider chose, already allowlisted by the caller; 0 for none.
+     * @return void
+     */
+    public static function record_decided_role(int $userenrolmentid, int $roleid): void {
+        global $DB;
+
+        $clean = $roleid > 0 ? $roleid : 0;
+
+        $rows = $DB->get_records('enrol_apply_submission', ['userenrolmentid' => $userenrolmentid], '', 'id');
+        foreach ($rows as $row) {
+            $DB->update_record('enrol_apply_submission', (object) [
+                'id' => $row->id,
+                'decidedrole' => $clean,
+            ]);
+        }
+    }
+
+    /**
+     * The role the decider chose, or null when they chose none.
+     *
+     * There is no third state to represent, which is why this returns a plain int or null where
+     * chosen_groups() has to distinguish an empty array from null: the form offers a role or
+     * nothing, and "nothing" means the instance's own role. An explicit "no role at all" is not
+     * something the queue can express, and inventing a representation for it here would be a
+     * guard no test could hold.
+     *
+     * @param int $userenrolmentid User enrolment the decision applies to.
+     * @return int|null Role id, or null when nothing was recorded.
+     */
+    public static function chosen_role(int $userenrolmentid): ?int {
+        global $DB;
+
+        $rows = $DB->get_records(
+            'enrol_apply_submission',
+            ['userenrolmentid' => $userenrolmentid],
+            'timecreated DESC, id DESC',
+            'id, decidedrole',
+            0,
+            1
+        );
+        $row = reset($rows);
+        if (!$row || (int) $row->decidedrole <= 0) {
+            return null;
+        }
+
+        return (int) $row->decidedrole;
+    }
+
+    /**
      * The message the decider wrote, for the notification that announces the decision.
      *
      * Read from the record rather than passed along, which is what lets one lookup serve all

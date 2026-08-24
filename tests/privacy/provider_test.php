@@ -89,7 +89,8 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
 
         $instance = $instance ?? $this->instance;
         $user = $this->getDataGenerator()->create_user();
-        $this->plugin->enrol_user($instance, $user->id, $instance->roleid, 0, 0, ENROL_USER_SUSPENDED);
+        // No role, mirroring apply(): the role is assigned on approval, not on application.
+        $this->plugin->enrol_user($instance, $user->id, null, 0, 0, ENROL_USER_SUSPENDED);
         $ueid = $DB->get_field(
             'user_enrolments',
             'id',
@@ -535,7 +536,7 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
 
         $applicant = $this->create_application('Through the first method');
         // The same person applying to both methods, which is what makes the paths collide.
-        $this->plugin->enrol_user($second, $applicant->id, $second->roleid, 0, 0, ENROL_USER_SUSPENDED);
+        $this->plugin->enrol_user($second, $applicant->id, null, 0, 0, ENROL_USER_SUSPENDED);
         $ueid = $DB->get_field(
             'user_enrolments',
             'id',

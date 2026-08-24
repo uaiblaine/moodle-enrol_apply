@@ -312,5 +312,35 @@ function xmldb_enrol_apply_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026082400, 'enrol', 'apply');
     }
 
+    if ($oldversion < 2026082500) {
+        /* The role a decider chose, for the same reason the groups are stored: complete_approval()
+           runs twice for a queue approval and only the second call could carry an argument, so both
+           passes read this column instead. It matters more here than it does for the groups. Two
+           group lists union, which is wrong but at least attributable; two DIFFERENT roles would
+           leave the applicant holding both, and a role assignment is not something a later pass can
+           tell apart from one somebody made by hand.
+
+           0 means "the decider chose nothing", which is what every existing row means too - the
+           column is deliberately backfilled with nothing. An application already in the queue when
+           a site upgrades keeps the role apply() gave it, and approving it assigns the instance
+           default exactly as before. */
+        $table = new xmldb_table('enrol_apply_submission');
+        $field = new xmldb_field(
+            'decidedrole',
+            XMLDB_TYPE_INTEGER,
+            '10',
+            null,
+            XMLDB_NOTNULL,
+            null,
+            '0',
+            'decidedgroups'
+        );
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        upgrade_plugin_savepoint(true, 2026082500, 'enrol', 'apply');
+    }
+
     return true;
 }

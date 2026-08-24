@@ -255,7 +255,18 @@ class enrol_apply_plugin extends enrol_plugin {
     protected function apply($instance, $userid, $data) {
         global $DB;
 
-        $this->enrol_user($instance, $userid, $instance->roleid, 0, 0, ENROL_USER_SUSPENDED);
+        /* No role, on purpose. The role is assigned on approval by complete_approval(), which is
+           what the "Role assigned to a user when their enrolment application is approved" setting
+           has always said and what the code did not do. Somebody who may yet be refused should
+           not hold a role meanwhile - and until this changed they did, visibly: a pending
+           applicant satisfied has_capability() in the course and was returned by
+           get_users_by_capability(), measured on 5.1 and 5.2, so anything asking those questions
+           without also checking the enrolment treated an applicant as a participant.
+
+           null rather than 0. The two are indistinguishable to enrol_user()'s own "if ($roleid)"
+           guard, but the after_user_enrolled hook publishes the value as a nullable int and null
+           is the honest one. It is also what restore_user_enrolment() below already passes. */
+        $this->enrol_user($instance, $userid, null, 0, 0, ENROL_USER_SUSPENDED);
 
         $userenrolment = $DB->get_record(
             'user_enrolments',
@@ -340,6 +351,9 @@ class enrol_apply_plugin extends enrol_plugin {
     public function complete_approval($instance, $userid, $userenrolmentid) {
         global $DB, $USER;
 
+        // The role follows approval, never the bare application. See assign_decided_role().
+        $this->assign_decided_role($instance, (int) $userid, (int) $userenrolmentid);
+
         // Group membership follows approval, never the bare application.
         $this->add_instance_groups($instance, $userid, (int) $userenrolmentid);
 
@@ -403,6 +417,56 @@ class enrol_apply_plugin extends enrol_plugin {
             get_config('enrol_apply', 'confirmmailsubject'),
             get_config('enrol_apply', 'confirmmailcontent')
         );
+    }
+
+    /**
+     * Assign the applicant the role their approval carries.
+     *
+     * The decider's choice is read from the stored record rather than received as an argument,
+     * and that is load bearing for the same reason it is for the groups: an approval taken
+     * through the queue completes TWICE over, and only the second pass could carry an argument.
+     * Two passes computing two different roles would assign both, and neither the UI nor a later
+     * sweep can tell which one this plugin meant. Reading one stored answer is what makes both
+     * passes agree, and role_assign() is idempotent on the whole tuple, so the second call
+     * returns the first call's id rather than writing a second row.
+     *
+     * Where nothing was recorded the instance's own role applies, which is the only role the
+     * out-of-band route can ever produce: core's "Edit enrolment" screen drives
+     * update_user_enrol(), which does nothing about roles at all and has no operator input to
+     * carry.
+     *
+     * The assignment is stamped with this plugin's component, and the plugin still returns false
+     * from roles_protected(). That pair is deliberate and each half was measured. The stamp is
+     * what lets core clean the assignment up exactly: unenrol_user() unassigns by component and
+     * itemid whether or not this was the user's last enrolment in the course, and
+     * process_expirations() does the same in its "remove all roles that belong to this instance"
+     * line. Without it core falls back to guessing $instance->roleid, and once a decider can
+     * choose a different role that guess is wrong by construction. Measured on m502, with an
+     * unrelated manual enrolment in the same course: an expired enrolment approved as Teacher
+     * against an instance defaulting to Student left the Teacher assignment behind under both
+     * expiredaction settings when it was bare, and was removed correctly under both when it was
+     * stamped. roles_protected() staying false is what keeps it removable by hand - the
+     * participants page refuses to remove a component-owned assignment only when the owning
+     * plugin protects its roles (user/classes/output/user_roles_editable.php, identical on 5.1
+     * and 5.2) - so the stamp and the false together give both.
+     *
+     * @param stdClass $instance Course enrol instance.
+     * @param int $userid Applicant user id.
+     * @param int $userenrolmentid User enrolment whose recorded choice wins, 0 for none.
+     * @return void
+     */
+    protected function assign_decided_role($instance, int $userid, int $userenrolmentid) {
+        $roleid = \enrol_apply\local\submission::chosen_role($userenrolmentid) ?? (int) $instance->roleid;
+
+        /* An instance can carry roleid 0 - the column is nullable with a default of 0, and a
+           restore writes 0 whenever the archived role maps to nothing the restoring user may
+           assign. role_assign(0, ...) throws rather than doing nothing, so this skip is required
+           and not defensive: until this change enrol_user()'s own "if ($roleid)" swallowed it. */
+        if ($roleid <= 0) {
+            return;
+        }
+
+        role_assign($roleid, $userid, context_course::instance($instance->courseid)->id, 'enrol_apply', $instance->id);
     }
 
     /**
@@ -737,6 +801,34 @@ class enrol_apply_plugin extends enrol_plugin {
                first, and decide() skips a row already at the target status - so a message
                carried any further than here is dropped in silence. */
             \enrol_apply\local\submission::record_outcome_message((int) $userenrolment->id, $message);
+
+            /* The role, allowlisted per instance for the same reason and by the same shape core
+               uses at enrol/manual/externallib.php:98-104. It is not optional politeness:
+               role_assign() performs no assignability check of any kind - measured on both
+               branches, its body holds only argument-shape checks and a lookup that the user
+               exists, and it will happily insert an assignment for a role id that does not exist
+               at all. This parameter arrives as a bare optional_param() with nothing between it
+               and that call, which is exactly the escalation shape enrol_gapply ships.
+
+               get_assignable_roles() is keyed by role id, so the comparison is array_key_exists
+               and never in_array: the values are LOCALISED NAMES, and testing an id against
+               those lets everything through.
+
+               A refused role records 0 rather than throwing, which matches what the rest of this
+               method does with input it will not act on - an approver working a queue is not
+               blocked by one bad id. The approval then proceeds with the instance's own role, and
+               the forged one is assigned nowhere. Note the fallback is deliberately NOT
+               allowlisted: it is what every application has been assigned since this plugin was
+               written, and filtering it would silently stop an instance configured with a role
+               its teacher may not assign from granting anything at all. */
+            if ($decision !== null && array_key_exists('roleid', $decision)) {
+                $assignable = get_assignable_roles(context_course::instance($instance->courseid));
+                $chosenrole = (int) $decision['roleid'];
+                \enrol_apply\local\submission::record_decided_role(
+                    (int) $userenrolment->id,
+                    array_key_exists($chosenrole, $assignable) ? $chosenrole : 0
+                );
+            }
 
             /* Allowlisted here, per instance, and not once for the batch: the ids arrive from a
                posted form and the batch can span courses, so a group that is legitimate for one
