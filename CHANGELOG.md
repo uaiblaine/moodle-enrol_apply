@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **A group name or a course name carrying an `&` or a `<` is no longer escaped twice.** The
+  group chooser on the applications queue and the course name in the "new application"
+  notification both went through `format_string()`, whose escape flag defaults to on, and were
+  then output through a Mustache double stash, which escapes again. A group named `R&D < Team`
+  reached the reader as the literal text `R&amp;D &lt; Team`. Both now hand the plain spelling
+  to the template, which is the only one of the two spellings a double stash wants.
+
 - **An enrolment method that asks for nothing no longer opens an empty window.** Where the method
   requests no profile fields, no comment and carries no introduction, the application form had
   nothing in it at all — the applicant saw a blank window with a Save button and no indication of
