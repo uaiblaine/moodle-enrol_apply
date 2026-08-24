@@ -97,14 +97,23 @@ class enrol_apply_renderer extends plugin_renderer_base {
                nothing in it is a control that cannot be used. Where it is empty the instance's
                own role applies, exactly as it does when the decider leaves the select alone.
 
-               Unlike the group names, these are the ESCAPED spelling and the template puts them
-               in a triple stash. That is not an inconsistency to tidy up: get_assignable_roles()
-               returns role_fix_names() output, which is format_string()ed with no way to ask for
-               anything else, so the escaped spelling is the only one core will give. It is the
-               same reason core's own element-select.mustache renders option text with a triple
-               stash. */
+               Unlike the group names, these go to the template in the ESCAPED spelling and are
+               rendered through a triple stash, as core's own element-select.mustache does. The
+               format_string() below is what makes that safe, and it is not belt and braces: core
+               hands back a MIXED list. role_get_name() escapes a role whose role.name column is
+               set, and returns a bare get_string() for one whose column is empty - which is every
+               role a stock site ships, measured on m502, where all eight return an empty name
+               while this site's own custom role returns "R&amp;D coordinator". A triple stash
+               over that list would emit the lang-string half raw.
+
+               The call is idempotent on the half that is already escaped, because the ampersand
+               rule skips an existing entity, so normalising costs nothing and removes the
+               asymmetry rather than documenting it. */
             foreach (get_assignable_roles($coursecontext) as $roleid => $rolename) {
-                $roles[] = ['id' => $roleid, 'name' => $rolename];
+                $roles[] = [
+                    'id' => $roleid,
+                    'name' => format_string($rolename, true, ['context' => $coursecontext]),
+                ];
             }
         }
 

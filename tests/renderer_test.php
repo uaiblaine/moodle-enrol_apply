@@ -141,6 +141,56 @@ final class renderer_test extends \advanced_testcase {
     }
 
     /**
+     * A role name reaches the chooser escaped exactly once.
+     *
+     * The renderer now normalises every role name through format_string() before the template's
+     * triple stash sees it, because core hands back a MIXED list: role_get_name() escapes a role
+     * whose role.name column is set and returns a bare get_string() for one whose column is
+     * empty, which is every role a stock site ships.
+     *
+     * **This test holds only one of those two halves, and says so rather than implying more.**
+     * It pins the escaped half — that normalising an already-escaped name does not escape it a
+     * second time, which is the regression the new call could have introduced. The raw half is
+     * NOT reachable from a fixture: its two sources are a core lang string and a role shortname,
+     * and neither can be given an ampersand from a test (shortnames are alphanumeric, and
+     * overriding a core string means driving tool_customlang and flushing its caches for one
+     * assertion). It was verified by measurement instead — on m502 all eight stock roles return
+     * an empty role.name while the site's own custom role returns "R&amp;D coordinator" — and by
+     * reading role_get_name() at lib/accesslib.php:4575-4594 on both branches.
+     *
+     * **What this test holds, measured rather than assumed, is the STASH — not the
+     * normalisation.** Switching the role option to a double stash reddens it, because an
+     * already-escaped name then arrives escaped twice. Adding a second format_string() call
+     * reddens NOTHING, because format_string() is idempotent; and removing the one that is there
+     * reddens nothing either, for the fixture reason above. So the normalisation this test sits
+     * beside is verified by measurement and by reading, and by no assertion in this file. Said
+     * plainly because the alternative — a docblock claiming a mutation that does not happen — is
+     * the exact shape this repository treats as its worst defect.
+     *
+     * @return void
+     */
+    public function test_a_role_name_reaches_the_chooser_escaped_once(): void {
+        $roleid = $this->getDataGenerator()->create_role([
+            'shortname' => 'awkwardrole',
+            'name' => self::AWKWARD_NAME,
+            'archetype' => 'student',
+        ]);
+        set_role_contextlevels($roleid, [CONTEXT_COURSE]);
+
+        $html = $this->render_queue();
+
+        preg_match('~<select[^>]*name="roleid".*?</select>~s', $html, $matches);
+        $this->assertNotEmpty($matches, 'the role chooser is rendered');
+        $chooser = $matches[0];
+
+        // The premise: this role really is on offer, or the assertions below are vacuous.
+        $this->assertStringContainsString('value="' . $roleid . '"', $chooser);
+
+        $this->assertStringContainsString(self::ESCAPED_ONCE, $chooser);
+        $this->assertStringNotContainsString(self::ESCAPED_TWICE, $chooser);
+    }
+
+    /**
      * Render the queue for one instance, with one pending application in it.
      *
      * @return string The rendered form.
