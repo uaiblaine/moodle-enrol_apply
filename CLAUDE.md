@@ -126,6 +126,19 @@ backup/                      group mappings, comments and the durable trail, see
   archived role maps to nothing the restoring user may assign — so `assign_decided_role()` skips
   explicitly. Until this change `enrol_user()`'s own `if ($roleid)` was what swallowed it.
 
+  **The stamp also has to be restored, and forgetting that lost the role in silence.** Core hands
+  any `{role_assignments}` row whose component starts with `enrol_` to
+  `enrol_plugin::restore_role_assignment()` (`restore_stepslib.php:2350`, the same line on both
+  branches), whose base implementation is empty. That branch has **no fallback and writes no
+  backup log line** — the generic-component branch beside it does both — so between the commit
+  that stamped the assignment and the one that added the override, every restore and every course
+  copy gave the applicant an ACTIVE enrolment and no role. Measured on 5.1 and 5.2 with three
+  controls in one restore: a bare manual assignment, a bare assignment of the pre-stamp shape and
+  an `enrol_self` one all survived, and only the apply row vanished. This is the identical
+  mechanism `restore_group_member()` already documents for memberships; the role half was simply
+  missed. `enrol_flatfile` is the precedent for the pairing — it stamps, its `roles_protected()`
+  is false, and it overrides.
+
   **`role_assign()` performs no assignability check at all**, so the `get_assignable_roles()`
   allowlist in `confirm_enrolment()` is the only thing between a posted `roleid` and a role
   assignment. Compare with `array_key_exists`, never `in_array`: the values are localised names.

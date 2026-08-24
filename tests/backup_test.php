@@ -735,6 +735,76 @@ final class backup_test extends \advanced_testcase {
     }
 
     /**
+     * An approved applicant's ROLE survives a restore with users, and keeps its stamp.
+     *
+     * It did not, between the commit that stamped the assignment and this one, and the loss was
+     * completely silent. Core routes any {role_assignments} row whose component starts with
+     * "enrol_" to enrol_plugin::restore_role_assignment() (restore_stepslib.php:2350, the same
+     * line on 5.1 and 5.2), whose base implementation is an empty stub. Unlike the neighbouring
+     * generic-component branch, that one has no role_assign() fallback and writes no
+     * backup::LOG_WARNING - so a restored applicant came back with an ACTIVE enrolment and no
+     * role at all, keeping their place in the course and losing every capability with it.
+     *
+     * THE CONTROL IS THE POINT. A second user holds a bare assignment in the same course, and
+     * the assertion that theirs survives is what proves the restore processed roles.xml at all.
+     * Without it this test passes just as happily against a restore that assigned nothing to
+     * anybody, which is the vacuous shape the fleet rules warn about - and it is not
+     * hypothetical here, because the defect being pinned IS "the roles quietly do not arrive".
+     *
+     * The stamp is asserted, not merely the role's existence. Restoring bare would satisfy a
+     * role-exists assertion while losing the cleanup contract the stamp is written for:
+     * process_expirations() would be back to guessing $instance->roleid.
+     *
+     * Mutation check: delete the body of enrol_apply_plugin::restore_role_assignment() and
+     * exactly this test goes red, on the applicant half, with the control still green.
+     *
+     * @return void
+     */
+    public function test_an_approved_applicants_role_survives_a_restore(): void {
+        global $DB;
+
+        [$course, $instance, $user] = $this->create_course_with_application();
+        $coursecontext = \context_course::instance($course->id);
+        $studentroleid = (int) $DB->get_field('role', 'id', ['shortname' => 'student'], MUST_EXIST);
+
+        /* The control: an ordinary manual enrolment, whose assignment carries no component and
+           therefore comes back through core's own branch whatever this plugin does. */
+        $control = $this->getDataGenerator()->create_user();
+        $this->getDataGenerator()->enrol_user($control->id, $course->id, $studentroleid);
+
+        $ueid = $DB->get_field('user_enrolments', 'id', ['enrolid' => $instance->id, 'userid' => $user->id], MUST_EXIST);
+        $this->plugin->confirm_enrolment([$ueid]);
+
+        $this->assertTrue($DB->record_exists('role_assignments', [
+            'contextid' => $coursecontext->id,
+            'userid' => $user->id,
+            'component' => 'enrol_apply',
+        ]), 'the approval should have created a stamped assignment');
+
+        $newcourseid = $this->backup_and_restore($course, true);
+        $newcontext = \context_course::instance($newcourseid);
+
+        $this->assertTrue($DB->record_exists('role_assignments', [
+            'contextid' => $newcontext->id,
+            'userid' => $control->id,
+        ]), 'the control proves the restore really processed the role assignments');
+
+        $newinstanceid = (int) $DB->get_field(
+            'enrol',
+            'id',
+            ['courseid' => $newcourseid, 'enrol' => 'apply'],
+            MUST_EXIST
+        );
+        $this->assertTrue($DB->record_exists('role_assignments', [
+            'contextid' => $newcontext->id,
+            'userid' => $user->id,
+            'roleid' => $studentroleid,
+            'component' => 'enrol_apply',
+            'itemid' => $newinstanceid,
+        ]), 'the applicant keeps the role AND the stamp that lets core clean it up again');
+    }
+
+    /**
      * A cohort restriction restored into another site becomes a live refusal, not "no restriction".
      *
      * A cohort id names a different group of people on every other site, so it cannot be

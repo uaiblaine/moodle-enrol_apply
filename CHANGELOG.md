@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **An approved applicant no longer loses their role when the course is restored or copied.**
+  The role assignment is tagged with this plugin as its component, and Moodle hands any such
+  assignment back to the plugin that owns it on restore — down a path that has no fallback and
+  logs no warning. This plugin was not listening, so a restored applicant came back with a live
+  enrolment and no role at all: still in the course, silently stripped of everything the role
+  allowed, and showing "No roles" on the participants page. Measured on 5.1 and 5.2 with three
+  controls in the same restore, all of which survived. Assignments made before the tagging was
+  introduced were never affected.
+
 - **A group name or a course name carrying an `&` or a `<` is no longer escaped twice.** The
   group chooser on the applications queue and the course name in the "new application"
   notification both went through `format_string()`, whose escape flag defaults to on, and were
