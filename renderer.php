@@ -72,10 +72,19 @@ class enrol_apply_renderer extends plugin_renderer_base {
            is picked - so an empty chooser would also imply a choice the operator never made. */
         $groups = [];
         if ($instance !== null) {
+            $coursecontext = \context_course::instance($instance->courseid);
+
+            /* The name is the PLAIN spelling, because the template renders it through a double
+               stash and Mustache escapes it there. format_string()'s escape flag defaults to
+               true, so leaving it out hands the escaped spelling to a sink that escapes again:
+               measured on 5.1 and 5.2, a group named "R&D < Team" reached the reader as the
+               literal text "R&amp;D &lt; Team". This is not the same call as the one in
+               edit_form.php, which feeds a moodleform select - core renders those options with a
+               triple stash and wants the escaped spelling there. */
             foreach (groups_get_all_groups($instance->courseid) as $group) {
                 $groups[] = [
                     'id' => $group->id,
-                    'name' => format_string($group->name, true, ['context' => \context_course::instance($instance->courseid)]),
+                    'name' => format_string($group->name, true, ['context' => $coursecontext, 'escape' => false]),
                 ];
             }
         }
@@ -167,7 +176,8 @@ class enrol_apply_renderer extends plugin_renderer_base {
 
         return $this->render_from_template('enrol_apply/application_notification', [
             'coursenamelabel' => get_string('coursename', 'enrol_apply'),
-            'coursename' => format_string($course->fullname),
+            // Plain, for the same reason as the group names above: the template double-stashes it.
+            'coursename' => format_string($course->fullname, true, ['escape' => false]),
             'applicantlabel' => get_string('applyuser', 'enrol_apply'),
             'applicant' => fullname($user),
             'commentlabel' => get_string('comment', 'enrol_apply'),

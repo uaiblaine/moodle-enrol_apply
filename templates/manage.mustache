@@ -35,7 +35,9 @@
     * hasgroups boolean - whether the course has any group to offer
     * grouplabel string - label of the group chooser
     * grouphelp string - hint explaining what choosing nothing does
-    * groups array - list of id and name pairs, one per group in the course
+    * groups array - list of id and name pairs, one per group in the course; each name is the
+      plain spelling, because the option text is output through a double stash and Mustache
+      escapes it there
     * actions array - list of value and label pairs, one per bulk action
 
     Example context (json):
@@ -54,7 +56,7 @@
         "grouphelp": "Leave empty to use the groups configured on the enrolment method.",
         "groups": [
             {"id": 3, "name": "Tutorial A"},
-            {"id": 4, "name": "Tutorial B"}
+            {"id": 4, "name": "R&D < Team"}
         ],
         "actions": [
             {"value": "confirm", "label": "Confirm requests"},

@@ -203,6 +203,29 @@ backup/                      group mappings, comments and the durable trail, see
   Builder cell is raw HTML, where escaping is safe and lossless, and stripping there is a
   defect rather than a deliberate cost. Only a web service return genuinely has to strip.
 
+- **A name this plugin renders itself needs `'escape' => false`, and there is nothing in the
+  pipeline that will tell you.** `format_string()`'s escape flag defaults to **true**, so the
+  bare call returns the *escaped* spelling; every double stash in this plugin's own templates
+  then escapes it a second time. Measured on 5.1 and 5.2: a group named `R&D < Team` reached
+  the reader as the literal text `R&amp;D &lt; Team`. Two calls had it — the group chooser in
+  `renderer.php` and the course name in the "new application" notification, whose template
+  docblock had claimed since it was written that "every label and value arrives in its PLAIN
+  spelling". `tests/renderer_test.php` pins both, and each of the two mutations reddens exactly
+  one of its tests.
+
+  **The opposite calls in this plugin are correct and must not be "fixed" to match.**
+  `edit_form.php:76` and `:284` feed moodleform selects, `manage_table.php:225` feeds
+  `html_writer::link()`, and every `$PAGE->set_heading(format_string(...))` feeds a triple
+  stash — all four sinks render raw and want the escaped spelling. The rule is the sink, never
+  the helper.
+
+  **A role name has only one spelling available.** `get_assignable_roles()` returns
+  `role_fix_names()` output and `role_get_name()` runs `format_string()` with the default flag,
+  so the escaped spelling is all core will give you and there is no `escape` option to pass. A
+  role name therefore belongs in a **triple** stash, exactly as core's own
+  `element-select.mustache` does with `{{{text}}}` — the one place in this plugin's templates
+  where that is right rather than wrong.
+
 - **One form class, two transports, and only one of them runs core's guards.**
   `\enrol_apply\form\application_form` is a `\core_form\dynamic_form`. The modal reaches it
   through core's `core_form_dynamic_form` web service; `apply.php` renders the same class on a
