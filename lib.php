@@ -364,7 +364,8 @@ class enrol_apply_plugin extends enrol_plugin {
         \enrol_apply\local\submission::decide(
             (int) $userenrolmentid,
             \enrol_apply\local\submission::STATUS_APPROVED,
-            (int) $USER->id
+            (int) $USER->id,
+            true
         );
 
         $DB->delete_records('enrol_apply_applicationinfo', ['userenrolmentid' => $userenrolmentid]);
@@ -872,11 +873,15 @@ class enrol_apply_plugin extends enrol_plugin {
                posted form and the batch can span courses, so a group that is legitimate for one
                application is not necessarily legitimate for the next. groups_get_all_groups()
                is keyed by group id, so the comparison is array_key_exists and never in_array,
-               which would compare an id against group names. */
-            if ($decision !== null && !empty($decision['groups'])) {
+               which would compare an id against group names.
+
+               The gate is array_key_exists and not !empty, so an EMPTY posted list reaches the
+               writer and clears an earlier choice. A caller with nothing to say about the groups
+               omits the key entirely, which is what the out-of-band approval route does. */
+            if ($decision !== null && array_key_exists('groups', $decision)) {
                 $allowed = groups_get_all_groups($instance->courseid);
                 $chosen = array_values(array_filter(
-                    array_map('intval', $decision['groups']),
+                    array_map('intval', (array) $decision['groups']),
                     static function (int $groupid) use ($allowed): bool {
                         return array_key_exists($groupid, $allowed);
                     }
@@ -952,7 +957,8 @@ class enrol_apply_plugin extends enrol_plugin {
             \enrol_apply\local\submission::decide(
                 (int) $userenrolment->id,
                 \enrol_apply\local\submission::STATUS_WAITING,
-                (int) $USER->id
+                (int) $USER->id,
+                true
             );
 
             $this->notify_applicant(
@@ -996,7 +1002,8 @@ class enrol_apply_plugin extends enrol_plugin {
             \enrol_apply\local\submission::decide(
                 (int) $userenrolment->id,
                 \enrol_apply\local\submission::STATUS_CANCELLED,
-                (int) $USER->id
+                (int) $USER->id,
+                true
             );
 
             $this->unenrol_user($instance, $userenrolment->userid);
