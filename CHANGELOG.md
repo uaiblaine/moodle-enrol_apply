@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **A renamed role no longer reaches the approval queue's role chooser unescaped.** Moodle spells
+  a role's name two different ways — a role that has been given a name of its own comes back
+  escaped, while the eight roles a site ships with come back as plain language strings that have
+  never been escaped — and the chooser was written as though only the first kind existed. A site
+  that had put an `&` into one of those language strings would have seen it rendered as markup.
+
 - **An approved applicant no longer loses their role when the course is restored or copied.**
   The role assignment is tagged with this plugin as its component, and Moodle hands any such
   assignment back to the plugin that owns it on restore — down a path that has no fallback and

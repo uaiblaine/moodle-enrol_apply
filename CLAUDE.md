@@ -311,12 +311,24 @@ backup/                      group mappings, comments and the durable trail, see
   stash — all four sinks render raw and want the escaped spelling. The rule is the sink, never
   the helper.
 
-  **A role name has only one spelling available.** `get_assignable_roles()` returns
-  `role_fix_names()` output and `role_get_name()` runs `format_string()` with the default flag,
-  so the escaped spelling is all core will give you and there is no `escape` option to pass. A
-  role name therefore belongs in a **triple** stash, exactly as core's own
-  `element-select.mustache` does with `{{{text}}}` — the one place in this plugin's templates
-  where that is right rather than wrong.
+  **A role name has no single spelling, and the sentence that used to stand here said it had
+  one.** It claimed `get_assignable_roles()` always returns `format_string()` output, so the
+  escaped spelling was "all core will give you" and a **triple** stash was therefore correct.
+  Half of that is true. `role_get_name()` runs `format_string()` only when `role.name` is
+  non-empty; when it is empty the name comes from a bare `get_string()` — `defaultcoursestudent`
+  and its siblings — that has never been escaped at all (`lib/accesslib.php:4575-4594`, the same
+  on both branches). **Every one of the eight roles a stock site ships has an empty `role.name`**
+  — measured on m502, where `manager`, `editingteacher`, `student` and the rest all return `[]`
+  while the site's own custom role returns `R&amp;D coordinator`. So the list handed to the
+  chooser mixes the two spellings, and no single stash is right for all of it.
+
+  The renderer therefore normalises: it puts every name through
+  `format_string($name, true, ['context' => $coursecontext])` before the template sees it. That
+  is a no-op on the already-escaped half — `format_string()` is idempotent, because the ampersand
+  rule skips an existing entity, measured — and escapes the other half, after which the triple
+  stash is correct for every member, exactly as core's own `element-select.mustache` is. It is
+  still the one place in this plugin's templates where a triple stash is right rather than wrong;
+  what changed is that the renderer now earns it instead of assuming it.
 
 - **One form class, two transports, and only one of them runs core's guards.**
   `\enrol_apply\form\application_form` is a `\core_form\dynamic_form`. The modal reaches it
