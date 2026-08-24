@@ -623,6 +623,32 @@ behaviour change to something already shipped and belongs in its own review.
   object and every current read is bare, which is an E_WARNING under `--fail-on-warning` the
   moment an element is added after the fact. Worth doing, in one PR covering both columns.
 
+## The audit trail and the participants page — analysed, not yet built
+
+Two symptoms reported from a live site on 2026-08-24: an unenrolment leaves the durable record
+reading "Pending", and a manual suspension re-queues the application while the report goes on
+saying "Approved". Both reproduce on 5.1 and 5.2. The full analysis is in
+[`audit-trail-analysis.md`](audit-trail-analysis.md); the load-bearing conclusions are:
+
+- **The record is not wrong; the report was lying by omission.** Every cell of the outcome matrix
+  is computable today from one `LEFT JOIN {user_enrolments}`, so the fix is read-side and cannot
+  regress `test_a_submission_row_survives_unenrolment`, which pins that a record deliberately
+  outlives its enrolment.
+- **The narrow real defect** is a PENDING application that gets unenrolled: it leaves the queue,
+  reads "Pending" for ever, is reachable from no screen, and `purge_submissions` eventually
+  deletes it without correcting it.
+- **Two worse defects found while measuring.** A re-approval after a manual suspension sends the
+  applicant a SECOND message while `decide()`'s same-status skip leaves the trail naming the first
+  decider — measured on both branches. And `record_decided_groups()`/`record_outcome_message()`
+  are sticky, so that second approval silently re-uses the earlier group list and message;
+  `record_decided_role()` deliberately does not, and
+  `test_a_later_approval_clears_an_earlier_choice` pins the difference.
+- **The participants-page lock is possible and server-side enforced**, but `allow_manage()` cannot
+  be narrowed to a row and taking it away removes the only UI for an approved applicant's dates —
+  which `hook_callbacks.php:41-43` already says is why the observer exists. `allow_unenrol_user()`
+  is the only one of the four that receives the row. Both `true` overrides are inherited from
+  upstream (`c9aa093`, 2018), and upstream tried this lock and commented it out.
+
 ## Corrections found in the plan and in fleet documentation
 
 - `~/dev/CLAUDE.md` overstates the auth-lock claim. `auth_manual` merges legacy *under* modern,
