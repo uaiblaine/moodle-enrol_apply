@@ -71,6 +71,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
            control that cannot be used, and the instance's own list still applies when nothing
            is picked - so an empty chooser would also imply a choice the operator never made. */
         $groups = [];
+        $roles = [];
         if ($instance !== null) {
             $coursecontext = \context_course::instance($instance->courseid);
 
@@ -86,6 +87,24 @@ class enrol_apply_renderer extends plugin_renderer_base {
                     'id' => $group->id,
                     'name' => format_string($group->name, true, ['context' => $coursecontext, 'escape' => false]),
                 ];
+            }
+
+            /* The same list the server allowlists the posted role against, so the control cannot
+               offer anything the decision would refuse. It is empty for anybody without
+               moodle/role:assign in the course, which by default is nobody who can reach this
+               page - enrol/apply:manageapplications and moodle/role:assign declare the same two
+               archetypes - but a custom role can hold one without the other, and a chooser with
+               nothing in it is a control that cannot be used. Where it is empty the instance's
+               own role applies, exactly as it does when the decider leaves the select alone.
+
+               Unlike the group names, these are the ESCAPED spelling and the template puts them
+               in a triple stash. That is not an inconsistency to tidy up: get_assignable_roles()
+               returns role_fix_names() output, which is format_string()ed with no way to ask for
+               anything else, so the escaped spelling is the only one core will give. It is the
+               same reason core's own element-select.mustache renders option text with a triple
+               stash. */
+            foreach (get_assignable_roles($coursecontext) as $roleid => $rolename) {
+                $roles[] = ['id' => $roleid, 'name' => $rolename];
             }
         }
 
@@ -103,6 +122,11 @@ class enrol_apply_renderer extends plugin_renderer_base {
             'grouplabel' => get_string('decisiongroups', 'enrol_apply'),
             'grouphelp' => get_string('decisiongroups_help', 'enrol_apply'),
             'groups' => $groups,
+            'hasroles' => (bool) $roles,
+            'rolelabel' => get_string('decisionrole', 'enrol_apply'),
+            'rolehelp' => get_string('decisionrole_help', 'enrol_apply'),
+            'roledefault' => get_string('decisionroledefault', 'enrol_apply'),
+            'roles' => $roles,
             'actions' => $actions,
         ];
 

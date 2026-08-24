@@ -109,13 +109,19 @@ if ($formaction !== '' && $userenrolments) {
     /* PARAM_TEXT and not PARAM_RAW: this reaches the applicant's notification, and the only
        formatting it is allowed is the line breaks the decider typed. It is escaped again at
        the sink in notify_applicant(); cleaning here as well keeps a forged post from putting
-       markup into the durable record, which the report and the privacy export both read. */
+       markup into the durable record, which outlives the enrolment it belongs to. */
     $outcomemessage = trim(optional_param('outcomemessage', '', PARAM_TEXT));
 
     /* Cleaned to integers here and allowlisted per instance inside confirm_enrolment(), not
-       here: the batch can span courses when the queue is opened site wide, so a group that is
-       legitimate for one application is not necessarily legitimate for the next. */
-    $decision = ['groups' => optional_param_array('groups', [], PARAM_INT)];
+       here: the batch can span courses when the queue is opened site wide, so a group or a role
+       that is legitimate for one application is not necessarily legitimate for the next. Both
+       are read unconditionally rather than only when the form offered a control, because the
+       allowlist has to run against whatever a forged post carries, not against what the page
+       chose to render. */
+    $decision = [
+        'groups' => optional_param_array('groups', [], PARAM_INT),
+        'roleid' => optional_param('roleid', 0, PARAM_INT),
+    ];
 
     $enrolapply = enrol_get_plugin('apply');
     switch ($formaction) {

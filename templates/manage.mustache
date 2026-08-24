@@ -38,6 +38,15 @@
     * groups array - list of id and name pairs, one per group in the course; each name is the
       plain spelling, because the option text is output through a double stash and Mustache
       escapes it there
+    * hasroles boolean - whether the decider may assign any role in this course
+    * rolelabel string - label of the role chooser
+    * rolehelp string - hint explaining what choosing nothing does
+    * roledefault string - text of the option that leaves the method's own role in charge
+    * roles array - list of id and name pairs, one per role the decider may assign; each name is
+      the ESCAPED spelling and is therefore output through a TRIPLE stash, exactly as core's own
+      element-select.mustache does. get_assignable_roles() returns format_string() output and
+      offers no way to ask for the plain spelling, so a double stash here would escape a second
+      time and a role renamed with an ampersand would read wrongly.
     * actions array - list of value and label pairs, one per bulk action
 
     Example context (json):
@@ -57,6 +66,14 @@
         "groups": [
             {"id": 3, "name": "Tutorial A"},
             {"id": 4, "name": "R&D < Team"}
+        ],
+        "hasroles": true,
+        "rolelabel": "Role to assign on approval",
+        "rolehelp": "Leave it alone to use the role configured on the enrolment method.",
+        "roledefault": "Use the enrolment method's role",
+        "roles": [
+            {"id": 5, "name": "Student"},
+            {"id": 3, "name": "R&amp;D &lt; Team"}
         ],
         "actions": [
             {"value": "confirm", "label": "Confirm requests"},
@@ -83,6 +100,19 @@
                 <div class="form-text" id="enrol_apply_groups_help">{{grouphelp}}</div>
             </div>
         {{/hasgroups}}
+        {{#hasroles}}
+            <div class="enrol_apply-decisionrole mt-3">
+                <label class="form-label" for="enrol_apply_roleid">{{rolelabel}}</label>
+                <select class="form-select" id="enrol_apply_roleid" name="roleid"
+                    aria-describedby="enrol_apply_roleid_help">
+                    <option value="0">{{roledefault}}</option>
+                    {{#roles}}
+                        <option value="{{id}}">{{{name}}}</option>
+                    {{/roles}}
+                </select>
+                <div class="form-text" id="enrol_apply_roleid_help">{{rolehelp}}</div>
+            </div>
+        {{/hasroles}}
         <div class="enrol_apply-outcomemessage mt-3">
             <label class="form-label" for="enrol_apply_outcomemessage">{{messagelabel}}</label>
             <textarea class="form-control" id="enrol_apply_outcomemessage" name="outcomemessage"

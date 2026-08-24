@@ -93,6 +93,46 @@ backup/                      group mappings, comments and the durable trail, see
   itemid). Dropping it leaves memberships behind whenever the user has another
   enrolment in the course.
 
+- **The ROLE follows approval too, and it is stamped even though `roles_protected()` is false.**
+  `apply()` enrols with no role; `complete_approval()` assigns one, reading the decider's choice
+  off the durable record and falling back to `$instance->roleid`. Three things about that pairing
+  were measured on both branches and none of them is obvious:
+
+  **The stamp is what makes core clean up.** `unenrol_user()` unassigns by component and itemid
+  unconditionally, and `process_expirations()` has the same line ("remove all roles that belong
+  to this instance and user"). Without a stamp, both fall back to guessing `$instance->roleid` —
+  and once a decider can choose a *different* role that guess is wrong by construction. Measured
+  on m502, with an unrelated manual enrolment in the same course so this was not the applicant's
+  last one: a Teacher chosen against an instance defaulting to Student **survived** the sweep
+  under `expiredaction` of both unenrol and suspendnoroles when the assignment was bare, and was
+  removed correctly under both when it was stamped.
+
+  **`roles_protected()` staying false is what keeps it removable by hand**, and the reason
+  recorded in the slice I handoff for not stamping — "Moodle's UI refuses to remove a role
+  assignment owned by a component" — is **false for this plugin**. The refusal in
+  `user/classes/output/user_roles_editable.php` (byte-identical on 5.1 and 5.2) is gated on the
+  owning plugin's `roles_protected()`, so with it false the participants page removes a stamped
+  `enrol_apply` assignment like any other. The one screen that does not is
+  `admin/roles/assign.php`, which by design touches only `component = ''` rows.
+
+  **`role_assign()` is idempotent on the whole tuple, component and itemid included.** Two passes
+  computing the same role produce one row, which is what makes `complete_approval()` running
+  twice safe. Two passes computing *different* roles produce two, which is why the role is read
+  off the record rather than passed as an argument — and unlike the groups, nothing afterwards
+  can tell which of the two this plugin meant.
+
+  **`role_assign(0, ...)` throws**; it does not quietly do nothing. An instance can carry
+  `roleid = 0` — the column is nullable with a default of 0, and a restore writes 0 whenever the
+  archived role maps to nothing the restoring user may assign — so `assign_decided_role()` skips
+  explicitly. Until this change `enrol_user()`'s own `if ($roleid)` was what swallowed it.
+
+  **`role_assign()` performs no assignability check at all**, so the `get_assignable_roles()`
+  allowlist in `confirm_enrolment()` is the only thing between a posted `roleid` and a role
+  assignment. Compare with `array_key_exists`, never `in_array`: the values are localised names.
+  The *fallback* is deliberately not allowlisted — it is what every application has been given
+  since the plugin was written, and filtering it would silently stop an instance configured with
+  a role its teacher may not assign from granting anything.
+
 - **`confirm_enrolment()` is not the only way an application becomes active.** Core's
   participants page offers "Edit enrolment", which posts to `enrol/editenrolment.php`;
   that page requires only `enrol/apply:manage` and drives
@@ -468,10 +508,15 @@ backup/                      group mappings, comments and the durable trail, see
   the status still looks correct. The outcome message is recorded by its own writer before the
   status changes, and the notification reads it back off the record rather than being handed it —
   which is also what lets the approval notification work at all, since that one is sent from an
-  adhoc task long after any argument would have gone out of scope. Anything slice I adds later
-  (role, dates, groups) has to follow the same shape; groups are the one where the naive version
-  is worst, because two calls **union** rather than replace, so a group the approver deselected
-  is joined anyway.
+  adhoc task long after any argument would have gone out of scope. The groups and the role both
+  follow that shape now, and the ROLE is the one where the naive version is worst — worse than
+  the groups, which is not what the earlier note here predicted. Two group lists **union**, so a
+  group the approver deselected is joined anyway; but a membership at least carries a component
+  and an itemid, so it is attributable and removable. Two different roles also both get assigned,
+  and a role assignment records nothing about which pass wrote it — measured, two rows, both
+  looking exactly like something a human did. The dates are the exception and need no record:
+  `confirm_enrolment()` writes them onto `{user_enrolments}` itself, before the hook fires, so
+  core already holds the one answer both passes see.
 
 ## The phpcs trap that keeps costing a CI round
 

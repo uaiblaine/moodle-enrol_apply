@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<XMLDB PATH="enrol/apply/db" VERSION="20260824" COMMENT="XMLDB file for Moodle enrol/apply"
+<XMLDB PATH="enrol/apply/db" VERSION="20260825" COMMENT="XMLDB file for Moodle enrol/apply"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:noNamespaceSchemaLocation="../../../lib/xmldb/xmldb.xsd"
 >
@@ -27,6 +27,7 @@
         <FIELD NAME="status" TYPE="int" LENGTH="4" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="0 pending, 1 approved, 2 waiting, 3 cancelled"/>
         <FIELD NAME="outcomemessage" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="message the decider wrote to the applicant"/>
         <FIELD NAME="decidedgroups" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="group ids the decider chose at approval, comma separated; empty means the instance default was used"/>
+        <FIELD NAME="decidedrole" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="role the decider chose at approval; 0 means the instance default was used. An id and not a key: the record outlives the role on purpose, and the restore does not carry it"/>
         <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="when the application was submitted; the retention sweep reads this"/>
         <FIELD NAME="timedecided" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="when it was decided, 0 while undecided"/>
         <FIELD NAME="decidedby" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="who decided it; zeroed when the course is deleted"/>

@@ -27,7 +27,7 @@ Last updated: 2026-08-23.
 
 ## In progress
 
-**Slice I, split into three PRs.** The plan bundles four things — decision-time parameters, the
+**Slice I, split into four PRs.** The plan bundles four things — decision-time parameters, the
 outcome message, previous/next navigation and replacing the bulk bar — that share almost nothing,
 and its Files table omits the schema, backup/restore, privacy and Report Builder entity work the
 first of them actually needs.
@@ -36,9 +36,17 @@ first of them actually needs.
    `outcomemessage` column has shipped since slice 6, is already declared in the privacy provider
    with strings in both languages, and was written as `''` by every path. Storage and privacy
    were done; the feature was missing.
-2. **Groups and the enrolment period at decision time** (this branch) — one new column, the
+2. **Groups and the enrolment period at decision time** (merged, PR #19) — one new column, the
    server-side group allowlist, and the record-resolution that keeps the two approval passes
    agreeing.
+
+   **Half of it is unreachable and that was not noticed at the time.** `confirm_enrolment()`
+   reads `$decision['timestart']` and `$decision['timeend']`, but `manage.php` builds `$decision`
+   with the `groups` key only, there is no date control in the template and no lang string for
+   one. The only caller that ever supplies them is a unit test, whose green makes the branch look
+   exercised. Either finish it with a control or delete the two branches; leaving them is a third
+   session inheriting the same illusion. The queue rework is the natural place, since it rebuilds
+   that form anyway.
 
    **The role is deliberately not here, and the reason is a design decision rather than
    sequencing.** `enrol_apply::roles_protected()` returns **false** on purpose - the docblock
@@ -49,7 +57,30 @@ first of them actually needs.
    the same role from another source. It is also assigned at APPLICATION time, not at decision
    time, so "choosing a role on approval" is a swap and not a fill-in. That belongs in its own
    PR with its own decision.
-3. **The role at decision time**, and **the modern queue** — the bulk bar on core's containers, previous/next, and the rewrite of
+3. **The role at decision time** (this branch) — one new column, the server-side role allowlist,
+   and the assignment moved from `apply()` to `complete_approval()`.
+
+   **The handoff's reason for not stamping the assignment with a component is measurably false,
+   and re-measuring overturned the decision.** It said "Moodle's UI refuses to remove a role
+   assignment owned by a component". The refusal in `user/classes/output/user_roles_editable.php`
+   (byte-identical on 5.1 and 5.2) is gated on the owning plugin's `roles_protected()`, and this
+   plugin returns false — so the participants page removes a stamped `enrol_apply` assignment
+   like any other. What the re-measurement also found, and the handoff could not have known:
+   without a stamp, `process_expirations()` falls back to guessing `$instance->roleid`, and once
+   a decider can choose a different role that guess is wrong by construction. Measured on m502
+   with an unrelated manual enrolment in the same course, a Teacher chosen against an instance
+   defaulting to Student **survived** the sweep under both `expiredaction` settings when bare and
+   was removed correctly under both when stamped. The owner was shown both measurements and chose
+   to stamp.
+
+   **A test that passed while proving nothing, found by its own mutation.**
+   `test_the_expiry_sweep_removes_a_chosen_role` was written with a second enrolment carrying no
+   role, so the applicant held exactly one assignment — and `process_expirations()` takes its
+   `count == 1` branch there, sweeping every component-less row, which removes an unstamped role
+   just as thoroughly. The stamp mutation left it green. Giving the second enrolment a *different*
+   role puts core on its `count > 1` branch, whose whole content is the wrong guess.
+
+4. **The modern queue** — the bulk bar on core's containers, previous/next, and the rewrite of
    Behat scenarios 2 and 3, which drive `"Select Student 1"`, `"With selected users..."` and
    `"Go"` — every one of them markup that bar replaces.
 
@@ -496,6 +527,42 @@ Every one of these was written for the defect it failed to catch.
   defect class fixed here, in another fleet repo. Eleven `local_iv*` plugins fail
   `test_all_providers_compliant` on the same stacks. Neither is this repo's to fix; noted so the
   next person running that suite knows the 12 failures are pre-existing and unrelated.
+
+## Found while building the role PR, and deliberately not fixed there
+
+Each measured on both branches. They are recorded rather than folded in, because each is a
+behaviour change to something already shipped and belongs in its own review.
+
+- **Two names were escaped twice, and one of them shipped in PR #19.** `format_string()`'s escape
+  flag defaults to true, so the bare call returns the escaped spelling; the group chooser and the
+  notification's course name then put that through a Mustache double stash. Fixed in its own PR
+  (#22) rather than inside the role PR, because it is a defect in shipped code and wants its own
+  test. `tests/renderer_test.php` pins both directions.
+- **`outcomemessage` and `decidedgroups` are declared in the privacy metadata and exported
+  nowhere.** `export_submissions()` builds a fixed object of role, enrolid, status, timecreated
+  and timedecided, plus the comment and snapshot for the applicant. `CHANGELOG.md`'s outcome
+  message entry says the message is "visible in the reports and in a subject access request";
+  measured, it is in neither — no Report Builder column mentions it either. Either the export
+  gains all three columns or that sentence is corrected; the role column joins the same gap in
+  the meantime, and its own CHANGELOG entry claims nothing of the sort.
+- **`record_decided_groups()` and `record_outcome_message()` are sticky.** Both return early on an
+  empty value, so no path can clear a stored one. Reachable by approving, having the row
+  re-suspended — core's "Edit enrolment" screen does that, and so does `expiredaction = suspend`
+  through `sync_enrolments` — and approving again with the control left alone. The role's writer
+  deliberately does NOT copy that shape (`record_decided_role()` writes the zero), and
+  `test_a_later_approval_clears_an_earlier_choice` pins it.
+- **`chosen_groups()`'s empty-array branch cannot be consumed.** Its docblock says "the caller
+  depends on the difference" between null and an empty array; `add_instance_groups()` hands the
+  array straight to `$DB->get_in_or_equal()` with no `$onemptyitems`, which throws on an empty
+  one. Unreachable today because the writer never stores an empty value — but the docblock claims
+  a guard that is not there.
+- **`add_instance_groups()`'s `int $userenrolmentid = 0` default is dead.** One caller, and it
+  always passes the id. The default should go rather than be defended.
+- **`decidedgroups` and `decidedrole` are not carried by backup/restore.** Group and role ids are
+  course- and site-local, so carrying them needs `get_mappingid()`, and a restore of an older
+  archive needs `?? 0` on the read — `restore_enrol_apply_plugin` casts the parsed chunk to an
+  object and every current read is bare, which is an E_WARNING under `--fail-on-warning` the
+  moment an element is added after the fact. Worth doing, in one PR covering both columns.
 
 ## Corrections found in the plan and in fleet documentation
 
