@@ -559,6 +559,44 @@ class enrol_apply_plugin extends enrol_plugin {
     }
 
     /**
+     * Re-create a role assignment this plugin owns, when a course is restored.
+     *
+     * The exact shape as restore_group_member() above, and it was missed when the approval's
+     * role assignment gained its component stamp. Core routes any {role_assignments} row whose
+     * component starts with "enrol_" to this method (backup/moodle2/restore_stepslib.php:2350,
+     * the same line on 5.1 and 5.2), and enrol_plugin's base implementation is an empty stub.
+     * That branch has NO fallback and logs nothing - the neighbouring generic-component branch
+     * falls back to role_assign() and writes a backup::LOG_WARNING, and this one does neither -
+     * so without this override the assignment simply disappears.
+     *
+     * Measured on 5.1 and 5.2, restoring one course with four assignments in it so the only
+     * variable was the stamp: an applicant approved through confirm_enrolment() came back with
+     * an ACTIVE enrolment and NO role, while a bare manual assignment, a bare assignment of the
+     * pre-stamp shape and an enrol_self one all survived. That is not a lock-out - is_enrolled()
+     * still passes - which is what makes it quiet: the person keeps their place in the course
+     * and loses every capability the role carried, and the participants page shows "No roles".
+     *
+     * The stamp is re-applied rather than dropped, for the same reason it is written in the
+     * first place: a bare assignment leaves process_expirations() guessing $instance->roleid,
+     * which is wrong by construction once a decider can choose a different role. enrol_flatfile
+     * is the precedent for this exact pairing - it stamps, its roles_protected() is false, and
+     * it overrides this method (enrol/flatfile/lib.php:693-695).
+     *
+     * No guard is needed on the arguments: core has already mapped the role, confirmed the user
+     * exists and derived the context, and it dispatches on $instance->enrol, so this is only
+     * ever handed an apply instance.
+     *
+     * @param stdClass $instance Enrol instance the assignment belongs to.
+     * @param int $roleid Role to assign.
+     * @param int $userid User to assign it to.
+     * @param int $contextid Context to assign it in.
+     * @return void
+     */
+    public function restore_role_assignment($instance, $roleid, $userid, $contextid) {
+        role_assign($roleid, $userid, $contextid, 'enrol_apply', $instance->id);
+    }
+
+    /**
      * Returns the action icons shown for this instance on the course enrolment methods page.
      *
      * @param stdClass $instance Course enrol instance.
