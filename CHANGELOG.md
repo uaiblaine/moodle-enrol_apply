@@ -50,6 +50,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   kept-roles copy puts every course-context role holder into the backup's user list, so that
   mapping resolves.
 
+### Changed
+
+- **The applications queue now uses Moodle's own bulk-selection machinery.** The row checkboxes,
+  the "Select all" header checkbox and the bulk action are one `core/checkbox-toggleall` group
+  instead of markup this plugin invented, and the action itself has moved into a core sticky
+  footer, so it stays reachable at the bottom of the window however long the queue is. Nothing
+  about the queue's behaviour changes: the same checkboxes, the same labels, the same actions.
+
+  **The action is now greyed out until you select somebody.** Core's module only re-enables such
+  a control — it never sets the initial state, which is why every core page hardcodes the
+  disabled attribute in its markup. This plugin does not, deliberately: its queue works without
+  JavaScript, and an attribute that only JavaScript can clear would take that away to buy an
+  affordance only JavaScript users see. It is switched off from the plugin's own module instead,
+  so with JavaScript you get the affordance and without it you get the working queue. Moodle
+  itself parks a sticky footer just off the bottom of the window and slides it up with
+  JavaScript, so the plugin's stylesheet brings it into view for a browser that has none —
+  without that, moving the bar there would have hidden the only button on the page from exactly
+  the people the enabled control was left enabled for.
+
+  One small loss: the "Select all" checkbox no longer shows a partial state when some but not all
+  rows are ticked. Core's own machinery has no such state, and keeping the plugin's version of it
+  would mean keeping code no test in this repository can execute.
+
 ### Added
 
 - **A decider can choose which role an approved applicant is given**, on the enrolment

@@ -9,8 +9,31 @@ form#enrol_apply_manage_form tr.enrol_apply_waitinglist_highlight {
     border-color: var(--bs-secondary-color, var(--gray, #6c757d));
 }
 
-.path-enrol-apply .formaction {
-    text-align: center;
+/* The bulk action bar lives in a core sticky footer, and core parks that footer OFF SCREEN
+   until JavaScript slides it in: theme/boost/scss/moodle/sticky-footer.scss gives .stickyfooter
+   "position: fixed" with "bottom: calc(<height> * -1)", and only ".hasstickyfooter .stickyfooter"
+   brings it to 0. That class is added by theme_boost/sticky-footer.js, so with JavaScript off the
+   queue's only submit control is painted where nobody can see it.
+
+   This plugin's queue is operable without JavaScript and was before the bar moved, so the two
+   rules below put the footer back on screen in exactly that case and give the page the bottom
+   margin core's own layout.scss adds alongside the class. body.jsenabled is written by
+   lib/classes/output/requirements/page_requirements_manager.php, so :not(.jsenabled) is true only
+   when no script ran; both selectors outrank core's single-class ones, and this stylesheet is
+   served after the theme's.
+
+   Verified by reading the cascade and the compiled theme CSS, NOT by an executing test - no gate
+   in this repository renders CSS. The non-JavaScript Behat driver applies no styles at all. */
+body.path-enrol-apply:not(.jsenabled) .stickyfooter {
+    bottom: 0;
+}
+
+body.path-enrol-apply:not(.jsenabled) #page.drawers {
+    /* Core's own compensation is max(80px, 3rem), which is 80px at every default font size and
+       is written with max() only so a very large base size still clears the bar. Stylelint's
+       csstree validator rejects max() in a length-valued property, so the floor is written
+       literally: the two agree unless the base font size passes about 26px. */
+    margin-bottom: 80px;
 }
 
 .enrol_apply-linebreaks {
