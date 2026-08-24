@@ -255,6 +255,41 @@ backup/                      group mappings, comments and the durable trail, see
   its concatenation and then assigns over it, so it replaces rather than appends: pass every
   class through the constructor.
 
+- **The report reads the LIVE enrolment as well as the record, and the two answer different
+  questions.** The durable record holds the last decision this plugin's own state machine took;
+  the participants page, course reset, user deletion and the expiry sweep all change an enrolment
+  without touching it. `submission::decide()` is reached from exactly three call sites
+  (`complete_approval()`, `wait_enrolment()`, `cancel_enrolment()`) and nothing else writes a
+  status. So the entity LEFT joins `{user_enrolments}` on `userenrolmentid` and derives an
+  `outcome` column from the pair.
+
+  **The fix for "the report says Pending after an unenrolment" was read-side on purpose.** A
+  write-side one would have to avoid breaking `test_a_submission_row_survives_unenrolment`, which
+  pins that a record deliberately outlives its enrolment, and avoid overwriting
+  `cancel_enrolment()`'s CANCELLED, which is stamped *before* the unenrol. Neither risk exists
+  when nothing new is written. Full analysis in `docs/design/audit-trail-analysis.md`.
+
+  **`userenrolmentid = 0` is not "no longer enrolled".** A restore writes 0 when it cannot map the
+  enrolment, and 0 finds nothing in the join for the same reason a deleted row does. The formatter
+  checks it FIRST; reporting the two alike would be a fresh falsehood of the kind the column
+  exists to remove.
+
+  **The suspended case is split on `timeend` because the halves mean opposite things.** A manual
+  suspension carries no period and `manage_table.php`'s predicate puts that row back in the
+  approval queue; an expiry carries one in the past and does not. One word for both would file
+  half of them in the wrong place.
+
+  **`outcome` is not sortable and has no filter, and that is load bearing** — it is a display
+  callback, and filtering and sorting are SQL that never reach one. The sortable primitives are
+  `status` and `enrolment`. The same precondition is what makes the snapshot column's masking
+  sound.
+
+  **`ENROL_APPLY_USER_WAIT` needs a `require_once` from an autoloaded class.** It is defined in
+  the plugin's `lib.php`, which is not autoloaded, and the formatter is the first `classes/` file
+  to need it. It is deliberately not substituted with `submission::STATUS_WAITING`, which also
+  happens to be 2: one is the enrolment's status and the other the record's, equal by coincidence
+  rather than contract.
+
 - **`table_sql` writes to the output buffer.** The renderer captures it with
   `ob_start()` so it can be handed to a Mustache template as a triple stash. That is the
   one place raw HTML is passed through a template on purpose.

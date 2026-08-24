@@ -267,6 +267,211 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
     }
 
     /**
+     * An applicant with a real enrolment, driven through the plugin's own path.
+     *
+     * seed() writes a record with userenrolmentid = 0, which is the shape a restore leaves and
+     * is exactly what the outcome column must call "unknown". Every scenario below needs the
+     * opposite: a record wired to a live user_enrolments row, so the join has something to find.
+     *
+     * @param int $status Enrolment status to leave the row at, or -1 to unenrol afterwards.
+     * @param int $recordstatus Status to stamp on the durable record.
+     * @param int $timeend Enrolment end, 0 for none.
+     * @return \stdClass The applicant.
+     */
+    protected function seed_live(int $status, int $recordstatus, int $timeend = 0): \stdClass {
+        global $DB;
+
+        $user = $this->getDataGenerator()->create_user();
+        $this->plugin->enrol_user($this->instance, $user->id, null, 0, $timeend, ENROL_USER_SUSPENDED);
+        $ueid = (int) $DB->get_field(
+            'user_enrolments',
+            'id',
+            ['userid' => $user->id, 'enrolid' => $this->instance->id],
+            MUST_EXIST
+        );
+
+        $DB->insert_record('enrol_apply_submission', (object) [
+            'courseid' => $this->course->id,
+            'userid' => $user->id,
+            'enrolid' => $this->instance->id,
+            'userenrolmentid' => $ueid,
+            'comment' => 'Please let me in',
+            'userinfodata' => '',
+            'status' => $recordstatus,
+            'outcomemessage' => '',
+            'decidedgroups' => '',
+            'decidedrole' => 0,
+            'timecreated' => time(),
+            'timedecided' => $recordstatus === submission::STATUS_PENDING ? 0 : time(),
+            'decidedby' => 0,
+        ]);
+
+        if ($status < 0) {
+            $DB->delete_records('user_enrolments', ['id' => $ueid]);
+        } else {
+            $DB->set_field('user_enrolments', 'status', $status, ['id' => $ueid]);
+        }
+
+        return $user;
+    }
+
+    /**
+     * The outcome cell of the single row the report shows.
+     *
+     * @return string The rendered outcome.
+     */
+    protected function outcome_cell(): string {
+        $rows = $this->rows();
+        $this->assertCount(1, $rows, 'the fixture should produce exactly one row');
+
+        return (string) $rows[0]->{'submission:outcome'};
+    }
+
+    /**
+     * An approved applicant who is still enrolled reads as approved and enrolled.
+     *
+     * The control for every scenario below it: if this one did not pass, the column would be
+     * saying "something went wrong" about every row rather than distinguishing them.
+     *
+     * @return void
+     */
+    public function test_an_approved_and_enrolled_application_reads_as_enrolled(): void {
+        $this->seed_live(ENROL_USER_ACTIVE, submission::STATUS_APPROVED);
+        $this->setUser($this->reader());
+
+        $this->assertSame(get_string('outcomeapproved', 'enrol_apply'), $this->outcome_cell());
+    }
+
+    /**
+     * An approved applicant who was later unenrolled no longer reads as merely approved.
+     *
+     * One of the two symptoms this column was built for. Before it, this row and the one above
+     * were literally identical on screen: the stored status is APPROVED in both cases, because
+     * nothing outside the plugin's own queue writes to the record, and a record deliberately
+     * outlives its enrolment (test_a_submission_row_survives_unenrolment pins that).
+     *
+     * @return void
+     */
+    public function test_an_approved_then_unenrolled_application_says_so(): void {
+        $this->seed_live(-1, submission::STATUS_APPROVED);
+        $this->setUser($this->reader());
+
+        $this->assertSame(get_string('outcomeunenrolled', 'enrol_apply'), $this->outcome_cell());
+    }
+
+    /**
+     * A pending application whose enrolment was removed reads as never decided.
+     *
+     * This is the narrow defect underneath the reported symptom. Such a record has no
+     * user_enrolments row, so it is in no queue and nobody can ever decide it, while the report
+     * showed "Pending" - a decision that reads as owed and is in fact impossible. The retention
+     * sweep then deletes it without ever correcting it.
+     *
+     * @return void
+     */
+    public function test_a_pending_application_that_was_unenrolled_reads_as_never_decided(): void {
+        $this->seed_live(-1, submission::STATUS_PENDING);
+        $this->setUser($this->reader());
+
+        $this->assertSame(get_string('outcomeneverdecided', 'enrol_apply'), $this->outcome_cell());
+    }
+
+    /**
+     * A manually suspended approval says so, which is what puts it back in the queue.
+     *
+     * The second reported symptom. manage_table.php's predicate is
+     * "status != active AND (timeend = 0 OR timeend > now)", so a suspension with no period
+     * re-queues the application - and the report went on saying "Approved" while the queue
+     * showed the same person awaiting a decision, with neither screen mentioning the other.
+     *
+     * @return void
+     */
+    public function test_an_approved_then_suspended_application_says_so(): void {
+        $this->seed_live(ENROL_USER_SUSPENDED, submission::STATUS_APPROVED);
+        $this->setUser($this->reader());
+
+        $this->assertSame(get_string('outcomesuspended', 'enrol_apply'), $this->outcome_cell());
+    }
+
+    /**
+     * An expired approval is told apart from a manually suspended one.
+     *
+     * Both are status = suspended; only timeend separates them, and they mean opposite things to
+     * the operator. A manual suspension comes back to the approval queue and an expiry does not,
+     * because the queue's predicate excludes a row whose period has run out. Reporting the two
+     * with one word would put half of them in the wrong place.
+     *
+     * Mutation check: delete the timeend arm from the outcome formatter and exactly this test
+     * goes red - test_an_approved_then_suspended_application_says_so keeps passing, because the
+     * arm it falls through to is the one it already wanted.
+     *
+     * @return void
+     */
+    public function test_an_expired_approval_is_not_reported_as_a_suspension(): void {
+        $this->seed_live(ENROL_USER_SUSPENDED, submission::STATUS_APPROVED, time() - DAYSECS);
+        $this->setUser($this->reader());
+
+        $this->assertSame(get_string('outcomeexpired', 'enrol_apply'), $this->outcome_cell());
+    }
+
+    /**
+     * A record with no mappable enrolment reads "unknown", never "no longer enrolled".
+     *
+     * A restore writes userenrolmentid = 0 whenever it cannot map the enrolment, and zero finds
+     * nothing in the join for the same reason a deleted enrolment does. Reporting the two alike
+     * would be a fresh falsehood of exactly the kind this column exists to remove: one means
+     * "they were removed", the other means "this archive did not say".
+     *
+     * Mutation check: drop the userenrolmentid check from the formatter and exactly this test
+     * goes red, because every other fixture here carries a real id.
+     *
+     * @return void
+     */
+    public function test_a_record_with_no_mappable_enrolment_reads_unknown(): void {
+        // The seed helper writes userenrolmentid = 0, which is precisely the restored shape.
+        $this->seed('Please let me in', submission::STATUS_APPROVED);
+        $this->setUser($this->reader());
+
+        $rows = $this->rows();
+        $this->assertCount(1, $rows);
+        $this->assertSame(
+            get_string('enrolmentunknown', 'enrol_apply'),
+            (string) $rows[0]->{'submission:enrolment'}
+        );
+        // And the outcome falls back to the stored decision rather than describing an enrolment.
+        $this->assertSame(
+            submission::status_label(submission::STATUS_APPROVED),
+            (string) $rows[0]->{'submission:outcome'}
+        );
+    }
+
+    /**
+     * The outcome column is not sortable and carries no filter, and that is load bearing.
+     *
+     * Its value is computed in a display callback. Filtering and sorting are SQL and never reach
+     * a callback, so a sort would order by whichever field happened to be selected first and a
+     * filter would match the raw status - either would be a control that lies. The sortable,
+     * filterable primitives are the status column and the enrolment column beside it.
+     *
+     * The same precondition is what makes the snapshot column's masking sound, and
+     * test_the_snapshot_column_has_no_filter_and_is_not_sortable states it there.
+     *
+     * @return void
+     */
+    public function test_the_outcome_column_is_not_sortable_and_has_no_filter(): void {
+        $this->seed();
+        $this->setUser($this->reader());
+
+        $report = $this->report();
+        $this->assertFalse($report->get_column('submission:outcome')->get_is_sortable());
+        $this->assertNotContains('submission:outcome', $this->filter_ids());
+
+        // The control: a column that IS sortable, so the assertion is not passing vacuously.
+        $this->assertTrue($report->get_column('submission:enrolment')->get_is_sortable());
+    }
+
+    /**
+     * The capability is what admits a reader, and nothing else is.    /**
      * The capability is what admits a reader, and nothing else is.
      *
      * @return void
@@ -374,6 +579,8 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
             'submission:timecreated',
             'submission:timedecided',
             'submission:comment',
+            'submission:enrolment',
+            'submission:outcome',
             'submission:snapshot',
             'applydecider:fullname',
         ], $this->column_ids());

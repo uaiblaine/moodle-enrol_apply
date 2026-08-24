@@ -56,6 +56,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   kept-roles copy puts every course-context role holder into the backup's user list, so that
   mapping resolves.
 
+### Added
+
+- **The applications report now says what actually happened to each application.** Two new
+  columns: *Enrolment now*, which is the live state of the enrolment the application created, and
+  *Outcome*, which combines that with the recorded decision. Before this, an applicant who was
+  approved and one who was approved and later unenrolled were the same row on screen, and an
+  application whose enrolment was removed while still pending read "Pending" for ever even though
+  nobody could ever decide it.
+
+  The eight outcomes it distinguishes: awaiting a decision; never decided and no longer enrolled;
+  approved and enrolled; approved then suspended (which is what puts it back in the approval
+  queue); approved then expired; approved then unenrolled; on the waiting list; cancelled.
+
+  Nothing about the recorded decision changed — this reads data the plugin already stored. A
+  record restored from a backup that could not identify the enrolment reads "Unknown" rather than
+  claiming the person was removed. *Outcome* is deliberately not sortable and has no filter, because
+  it is worked out per row rather than in the database; sort or filter on *Status* or *Enrolment
+  now* instead.
+
 ### Changed
 
 - **The applications queue now uses Moodle's own bulk-selection machinery.** The row checkboxes,

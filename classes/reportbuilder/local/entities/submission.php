@@ -51,7 +51,30 @@ class submission extends base {
      * @return array Table names.
      */
     protected function get_default_tables(): array {
-        return ['enrol_apply_submission'];
+        return ['enrol_apply_submission', 'user_enrolments'];
+    }
+
+    /**
+     * The join onto the live enrolment the record was created for.
+     *
+     * LEFT, and every consequence of that word is deliberate. The record outlives its user
+     * enrolment on purpose - approval, cancellation and unenrolment all destroy the enrolment
+     * while the trail is kept - so an INNER join would silently drop exactly the rows the
+     * outcome column exists to explain.
+     *
+     * Joined on userenrolmentid and not on the courseid + userid pair, which is the record's
+     * natural key but is deliberately not unique: an applicant who was cancelled and applied
+     * again has two records for one course, and joining on the pair would pair each of them
+     * with both enrolments. The id is never recycled by a sequence, so a stale one cannot
+     * false-match; it can only fail to match, which is the state the column reports.
+     *
+     * @return string The join.
+     */
+    protected function enrolment_join(): string {
+        $alias = $this->get_table_alias('enrol_apply_submission');
+        $uealias = $this->get_table_alias('user_enrolments');
+
+        return "LEFT JOIN {user_enrolments} {$uealias} ON {$uealias}.id = {$alias}.userenrolmentid";
     }
 
     /**
@@ -156,6 +179,57 @@ class submission extends base {
             // Same literal newlines and the same CSS as the snapshot; see the formatter.
             ->add_attributes(['class' => 'enrol_apply-linebreaks'])
             ->add_callback([formatter::class, 'plaintext']);
+
+        $uealias = $this->get_table_alias('user_enrolments');
+
+        /* What the enrolment is doing NOW, which the stored status cannot say. The record holds
+           the last decision this plugin's own state machine took; everything else that can move
+           an enrolment - the participants page, course reset, user deletion, the expiry sweep -
+           changes the enrolment and leaves the record alone. Without this column a reader cannot
+           tell an approved participant from one who was approved and then unenrolled, because
+           the two are literally the same row.
+
+           Sortable, and that is the reason it exists beside the outcome column rather than being
+           folded into it: the outcome is a display callback, and filtering and sorting are SQL,
+           so they go straight past a callback. This column is the sortable primitive. */
+        $columns[] = (new column(
+            'enrolment',
+            new lang_string('submissionenrolment', 'enrol_apply'),
+            $this->get_entity_name()
+        ))
+            ->add_joins($this->get_joins())
+            ->add_join($this->enrolment_join())
+            ->set_type(column::TYPE_TEXT)
+            ->add_field("{$uealias}.status", 'liveenrolstatus')
+            ->add_field("{$alias}.userenrolmentid", 'liveueid')
+            ->set_is_sortable(true)
+            ->add_callback([formatter::class, 'enrolment']);
+
+        /* The question a reader actually has, answered from the two above with no new storage:
+           "what happened to this application". See docs/design/audit-trail-analysis.md for the
+           full matrix and for why this is a read-side fix - the record is not wrong, the report
+           was lying by omission, and a write-side fix would have to avoid both breaking
+           test_a_submission_row_survives_unenrolment and overwriting cancel_enrolment()'s own
+           CANCELLED.
+
+           NOT sortable and carrying no filter, on purpose. The value is computed in a callback,
+           so a sort would order by whichever field happened to be first and a filter would never
+           reach it - either would be a control that lies. The sortable, filterable primitives are
+           the status column above and the enrolment column beside it. */
+        $columns[] = (new column(
+            'outcome',
+            new lang_string('submissionoutcome', 'enrol_apply'),
+            $this->get_entity_name()
+        ))
+            ->add_joins($this->get_joins())
+            ->add_join($this->enrolment_join())
+            ->set_type(column::TYPE_TEXT)
+            ->add_field("{$alias}.status", 'outcomerecordstatus')
+            ->add_field("{$uealias}.status", 'outcomeenrolstatus')
+            ->add_field("{$uealias}.timeend", 'outcomeenroltimeend')
+            ->add_field("{$alias}.userenrolmentid", 'outcomeueid')
+            ->set_is_sortable(false)
+            ->add_callback([formatter::class, 'outcome']);
 
         /* The frozen snapshot, as ONE long-text column: not sortable, and with no filter
            declared anywhere in this entity. That combination is what makes it the single place
