@@ -280,8 +280,14 @@ Every fix is mutation-checked and reddens exactly its own named test.
 
 ## Next
 
+**Slice I is complete** (message #18, groups and period #19, role #23, modern queue #24), and the
+audit work that followed it is merged (#27 the analysis, #28 the report, #29 the two write-side
+defects). What remains is **slice J**, **previous/next navigation**, and the audit recommendations
+the owner accepted. All three are written up in [`HANDOFF.md`](HANDOFF.md), which is the file to
+read first.
+
 **Slice I** (decision-time enrolment parameters, the outcome message and the modern queue), then
-**slice J** (bulk actions on the participants page). Those are the last two.
+**slice J** (bulk actions on the participants page). Those were the last two.
 
 There is **no slice 10 and no slice 11**, and an earlier version of this section said there were.
 The plan is eleven slices — 1 to 9, then I and J (`implementation-plan.md:8`) — and slice 10, the
