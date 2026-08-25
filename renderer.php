@@ -67,14 +67,78 @@ class enrol_apply_renderer extends plugin_renderer_base {
             ['value' => 'cancel', 'label' => get_string('btncancel', 'enrol_apply')],
         ];
 
-        /* Offered only where the course actually has groups. A chooser with nothing in it is a
-           control that cannot be used, and the instance's own list still applies when nothing
-           is picked - so an empty chooser would also imply a choice the operator never made. */
+        /* The bar goes into a core sticky footer, rendered here and interpolated INSIDE the
+           form by the template. Only the action belongs in it: the footer is a fixed bar whose
+           .sticky-footer-content carries overflow hidden, so the message textarea and the two
+           choosers stay in the page body. Core's own precedent for the placement is
+           grade/templates/edit_tree.mustache, and the footer is never moved in the DOM - unlike
+           core/modal, its position is CSS, so the controls inside it post with the form.
+
+           justify-content-end is passed rather than relied on. It is already the property's
+           default and the constructor only overwrites it when the argument is not null, so this
+           changes nothing today - it is written down because the alternative way to reach it is
+           a trap: sticky_footer::add_classes() looks like it appends and does not. It builds the
+           concatenation and then throws it away by assigning the argument over it, measured on
+           both branches, so a later "just add a class" would silently drop this one. */
+        $bar = $this->render_from_template('enrol_apply/manage_actions', [
+            'togglegroup' => \enrol_apply_manage_table::TOGGLE_GROUP,
+            'actionlabel' => get_string('withselectedusers'),
+            'choosedots' => get_string('choosedots'),
+            'golabel' => get_string('go'),
+            'actions' => $actions,
+        ]);
+        $stickyfooter = $this->render(new \core\output\sticky_footer($bar, 'justify-content-end'));
+
+        $context = $this->decision_controls_context($instance) + [
+            'formurl' => $manageurl->out(false),
+            'sesskey' => sesskey(),
+            'tablehtml' => $tablehtml,
+            'hasrows' => $table->totalrows > 0,
+            'stickyfooter' => $stickyfooter,
+        ];
+
+        if ($context['hasrows']) {
+            /* core/checkbox-toggleall boots itself: the toggler template carries its own js
+               block, and js_amd_inline goes through $PAGE->requires rather than the output
+               buffer, so capture_table()'s ob_start() does not swallow it. This module is only
+               the two gaps core leaves; see its docblock. */
+            $this->page->requires->js_call_amd(
+                'enrol_apply/manage',
+                'init',
+                [\enrol_apply_manage_table::TOGGLE_GROUP]
+            );
+        }
+
+        return $this->render_from_template('enrol_apply/manage', $context);
+    }
+
+    /**
+     * Everything the enrol_apply/decision_controls partial needs.
+     *
+     * Shared by the queue and by the single-application review page, so that the two decision
+     * surfaces cannot offer different things. Each chooser is offered only where it has
+     * something to offer: a control with nothing in it cannot be used, and the instance's own
+     * list still applies when nothing is picked, so an empty chooser would also imply a choice
+     * the operator never made.
+     *
+     * Gated on the capability in the COURSE, which is stricter than the gate on the page that
+     * calls it. A mentor reaches the review page through the applicant's own user context and
+     * holds nothing in the course at all, so offering them the group chooser would list every
+     * group name in a course they cannot open - groups_get_all_groups() applies no capability
+     * check of its own, unlike get_assignable_roles(), which self-gates and would have come
+     * back empty for them anyway. The instance's own groups and role still apply to their
+     * decision; what they lose is the ability to override them, which is the level of trust
+     * that delegation carries.
+     *
+     * @param stdClass|null $instance Enrol instance the decision belongs to, null when unknown.
+     * @return array Context for the partial.
+     */
+    protected function decision_controls_context($instance): array {
         $groups = [];
         $roles = [];
-        if ($instance !== null) {
-            $coursecontext = \context_course::instance($instance->courseid);
 
+        $coursecontext = $instance === null ? null : \context_course::instance($instance->courseid);
+        if ($coursecontext && has_capability('enrol/apply:manageapplications', $coursecontext)) {
             /* The name is the PLAIN spelling, because the template renders it through a double
                stash and Mustache escapes it there. format_string()'s escape flag defaults to
                true, so leaving it out hands the escaped spelling to a sink that escapes again:
@@ -117,34 +181,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
             }
         }
 
-        /* The bar goes into a core sticky footer, rendered here and interpolated INSIDE the
-           form by the template. Only the action belongs in it: the footer is a fixed bar whose
-           .sticky-footer-content carries overflow hidden, so the message textarea and the two
-           choosers stay in the page body. Core's own precedent for the placement is
-           grade/templates/edit_tree.mustache, and the footer is never moved in the DOM - unlike
-           core/modal, its position is CSS, so the controls inside it post with the form.
-
-           justify-content-end is passed rather than relied on. It is already the property's
-           default and the constructor only overwrites it when the argument is not null, so this
-           changes nothing today - it is written down because the alternative way to reach it is
-           a trap: sticky_footer::add_classes() looks like it appends and does not. It builds the
-           concatenation and then throws it away by assigning the argument over it, measured on
-           both branches, so a later "just add a class" would silently drop this one. */
-        $bar = $this->render_from_template('enrol_apply/manage_actions', [
-            'togglegroup' => \enrol_apply_manage_table::TOGGLE_GROUP,
-            'actionlabel' => get_string('withselectedusers'),
-            'choosedots' => get_string('choosedots'),
-            'golabel' => get_string('go'),
-            'actions' => $actions,
-        ]);
-        $stickyfooter = $this->render(new \core\output\sticky_footer($bar, 'justify-content-end'));
-
-        $context = [
-            'formurl' => $manageurl->out(false),
-            'sesskey' => sesskey(),
-            'tablehtml' => $tablehtml,
-            'hasrows' => $table->totalrows > 0,
-            'stickyfooter' => $stickyfooter,
+        return [
             'messagelabel' => get_string('outcomemessage', 'enrol_apply'),
             'messagehelp' => get_string('outcomemessage_help', 'enrol_apply'),
             'hasgroups' => (bool) $groups,
@@ -157,20 +194,111 @@ class enrol_apply_renderer extends plugin_renderer_base {
             'roledefault' => get_string('decisionroledefault', 'enrol_apply'),
             'roles' => $roles,
         ];
+    }
 
-        if ($context['hasrows']) {
-            /* core/checkbox-toggleall boots itself: the toggler template carries its own js
-               block, and js_amd_inline goes through $PAGE->requires rather than the output
-               buffer, so capture_table()'s ob_start() does not swallow it. This module is only
-               the two gaps core leaves; see its docblock. */
-            $this->page->requires->js_call_amd(
-                'enrol_apply/manage',
-                'init',
-                [\enrol_apply_manage_table::TOGGLE_GROUP]
-            );
-        }
+    /**
+     * Render one application, with the controls to decide it.
+     *
+     * @param stdClass $application Application as \enrol_apply\local\queue::application() returns it.
+     * @param stdClass $applicant Applicant user record.
+     * @param stdClass $instance Enrol instance the application belongs to.
+     * @param moodle_url $manageurl Url the decision form posts back to.
+     * @return void
+     */
+    public function review_page($application, $applicant, $instance, $manageurl) {
+        echo $this->header();
+        echo $this->heading(fullname($applicant));
+        echo $this->review_form($application, $applicant, $instance, $manageurl);
+        echo $this->footer();
+    }
 
-        return $this->render_from_template('enrol_apply/manage', $context);
+    /**
+     * The single-application decision form.
+     *
+     * The POST is byte for byte the one the queue makes - formaction, userenrolments[] and the
+     * session key - so manage.php's handler needs no branch of its own and every guard it
+     * applies to a queue decision applies here unchanged.
+     *
+     * @param stdClass $application Application as \enrol_apply\local\queue::application() returns it.
+     * @param stdClass $applicant Applicant user record.
+     * @param stdClass $instance Enrol instance the application belongs to.
+     * @param moodle_url $manageurl Url the decision form posts back to.
+     * @return string Rendered markup.
+     */
+    public function review_form($application, $applicant, $instance, $manageurl) {
+        $waiting = (int) $application->status === ENROL_APPLY_USER_WAIT;
+
+        $context = $this->decision_controls_context($instance) + [
+            'formurl' => $manageurl->out(false),
+            'sesskey' => sesskey(),
+            'userenrolmentid' => (int) $application->id,
+            'courselabel' => get_string('course'),
+            // Plain, for the same reason as the group names: the template double-stashes it.
+            'coursename' => format_string($application->coursename, true, [
+                'context' => \context_course::instance($application->courseid),
+                'escape' => false,
+            ]),
+            'courseurl' => (new moodle_url('/course/view.php', ['id' => $application->courseid]))->out(false),
+            'emaillabel' => get_string('email'),
+            'email' => $applicant->email,
+            'appliedlabel' => get_string('applydate', 'enrol_apply'),
+            'applied' => userdate((int) $application->applydate, get_string('strftimedatetimeshort', 'langconfig')),
+            'statuslabel' => get_string('submissionstatus', 'enrol_apply'),
+            'status' => $waiting
+                ? get_string('outcomewaiting', 'enrol_apply')
+                : get_string('outcomeawaiting', 'enrol_apply'),
+            'commentlabel' => get_string('applycomment', 'enrol_apply'),
+            'hascomment' => trim((string) $application->applycomment) !== '',
+            /* Escaped exactly once, and with the line breaks the applicant typed. A double
+               stash alone would escape correctly and then render every paragraph as one run,
+               on the one page whose purpose is reading what they wrote; the queue's own cell
+               has always used format_text(FORMAT_PLAIN), which escapes and converts newlines
+               and nothing else. So this arrives ALREADY escaped and the template triple
+               stashes it, which is the opposite of every other value on that template and is
+               why it is the only one flagged there.
+
+               Not format_string(): that runs strip_tags(), which would delete an applicant's
+               answer from the first "<" onwards. A restore is the route by which such a value
+               reaches the column - it writes the comment verbatim out of a foreign archive. */
+            'comment' => format_text((string) $application->applycomment, FORMAT_PLAIN),
+            'nocomment' => get_string('nocomment', 'enrol_apply'),
+            /* Singular labels of their own, not the queue's. btnconfirm and its siblings read
+               "Confirm requests", which is right above a list and wrong above one application -
+               and on this page the button IS the decision, so its label is the last thing the
+               operator reads before an applicant is enrolled or unenrolled. */
+            'actions' => [
+                ['value' => 'confirm', 'label' => get_string('reviewconfirm', 'enrol_apply'), 'primary' => true],
+                ['value' => 'wait', 'label' => get_string('reviewwait', 'enrol_apply'), 'primary' => false],
+                ['value' => 'cancel', 'label' => get_string('reviewcancel', 'enrol_apply'), 'primary' => false],
+            ],
+        ];
+
+        return $this->render_from_template('enrol_apply/review', $context);
+    }
+
+    /**
+     * Render the page shown when there is no application to decide.
+     *
+     * Reached by a link that has gone stale, which on this page is the ordinary case rather
+     * than the edge one: an application is decided exactly once and the url that reviewed it
+     * outlives the decision. It says the same thing whether the application was decided, the
+     * enrolment was removed, or the id never named anything - the reader cannot act on the
+     * difference, and telling them apart would answer "does user enrolment N exist?" for
+     * anybody who asks.
+     *
+     * @param moodle_url $backurl Where to send the reader instead.
+     * @return void
+     */
+    public function no_application_page($backurl) {
+        echo $this->header();
+        echo $this->heading(get_string('confirmusers', 'enrol_apply'));
+        echo $this->notification(get_string('applicationgone', 'enrol_apply'), 'info');
+        echo $this->render_from_template('core/single_button', (new \single_button(
+            $backurl,
+            get_string('backtoapplications', 'enrol_apply'),
+            'get'
+        ))->export_for_template($this));
+        echo $this->footer();
     }
 
     /**

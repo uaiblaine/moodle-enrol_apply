@@ -303,6 +303,66 @@ final class purge_submissions_test extends \advanced_testcase {
     }
 
     /**
+     * An expired enrolment does not keep its record alive forever.
+     *
+     * "Spare a live application" is two clauses, and only the second separates a genuinely
+     * pending application from an enrolment that was approved and has since lapsed:
+     * process_expirations() re-suspends a lapsed enrolment, so on status alone it looks
+     * exactly like somebody still waiting. The queue excludes it and this sweep must too, or
+     * the record of an enrolment that ended years ago is kept for ever - which is the opposite
+     * of what a retention period is for, and the reason the predicate is shared with the queue
+     * rather than written out here.
+     *
+     * @return void
+     */
+    public function test_a_record_whose_enrolment_expired_is_not_spared(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        set_config('retentiondays', 30 * DAYSECS, 'enrol_apply');
+
+        $enabled = enrol_get_plugins(true);
+        $enabled['apply'] = true;
+        set_config('enrol_plugins_enabled', implode(',', array_keys($enabled)));
+        $plugin = enrol_get_plugin('apply');
+
+        $course = $this->getDataGenerator()->create_course();
+        $instanceid = $plugin->add_instance($course, $plugin->get_instance_defaults());
+        $instance = $DB->get_record('enrol', ['id' => $instanceid], '*', MUST_EXIST);
+
+        $method = new \ReflectionMethod(\enrol_apply_plugin::class, 'apply');
+        $method->setAccessible(true);
+
+        // One whose enrolment was approved and has since lapsed: suspended, timeend in the past.
+        $lapsed = $this->getDataGenerator()->create_user();
+        $sink = $this->redirectMessages();
+        $method->invoke($plugin, $instance, $lapsed->id, (object) ['applydescription' => 'Long finished']);
+        // The control: one still genuinely awaiting a decision, which must survive.
+        $pending = $this->getDataGenerator()->create_user();
+        $method->invoke($plugin, $instance, $pending->id, (object) ['applydescription' => 'Still waiting']);
+        $sink->close();
+
+        $DB->set_field(
+            'user_enrolments',
+            'timeend',
+            time() - DAYSECS,
+            ['userid' => $lapsed->id, 'enrolid' => $instance->id]
+        );
+
+        $old = time() - 90 * DAYSECS;
+        $DB->set_field('enrol_apply_submission', 'timecreated', $old, ['userid' => $lapsed->id]);
+        $DB->set_field('enrol_apply_submission', 'timecreated', $old, ['userid' => $pending->id]);
+
+        $this->assertEquals(1, $this->sweep());
+
+        $this->assertFalse(
+            $DB->record_exists('enrol_apply_submission', ['userid' => $lapsed->id]),
+            'the record of a lapsed enrolment was kept as though it were still awaiting a decision'
+        );
+        $this->assertTrue($DB->record_exists('enrol_apply_submission', ['userid' => $pending->id]));
+    }
+
+    /**
      * Once the application leaves the queue, its record becomes sweepable again.
      *
      * The other half of the rule above: "spare it while it is live" must not turn into

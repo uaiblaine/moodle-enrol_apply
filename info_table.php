@@ -46,9 +46,8 @@ class enrol_apply_info_table extends table_sql {
     public function __construct($enrolid = 0, $commentlabel = '') {
         parent::__construct('enrol_apply_info_table');
 
-        // Same "undecided application" predicate as the approval queue, see manage_table.php.
-        $wheres = ['ue.status != :active', '(ue.timeend = 0 OR ue.timeend > :now)'];
-        $params = ['active' => ENROL_USER_ACTIVE, 'now' => time()];
+        // The one definition of "awaiting a decision", shared with the approval queue.
+        [$wheres, $params] = \enrol_apply\local\queue::awaiting_decision_where();
 
         if ($enrolid) {
             $wheres[] = 'e.id = :enrolid';

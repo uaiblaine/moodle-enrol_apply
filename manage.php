@@ -17,12 +17,14 @@
 /**
  * Review pending enrolment applications and decide on them.
  *
- * Three scopes are served by this page:
- *  - id=<enrolid>      the applications of one course enrolment instance;
- *  - userenrol=<ueid>  a single application, reachable by a mentor holding the
- *                      capability in the applicant's user context;
- *  - no parameter      every application the current user may decide on, either
- *                      site-wide or for the users they mentor.
+ * Three scopes are served by this page, and userenrol is tested first because it selects a
+ * different page rather than a narrower one:
+ *  - userenrol=<ueid>  ONE application, reviewed on a page of its own, open to anybody who
+ *                      may decide it - a site administrator, a teacher of the course it was
+ *                      made to, or a mentor of the applicant;
+ *  - id=<enrolid>      the queue of one course enrolment instance;
+ *  - no parameter      every application the current user may decide on, either site-wide or
+ *                      for the users they mentor.
  *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine
@@ -47,8 +49,50 @@ require_login();
 $manageurlparams = [];
 $instance = null;
 $mentees = null;
+$afterdecisionurl = null;
 
-if ($id) {
+if ($userenrol) {
+    /* Scope: one application, reviewed on its own. Everything is derived from the user
+       enrolment id server-side - the applicant, the enrolment method and therefore the
+       course - and no context is ever taken from the request. */
+    $application = \enrol_apply\local\queue::application($userenrol);
+    if (!$application) {
+        /* Nothing to decide: already decided, unenrolled, or never there. The three are one
+           outcome to the reader, and the page cannot authorise anybody without a row to
+           derive a context from, so it says so and offers the way back. */
+        $PAGE->set_context(context_system::instance());
+        $PAGE->set_url(new moodle_url('/enrol/apply/manage.php', ['userenrol' => $userenrol]));
+        $PAGE->set_pagelayout('admin');
+        $PAGE->set_title(get_string('confirmusers', 'enrol_apply'));
+        $PAGE->set_heading(get_string('confirmusers', 'enrol_apply'));
+        $PAGE->get_renderer('enrol_apply')->no_application_page(
+            new moodle_url('/enrol/apply/manage.php')
+        );
+        exit;
+    }
+
+    $applicant = core_user::get_user($application->userid, '*', MUST_EXIST);
+    $instance = $DB->get_record('enrol', ['id' => $application->enrolid, 'enrol' => 'apply'], '*', MUST_EXIST);
+    $context = \enrol_apply\local\queue::require_review_access($application);
+    $manageurlparams['userenrol'] = $userenrol;
+    $pageheading = fullname($applicant);
+
+    /* Where a decision sends the operator. Not back here: two of the three decisions leave
+       this url reviewing an application that is no longer awaiting one, and landing on
+       "nothing to decide" having just decided it reads as a failure. Deferring is the
+       exception - a waiting-list application is still awaiting a decision and the page would
+       render again perfectly well - but sending one decision somewhere else than the other
+       two would be stranger than sending all three to the queue.
+
+       WHICH queue is chosen by what the operator can open, not by which context let them in:
+       the instance scope calls require_login($course), which this page deliberately does not,
+       so a system-level grant that carries no course access would be bounced off its own
+       landing page. The no-parameter scope refuses a course teacher outright, so neither url
+       serves everybody and the test has to be the specific one. */
+    $afterdecisionurl = can_access_course(get_course($instance->courseid))
+        ? new moodle_url('/enrol/apply/manage.php', ['id' => $instance->id])
+        : new moodle_url('/enrol/apply/manage.php');
+} else if ($id) {
     // Scope: one course enrolment instance.
     $instance = $DB->get_record('enrol', ['id' => $id, 'enrol' => 'apply'], '*', MUST_EXIST);
     $course = get_course($instance->courseid);
@@ -57,22 +101,6 @@ if ($id) {
     require_capability('enrol/apply:manageapplications', $context);
     $manageurlparams['id'] = $instance->id;
     $pageheading = format_string($course->fullname);
-} else if ($userenrol) {
-    /* Scope: one application. The applicant is derived from the user enrolment id
-       server-side; the context is never taken from the request. */
-    $applicantid = $DB->get_field_sql(
-        "SELECT ue.userid
-           FROM {user_enrolments} ue
-           JOIN {enrol} e ON e.id = ue.enrolid
-          WHERE ue.id = :ueid AND e.enrol = :enrol",
-        ['ueid' => $userenrol, 'enrol' => 'apply'],
-        MUST_EXIST
-    );
-    $applicant = core_user::get_user($applicantid, '*', MUST_EXIST);
-    $context = context_user::instance($applicantid, MUST_EXIST);
-    require_capability('enrol/apply:manageapplications', $context);
-    $manageurlparams['userenrol'] = $userenrol;
-    $pageheading = fullname($applicant);
 } else {
     /* Scope: everything the current user may decide on. Site-wide for holders of the
        capability at system level; otherwise restricted to the users they mentor, which
@@ -137,11 +165,22 @@ if ($formaction !== '' && $userenrolments) {
         default:
             throw new moodle_exception('invalidformaction', 'enrol_apply');
     }
-    redirect($manageurl, get_string('applicationsupdated', 'enrol_apply'), null, \core\output\notification::NOTIFY_SUCCESS);
+    redirect(
+        $afterdecisionurl ?? $manageurl,
+        get_string('applicationsupdated', 'enrol_apply'),
+        null,
+        \core\output\notification::NOTIFY_SUCCESS
+    );
+}
+
+$renderer = $PAGE->get_renderer('enrol_apply');
+
+if ($userenrol) {
+    // One application gets a page of its own rather than a queue filtered down to one row.
+    $renderer->review_page($application, $applicant, $instance, $manageurl);
+    exit;
 }
 
 $table = new enrol_apply_manage_table($id, $userenrol, $mentees);
 $table->define_baseurl($manageurl);
-
-$renderer = $PAGE->get_renderer('enrol_apply');
 $renderer->manage_page($table, $manageurl, $instance);

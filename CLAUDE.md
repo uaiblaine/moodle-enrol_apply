@@ -65,6 +65,76 @@ backup/                      group mappings, comments and the durable trail, see
   `status != ENROL_USER_ACTIVE`, never `status = ENROL_USER_SUSPENDED`, or deferred
   applications vanish from the queue.
 
+- **`?userenrol=` is a page, not a narrower queue, and it is tested before `id=` for that
+  reason.** It used to render `enrol_apply_manage_table` filtered to one row, bulk bar and all,
+  and it required the capability in the applicant's own USER context and nowhere else — which
+  made it a mentor's page by accident. Measured on both branches: a teacher holding
+  `enrol/apply:manageapplications` in the course an application was made to fails that check, so
+  opening one application threw at them. The gate is now
+  `\enrol_apply\local\queue::require_review_access()`, which applies the plugin's own
+  `can_manage_application()` — the same predicate every decision applies to every row, so the
+  people who may act on an application are exactly the people who may look at one. Nothing new
+  is disclosed: a course teacher already sees every one of those applications, with the same
+  fields, on the queue.
+
+  `require_login($course)` is deliberately still not called on that path. A mentor holds no
+  course access at all, which is the whole point of that delegation level.
+
+  **The review form posts the queue's own contract** — `formaction`, a non-empty
+  `userenrolments[]`, `sesskey` — so `manage.php`'s handler needs no branch of its own and every
+  guard it applies to a queue decision applies here unchanged. Keep that contract if either
+  surface is rebuilt.
+
+  **A decision made there does not redirect back to it.** Two of the three decisions leave that
+  url reviewing an application which is no longer awaiting one, so landing on "nothing to
+  decide" having just decided it reads as a failure. Deferring is the exception and is sent to
+  the same place anyway, because one decision landing somewhere else than the other two would
+  be stranger than all three landing on the queue.
+
+  **Which queue is chosen by `can_access_course()`, not by which context granted access.** The
+  instance scope calls `require_login($course)`, which the review page deliberately does not, so
+  a system-level grant carrying no course access would be bounced off its own landing page. The
+  no-parameter scope refuses a course teacher outright. Neither url serves everybody, so the
+  test has to be the specific one.
+
+  **The group and role choosers are gated on the COURSE capability, which is stricter than the
+  page.** A mentor reaches the page through the applicant's user context and holds nothing in
+  the course, and `groups_get_all_groups()` applies no capability check of its own — unlike
+  `get_assignable_roles()`, which self-gates and would have come back empty for them anyway. So
+  without that gate the page listed every group name in a course the reader cannot open. The
+  instance's own groups and role still apply to their decision.
+
+- **One SQL definition of "awaiting a decision", in `queue::awaiting_decision_where()`** — read
+  by the approval queue, the submitted-comments listing, the review lookup and the retention
+  sweep. It used to be written out in each of them, which is how the participants-page bulk
+  decisions came to act on rows the queue excludes: two copies of a filter that is also a
+  correctness boundary drift, and the one that drifted was the newer. Deleting the `timeend`
+  half of it now reddens a test of the queue AND a test of the review lookup, which is the
+  property the extraction buys.
+
+  There is exactly one deliberate second expression of the rule and it is not SQL:
+  `\enrol_apply\bulk\decision_operation::awaiting_decision()` applies it to the user enrolment
+  OBJECTS core's participants-page driver hands over, which never reach a query. Keep those two
+  in step by hand; there is no third.
+
+- **A stale review link is the ordinary case, not the edge one.** An application is decided
+  exactly once and the url that reviewed it outlives the decision. `queue::application()`
+  returns null for a decided application, a deleted enrolment and an id that never existed
+  alike, and the page says one thing for all three — verified live on 5.2, where the two
+  reachable cases render byte-identical pages. Before this, a deleted enrolment raised a raw
+  `dml_missing_record_exception` and a decided one rendered an empty queue with no explanation
+  at all.
+
+  **Be careful what that merge is claimed to buy, because an earlier draft of this bullet
+  claimed too much and three reviewers then argued the claim was fine.** It does NOT make the
+  page silent about whether an id names a live application. Measured on 5.2 as a logged-in user
+  with no claim on the course: `?userenrol=<nothing there>` renders the "no application" page
+  with HTTP 200, while `?userenrol=<a pending one>` is refused by `require_review_access()` and
+  comes back 500. So the page still answers "is user enrolment N a pending application?" — as
+  every Moodle page that refuses by capability answers the same question about its own object,
+  and the refusal names neither the applicant nor the course. What the merge buys is that
+  nobody, entitled or not, can tell a decided application from a deleted one.
+
 - **Authorisation is per row, not per page.** `manage.php` decides which scope you may
   open; `can_manage_application()` in `lib.php` re-checks every single user enrolment
   before acting on it. Three delegation levels are accepted — system, course, and the
