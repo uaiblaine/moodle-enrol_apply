@@ -97,6 +97,12 @@ class purge_submissions extends \core\task\scheduled_task {
         $deleted = 0;
         $skipped = 0;
 
+        /* The queue's own predicate, not a copy of it: this sweep must spare a record whose
+           application is still awaiting a decision, and "still awaiting a decision" has to
+           mean here exactly what it means on the screen a manager is looking at. */
+        [$awaitingwheres, $awaitingparams] = \enrol_apply\local\queue::awaiting_decision_where();
+        $awaiting = implode(' AND ', $awaitingwheres);
+
         while (time() < $deadline) {
             $rows = $DB->get_records_sql(
                 "SELECT s.id
@@ -106,17 +112,14 @@ class purge_submissions extends \core\task\scheduled_task {
                             SELECT 1
                               FROM {user_enrolments} ue
                               JOIN {enrol} e ON e.id = ue.enrolid AND e.enrol = :enrol
-                             WHERE ue.id = s.userenrolmentid AND ue.status <> :active
-                                   AND (ue.timeend = 0 OR ue.timeend > :now)
+                             WHERE ue.id = s.userenrolmentid AND {$awaiting}
                         )
                ORDER BY s.id ASC",
                 [
                     'cutoff' => $cutoff,
                     'lastid' => $lastid,
                     'enrol' => 'apply',
-                    'active' => ENROL_USER_ACTIVE,
-                    'now' => time(),
-                ],
+                ] + $awaitingparams,
                 0,
                 static::CHUNK
             );

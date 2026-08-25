@@ -26,9 +26,13 @@
     a submit button carrying its own formaction value, so the button that was pressed is the
     decision that is taken.
 
-    Every value below is the PLAIN spelling and is output through a double stash, which
-    escapes each exactly once. That includes the course name: format_string()'s escape flag
-    defaults to true, so the renderer asks for the plain spelling explicitly.
+    Every value this template renders ITSELF is the PLAIN spelling and is output through a
+    double stash, which escapes each exactly once - the course name included, for which the
+    renderer asks for the plain spelling explicitly because format_string()'s escape flag
+    defaults to true. The two exceptions are both deliberate and both flagged where they sit:
+    the comment, which arrives already escaped from format_text(FORMAT_PLAIN) so that the line
+    breaks the applicant typed survive, and the role names inside the partial this template
+    includes, which core's own element-select.mustache also triple stashes.
 
     Context variables required for this template:
     * formurl string - url the decision form posts back to
@@ -37,16 +41,20 @@
     * courselabel string - label of the course row
     * coursename string - full name of the course applied for, plain spelling
     * courseurl string - link to the course
+    * emaillabel string - label of the email row
+    * email string - the applicant's email address, plain spelling
     * appliedlabel string - label of the application date row
     * applied string - when the application was submitted, already formatted
     * statuslabel string - label of the state row
     * status string - whether the application is pending or on the waiting list
     * commentlabel string - label of the applicant's comment
     * hascomment boolean - whether the applicant wrote one
-    * comment string - what the applicant wrote, plain spelling
+    * comment string - what the applicant wrote, ALREADY escaped and with its line breaks
+      converted by format_text(FORMAT_PLAIN), which is why it is triple stashed
     * nocomment string - what to say when they wrote nothing
     * everything enrol_apply/decision_controls requires
-    * actions array - one entry per decision, each with a formaction value and its label
+    * actions array - one entry per decision, each with a formaction value, its label, and a
+      primary flag choosing between the primary and the secondary button style
 
     Example context (json):
     {
@@ -56,10 +64,12 @@
         "courselabel": "Course",
         "coursename": "R&D < Team induction",
         "courseurl": "https://example.com/course/view.php?id=7",
-        "appliedlabel": "Application date",
+        "emaillabel": "Email address",
+        "email": "applicant@example.com",
+        "appliedlabel": "Enrol date",
         "applied": "25/08/26, 09:14",
-        "statuslabel": "State",
-        "status": "Pending",
+        "statuslabel": "Status",
+        "status": "Awaiting a decision",
         "commentlabel": "Comment",
         "hascomment": true,
         "comment": "I would like to join this course.",
@@ -80,9 +90,9 @@
         "messagelabel": "Message to the applicant",
         "messagehelp": "Included in the message they receive. Optional.",
         "actions": [
-            {"value": "confirm", "label": "Confirm requests", "primary": true},
-            {"value": "wait", "label": "Defer requests", "primary": false},
-            {"value": "cancel", "label": "Cancel requests", "primary": false}
+            {"value": "confirm", "label": "Confirm this application", "primary": true},
+            {"value": "wait", "label": "Defer this application", "primary": false},
+            {"value": "cancel", "label": "Cancel this application", "primary": false}
         ]
     }
 }}
@@ -92,13 +102,15 @@
     <dl class="enrol_apply-application row">
         <dt class="col-sm-3">{{courselabel}}</dt>
         <dd class="col-sm-9"><a href="{{courseurl}}">{{coursename}}</a></dd>
+        <dt class="col-sm-3">{{emaillabel}}</dt>
+        <dd class="col-sm-9">{{email}}</dd>
         <dt class="col-sm-3">{{appliedlabel}}</dt>
         <dd class="col-sm-9">{{applied}}</dd>
         <dt class="col-sm-3">{{statuslabel}}</dt>
         <dd class="col-sm-9">{{status}}</dd>
         <dt class="col-sm-3">{{commentlabel}}</dt>
         <dd class="col-sm-9">
-            {{#hascomment}}{{comment}}{{/hascomment}}
+            {{#hascomment}}{{{comment}}}{{/hascomment}}
             {{^hascomment}}<span class="text-muted">{{nocomment}}</span>{{/hascomment}}
         </dd>
     </dl>

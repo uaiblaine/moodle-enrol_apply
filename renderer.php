@@ -121,6 +121,15 @@ class enrol_apply_renderer extends plugin_renderer_base {
      * list still applies when nothing is picked, so an empty chooser would also imply a choice
      * the operator never made.
      *
+     * Gated on the capability in the COURSE, which is stricter than the gate on the page that
+     * calls it. A mentor reaches the review page through the applicant's own user context and
+     * holds nothing in the course at all, so offering them the group chooser would list every
+     * group name in a course they cannot open - groups_get_all_groups() applies no capability
+     * check of its own, unlike get_assignable_roles(), which self-gates and would have come
+     * back empty for them anyway. The instance's own groups and role still apply to their
+     * decision; what they lose is the ability to override them, which is the level of trust
+     * that delegation carries.
+     *
      * @param stdClass|null $instance Enrol instance the decision belongs to, null when unknown.
      * @return array Context for the partial.
      */
@@ -128,9 +137,8 @@ class enrol_apply_renderer extends plugin_renderer_base {
         $groups = [];
         $roles = [];
 
-        if ($instance !== null) {
-            $coursecontext = \context_course::instance($instance->courseid);
-
+        $coursecontext = $instance === null ? null : \context_course::instance($instance->courseid);
+        if ($coursecontext && has_capability('enrol/apply:manageapplications', $coursecontext)) {
             /* The name is the PLAIN spelling, because the template renders it through a double
                stash and Mustache escapes it there. format_string()'s escape flag defaults to
                true, so leaving it out hands the escaped spelling to a sink that escapes again:
@@ -200,7 +208,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
     public function review_page($application, $applicant, $instance, $manageurl) {
         echo $this->header();
         echo $this->heading(fullname($applicant));
-        echo $this->review_form($application, $instance, $manageurl);
+        echo $this->review_form($application, $applicant, $instance, $manageurl);
         echo $this->footer();
     }
 
@@ -212,11 +220,12 @@ class enrol_apply_renderer extends plugin_renderer_base {
      * applies to a queue decision applies here unchanged.
      *
      * @param stdClass $application Application as \enrol_apply\local\queue::application() returns it.
+     * @param stdClass $applicant Applicant user record.
      * @param stdClass $instance Enrol instance the application belongs to.
      * @param moodle_url $manageurl Url the decision form posts back to.
      * @return string Rendered markup.
      */
-    public function review_form($application, $instance, $manageurl) {
+    public function review_form($application, $applicant, $instance, $manageurl) {
         $waiting = (int) $application->status === ENROL_APPLY_USER_WAIT;
 
         $context = $this->decision_controls_context($instance) + [
@@ -230,6 +239,8 @@ class enrol_apply_renderer extends plugin_renderer_base {
                 'escape' => false,
             ]),
             'courseurl' => (new moodle_url('/course/view.php', ['id' => $application->courseid]))->out(false),
+            'emaillabel' => get_string('email'),
+            'email' => $applicant->email,
             'appliedlabel' => get_string('applydate', 'enrol_apply'),
             'applied' => userdate((int) $application->applydate, get_string('strftimedatetimeshort', 'langconfig')),
             'statuslabel' => get_string('submissionstatus', 'enrol_apply'),
@@ -238,15 +249,27 @@ class enrol_apply_renderer extends plugin_renderer_base {
                 : get_string('outcomeawaiting', 'enrol_apply'),
             'commentlabel' => get_string('applycomment', 'enrol_apply'),
             'hascomment' => trim((string) $application->applycomment) !== '',
-            /* Plain, and neither stripped nor formatted. The double stash escapes it exactly
-               once, which is lossless; format_string() would run strip_tags() and delete an
-               applicant's answer from the first "<" onwards. */
-            'comment' => (string) $application->applycomment,
+            /* Escaped exactly once, and with the line breaks the applicant typed. A double
+               stash alone would escape correctly and then render every paragraph as one run,
+               on the one page whose purpose is reading what they wrote; the queue's own cell
+               has always used format_text(FORMAT_PLAIN), which escapes and converts newlines
+               and nothing else. So this arrives ALREADY escaped and the template triple
+               stashes it, which is the opposite of every other value on that template and is
+               why it is the only one flagged there.
+
+               Not format_string(): that runs strip_tags(), which would delete an applicant's
+               answer from the first "<" onwards. A restore is the route by which such a value
+               reaches the column - it writes the comment verbatim out of a foreign archive. */
+            'comment' => format_text((string) $application->applycomment, FORMAT_PLAIN),
             'nocomment' => get_string('nocomment', 'enrol_apply'),
+            /* Singular labels of their own, not the queue's. btnconfirm and its siblings read
+               "Confirm requests", which is right above a list and wrong above one application -
+               and on this page the button IS the decision, so its label is the last thing the
+               operator reads before an applicant is enrolled or unenrolled. */
             'actions' => [
-                ['value' => 'confirm', 'label' => get_string('btnconfirm', 'enrol_apply'), 'primary' => true],
-                ['value' => 'wait', 'label' => get_string('btnwait', 'enrol_apply'), 'primary' => false],
-                ['value' => 'cancel', 'label' => get_string('btncancel', 'enrol_apply'), 'primary' => false],
+                ['value' => 'confirm', 'label' => get_string('reviewconfirm', 'enrol_apply'), 'primary' => true],
+                ['value' => 'wait', 'label' => get_string('reviewwait', 'enrol_apply'), 'primary' => false],
+                ['value' => 'cancel', 'label' => get_string('reviewcancel', 'enrol_apply'), 'primary' => false],
             ],
         ];
 

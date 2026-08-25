@@ -77,11 +77,19 @@ if ($userenrol) {
     $manageurlparams['userenrol'] = $userenrol;
     $pageheading = fullname($applicant);
 
-    /* Where a decision sends the operator. Not back here: this url reviews an application
-       that will not be awaiting a decision any more, and landing on "nothing to decide"
-       having just decided it reads as a failure. The queue they can actually open is the one
-       whose context let them in - a course teacher is refused by the no-parameter scope. */
-    $afterdecisionurl = $context instanceof context_course
+    /* Where a decision sends the operator. Not back here: two of the three decisions leave
+       this url reviewing an application that is no longer awaiting one, and landing on
+       "nothing to decide" having just decided it reads as a failure. Deferring is the
+       exception - a waiting-list application is still awaiting a decision and the page would
+       render again perfectly well - but sending one decision somewhere else than the other
+       two would be stranger than sending all three to the queue.
+
+       WHICH queue is chosen by what the operator can open, not by which context let them in:
+       the instance scope calls require_login($course), which this page deliberately does not,
+       so a system-level grant that carries no course access would be bounced off its own
+       landing page. The no-parameter scope refuses a course teacher outright, so neither url
+       serves everybody and the test has to be the specific one. */
+    $afterdecisionurl = can_access_course(get_course($instance->courseid))
         ? new moodle_url('/enrol/apply/manage.php', ['id' => $instance->id])
         : new moodle_url('/enrol/apply/manage.php');
 } else if ($id) {

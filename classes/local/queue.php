@@ -24,10 +24,16 @@ use stdClass;
 /**
  * What counts as an application awaiting a decision, and who may decide it.
  *
- * The predicate below is the only definition of "awaiting a decision" in the plugin. It used
- * to be written out in each listing that needed it, which is how the participants-page bulk
- * decisions came to act on rows the queue deliberately excludes: two copies of a filter that
- * is also a correctness boundary drift, and the one that drifted was the newer.
+ * The predicate below is the only SQL definition of "awaiting a decision" in the plugin - the
+ * approval queue, the submitted-comments listing, the review lookup and the retention sweep
+ * all read it. It used to be written out in each of them, which is how the participants-page
+ * bulk decisions came to act on rows the queue deliberately excludes: two copies of a filter
+ * that is also a correctness boundary drift, and the one that drifted was the newer.
+ *
+ * There is one deliberate second expression of the same rule, and it is not SQL:
+ * \enrol_apply\bulk\decision_operation::awaiting_decision() applies it to the user enrolment
+ * OBJECTS core's participants-page driver hands over, which never reach a query at all. Keep
+ * the two in step by hand; there is no third.
  *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine
@@ -60,10 +66,22 @@ final class queue {
      * One application, if it is still awaiting a decision.
      *
      * Deliberately one lookup for three different outcomes - never applied, already decided,
-     * enrolment gone - because they are the same thing to a reader of this page and telling
-     * them apart would answer "does user enrolment N exist?" for anybody who asks. The caller
-     * has not been authorised at this point and cannot be: the context to authorise against is
-     * derived from this row.
+     * enrolment gone - because they are the same thing to somebody who followed a link that has
+     * gone stale, which is who reaches this. It is worth being precise about what that does and
+     * does not buy, because an earlier draft of this docblock claimed more.
+     *
+     * It does NOT make the page silent about whether an id names a live application. Measured
+     * on 5.2 as a logged-in user with no claim on the course: an id with nothing behind it
+     * renders the "no application" page with HTTP 200, while a pending one is refused by
+     * require_review_access() below and comes back 500. So the page still answers "is user
+     * enrolment N a pending application?" - as every Moodle page that refuses by capability
+     * answers the same question about its own object, and the refusal names neither the
+     * applicant nor the course.
+     *
+     * What it does buy is that a reader who IS entitled to the answer cannot tell a decided
+     * application from a deleted one, and neither can anybody else. The caller has not been
+     * authorised at this point and cannot be: the context to authorise against is derived from
+     * this row.
      *
      * @param int $userenrolmentid User enrolment id.
      * @return stdClass|null The application, or null when there is none to decide.
@@ -108,16 +126,27 @@ final class queue {
      * @return context The context that granted access, for the page to sit in.
      */
     public static function require_review_access(stdClass $application): context {
-        $coursecontext = context_course::instance($application->courseid, IGNORE_MISSING);
-        if ($coursecontext && has_capability('enrol/apply:manageapplications', $coursecontext)) {
-            // Covers a grant at system level too, which is inherited down to the course.
-            return $coursecontext;
+        $usercontext = context_user::instance($application->userid, MUST_EXIST);
+
+        /* The gate is can_manage_application() itself and not a second reading of the same
+           three levels. Written out again here it would be a copy of an authorisation
+           boundary, which is the shape this class exists to remove from the predicate above -
+           and the two would agree only until somebody added an override, a prohibit or a
+           fourth level to one of them. */
+        if (!enrol_get_plugin('apply')->can_manage_application((int) $application->courseid, (int) $application->userid)) {
+            // Reported exactly as every other refusal in this plugin is.
+            require_capability('enrol/apply:manageapplications', $usercontext);
         }
 
-        /* The mentor level. require_capability() rather than a bare throw, so a refusal is
-           reported exactly as every other refusal in this plugin is. */
-        $usercontext = context_user::instance($application->userid, MUST_EXIST);
-        require_capability('enrol/apply:manageapplications', $usercontext);
+        /* Which context the PAGE then sits in is a rendering question, not an authorisation
+           one - the decision has already been taken. The course context where the operator
+           holds the capability there, because that is where the group and role choosers, the
+           filters and the file serving belong; the applicant's own context otherwise, which
+           is the only one a mentor has. */
+        $coursecontext = context_course::instance($application->courseid, IGNORE_MISSING);
+        if ($coursecontext && has_capability('enrol/apply:manageapplications', $coursecontext)) {
+            return $coursecontext;
+        }
 
         return $usercontext;
     }

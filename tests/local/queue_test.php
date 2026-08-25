@@ -202,8 +202,8 @@ final class queue_test extends \advanced_testcase {
     public function test_the_listing_and_the_lookup_agree(): void {
         global $DB;
 
-        [$pending] = $this->applicant();
-        [$waiting] = $this->applicant(ENROL_APPLY_USER_WAIT);
+        [, $pendingueid] = $this->applicant();
+        [, $waitingueid] = $this->applicant(ENROL_APPLY_USER_WAIT);
         [, $expired] = $this->applicant();
         $DB->set_field('user_enrolments', 'timeend', time() - DAYSECS, ['id' => $expired]);
         [, $active] = $this->applicant(ENROL_USER_ACTIVE);
@@ -223,11 +223,11 @@ final class queue_test extends \advanced_testcase {
         }
 
         $this->assertEqualsCanonicalizing($listed, $found);
-        // The control: something really was excluded, so agreeing is not agreeing on everything.
+        /* The controls: something really was excluded, so agreeing is not agreeing on
+           everything, and the two that survived are the two that should have. */
         $this->assertNotContains($expired, $found);
         $this->assertNotContains($active, $found);
-        $this->assertCount(2, $found);
-        $this->assertNotEmpty([$pending, $waiting]);
+        $this->assertEqualsCanonicalizing([$pendingueid, $waitingueid], $found);
     }
 
     /**
