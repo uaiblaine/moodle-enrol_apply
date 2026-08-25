@@ -336,6 +336,184 @@ final class renderer_test extends \advanced_testcase {
     }
 
     /**
+     * Render the single-application review page for a fresh applicant.
+     *
+     * @param string $comment Comment submitted with the application.
+     * @param int $status One of ENROL_USER_SUSPENDED and ENROL_APPLY_USER_WAIT.
+     * @return string Rendered markup.
+     */
+    private function render_review(string $comment = 'Please let me in', int $status = ENROL_USER_SUSPENDED): string {
+        global $DB, $PAGE;
+
+        $this->setAdminUser();
+        $applicant = $this->getDataGenerator()->create_user();
+        $this->plugin->enrol_user($this->instance, $applicant->id, null, 0, 0, $status);
+        $ueid = (int) $DB->get_field(
+            'user_enrolments',
+            'id',
+            ['userid' => $applicant->id, 'enrolid' => $this->instance->id],
+            MUST_EXIST
+        );
+        $DB->insert_record('enrol_apply_applicationinfo', (object) [
+            'userenrolmentid' => $ueid,
+            'comment' => $comment,
+        ]);
+
+        $url = new \moodle_url('/enrol/apply/manage.php', ['userenrol' => $ueid]);
+        $PAGE->set_url($url);
+        $PAGE->set_context(\context_course::instance($this->course->id));
+
+        $application = \enrol_apply\local\queue::application($ueid);
+
+        return $PAGE->get_renderer('enrol_apply')->review_form($application, $this->instance, $url);
+    }
+
+    /**
+     * The review page posts exactly the contract manage.php's handler requires.
+     *
+     * A formaction naming the decision, a non-empty userenrolments array and the session key.
+     * That is what lets one handler serve both decision surfaces with no branch of its own, and
+     * it is the contract to keep if either surface is ever rebuilt.
+     *
+     * @return void
+     */
+    public function test_the_review_page_posts_the_queues_own_contract(): void {
+        $html = $this->render_review();
+
+        $this->assertMatchesRegularExpression('~<input[^>]*type="hidden"[^>]*name="sesskey"~', $html, $html);
+        $this->assertMatchesRegularExpression(
+            '~<input[^>]*type="hidden"[^>]*name="userenrolments\[\]"[^>]*value="\d+"~',
+            $html,
+            $html
+        );
+        foreach (['confirm', 'wait', 'cancel'] as $action) {
+            $this->assertMatchesRegularExpression(
+                '~<button[^>]*type="submit"[^>]*name="formaction"[^>]*value="' . $action . '"~',
+                $html,
+                $action . ': ' . $html
+            );
+        }
+    }
+
+    /**
+     * The review page offers the same three decision controls the queue does.
+     *
+     * They come from one partial precisely so the two surfaces cannot offer different things;
+     * this asserts the review page really renders it rather than a copy that has drifted.
+     *
+     * @return void
+     */
+    public function test_the_review_page_offers_the_group_and_role_choosers(): void {
+        $this->getDataGenerator()->create_group(['courseid' => $this->course->id, 'name' => 'Tutorial A']);
+
+        $html = $this->render_review();
+
+        $this->assertMatchesRegularExpression('~<select[^>]*name="groups\[\]"~', $html, $html);
+        $this->assertMatchesRegularExpression('~<select[^>]*name="roleid"~', $html, $html);
+        $this->assertMatchesRegularExpression('~<textarea[^>]*name="outcomemessage"~', $html, $html);
+    }
+
+    /**
+     * A group name reaches the review page's chooser escaped exactly once, as the queue's does.
+     *
+     * Mutation check: dropping the escape option from decision_controls_context() reddens this
+     * and test_a_group_name_reaches_the_chooser_escaped_once, and nothing else - which is the
+     * property being pinned, since both surfaces read the one helper.
+     *
+     * @return void
+     */
+    public function test_a_group_name_reaches_the_review_chooser_escaped_once(): void {
+        $this->getDataGenerator()->create_group([
+            'courseid' => $this->course->id,
+            'name' => self::AWKWARD_NAME,
+        ]);
+
+        $html = $this->render_review();
+
+        $this->assertSame(1, preg_match('~<select[^>]*name="groups\[\]".*?</select>~s', $html, $select), $html);
+        $this->assertStringContainsString(self::ESCAPED_ONCE, $select[0]);
+        $this->assertStringNotContainsString(self::ESCAPED_TWICE, $select[0]);
+        $this->assertStringNotContainsString(self::AWKWARD_NAME, $select[0]);
+    }
+
+    /**
+     * The course name reaches the review page escaped exactly once.
+     *
+     * @return void
+     */
+    public function test_the_reviewed_course_name_is_escaped_once(): void {
+        global $DB;
+
+        $DB->set_field('course', 'fullname', self::AWKWARD_NAME, ['id' => $this->course->id]);
+
+        $html = $this->render_review();
+
+        $this->assertStringContainsString(self::ESCAPED_ONCE, $html);
+        $this->assertStringNotContainsString(self::ESCAPED_TWICE, $html);
+    }
+
+    /**
+     * The applicant's comment reaches the review page whole, and escaped exactly once.
+     *
+     * Neither stripped nor formatted: format_string() runs strip_tags(), which would delete an
+     * applicant's answer from the first "<" onwards. A restore is the route by which such a
+     * value reaches the column - it writes the comment verbatim out of a foreign archive.
+     *
+     * @return void
+     */
+    public function test_the_applicants_comment_is_escaped_once_and_kept_whole(): void {
+        $html = $this->render_review(self::AWKWARD_NAME);
+
+        $this->assertStringContainsString(self::ESCAPED_ONCE, $html);
+        $this->assertStringNotContainsString(self::ESCAPED_TWICE, $html);
+    }
+
+    /**
+     * An applicant who wrote nothing is said to have written nothing.
+     *
+     * @return void
+     */
+    public function test_an_empty_comment_says_so(): void {
+        $html = $this->render_review('');
+
+        $this->assertStringContainsString(get_string('nocomment', 'enrol_apply'), $html);
+    }
+
+    /**
+     * A waiting-list application says so, and a pending one says something else.
+     *
+     * @return void
+     */
+    public function test_the_review_page_names_the_state(): void {
+        $this->assertStringContainsString(
+            get_string('outcomewaiting', 'enrol_apply'),
+            $this->render_review('x', ENROL_APPLY_USER_WAIT)
+        );
+        $this->assertStringContainsString(
+            get_string('outcomeawaiting', 'enrol_apply'),
+            $this->render_review('x', ENROL_USER_SUSPENDED)
+        );
+    }
+
+    /**
+     * The review page carries no bulk-selection apparatus.
+     *
+     * There is one application on it, so a select-all checkbox and a toggle group would be
+     * controls with nothing to control - and the toggle group in particular would leave
+     * enrol_apply/manage disabling a submit button this page needs enabled.
+     *
+     * @return void
+     */
+    public function test_the_review_page_carries_no_toggle_apparatus(): void {
+        $html = $this->render_review();
+
+        $this->assertStringNotContainsString(\enrol_apply_manage_table::TOGGLE_GROUP, $html, $html);
+        $this->assertStringNotContainsString('data-action="toggle"', $html, $html);
+        // The control: the page really did render, so the absences above are absences.
+        $this->assertStringContainsString('enrol_apply_review_form', $html);
+    }
+
+    /**
      * The course name reaches the new-application notification escaped exactly once.
      *
      * Mutation check: drop the 'escape' => false option from the course name in

@@ -59,15 +59,8 @@ class enrol_apply_manage_table extends table_sql {
 
         parent::__construct('enrol_apply_manage_table');
 
-        /* An undecided application is "not active AND has not expired". The second half
-           matters because process_expirations() re-suspends an ACTIVE enrolment whose
-           period ran out when expiredaction is "suspend" (lib/enrollib.php), and a
-           re-suspended row would otherwise surface here as a fresh application from a
-           user who was in fact approved long ago. Pending and waiting-list rows always
-           carry timeend = 0, because apply() never stamps a period and wait_enrolment()
-           does not touch the dates; only a once-approved row can have one. */
-        $wheres = ['ue.status != :active', '(ue.timeend = 0 OR ue.timeend > :now)'];
-        $params = ['active' => ENROL_USER_ACTIVE, 'now' => time()];
+        // The one definition of "awaiting a decision"; see the method for both its clauses.
+        [$wheres, $params] = \enrol_apply\local\queue::awaiting_decision_where();
 
         if ($enrolid) {
             $wheres[] = 'e.id = :enrolid';

@@ -34,6 +34,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   applications of the first one only; Moodle offers the menu no way to say which method was
   meant. The plugin's own queue reaches all of them.
 
+- **One application can now be reviewed on a page of its own, by anybody who may decide it.**
+  The single-application link showed the whole approval queue narrowed to one row — bulk
+  checkboxes, select-all and all — and offered neither the group chooser nor the role chooser,
+  so the one screen dedicated to a single decision was the one screen that could not take it.
+  It is now a page: who applied, for which course, when, what they wrote, and the same three
+  controls the queue offers, with a button per decision.
+
+  It also stopped being a page only a mentor could open. It required the deciding permission in
+  the applicant's own profile, which a course teacher does not hold there, so a teacher
+  following the link got an error where a mentor got the page. The permission it asks for is
+  now the one every decision asks for, which means a site administrator, a teacher of the
+  course, and a mentor of the applicant all reach it — and nobody else. None of them sees
+  anything they could not already see on the queue.
+
+  Two rough edges went with it. Deciding from that page used to send you back to it, where the
+  application you had just decided was no longer listed; it now returns you to the queue. And a
+  link to an application that had since been decided, or whose enrolment had been removed, used
+  to produce a database error page; it now says so plainly and offers the way back.
+
 ### Fixed
 
 - **Two applications submitted in the same second no longer trade places.** Moodle records an

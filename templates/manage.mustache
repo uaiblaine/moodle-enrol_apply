@@ -32,23 +32,10 @@
       from the table and the action from the bar. Core does the same in grade/templates/edit_tree
       and the sticky footer is never moved in the DOM - its placement is CSS, not JavaScript, so
       the inputs inside it post normally.
-    * messagelabel string - label of the optional message to the applicant
-    * messagehelp string - hint explaining who reads the message and when
-    * hasgroups boolean - whether the course has any group to offer
-    * grouplabel string - label of the group chooser
-    * grouphelp string - hint explaining what choosing nothing does
-    * groups array - list of id and name pairs, one per group in the course; each name is the
-      plain spelling, because the option text is output through a double stash and Mustache
-      escapes it there
-    * hasroles boolean - whether the decider may assign any role in this course
-    * rolelabel string - label of the role chooser
-    * rolehelp string - hint explaining what choosing nothing does
-    * roledefault string - text of the option that leaves the method's own role in charge
-    * roles array - list of id and name pairs, one per role the decider may assign; each name is
-      the ESCAPED spelling and is therefore output through a TRIPLE stash, exactly as core's own
-      element-select.mustache does. get_assignable_roles() returns format_string() output and
-      offers no way to ask for the plain spelling, so a double stash here would escape a second
-      time and a role renamed with an ampersand would read wrongly.
+    * everything enrol_apply/decision_controls requires - the group chooser, the role chooser
+      and the message box are that partial's, shared with the single-application review page so
+      the two decision surfaces cannot drift. See it for what each variable means and for which
+      spelling of a name each stash wants.
 
     Example context (json):
     {
@@ -82,37 +69,7 @@
         {{{tablehtml}}}
     </div>
     {{#hasrows}}
-        {{#hasgroups}}
-            <div class="enrol_apply-decisiongroups mt-3">
-                <label class="form-label" for="enrol_apply_groups">{{grouplabel}}</label>
-                <select class="form-select" id="enrol_apply_groups" name="groups[]" multiple
-                    aria-describedby="enrol_apply_groups_help">
-                    {{#groups}}
-                        <option value="{{id}}">{{name}}</option>
-                    {{/groups}}
-                </select>
-                <div class="form-text" id="enrol_apply_groups_help">{{grouphelp}}</div>
-            </div>
-        {{/hasgroups}}
-        {{#hasroles}}
-            <div class="enrol_apply-decisionrole mt-3">
-                <label class="form-label" for="enrol_apply_roleid">{{rolelabel}}</label>
-                <select class="form-select" id="enrol_apply_roleid" name="roleid"
-                    aria-describedby="enrol_apply_roleid_help">
-                    <option value="0">{{roledefault}}</option>
-                    {{#roles}}
-                        <option value="{{id}}">{{{name}}}</option>
-                    {{/roles}}
-                </select>
-                <div class="form-text" id="enrol_apply_roleid_help">{{rolehelp}}</div>
-            </div>
-        {{/hasroles}}
-        <div class="enrol_apply-outcomemessage mt-3">
-            <label class="form-label" for="enrol_apply_outcomemessage">{{messagelabel}}</label>
-            <textarea class="form-control" id="enrol_apply_outcomemessage" name="outcomemessage"
-                rows="3" aria-describedby="enrol_apply_outcomemessage_help"></textarea>
-            <div class="form-text" id="enrol_apply_outcomemessage_help">{{messagehelp}}</div>
-        </div>
+        {{> enrol_apply/decision_controls }}
         {{{stickyfooter}}}
     {{/hasrows}}
 </form>
