@@ -84,5 +84,36 @@ Feature: Enrolment upon approval
     And I am on "Course 1" course homepage
     And I should not see "New section"
 
+  # The second decision route: core's own participants page. @javascript is not a choice
+  # here and it is the opposite of the queue's bar above - core ships the "With selected
+  # users..." select DISABLED and only core/checkbox-toggleall clears it, so without
+  # JavaScript Mink sets the value happily and then never posts "formaction" at all,
+  # because a disabled field is left out of the submission.
+  #
+  # One applicant, not two. What this scenario exists to prove is the wiring core owns and
+  # nothing else in this repository exercises: the menu, action_redir.php's regex sweep of
+  # the checkbox names, the confirmation form and the round trip back. That the selection
+  # survives that round trip for MORE than one applicant is a property of the form's hidden
+  # bulkuser[] inputs, and tests/bulk/operations_test.php holds it with two.
+  @javascript
+  Scenario: A teacher confirms an application from the course participants page
+    Given I log in as "student1"
+    And I am on "Course 1" course homepage
+    And I press "Start application"
+    And I press "Submit application"
+    And I log out
+    When I log in as "teacher1"
+    And I am on the "Course 1" "enrolled users" page
+    Then I should see "Student 1"
+    And I click on "Select 'Student 1'" "checkbox"
+    And I choose "Confirm enrolment applications" from the participants page bulk action menu
+    Then I should see "Selected applicants"
+    And I press "Confirm enrolment applications"
+    Then I should see "Enrolment applications decided: 1"
+    And I log out
+    And I log in as "student1"
+    And I am on "Course 1" course homepage
+    Then I should see "New section"
+
   # Capability enforcement is covered by tests/lib_test.php: asserting on it here would
   # mean asserting on an exception page, which behat's exception hook fails by design.
