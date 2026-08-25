@@ -91,6 +91,23 @@ class enrol_apply_info_table extends table_sql {
     }
 
     /**
+     * The sort, with a unique final key so that two applications never trade places.
+     *
+     * Same defect and same remedy as the approval queue's; the reasoning, the measurement and
+     * the reason this method rather than another is the injection point are all in
+     * manage_table.php. This table ties more readily, not less: it offers `applydate` and
+     * `fullname` and nothing else that could separate two applications made in the same second.
+     *
+     * @return array Column name => SORT_ASC or SORT_DESC, ending in a unique key.
+     */
+    public function get_sort_columns() {
+        $sortcolumns = parent::get_sort_columns();
+        $sortcolumns['ue.id'] = SORT_ASC;
+
+        return $sortcolumns;
+    }
+
+    /**
      * Extra CSS classes for a row.
      *
      * @param stdClass $row Row data, an object carrying every selected column.

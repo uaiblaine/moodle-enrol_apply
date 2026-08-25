@@ -36,6 +36,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Two applications submitted in the same second no longer trade places.** Moodle records an
+  application's date to the second, so a cohort admitted by one script — or simply a busy
+  minute — leaves several applications sharing a timestamp, and the queue was ordered by that
+  date alone. A database is free to return tied rows in any order and need not make the same
+  choice twice, so on a queue long enough to page, one application could appear on two pages
+  while another appeared on none. Both listings now order by something unique as a last resort,
+  whichever heading the operator sorts by.
+
 - **Approving an application a second time is now recorded as a second decision.** If an approved
   participant was suspended from the participants page and then approved again, the applications
   trail went on naming the first person to approve them and the date they did it — while the

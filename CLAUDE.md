@@ -399,6 +399,31 @@ backup/                      group mappings, comments and the durable trail, see
   happens to be 2: one is the enrolment's status and the other the record's, equal by coincidence
   rather than contract.
 
+- **Both listings order by a unique key as a last resort, and the injection point is the only
+  one that works.** Every column either table offers can tie — `applydate` is `ue.timecreated`,
+  which `enrol_user()` writes as whole Unix seconds, so a cohort admitted by one script shares a
+  value, and on the live 5.2 site three pending applications already do. With no unique key the
+  database may return a tied group in any order and need not repeat its choice, and each page of
+  a paged table is a separately planned statement: measured on PostgreSQL 17 over a tied 100-row
+  set, 11 rows appeared on two pages and 11 on none, and a unique final key gave exactly 100.
+
+  Core's own fallback cannot cover it. `set_sorting_preferences()` appends `sort_default_column`
+  when it is missing, and here that column IS `applydate` — so clicking any other heading gives
+  two keys that both tie, and clicking `applydate` appends nothing.
+
+  Override **`get_sort_columns()`**, which is what `tool_policy`, `mod_quiz` and `mod_assign` all
+  do. Not `construct_order_by()`: it is static and reached through `self::`, which is early
+  bound, so an override of it is never called — silently. Not `get_sql_sort()` either: appending
+  to its string puts a raw fragment after core's per-driver NULL ordering. And not
+  `gradereport_history`'s shape, which appends its key only when the sort is exactly the default
+  one, so every other heading loses it.
+
+  **Test the ORDER BY, never the row order.** A tie only reorders when the database chooses to,
+  and at fixture size it usually does not — the five live rows page cleanly today while three of
+  them share a timestamp. A row-order test passes with the tiebreaker deleted, which is how this
+  survived. Note also that the emitted fragment is driver-dependent: PostgreSQL gives
+  `ue.id ASC NULLS FIRST`, MariaDB gives `ue.id ASC`, so match by prefix.
+
 - **`table_sql` writes to the output buffer.** The renderer captures it with
   `ob_start()` so it can be handed to a Mustache template as a triple stash. That is the
   one place raw HTML is passed through a template on purpose.
