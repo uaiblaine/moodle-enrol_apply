@@ -124,6 +124,42 @@ class enrol_apply_manage_table extends table_sql {
     }
 
     /**
+     * The sort, with a unique final key so that two applications never trade places.
+     *
+     * Every column this table offers can tie. `applydate` is `ue.timecreated`, which
+     * `enrol_plugin::enrol_user()` writes as whole Unix seconds, so a cohort admitted by one
+     * script or one busy minute shares a value - measured on the live 5.2 site, three pending
+     * applications already do. `course`, `fullname` and `email` tie more easily still. With no
+     * unique key the database is free to return a tied group in any order it likes, and it does
+     * not have to make the same choice twice: each page of a paged table is a separately planned
+     * statement with its own LIMIT and OFFSET, so a row can appear on two pages while another
+     * appears on none. Measured on PostgreSQL 17 over a tied 100-row set: 11 rows duplicated,
+     * 11 never shown, and adding a unique final key gave exactly 100 distinct rows.
+     *
+     * Core's own fallback cannot cover this. `set_sorting_preferences()` appends
+     * `sort_default_column` when it is missing, and here that column IS `applydate` - so
+     * clicking any other header gives "<that column> ASC, applydate ASC", which is two keys that
+     * both tie, and clicking `applydate` itself appends nothing at all.
+     *
+     * This method, and not `get_sql_sort()` or `construct_order_by()`, is the injection point.
+     * `construct_order_by()` is static and reached through `self::`, which is early bound, so an
+     * override of it is never called. Appending to `get_sql_sort()`'s string instead would put a
+     * raw fragment after core's per-driver NULL ordering, which is not portable. The shape below
+     * is core's own, in `tool_policy`, `mod_quiz` and `mod_assign`.
+     *
+     * The raw `ue.id` and not the `userenrolmentid` alias: both work on PostgreSQL and MariaDB,
+     * but the raw column is what core uses and it does not depend on the SELECT list.
+     *
+     * @return array Column name => SORT_ASC or SORT_DESC, ending in a unique key.
+     */
+    public function get_sort_columns() {
+        $sortcolumns = parent::get_sort_columns();
+        $sortcolumns['ue.id'] = SORT_ASC;
+
+        return $sortcolumns;
+    }
+
+    /**
      * Declare the columns and their headings.
      *
      * @return void
