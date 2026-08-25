@@ -255,6 +255,115 @@ backup/                      group mappings, comments and the durable trail, see
   its concatenation and then assigns over it, so it replaces rather than appends: pass every
   class through the constructor.
 
+- **The participants page offers the same three decisions in bulk, and core gates that route with
+  nothing at all.** `user/action_redir.php` contains no `require_login()` and no
+  `require_capability()` anywhere in its bulk branch — byte-identical on 5.1 and 5.2, its only
+  gates being `confirm_sesskey()` and a check that the plugin is enabled site wide. So
+  `get_bulk_operations()` returning an empty array is what *refuses* an operator, not merely what
+  hides the menu: core looks the chosen operation up in exactly that array and throws
+  `errorwithbulkoperation` when it is absent. The capability is checked at the course context,
+  which is deliberately stricter than `can_manage_application()` — a mentor holding it only in an
+  applicant's user context is offered nothing here, and `manage.php` is what serves that scope.
+
+  **`process()` re-checks it, and that second check is not the unreachable-guard pattern.** It is
+  the gate for any driver other than core's, because the method is public and
+  `enrol_bulk_enrolment_operation` declares it abstract with no gate in front of it.
+  `test_process_refuses_an_operator_without_the_capability` holds it by calling `process()`
+  directly, which is the only way to reach it.
+
+  **The bulk path adds no per-ROW authorisation of its own, and that is the point rather than an
+  omission.** It inherits `can_manage_application()` from inside `confirm_enrolment()`,
+  `wait_enrolment()` and `cancel_enrolment()` — which is the whole argument for delegating.
+  Measured on both branches: through core's dispatch a per-row check could not refuse anything
+  anyway, because the menu gate tests the same capability at the same course context that
+  `can_manage_application()` reaches second, and the manager is built for that one course. What
+  the inherited check does protect is a selection reaching *beyond* the course — and that shape is
+  NOT what a forged post produces, which an earlier draft of this paragraph claimed. Core builds
+  the manager with the instance filter and `get_users_enrolments()` selects on `ue.enrolid`, so a
+  posted id belonging to another course simply does not come back; core warns per dropped user and
+  redirects when nothing is left. The cross-course shape reaches `process()` only from a caller
+  other than core's driver — which is exactly the standing the second capability check already has,
+  and exactly what `test_an_application_in_another_course_is_not_decided` builds, by composing two
+  managers by hand.
+  The slice plan's `test_bulk_confirm_re_authorises_every_posted_id` was specified against the
+  belief that the bulk path needed a check of its own. Written that way it would pass by doing
+  nothing.
+
+- **Never copy either core precedent's bulk edit operation.** `enrol_manual` and `enrol_self` ship
+  the same SQL character for character: a raw `$DB->execute()` UPDATE of `{user_enrolments}` with
+  `\core\event\user_enrolment_updated` built by hand. Neither calls `update_user_enrol()`, so
+  `\core_enrol\hook\before_user_enrolment_updated` is never dispatched — and that hook is the
+  entire out-of-band approval route (see `classes/hook_callbacks.php`). A bulk approval written
+  that way flips the status to active and silently skips the role, the group memberships, the
+  durable record and the applicant's notification. Every operation in `classes/bulk/` delegates
+  instead, and `test_a_bulk_confirmation_runs_the_plugins_own_approval` is what holds it: replacing
+  the delegation with a `set_field()` reddens it on the queued task and on the component-stamped
+  membership. The delete half of both precedents is safe to copy — it goes through
+  `allow_unenrol_user()` and `unenrol_user()`.
+
+- **The bulk path had to reproduce the QUEUE's predicate, and the half that is easy to miss is
+  `timeend`.** `manage_table.php` pairs `ue.status != :active` with `(ue.timeend = 0 OR ue.timeend
+  > :now)`, and only the second clause keeps an expired enrolment out: `process_expirations()`
+  re-suspends an enrolment whose period ran out, so somebody approved and enrolled long ago comes
+  back looking exactly like a fresh application. That exclusion has only ever lived in the
+  LISTING — `get_pending_user_enrolment()` carries no `timeend` clause at all — so the
+  participants page, which is a second listing that core owns, reached rows the first listing was
+  written to keep away from the decision methods. `awaiting_decision()` is where the whole
+  predicate now lives.
+
+  **Deferral is the worst of the three, not cancellation, which is the opposite of what it looks
+  like.** `wait_enrolment()` calls `update_user_enrol()` with no dates and that method writes a
+  date only when one is passed, so an expired row keeps its past `timeend` and becomes a
+  waiting-list application carrying an expiry — a state no queue lists, and one the
+  `ENROL_EXT_REMOVED_UNENROL` branch of `process_expirations()` unenrols on sight, selecting on
+  `timeend` alone with no status filter. It is exactly the state "Never put a `timeend` on a
+  pending application" above forbids, arrived at from the other end.
+
+- **Counts are taken by re-reading, never by predicting, and there are three of them rather than
+  one.** The three decision methods skip a row they will not act on and skip it silently, so the
+  only truthful report is of the rows whose state actually moved. One bucket would have to carry
+  three unrelated reasons under a sentence naming a single one — "not awaiting a decision" is false
+  of an application already on the waiting list, which `wait_enrolment()` skips because it looks up
+  `status = ENROL_USER_SUSPENDED` strictly, and false again of one refused by
+  `can_manage_application()`. Each counter is computed from the set its string describes and
+  nothing else.
+
+- **Core's own bulk form cannot be reused, and the one line worth copying from it is invisible.**
+  `enrol_bulk_enrolment_change_form` indexes an options array whose only keys are `-1`, `0` and `1`
+  by the row's own status with no `isset()` guard (`enrol/bulkchange_forms.php:57-61` and `:84`),
+  so every `ENROL_APPLY_USER_WAIT` row raises "Undefined array key 2"; and its labels come out of
+  the `enrol_manual` language pack. What must still be copied is the hidden `bulkuser[]` input per
+  row. The selected ids reach core from the participants table's checkbox NAMES — `user<id>`,
+  scraped with `preg_match('/^user(\d+)$/')` over the whole POST — and those exist only on the
+  FIRST post; on the second the ids survive purely because the form re-emits them
+  (`enrol/bulkchange_forms.php:81`, read back at `user/action_redir.php:67`). A form that omits
+  them submits cleanly and then redirects the operator back with "No users selected", as though
+  they had ticked nothing. `test_the_confirmation_form_carries_the_selection_forward` reads them
+  back through `optional_param_array()` rather than asserting on the markup alone.
+
+- **A form-based operation that returns false fails silently.** `user/action_redir.php` has no
+  `else` on the form branch: a false return falls through and redisplays the form with no message
+  at all. Only the form-less branch throws. So a refusal has to push its own
+  `\core\notification::error()` — which is also why all three operations return a form rather
+  than acting immediately, a bulk cancellation being an unenrolment.
+
+- **A bulk decision reaches ONE apply instance per course, and nothing can be done about it here.**
+  `action_redir.php` picks the FIRST `{enrol}` row of the plugin in the course
+  (`enrol_get_instances($courseid, false)`, `break` on the first match) and filters the manager to
+  it, while the menu url carries only the plugin name — there is nowhere to say which instance was
+  meant, and `user/index.php` renders the operations once per instance with identical urls. So a
+  course carrying two apply instances bulk-decides the first one's applications only; applicants of
+  the second are dropped by core with a per-user warning. That is not a reason to forbid a second
+  instance — the plugin supports them on purpose, and `enrol_gapply` gets exactly that wrong. The
+  queue reaches all of them.
+
+- **The bulk menu needs JavaScript, which is the opposite of the queue's own bar.** Core ships the
+  "With selected users..." select `disabled` in the server markup and only `core/checkbox-toggleall`
+  clears it. In a non-JavaScript Behat run `I set the field ... to ...` does not throw — Mink sets
+  the value regardless — but `Form::getValues()` omits a disabled field, so `formaction` is never
+  posted and the step passes while nothing happens. Every core scenario driving this menu is
+  `@javascript`, and so is this plugin's.
+
 - **The report reads the LIVE enrolment as well as the record, and the two answer different
   questions.** The durable record holds the last decision this plugin's own state machine took;
   the participants page, course reset, user deletion and the expiry sweep all change an enrolment

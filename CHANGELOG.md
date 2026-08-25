@@ -6,6 +6,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Added
+
+- **Applications can now be decided from the course participants page.** Confirming, deferring
+  and cancelling used to be possible only on the plugin's own queue, so a teacher already
+  looking at the participants list had to leave it and find the applicants again. The three
+  decisions now appear in the participants page's own *With selected users...* menu, under
+  *Course enrol confirmation*, and ask for confirmation before acting.
+
+  A bulk decision takes exactly the same route as the queue's. The applicant is notified, the
+  chosen groups are joined, the chosen role is assigned and the applications trail is stamped,
+  all once and not twice — a bulk approval and a queue approval leave the same state behind.
+  Confirming also offers the group and role choosers; deferring and cancelling take only the
+  message. Selected users who are not waiting for a decision are left alone and counted, so the
+  result says how many applications were decided, how many of the people selected had no
+  application awaiting one, and how many applications it did not change.
+
+  "Waiting for a decision" means the same thing on both screens, expiry included. An enrolment
+  that was approved and has since lapsed reads as suspended to Moodle, so it sits on the
+  participants page looking like an applicant; the plugin's own queue has always excluded it, and
+  a bulk decision excludes it too rather than cancelling somebody's finished enrolment or
+  re-approving it in the name of whoever happened to tick the box.
+
+  Two limits worth knowing, both of them Moodle's rather than this plugin's. The menu needs
+  JavaScript, because the control that opens it is disabled until a row is ticked. And where a
+  course offers more than one enrolment-upon-approval method, the bulk decision reaches the
+  applications of the first one only; Moodle offers the menu no way to say which method was
+  meant. The plugin's own queue reaches all of them.
+
 ### Fixed
 
 - **Approving an application a second time is now recorded as a second decision.** If an approved

@@ -598,6 +598,52 @@ class enrol_apply_plugin extends enrol_plugin {
     }
 
     /**
+     * The decisions this plugin offers from core's participants page bulk menu.
+     *
+     * This is the gate as well as the menu. Core's driver looks the chosen operation up in
+     * exactly this array and throws when it is absent (user/action_redir.php:199-201), and it
+     * performs no require_login() and no require_capability() of its own anywhere in that
+     * branch - measured, and byte-identical on 5.1 and 5.2 - so returning an empty array is
+     * what refuses an operator who may not decide here, not merely what hides the menu.
+     *
+     * The capability is checked at the course context, which is stricter than the plugin's own
+     * can_manage_application(): a mentor holding it only in an applicant's user context is
+     * offered nothing here. That is deliberate and it costs nothing - the participants page is
+     * a course page, and manage.php serves the mentor scope.
+     *
+     * @param course_enrolment_manager $manager Manager core built for the course.
+     * @return array Operation identifier => enrol_bulk_enrolment_operation.
+     */
+    public function get_bulk_operations(course_enrolment_manager $manager) {
+        global $CFG;
+
+        /* enrol_bulk_enrolment_operation lives in a legacy file and is not autoloadable, so
+           the require has to happen before the autoloader is asked for a subclass of it.
+           Both core precedents reach it the same way, through their own locallib. */
+        require_once($CFG->dirroot . '/enrol/locallib.php');
+
+        if (!has_capability('enrol/apply:manageapplications', $manager->get_context())) {
+            return [];
+        }
+
+        $offered = [
+            new \enrol_apply\bulk\confirm_operation($manager, $this),
+            new \enrol_apply\bulk\wait_operation($manager, $this),
+            new \enrol_apply\bulk\cancel_operation($manager, $this),
+        ];
+
+        /* Keyed by each operation's own identifier so the two cannot drift: core dispatches on
+           the array key and hands it back as a url parameter, and never calls get_identifier()
+           at all - so nothing outside this plugin would notice them disagreeing. */
+        $operations = [];
+        foreach ($offered as $operation) {
+            $operations[$operation->get_identifier()] = $operation;
+        }
+
+        return $operations;
+    }
+
+    /**
      * Returns the action icons shown for this instance on the course enrolment methods page.
      *
      * @param stdClass $instance Course enrol instance.
