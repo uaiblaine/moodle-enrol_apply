@@ -1,157 +1,183 @@
 # Handoff — read this before touching anything
 
-State at the end of the session of 2026-08-27. **Everything is merged; nothing is in flight.**
+State at the end of the session of 2026-08-28. **Everything is merged; nothing is in flight.**
 
-- `master` at `aabbf0a`, working tree clean, no open pull requests.
-- `version.php` is `2026082700`.
-- **314/314 PHPUnit on m501 and m502**, Behat 4 scenarios, the full matrix audited leg by leg
-  (7 legs, MariaDB and PHP 8.2 included) — every leg exactly 314 tests and 4 scenarios.
+- `master` at `6794897`, working tree clean, no open pull requests.
+- `version.php` is `2026082702`.
+- **324/324 PHPUnit on m501 and m502**, Behat 5 scenarios, the full matrix audited leg by leg
+  (7 legs, MariaDB and PHP 8.2 included) — every leg exactly 324 tests and 5 scenarios.
 
 ## What landed this session
 
 | PR | What |
 |---|---|
-| [#36](https://github.com/uaiblaine/moodle-enrol_apply/pull/36) | **Previous/next navigation on the review page**, plus the redirect defect it uncovered. |
-| [#38](https://github.com/uaiblaine/moodle-enrol_apply/pull/38) | **The submitted profile details on the review page.** |
+| [#41](https://github.com/uaiblaine/moodle-enrol_apply/pull/41) | **The "Decide this application" icon on the participants page.** |
+| [#42](https://github.com/uaiblaine/moodle-enrol_apply/pull/42) | **Two dead seams in the decision path, one of which could throw.** |
 
-That closes items 1 and 2 of the previous handoff. The implementation plan and its follow-on
-list are now down to the smaller items below.
+That closes item 1 of the previous handoff and two of its smaller items.
 
-## Facts the PREVIOUS handoff stated that are now obsolete
+## Facts the PREVIOUS handoff and the design docs stated that are now obsolete
 
 Read this section before trusting anything else you remember about this plugin.
 
-- **"Carry the scope as `id=`… `manage.php` already authorises that parameter" is FALSE**, and
-  building on it would have let a request parameter choose which applications are enumerated.
-  `manage.php` tests `userenrol` before `id` in an `else if`, so on the review path `$id` is read
-  into a variable and then never authorised and never used. The scope is now DERIVED from the
-  operator by `queue::scope()`. Do not reintroduce a scope parameter.
-- **"table_sql stores the operator's choice in the `flextable_enrol_apply_manage_table` user
-  preference" is FALSE.** `flexible_table::$persistent` defaults to false on both branches and
-  this table never calls `is_persistent(true)`, so the sort AND the initials filter live in
-  `$SESSION->flextable['enrol_apply_manage_table']`.
-- **mod_book's skip-the-candidates-that-fail loop was deliberately NOT copied.** The previous
-  handoff recommended it as "what a per-row gate needs". It is unnecessary here and would have
-  been an unreachable guard: the three scopes are `can_manage_application()`'s three levels, so
-  every application the walk reaches is decidable by construction. A test per scope holds it.
-- **The initials-bar question is DECIDED: the walk does not honour it.** See
-  `queue::neighbours()`'s docblock and `CLAUDE.md` for the three measurements behind it, including
-  why turning the bar off would not have closed the gap.
+- **`docs/design/audit-trail-analysis.md`'s "The custom action icon" section is SUPERSEDED** and
+  now carries a block saying so. Do not follow its instructions. It said the icon "must point at
+  `manage.php?id=<enrolid>` and **not** `?userenrol=`", which was true only of the review page's
+  old user-context-only gate; `queue::require_review_access()` admits the course teacher, and the
+  icon ships pointing at `?userenrol=`. Its "Measured markup on m502" block was a **sketch** and
+  never shipped — the real anchor is in that annotation and in `CLAUDE.md`.
+- **"`user/amd/src/status_field.js` claims exactly three action names, so any other `data-action`
+  is inert" is FALSE**, and it was written into `lib.php`, `CLAUDE.md` and a Behat comment before
+  being measured. The participants table is a `core_table\dynamic` table, and `core_table/dynamic`
+  also claims `a[data-action="hide"]`, `a[data-action="show"]` and `[data-action="showcount"]`
+  anywhere inside `[data-region="core_table/dynamic"]`. **Five** values, two lists, growing
+  independently. The shipped link carries no `data-action` at all.
+- **"`get_user_enrolment_actions()` has no precedent at all" is FALSE as stated.** No core enrol
+  plugin OVERRIDES it — that half is measured and holds — but **eight** core plugins ship a
+  `test_get_user_enrolment_actions()`, and `enrol/manual/tests/lib_test.php:493` is the shape this
+  plugin's test file follows. The claim was written in a session that had already read one of the
+  eight.
+- **`chosen_groups()`'s empty-array branch was not "unreachable code to consider deleting", it was
+  a latent crash**, and it is fixed. The caller branches on `=== null` and hands anything else to
+  `get_in_or_equal()`, which refuses an empty array outright. Unreachable through the writer;
+  reachable through a **restore**, which writes that column from a foreign archive. It now returns
+  null for anything naming no group.
+- **`add_instance_groups()`'s dead default is gone.** Nothing to re-check.
+- **Never carry one branch's line number under a claim measured on both.** `CLAUDE.md` said
+  `user/classes/table/participants.php:355` was "the only live caller … measured on both
+  branches"; on 5.1 it is `:347`. Five separate review lenses caught that one line.
+- **The masking-on-the-course-context product question still stands** (a mentor loses the identity
+  fields on the review page's snapshot panel). Unchanged, still pinned by
+  `test_the_masking_is_judged_in_the_course_and_not_at_system_level`.
 - **"The full participants-page lock is DECIDED AGAINST" still stands** (2026-08-25). Unchanged.
-- **The review page's snapshot panel does NOT read the live profile, and must never learn to.**
-  The first version of it showed "what the profile says now" beside each submitted value, by
-  handing the stored field key to `fields::current_value()`. That key comes out of `userinfodata`,
-  which `restore_enrol_apply_plugin` writes **verbatim from a foreign archive**, and
-  `current_value()` dereferences whatever `{user}` column an `s_` key names with no allowlist —
-  the `DENY` list governs the WRITE path only. Measured on m502 with a crafted envelope: **the
-  panel rendered the applicant's password hash**, to any reader for whom `visible_keys()` returns
-  `ALL_FIELDS`, which is every teacher and manager. `test_the_panel_never_reads_the_live_profile_for_a_stored_key`
-  holds it now. If a "versus profile now" comparison is ever wanted, it needs the key validated
-  against the live field set first, and core's own `PROFILE_VISIBLE_*` gates applied on top.
-- **Masking on the COURSE context costs a mentor the identity fields**, and that is an open
-  product question rather than a settled one. They hold nothing in the course, so the panel gives
-  them the name fields only. It is the stricter reading, and the one the report already took;
-  `test_the_masking_is_judged_in_the_course_and_not_at_system_level` pins the context so a change
-  of mind is a deliberate edit rather than a drift.
 
 ## What is left, in the order I would take it
 
-### 1. The "Decide this application" action icon on the participants page
+### 1. The privacy export of three declared-but-unexported columns
 
-The cheapest remaining item, and the only one with a shape already worked out. `?userenrol=<ueid>`
-is the natural target and lands on a page built for one decision. No core enrol plugin does this,
-so there is no precedent to copy, and it needs a status gate or it renders on approved rows.
+`outcomemessage`, `decidedgroups` and `decidedrole` are declared in the privacy metadata and
+appear nowhere in `export_submissions()`'s object. Re-measured 2026-08-28 against the current
+master, by grep, not by memory. The metadata is right — the plugin does store them — so the fix is
+to export, not to undeclare.
 
-### 2. The audit recommendations
+**One trap is already visible and will bite.** A role name has no single spelling:
+`role_get_name()` runs `format_string()` only when `role.name` is non-empty, and **every role a
+stock site ships has an empty one**, so the value arrives unescaped for those and escaped for a
+site's own custom roles. A privacy export is data rather than HTML and wants the plain spelling
+deliberately, not by accident. `CLAUDE.md`'s "Escaping an admin-set name" section is the reference.
 
-From `audit-trail-analysis.md`. The read-side half is done (#28), and the full participants-page
-lock is decided against (2026-08-25, do not reopen without a new reason). The action icon above
-was the third recommendation and is the only one left, which is why it has a section of its own -
-an earlier version of this file repeated it here verbatim and made the list look longer than it is.
+### 2. `decidedgroups` and `decidedrole` through backup/restore
 
-### 3. Smaller things, all measured and all still open
+Still zero occurrences in either backup class. Group and role ids are course- and site-local, so
+it needs `get_mappingid()`, and a restore of an older archive needs `?? 0` on the read —
+`restore_enrol_apply_plugin` casts the parsed chunk to an object and every current read is bare,
+which is an `E_WARNING` under `--fail-on-warning` the moment an element is added after the fact.
 
-Each one re-measured against `master` at `73f116b` on 2026-08-27, by grep rather than by memory:
-`add_instance_groups()` still declares the default and still has one caller; `decidedgroups` and
-`decidedrole` appear **zero** times in either backup class; all three columns appear in
-`provider.php` only inside the metadata declaration, never in `export_submissions()`'s object; and
-`timestart` appears nowhere in `manage.php`, `classes/bulk/` or `renderer.php`. An earlier version
-of this line claimed a re-verification against the previous master that had not been done.
+**Note the ordering that made this safe to attempt at all.** `decidedgroups` is a CSV column, and a
+restore is exactly the route that can write a list whose ids all fail to map. Until #42 that value
+crashed the approval; now it falls back to the instance's own groups. Do not undo that.
 
-- **`decidedgroups` and `decidedrole` are not carried by backup/restore.** Group and role ids are
-  course- and site-local, so it needs `get_mappingid()`, and a restore of an older archive needs
-  `?? 0` on the read — `restore_enrol_apply_plugin` casts the parsed chunk to an object and every
-  current read is bare, which is an `E_WARNING` under `--fail-on-warning` the moment an element is
-  added after the fact.
-- **`outcomemessage`, `decidedgroups` and `decidedrole` are declared in the privacy metadata and
-  exported nowhere.** Decide which way it should go.
-- **The enrolment-period branches of `confirm_enrolment()` are still unreachable from the UI.**
-  Neither `manage.php`, nor the bulk decision form, nor the review page supplies
-  `timestart`/`timeend`. The only caller that does is a unit test, whose green makes the branch
-  look exercised. Either finish it or delete it.
-- **`add_instance_groups()`'s `int $userenrolmentid = 0` default is dead** (`lib.php`) — one
-  caller, always passing the id. Same species as the queue table's removed parameter.
-- **`chosen_groups()`'s empty-array branch cannot be consumed** (`classes/local/submission.php`).
+### 3. The enrolment-period branches of `confirm_enrolment()` — a product decision, not a defect
+
+Still unreachable from the UI. Neither `manage.php`, nor the bulk decision form, nor the review
+page supplies `timestart`/`timeend`; the only caller that does is
+`tests/outcome_message_test.php:539`, whose green makes the branch look exercised. **Finishing it**
+means date controls on the review page and the queue. **Deleting it** removes an API capability no
+screen reaches. Left open deliberately for the owner to choose.
+
+### 4. Smaller things, all measured against this master on 2026-08-28
+
 - **A core defect, not fixable from here:** the participants page renders a waiting-list row
-  (`ENROL_APPLY_USER_WAIT = 2`) as a green **"Active"** badge.
-- **A bulk decision reaches ONE apply instance per course.** Not fixable from here.
+  (`ENROL_APPLY_USER_WAIT = 2`) as a green **"Active"** badge. Note the framing, which the
+  CHANGELOG got wrong once: the value is **this plugin's own** third value in a column core defines
+  two for, so it is not a bug to report upstream.
+- **A bulk decision reaches ONE apply instance per course.** Not fixable from here. The new action
+  icon does not have this limitation — a user enrolment id names its own instance.
+- **`user/templates/status_field.mustache` hardcodes `role="button"`** on every enrol action
+  anchor. Core's three are JS-driven buttons; this plugin's is a real navigation link, so it is
+  announced as a button and Space does not activate it. Core's markup, not fixable here.
 - **If the full history is ever wanted**, the shape is a decision-log table, not more status values.
 
 ## How to work here
 
 Unchanged unless marked NEW. The NEW ones all cost real time this session.
 
+### NEW — the verification ladder. Do not verify everything at the same depth.
+
+An adversarial pass that spawns two verifier agents per finding is mostly waste: 24 findings became
+48 agents, several of them re-reading the whole slice to settle "is that line number right on 5.1?"
+Use the cheapest instrument that can settle the claim, and escalate only when it cannot:
+
+| Tier | Instrument | Use for |
+|---|---|---|
+| 0 | cluster findings by SUBJECT; ≥2 independent lenses ⇒ treat as real, verify nothing | duplicates |
+| 1 | one `grep`/`sed`/`php -r` you run yourself | any file:line, core-behaviour or string claim |
+| 2 | one run of the mutation harness | "no test would catch this" |
+| 3 | one agent; a panel only for HIGH findings that would change shipped behaviour | genuine judgement |
+
+Two things this got right that are worth keeping. **Cluster by subject, not by title** — five lenses
+reported the same line-number defect under five different titles, and a title-keyed dedup bought
+five verifier pairs for one fact. And **a "reproducer" agent is a worse instrument than running the
+code**: the one finding that mattered ("widening the gate to `can_manage_application()` leaves every
+test green") was settled by a mutation run, which both proved it and produced the fix.
+
+Keep the FINDER fan-out wide. Five lenses over one small slice produced 29 findings in 15 clusters,
+six of them confident wrong sentences of mine. Breadth found things; depth mostly re-litigated them.
+
+### NEW — silence is not a result
+
+**The mutation harness must fail loudly when a run produces no PHPUnit verdict line at all**, not
+only when its restore fails. Two mutations "reddened nothing" this session because m502's versions
+hash had shifted underneath them and the suite never ran; the harness printed an empty section.
+It now hard-exits on a missing verdict line **and** prints each run's test count. The same shape
+bit `mdl phpunit m501`, which printed no `OK (…)` line at all — an outdated environment, invisible
+to any grep for failures.
+
+### NEW — Perl interpolates BOTH sides, and `\Q…\E` does not stop it
+
+`\Qif (!has_capability('…', $manager->get_context()))\E` matches **nothing**, because `$manager`
+interpolates to the empty string inside `\Q`. The replacement side does it too: a replacement
+containing `$row->decidedgroups` produced `->decidedgroups`. Escape every `$` on both sides, and
+verify a mutation matched **exactly one line** before running it — the icon's capability gate is
+byte-identical to `get_bulk_operations()`'s, and only `return $actions;` tells them apart. This is
+the same family as the Python form recorded last session, so treat it as language-independent:
+**never build source text with an interpolating string, and always diff the result.**
+
+### NEW — the fleet can break your stack mid-run
+
+Another session added a plugin to `~/dev/moodle-dev/plugins.conf` while this one was running. Both
+stacks carried an empty bind mount for it, which broke `core\component::get_all_versions()`, changed
+the versions hash, aborted PHPUnit at bootstrap, and restarted m502's containers under a Behat run.
+Symptoms to recognise: `Failed opening '…/version.php'`, `plugin_manager.php:320` warnings, and
+`Moodle PHPUnit environment was initialised for different version`. It is not your change.
+`mdl phpunit-init` re-stamps it once the mount is real.
+
+**Related, and unresolved at the end of this session: the m502 BEHAT site fails on core scenarios.**
+`@enrol_self` fails 3 of 17, and an `@enrol_apply` run aborted with `Undefined variable $CFG in
+lib/filelib.php`. That is site-wide and nothing to do with this plugin — the same plugin code passed
+Behat on all 7 isolated matrix legs the same hour. **Use `mdl ci --matrix --behat` as the Behat gate
+until the local site is repaired**, and do not read a local Behat failure as a regression without
+running a core tag first.
+
+### Unchanged
+
 - **Mutation-check every guard**, and **count the tests, not the failures**. A version bump stales
   the PHPUnit environment — re-initialise after every bump, before the mutations.
-- **Make the harness print the `OK (N tests, …)` line, not only `Tests:`.** PHPUnit prints
-  `Tests:` on failure and `OK (…)` on success.
-- **A mutation that reddens nothing is a finding.** It happened twice this session and was right
-  both times: renaming `render_application_navigation()` reddened nothing because
-  `renderer_base::render()` resolves the template from the CLASS NAME, so the method was deleted
-  and the wrong prose with it.
-- **NEW — never give a subagent write access to the working tree.** An adversarial reviewer
-  deleted a production guard from `queue.php` to test a finding and did not restore it. The suite
-  was green at the time because no test held that guard, so it sat in the tree unnoticed until a
-  later test caught it. Have reviewers work read-only, or in a copy. Scratch test files they leave
-  behind (`tests/**/zz*_test.php`) also contaminate any matrix leg that starts afterwards — one
-  leg ran 304 tests instead of 303 that way.
-- **NEW — the mutation harness must abort loudly when its restore fails, and only one run may be
-  in flight.** A stray file in the pristine directory made `restore` raise a `KeyError` that the
-  runner ignored, so mutations STACKED and three results were measured against the wrong code; and
-  two overlapping runs produced a report where one mutation "reddened nothing" purely because the
-  other run had restored the tree underneath it. Both are fixed in the scratchpad harness (hard
-  exit on restore failure, lock file), but rebuild those guards if you write a new one.
-- **NEW — an adversarial pass can die on the weekly subagent limit mid-flight, and findings whose
-  verifiers all died show as DISMISSED with `votes=0/0`.** They are UNJUDGED, not refuted. Ten of
-  them were unjudged in the first pass and several were real, including two HIGHs that no test
-  held. Read the vote count, never the bucket.
-- **NEW — run the adversarial pass. The second one found a HIGH-severity disclosure in code that
-  was already green, mutation-checked, matrix-clean and verified on the live site.** Twenty
-  confirmed findings over one small slice. The defect was mine and the shape is worth
-  remembering: a feature added *beyond the brief* (a "profile now" comparison nobody asked for)
-  was the entire attack surface, and the comment justifying it — "only for a row already judged
-  visible, so the live value cannot widen what the masking allowed" — was false exactly where the
-  exposure was. **When a slice grows a capability the plan did not ask for, that is the part to
-  attack first.**
-- **The adversarial pass's VERIFIERS can be wrong, and being wrong is the expensive direction.**
-  This session a finding dismissed 1/1 ("the empty-mentee guard is held by no test") was correct.
-  **Measure any dismissed finding whose subject is a claim you wrote yourself.**
-- **NEW — never build PHP source with a non-raw Python string.** `\core_user\fields` becomes
-  `\core_user` + a FORM FEED, and the failure surfaces as `Class "…" not found` from the
-  autoloader across 54 unrelated tests rather than as a syntax error at the site of the damage.
-  Use raw strings or quoted heredocs, and scan for control characters after generating a file.
-- **The most expensive defect here is a confident wrong sentence.** This session produced five,
-  every one of them load-bearing: that `can_access_course()` with a capability was "the pair
-  `manage.php?id=` demands" (it is not — `$onlyactive` defaults to false, so a suspended or
-  expired enrolment passes); that a base `render_` method was what made a renderable
-  theme-overridable; that "only `get_initial_first()` consults `use_initials`"; that the no-queue
-  scope needed a hidden course; and that LEFT joins "cannot change which rows exist". All five now
-  say what was measured and say that an earlier draft claimed more.
-- **Never restore a mutation with `git checkout <file>`.** Copy to the scratchpad first.
-- `git worktree prune` before every test run. Never edit the tree while the matrix runs. Read the
-  per-leg logs rather than the summary line, with anchored patterns (`^-- [a-z]+: FAILED$`) and
-  check every leg's TEST COUNT. One PR per unit of review, and `--repo uaiblaine/moodle-enrol_apply`
-  on every `gh` call. Never pass `--delete-branch` when another PR is stacked on that branch.
+- **A mutation that reddens nothing is a finding**, and so is one that reddens somewhere you did
+  not predict: check WHICH assertion fired. A docblock here claimed a mutation "goes red with the
+  exception"; it goes red on the test's own premise assertion, which runs first.
+- **NEVER give a subagent write access to the working tree.** Read-only reviewers, and say so in
+  the prompt. Scratch files left in `tests/` contaminate every later run.
+- **Run the matrix with `--keep-logs`.** A passing run deletes them, and the per-leg audit — exit
+  code, PHPUnit count, scenario count, anchored `^-- [a-z]+: FAILED$` — is the point.
+- **Never edit the tree while the matrix runs.** Done by accident this session; the run was killed
+  and restarted rather than read across two states.
+- `git worktree prune` before every run. One PR per unit of review, `--repo uaiblaine/moodle-enrol_apply`
+  on every `gh` call, and no `--delete-branch` where another PR is stacked on that branch.
+- **On a `version.php` merge conflict, keep the HIGHER number.** Two PRs branched from the same
+  master this session and this is exactly how it resolved.
+- **The most expensive defect here is a confident wrong sentence.** Six this session, every one
+  load bearing, every one caught by measuring rather than reasoning. Each now says what was
+  measured and that an earlier draft claimed more.
 - **Nothing in this repository executes the plugin's JavaScript** except the `@javascript` Behat
-  scenarios, and **nothing renders CSS** — the RTL chevron rule added this session is verified by
-  reading the cascade, and says so, exactly like the sticky-footer polyfill.
+  scenarios, and **nothing renders CSS**.
