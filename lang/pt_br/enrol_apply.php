@@ -243,6 +243,7 @@ $string['submissiontimecreated'] = 'Enviada em';
 $string['submissiontimedecided'] = 'Decidida em';
 $string['submitapplication'] = 'Enviar solicitação';
 $string['submitted_info'] = 'Informações da solicitação';
+$string['submittedprofile'] = 'Dados enviados com esta solicitação';
 $string['syncenrolmentstask'] = 'Sincronização de matrículas expiradas';
 $string['updateprofile'] = 'Salvar no meu perfil';
 $string['user_profile'] = 'Perfil do usuário';

@@ -52,6 +52,13 @@
     * comment string - what the applicant wrote, ALREADY escaped and with its line breaks
       converted by format_text(FORMAT_PLAIN), which is why it is triple stashed
     * nocomment string - what to say when they wrote nothing
+    * hassnapshot boolean - whether the applicant submitted any profile detail this reader may see
+    * snapshotlabel string - heading of the submitted-details list
+    * snapshot array - one entry per submitted field the reader may see, each with the label and
+      the value as they were submitted, both the PLAIN spelling and output through double
+      stashes. A value can hold newlines, because a textarea custom field is offerable, so the
+      cell carries the same white-space rule the report's own free-text cells do rather than
+      converting them to markup
     * everything enrol_apply/decision_controls requires
     * actions array - one entry per decision, each with a formaction value, its label, and a
       primary flag choosing between the primary and the secondary button style
@@ -74,6 +81,12 @@
         "hascomment": true,
         "comment": "I would like to join this course.",
         "nocomment": "The applicant did not write anything.",
+        "hassnapshot": true,
+        "snapshotlabel": "Details submitted with this application",
+        "snapshot": [
+            {"label": "City/town", "value": "Ouro Preto"},
+            {"label": "Registration number", "value": "2026-0042"}
+        ],
         "hasgroups": true,
         "grouplabel": "Groups to join on approval",
         "grouphelp": "Leave empty to use the groups configured on the enrolment method.",
@@ -114,6 +127,17 @@
             {{^hascomment}}<span class="text-muted">{{nocomment}}</span>{{/hascomment}}
         </dd>
     </dl>
+    {{#hassnapshot}}
+        <div class="enrol_apply-snapshot mt-3">
+            <h3 class="h5">{{snapshotlabel}}</h3>
+            <dl class="row">
+                {{#snapshot}}
+                    <dt class="col-sm-3">{{label}}</dt>
+                    <dd class="col-sm-9 enrol_apply-linebreaks">{{value}}</dd>
+                {{/snapshot}}
+            </dl>
+        </div>
+    {{/hassnapshot}}
     {{> enrol_apply/decision_controls }}
     <div class="enrol_apply-reviewactions mt-3 d-flex flex-wrap gap-2">
         {{#actions}}

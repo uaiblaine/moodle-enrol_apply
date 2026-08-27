@@ -245,6 +245,7 @@ $string['submissiontimecreated'] = 'Submitted on';
 $string['submissiontimedecided'] = 'Decided on';
 $string['submitapplication'] = 'Submit application';
 $string['submitted_info'] = 'Enrol info';
+$string['submittedprofile'] = 'Details submitted with this application';
 $string['syncenrolmentstask'] = 'Apply enrolment synchronise expired enrolments task';
 $string['updateprofile'] = 'Save to my profile';
 $string['user_profile'] = 'User Profile';
