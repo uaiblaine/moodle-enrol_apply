@@ -91,11 +91,58 @@ backup/                      group mappings, comments and the durable trail, see
   the same place anyway, because one decision landing somewhere else than the other two would
   be stranger than all three landing on the queue.
 
-  **Which queue is chosen by `can_access_course()`, not by which context granted access.** The
-  instance scope calls `require_login($course)`, which the review page deliberately does not, so
-  a system-level grant carrying no course access would be bounced off its own landing page. The
-  no-parameter scope refuses a course teacher outright. Neither url serves everybody, so the
-  test has to be the specific one.
+  **Which queue is chosen by `queue::scope()`, and it answers TWO questions that must never
+  disagree** — where a decision sends the operator back to, and which applications the
+  previous/next links walk. It is derived from what the operator may open, never from the
+  request: `manage.php` tests `userenrol` before `id`, so on the review path `$id` is read into
+  a variable and then never authorised and never used. A walk built on it would let a request
+  parameter choose which applications are enumerated, and the plan for this navigation said to
+  carry the scope exactly that way, on the belief that `manage.php` had already authorised it.
+
+  The three scopes are `can_manage_application()`'s three levels in the same order — the
+  instance queue when the operator may open it, the site-wide queue for a system grant, the
+  mentees otherwise — which is what makes every application the walk can reach one the operator
+  may decide, **by construction rather than by a per-candidate check**. `mod_book`'s
+  skip-the-candidates-that-fail loop is therefore deliberately absent; a test per scope holds the
+  property instead.
+
+  **The access test is `can_access_course($course, null, 'enrol/apply:manageapplications', true)`
+  and all four arguments are load bearing.** Two separate defects lived here, and the second one
+  hid behind a confident sentence about the first.
+
+  Dropping the CAPABILITY: with the bare `can_access_course($course)` that stood here first, a
+  mentor enrolled in the course as anything at all satisfied it, was redirected to
+  `manage.php?id=` after deciding, and was refused by its `require_capability()` — the decision
+  taken and applied, reported as an exception.
+
+  Dropping `$onlyactive`: the three-argument form was then documented as "the pair
+  `manage.php?id=` itself demands". **It is not.** `can_access_course()` defaults `$onlyactive`
+  to false and reaches `is_enrolled()` with it, so a **suspended or expired** enrolment counts as
+  access, while `require_login($course)` refuses both. Measured on 5.1 and 5.2 over five
+  operators — active teacher, suspended teacher, expired teacher, category manager, unenrolled
+  category teacher — the four-argument form agrees with `require_login()` on every one; the
+  three-argument form disagrees on the suspended and the expired one, who kept the capability,
+  decided, and were bounced to `/enrol/index.php`. A role assignment survives a suspension, which
+  is what makes that operator both legitimate and broken.
+  `test_a_mentor_enrolled_in_the_course_still_walks_their_mentees` and
+  `test_a_teacher_whose_own_enrolment_is_suspended_opens_no_queue` pin the two halves.
+
+  **The scope must CONTAIN the application it was derived for**, which is a second property and
+  not the same one. `neighbours()` compares the anchor's `(timecreated, ue.id)` against the scoped
+  set, so anchored outside it the page offers insertion-point neighbours — a "next" in another
+  course, and no link back to the application on screen. The mentee branch used to be taken
+  whenever the operator mentored *anybody*, so `scope()` now takes the application and tests
+  membership. The first two branches contain it by construction.
+
+  **An operator can legitimately be able to open NO queue**, and that case is reachable rather
+  than defensive. The plainest route is the capability held at a course context through a category
+  role by somebody not enrolled — **on a visible course**; hiding it is one sufficient condition
+  among several, not the mechanism, and an earlier version of this bullet said it was. A teacher
+  whose own enrolment is suspended lands here too, and so does a mentor looking at an application
+  none of their mentees made. They are sent to `destination::home_page_url()`, because both queues
+  would refuse them. `neighbour()`'s empty-mentee early return is that branch's other half:
+  `get_in_or_equal()` throws on an empty array, and
+  `test_an_application_outside_the_mentees_gives_no_walk_at_all` is what holds it.
 
   **The group and role choosers are gated on the COURSE capability, which is stricter than the
   page.** A mentor reaches the page through the applicant's user context and holds nothing in
@@ -103,6 +150,63 @@ backup/                      group mappings, comments and the durable trail, see
   `get_assignable_roles()`, which self-gates and would have come back empty for them anyway. So
   without that gate the page listed every group name in a course the reader cannot open. The
   instance's own groups and role still apply to their decision.
+
+- **The previous/next walk is SQL, one `LIMIT 1` per direction, and it is pinned in order and in
+  set.** `queue::neighbours()` runs the queue's own predicate plus the scope clauses with a
+  strict comparison against `(timecreated, ue.id)` — the unique final key #33 put on the
+  listing's ORDER BY, needed here for the same reason and needed *more*: without it "later than
+  this timestamp" cannot move within a tied group at all, and `enrol_user()` stamps whole
+  seconds, so a cohort admitted by one script is one tied group. Measured on the live 5.2 site,
+  three pending applications already share a timestamp and the walk steps through all three.
+
+  **`:t` twice is `duplicateparaminsql`.** The comparison needs the timestamp in two places, so
+  it binds two NAMES to one value; `fix_sql_params()` counts occurrences.
+
+  **The walk does NOT honour the initials bar, and that is a decision.** The queue renders with
+  `out(50, true)` and `query_db()` appends `get_sql_where()` — `firstname LIKE 'x%'` — so an
+  operator who has picked a letter is looking at a narrower set than the predicate describes.
+  Three measurements settled it. Turning the bar off would NOT close the gap:
+  `set_initials_preferences()` runs from `setup()` whatever the `$useinitialsbar` argument says,
+  and only `get_initial_first()` consults `use_initials`, so a stale preference or a crafted
+  request parameter still filters — the control disappears, the filter does not. The load-bearing
+  fact is that `get_sql_where()` never consults `use_initials` at all, only `prefs['i_first']` and
+  `prefs['i_last']`; an earlier version of this bullet said "only `get_initial_first()` consults
+  `use_initials`", which is wrong three ways over — `get_initial_last()` and
+  `print_initials_bar()` read it too, and none of them is the filter. The preference
+  itself lives in `$SESSION->flextable['enrol_apply_manage_table']`, **not** in a user preference:
+  `flexible_table::$persistent` defaults to false on both branches and this table never calls
+  `is_persistent(true)`. And honouring it would make the page depend on session state it does
+  not render, so a bookmarked or emailed review link would lose its neighbours because of a
+  letter clicked days earlier — invisible, which is the failure mode this repo treats as the
+  defect. Not honouring it fails visibly instead, because the link names the applicant.
+
+  **Test the walk against the LISTING, not against a hand-written expectation.**
+  `test_the_walk_visits_exactly_what_the_queue_lists_and_in_its_order` walks from one row to both
+  ends and compares with `enrol_apply_manage_table`'s own rows. Sharing code between the two
+  would only make them agree on whatever that code said; this asserts the behaviour, so a scope
+  clause, a join or an order that drifts on either side reddens it.
+
+- **Copying core markup copies its class names, not their meaning.** The navigation is shaped on
+  `mod_book`'s, and `btn-previous`/`btn-next` are defined **nowhere in core** — only in
+  `mod/book/styles.css` under `.path-mod-book` (measured: zero occurrences in Boost's compiled
+  sheet). On another page they style nothing while reading as though they carried mod_book's
+  behaviour, so they are deliberately not used here. What they carry *there* is the one rule that
+  matters: **a right-to-left flip for the chevrons, which core does not apply to any icon but
+  `fa-question`.** `core_rtlcss` mirrors the layout, so "previous" correctly moves to the right
+  edge in an RTL language while its arrow keeps pointing left — the arrow ends up meaning the
+  opposite of the link. This plugin's `styles.css` carries that rule on its own wrapper class.
+  Nothing here renders CSS, so it is verified by reading the cascade, like the sticky-footer
+  polyfill, and says so.
+
+- **`renderer_base::render()` resolves a `templatable` from its CLASS NAME**, so a
+  `render_<class>()` method on the plugin renderer is not what makes the template render.
+  Measured: renaming `render_application_navigation()` under the whole suite reddened **nothing**
+  — `plugin_renderer_base::render()` finds no method, falls through to `$this->output->render()`,
+  and core guesses `enrol_apply/application_navigation` from the namespace and class. The method
+  was deleted rather than kept with a corrected comment: its only claim was one no test here
+  could hold. What IS load bearing is the class-name-to-template-name coupling — renaming the
+  template errors both rendering tests, which is the mutation that replaced the one that held
+  nothing.
 
 - **One SQL definition of "awaiting a decision", in `queue::awaiting_decision_where()`** — read
   by the approval queue, the submitted-comments listing, the review lookup and the retention

@@ -203,11 +203,34 @@ class enrol_apply_renderer extends plugin_renderer_base {
      * @param stdClass $applicant Applicant user record.
      * @param stdClass $instance Enrol instance the application belongs to.
      * @param moodle_url $manageurl Url the decision form posts back to.
+     * @param \enrol_apply\output\application_navigation $navigation Links to the neighbouring
+     *        applications. Required, and not defaulted to null: manage.php always resolves a
+     *        pair before it renders, so a "not being walked" mode would be a parameter claiming
+     *        a state the plugin never produces - the same claim the queue table's own removed
+     *        constructor parameter was making. The navigation renders as nothing on its own
+     *        when there is no neighbour either way, which is what a queue of one needs.
      * @return void
      */
-    public function review_page($application, $applicant, $instance, $manageurl) {
+    public function review_page($application, $applicant, $instance, $manageurl, $navigation) {
         echo $this->header();
         echo $this->heading(fullname($applicant));
+        /* Above the form, where core puts a tertiary navigation bar, and not below it:
+           the last control an operator reads before a decision should be the decision.
+
+           render() resolves the template from the CLASS NAME - renderer_base::render()
+           falls back to "<component>/<class>" for any templatable with no render_ method,
+           so this reaches enrol_apply/application_navigation with nothing else declared.
+           A render_application_navigation() method here is deliberately not written: adding
+           it changed no byte of any page, measured by renaming it under the whole suite,
+           which stayed green - so it would be a method whose only claim was one no test in
+           this repository could hold. Nor does its absence cost a theme anything, which an
+           earlier draft of this comment got backwards: render() dispatches on
+           method_exists($this, ...) against the CONCRETE renderer, so a theme's own
+           enrol_apply renderer subclass can declare that method and have it called with
+           nothing declared here at all. The coupling that IS load bearing is the class name
+           to the template file name, and renaming either without the other throws, which
+           the two rendering tests hold. */
+        echo $this->render($navigation);
         echo $this->review_form($application, $applicant, $instance, $manageurl);
         echo $this->footer();
     }

@@ -77,21 +77,19 @@ if ($userenrol) {
     $manageurlparams['userenrol'] = $userenrol;
     $pageheading = fullname($applicant);
 
-    /* Where a decision sends the operator. Not back here: two of the three decisions leave
-       this url reviewing an application that is no longer awaiting one, and landing on
-       "nothing to decide" having just decided it reads as a failure. Deferring is the
-       exception - a waiting-list application is still awaiting a decision and the page would
-       render again perfectly well - but sending one decision somewhere else than the other
-       two would be stranger than sending all three to the queue.
+    /* Which queue this operator is working in. It answers two questions that must never be
+       able to disagree - where a decision sends them back to, and which applications the
+       previous and next links walk - so it is resolved once, by queue::scope(), which also
+       records why it is derived from the operator rather than read out of the request.
 
-       WHICH queue is chosen by what the operator can open, not by which context let them in:
-       the instance scope calls require_login($course), which this page deliberately does not,
-       so a system-level grant that carries no course access would be bounced off its own
-       landing page. The no-parameter scope refuses a course teacher outright, so neither url
-       serves everybody and the test has to be the specific one. */
-    $afterdecisionurl = can_access_course(get_course($instance->courseid))
-        ? new moodle_url('/enrol/apply/manage.php', ['id' => $instance->id])
-        : new moodle_url('/enrol/apply/manage.php');
+       Not back to this page after a decision: two of the three decisions leave this url
+       reviewing an application that is no longer awaiting one, and landing on "nothing to
+       decide" having just decided it reads as a failure. Deferring is the exception - a
+       waiting-list application is still awaiting a decision and the page would render again
+       perfectly well - but sending one decision somewhere else than the other two would be
+       stranger than sending all three to the queue. */
+    $scope = \enrol_apply\local\queue::scope($application, $instance);
+    $afterdecisionurl = $scope->url;
 } else if ($id) {
     // Scope: one course enrolment instance.
     $instance = $DB->get_record('enrol', ['id' => $id, 'enrol' => 'apply'], '*', MUST_EXIST);
@@ -177,10 +175,15 @@ $renderer = $PAGE->get_renderer('enrol_apply');
 
 if ($userenrol) {
     // One application gets a page of its own rather than a queue filtered down to one row.
-    $renderer->review_page($application, $applicant, $instance, $manageurl);
+    $neighbours = \enrol_apply\local\queue::neighbours($application, $scope);
+    $navigation = new \enrol_apply\output\application_navigation(
+        $neighbours['previous'],
+        $neighbours['next']
+    );
+    $renderer->review_page($application, $applicant, $instance, $manageurl, $navigation);
     exit;
 }
 
-$table = new enrol_apply_manage_table($id, $userenrol, $mentees);
+$table = new enrol_apply_manage_table($id, $mentees);
 $table->define_baseurl($manageurl);
 $renderer->manage_page($table, $manageurl, $instance);

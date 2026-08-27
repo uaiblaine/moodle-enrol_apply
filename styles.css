@@ -43,3 +43,17 @@ body.path-enrol-apply:not(.jsenabled) #page.drawers {
        breaks are therefore drawn here, on the cell, where the export cannot see them. */
     white-space: pre-line;
 }
+
+.dir-rtl .enrol_apply-applicationnav .icon {
+    /* The previous/next chevrons must point the other way in a right-to-left language, and
+       nothing upstream does it for them. core_rtlcss mirrors the LAYOUT of the compiled sheet,
+       so the "previous" link correctly moves to the right edge, but the icon itself is untouched:
+       icon_system_fontawesome::render_pix_icon() flips exactly one glyph, fa-question, and Boost
+       ships no .dir-rtl chevron rule at all. mod_book, whose navigation this one is shaped on,
+       carries the same rule in its own stylesheet under .path-mod-book - copying its markup
+       without this is how the arrows end up pointing at the opposite of what the links do.
+
+       Verified by reading the cascade and the compiled theme CSS, NOT by an executing test:
+       nothing in this repository renders CSS. */
+    transform: scale(-1, -1);
+}

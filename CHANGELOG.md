@@ -59,7 +59,52 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   produced an empty list with no explanation; both now say what happened and offer the way
   back.
 
+- **The review page now walks the queue.** Reviewing one application was a dead end: the only
+  route to the next one was back to the list and down it again. Previous and next links now sit
+  above the decision, and each one names the applicant it leads to rather than pointing an arrow
+  at them.
+
+  Which queue is walked follows whoever is looking, and it is worked out from what they may
+  open rather than from anything in the link. Someone who can open a course's approval queue —
+  its teachers, and an administrator looking at that course — walks that course's applications.
+  Someone granted the permission across the whole site, but who cannot get into the course
+  itself, walks **every** application on the site, in every course. A mentor walks the
+  applications of the people they mentor, across every course those people applied to. Those are
+  the same three levels that decide who may take a decision at all, so every application the
+  links can reach is one the reader may decide — and if none of the three fits the application
+  being looked at, there are no links rather than the wrong ones.
+
+  The walk follows the queue's own order — oldest application first, and a stable order within a
+  group submitted in the same second — and not any order the queue has been re-sorted into. Nor
+  does it follow the alphabetical filter above the list. So the walk can disagree with the list
+  on screen, which is exactly why each link names its destination: whoever is reading can see
+  where "next" goes before they follow it.
+
+  Where a decision sends the operator is now the same question, answered once, so the two can no
+  longer disagree about which list is theirs. The links are also always links within the list the
+  application itself belongs to: a mentor looking at an application none of the people they mentor
+  made is offered no navigation, rather than a "next" in somebody else's course with no way back.
+
+### Changed
+
+- **For site-local customisations only:** `enrol_apply_manage_table`'s constructor lost its
+  second parameter, which restricted the queue to a single application and could no longer be
+  reached — the single-application view became a page of its own. The signature is now
+  `__construct($enrolid, $mentees)`. A surviving call of the old three-argument shape does not
+  error: PHP discards the extra argument and the old third value lands in `$mentees`, which
+  yields an empty queue that looks exactly like having no applications waiting.
+
 ### Fixed
+
+- **A decision could be applied and then reported as an error.** Where an operator was sent
+  after deciding was worked out from whether they could get into the course, rather than from
+  whether they could open its approval queue. Two kinds of operator fell in that gap: a mentor
+  who is also enrolled in the course as something else, and a teacher whose own enrolment has
+  been suspended or has expired — both keep the permission to decide, and neither can open the
+  queue. Their decision was taken and applied, and they were then shown a permission error or
+  bounced to the course's enrolment page, which reads exactly like the decision having failed.
+  Both now go where they can actually get to; an operator who can open no queue at all is sent
+  to their own home page rather than to one that will refuse them.
 
 - **Two applications submitted in the same second no longer trade places.** Moodle records an
   application's date to the second, so a cohort admitted by one script — or simply a busy

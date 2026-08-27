@@ -50,11 +50,16 @@ class enrol_apply_manage_table extends table_sql {
     /**
      * Build the table for the requested scope.
      *
+     * There used to be a third parameter restricting the table to ONE user enrolment, which is
+     * how a single application was shown before it got a page of its own. Since manage.php
+     * tests userenrol before id and leaves that branch through the review page, the only caller
+     * could only ever pass 0 for it, so the one-row mode was unreachable. It is removed rather
+     * than left in place: a constructor parameter is a claim that the mode exists.
+     *
      * @param int $enrolid Restrict to one enrol instance, 0 for no restriction.
-     * @param int $userenrolmentid Restrict to one user enrolment, 0 for no restriction.
      * @param array|null $mentees Restrict to these applicant user ids, null for no restriction.
      */
-    public function __construct($enrolid = 0, $userenrolmentid = 0, $mentees = null) {
+    public function __construct($enrolid = 0, $mentees = null) {
         global $DB;
 
         parent::__construct('enrol_apply_manage_table');
@@ -68,11 +73,6 @@ class enrol_apply_manage_table extends table_sql {
         } else {
             $wheres[] = 'e.enrol = :enrol';
             $params['enrol'] = 'apply';
-        }
-
-        if ($userenrolmentid) {
-            $wheres[] = 'ue.id = :userenrolmentid';
-            $params['userenrolmentid'] = $userenrolmentid;
         }
 
         if ($mentees !== null) {
