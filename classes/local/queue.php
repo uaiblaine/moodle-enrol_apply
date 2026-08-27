@@ -33,9 +33,12 @@ use stdClass;
  * that is also a correctness boundary drift, and the one that drifted was the newer.
  *
  * There is one deliberate second expression of the same rule, and it is not SQL:
- * \enrol_apply\bulk\decision_operation::awaiting_decision() applies it to the user enrolment
- * OBJECTS core's participants-page driver hands over, which never reach a query at all. Keep
- * the two in step by hand; there is no third.
+ * is_awaiting_decision() below applies it to a {user_enrolments} row that core has already
+ * loaded and that never reaches a query - the objects the participants-page driver hands to
+ * a bulk decision, and the one row behind each of that page's action icons. It lives here,
+ * next to the SQL, because it used to live in classes/bulk/ and the icon would have made a
+ * third copy of a filter that is also a correctness boundary. Keep the two in step by hand;
+ * there is no third.
  *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine
@@ -62,6 +65,45 @@ final class queue {
             ['ue.status != :active', '(ue.timeend = 0 OR ue.timeend > :now)'],
             ['active' => ENROL_USER_ACTIVE, 'now' => time()],
         ];
+    }
+
+    /**
+     * The same predicate, applied to a user enrolment row core has already loaded.
+     *
+     * The twin of awaiting_decision_where() above, and the only other place the rule is
+     * written out. Both callers are on core's participants page, which hands over
+     * {user_enrolments} rows rather than running a query of this plugin's: the bulk
+     * decisions, which get the selection, and get_user_enrolment_actions(), which gets one
+     * row per action icon it is asked to build.
+     *
+     * The second clause is the one that is easy to leave out and the reason this is not
+     * simply "not active". Under an expiredaction of suspend, process_expirations()
+     * re-suspends an ACTIVE enrolment whose period ran out, so somebody approved and enrolled
+     * long ago comes back reading exactly like a fresh application - and the participants
+     * page is where that row is most visible, since core paints its own status badge from the
+     * same status value with none of this context. Under the shipped default of
+     * ENROL_EXT_REMOVED_KEEP the row stays active and the first clause is what excludes it.
+     *
+     * It is written as "= 0", matching the SQL, rather than the "> 0 && <= now" the bulk copy
+     * used, and the two disagree on exactly one input: a NEGATIVE timeend, which the old
+     * object form reported as awaiting a decision and which the SQL has always excluded.
+     * Measured over {0, -1, -86400, now, now +/- 10}; -1 and -86400 are the only rows that
+     * move, and they move onto the side the queue was already on. Nothing this plugin writes
+     * produces one - the column is NOT NULL and core stamps 0 or a real timestamp - so it is
+     * a correction rather than a behaviour change, but it is a correction and is recorded
+     * here rather than left for somebody to rediscover from a diff.
+     *
+     * @param stdClass $userenrolment A {user_enrolments} row, carrying at least status and timeend.
+     * @return bool True when this enrolment is an application still awaiting a decision.
+     */
+    public static function is_awaiting_decision(stdClass $userenrolment): bool {
+        if ((int) $userenrolment->status === ENROL_USER_ACTIVE) {
+            return false;
+        }
+
+        $timeend = (int) $userenrolment->timeend;
+
+        return $timeend === 0 || $timeend > time();
     }
 
     /**

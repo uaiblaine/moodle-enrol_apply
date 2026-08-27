@@ -8,6 +8,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **An application can now be opened for a decision straight from the course participants
+  page.** A row awaiting one carries a new icon next to *Edit enrolment* and *Unenrol*, which
+  opens that application's own review page — who applied, what they wrote, what they submitted,
+  and the three decisions. Reaching it used to mean leaving the participants list, opening the
+  plugin's queue and finding the same person again.
+
+  The icon appears only where there is something to decide: an approved enrolment does not carry
+  it, and neither does one that was approved and has since lapsed. That second case is worth
+  knowing on a site whose *Action on enrolment expiry* is set to suspend, because Moodle then
+  shows the lapsed enrolment as *Suspended* on this very page, which is also how a fresh
+  application looks. On the default setting, which changes nothing when an enrolment expires,
+  Moodle shows it as *Not current* and it was never mistakable for an application.
+
+  The icon is also the only thing on a deferred applicant's row that says a decision is still
+  owed. Moodle paints a waiting-list enrolment with a green *Active* badge, and that is not a bug
+  to report: the waiting-list state is a third value this plugin stores in a field Moodle defines
+  two values for, so Moodle renders what it knows. It cannot be corrected from this plugin.
+
+  It is offered to whoever may decide applications in the course, which is the same reading the
+  bulk menu on this page takes. A mentor's permission is over a person rather than over a
+  course, so it is the plugin's own queue that serves them, exactly as before. Taking a decision
+  returns you to the list of applications you can open, not to the participants page.
+
 - **Applications can now be decided from the course participants page.** Confirming, deferring
   and cancelling used to be possible only on the plugin's own queue, so a teacher already
   looking at the participants list had to leave it and find the applicants again. The three
