@@ -18,7 +18,9 @@ namespace enrol_apply\local;
 
 use context;
 use context_course;
+use context_system;
 use context_user;
+use moodle_url;
 use stdClass;
 
 /**
@@ -104,6 +106,241 @@ final class queue {
                  WHERE ue.id = :ueid AND e.enrol = :enrol AND " . implode(' AND ', $wheres);
 
         return $DB->get_record_sql($sql, $params) ?: null;
+    }
+
+    /**
+     * Which queue this operator is working in, and where that queue lives.
+     *
+     * The review page is reachable by three audiences and each of them has a different queue
+     * behind it, so "the next application" has no meaning until this is settled. It is settled
+     * from what the operator may OPEN, never from the request: manage.php tests userenrol
+     * before id, so on the review path the id parameter is read into a variable and then never
+     * authorised and never used. A walk built on it would let a request parameter choose which
+     * applications are enumerated - and an earlier plan for this navigation said to carry the
+     * scope that way, on the belief that manage.php had already authorised it.
+     *
+     * Deriving it instead buys a property worth more than the parameter: every application the
+     * walk can reach is one this operator may decide, by construction rather than by a
+     * per-candidate check. The three scopes below are the three levels can_manage_application()
+     * accepts, in the same order:
+     *  - the instance queue, when the operator may open it, where every row is in that one
+     *    course and the course-context check passes for all of them;
+     *  - the site-wide queue, where the system-context check passes for all of them;
+     *  - the operator's own mentees, which get_mentees() enumerates by confirming the
+     *    capability in each candidate's user context - the same check, one candidate at a time.
+     *
+     * So mod_book's skip-the-candidates-that-fail loop, which is the shape a per-row gate
+     * usually needs, is not needed here and is deliberately absent: an unreachable guard no
+     * test can hold reads as protection while proving nothing. What holds the property instead
+     * is a test per scope.
+     *
+     * Every scope also CONTAINS the application it was derived for, which is a second property
+     * and not the same one. neighbours() compares the anchor's (timecreated, ue.id) against the
+     * scoped set; anchored outside that set it returns insertion-point neighbours instead of
+     * neighbours, so the application on screen is reachable from neither of its own links and
+     * "next" leads somewhere the operator cannot get back from. That is exactly the dead end
+     * this navigation exists to remove, and it was reachable: the mentee branch was taken
+     * whenever the first two failed and the operator mentored ANYBODY, including for an
+     * application belonging to none of their mentees. The first two branches contain the anchor
+     * by construction; the third has to test for it.
+     *
+     * This is also the one answer to "where does a decision send the operator back to", which
+     * manage.php used to work out separately with can_access_course() alone. That was measurably
+     * wrong for a mentor who is enrolled in the course as anything else: can_access_course()
+     * was true, so the decision redirected to manage.php?id=, whose require_capability() then
+     * threw at them - a successful decision reported as an exception.
+     *
+     * @param stdClass $application Application as application() returns it.
+     * @param stdClass $instance Enrol instance the application under review belongs to.
+     * @return stdClass Scope carrying: enrolid, the instance to restrict to or 0 for none;
+     *                  mentees, applicant ids to restrict to or null for none; and url, the
+     *                  queue's own page.
+     */
+    public static function scope(stdClass $application, stdClass $instance): stdClass {
+        $course = get_course($instance->courseid);
+
+        /* The FOURTH argument is the whole test, and an earlier draft of this comment claimed
+           the three-argument form was "the pair manage.php?id= itself demands". It is not.
+           can_access_course() defaults $onlyactive to false and reaches is_enrolled() with it,
+           so a SUSPENDED or EXPIRED enrolment counts as access - while require_login($course),
+           which manage.php?id= calls before require_capability(), refuses both. Measured on 5.1
+           and 5.2 over five operators: with $onlyactive true the two agree on every one of them
+           (active teacher and category manager allowed, suspended, expired and unenrolled
+           category teacher refused); with it false they disagree on the suspended and the
+           expired one, who kept the capability and were sent to a queue that bounced them to
+           the course enrolment page after their decision had already been applied. */
+        if (can_access_course($course, null, 'enrol/apply:manageapplications', true)) {
+            return (object) [
+                'enrolid' => (int) $instance->id,
+                'mentees' => null,
+                'url' => new moodle_url('/enrol/apply/manage.php', ['id' => (int) $instance->id]),
+            ];
+        }
+
+        if (has_capability('enrol/apply:manageapplications', context_system::instance())) {
+            return (object) [
+                'enrolid' => 0,
+                'mentees' => null,
+                'url' => new moodle_url('/enrol/apply/manage.php'),
+            ];
+        }
+
+        /* Only when this application is one of theirs. Mentoring somebody does not make an
+           arbitrary application walkable, and the membership test is what keeps the anchor
+           inside the set - see the note above for what an anchor outside it produces. */
+        $mentees = applications::get_mentees();
+        if (in_array((int) $application->userid, $mentees, true)) {
+            return (object) [
+                'enrolid' => 0,
+                'mentees' => $mentees,
+                'url' => new moodle_url('/enrol/apply/manage.php'),
+            ];
+        }
+
+        /* No queue at all, and this is reachable rather than defensive. The plainest route is
+           the capability held at a course context through a category role, by somebody who is
+           not enrolled: that passes can_manage_application() and fails every test above, on a
+           VISIBLE course - measured, and worth stating because an earlier draft of this comment
+           said the course had to be hidden. Hiding it is one sufficient condition among several,
+           not a necessary one. A teacher whose own enrolment has been suspended lands here too,
+           and so does a mentor looking at an application none of their mentees made.
+
+           The parameterless queue would refuse the first of those, so sending them there after
+           a decision would report a success as an exception - the same defect this method exists
+           to remove, arrived at from the other end. An empty mentee list is the marker; nothing
+           can be walked from it. */
+        return (object) [
+            'enrolid' => 0,
+            'mentees' => [],
+            'url' => destination::home_page_url(),
+        ];
+    }
+
+    /**
+     * The applications either side of this one, in the queue this operator is working in.
+     *
+     * Resolved in SQL, one statement per direction with a single row taken, rather than by
+     * materialising the queue and looking for the current row in it - which is what both
+     * gradebook reports do. The comparison is not close: materialising runs this same predicate
+     * with no LIMIT, hands every row to PHP and hydrates a user record for each, and the
+     * site-wide scope spans every course. This runs it twice and hands over two rows.
+     *
+     * What the plan actually depends on, measured with EXPLAIN ANALYZE on m502 rather than
+     * assumed: {user_enrolments} carries indexes on enrolid and userid and NONE on status or
+     * timecreated, so the instance scope (e.id) and the mentee scope (ue.userid) each reach
+     * their rows through one, while the site-wide scope has only e.enrol = 'apply' to be
+     * selective with - few instances, joined into {user_enrolments} on the enrolid index. On a
+     * small site the planner ignores all of that and sequentially scans the 313-row table in
+     * 0.1ms with a top-N heapsort, which is the right answer at that size; the point of the
+     * shape is that the sort and the LIMIT stay in the database whatever it decides.
+     *
+     * The walk is pinned to (timecreated ASC, ue.id ASC) - the table's own default sort, with
+     * the unique final key that keeps a tied group from trading places. It is pinned because a
+     * server-resolved neighbour has no meaning otherwise: the table is user-sortable and
+     * flexible_table keeps that choice in $SESSION->flextable['enrol_apply_manage_table'] (a
+     * user preference only when is_persistent(true) is called, which this table does not do),
+     * so "next" would otherwise depend on state this page cannot see. It follows that the walk
+     * can disagree with a re-sorted queue. That divergence is documented rather than silent,
+     * and the link names the applicant it leads to, so the operator reads where they are going
+     * before they go there.
+     *
+     * The walk does NOT honour the initials bar, and this is a decision rather than an
+     * oversight. The queue is rendered with out(50, true), and query_db() appends
+     * get_sql_where() - firstname LIKE 'x%' - so an operator who has picked a letter is looking
+     * at a narrower set than the predicate below describes. Three things settle it. Turning the
+     * bar off would not close the gap: set_initials_preferences() runs from setup() whatever
+     * the bar argument says, so the filter still applies from a stale preference or a crafted
+     * request parameter, and only the CONTROL disappears. Honouring it would make the page
+     * depend on session state it does not render, so a bookmarked or emailed review link would
+     * silently lose its neighbours because of a letter clicked days earlier - invisible, which
+     * is the failure mode this repository treats as the defect. Not honouring it fails visibly
+     * instead: the next link names an applicant outside the filtered letter, before the click.
+     * And it keeps one rule for the whole preference blob, rather than pinning the sort half
+     * and obeying the filter half.
+     *
+     * @param stdClass $application Application as application() returns it.
+     * @param stdClass $scope Scope as scope() returns it.
+     * @return array Two keys, previous and next, each an application record or null.
+     */
+    public static function neighbours(stdClass $application, stdClass $scope): array {
+        return [
+            'previous' => self::neighbour($application, $scope, false),
+            'next' => self::neighbour($application, $scope, true),
+        ];
+    }
+
+    /**
+     * The one application before or after this one in the pinned order.
+     *
+     * @param stdClass $application Application as application() returns it.
+     * @param stdClass $scope Scope as scope() returns it.
+     * @param bool $forward True for the next application, false for the previous one.
+     * @return stdClass|null Record carrying the user enrolment id, the applicant id and their
+     *                       name fields, or null when there is nothing that way.
+     */
+    private static function neighbour(stdClass $application, stdClass $scope, bool $forward): ?stdClass {
+        global $DB;
+
+        [$wheres, $params] = self::awaiting_decision_where();
+        $wheres[] = 'e.enrol = :enrol';
+        $params['enrol'] = 'apply';
+
+        if ($scope->enrolid) {
+            // The listing's own clause, character for character: e.id, not the equivalent ue.enrolid.
+            $wheres[] = 'e.id = :enrolid';
+            $params['enrolid'] = $scope->enrolid;
+        }
+
+        if ($scope->mentees !== null) {
+            if (!$scope->mentees) {
+                /* Nothing to walk, and this is the scope() branch for an operator who can open
+                   no queue - not a defensive check. get_in_or_equal() throws on an empty array,
+                   so the listing spells the same case as "1 = 0" to keep its SQL valid; here
+                   there is no query to keep valid, so there is nothing to build. */
+                return null;
+            }
+            [$insql, $inparams] = $DB->get_in_or_equal($scope->mentees, SQL_PARAMS_NAMED, 'mentee');
+            $wheres[] = "ue.userid {$insql}";
+            $params += $inparams;
+        }
+
+        /* Strictly past the current row in the pinned order, which needs the timestamp twice -
+           once against the timestamp and once inside the tie-break. Two NAMES bound to the one
+           value, never one name used twice: fix_sql_params() counts occurrences with
+           preg_match_all() and throws duplicateparaminsql when that total differs from the
+           parameter array. */
+        $comparison = $forward ? '>' : '<';
+        $wheres[] = "(ue.timecreated {$comparison} :walkafter
+                      OR (ue.timecreated = :walkat AND ue.id {$comparison} :walkid))";
+        $params['walkafter'] = (int) $application->applydate;
+        $params['walkat'] = (int) $application->applydate;
+        $params['walkid'] = (int) $application->id;
+
+        $direction = $forward ? 'ASC' : 'DESC';
+        $namefields = \core_user\fields::for_name()->get_sql('u')->selects;
+
+        /* The listing's own INNER joins, including the one to {course}, which this query reads
+           nothing from. It is here so that the walk's FROM is the listing's FROM: neither can
+           drop a row on data this plugin can produce - {enrol}.courseid is declared foreign to
+           course.id, though XMLDB creates an index for it rather than a constraint - and where
+           that ever stopped being true, a walk that had dropped the join would offer a
+           neighbour the queue does not list. The listing's two comment joins are omitted
+           because nothing here reads a comment: a LEFT join cannot REMOVE a row, so leaving
+           them out cannot let anything through. It could in principle multiply one - measured,
+           applicationinfo.userenrolmentid is declared foreign-unique and cannot, while
+           submission.userenrolmentid is a plain index and could - but that is a property of
+           the listing, and taking one row per statement is not affected by it either way. */
+        $sql = "SELECT ue.id, ue.userid {$namefields}
+                  FROM {user_enrolments} ue
+                  JOIN {user} u ON u.id = ue.userid
+                  JOIN {enrol} e ON e.id = ue.enrolid
+                  JOIN {course} c ON c.id = e.courseid
+                 WHERE " . implode(' AND ', $wheres) . "
+              ORDER BY ue.timecreated {$direction}, ue.id {$direction}";
+
+        $records = $DB->get_records_sql($sql, $params, 0, 1);
+
+        return $records ? reset($records) : null;
     }
 
     /**
