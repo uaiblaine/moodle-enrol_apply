@@ -115,5 +115,28 @@ Feature: Enrolment upon approval
     And I am on "Course 1" course homepage
     Then I should see "New section"
 
+  # The other half of that page, and the half that needs no JavaScript at all: the icon is an
+  # ordinary link that no core module claims, so the browser follows it. Without JavaScript
+  # the scenario above cannot even open its menu.
+  #
+  # The click is scoped to the applicant's own row, which is what every core scenario touching
+  # this column does, and the review page is then identified by the applicant's name rather
+  # than by the page's own furniture - a whole-page click plus "Awaiting a decision" would pass
+  # against a link built from the wrong id, since the fixture has exactly one application and
+  # any id would land on a page saying the same thing.
+  Scenario: A teacher opens one application from the course participants page
+    Given I log in as "student1"
+    And I am on "Course 1" course homepage
+    And I press "Start application"
+    And I press "Submit application"
+    And I log out
+    When I log in as "teacher1"
+    And I am on the "Course 1" "enrolled users" page
+    Then I should see "Student 1"
+    And I click on "Decide this application" "link" in the "Student 1" "table_row"
+    Then I should see "Awaiting a decision"
+    And I should see "Confirm this application"
+    And I should see "Student 1" in the "page-header" "region"
+
   # Capability enforcement is covered by tests/lib_test.php: asserting on it here would
   # mean asserting on an exception page, which behat's exception hook fails by design.

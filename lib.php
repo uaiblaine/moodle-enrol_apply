@@ -644,6 +644,107 @@ class enrol_apply_plugin extends enrol_plugin {
     }
 
     /**
+     * The per-row action icons this plugin adds to core's participants page.
+     *
+     * One icon, on an application still awaiting a decision, pointing at the page that
+     * decides it. No core enrol plugin overrides this method - measured on 5.1 and 5.2, zero
+     * overrides - so there is no precedent for the override itself, though eight core plugins
+     * do test it and tests/user_enrolment_actions_test.php follows their shape.
+     *
+     * This link carries NO data-action, and the reason is not the one an earlier draft of
+     * this docblock gave. That draft said core's JavaScript claims "exactly three action
+     * names - editenrolment, unenrol and showdetails" and that any other value is therefore
+     * inert. It is false: TWO modules claim names inside this markup, because the
+     * participants table is a core_table\dynamic table rendered inside
+     * [data-region="core_table/dynamic"]. core_user/status_field claims those three, and
+     * core_table/dynamic adds a document-level click handler that matches
+     * a[data-action="hide"], a[data-action="show"] and [data-action="showcount"] anywhere
+     * inside that region (lib/table/amd/src/local/dynamic/selectors.js:31-48 and
+     * dynamic.js's listener, identical on 5.1 and 5.2). So five values would be hijacked
+     * rather than three, from a list that can grow in either module. Carrying none is what
+     * makes this an ordinary link, and there is nothing an attribute would buy.
+     *
+     * The target is manage.php?userenrol=, the review page, and not manage.php?id=, the
+     * instance queue, for the plainest reason: this icon says "decide this application", and
+     * ?id= opens the whole queue instead. It is reachable at all only because that page's
+     * gate was rewritten - docs/design/audit-trail-analysis.md still instructs the opposite,
+     * from when it required the capability in the applicant's own user context and a course
+     * teacher failed it; queue::require_review_access() now applies can_manage_application(),
+     * which admits them. What is NOT a reason, though an earlier draft of this docblock
+     * offered it as one, is that a queue link "would have to pick an instance": $ue carries
+     * enrolid (enrol/locallib.php selects the whole {user_enrolments} row), so ?id= could
+     * always have named the right one.
+     *
+     * Deciding from there returns the operator to the queue rather than to the participants
+     * page, because queue::scope() derives that destination from what they may open and this
+     * page passes it nothing. A returnto parameter would be a new redirect target read out
+     * of the request, which is a larger thing than the icon is worth.
+     *
+     * Two gates. The status gate is queue::is_awaiting_decision(), the plugin's one
+     * object-form definition of an undecided application, so an approved row is left alone;
+     * without it the icon would sit on every row this plugin enrolled, for ever. Its second
+     * clause only bites under a non-default expiredaction: the plugin ships
+     * ENROL_EXT_REMOVED_KEEP, under which process_expirations() changes nothing and a lapsed
+     * enrolment stays ACTIVE, excluded by the first clause - it is under the suspend actions
+     * that the row comes back suspended and needs the timeend half.
+     *
+     * The status gate also does something core's own column cannot: core pre-sets "Active"
+     * and switches on ENROL_USER_ACTIVE and ENROL_USER_SUSPENDED with no default arm, so a
+     * waiting-list row is painted with a green Active badge - the icon is then the only
+     * thing on that row saying a decision is still owed. Note whose value that is:
+     * ENROL_APPLY_USER_WAIT = 2 is this plugin's own extension of a column core defines two
+     * values for, so it is a collision this plugin created and core cannot be asked to
+     * render; it is simply not fixable from here.
+     *
+     * The capability is read in the course, which is stricter than can_manage_application()
+     * and deliberately the same reading get_bulk_operations() takes on this same page: a
+     * mentor holding it only in an applicant's own user context is offered nothing here, and
+     * manage.php with no parameter is what serves that scope.
+     * test_a_mentor_is_offered_no_icon_in_the_course is what holds that, because every other
+     * test in the file stays green when the gate is widened to can_manage_application().
+     * Reading it in the course also costs one context rather than one per row.
+     *
+     * One thing this deliberately does NOT check is whether the plugin is enabled site wide.
+     * Core's own Edit and Unenrol icons render on a disabled plugin's rows here - the
+     * manager resolves plugins through get_enrolment_plugins(false) - and manage.php has no
+     * enabled check either, so a check on the icon alone would hide the way in to a queue
+     * that still works. That differs from the bulk menu, which core's own driver refuses on
+     * the enabled-only list; the difference is core's, in both directions.
+     *
+     * @param course_enrolment_manager $manager Manager core built for the course.
+     * @param stdClass $ue The user enrolment row, carrying its instance and plugin.
+     * @return array Core's own actions, plus this plugin's where it applies.
+     */
+    public function get_user_enrolment_actions(course_enrolment_manager $manager, $ue) {
+        /* Core's edit and unenrol icons first, unchanged, and appending rather than
+           reordering keeps the icons an operator already knows where they were. What core
+           actually tests for those two is allow_manage($instance) and
+           allow_unenrol_user($instance, $ue) - not allow_unenrol(), which is only what the
+           base allow_unenrol_user() delegates to (lib/enrollib.php, identical on 5.1 and
+           5.2). This plugin overrides allow_unenrol() and returns true, so both are true
+           today; a later override of allow_unenrol_user() is what would change it, and it
+           is the method to look at. */
+        $actions = parent::get_user_enrolment_actions($manager, $ue);
+
+        if (!\enrol_apply\local\queue::is_awaiting_decision($ue)) {
+            return $actions;
+        }
+
+        if (!has_capability('enrol/apply:manageapplications', $manager->get_context())) {
+            return $actions;
+        }
+
+        $title = get_string('decideapplication', 'enrol_apply');
+        $actions[] = new user_enrolment_action(
+            new pix_icon('i/userevent', $title),
+            $title,
+            new moodle_url('/enrol/apply/manage.php', ['userenrol' => $ue->id])
+        );
+
+        return $actions;
+    }
+
+    /**
      * Returns the action icons shown for this instance on the course enrolment methods page.
      *
      * @param stdClass $instance Course enrol instance.

@@ -18,6 +18,7 @@ namespace enrol_apply\bulk;
 
 use course_enrolment_manager;
 use enrol_apply\form\bulk_decision_form;
+use enrol_apply\local\queue;
 use enrol_bulk_enrolment_operation;
 use moodle_url;
 use stdClass;
@@ -80,15 +81,13 @@ abstract class decision_operation extends enrol_bulk_enrolment_operation {
     /**
      * Which of those are actually applications awaiting a decision.
      *
-     * This is the QUEUE's predicate, both halves of it, and the second half is the one that
-     * is easy to leave out: manage_table.php pairs "status != active" with
-     * "timeend = 0 OR timeend > now" because process_expirations() re-suspends an enrolment
-     * whose period ran out, so somebody approved and enrolled long ago comes back looking
-     * exactly like a fresh application. The queue excludes that row on purpose and
-     * tests/lib_test.php::test_expired_enrolment_does_not_reappear_in_the_queue pins it -
-     * but the exclusion has only ever lived in the LISTING. get_pending_user_enrolment()
-     * carries no timeend clause, so a second listing that omits it hands the decision
-     * methods rows the first listing was written to keep away from them.
+     * The predicate itself is queue::is_awaiting_decision(), which is where the plugin's
+     * object-form definition of "awaiting a decision" lives - next to the SQL one it has to
+     * agree with. It used to be written out here, and the participants page's own action
+     * icon would then have been a third copy of a filter that is also a correctness
+     * boundary: get_pending_user_enrolment() carries no timeend clause, so an approved
+     * enrolment that has since lapsed reads as suspended and comes back looking exactly like
+     * a fresh application unless the second half of the rule is applied.
      *
      * Of the three decisions, deferral is the one that makes a state nothing can undo:
      * wait_enrolment() calls update_user_enrol() with no dates, and update_user_enrol()
@@ -107,14 +106,9 @@ abstract class decision_operation extends enrol_bulk_enrolment_operation {
         $awaiting = [];
 
         foreach (static::enrolments_of($users) as $ueid => $enrolment) {
-            if ((int) $enrolment->status === ENROL_USER_ACTIVE) {
-                continue;
+            if (queue::is_awaiting_decision($enrolment)) {
+                $awaiting[] = $ueid;
             }
-            $timeend = (int) $enrolment->timeend;
-            if ($timeend > 0 && $timeend <= time()) {
-                continue;
-            }
-            $awaiting[] = $ueid;
         }
 
         return $awaiting;
