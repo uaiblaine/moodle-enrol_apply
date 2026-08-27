@@ -2,19 +2,20 @@
 
 State at the end of the session of 2026-08-27. **Everything is merged; nothing is in flight.**
 
-- `master` at `b86ebdd`, working tree clean, no open pull requests.
-- `version.php` is `2026082600`.
-- **309/309 PHPUnit on m501 and m502**, Behat 4 scenarios, the full matrix audited leg by leg
-  (7 legs, MariaDB and PHP 8.2 included) — every leg exactly 309 tests and 4 scenarios.
+- `master` at `aabbf0a`, working tree clean, no open pull requests.
+- `version.php` is `2026082700`.
+- **314/314 PHPUnit on m501 and m502**, Behat 4 scenarios, the full matrix audited leg by leg
+  (7 legs, MariaDB and PHP 8.2 included) — every leg exactly 314 tests and 4 scenarios.
 
 ## What landed this session
 
 | PR | What |
 |---|---|
 | [#36](https://github.com/uaiblaine/moodle-enrol_apply/pull/36) | **Previous/next navigation on the review page**, plus the redirect defect it uncovered. |
+| [#38](https://github.com/uaiblaine/moodle-enrol_apply/pull/38) | **The submitted profile details on the review page.** |
 
-That closes item 1 of the previous handoff. Item 2 (the profile snapshot on the review page) is
-untouched and is the next unit.
+That closes items 1 and 2 of the previous handoff. The implementation plan and its follow-on
+list are now down to the smaller items below.
 
 ## Facts the PREVIOUS handoff stated that are now obsolete
 
@@ -37,32 +38,29 @@ Read this section before trusting anything else you remember about this plugin.
   `queue::neighbours()`'s docblock and `CLAUDE.md` for the three measurements behind it, including
   why turning the bar off would not have closed the gap.
 - **"The full participants-page lock is DECIDED AGAINST" still stands** (2026-08-25). Unchanged.
+- **The review page's snapshot panel does NOT read the live profile, and must never learn to.**
+  The first version of it showed "what the profile says now" beside each submitted value, by
+  handing the stored field key to `fields::current_value()`. That key comes out of `userinfodata`,
+  which `restore_enrol_apply_plugin` writes **verbatim from a foreign archive**, and
+  `current_value()` dereferences whatever `{user}` column an `s_` key names with no allowlist —
+  the `DENY` list governs the WRITE path only. Measured on m502 with a crafted envelope: **the
+  panel rendered the applicant's password hash**, to any reader for whom `visible_keys()` returns
+  `ALL_FIELDS`, which is every teacher and manager. `test_the_panel_never_reads_the_live_profile_for_a_stored_key`
+  holds it now. If a "versus profile now" comparison is ever wanted, it needs the key validated
+  against the live field set first, and core's own `PROFILE_VISIBLE_*` gates applied on top.
+- **Masking on the COURSE context costs a mentor the identity fields**, and that is an open
+  product question rather than a settled one. They hold nothing in the course, so the panel gives
+  them the name fields only. It is the stricter reading, and the one the report already took;
+  `test_the_masking_is_judged_in_the_course_and_not_at_system_level` pins the context so a change
+  of mind is a deliberate edit rather than a drift.
 
 ## What is left, in the order I would take it
 
-### 1. The submitted profile snapshot on the review page
+### 1. The "Decide this application" action icon on the participants page
 
-Scoped out of #34 deliberately, still the next unit. The measurements from that session still
-hold and are re-stated here because nothing since has touched them:
-
-- Read it with `submission::read_snapshot()`, which returns `['key','label','value']` string
-  triples and is defensive by construction — a wrong `version`, a non-array envelope or any
-  non-scalar drops the entry.
-- **Never `\enrol_apply\local\diff::compute()`** for a "submitted versus profile now" panel. It
-  re-resolves the field set from the LIVE instance and re-classifies against the current user, so
-  a frozen snapshot renders with rows silently missing. Use the snapshot's own stored labels and
-  `fields::current_value()` for the other side.
-- Labels AND values are both the PLAIN spelling, so a Mustache double stash is correct and
-  lossless. Not `format_string()` and not `format_text(FORMAT_PLAIN)` — both are lossy here, and
-  the reasons are written at `classes/reportbuilder/local/formatters/submission.php:207-217`
-  and `:241-265`.
-- **Mask it with `formatters\submission::visible_keys(context_course::instance(...))`.** The
-  report already masks identity data on `moodle/site:viewuseridentity`; a review page rendering
-  the snapshot unmasked would be the weaker surface for the same data. Copy the markup from
-  `application_notification.mustache:59-70`.
-
-Note the review page now renders through `review_page($application, $applicant, $instance,
-$manageurl, $navigation)` — the navigation argument is REQUIRED, deliberately (see below).
+The cheapest remaining item, and the only one with a shape already worked out. `?userenrol=<ueid>`
+is the natural target and lands on a page built for one decision. No core enrol plugin does this,
+so there is no precedent to copy, and it needs a status gate or it renders on approved rows.
 
 ### 2. The audit recommendations
 
@@ -121,8 +119,16 @@ Unchanged unless marked NEW. The NEW ones all cost real time this session.
   exit on restore failure, lock file), but rebuild those guards if you write a new one.
 - **NEW — an adversarial pass can die on the weekly subagent limit mid-flight, and findings whose
   verifiers all died show as DISMISSED with `votes=0/0`.** They are UNJUDGED, not refuted. Ten of
-  them were unjudged this session and several were real, including two HIGHs that no test held.
-  Read the vote count, never the bucket.
+  them were unjudged in the first pass and several were real, including two HIGHs that no test
+  held. Read the vote count, never the bucket.
+- **NEW — run the adversarial pass. The second one found a HIGH-severity disclosure in code that
+  was already green, mutation-checked, matrix-clean and verified on the live site.** Twenty
+  confirmed findings over one small slice. The defect was mine and the shape is worth
+  remembering: a feature added *beyond the brief* (a "profile now" comparison nobody asked for)
+  was the entire attack surface, and the comment justifying it — "only for a row already judged
+  visible, so the live value cannot widen what the masking allowed" — was false exactly where the
+  exposure was. **When a slice grows a capability the plan did not ask for, that is the part to
+  attack first.**
 - **The adversarial pass's VERIFIERS can be wrong, and being wrong is the expensive direction.**
   This session a finding dismissed 1/1 ("the empty-mentee guard is held by no test") was correct.
   **Measure any dismissed finding whose subject is a claim you wrote yourself.**
