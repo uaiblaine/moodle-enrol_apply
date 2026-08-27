@@ -197,6 +197,75 @@ class enrol_apply_renderer extends plugin_renderer_base {
     }
 
     /**
+     * The details the applicant submitted with this application, as the reader may see them.
+     *
+     * Read from the frozen snapshot the applicant's own submission wrote, NOT recomputed. In
+     * particular this must never go through \enrol_apply\local\diff::compute(): that re-resolves
+     * the field set from the LIVE enrol instance and re-classifies it against the current user,
+     * so a field the teacher has since stopped asking for, or one the applicant may no longer
+     * edit, silently vanishes from a record of what was actually submitted. The snapshot carries
+     * its own labels for the same reason - they are what the applicant saw when they typed.
+     *
+     * Nothing here reads the applicant's LIVE profile, and that is a security boundary rather
+     * than a scoping choice. An earlier version of this method showed "what the profile says
+     * now" beside each row, by passing the stored key to fields::current_value(). That key comes
+     * out of userinfodata, which restore_enrol_apply_plugin writes verbatim from an archive this
+     * site did not produce, and current_value() dereferences any {user} column an "s_" key names
+     * with no allowlist of its own - the DENY list that exists to keep s_password, s_secret,
+     * s_email and s_idnumber out of this plugin governs only the WRITE path. Measured on m502
+     * with a crafted envelope: the panel rendered the applicant's password hash. The reader for
+     * whom visible_keys() returns ALL_FIELDS - any teacher or manager - skipped the key filter
+     * entirely, so the row was not "already judged visible" in any sense. The custom-field
+     * branch was as bad: a c_<id> key reads {user_info_data} directly, past every
+     * PROFILE_VISIBLE_* gate core applies to its own profile page.
+     *
+     * The frozen record needs none of that, and the Report Builder surface it inherits its
+     * masking from does not read the live profile either. So the two surfaces onto this record
+     * now do the same thing, which was the point of sharing the rule.
+     *
+     * Masked with the report's own rule, on the COURSE context. Note what that costs: a MENTOR
+     * holds nothing in the course, so they see the name fields only, even where their own mentor
+     * role grants the identity capability in the applicant's user context. That is the stricter
+     * reading of a genuine question rather than an obviously right answer, and it is the one the
+     * report already took.
+     *
+     * Every value is the PLAIN spelling and the template double stashes it, so each is escaped
+     * exactly once. Not format_string(), whose strip_tags() would delete a restored value from
+     * the first "<" onwards. A stored value CAN contain newlines - a textarea custom field is
+     * offerable - so the template carries the same white-space rule the report's own cell does
+     * rather than converting them to markup.
+     *
+     * @param stdClass $application Application as \enrol_apply\local\queue::application() returns it.
+     * @return array Template context: hassnapshot, its label, and one row per visible field.
+     */
+    protected function snapshot_context($application): array {
+        $formatter = \enrol_apply\reportbuilder\local\formatters\submission::class;
+        $entries = \enrol_apply\local\submission::read_snapshot($application->snapshot ?? null);
+        $visible = $formatter::visible_keys(\context_course::instance($application->courseid));
+
+        $rows = [];
+        foreach ($entries as $entry) {
+            if ($visible !== $formatter::ALL_FIELDS && !in_array($entry['key'], $visible, true)) {
+                /* Withheld from every row rather than only from the rows holding a value: a
+                   marker that appears exactly where there is data is a presence oracle, which is
+                   the rule the report's own formatter states and this surface inherits. */
+                continue;
+            }
+
+            $rows[] = [
+                'label' => $entry['label'],
+                'value' => $entry['value'],
+            ];
+        }
+
+        return [
+            'hassnapshot' => (bool) $rows,
+            'snapshotlabel' => get_string('submittedprofile', 'enrol_apply'),
+            'snapshot' => $rows,
+        ];
+    }
+
+    /**
      * Render one application, with the controls to decide it.
      *
      * @param stdClass $application Application as \enrol_apply\local\queue::application() returns it.
@@ -251,7 +320,9 @@ class enrol_apply_renderer extends plugin_renderer_base {
     public function review_form($application, $applicant, $instance, $manageurl) {
         $waiting = (int) $application->status === ENROL_APPLY_USER_WAIT;
 
-        $context = $this->decision_controls_context($instance) + [
+        $context = $this->decision_controls_context($instance)
+            + $this->snapshot_context($application)
+            + [
             'formurl' => $manageurl->out(false),
             'sesskey' => sesskey(),
             'userenrolmentid' => (int) $application->id,

@@ -151,6 +151,40 @@ backup/                      group mappings, comments and the durable trail, see
   without that gate the page listed every group name in a course the reader cannot open. The
   instance's own groups and role still apply to their decision.
 
+- **The review page's profile snapshot is read frozen, and NOTHING on that page reads the live
+  profile.** It comes from `submission::read_snapshot()` and never from `diff::compute()`, which
+  re-resolves the field set from the LIVE instance and re-classifies it against the current user
+  — so a field the teacher has since stopped asking for silently vanishes from a record of what
+  was submitted. The snapshot's own stored labels are used for the same reason.
+
+  **The live read is a security boundary, and the first version of this panel got it wrong.** It
+  showed "what the profile says now" beside each row by handing the stored key to
+  `fields::current_value()`. That key comes out of `userinfodata`, which
+  `restore_enrol_apply_plugin` writes **verbatim from a foreign archive**, and `current_value()`
+  dereferences whatever `{user}` column an `s_` key names with no allowlist — the `DENY` list
+  that keeps `s_password`, `s_secret`, `s_email` and `s_idnumber` out of this plugin governs the
+  WRITE path only. Measured on m502 with a crafted envelope: the panel rendered the applicant's
+  **password hash**. The `c_<id>` branch reads `{user_info_data}` directly, past every
+  `PROFILE_VISIBLE_*` gate core applies on its own profile page. And the masking above does not
+  help: `visible_keys()` returns `ALL_FIELDS` for any teacher or manager, so the key filter is
+  skipped entirely and nothing has been "judged visible" at all — which is exactly what the
+  comment justifying the read claimed. The Report Builder surface never reads the live profile
+  either; that is now true of both doors onto this record.
+
+  Masking is `reportbuilder\local\formatters\submission::visible_keys(context_course::instance(...))`,
+  the report's own rule, so the two surfaces cannot disagree. **It costs a mentor the identity
+  fields** — they hold nothing in the course — which is the stricter reading of a real question
+  rather than an obviously right answer. Withheld rows are dropped whether or not they hold a
+  value: a marker appearing only where there is data is a presence oracle. The masking governs
+  the PANEL, not the page: the applicant's e-mail address has its own row and always did.
+
+  **Field keys are `s_<column>` and `c_<id>`, not `standard:<column>`.** Build them with
+  `fields::standard_key()`. A hand-written prefix fails two ways at once and neither is loud:
+  the masking list matches nothing, so under a restricted reader **the row silently vanishes**,
+  and under an `ALL_FIELDS` reader it renders while any live lookup for that key returns nothing.
+  An earlier version of this bullet said "the row still renders" of both, which is wrong in the
+  reassuring direction.
+
 - **The previous/next walk is SQL, one `LIMIT 1` per direction, and it is pinned in order and in
   set.** `queue::neighbours()` runs the queue's own predicate plus the scope clauses with a
   strict comparison against `(timecreated, ue.id)` — the unique final key #33 put on the

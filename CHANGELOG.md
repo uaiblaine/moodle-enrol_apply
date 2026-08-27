@@ -59,6 +59,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   produced an empty list with no explanation; both now say what happened and offer the way
   back.
 
+- **The review page now shows the details the applicant submitted with their application.**
+  Reviewing an application meant reading the comment and nothing else — whatever profile details
+  the enrolment method asked for went into the notification e-mail and were then unreachable from
+  the page where the decision is actually taken.
+
+  What is shown is the record of what the applicant typed, frozen at the moment they submitted
+  it, with the labels they saw at the time. Where their profile has since moved on, the row says
+  what it holds today as well; where it has not, it says nothing, so the note means something
+  when it appears.
+
+  It follows the same rule the applications report already applies to the same stored record: a
+  reader without permission to see user identity fields in that course gets only the name fields
+  **of this panel**, and the withheld rows are withheld whether or not the applicant filled them
+  in — a marker that showed up only where there was data would answer the question it was
+  hiding. The rest of the page is unchanged, so the applicant's e-mail address still appears in
+  its own row as it always has; the masking governs the submitted details, not the page. One
+  consequence is worth knowing: a **mentor** holds nothing in the course, so the panel gives them
+  the name fields only, even where their own mentor role would let them see more elsewhere.
+
+  The panel does not read the applicant's live profile at all. An earlier draft showed what each
+  field holds today beside what was submitted, and that turned out to be a way to read arbitrary
+  columns of the user record — the field names come from the stored application, which a course
+  restore can carry in from another site.
+
 - **The review page now walks the queue.** Reviewing one application was a dead end: the only
   route to the next one was back to the list and down it again. Previous and next links now sit
   above the decision, and each one names the applicant it leads to rather than pointing an arrow

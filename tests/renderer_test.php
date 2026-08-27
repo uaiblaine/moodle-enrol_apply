@@ -343,13 +343,20 @@ final class renderer_test extends \advanced_testcase {
      *
      * @param string $comment Comment submitted with the application.
      * @param int $status One of ENROL_USER_SUSPENDED and ENROL_APPLY_USER_WAIT.
+     * @param string $snapshot Stored profile snapshot envelope, empty for none.
+     * @param array $applicantfields Extra fields for the applicant's own user record.
      * @return string Rendered markup.
      */
-    private function render_review(string $comment = 'Please let me in', int $status = ENROL_USER_SUSPENDED): string {
+    private function render_review(
+        string $comment = 'Please let me in',
+        int $status = ENROL_USER_SUSPENDED,
+        string $snapshot = '',
+        array $applicantfields = []
+    ): string {
         global $DB, $PAGE;
 
         $this->setAdminUser();
-        $applicant = $this->getDataGenerator()->create_user();
+        $applicant = $this->getDataGenerator()->create_user($applicantfields);
         $this->plugin->enrol_user($this->instance, $applicant->id, null, 0, 0, $status);
         $ueid = (int) $DB->get_field(
             'user_enrolments',
@@ -371,7 +378,7 @@ final class renderer_test extends \advanced_testcase {
             'userenrolmentid' => $ueid,
             'status' => \enrol_apply\local\submission::STATUS_PENDING,
             'comment' => $comment,
-            'userinfodata' => '',
+            'userinfodata' => $snapshot,
             'outcomemessage' => '',
             'decidedgroups' => '',
             'decidedrole' => 0,
@@ -665,5 +672,239 @@ final class renderer_test extends \advanced_testcase {
 
         $this->assertStringContainsString(self::ESCAPED_ONCE, $body);
         $this->assertStringNotContainsString(self::ESCAPED_TWICE, $body);
+    }
+
+    /**
+     * The submitted profile details are rendered from the frozen snapshot's own label and value.
+     *
+     * The stored label is deliberately NOT one core would recompute for that key: an earlier
+     * version of this test stored "City/town", which is byte-identical to what fields::label()
+     * returns for s_city, so replacing $entry['label'] with a live lookup left it green. The
+     * value is likewise not the applicant's live one, so neither assertion can be satisfied by
+     * anything except the frozen record.
+     *
+     * @return void
+     */
+    public function test_the_review_page_shows_the_submitted_profile_details(): void {
+        $snapshot = json_encode([
+            'version' => \enrol_apply\local\submission::SNAPSHOT_VERSION,
+            'fields' => [
+                [
+                    'key' => \enrol_apply\local\fields::standard_key('city'),
+                    'label' => 'Town as it was asked for in 2019',
+                    'value' => 'Ouro Preto',
+                ],
+            ],
+        ]);
+
+        $html = $this->render_review(
+            'Please let me in',
+            ENROL_USER_SUSPENDED,
+            $snapshot,
+            ['city' => 'Belo Horizonte']
+        );
+
+        $this->assertStringContainsString(get_string('submittedprofile', 'enrol_apply'), $html);
+        // The label as STORED, which no live lookup for this key would produce.
+        $this->assertStringContainsString('Town as it was asked for in 2019', $html);
+        $this->assertStringNotContainsString(\enrol_apply\local\fields::label(
+            \enrol_apply\local\fields::standard_key('city')
+        ), $html);
+        // The value as SUBMITTED, and not the one the profile holds today.
+        $this->assertStringContainsString('Ouro Preto', $html);
+        $this->assertStringNotContainsString('Belo Horizonte', $html);
+    }
+
+    /**
+     * An application carrying no snapshot renders no panel, rather than an empty one.
+     *
+     * @return void
+     */
+    public function test_the_review_page_omits_the_panel_when_nothing_was_submitted(): void {
+        $html = $this->render_review();
+
+        $this->assertStringNotContainsString(get_string('submittedprofile', 'enrol_apply'), $html);
+    }
+
+    /**
+     * The page never reads the applicant's live profile for a snapshot field.
+     *
+     * This is a security boundary, not a scoping choice, so it is asserted rather than left to
+     * the absence of a call. The stored key is attacker-choosable - restore_enrol_apply_plugin
+     * writes userinfodata verbatim out of a foreign archive - and fields::current_value()
+     * dereferences whatever {user} column an "s_" key names, with no allowlist: measured on
+     * m502, an earlier version of this panel rendered the applicant's password hash from an
+     * envelope naming s_password. The DENY list that keeps such keys out of this plugin governs
+     * the WRITE path only.
+     *
+     * @return void
+     */
+    public function test_the_panel_never_reads_the_live_profile_for_a_stored_key(): void {
+        $snapshot = json_encode([
+            'version' => \enrol_apply\local\submission::SNAPSHOT_VERSION,
+            'fields' => [
+                ['key' => 's_password', 'label' => 'Town', 'value' => 'Ouro Preto'],
+                ['key' => 's_email', 'label' => 'Registration', 'value' => '2026-0042'],
+            ],
+        ]);
+
+        /* The password is set explicitly: the data generator leaves it empty, and an assertion
+           that an empty string is absent from the markup would hold for any code at all. */
+        $html = $this->render_review(
+            'Please let me in',
+            ENROL_USER_SUSPENDED,
+            $snapshot,
+            ['password' => 'Probe1234!']
+        );
+
+        /* The stored values still render - they are this applicant's own submitted text, and the
+           report renders stored label and value for any key too. What must never appear is
+           anything READ from the live row those keys name. */
+        $this->assertStringContainsString('Ouro Preto', $html);
+
+        global $DB;
+        $applicant = $DB->get_record_sql(
+            "SELECT u.* FROM {user} u JOIN {user_enrolments} ue ON ue.userid = u.id
+              WHERE ue.enrolid = :enrolid ORDER BY ue.id DESC",
+            ['enrolid' => $this->instance->id],
+            IGNORE_MULTIPLE
+        );
+        // The precondition: those columns really do hold something worth withholding.
+        $this->assertNotEmpty($applicant->password);
+        $this->assertNotEmpty($applicant->email);
+
+        /* Scoped to the PANEL and not to the page. The review page shows the applicant's e-mail
+           address in its own row on purpose, so a whole-page assertion would fail for a reason
+           that has nothing to do with the snapshot - and a whole-page assertion that happened to
+           pass would be holding the wrong thing. */
+        $this->assertMatchesRegularExpression('/enrol_apply-snapshot/', $html);
+        preg_match('#<div class="enrol_apply-snapshot.*?</div>#s', $html, $panel);
+        $this->assertNotEmpty($panel, 'the snapshot panel did not render');
+
+        $this->assertStringNotContainsString($applicant->password, $panel[0]);
+        $this->assertStringNotContainsString($applicant->email, $panel[0]);
+    }
+
+    /**
+     * An identity field is withheld from a reader without the identity capability.
+     *
+     * The same rule the Report Builder surface applies to the same stored record, judged in the
+     * COURSE context. Without this the review page would be the weaker of the two doors onto it.
+     * The name row is the control: it proves the panel rendered at all, so the missing city is
+     * masking rather than an empty panel.
+     *
+     * @return void
+     */
+    public function test_an_identity_field_is_withheld_from_a_reader_without_the_capability(): void {
+        $html = $this->render_masked_review(false);
+
+        $this->assertStringContainsString('Ann', $html);
+        $this->assertStringNotContainsString('Ouro Preto', $html);
+        $this->assertStringNotContainsString('City/town', $html);
+    }
+
+    /**
+     * The masking is judged in the COURSE context, not at system level.
+     *
+     * The pair that tells the two apart, and without it the diff's central claim is unpinned:
+     * this reader holds moodle/site:viewuseridentity in the COURSE and not at system level, so a
+     * masking rule that asked the system context would withhold the city from somebody entitled
+     * to it. The sibling test above is the other half - there the reader holds it nowhere.
+     *
+     * @return void
+     */
+    public function test_the_masking_is_judged_in_the_course_and_not_at_system_level(): void {
+        $html = $this->render_masked_review(true);
+
+        $this->assertStringContainsString('Ann', $html);
+        $this->assertStringContainsString('Ouro Preto', $html);
+    }
+
+    /**
+     * Render the review page for a reader whose identity capability is set per context.
+     *
+     * @param bool $identityincourse Whether to grant moodle/site:viewuseridentity in the course.
+     * @return string Rendered markup.
+     */
+    private function render_masked_review(bool $identityincourse): string {
+        global $DB, $PAGE;
+
+        $snapshot = json_encode([
+            'version' => \enrol_apply\local\submission::SNAPSHOT_VERSION,
+            'fields' => [
+                [
+                    'key' => \enrol_apply\local\fields::standard_key('firstname'),
+                    'label' => 'First name',
+                    'value' => 'Ann',
+                ],
+                [
+                    'key' => \enrol_apply\local\fields::standard_key('city'),
+                    'label' => 'City/town',
+                    'value' => 'Ouro Preto',
+                ],
+            ],
+        ]);
+
+        $applicant = $this->getDataGenerator()->create_user();
+        $this->plugin->enrol_user($this->instance, $applicant->id, null, 0, 0, ENROL_USER_SUSPENDED);
+        $ueid = (int) $DB->get_field(
+            'user_enrolments',
+            'id',
+            ['userid' => $applicant->id, 'enrolid' => $this->instance->id],
+            MUST_EXIST
+        );
+        $DB->insert_record('enrol_apply_submission', (object) [
+            'courseid' => $this->course->id,
+            'userid' => $applicant->id,
+            'enrolid' => $this->instance->id,
+            'userenrolmentid' => $ueid,
+            'status' => \enrol_apply\local\submission::STATUS_PENDING,
+            'comment' => '',
+            'userinfodata' => $snapshot,
+            'outcomemessage' => '',
+            'decidedgroups' => '',
+            'decidedrole' => 0,
+            'decidedby' => 0,
+            'timecreated' => time(),
+            'timedecided' => 0,
+        ]);
+
+        /* A reader who may decide the application, with the identity capability set where the
+           test wants it. The role is built rather than borrowed so the two capabilities move
+           independently - a stock teacher holds both. */
+        $reader = $this->getDataGenerator()->create_user();
+        $coursecontext = \context_course::instance($this->course->id);
+        $roleid = $this->getDataGenerator()->create_role(['shortname' => 'applyreviewer']);
+        assign_capability(
+            'enrol/apply:manageapplications',
+            CAP_ALLOW,
+            $roleid,
+            \context_system::instance()
+        );
+        if ($identityincourse) {
+            assign_capability('moodle/site:viewuseridentity', CAP_ALLOW, $roleid, $coursecontext);
+        }
+        role_assign($roleid, $reader->id, $coursecontext->id);
+        $this->setUser($reader);
+
+        // The precondition: the capability really is where this test put it, and nowhere else.
+        $this->assertEquals(
+            $identityincourse,
+            has_capability('moodle/site:viewuseridentity', $coursecontext)
+        );
+        $this->assertFalse(
+            has_capability('moodle/site:viewuseridentity', \context_system::instance())
+        );
+
+        $url = new \moodle_url('/enrol/apply/manage.php', ['userenrol' => $ueid]);
+        $PAGE->set_url($url);
+        $PAGE->set_context($coursecontext);
+
+        return $PAGE->get_renderer('enrol_apply')->review_form(
+            \enrol_apply\local\queue::application($ueid),
+            $applicant,
+            $this->instance,
+            $url
+        );
     }
 }

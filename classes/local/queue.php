@@ -85,6 +85,11 @@ final class queue {
      * authorised at this point and cannot be: the context to authorise against is derived from
      * this row.
      *
+     * The profile snapshot comes from the durable record only, with no fallback: the
+     * applicationinfo row has never held one, so an application that predates that record shows
+     * its comment and no snapshot rather than an empty one that looks like "they filled nothing
+     * in". Null and the empty string are the same thing to read_snapshot().
+     *
      * @param int $userenrolmentid User enrolment id.
      * @return stdClass|null The application, or null when there is none to decide.
      */
@@ -96,7 +101,7 @@ final class queue {
         $params['enrol'] = 'apply';
 
         $sql = "SELECT ue.id, ue.userid, ue.enrolid, ue.status, ue.timecreated AS applydate,
-                       COALESCE(s.comment, ai.comment) AS applycomment,
+                       COALESCE(s.comment, ai.comment) AS applycomment, s.userinfodata AS snapshot,
                        e.courseid, c.fullname AS coursename
                   FROM {user_enrolments} ue
              LEFT JOIN {enrol_apply_applicationinfo} ai ON ai.userenrolmentid = ue.id
