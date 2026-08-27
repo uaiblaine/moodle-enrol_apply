@@ -64,15 +64,19 @@ so there is no precedent to copy, and it needs a status gate or it renders on ap
 
 ### 2. The audit recommendations
 
-From `audit-trail-analysis.md`. The read-side half is done (#28). The full participants-page lock
-is decided against. **The "Decide this application" action icon is still open** and is cheap now:
-`?userenrol=<ueid>` is the natural target and lands on a page built for one decision. No core
-enrol plugin does this, so there is no precedent to copy, and it needs a status gate or it renders
-on approved rows.
+From `audit-trail-analysis.md`. The read-side half is done (#28), and the full participants-page
+lock is decided against (2026-08-25, do not reopen without a new reason). The action icon above
+was the third recommendation and is the only one left, which is why it has a section of its own -
+an earlier version of this file repeated it here verbatim and made the list look longer than it is.
 
 ### 3. Smaller things, all measured and all still open
 
-Re-verified against `master` at `b86ebdd`.
+Each one re-measured against `master` at `73f116b` on 2026-08-27, by grep rather than by memory:
+`add_instance_groups()` still declares the default and still has one caller; `decidedgroups` and
+`decidedrole` appear **zero** times in either backup class; all three columns appear in
+`provider.php` only inside the metadata declaration, never in `export_submissions()`'s object; and
+`timestart` appears nowhere in `manage.php`, `classes/bulk/` or `renderer.php`. An earlier version
+of this line claimed a re-verification against the previous master that had not been done.
 
 - **`decidedgroups` and `decidedrole` are not carried by backup/restore.** Group and role ids are
   course- and site-local, so it needs `get_mappingid()`, and a restore of an older archive needs
@@ -87,7 +91,7 @@ Re-verified against `master` at `b86ebdd`.
   look exercised. Either finish it or delete it.
 - **`add_instance_groups()`'s `int $userenrolmentid = 0` default is dead** (`lib.php`) — one
   caller, always passing the id. Same species as the queue table's removed parameter.
-- **`chosen_groups()`'s empty-array branch cannot be consumed.**
+- **`chosen_groups()`'s empty-array branch cannot be consumed** (`classes/local/submission.php`).
 - **A core defect, not fixable from here:** the participants page renders a waiting-list row
   (`ENROL_APPLY_USER_WAIT = 2`) as a green **"Active"** badge.
 - **A bulk decision reaches ONE apply instance per course.** Not fixable from here.
