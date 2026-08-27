@@ -488,10 +488,10 @@ class enrol_apply_plugin extends enrol_plugin {
      *
      * @param stdClass $instance Course enrol instance.
      * @param int $userid User to add to the groups.
-     * @param int $userenrolmentid User enrolment whose recorded choice wins, 0 for none.
+     * @param int $userenrolmentid User enrolment whose recorded choice wins.
      * @return void
      */
-    protected function add_instance_groups($instance, $userid, int $userenrolmentid = 0) {
+    protected function add_instance_groups($instance, $userid, int $userenrolmentid) {
         global $CFG, $DB;
 
         require_once($CFG->dirroot . '/group/lib.php');

@@ -143,6 +143,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Approving a restored application could fail with a programming error instead of enrolling
+  anybody.** The record of a decision stores the groups the decider picked, and a course restore
+  copies that list in from wherever the backup was made. Where the list survived the copy but
+  named no group this site has — every id in it belonging to a course that was not restored with
+  it, say — approving the application raised an error rather than falling back to the groups
+  configured on the enrolment method. It now falls back, which is what happens when no groups
+  were picked at all.
+
 - **A decision could be applied and then reported as an error.** Where an operator was sent
   after deciding was worked out from whether they could get into the course, rather than from
   whether they could open its approval queue. Two kinds of operator fell in that gap: a mentor

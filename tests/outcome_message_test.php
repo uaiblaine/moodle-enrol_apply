@@ -335,6 +335,65 @@ final class outcome_message_test extends \advanced_testcase {
     }
 
     /**
+     * A stored group list that names no usable group falls back to the instance's own.
+     *
+     * The writer cannot produce one: record_decided_groups() filters zeroes out and stores
+     * nothing when the result is empty. But the writer is not the only thing that fills this
+     * column - a restore writes it from an archive this site did not produce - so "0", a lone
+     * comma and a list whose ids all fail to map are shapes the read has to survive.
+     *
+     * Before this, chosen_groups() returned an EMPTY ARRAY for such a value and the caller
+     * branched on `=== null`, so the empty array went to get_in_or_equal(), which refuses one
+     * outright ("does not accept empty arrays", measured). Approving that application threw a
+     * coding_exception instead of joining the instance's groups. The docblock there argued the
+     * empty array was worth keeping as a seam for an explicit "no groups at all"; the seam
+     * could not be used without changing the caller, and the value it let through crashed.
+     *
+     * Mutation check: return the parsed array rather than null when it is empty, and exactly
+     * this test goes red. It reddens on the PREMISE assertion below rather than on the
+     * approval - "Failed asserting that Array &0 [] is null" - because that assertion comes
+     * first and PHPUnit stops there. An earlier version of this line claimed it reddened with
+     * the exception, which is what the code would do rather than what the run reports; the
+     * crash itself is evidenced by reading the caller, whose `=== null` branch sends anything
+     * else to get_in_or_equal(), measured to refuse an empty array outright.
+     *
+     * @return void
+     */
+    public function test_a_group_choice_that_names_nothing_falls_back_to_the_instance(): void {
+        global $DB;
+
+        [$applicant, $ueid] = $this->apply();
+        $group = $this->getDataGenerator()->create_group(['courseid' => $this->course->id]);
+        $DB->insert_record('enrol_apply_groups', (object) [
+            'enrolid' => $this->instance->id,
+            'groupid' => $group->id,
+        ]);
+
+        /* Written past record_decided_groups() on purpose: this is the restore's shape, and
+           the writer is exactly what cannot produce it. */
+        $DB->set_field(
+            'enrol_apply_submission',
+            'decidedgroups',
+            '0',
+            ['id' => $this->record($applicant)->id]
+        );
+        $this->assertNull(
+            \enrol_apply\local\submission::chosen_groups($ueid),
+            'the premise: a value naming no group reads as no choice recorded'
+        );
+
+        $this->setAdminUser();
+        $sink = $this->redirectMessages();
+        $this->plugin->confirm_enrolment([$ueid]);
+        $sink->close();
+
+        $this->assertTrue(
+            groups_is_member((int) $group->id, (int) $applicant->id),
+            'the instance list should have applied, as it does when nothing was recorded'
+        );
+    }
+
+    /**
      * A later decision clears the message an earlier one recorded.
      *
      * Same defect as the groups, and louder: the applicant received the earlier decision's

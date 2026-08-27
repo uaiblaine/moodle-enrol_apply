@@ -396,16 +396,25 @@ class submission {
     }
 
     /**
-     * The groups the decider chose, or null when they chose none.
+     * The groups the decider chose, or null when no choice is recorded.
      *
-     * Null and an empty array mean different things here and the caller depends on the
-     * difference: null is "no choice was recorded, use the instance's list", while an empty
-     * array would be "the decider chose no groups at all". Only the first is reachable today,
-     * because record_decided_groups() does not store an empty choice - but returning null for
-     * both would quietly make an explicit "no groups" impossible to add later.
+     * Null means "use the instance's own list", and it is the ONLY way of saying nothing here:
+     * a stored value that parses to no ids at all reads as no choice rather than as an empty
+     * one. An earlier docblock argued the opposite - that null and an empty array should mean
+     * different things, so an explicit "the decider chose no groups" stayed possible to add
+     * later - and that reading was worse than unreachable, it was a latent crash. The sole
+     * caller branches on `=== null` and hands anything else to get_in_or_equal(), which
+     * refuses an empty array outright: measured, `does not accept empty arrays`. So the
+     * affordance the comment was protecting could not have been used without changing the
+     * caller too, while the value it let through would have thrown on the way.
+     *
+     * Unreachable today by the WRITER - record_decided_groups() filters zeroes and stores
+     * nothing when the result is empty - but the row is not only written by that method. A
+     * restore writes this column from a foreign archive, so "0", a lone comma, or a list whose
+     * ids all fail to map are all shapes the parse has to survive.
      *
      * @param int $userenrolmentid User enrolment the decision applies to.
-     * @return array|null Group ids, or null when nothing was recorded.
+     * @return array|null Group ids, never empty; null when nothing usable was recorded.
      */
     public static function chosen_groups(int $userenrolmentid): ?array {
         global $DB;
@@ -423,7 +432,9 @@ class submission {
             return null;
         }
 
-        return array_values(array_filter(array_map('intval', explode(',', (string) $row->decidedgroups))));
+        $ids = array_values(array_filter(array_map('intval', explode(',', (string) $row->decidedgroups))));
+
+        return $ids ?: null;
     }
 
     /**
