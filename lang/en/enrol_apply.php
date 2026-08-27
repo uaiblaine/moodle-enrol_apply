@@ -93,6 +93,7 @@ $string['confirmusers_desc'] = 'Users in gray colored rows are on the waiting li
 $string['coursename'] = 'Course';
 $string['custom_label'] = 'Custom label';
 $string['datasource:applications'] = 'Enrolment applications';
+$string['decideapplication'] = 'Decide this application';
 $string['decisiongroups'] = 'Groups to join on approval';
 $string['decisiongroups_help'] = 'The approved applicants join these groups. Leave it empty to use the groups configured on the enrolment method.';
 $string['decisionrole'] = 'Role to assign on approval';

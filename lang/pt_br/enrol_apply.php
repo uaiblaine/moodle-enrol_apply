@@ -91,6 +91,7 @@ $string['confirmusers_desc'] = 'Os usuários nas linhas em cinza estão na lista
 $string['coursename'] = 'Curso';
 $string['custom_label'] = 'Rótulo personalizado';
 $string['datasource:applications'] = 'Solicitações de inscrição';
+$string['decideapplication'] = 'Decidir esta solicitação';
 $string['decisiongroups'] = 'Grupos para ingressar na aprovação';
 $string['decisiongroups_help'] = 'Os solicitantes aprovados entram nestes grupos. Deixe em branco para usar os grupos configurados no método de inscrição.';
 $string['decisionrole'] = 'Papel a atribuir na aprovação';

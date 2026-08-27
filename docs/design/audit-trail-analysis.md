@@ -220,6 +220,28 @@ it to pick the notification's "from" user.
 
 ### The custom action icon
 
+> **Superseded on 2026-08-27, when the icon was built. Do not follow this section's
+> instructions.** Three of its statements are now wrong, and the first two were wrong at the
+> time in ways only the build measured:
+>
+> - **The target.** It says the link "must point at `manage.php?id=<enrolid>` and **not**
+>   `?userenrol=`" because that branch authorised at the applicant's user context. That gate was
+>   replaced by `\enrol_apply\local\queue::require_review_access()`, which applies
+>   `can_manage_application()` and admits the course teacher. The icon ships pointing at
+>   `?userenrol=`, because it decides ONE application and `?id=` opens the whole queue.
+> - **"Any other `data-action` is left to the browser."** Two modules claim names in this markup,
+>   not one: the participants table is a `core_table\dynamic` table, and `core_table/dynamic`
+>   also intercepts `a[data-action="hide"]`, `a[data-action="show"]` and `[data-action="showcount"]`
+>   anywhere inside `[data-region="core_table/dynamic"]`. The shipped link carries no
+>   `data-action` at all.
+> - **The markup block below is not what shipped**, despite its "Measured markup on m502"
+>   heading — it was a sketch. The real rendered anchor, measured on m502 for user enrolment 394:
+>   `<a href="…/enrol/apply/manage.php?userenrol=394" role="button" title="Decide this application"><i class="icon fa fa-clipboard-user fa-fw" title="Decide this application" role="img" aria-label="Decide this application"></i></a>`
+>
+> What this section got right and the build kept: no core enrol plugin overrides the method, and
+> the icon needs a status gate or it renders on approved rows. See `CLAUDE.md` and
+> `enrol_apply_plugin::get_user_enrolment_actions()` for what was actually built.
+
 A plugin **can** add its own icon to the participants page by overriding
 `get_user_enrolment_actions()`, and it renders as an ordinary link:
 `user/amd/src/status_field.js` intercepts only `editenrolment`, `unenrol` and `showdetails`, so any

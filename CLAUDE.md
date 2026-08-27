@@ -251,9 +251,11 @@ backup/                      group mappings, comments and the durable trail, see
   property the extraction buys.
 
   There is exactly one deliberate second expression of the rule and it is not SQL:
-  `\enrol_apply\bulk\decision_operation::awaiting_decision()` applies it to the user enrolment
-  OBJECTS core's participants-page driver hands over, which never reach a query. Keep those two
-  in step by hand; there is no third.
+  `queue::is_awaiting_decision()` applies it to the `{user_enrolments}` rows core's participants
+  page has already loaded and which never reach a query of this plugin's — the selection a bulk
+  decision is given, and the one row behind each action icon. It sits next to the SQL rather than
+  in `classes/bulk/`, where it used to live, because the second reader would otherwise have made
+  it a third copy. Keep those two in step by hand; there is no third.
 
 - **A stale review link is the ordinary case, not the edge one.** An application is decided
   exactly once and the url that reviewed it outlives the decision. `queue::application()`
@@ -496,6 +498,69 @@ backup/                      group mappings, comments and the durable trail, see
   The slice plan's `test_bulk_confirm_re_authorises_every_posted_id` was specified against the
   belief that the bulk path needed a check of its own. Written that way it would pass by doing
   nothing.
+
+- **The same page also carries a per-row decision icon, and `get_user_enrolment_actions()` is the
+  one extension point here with no precedent for the OVERRIDE.** Measured on 5.1 and 5.2: no enrol
+  plugin in core overrides it, and the base implementation is byte-identical on both branches. That
+  is a claim about overrides only — **eight** core enrol plugins ship a
+  `test_get_user_enrolment_actions()`, so the TEST has ample precedent and
+  `enrol/manual/tests/lib_test.php:493` is the shape this plugin's follows. An earlier draft of
+  this bullet said "no precedent at all", and the test file repeated it as "core has no PHPUnit
+  coverage of this extension point" — written in a session that had already read one of the eight.
+
+  **The link carries no `data-action`, and the reason first written down was false.** It said
+  `user/amd/src/status_field.js` claims "exactly three action names" — `editenrolment`, `unenrol`,
+  `showdetails` — so any other value is inert. **Two** modules claim names in this markup, because
+  the participants table is a `core_table\dynamic` table inside
+  `[data-region="core_table/dynamic"]`: `core_table/dynamic` adds a document-level click handler
+  matching `a[data-action="hide"]`, `a[data-action="show"]` and `[data-action="showcount"]`
+  anywhere inside that region (`lib/table/amd/src/local/dynamic/selectors.js:31-48`, identical on
+  both branches). Five values would be hijacked, not three, from two lists that can grow
+  independently. Carrying none is what makes it an ordinary link. The override appends to
+  `parent::get_user_enrolment_actions()`, and `test_the_icon_is_added_to_cores_own_actions` keeps a
+  future edit from silently taking core's Edit and Unenrol away from every apply row — note that
+  what core builds those from is `allow_manage()` and **`allow_unenrol_user()`**, the latter only
+  delegating to this plugin's `allow_unenrol()`.
+
+  **It points at `manage.php?userenrol=` because the icon decides ONE application and `?id=` opens
+  the whole queue**, and `docs/design/audit-trail-analysis.md` instructs the opposite because it
+  predates the review page's gate. That document says the icon "must point at
+  `manage.php?id=<enrolid>` and **not** `?userenrol=`", true of the user-context-only gate a course
+  teacher fails and not of `queue::require_review_access()`. What is **not** a reason, though it
+  was written down as one, is that an `id=` link "would have to pick an instance": `$ue` carries
+  `enrolid`, so it could always have named the right one.
+
+  **Two gates, and the capability one is deliberately not `can_manage_application()`.** It is read
+  in the course, exactly as `get_bulk_operations()` reads it, so the icon and the bulk menu answer
+  the same question on the same page and a mentor is offered neither; `manage.php` with no
+  parameter is what serves that scope. Only `test_a_mentor_is_offered_no_icon_in_the_course` holds
+  that — measured, every other test in the file stays green when the gate is widened to
+  `can_manage_application()`, because none of the others creates a user-context assignment.
+
+  The status gate is `queue::is_awaiting_decision()`, and its second clause bites only under a
+  **non-default** `expiredaction`: the plugin ships `ENROL_EXT_REMOVED_KEEP`, under which
+  `process_expirations()` changes nothing and a lapsed enrolment stays ACTIVE, excluded by the
+  first clause and rendered by core as "Not current" rather than "Suspended". It also does one
+  thing core's column cannot: core pre-sets "Active" and switches on 0 and 1 with no default arm,
+  so a waiting-list row gets a green Active badge. **That value is this plugin's own** —
+  `ENROL_APPLY_USER_WAIT = 2` extends a column core defines two values for — so it is a collision
+  this plugin created, not a defect to report upstream; it is simply not fixable from here.
+
+  **What the icon deliberately does not check is whether the plugin is enabled site wide.** Core's
+  own Edit and Unenrol icons render on a disabled plugin's rows here (the manager resolves plugins
+  through `get_enrolment_plugins(false)`) and `manage.php` has no enabled check either, so a check
+  on the icon alone would hide the way in to a queue that still works. The bulk menu differs
+  because core's own driver builds it from the enabled-only list.
+
+  **`enrol/locallib.php`'s `get_users_for_display()` is dead code** — measured, zero callers on
+  either branch — so `user/classes/table/participants.php` is the only live caller of this method
+  (`:355` on 5.2, `:347` on 5.1 — do not carry one branch's line number under a claim measured on
+  both), and the participants page is the icon's only surface.
+
+  One accessibility limitation is core's and cannot be fixed from here:
+  `user/templates/status_field.mustache` hardcodes `role="button"` on every enrol action anchor.
+  Core's three really are JS-driven buttons; this one is a genuine navigation link, so it is
+  announced as a button and Space does not activate it.
 
 - **Never copy either core precedent's bulk edit operation.** `enrol_manual` and `enrol_self` ship
   the same SQL character for character: a raw `$DB->execute()` UPDATE of `{user_enrolments}` with
