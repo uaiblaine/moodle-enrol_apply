@@ -5,6 +5,12 @@
 #
 # Verify with:  git check-attr export-ignore -- <path>
 # (a path marked "set" is excluded from the archive; "unspecified" ships).
+#
+# Check the DIRECTORY, not a file inside it. A directory entry below excludes the
+# whole tree from `git archive`, but check-attr reports each file under it as
+# "unspecified" - so `git check-attr ... -- docs/design/HANDOFF.md` reads as though
+# docs/ shipped, and it does not. The decisive test is the archive itself:
+#   git archive --format=tar HEAD | tar -t | grep -c '^docs/'    # expect 0
 
 .github               export-ignore
 .moodle-plugin-ci.yml export-ignore
@@ -12,3 +18,4 @@ CLAUDE.md             export-ignore
 .gitignore            export-ignore
 .gitattributes        export-ignore
 docs                  export-ignore
+mutations             export-ignore
