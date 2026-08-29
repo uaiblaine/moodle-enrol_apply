@@ -660,8 +660,9 @@ class enrol_apply_plugin extends enrol_plugin {
      * core_table/dynamic adds a document-level click handler that matches
      * a[data-action="hide"], a[data-action="show"] and [data-action="showcount"] anywhere
      * inside that region (lib/table/amd/src/local/dynamic/selectors.js:31-48 and
-     * dynamic.js's listener, identical on 5.1 and 5.2). So five values would be hijacked
-     * rather than three, from a list that can grow in either module. Carrying none is what
+     * dynamic.js's listener, identical on 5.1 and 5.2). Each of the three is dispatched with
+     * e.preventDefault(), showcount included, so SIX values would be hijacked rather than
+     * three, from two lists that grow independently. Carrying none is what
      * makes this an ordinary link, and there is nothing an attribute would buy.
      *
      * The target is manage.php?userenrol=, the review page, and not manage.php?id=, the

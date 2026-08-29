@@ -515,7 +515,8 @@ backup/                      group mappings, comments and the durable trail, see
   `[data-region="core_table/dynamic"]`: `core_table/dynamic` adds a document-level click handler
   matching `a[data-action="hide"]`, `a[data-action="show"]` and `[data-action="showcount"]`
   anywhere inside that region (`lib/table/amd/src/local/dynamic/selectors.js:31-48`, identical on
-  both branches). Five values would be hijacked, not three, from two lists that can grow
+  both branches). Six values would be hijacked, not three - all three of the second list are
+  dispatched with `e.preventDefault()`, `showcount` included - from two lists that can grow
   independently. Carrying none is what makes it an ordinary link. The override appends to
   `parent::get_user_enrolment_actions()`, and `test_the_icon_is_added_to_cores_own_actions` keeps a
   future edit from silently taking core's Edit and Unenrol away from every apply row — note that
