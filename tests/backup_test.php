@@ -32,6 +32,31 @@ use restore_controller;
 use restore_dbops;
 use PHPUnit\Framework\Attributes\CoversClass;
 
+defined('MOODLE_INTERNAL') || die();
+
+global $CFG;
+
+/* The two classes this file declares as its coverage targets are NOT autoloadable: core loads
+   backup/moodle2/*.class.php by path, from the backup and restore machinery, only when a run
+   actually reaches an enrol_apply element. PHPUnit resolves a CoversClass target per test, so
+   before this require the target resolved only once some earlier test had happened to perform a
+   restore - and every test running before that one reported
+   "restore_enrol_apply_plugin" is not a valid target for code coverage.
+
+   Measured: exactly the four tests that never restore warned, because they are the four that run
+   before the first restoring test, so which tests warn was decided by execution order alone. Four
+   PHPUnit warnings are enough to fail the run under coverage, which is why this plugin had no
+   coverage number at all - and nothing in ordinary CI sees it, because the workflow passes
+   coverage: none and never resolves a target.
+
+   The includes have to come first and in this order: both plugin classes extend core backup
+   classes that these files are what load. setUp() already requires the same two includes, which
+   is why the classes resolve at all once a restore has run. */
+require_once($CFG->dirroot . '/backup/util/includes/backup_includes.php');
+require_once($CFG->dirroot . '/backup/util/includes/restore_includes.php');
+require_once($CFG->dirroot . '/enrol/apply/backup/moodle2/backup_enrol_apply_plugin.class.php');
+require_once($CFG->dirroot . '/enrol/apply/backup/moodle2/restore_enrol_apply_plugin.class.php');
+
 /**
  * Tests for backing up and restoring the plugin's own data.
  *
@@ -202,6 +227,35 @@ final class backup_test extends \advanced_testcase {
         $this->assertFileExists($xml, 'MODE_SAMESITE must produce an enrolments file');
 
         return file_get_contents($xml);
+    }
+
+    /**
+     * The classes this file declares as coverage targets are loaded before any test runs.
+     *
+     * Deliberately the FIRST test in the file, and deliberately `class_exists(..., false)`: the
+     * point is that the two classes are already in memory without anything having autoloaded or
+     * restored them, which is what PHPUnit needs in order to resolve a CoversClass target. They
+     * are not autoloadable - core loads backup/moodle2/*.class.php by path from the backup and
+     * restore machinery - so before the file-scope requires above, the target resolved only from
+     * whichever test first performed a restore, and every test before that one warned.
+     *
+     * What this test can and cannot hold is worth stating. Deleting those requires reddens it,
+     * measured. It holds because no other test file in this plugin loads either class - also
+     * measured - so nothing earlier in a full-suite run can satisfy it by accident. It would stop
+     * holding under a randomised test order, which is why the fix is a require rather than a
+     * convention about ordering; this test guards the require, not the ordering.
+     *
+     * @return void
+     */
+    public function test_the_declared_coverage_targets_are_loaded(): void {
+        $this->assertTrue(
+            class_exists(\backup_enrol_apply_plugin::class, false),
+            'the CoversClass target is unresolvable, which fails the run under --coverage'
+        );
+        $this->assertTrue(
+            class_exists(\restore_enrol_apply_plugin::class, false),
+            'the CoversClass target is unresolvable, which fails the run under --coverage'
+        );
     }
 
     /**
