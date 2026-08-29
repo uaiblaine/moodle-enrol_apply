@@ -9,10 +9,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - **An application can now be opened for a decision straight from the course participants
-  page.** A row awaiting one carries a new icon next to *Edit enrolment* and *Unenrol*, which
-  opens that application's own review page — who applied, what they wrote, what they submitted,
-  and the three decisions. Reaching it used to mean leaving the participants list, opening the
-  plugin's queue and finding the same person again.
+  page.** A row awaiting one carries a new icon in the enrolment status column, which opens that
+  application's own review page — who applied, what they wrote, what they submitted, and the three
+  decisions. Reaching it used to mean leaving the participants list, opening the plugin's queue and
+  finding the same person again. It sits alongside *Edit enrolment* and *Unenrol* for anyone who
+  has those, which are separate permissions from the one this icon needs.
 
   The icon appears only where there is something to decide: an approved enrolment does not carry
   it, and neither does one that was approved and has since lapsed. That second case is worth
