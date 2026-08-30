@@ -137,10 +137,56 @@ class restore_enrol_apply_plugin extends restore_enrol_plugin {
             'userinfodata' => $data->userinfodata,
             'status' => (int) $data->status,
             'outcomemessage' => $data->outcomemessage,
+            /* The ?? on both is not defensive padding, and the reason it is here is not the
+               one it looks like. An EMPTY element parses back as NULL, not as the empty
+               string it was written from - measured: without these, the very first record
+               with no decided groups raises
+               "mapped_groups(): Argument #1 must be of type string, null given", and since
+               that happens inside a restore step it leaves the backup's temp tables behind
+               and every later restore in the same run dies with them. So this is the ordinary
+               path, not the edge one: every undecided application has an empty value here.
+
+               It covers the archive that predates these elements too, where the property is
+               absent rather than null, which is the case test_an_archive_without_the_new
+               _elements_still_restores reaches by stripping them from the extracted XML. */
+            'decidedgroups' => $this->mapped_groups($data->decidedgroups ?? ''),
+            'decidedrole' => (int) $this->get_mappingid('role', $data->decidedrole ?? 0),
             'timecreated' => (int) $data->timecreated,
             'timedecided' => (int) $data->timedecided,
             'decidedby' => (int) $this->get_mappingid('user', $data->decidedby),
         ]);
+    }
+
+    /**
+     * The decided groups, translated to the ids they have in the restored course.
+     *
+     * Group ids are course-local, so the archived ones name groups of the course the backup
+     * was taken from and mean something else - or nothing - here. Every group of that course
+     * is annotated by core, so each one that travelled has a mapping; an id with none did not
+     * travel, which is what a groups-excluded backup produces for all of them, and is dropped.
+     *
+     * Dropping is safe rather than merely tolerable, and only because of what
+     * submission::chosen_groups() was changed to do: a value that names no group at all now
+     * reads as "no choice recorded", which puts the enrolment method's own list back in
+     * charge. Before that it returned an empty array, which the caller handed to
+     * get_in_or_equal() - measured to refuse one - so approving a restored application whose
+     * groups had all failed to map threw a coding exception. This method is the route that
+     * reaches it.
+     *
+     * @param string $decidedgroups Comma-separated group ids as the archive carries them.
+     * @return string Comma-separated group ids in this site, empty when none mapped.
+     */
+    protected function mapped_groups(string $decidedgroups): string {
+        $mapped = [];
+
+        foreach (array_filter(array_map('intval', explode(',', $decidedgroups))) as $old) {
+            $new = (int) $this->get_mappingid('group', $old);
+            if ($new) {
+                $mapped[] = $new;
+            }
+        }
+
+        return implode(',', $mapped);
     }
 
     /**

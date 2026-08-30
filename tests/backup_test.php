@@ -104,6 +104,8 @@ final class backup_test extends \advanced_testcase {
      * @param bool $crosssite Whether to move the site identifier first, so the restore reads as cross-site.
      * @param bool|null $restoreusers Users setting on the RESTORE side, null to match the backup.
      * @param int $enrolments One of the backup::ENROL_* constants for the restore.
+     * @param callable|null $tweakarchive Called with the extracted archive's basepath before the
+     *                                    restore, to alter the XML a fixture cannot produce.
      * @return int Id of the restored course.
      */
     protected function backup_and_restore(
@@ -111,7 +113,8 @@ final class backup_test extends \advanced_testcase {
         bool $userdata,
         bool $crosssite = false,
         ?bool $restoreusers = null,
-        int $enrolments = backup::ENROL_ALWAYS
+        int $enrolments = backup::ENROL_ALWAYS,
+        ?callable $tweakarchive = null
     ): int {
         global $CFG, $USER;
 
@@ -145,6 +148,16 @@ final class backup_test extends \advanced_testcase {
                 get_file_packer('application/vnd.moodle.backup'),
                 $backupbasepath
             );
+        }
+
+        /* An archive written by an OLDER version of this plugin is not something a fixture
+           can produce, because the code that writes one no longer exists. Editing the
+           extracted XML is the only way to reach that path, and it is a real path: every
+           read in the restore handler is bare, so an element added later is an undefined
+           property - an E_WARNING, which --fail-on-warning turns into a failed build - on
+           the first archive that predates it. */
+        if ($tweakarchive !== null) {
+            $tweakarchive($backupbasepath);
         }
 
         /* restore_controller works out whether the backup came from this site by comparing
@@ -256,6 +269,163 @@ final class backup_test extends \advanced_testcase {
             class_exists(\restore_enrol_apply_plugin::class, false),
             'the CoversClass target is unresolvable, which fails the run under --coverage'
         );
+    }
+
+    /**
+     * Seed a decision on the record, with groups and a role the restore has to translate.
+     *
+     * @param \stdClass $course Course the application belongs to.
+     * @param \stdClass $applicant The applicant.
+     * @param array $groupids Group ids the decider chose.
+     * @param int $roleid Role id the decider chose.
+     * @return void
+     */
+    protected function record_decision(
+        \stdClass $course,
+        \stdClass $applicant,
+        array $groupids,
+        int $roleid
+    ): void {
+        global $DB;
+
+        $DB->set_field_select(
+            'enrol_apply_submission',
+            'decidedgroups',
+            implode(',', $groupids),
+            'courseid = :courseid AND userid = :userid',
+            ['courseid' => $course->id, 'userid' => $applicant->id]
+        );
+        $DB->set_field_select(
+            'enrol_apply_submission',
+            'decidedrole',
+            $roleid,
+            'courseid = :courseid AND userid = :userid',
+            ['courseid' => $course->id, 'userid' => $applicant->id]
+        );
+    }
+
+    /**
+     * The restored record for the only applicant of a course.
+     *
+     * @param int $courseid Restored course id.
+     * @return \stdClass The record.
+     */
+    protected function restored_record(int $courseid): \stdClass {
+        global $DB;
+
+        $records = $DB->get_records('enrol_apply_submission', ['courseid' => $courseid]);
+        $this->assertCount(1, $records);
+
+        return reset($records);
+    }
+
+    /**
+     * The decided groups and role survive a restore, translated to the new course's ids.
+     *
+     * Both are ids of things the restore re-creates, so carrying them verbatim would be worse
+     * than dropping them: the archived numbers name a group and a role of the course the backup
+     * came from, and in the destination they name something else or nothing at all. The
+     * assertion is therefore that the values CHANGED and now name the right things.
+     *
+     * The role is deliberately NOT the one the enrolment method assigns by default. A first
+     * version used 'student', which is that default, and the mutation removing this plugin's
+     * role annotation then reddened nothing at all: core annotates every enrol instance's own
+     * roleid (backup_stepslib.php:737), so the role reached the archive whatever this plugin
+     * did. The fixture proved the mapping and not the annotation. Any role the instance does
+     * not already name is what makes the annotation load bearing.
+     *
+     * @return void
+     */
+    public function test_the_decided_groups_and_role_survive_a_restore(): void {
+        global $DB;
+
+        [$course, $instance, $applicant] = $this->create_course_with_application();
+        $chosen = $this->getDataGenerator()->create_group(['courseid' => $course->id, 'name' => 'Chosen on approval']);
+        $roleid = (int) $DB->get_field('role', 'id', ['shortname' => 'editingteacher'], MUST_EXIST);
+        $this->assertNotEquals(
+            $roleid,
+            (int) $instance->roleid,
+            'the premise: the decided role must not be the one core annotates for the instance'
+        );
+        $this->record_decision($course, $applicant, [(int) $chosen->id], $roleid);
+
+        $newcourseid = $this->backup_and_restore($course, true);
+        $restored = $this->restored_record($newcourseid);
+
+        $newgroupid = (int) $DB->get_field(
+            'groups',
+            'id',
+            ['courseid' => $newcourseid, 'name' => 'Chosen on approval'],
+            MUST_EXIST
+        );
+        $this->assertNotEquals((int) $chosen->id, $newgroupid, 'the premise: the group really was re-created');
+        $this->assertSame((string) $newgroupid, (string) $restored->decidedgroups);
+
+        // A role is site-wide, so a same-site restore maps it to itself - the value is carried
+        // through the mapping rather than copied, which the cross-site test below separates.
+        $this->assertSame($roleid, (int) $restored->decidedrole);
+    }
+
+    /**
+     * A group that did not travel is dropped rather than carried as a foreign id.
+     *
+     * The id here names a group of ANOTHER course, which no backup of this one annotates, so
+     * it has no mapping. Writing it through unchanged would put the applicant into whatever
+     * that number means in the destination - or, before chosen_groups() learned to read an
+     * all-unmappable list as no choice at all, make the approval throw.
+     *
+     * A first version of this test excluded groups from the BACKUP instead, assuming nothing
+     * would then be annotated. It failed: the id came back mapped to itself. The property
+     * under test never needed that setting, and an unverified assumption about one is not
+     * worth carrying inside a test about something else.
+     *
+     * @return void
+     */
+    public function test_a_group_that_did_not_travel_is_dropped(): void {
+        [$course, $instance, $applicant] = $this->create_course_with_application();
+        $elsewhere = $this->getDataGenerator()->create_course();
+        $foreign = $this->getDataGenerator()->create_group(['courseid' => $elsewhere->id, 'name' => 'Another course']);
+        $this->record_decision($course, $applicant, [(int) $foreign->id], 0);
+
+        $newcourseid = $this->backup_and_restore($course, true);
+        $restored = $this->restored_record($newcourseid);
+
+        $this->assertSame('', (string) $restored->decidedgroups);
+        // The control: the record itself did travel, so the empty value is the mapping having
+        // dropped the id and not a record that never arrived.
+        $this->assertSame('I would like to join this course', $restored->comment);
+    }
+
+    /**
+     * An archive written before these two elements existed restores without a warning.
+     *
+     * This covers the ABSENT property. The commoner case is a present but empty one, which
+     * parses back as null rather than as the empty string it was written from, and which every
+     * undecided application produces - so the ?? in the handler is on the ordinary path and is
+     * exercised by every other restore test here. This one reaches the other half by stripping
+     * the elements from the extracted XML, because no fixture can produce an archive from a
+     * version of the plugin that no longer exists.
+     *
+     * @return void
+     */
+    public function test_an_archive_without_the_new_elements_still_restores(): void {
+        [$course, $instance, $applicant] = $this->create_course_with_application();
+        $chosen = $this->getDataGenerator()->create_group(['courseid' => $course->id, 'name' => 'Chosen on approval']);
+        $this->record_decision($course, $applicant, [(int) $chosen->id], 0);
+
+        $strip = function (string $basepath): void {
+            $path = $basepath . '/course/enrolments.xml';
+            $xml = file_get_contents($path);
+            $this->assertStringContainsString('<decidedgroups>', $xml, 'the premise: the elements were written');
+            $xml = preg_replace('#\s*<decided(groups|role)>.*?</decided(groups|role)>#s', '', $xml);
+            file_put_contents($path, $xml);
+        };
+
+        $newcourseid = $this->backup_and_restore($course, true, false, null, backup::ENROL_ALWAYS, $strip);
+        $restored = $this->restored_record($newcourseid);
+
+        $this->assertSame('', (string) $restored->decidedgroups);
+        $this->assertSame(0, (int) $restored->decidedrole);
     }
 
     /**
