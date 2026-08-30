@@ -1,0 +1,2 @@
+# I: remove the file-scope requires that make the coverage targets resolvable.
+s|\nrequire_once\(\$CFG->dirroot \. '/backup/util/includes/backup_includes\.php'\);\nrequire_once\(\$CFG->dirroot \. '/backup/util/includes/restore_includes\.php'\);\nrequire_once\(\$CFG->dirroot \. '/enrol/apply/backup/moodle2/backup_enrol_apply_plugin\.class\.php'\);\nrequire_once\(\$CFG->dirroot \. '/enrol/apply/backup/moodle2/restore_enrol_apply_plugin\.class\.php'\);\n|\n|s;
