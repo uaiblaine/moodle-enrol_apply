@@ -325,6 +325,179 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
     }
 
     /**
+     * Record a decision on an applicant's durable record.
+     *
+     * Written straight to the row rather than through the state machine: what is under test is
+     * the EXPORT of these three columns, and driving a real approval would make the fixture
+     * depend on the whole decision path to prove something about reading it back.
+     *
+     * @param \stdClass $applicant The applicant whose record to stamp.
+     * @param array $groupids Group ids the decider chose.
+     * @param int $roleid Role id the decider chose, 0 for the instance default.
+     * @param string $message Message the decider wrote to the applicant.
+     * @return void
+     */
+    protected function record_decision(
+        \stdClass $applicant,
+        array $groupids = [],
+        int $roleid = 0,
+        string $message = ''
+    ): void {
+        global $DB;
+
+        $DB->update_record('enrol_apply_submission', (object) [
+            'id' => $this->submission_id_of($applicant),
+            'decidedgroups' => implode(',', $groupids),
+            'decidedrole' => $roleid,
+            'outcomemessage' => $message,
+        ]);
+    }
+
+    /**
+     * The decision reaches both subjects' exports.
+     *
+     * These three columns were declared in get_metadata() from the start and exported nowhere,
+     * which is the worse half of the two failures available here: metadata that promises more
+     * than the export delivers is what a subject reads before they read the export.
+     *
+     * Both roles get them, and that is the deliberate part. The split this provider already
+     * makes is between the applicant's own words - their comment and profile snapshot, which a
+     * decider never receives - and the decision taken on them. These three ARE the decision.
+     *
+     * @return void
+     */
+    public function test_the_decision_is_exported_to_both_subjects(): void {
+        $decider = $this->getDataGenerator()->create_user();
+        $applicant = $this->create_application('Please approve me', (int) $decider->id);
+        $context = context_course::instance($this->course->id);
+        $group = $this->getDataGenerator()->create_group(['courseid' => $this->course->id, 'name' => 'Cohort A']);
+        $roleid = (int) $this->getDataGenerator()->create_role(['name' => 'Site mentor', 'shortname' => 'sitementor']);
+        $this->record_decision($applicant, [(int) $group->id], $roleid, 'Welcome aboard.');
+        $recordid = $this->submission_id_of($applicant);
+
+        foreach (['privacy:roleapplicant' => $applicant, 'privacy:roledecider' => $decider] as $rolekey => $subject) {
+            writer::reset();
+            $this->export_context_data_for_user((int) $subject->id, $context, 'enrol_apply');
+            $exported = writer::with_context($context)->get_data([
+                get_string('privacy:trailpath', 'enrol_apply'),
+                get_string($rolekey, 'enrol_apply'),
+                get_string('privacy:recordpath', 'enrol_apply', $recordid),
+            ]);
+
+            $this->assertNotEmpty($exported, $rolekey);
+            $this->assertSame('Welcome aboard.', $exported->outcomemessage, $rolekey);
+            $this->assertSame(['Cohort A'], $exported->decidedgroups, $rolekey);
+            $this->assertSame('Site mentor', $exported->decidedrole, $rolekey);
+        }
+    }
+
+    /**
+     * A group and a custom role are exported in their PLAIN spelling.
+     *
+     * format_string()'s escape flag defaults to true, and an export file is data rather than
+     * HTML, so the default would deliver the literal "R&amp;D" to the person reading their own
+     * export. The assertion is on the ampersand rather than only on the whole string, because
+     * that is the character that moves between the two spellings.
+     *
+     * Mutation check: drop 'escape' => false from either helper and exactly this test reddens.
+     *
+     * @return void
+     */
+    public function test_a_group_and_role_name_are_exported_unescaped(): void {
+        $applicant = $this->create_application('Please approve me');
+        $context = context_course::instance($this->course->id);
+        $group = $this->getDataGenerator()->create_group([
+            'courseid' => $this->course->id,
+            'name' => 'R&D < Team',
+        ]);
+        $roleid = (int) $this->getDataGenerator()->create_role([
+            'name' => 'R&D coordinator',
+            'shortname' => 'rndcoord',
+        ]);
+        $this->record_decision($applicant, [(int) $group->id], $roleid);
+
+        $this->export_context_data_for_user((int) $applicant->id, $context, 'enrol_apply');
+        $exported = writer::with_context($context)->get_data([
+            get_string('privacy:trailpath', 'enrol_apply'),
+            get_string('privacy:roleapplicant', 'enrol_apply'),
+            get_string('privacy:recordpath', 'enrol_apply', $this->submission_id_of($applicant)),
+        ]);
+
+        $this->assertSame(['R&D < Team'], $exported->decidedgroups);
+        $this->assertSame('R&D coordinator', $exported->decidedrole);
+        $this->assertStringNotContainsString('&amp;', $exported->decidedgroups[0]);
+        $this->assertStringNotContainsString('&amp;', $exported->decidedrole);
+    }
+
+    /**
+     * A role a stock site ships is exported by its localised name.
+     *
+     * The other branch of role_name(), and the reason it exists. Every role Moodle installs has
+     * an EMPTY role.name, so role_get_name() falls through to a bare get_string() for these and
+     * to format_string() for a site's own - one escaped spelling and one not, from one call.
+     * This test holds the unescaped branch; the one above holds the other.
+     *
+     * @return void
+     */
+    public function test_a_stock_role_is_exported_by_its_localised_name(): void {
+        global $DB;
+
+        $applicant = $this->create_application('Please approve me');
+        $context = context_course::instance($this->course->id);
+        $student = $DB->get_record('role', ['shortname' => 'student'], '*', MUST_EXIST);
+
+        // The premise: this really is the empty-name branch, or the test proves the wrong half.
+        $this->assertSame('', trim((string) $student->name));
+
+        $this->record_decision($applicant, [], (int) $student->id);
+
+        $this->export_context_data_for_user((int) $applicant->id, $context, 'enrol_apply');
+        $exported = writer::with_context($context)->get_data([
+            get_string('privacy:trailpath', 'enrol_apply'),
+            get_string('privacy:roleapplicant', 'enrol_apply'),
+            get_string('privacy:recordpath', 'enrol_apply', $this->submission_id_of($applicant)),
+        ]);
+
+        $this->assertSame(get_string('defaultcoursestudent'), $exported->decidedrole);
+    }
+
+    /**
+     * A decision naming things that no longer exist exports what it still can.
+     *
+     * The record outlives the group and the role it names - that is the whole point of it - so
+     * the export has to survive both being gone. A deleted group is left out rather than
+     * reported as a bare id, and a role that has been removed exports as nothing rather than
+     * as a number the subject cannot act on.
+     *
+     * @return void
+     */
+    public function test_a_decision_naming_deleted_things_still_exports(): void {
+        global $DB;
+
+        $applicant = $this->create_application('Please approve me');
+        $context = context_course::instance($this->course->id);
+        $kept = $this->getDataGenerator()->create_group(['courseid' => $this->course->id, 'name' => 'Still here']);
+        $gone = $this->getDataGenerator()->create_group(['courseid' => $this->course->id, 'name' => 'Deleted later']);
+        $roleid = (int) $this->getDataGenerator()->create_role(['name' => 'Temporary', 'shortname' => 'temprole']);
+        $this->record_decision($applicant, [(int) $kept->id, (int) $gone->id], $roleid, '');
+
+        groups_delete_group((int) $gone->id);
+        $DB->delete_records('role', ['id' => $roleid]);
+
+        $this->export_context_data_for_user((int) $applicant->id, $context, 'enrol_apply');
+        $exported = writer::with_context($context)->get_data([
+            get_string('privacy:trailpath', 'enrol_apply'),
+            get_string('privacy:roleapplicant', 'enrol_apply'),
+            get_string('privacy:recordpath', 'enrol_apply', $this->submission_id_of($applicant)),
+        ]);
+
+        $this->assertSame(['Still here'], $exported->decidedgroups);
+        $this->assertNull($exported->decidedrole);
+        // An empty message is null rather than an empty string, matching timedecided.
+        $this->assertNull($exported->outcomemessage);
+    }
+
+    /**
      * A decider's export carries the decision and NOT the applicant's own content.
      *
      * The comment and the profile snapshot are the applicant's data. A subject access request

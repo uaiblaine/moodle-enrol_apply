@@ -243,6 +243,24 @@ class provider implements
                 'timedecided' => $row->timedecided ? transform::datetime($row->timedecided) : null,
             ];
 
+            /* The decision itself, and it goes to BOTH subjects rather than to the applicant
+               alone. The split this method already makes is between the applicant's own words
+               and the decision taken on them - which is why the comment and the profile
+               snapshot below are the applicant's only. These three are the decision: what was
+               written to the applicant, which groups they were put in, which role they were
+               given. The decider is entitled to a record of what they decided, and the
+               applicant to a record of what was decided about them.
+
+               Declared in get_metadata() since the columns existed and exported nowhere until
+               now, which is the gap this closes: metadata that promises more than the export
+               delivers is a worse failure than either alone, because the promise is what a
+               subject reads. */
+            $export->outcomemessage = trim((string) $row->outcomemessage) !== ''
+                ? $row->outcomemessage
+                : null;
+            $export->decidedgroups = self::group_names((string) $row->decidedgroups, $context);
+            $export->decidedrole = self::role_name((int) $row->decidedrole);
+
             /* The comment and the profile snapshot belong to the APPLICANT, and only ever go
                into the applicant's own export. A decider's subject access request is about
                the decision they took, not about the person they took it on: handing them
@@ -256,6 +274,87 @@ class provider implements
             $subcontext = self::submission_subcontext((int) $row->id, $asapplicant);
             writer::with_context($context)->export_data($subcontext, $export);
         }
+    }
+
+    /**
+     * The names of the groups a decider chose, for a data export.
+     *
+     * The column stores group ids, which mean nothing to the person reading their own export,
+     * so they are resolved to names. A group deleted since the decision cannot be resolved and
+     * is left out rather than reported as a bare number: an id is not recoverable information
+     * to a subject, and a placeholder for it would need a string that says less than nothing.
+     *
+     * The names are taken in their PLAIN spelling. format_string()'s escape flag defaults to
+     * true, and this value goes into an export file rather than into HTML, so the escaped
+     * spelling would reach the subject as the literal "R&amp;D" - the sink decides, never the
+     * helper.
+     *
+     * @param string $decidedgroups Comma-separated group ids as the record stores them.
+     * @param context $context Course context the groups belong to.
+     * @return array Group names, empty when none were recorded or none still exist.
+     */
+    protected static function group_names(string $decidedgroups, context $context): array {
+        global $DB;
+
+        $ids = array_filter(array_map('intval', explode(',', $decidedgroups)));
+        if (!$ids) {
+            return [];
+        }
+
+        [$insql, $params] = $DB->get_in_or_equal($ids, SQL_PARAMS_NAMED, 'gid');
+        $groups = $DB->get_records_select('groups', "id {$insql}", $params, '', 'id, name');
+
+        $names = [];
+        foreach ($groups as $group) {
+            $names[] = format_string($group->name, true, ['context' => $context, 'escape' => false]);
+        }
+
+        return $names;
+    }
+
+    /**
+     * The name of the role a decider chose, for a data export.
+     *
+     * A role name has no single spelling and role_get_name() does not give it one, which is why
+     * this does not simply call it. Measured on 5.1 and 5.2, where the function is identical:
+     * a role whose role.name is non-empty comes back through format_string() and is therefore
+     * ESCAPED, while an empty one - which is every role a stock site ships - comes back from a
+     * bare get_string() and is not. An export carrying both spellings is one where a site's own
+     * custom roles read as "R&amp;D coordinator" and Moodle's do not.
+     *
+     * So the two branches are taken deliberately, each in its plain spelling. Core's one
+     * precedent for exporting a role name (badges/classes/privacy/provider.php) calls
+     * role_get_name() directly and inherits the mixture; this is a considered departure.
+     *
+     * The course alias a site may give a role is deliberately not applied. It is a second
+     * admin-set name needing the same treatment, and what the record holds is the role that was
+     * assigned rather than what one course chose to call it.
+     *
+     * @param int $roleid Role id as the record stores it, 0 when the instance default applied.
+     * @return string|null The role name, or null when none was recorded or the role is gone.
+     */
+    protected static function role_name(int $roleid): ?string {
+        global $DB;
+
+        if (!$roleid) {
+            return null;
+        }
+
+        $role = $DB->get_record('role', ['id' => $roleid], 'id, name, shortname');
+        if (!$role) {
+            return null;
+        }
+
+        if (trim((string) $role->name) !== '') {
+            // The system context, because that is the one core filters a role name against.
+            return format_string($role->name, true, [
+                'context' => \context_system::instance(),
+                'escape' => false,
+            ]);
+        }
+
+        // Empty name: role_get_name() returns the localised get_string(), already unescaped.
+        return role_get_name($role, null, ROLENAME_ORIGINAL);
     }
 
     /**
