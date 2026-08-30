@@ -310,8 +310,6 @@ final class outcome_message_test extends \advanced_testcase {
      * @return void
      */
     public function test_a_later_approval_clears_an_earlier_group_choice(): void {
-        global $DB;
-
         [$applicant, $ueid] = $this->apply();
         $this->setAdminUser();
         $group = $this->getDataGenerator()->create_group(['courseid' => $this->course->id]);
@@ -585,7 +583,7 @@ final class outcome_message_test extends \advanced_testcase {
     public function test_the_chosen_period_is_stamped_on_approval_only(): void {
         global $DB;
 
-        [$applicant, $ueid] = $this->apply();
+        [, $ueid] = $this->apply();
 
         // The control: nothing is stamped while the application is still pending.
         $pending = $DB->get_record('user_enrolments', ['id' => $ueid], '*', MUST_EXIST);
