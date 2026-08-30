@@ -125,15 +125,23 @@ class enrol_apply_plugin extends enrol_plugin {
             /* Read the cohort with a plain get_record() rather than cohort_get_cohort():
                the applicant holds moodle/cohort:view nowhere, so the visibility-aware
                helper would refuse every cohort and turn each restriction into "unresolved".
-               enrol_self names the gating cohort to the applicant the same way. */
-            $cohort = $DB->get_record('cohort', ['id' => $cohortid], 'id, name, contextid');
+               Only the existence of the row is used - see the refusal below. */
+            $cohort = $DB->get_record('cohort', ['id' => $cohortid], 'id');
             if (!$cohort) {
                 // The cohort was deleted. Fail closed, and with a string the caller can render.
                 return get_string('cohortunresolved', 'enrol_apply');
             }
             if (!cohort_is_member($cohortid, $USER->id)) {
-                $name = format_string($cohort->name, true, ['context' => context::instance_by_id($cohort->contextid)]);
-                return get_string('cohortnonmemberinfo', 'enrol_apply', $name);
+                /* The refusal does NOT name the cohort, and that is the point. enrol_self's
+                   equivalent does (public/enrol/self/lib.php, 'cohortnonmemberinfo'), and the
+                   string it builds travels further than the page: enrol_page_hook() renders it
+                   to any authenticated non-member, and get_enrol_info() puts it in the `status`
+                   field that core_enrol_get_course_enrolment_methods returns. On a platform
+                   whose cohorts are named after security forces, the cohort name is itself the
+                   sensitive fact - it tells a stranger which corporation a course belongs to.
+                   The applicant still learns that the course is restricted, which is what they
+                   can act on; which group it is restricted to is for the course staff to say. */
+                return get_string('cohortnonmemberinfo', 'enrol_apply');
             }
         }
 
