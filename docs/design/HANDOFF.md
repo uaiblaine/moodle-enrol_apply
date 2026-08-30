@@ -1,25 +1,23 @@
 # Handoff — read this before touching anything
 
-State at the end of 2026-08-30. **One pull request is open; everything else is merged.**
+State at the end of 2026-08-30. **Everything is merged; nothing is in flight.**
 
 This covers THREE working days and says which is which wherever it matters: #41 and #42 landed
 on 2026-08-27, #44 and #45 on 2026-08-29, and #47 to #50 on 2026-08-30. Dates in prose have
 been wrong here twice; `git log --date=short` is the authority.
 
-- `master` at `1920be9`, **plus the commit that adds this file** — a handoff can never name the
+- `master` at `a9e905f`, **plus the commit that adds this file** — a handoff can never name the
   commit that merges it. Three of them have now named a sha already behind by the time anyone
   read it, so check the gap in one command and expect docs only:
-  `git log --oneline 1920be9..HEAD`.
-- **[#50](https://github.com/uaiblaine/moodle-enrol_apply/pull/50) is open** — it clears
-  `mdl ci --strict`. It is the only thing in flight.
+  `git log --oneline a9e905f..HEAD`.
 - `version.php` is `2026082900`.
 - **332/332 PHPUnit on m501 and m502**, Behat 5 scenarios, the full matrix audited leg by leg
   (7 legs, MariaDB and PHP 8.2 included) — every leg exactly 332 tests and 5 scenarios.
 - **Coverage runs, and was 56.1% lines (1773/3160)** when measured on 2026-08-29. Read the
   coverage section before comparing that with any other plugin's number, and re-measure before
   quoting it: three changes have landed since.
-- **`mdl ci --strict` passes end to end** once #50 lands. It had been red on six
-  `UnusedLocalVariable` findings, two of which #49 added.
+- **`mdl ci --strict` passes end to end.** It had been red on six `UnusedLocalVariable`
+  findings, two of which #49 added; #50 cleared all six.
 
 ## What landed
 
@@ -31,7 +29,7 @@ been wrong here twice; `git log --date=short` is the authority.
 | [#46](https://github.com/uaiblaine/moodle-enrol_apply/pull/46) | **The mutation spec: nine guards paired with the test each must redden.** |
 | [#48](https://github.com/uaiblaine/moodle-enrol_apply/pull/48) | **The privacy export of the decision** — §3 item 1. |
 | [#49](https://github.com/uaiblaine/moodle-enrol_apply/pull/49) | **The decided groups and role through backup/restore** — §3 item 2. |
-| [#50](https://github.com/uaiblaine/moodle-enrol_apply/pull/50) | **Clearing `mdl ci --strict`.** Open. |
+| [#50](https://github.com/uaiblaine/moodle-enrol_apply/pull/50) | **Clearing `mdl ci --strict`**, six findings, two of them added by #49. |
 
 [#47](https://github.com/uaiblaine/moodle-enrol_apply/pull/47) also landed on 2026-08-30 and is
 NOT mine: another session stopped the cohort refusal naming the cohort. It is listed because the
