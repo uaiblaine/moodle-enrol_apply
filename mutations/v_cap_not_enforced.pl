@@ -1,3 +1,4 @@
-# V: drop the places cap from the write door. Before this change the cap had no mutation at
-# all and deleting it reddened NOTHING - it was held by one test on one of its three doors.
-s{\n            if \(\$instance->customint3 > 0\) \{.*?\n            \}\n}{\n}s;
+# V: drop the places cap from the WRITE door. Re-anchored when the predicate moved into
+# \enrol_apply\local\capacity - before that extraction the cap lived inline in three places
+# and deleting any one of them reddened nothing at all.
+s{\n            if \(\\enrol_apply\\local\\capacity::is_full\(\$instance\)\) \{.*?\n            \}\n}{\n}s;

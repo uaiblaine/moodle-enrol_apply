@@ -145,7 +145,6 @@ $string['lockedby'] = 'Details set by your institution';
 $string['mailtoteacher_subject'] = 'New Enrolment request!';
 $string['maxenrolled'] = 'Max enrolled users';
 $string['maxenrolled_help'] = 'Specifies the maximum number of users that can apply for this course. 0 means no limit.';
-$string['maxenrolled_tip'] = '{$a->count} out of {$a->max} seats already booked.';
 $string['maxenrolledreached'] = 'No more applications are being accepted.';
 $string['messageprovider:application'] = 'Course enrolment application notifications';
 $string['messageprovider:cancelation'] = 'Course enrolment application cancelation notifications';

@@ -342,5 +342,53 @@ function xmldb_enrol_apply_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026082500, 'enrol', 'apply');
     }
 
+    if ($oldversion < 2026083002) {
+        /* Repair waiting-list rows that are carrying an expiry. wait_enrolment() now clears
+           the date when it defers, but that cannot reach a row already in the state, because
+           its own lookup demands ENROL_USER_SUSPENDED and these rows are status 2.
+
+           Such a row is stranded: core's suspend arms of process_expirations() filter on
+           status = active, which it fails, so no sweep touches it; the queue excludes it by
+           the timeend clause, so no listing offers it; and once the places cap stops counting
+           expired rows it no longer even holds a place. It waits for a decision nobody can
+           take, and nothing anywhere says so.
+
+           The predicate is ENROL_APPLY_USER_WAIT and nothing wider. "Not active" would also
+           match status 1, and a suspended row with a past timeend is the NORMAL resting state
+           of an approval whose period ran out under expiredaction = suspend. Zeroing those
+           would make them satisfy the queue's predicate and reappear as applications nobody
+           ever decided - the same false audit row the 2026082300 backfill above refuses to
+           create, arrived at from the other end.
+
+           "<> 0" rather than "< time()": a future expiry on a waiting-list row is the same
+           defect one tick early, and under an expiredaction of unenrol it is a time bomb
+           rather than an already-fired one.
+
+           Scoped to this plugin's instances even though status 2 is its own invention: the
+           value is only guaranteed to mean "waiting list" for enrol_apply, and another
+           plugin on the same site may spend it differently.
+
+           A direct write rather than update_user_enrol(), which would dispatch
+           before_user_enrolment_updated into every installed plugin mid-upgrade. Nothing
+           reads a non-active row's timeend for an access decision - every core reader pairs
+           it with ue.status = :active - and this plugin's own callback ignores a change that
+           does not touch the status.
+
+           Idempotent by construction rather than by a guard: the WHERE is the negation of the
+           step's own effect, so a second run matches nothing. */
+        require_once($CFG->dirroot . '/enrol/apply/lib.php');
+
+        $DB->set_field_select(
+            'user_enrolments',
+            'timeend',
+            0,
+            "timeend <> 0 AND status = :waiting
+               AND enrolid IN (SELECT id FROM {enrol} WHERE enrol = :enrol)",
+            ['waiting' => ENROL_APPLY_USER_WAIT, 'enrol' => 'apply']
+        );
+
+        upgrade_plugin_savepoint(true, 2026083002, 'enrol', 'apply');
+    }
+
     return true;
 }

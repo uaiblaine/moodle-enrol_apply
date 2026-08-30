@@ -208,15 +208,12 @@ class enrol_apply_plugin extends enrol_plugin {
         $buttonurl = null;
         $buttonattrs = [];
 
-        $cap = (int) $instance->customint3;
-        $taken = $cap > 0 ? $DB->count_records('user_enrolments', ['enrolid' => $instance->id]) : 0;
-
         $allowapply = $this->allow_apply($instance);
         if ($allowapply !== true) {
             $body = $allowapply;
         } else if ($DB->record_exists('user_enrolments', ['userid' => $USER->id, 'enrolid' => $instance->id])) {
             $body = get_string('notification', 'enrol_apply');
-        } else if ($cap > 0 && $taken >= $cap) {
+        } else if (\enrol_apply\local\capacity::is_full($instance)) {
             $body = get_string('maxenrolledreached', 'enrol_apply');
         } else {
             $body = get_string('youwillchecknddetails', 'enrol_apply');
@@ -308,6 +305,29 @@ class enrol_apply_plugin extends enrol_plugin {
     }
 
     /**
+     * Whether this instance has no place left.
+     *
+     * The public face of \enrol_apply\local\capacity, and it exists for callers OUTSIDE this
+     * plugin. Three of them re-implemented the count instead - local_dimensions,
+     * local_unlistedcourses and theme_boost_union_fundaseg - and so went on treating a course
+     * as full after the cap stopped counting expired enrolments, while this plugin's own pages
+     * offered the button and accepted the application.
+     *
+     * They cannot reach the class directly and must not be asked to: for each of them
+     * enrol_apply is an OPTIONAL dependency, and naming a class in its namespace is a reference
+     * the autoloader has to resolve on a site that may not have the plugin at all.
+     * local_dimensions enforces exactly that with a test over its own source, which is what
+     * caught the first attempt here. A method on the plugin object is what they can guard with
+     * is_callable(), which is already how every one of them reaches allow_apply().
+     *
+     * @param stdClass $instance Course enrol instance.
+     * @return bool True when the instance has no place left.
+     */
+    public function is_full(stdClass $instance) {
+        return \enrol_apply\local\capacity::is_full($instance);
+    }
+
+    /**
      * Submit an application, serialised so that two tabs cannot both get through.
      *
      * "One row per application" is an assertion, not a guarantee: two simultaneous
@@ -387,16 +407,13 @@ class enrol_apply_plugin extends enrol_plugin {
             if ($DB->record_exists('user_enrolments', ['userid' => $userid, 'enrolid' => $instance->id])) {
                 return \enrol_apply\local\application_result::already_applied();
             }
-            if ($instance->customint3 > 0) {
-                $count = $DB->count_records('user_enrolments', ['enrolid' => $instance->id]);
-                if ($count >= $instance->customint3) {
-                    /* No placeholder. The count is not the maximum - it is only known to have
-                       reached it - and the ceiling is competitive information an applicant
-                       cannot act on anyway. */
-                    return \enrol_apply\local\application_result::refused(
-                        get_string('maxenrolledreached', 'enrol_apply')
-                    );
-                }
+            if (\enrol_apply\local\capacity::is_full($instance)) {
+                /* No placeholder. The count is not the maximum - it is only known to have
+                   reached it - and the ceiling is competitive information an applicant
+                   cannot act on anyway. */
+                return \enrol_apply\local\application_result::refused(
+                    get_string('maxenrolledreached', 'enrol_apply')
+                );
             }
             $this->apply($instance, $userid, $data);
         } finally {
@@ -1172,7 +1189,22 @@ class enrol_apply_plugin extends enrol_plugin {
 
             \enrol_apply\local\submission::record_outcome_message((int) $userenrolment->id, $message);
 
-            $this->update_user_enrol($instance, $userenrolment->userid, ENROL_APPLY_USER_WAIT);
+            /* Deferring CLEARS the expiry, and the literal 0 matters twice over.
+               update_user_enrol() gates on isset(), so null means "leave this date alone" and
+               there is no other spelling for it - passing nothing is what used to leave a
+               once-approved row on the waiting list carrying a past timeend. Such a row is
+               swept by nothing (core's suspend arms filter status = active, which it fails)
+               and listed by no queue, so it waited for a decision nobody could ever take.
+
+               And it must be the INTEGER, never '0': core's communication listener compares
+               timeend !== 0, and a string passes that test, which would drop the applicant
+               out of the course communication room on a site that has one. */
+            $this->update_user_enrol($instance, $userenrolment->userid, ENROL_APPLY_USER_WAIT, null, 0);
+
+            /* The row was read before the update, and notify_applicant() below substitutes
+               {timeend} into the wait mail unconditionally. Without this the message would
+               print the expiry that was just cleared. */
+            $userenrolment->timeend = 0;
 
             \enrol_apply\local\submission::decide(
                 (int) $userenrolment->id,

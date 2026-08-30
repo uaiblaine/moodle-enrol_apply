@@ -143,7 +143,6 @@ $string['lockedby'] = 'Dados definidos pela sua instituição';
 $string['mailtoteacher_subject'] = 'Nova solicitação de matrícula!';
 $string['maxenrolled'] = 'Número máximo de usuários matriculados';
 $string['maxenrolled_help'] = 'Define o número máximo de usuários que podem solicitar matrícula neste curso. 0 significa sem limite.';
-$string['maxenrolled_tip'] = '{$a->count} de {$a->max} vagas já preenchidas.';
 $string['maxenrolledreached'] = 'Não estamos mais aceitando solicitações de matrícula.';
 $string['messageprovider:application'] = 'Notificações de solicitação de matrícula em curso';
 $string['messageprovider:cancelation'] = 'Notificações de cancelamento de solicitação de matrícula';
