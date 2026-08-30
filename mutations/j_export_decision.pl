@@ -1,0 +1,2 @@
+# J: stop exporting the decision at all - the state this change fixes.
+s|\n            \$export->outcomemessage = trim\(\(string\) \$row->outcomemessage\) !== ''\n                \? \$row->outcomemessage\n                : null;\n            \$export->decidedgroups = self::group_names\(\(string\) \$row->decidedgroups, \$context\);\n            \$export->decidedrole = self::role_name\(\(int\) \$row->decidedrole\);\n|\n|s;

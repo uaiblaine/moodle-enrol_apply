@@ -157,6 +157,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **A subject access request now includes the decision taken on the application.** The plugin's
+  privacy declaration has always listed the message a decider wrote to the applicant, the groups
+  the applicant was put into and the role they were given — but the export itself carried none of
+  the three, so anyone reading their own data was told those details were held and then not shown
+  them. They are now exported, to the applicant and to whoever decided alike: the applicant is
+  entitled to a record of what was decided about them, and the decider to a record of what they
+  decided. The applicant's own comment and submitted details remain theirs alone, as before.
+
+  Groups and roles are exported by name rather than by the internal numbers the record stores,
+  and a group or role deleted since the decision is simply left out rather than reported as a
+  number that means nothing to the reader.
+
 - **Approving a restored application could fail with a programming error instead of enrolling
   anybody.** The record of a decision stores the groups the decider picked, and a course restore
   copies that list in from wherever the backup was made. Where the list survived the copy but
