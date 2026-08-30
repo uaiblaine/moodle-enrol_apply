@@ -402,7 +402,7 @@ class application_form extends dynamic_form {
         if ($instance->customint3 > 0) {
             $count = $DB->count_records('user_enrolments', ['enrolid' => $instance->id]);
             if ($count >= $instance->customint3) {
-                throw new \moodle_exception('maxenrolledreached', 'enrol_apply', '', $count);
+                throw new \moodle_exception('maxenrolledreached', 'enrol_apply');
             }
         }
     }
@@ -462,6 +462,10 @@ class application_form extends dynamic_form {
     /**
      * Submit the application.
      *
+     * Two destinations, chosen by what the write door actually did: the acknowledgement page
+     * when there is an application to acknowledge, and back to the course enrolment page with
+     * a notification when there is not.
+     *
      * @return string Url the client should go to next.
      */
     public function process_dynamic_submission() {
@@ -469,10 +473,24 @@ class application_form extends dynamic_form {
 
         $instance = $this->get_instance();
         $data = $this->get_data();
-        $this->get_plugin()->submit_application($instance, $USER->id, $data);
+        $result = $this->get_plugin()->submit_application($instance, $USER->id, $data);
+
+        if ($result->is_refusal()) {
+            /* Nothing was written, so applied.php is the wrong destination: its own access
+               gate finds no enrolment row and throws a bare "Invalid access detected", which
+               is how losing the race for the last place used to be reported. The reason goes
+               out as a session notification and is rendered by whichever page comes next,
+               which is what makes one branch serve BOTH transports - apply.php redirect()s to
+               this url, and the modal assigns it to window.location. */
+            \core\notification::error($result->reason());
+
+            return (string) new moodle_url('/enrol/index.php', ['id' => $instance->courseid]);
+        }
 
         /* What the applicant typed is carried to the acknowledgement page so it can offer to
-           save it. Nothing is written here: the offer is theirs to accept. */
+           save it. Nothing is written here: the offer is theirs to accept. Deliberately not
+           reached on the refused path above, which used to leave an offer sitting in the
+           session to update a profile for an application that does not exist. */
         \enrol_apply\local\offer::stash($instance, $USER, (array) $data);
 
         return (string) new moodle_url('/enrol/apply/applied.php', ['instance' => $instance->id]);

@@ -39,6 +39,13 @@ defect that shipped:
 - **I** removes the file-scope requires that make this plugin's two `CoversClass` targets
   resolvable. Without them `mdl ci --coverage` fails, and which tests warn depends on
   execution order.
+- **S, T, U and V** hold what an applicant is told when the write door refuses. `V` is the one
+  worth noting: it deletes the `customint3` places cap, and **before this set existed that
+  mutation reddened nothing** — the cap was written out in three places and held by a single
+  test on one of them. `T` is the subtle one: it stashes the profile offer unconditionally, and
+  it can only be caught because `tests/fixtures/testable_application_form.php` makes `get_data()`
+  return something. With the null a unit-built form really returns there is nothing to stash
+  either way, so the obvious test passes against the very mutation it exists to catch.
 - **Q and R** are the write door's eligibility check, and they are a pair because the guard
   has two independent ways to be wrong. `Q` deletes it, restoring the state in which
   `allow_apply()` guarded the two screens that OFFER an application and not the method that

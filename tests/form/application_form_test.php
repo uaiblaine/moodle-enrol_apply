@@ -27,7 +27,13 @@ namespace enrol_apply\form;
 
 use enrol_apply\local\fields;
 use enrol_apply\local\fieldset;
+use enrol_apply\local\offer;
 use PHPUnit\Framework\Attributes\CoversClass;
+
+defined('MOODLE_INTERNAL') || die();
+
+global $CFG;
+require_once($CFG->dirroot . '/enrol/apply/tests/fixtures/testable_application_form.php');
 
 /**
  * Tests for the application form and the gates it applies.
@@ -576,8 +582,12 @@ final class application_form_test extends \advanced_testcase {
     public function test_a_second_submission_for_the_same_user_creates_nothing(): void {
         global $DB;
 
-        $this->assertTrue($this->plugin->submit_application($this->instance, $this->applicant->id, (object) []));
-        $this->assertFalse($this->plugin->submit_application($this->instance, $this->applicant->id, (object) []));
+        $first = $this->plugin->submit_application($this->instance, $this->applicant->id, (object) []);
+        $second = $this->plugin->submit_application($this->instance, $this->applicant->id, (object) []);
+
+        $this->assertTrue($first->was_created());
+        $this->assertFalse($second->was_created());
+        $this->assertFalse($second->is_refusal());
 
         $this->assertEquals(1, $DB->count_records('user_enrolments', [
             'enrolid' => $this->instance->id,
@@ -599,5 +609,142 @@ final class application_form_test extends \advanced_testcase {
         ]);
 
         $this->assertSame('Campinas', $DB->get_field('user', 'city', ['id' => $this->applicant->id]));
+    }
+
+    /**
+     * Build a form whose submitted data the test controls.
+     *
+     * @param array $submitted Values the form should report as submitted.
+     * @return testable_application_form
+     */
+    protected function make_form_submitting(array $submitted): testable_application_form {
+        $form = new testable_application_form(null, null, 'post', '', null, true, [
+            'instance' => $this->instance->id,
+            'id' => $this->course->id,
+        ]);
+        $form->set_test_data((object) $submitted);
+
+        return $form;
+    }
+
+    /**
+     * A refused application goes back to the enrolment page and says why.
+     *
+     * The fixture is the real race rather than a contrived state: the form is built while a
+     * place is still free, so the applicant passed every check the form makes, and the place
+     * is taken before the write. Until this changed, that produced a bare "Invalid access
+     * detected" from applied.php, whose own gate found no enrolment row.
+     *
+     * @return void
+     */
+    public function test_a_refused_application_goes_back_to_the_enrolment_page_with_a_reason(): void {
+        global $DB;
+
+        $DB->set_field('enrol', 'customint3', 1, ['id' => $this->instance->id]);
+        $form = $this->make_form_submitting([]);
+
+        $other = $this->getDataGenerator()->create_user();
+        $this->plugin->enrol_user($this->instance, $other->id, null, 0, 0, ENROL_USER_SUSPENDED);
+
+        // Drain anything the fixture queued, so the assertion below is about this submission.
+        \core\notification::fetch();
+
+        $url = $form->process_dynamic_submission();
+
+        $this->assertStringContainsString('/enrol/index.php', $url);
+        $this->assertStringNotContainsString('/enrol/apply/applied.php', $url);
+
+        $notifications = \core\notification::fetch();
+        $this->assertCount(1, $notifications);
+        $this->assertSame(\core\output\notification::NOTIFY_ERROR, $notifications[0]->get_message_type());
+        $this->assertSame(get_string('maxenrolledreached', 'enrol_apply'), $notifications[0]->get_message());
+
+        /* Nothing was written for the applicant, which is precisely why the acknowledgement
+           page would have refused them. */
+        $this->assertFalse($DB->record_exists('user_enrolments', [
+            'userid' => $this->applicant->id,
+            'enrolid' => $this->instance->id,
+        ]));
+    }
+
+    /**
+     * An application that goes through still reaches the acknowledgement, silently.
+     *
+     * The control for the test above. Without it, routing every outcome to the enrolment page
+     * would pass the refusal test while breaking every successful application.
+     *
+     * @return void
+     */
+    public function test_a_created_application_still_reaches_the_acknowledgement(): void {
+        /* Submitting form rather than the plain one: get_data() returns null on a unit-built
+           form, and the created path hands that straight to submission::create(), which is
+           typed. Production never sees the null - apply.php calls this only inside
+           `else if ($form->get_data())` and the web service only after is_validated() - so
+           the fixture is what makes the test resemble the real call. */
+        $form = $this->make_form_submitting([]);
+
+        \core\notification::fetch();
+
+        $sink = $this->redirectMessages();
+        $url = $form->process_dynamic_submission();
+        $sink->close();
+
+        $this->assertStringContainsString('/enrol/apply/applied.php', $url);
+        $this->assertStringNotContainsString('/enrol/index.php', $url);
+        $this->assertCount(0, \core\notification::fetch());
+    }
+
+    /**
+     * A refusal leaves no profile-update offer behind in the session.
+     *
+     * The offer used to be stashed whatever the write door did, so a refusal left the session
+     * holding an offer to update a profile for an application that does not exist.
+     *
+     * The submitted data is supplied by the fixture form on purpose: with the null that a
+     * unit-built form really returns, diff::compute() finds no changes and offer::stash()
+     * returns before writing, so this test would pass against a build that stashes
+     * unconditionally. The control below is what proves it does not.
+     *
+     * @return void
+     */
+    public function test_a_refused_application_stashes_no_profile_offer(): void {
+        global $DB;
+
+        set_config('allowprofilewrite', 1, 'enrol_apply');
+        $DB->set_field('enrol', 'customint8', 1, ['id' => $this->instance->id]);
+        $DB->set_field('enrol', 'customint3', 1, ['id' => $this->instance->id]);
+
+        $refusedform = $this->make_form_submitting(['city' => 'Somewhere else entirely']);
+
+        $other = $this->getDataGenerator()->create_user();
+        $this->plugin->enrol_user($this->instance, $other->id, null, 0, 0, ENROL_USER_SUSPENDED);
+
+        $refusedform->process_dynamic_submission();
+
+        $this->assertSame([], offer::peek((int) $this->instance->id));
+    }
+
+    /**
+     * ...and an application that goes through does leave one.
+     *
+     * The control for the test above, and it is not optional: it is what proves the stash can
+     * happen at all under this fixture, so that its absence above means the refusal skipped it
+     * rather than that nothing was ever stashable.
+     *
+     * @return void
+     */
+    public function test_a_created_application_does_stash_a_profile_offer(): void {
+        global $DB;
+
+        set_config('allowprofilewrite', 1, 'enrol_apply');
+        $DB->set_field('enrol', 'customint8', 1, ['id' => $this->instance->id]);
+
+        $form = $this->make_form_submitting(['city' => 'Somewhere else entirely']);
+
+        $sink = $this->redirectMessages();
+        $form->process_dynamic_submission();
+        $sink->close();
+
+        $this->assertNotSame([], offer::peek((int) $this->instance->id));
     }
 }
