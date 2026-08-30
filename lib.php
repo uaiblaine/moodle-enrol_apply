@@ -217,7 +217,7 @@ class enrol_apply_plugin extends enrol_plugin {
         } else if ($DB->record_exists('user_enrolments', ['userid' => $USER->id, 'enrolid' => $instance->id])) {
             $body = get_string('notification', 'enrol_apply');
         } else if ($cap > 0 && $taken >= $cap) {
-            $body = get_string('maxenrolledreached', 'enrol_apply', $taken);
+            $body = get_string('maxenrolledreached', 'enrol_apply');
         } else {
             $body = get_string('youwillchecknddetails', 'enrol_apply');
             /* The href is the no-JavaScript transport and is a real destination, not a
@@ -320,10 +320,14 @@ class enrol_apply_plugin extends enrol_plugin {
      * each other. A failure to acquire is treated as "the other request is already doing
      * it", which is the truth: the caller's own already-applied check will see the row.
      *
+     * The three outcomes are distinguished because two of them need opposite treatment: an
+     * application that was already there is benign, while a refusal has to be explained. See
+     * \enrol_apply\local\application_result.
+     *
      * @param stdClass $instance Course enrol instance.
      * @param int $userid Applicant user id.
      * @param stdClass $data Submitted application form data.
-     * @return bool True when this call created the application, false when it refused to.
+     * @return \enrol_apply\local\application_result What this call did, and why if it refused.
      */
     public function submit_application($instance, $userid, $data) {
         global $DB;
@@ -331,7 +335,13 @@ class enrol_apply_plugin extends enrol_plugin {
         $factory = \core\lock\lock_config::get_lock_factory('enrol_apply_submit');
         $lock = $factory->get_lock($instance->id . '_' . $userid, 10);
         if (!$lock) {
-            return false;
+            /* The other request is already doing it, which is what a failed acquisition has
+               always been taken to mean here. Reported as "already applied" rather than as a
+               refusal: the applicant almost certainly does end up with an application, and
+               applied.php's own gate covers the rare case where that other request wrote
+               nothing after all. Calling it a refusal would tell them to try again at the
+               moment it worked. */
+            return \enrol_apply\local\application_result::already_applied();
         }
 
         try {
@@ -361,17 +371,31 @@ class enrol_apply_plugin extends enrol_plugin {
                true fails closed. The cohort refusal is a generic string today and no longer
                names the cohort, but the signature still permits detail and this comparison
                does not care which it is. */
-            if ($this->allow_apply($instance, (int) $userid) !== true) {
-                return false;
+            $allowapply = $this->allow_apply($instance, (int) $userid);
+            if ($allowapply !== true) {
+                /* allow_apply() hands back the reason, so the applicant is told which rule
+                   refused them rather than a generic "you cannot enrol". Every one of those
+                   strings is already rendered to any authenticated non-member by
+                   enrol_page_hook(), so none of them discloses anything new. The declared
+                   return is bool|string, so a non-string refusal falls back rather than
+                   reaching refused() with nothing for it to show. */
+                return \enrol_apply\local\application_result::refused(
+                    is_string($allowapply) ? $allowapply : get_string('cantenrol', 'enrol_apply')
+                );
             }
 
             if ($DB->record_exists('user_enrolments', ['userid' => $userid, 'enrolid' => $instance->id])) {
-                return false;
+                return \enrol_apply\local\application_result::already_applied();
             }
             if ($instance->customint3 > 0) {
                 $count = $DB->count_records('user_enrolments', ['enrolid' => $instance->id]);
                 if ($count >= $instance->customint3) {
-                    return false;
+                    /* No placeholder. The count is not the maximum - it is only known to have
+                       reached it - and the ceiling is competitive information an applicant
+                       cannot act on anyway. */
+                    return \enrol_apply\local\application_result::refused(
+                        get_string('maxenrolledreached', 'enrol_apply')
+                    );
                 }
             }
             $this->apply($instance, $userid, $data);
@@ -379,7 +403,7 @@ class enrol_apply_plugin extends enrol_plugin {
             $lock->release();
         }
 
-        return true;
+        return \enrol_apply\local\application_result::created();
     }
 
     /**

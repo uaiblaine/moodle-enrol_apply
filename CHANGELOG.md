@@ -21,6 +21,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **An application that is refused now says so, instead of showing an access error.** The
+  method that writes an application could refuse for four reasons, and reported all four as a
+  bare `false` that the form discarded — every outcome was sent to the acknowledgement page.
+  For a refusal that page found no enrolment row of its own to show, so it refused in turn,
+  and the applicant read *"Invalid access detected"*. The realistic way to reach it was losing
+  a race for the last place: two people apply, one gets it, the other is told nothing useful.
+
+  The refusal now carries its reason. The applicant goes back to the course enrolment page,
+  where the other enrolment methods are, and is told why — the course is full, applications are
+  closed, the enrolment window has passed, or enrolment is restricted. One code path serves both
+  the pop-up form and the plain page.
+
+  Note the outcome that is deliberately *not* a refusal: submitting twice, whether by a double
+  click or two tabs. There is an application, so the acknowledgement page is telling the truth,
+  and it still appears. That distinction is the reason the write door now reports three outcomes
+  rather than two — the previous `false` fused "already there" with "refused", which is why
+  nothing could route them differently.
+
+- **"The maximum number of users allowed (30) has already been reached" no longer states a
+  number that is not the maximum.** The message was handed the current count rather than the
+  configured limit, so the two differed whenever they could differ at all. It also published a
+  ceiling that an applicant cannot act on and that says how contested a course is. The message
+  now says only that no more applications are being accepted.
+
+- **A refused application no longer leaves a profile-update offer behind.** The offer to save
+  what was just typed was stashed in the session whatever the write door did, so a refusal left
+  an offer attached to an application that does not exist.
+
 - **The rules deciding who may apply are now enforced where the application is written, not
   only where it is offered.** `allow_apply()` — which settles whether the enrolment method is
   accepting applications at all, whether the enrolment window is open, and whether the

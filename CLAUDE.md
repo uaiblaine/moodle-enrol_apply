@@ -819,18 +819,41 @@ backup/                      group mappings, comments and the durable trail, see
   keeps it and drops the user id, and only the cohort test can see `R` — which is why that test
   puts the operator inside the cohort and the applicant outside it.
 
-  **A refusal here does NOT show a false acknowledgement**, which is what a first reading of the
-  code suggests and what an earlier version of this bullet said. `process_dynamic_submission()`
-  discards the return value and hands back the `applied.php` url regardless — but `applied.php`
-  is itself gated on `record_exists('user_enrolments', [...'enrolid' => $instance->id])`, so with
-  nothing written it throws `invalidaccess` rather than rendering. The four `false` branches
-  therefore do not behave alike. The duplicate refusal is the one where a row *does* exist —
-  that is why it refused — so the acknowledgement renders and is correct. The cap and
-  eligibility refusals write nothing and land on `invalidaccess`: an unexplained error page,
-  which is poor, but is not a false reassurance. The lock refusal is neither, and is
-  timing-dependent: failing to acquire means another request is already writing, so the row
-  usually exists by the time the redirect lands. The ordinary path reaches none of the four,
-  because the form refuses first.
+  **The refusal is reported through `\enrol_apply\local\application_result`, and the reason it
+  has THREE states rather than a bool is the whole point.** The old `bool` fused "an application
+  was already there" with "this was refused", which need opposite treatment — so
+  `process_dynamic_submission()` could not route them and discarded the value, sending every
+  outcome to `applied.php`. That page is itself gated on a `{user_enrolments}` row for the
+  instance, so a refusal, having written none, was turned into a bare `invalidaccess`. The
+  realistic way in was losing the race for the last place under `customint3`.
+
+  Now: `created` and `already_applied` go to `applied.php` as before; `refused` pushes
+  `\core\notification::error()` and returns `/enrol/index.php`. One branch serves **both**
+  transports because the notification is session-carried — `apply.php` `redirect()`s to the url
+  and the modal assigns it to `window.location`. Keep `already_applied` on the acknowledgement:
+  the ordinary double submission reaches it, the applicant really does have an application, and
+  routing it to an error would break the commonest path to buy nothing.
+
+  **`refused()` throws on an empty reason rather than falling back to a generic string**, because
+  a fallback would reinstate the unexplained refusal while hiding the caller that produced it.
+  The lock branch reports `already_applied`, which is what a failed acquisition has always been
+  taken to mean here — calling it a refusal would tell the applicant to try again at the moment
+  it worked.
+
+  **Testing this needs `tests/fixtures/testable_application_form.php`, and the reason is a trap.**
+  `get_data()` returns **null** on a unit-built `dynamic_form`: the `_qf__` marker is absent, and
+  supplying it drives the form into `require_sesskey()` and dies in `sessionlib`. Null is harmless
+  for the routing, so the routing tests could use a plain form — but it silently empties the
+  profile-update offer, because `diff::compute()` over no data finds no changes and
+  `offer::stash()` returns before writing. So "a refused application stashes nothing" **passes
+  against a build that stashes unconditionally**. The fixture overrides `get_data()` so the stash
+  can actually happen, and `test_a_created_application_does_stash_a_profile_offer` is the control
+  that proves it does.
+
+  One thing that null also reveals: the *created* path hands `$data` straight to
+  `submission::create()`, which is typed, so null `TypeError`s there. Production never sees it —
+  `apply.php` calls this only inside `else if ($form->get_data())` and the web service only after
+  `is_validated()` — but a test using a plain form on the success path will hit it.
 
 - **One form class, two transports, and only one of them runs core's guards.**
   `\enrol_apply\form\application_form` is a `\core_form\dynamic_form`. The modal reaches it

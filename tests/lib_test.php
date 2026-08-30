@@ -1359,9 +1359,16 @@ final class lib_test extends \advanced_testcase {
         $second = $this->plugin->submit_application($this->instance, $applicant->id, (object) ['applydescription' => 'Two']);
         $sink->close();
 
-        $this->assertTrue($first);
-        $this->assertFalse($second);
+        $this->assertTrue($first->was_created());
+        $this->assertFalse($second->was_created());
         $this->assertCount(1, $DB->get_records('enrol_apply_submission', ['userid' => $applicant->id]));
+
+        /* And the second is NOT a refusal, which is the distinction the result type exists to
+           carry. The applicant does have an application, so the acknowledgement page is
+           telling them the truth; routing this outcome to an error would break the ordinary
+           double submission, which is the commonest way to reach it. */
+        $this->assertFalse($second->is_refusal());
+        $this->assertSame('', $second->reason());
     }
 
     /**
@@ -1399,7 +1406,8 @@ final class lib_test extends \advanced_testcase {
         $admitted = $this->plugin->submit_application($instance, $member->id, (object) ['applydescription' => 'In']);
         $sink->close();
 
-        $this->assertFalse($refused);
+        $this->assertTrue($refused->is_refusal());
+        $this->assertNotSame('', $refused->reason());
         $this->assertFalse($DB->record_exists('user_enrolments', [
             'userid' => $outsider->id,
             'enrolid' => $instance->id,
@@ -1409,7 +1417,7 @@ final class lib_test extends \advanced_testcase {
         /* The control, in the same execution. Without it this test would keep passing if
            submit_application() refused everybody - by throwing early, by a broken fixture,
            or by a guard placed where nothing can get past it. */
-        $this->assertTrue($admitted);
+        $this->assertTrue($admitted->was_created());
         $this->assertTrue($DB->record_exists('user_enrolments', [
             'userid' => $member->id,
             'enrolid' => $instance->id,
@@ -1438,7 +1446,7 @@ final class lib_test extends \advanced_testcase {
         $admitted = $this->plugin->submit_application($this->instance, $first->id, (object) ['applydescription' => 'Open']);
         $sink->close();
 
-        $this->assertTrue($admitted);
+        $this->assertTrue($admitted->was_created());
         $this->assertTrue($DB->record_exists('user_enrolments', [
             'userid' => $first->id,
             'enrolid' => $this->instance->id,
@@ -1453,7 +1461,8 @@ final class lib_test extends \advanced_testcase {
             (object) ['applydescription' => 'Closed']
         );
 
-        $this->assertFalse($refused);
+        $this->assertTrue($refused->is_refusal());
+        $this->assertNotSame('', $refused->reason());
         $this->assertFalse($DB->record_exists('user_enrolments', [
             'userid' => $second->id,
             'enrolid' => $this->instance->id,
