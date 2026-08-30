@@ -81,18 +81,28 @@ class enrol_apply_plugin extends enrol_plugin {
     }
 
     /**
-     * Check whether the given instance currently accepts applications from the current user.
+     * Check whether the given instance currently accepts applications from a user.
      *
      * Every caller routes through this method, so each restriction is checked here rather
      * than in enrol_page_hook(): the hook is only one of the callers and the return value
-     * is rendered raw by core's notification output, which is why the cohort name below is
-     * escaped by format_string() before it is substituted into the message.
+     * is rendered raw by core's notification output, which is why every refusal below is a
+     * plain language string carrying no interpolated detail.
+     *
+     * The applicant defaults to the current user, which is the contract every existing
+     * caller was written against - including plugins outside this repository, which reach
+     * this method through is_callable() and pass a single argument. submit_application()
+     * passes its own $userid instead: it is the write door, it may one day be reached for
+     * somebody other than the operator, and the cohort clause below is the only restriction
+     * here that asks about a person rather than about the instance.
      *
      * @param stdClass $instance Course enrol instance.
+     * @param int|null $userid Applicant to judge, or null for the current user.
      * @return bool|string True when applications are accepted, otherwise the reason to show the user.
      */
-    public function allow_apply(stdClass $instance) {
+    public function allow_apply(stdClass $instance, ?int $userid = null) {
         global $CFG, $DB, $USER;
+
+        $userid = $userid ?? (int) $USER->id;
 
         if ($instance->status != ENROL_INSTANCE_ENABLED) {
             return get_string('cantenrol', 'enrol_apply');
@@ -131,7 +141,7 @@ class enrol_apply_plugin extends enrol_plugin {
                 // The cohort was deleted. Fail closed, and with a string the caller can render.
                 return get_string('cohortunresolved', 'enrol_apply');
             }
-            if (!cohort_is_member($cohortid, $USER->id)) {
+            if (!cohort_is_member($cohortid, $userid)) {
                 /* The refusal does NOT name the cohort, and that is the point. enrol_self's
                    equivalent does (public/enrol/self/lib.php, 'cohortnonmemberinfo'), and the
                    string it builds travels further than the page: enrol_page_hook() renders it
@@ -313,7 +323,7 @@ class enrol_apply_plugin extends enrol_plugin {
      * @param stdClass $instance Course enrol instance.
      * @param int $userid Applicant user id.
      * @param stdClass $data Submitted application form data.
-     * @return bool True when this call created the application, false when it was already there.
+     * @return bool True when this call created the application, false when it refused to.
      */
     public function submit_application($instance, $userid, $data) {
         global $DB;
@@ -325,6 +335,36 @@ class enrol_apply_plugin extends enrol_plugin {
         }
 
         try {
+            /* The eligibility predicate, on the WRITE door. Until this was added it guarded
+               only the presentation layer - enrol_page_hook() and the form's access check -
+               so everything it covers (the instance status, the new-applications flag, the
+               enrolment window, and the cohort restriction with its -1 unresolved sentinel)
+               was bypassed by any other route into this method: a task, a web service, an
+               import.
+
+               Inside the lock, beside the duplicate and cap checks, so the decision cannot be
+               separated from the write. Do NOT restate this as closing the form's race: both
+               transports re-run check_access_for_dynamic_submission() on the SUBMIT request
+               itself - apply.php calls it on every request including the POST, and core builds
+               the modal's form with $isajaxsubmission = true, whose constructor runs the same
+               check before process_dynamic_submission() is reached - so somebody removed from
+               the cohort while filling the form in is already refused there, and refused
+               better, with a message naming a reason. What is left here is the intra-request
+               gap between that check and this write, and every caller that is not the form.
+
+               The applicant is passed explicitly. allow_apply() reads $USER when given nothing,
+               which is right for the two screens and wrong here: judged against the operator,
+               the cohort clause admits whoever the OPERATOR's membership admits. See the R
+               mutation in mutations/gates.conf.
+
+               `!== true` because the return is bool|string, so anything that is not exactly
+               true fails closed. The cohort refusal is a generic string today and no longer
+               names the cohort, but the signature still permits detail and this comparison
+               does not care which it is. */
+            if ($this->allow_apply($instance, (int) $userid) !== true) {
+                return false;
+            }
+
             if ($DB->record_exists('user_enrolments', ['userid' => $userid, 'enrolid' => $instance->id])) {
                 return false;
             }
