@@ -75,6 +75,8 @@ class backup_enrol_apply_plugin extends backup_enrol_plugin {
             'userinfodata',
             'status',
             'outcomemessage',
+            'decidedgroups',
+            'decidedrole',
             'timecreated',
             'timedecided',
             'decidedby',
@@ -192,6 +194,26 @@ class backup_enrol_apply_plugin extends backup_enrol_plugin {
            built by joining the annotated ids against {user}, where no row has id 0. */
         $submission->annotate_ids('user', 'userid');
         $submission->annotate_ids('user', 'decidedby');
+
+        /* The ROLE a decider chose is annotated; the GROUPS are deliberately not, and the
+           asymmetry is measured rather than stylistic.
+
+           Groups need nothing: backup_annotate_course_groups_and_groupings annotates every
+           group of the course unconditionally, so each one is promoted to 'groupfinal' and
+           written to groups.xml whenever the groups setting is on, whether or not anything
+           refers to it. decidedgroups is a comma-separated column in any case, which
+           annotate_ids() - one id per row - could not walk.
+
+           The role does need it. roles.xml selects on 'rolefinal', so a role reaches the
+           archive only through an annotation, and the obvious source of one is a
+           role_assignment the applicant holds. That is exactly what a cancelled application
+           does not have: the decision is recorded, the assignment is gone, and without this
+           line the role would be absent from the archive and unmappable on restore.
+
+           A decidedrole of 0 is annotated too and is inert for the same reason the decidedby
+           of an undecided row is: roles.xml joins the annotated ids against {role}, where no
+           row has id 0. */
+        $submission->annotate_ids('role', 'decidedrole');
 
         $applygroup->annotate_ids('group', 'groupid');
 

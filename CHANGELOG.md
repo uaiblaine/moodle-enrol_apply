@@ -157,6 +157,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **A restored course keeps the groups and the role a decision recorded.** The applications
+  trail stores which groups an approved applicant was put into and which role they were given,
+  and a backup carried neither: restoring a course produced records that said a decision had
+  been taken and showed nothing about what it was. Both now travel, translated to the groups
+  and roles of the course they land in rather than copied as the numbers they had in the
+  course they came from. A group that did not come across — one belonging to a different
+  course, say — is dropped rather than pointed at whatever that number means in the
+  destination, and a role the restoring user may not assign falls back to the role configured
+  on the enrolment method, exactly as an application decided without a role choice does.
+
+  This matters more since the previous entry: those two details are now part of what somebody
+  gets when they ask for their own data, so a restored course would have shown them a decision
+  with the groups and role silently missing.
+
 - **A subject access request now includes the decision taken on the application.** The plugin's
   privacy declaration has always listed the message a decider wrote to the applicant, the groups
   the applicant was put into and the role they were given — but the export itself carried none of
