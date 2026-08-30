@@ -429,6 +429,171 @@ final class lib_test extends \advanced_testcase {
     }
 
     /**
+     * The plugin object answers the capacity question, and answers it the same way.
+     *
+     * This method is the API three plugins outside this repo depend on - local_dimensions,
+     * local_unlistedcourses and theme_boost_union_fundaseg - and they reach it through
+     * is_callable() on the plugin object, because for each of them enrol_apply is an OPTIONAL
+     * dependency and a reference into its namespace is one the autoloader would have to
+     * resolve on a site without it. local_dimensions enforces that with a test over its own
+     * source. So this is not a redundant wrapper over capacity::is_full(): it is the only
+     * spelling those callers are allowed to use, and deleting it breaks them silently, since
+     * is_callable() would simply start returning false and each would fall back to the
+     * unfiltered count this change exists to stop.
+     *
+     * @return void
+     */
+    public function test_the_plugin_object_answers_the_capacity_question(): void {
+        global $DB;
+
+        $this->assertTrue(is_callable([$this->plugin, 'is_full']));
+
+        $DB->set_field('enrol', 'customint3', 1, ['id' => $this->instance->id]);
+        $instance = $this->reload_instance();
+        $this->assertFalse($this->plugin->is_full($instance));
+
+        $this->create_application();
+        $this->assertTrue($this->plugin->is_full($this->reload_instance()));
+
+        // And it agrees with the class it fronts, on both answers.
+        $expired = $this->getDataGenerator()->create_user();
+        $this->plugin->enrol_user($this->instance, $expired->id, null, 0, time() - DAYSECS, ENROL_USER_ACTIVE);
+        $instance = $this->reload_instance();
+        $this->assertSame(
+            \enrol_apply\local\capacity::is_full($instance),
+            $this->plugin->is_full($instance)
+        );
+    }
+
+    /**
+     * Deferring clears an expiry the row was carrying.
+     *
+     * A once-approved application can be deferred, and update_user_enrol() writes a date only
+     * when it is given one - so before this the row landed on the waiting list still carrying
+     * its old timeend. That state is stranded: core's suspend arms of process_expirations()
+     * filter on status = active, which a waiting-list row fails, so no sweep touches it; the
+     * queue's own predicate excludes it by that very timeend, so no listing offers it. It
+     * waited for a decision nobody could take.
+     *
+     * Three things make this test non-vacuous, and it needs all three. The row must really
+     * have carried an expiry, or zero was true before the call. The deferral must be shown to
+     * have run, because wait_enrolment() silently skips a row that is not ENROL_USER_SUSPENDED
+     * and one that fails can_manage_application(). And only then does the cleared value mean
+     * anything.
+     *
+     * @return void
+     */
+    public function test_deferring_clears_an_expiry_the_row_was_carrying(): void {
+        global $DB;
+
+        $this->setAdminUser();
+        [, $ueid] = $this->create_application();
+
+        $DB->set_field('user_enrolments', 'timeend', time() - DAYSECS, ['id' => $ueid]);
+        $this->assertNotEquals(
+            0,
+            (int) $DB->get_field('user_enrolments', 'timeend', ['id' => $ueid]),
+            'The precondition: the row must be carrying an expiry before the call.'
+        );
+
+        $sink = $this->redirectMessages();
+        $this->plugin->wait_enrolment([$ueid]);
+        $sink->close();
+
+        $ue = $DB->get_record('user_enrolments', ['id' => $ueid], '*', MUST_EXIST);
+        $this->assertEquals(
+            ENROL_APPLY_USER_WAIT,
+            (int) $ue->status,
+            'The deferral must actually have run, or the cleared date proves nothing.'
+        );
+        $this->assertSame(0, (int) $ue->timeend);
+    }
+
+    /**
+     * Approving resets an expiry the row was carrying, rather than inheriting it.
+     *
+     * Found by a mis-anchored mutation, which is worth recording: the pattern for AB matched
+     * this line instead of the one in wait_enrolment(), reddened nothing, and so reported a
+     * guard nobody was holding. The guard turned out to be real.
+     *
+     * confirm_enrolment() works on the {user_enrolments} row, so timeend arrives carrying
+     * whatever is stored. With no enrolperiod on the instance, dropping the reset would let a
+     * PAST expiry survive the approval - and under the shipped expiredaction of KEEP nothing
+     * ever corrects it. The applicant would be approved, ACTIVE, and hold no access at all,
+     * which is the least visible way this plugin can fail somebody.
+     *
+     * Reachable rather than theoretical: a restore writes an archived timeend verbatim, and a
+     * once-approved application can be re-suspended and decided again.
+     *
+     * @return void
+     */
+    public function test_approving_resets_an_expiry_the_row_was_carrying(): void {
+        global $DB;
+
+        $this->setAdminUser();
+        [$user, $ueid] = $this->create_application();
+
+        // The instance has no period of its own, so nothing else would overwrite the date.
+        $this->assertSame(0, (int) $this->reload_instance()->enrolperiod);
+
+        $DB->set_field('user_enrolments', 'timeend', time() - DAYSECS, ['id' => $ueid]);
+        $this->assertNotEquals(
+            0,
+            (int) $DB->get_field('user_enrolments', 'timeend', ['id' => $ueid]),
+            'The precondition: the row must be carrying a past expiry before the approval.'
+        );
+
+        $sink = $this->redirectMessages();
+        $this->plugin->confirm_enrolment([$ueid]);
+        $sink->close();
+
+        $ue = $DB->get_record('user_enrolments', ['id' => $ueid], '*', MUST_EXIST);
+        $this->assertEquals(ENROL_USER_ACTIVE, (int) $ue->status);
+        $this->assertSame(0, (int) $ue->timeend);
+
+        /* The assertion that says why it matters: approved and actually able to get in. With
+           the stale expiry surviving, this is false while the status still reads active. */
+        $this->assertTrue(is_enrolled(\context_course::instance($this->course->id), $user, '', true));
+    }
+
+    /**
+     * The wait notification does not print an expiry that was just cleared.
+     *
+     * notify_applicant() is handed the row as it was read BEFORE the update, and
+     * update_mail_content() substitutes {timeend} for every message type, so without clearing
+     * the in-memory copy too the applicant is told their enrolment ends on a date that no
+     * longer exists.
+     *
+     * @return void
+     */
+    public function test_the_wait_notification_carries_no_expiry_that_was_just_cleared(): void {
+        global $DB;
+
+        $expiry = time() - DAYSECS;
+        set_config('waitmailsubject', 'Waiting list', 'enrol_apply');
+        set_config('waitmailcontent', 'Marker. Ends: {timeend}.', 'enrol_apply');
+
+        $this->setAdminUser();
+        [, $ueid] = $this->create_application();
+        $DB->set_field('user_enrolments', 'timeend', $expiry, ['id' => $ueid]);
+
+        $sink = $this->redirectMessages();
+        $this->plugin->wait_enrolment([$ueid]);
+        $messages = $sink->get_messages();
+        $sink->close();
+
+        $this->assertCount(1, $messages);
+        $body = $messages[0]->fullmessage . ' ' . $messages[0]->fullmessagehtml;
+
+        // The control: the configured template really was used and really was substituted.
+        $this->assertStringContainsString('Marker.', $body);
+        $this->assertStringNotContainsString('{timeend}', $body);
+
+        // And the date that was cleared is not announced.
+        $this->assertStringNotContainsString(userdate($expiry), $body);
+    }
+
+    /**
      * A deferred application can still be confirmed afterwards.
      *
      * @return void

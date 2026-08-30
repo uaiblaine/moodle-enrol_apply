@@ -52,9 +52,13 @@ final class queue {
      * application is "not active AND has not expired": process_expirations() re-suspends an
      * ACTIVE enrolment whose period ran out when expiredaction is "suspend", and a re-suspended
      * row would otherwise surface as a fresh application from somebody who was in fact approved
-     * long ago. Pending and waiting-list rows always carry timeend = 0, because apply() never
-     * stamps a period and wait_enrolment() does not touch the dates; only a once-approved row
-     * can have one.
+     * long ago.
+     *
+     * Nothing this plugin WRITES puts a period on a pending or waiting-list row - apply()
+     * stamps none, and wait_enrolment() clears any the row was carrying - but that is a
+     * property of the writers, not an invariant of the table, and it must not be read as one.
+     * restore_enrol_apply_plugin passes an archived timeend through verbatim, so a foreign
+     * archive can produce any value at all. The clause stays because the data can.
      *
      * The user enrolment must be aliased "ue" by the caller, which every caller already does.
      *

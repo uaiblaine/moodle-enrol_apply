@@ -21,6 +21,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **A course whose places expired stopped accepting applications for ever.** The limit on how
+  many people may apply counted every enrolment the method had ever made, including those whose
+  enrolment period had already run out. Nothing frees those: the plugin ships *Action on
+  enrolment expiry* set to *Keep*, under which Moodle deliberately changes nothing when a period
+  ends, so the row stays and goes on occupying a place indefinitely.
+
+  A course with a limit of 100 could therefore admit 100 people in its first year, watch all of
+  them expire, and in its second year refuse everybody — with an **empty** approval queue, and
+  no screen anywhere able to say why. The limit now counts only enrolments that still hold a
+  place. An enrolment that has not started yet does still hold one, because that person is going
+  to turn up.
+
+  The number this plugin shows will now differ from the *Users* column on Moodle's own
+  *Enrolment methods* page, which counts every row regardless. That divergence is deliberate and
+  is the lesser of two evils.
+
+- **Deferring an application to the waiting list clears any expiry it was carrying.** An
+  application that had been approved and then deferred kept its old end date, and that state was
+  a dead end: Moodle's expiry sweep skips it because the enrolment is not active, and the
+  approval queue hides it because it has expired. It waited for a decision that no screen could
+  offer and no sweep could take. Sites carrying such rows already have them repaired on upgrade.
+
 - **An application that is refused now says so, instead of showing an access error.** The
   method that writes an application could refuse for four reasons, and reported all four as a
   bare `false` that the form discarded — every outcome was sent to the acknowledgement page.

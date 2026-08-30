@@ -399,11 +399,8 @@ class application_form extends dynamic_form {
             throw new \moodle_exception('notification', 'enrol_apply');
         }
 
-        if ($instance->customint3 > 0) {
-            $count = $DB->count_records('user_enrolments', ['enrolid' => $instance->id]);
-            if ($count >= $instance->customint3) {
-                throw new \moodle_exception('maxenrolledreached', 'enrol_apply');
-            }
+        if (\enrol_apply\local\capacity::is_full($instance)) {
+            throw new \moodle_exception('maxenrolledreached', 'enrol_apply');
         }
     }
 

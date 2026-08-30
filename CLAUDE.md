@@ -253,6 +253,59 @@ backup/                      group mappings, comments and the durable trail, see
   template errors both rendering tests, which is the mutation that replaced the one that held
   nothing.
 
+- **One definition of the places cap, in `\enrol_apply\local\capacity` — and it is NOT the queue
+  predicate.** This is the most damaging confusion available in this plugin, so read it before
+  touching either. `queue::awaiting_decision_where()` is `status != active AND not expired`: it
+  answers *which applications still need deciding*. Capacity asks *which enrolments still hold a
+  place*, and an approved, **active** learner holds one — exactly what the queue's status clause
+  throws away. Borrowing that predicate, or indexing into the array it returns to lift the
+  `timeend` half out, makes the cap exceedable by the number of approvals.
+
+  And it fails **silently**: `fix_sql_params()` tolerates surplus named parameters
+  (`lib/dml/moodle_database.php`, "there might be more params than needed"), so a half-refactor
+  that passes the whole parameter array with only one clause runs clean and reddens nothing.
+  `test_every_state_of_an_application_holds_a_place` is what catches it — the pending and
+  waiting-list rows in that test pass either way, and only the ACTIVE one tells the two apart.
+
+  It is also **not** core's access predicate. `enrol_get_all_users_courses()` and friends pair
+  the expiry test with `timestart < :now`, and copying that half would free the place of somebody
+  enrolled with a future start date. The line is *"will this row ever grant access again?"* —
+  expired: no; not started yet: yes.
+
+  **Why it excludes expired rows at all** is the ratchet: the plugin ships
+  `expiredaction = ENROL_EXT_REMOVED_KEEP`, whose arm of `process_expirations()` is literally
+  `// ENROL_EXT_REMOVED_KEEP means no changes.`, so an expired row survives for ever. Counted, it
+  closed a course's applications permanently with an empty queue and nothing able to explain it.
+  The cost is a deliberate divergence from core's own unfiltered `Users` column
+  (`enrol/instances.php`) and from `enrol_self`'s cap — documented rather than hidden, because a
+  teacher comparing the two screens will notice.
+
+  **`limit()` must stay `> 0`, not `!== 0`.** `db/upgrade.php` writes `customint3 = null` on one
+  path, and a negative would otherwise mean "permanently full" rather than "uncapped".
+
+  **Three plugins outside this repo consumed the old inline count** — `local_dimensions`,
+  `local_unlistedcourses` and `theme_boost_union_fundaseg` — and all three now delegate here
+  behind a `class_exists()` guard, keeping the unfiltered count as the fallback because that is
+  what an older `enrol_apply` build genuinely means. Their own tests seat occupants with
+  `timeend = 0`, so they stayed green through the divergence and nothing in any pipeline
+  reported it. If this predicate changes again, they change with it.
+
+- **Deferring clears the expiry, and the literal `0` is load bearing twice.**
+  `update_user_enrol()` gates each date on `isset()`, so `null` means "leave it alone" and there
+  is no other spelling — which is how a once-approved application used to land on the waiting
+  list still carrying a past `timeend`. That row is stranded by construction: core's SUSPEND arms
+  filter `status = active`, which it fails, so no sweep touches it, and the queue excludes it by
+  that same `timeend`, so no listing offers it. It waited for a decision nobody could take.
+
+  It must be the **integer** `0`: core's `communication/classes/hook_listener.php` compares
+  `timeend !== 0`, and `'0' !== 0` is true, so a string would drop the applicant out of the
+  course communication room on any site running that subsystem.
+
+  `wait_enrolment()` also sets `$userenrolment->timeend = 0` in memory, because the row was read
+  before the update and `update_mail_content()` substitutes `{timeend}` for every message type —
+  without it the wait mail announces the date that was just cleared. Both live templates are
+  empty, so that one is a trap rather than a live defect, and `AB` in `gates.conf` holds it.
+
 - **One SQL definition of "awaiting a decision", in `queue::awaiting_decision_where()`** — read
   by the approval queue, the submitted-comments listing, the review lookup and the retention
   sweep. It used to be written out in each of them, which is how the participants-page bulk

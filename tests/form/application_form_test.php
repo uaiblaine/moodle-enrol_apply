@@ -319,7 +319,12 @@ final class application_form_test extends \advanced_testcase {
         $this->plugin->enrol_user($this->instance, $other->id, null, 0, 0, ENROL_USER_SUSPENDED);
         $DB->set_field('enrol', 'customint3', 1, ['id' => $this->instance->id]);
 
+        /* The message, not just the type. A bare moodle_exception assertion cannot tell the
+           cap refusal apart from the coursehidden and cantenrol throws a few lines above it
+           in the same method, so it stayed green against a mutation that made an earlier
+           guard throw instead. */
         $this->expectException(\moodle_exception::class);
+        $this->expectExceptionMessage(get_string('maxenrolledreached', 'enrol_apply'));
         $this->make_form()->check_access_for_dynamic_submission();
     }
 
