@@ -784,6 +784,54 @@ backup/                      group mappings, comments and the durable trail, see
   still the one place in this plugin's templates where a triple stash is right rather than wrong;
   what changed is that the renderer now earns it instead of assuming it.
 
+- **`allow_apply()` guards BOTH doors, and until recently it guarded only the offer.** It is
+  the whole eligibility predicate — instance status, `customint6`, the enrolment window, and the
+  `customint5` cohort restriction with its `-1` unresolved sentinel — and its only callers were
+  `enrol_page_hook()` and the form's `check_access_for_dynamic_submission()`. Both are
+  presentation. `submit_application()`, which is what actually writes the enrolment, checked the
+  lock, the duplicate and the `customint3` cap and nothing else, so every one of those
+  restrictions was a property of two screens rather than of the plugin. Any other caller — a
+  task, a web service, an import — walked past all of them.
+
+  It is now re-checked **inside the existing lock**, first thing, next to the duplicate and cap
+  checks that were always there. The comparison is `!== true` because the return is
+  `bool|string` and anything that is not exactly `true` must fail closed — the cohort refusal is
+  generic today, but the signature still permits detail.
+
+  **Do not repeat the claim that this closes the form's race; it mostly does not.** Both
+  transports re-run `check_access_for_dynamic_submission()` on the SUBMIT request, immediately
+  before the write — `apply.php:63` calls it on every request including the POST, and core builds
+  the modal's form with `$isajaxsubmission = true`, whose `dynamic_form::__construct()` runs the
+  same check before `core_form\external\dynamic_form::execute()` reaches
+  `process_dynamic_submission()`. So an applicant removed from the cohort while filling the form
+  in is already refused there, and refused *better*: the form throws `cantenrol`, which names a
+  reason. What is left for this guard is the intra-request gap between that check and the write,
+  and — the real point — every caller that is not the form.
+
+  **The second argument is load bearing and is the half a reviewer skips.** `allow_apply()` read
+  `$USER` internally, which is right for the two screens (both ask "may *I* apply?") and wrong
+  for a write path handed an explicit `$userid`. With the bare one-argument call, a caller
+  enrolling somebody else has the cohort clause evaluated against **the operator** — so an
+  admin who happens to be a cohort member admits an applicant who is not. The parameter is
+  optional and defaults to the current user, because callers **outside this repository** reach
+  this method through `is_callable()` and pass one argument, and all of them document it as
+  resolving for `$USER`. `mutations/gates.conf` carries both halves: `Q` deletes the guard, `R`
+  keeps it and drops the user id, and only the cohort test can see `R` — which is why that test
+  puts the operator inside the cohort and the applicant outside it.
+
+  **A refusal here does NOT show a false acknowledgement**, which is what a first reading of the
+  code suggests and what an earlier version of this bullet said. `process_dynamic_submission()`
+  discards the return value and hands back the `applied.php` url regardless — but `applied.php`
+  is itself gated on `record_exists('user_enrolments', [...'enrolid' => $instance->id])`, so with
+  nothing written it throws `invalidaccess` rather than rendering. The four `false` branches
+  therefore do not behave alike. The duplicate refusal is the one where a row *does* exist —
+  that is why it refused — so the acknowledgement renders and is correct. The cap and
+  eligibility refusals write nothing and land on `invalidaccess`: an unexplained error page,
+  which is poor, but is not a false reassurance. The lock refusal is neither, and is
+  timing-dependent: failing to acquire means another request is already writing, so the row
+  usually exists by the time the redirect lands. The ordinary path reaches none of the four,
+  because the form refuses first.
+
 - **One form class, two transports, and only one of them runs core's guards.**
   `\enrol_apply\form\application_form` is a `\core_form\dynamic_form`. The modal reaches it
   through core's `core_form_dynamic_form` web service; `apply.php` renders the same class on a

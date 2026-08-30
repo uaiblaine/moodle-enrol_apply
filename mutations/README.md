@@ -1,6 +1,6 @@
 # Mutation spec
 
-Nine guards in this plugin, each paired with the test that must go red when the guard is
+Every guard in this plugin is paired with the test that must go red when the guard is
 removed. Run the whole set with:
 
 ```sh
@@ -20,7 +20,7 @@ they were written to catch. The pairing in `gates.conf` — this guard, that tes
 claim, and a claim that lives only in a commit message or a docblock cannot be re-checked.
 Here it is executable.
 
-The nine are not a sample. Each one was a real decision that a reviewer questioned or a
+They are not a sample. Each one was a real decision that a reviewer questioned or a
 defect that shipped:
 
 - **A, B, E, F, G** hold the participants-page decision icon. `G` is the sharpest: it
@@ -39,6 +39,14 @@ defect that shipped:
 - **I** removes the file-scope requires that make this plugin's two `CoversClass` targets
   resolvable. Without them `mdl ci --coverage` fails, and which tests warn depends on
   execution order.
+- **Q and R** are the write door's eligibility check, and they are a pair because the guard
+  has two independent ways to be wrong. `Q` deletes it, restoring the state in which
+  `allow_apply()` guarded the two screens that OFFER an application and not the method that
+  writes one. `R` is the sharper of the two: it keeps the call and drops the applicant's user
+  id, so the cohort clause is judged against whoever is logged in. Only the cohort test can
+  see `R` at all — the other three restrictions ask nothing about a person — which is why that
+  test deliberately puts the operator inside the cohort and the applicant outside it. A test
+  written the obvious way, with both of them outside, passes against `R`.
 
 ## Rules for adding one
 

@@ -19,6 +19,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `enrol_self` still names the cohort in the same situation; closing that would mean forking a core
   plugin, and has deliberately not been done.
 
+### Fixed
+
+- **The rules deciding who may apply are now enforced where the application is written, not
+  only where it is offered.** `allow_apply()` — which settles whether the enrolment method is
+  accepting applications at all, whether the enrolment window is open, and whether the
+  applicant belongs to the cohort the method is restricted to — was consulted by the course
+  enrolment page and by the application form, and by nothing else. The method that actually
+  creates the application never asked it anything. Any other route into that method wrote the
+  enrolment regardless, so the restrictions were a property of those two screens rather than
+  of the plugin, and anything added later — a scheduled task, a web service, an import — would
+  have walked past all of them without a word.
+
+  The check runs inside the lock the write already takes, alongside the duplicate and
+  places-cap checks that were always there, so the decision and the write cannot be separated.
+
+  It is worth being exact about how much of a race this closes, because it is less than it
+  first appears. Both ways of reaching the form re-run its access check on the *submit*
+  request itself, immediately before the write, so an applicant who is removed from the cohort
+  while filling the form in was already refused — and refused better, with a message naming
+  the reason, rather than by the write door. What is genuinely new is every route that is not
+  the form at all, which is the case this entry is about.
+
+  Nothing changes on the ordinary path: an applicant who is not eligible is still refused by
+  the form first, with the same message, on the same screen.
+
+- **`allow_apply()` now accepts the applicant it is judging.** It read the current user from
+  the session, which is correct for the two screens that call it — both ask "may *I* apply?" —
+  and wrong for the write path, which is handed a user id and may one day be reached for
+  somebody other than the operator. Passing no second argument keeps the previous behaviour
+  exactly, so callers outside this plugin are unaffected; the cohort clause is the only rule
+  that reads a person rather than the enrolment method.
+
 ### Added
 
 - **An application can now be opened for a decision straight from the course participants

@@ -1365,6 +1365,103 @@ final class lib_test extends \advanced_testcase {
     }
 
     /**
+     * The write door refuses an applicant the cohort restriction excludes.
+     *
+     * submit_application() is called directly here, which is the whole point: allow_apply()
+     * used to be reached only from enrol_page_hook() and from the form's access check, so
+     * every restriction it carries lived in the presentation layer and any other route into
+     * the write path walked past all of it.
+     *
+     * The operator is a cohort MEMBER and the applicant is not, which is what makes this
+     * test read the user id the method was passed rather than the $USER global. With the
+     * one-argument allow_apply() the admin's own membership would admit the outsider, so
+     * this pins the threading of $userid and not merely the presence of a call.
+     *
+     * @return void
+     */
+    public function test_the_write_door_refuses_an_applicant_outside_the_cohort(): void {
+        global $DB;
+
+        $cohort = $this->getDataGenerator()->create_cohort();
+        $member = $this->getDataGenerator()->create_user();
+        $outsider = $this->getDataGenerator()->create_user();
+        cohort_add_member($cohort->id, $member->id);
+
+        $DB->set_field('enrol', 'customint5', $cohort->id, ['id' => $this->instance->id]);
+        $instance = $this->reload_instance();
+
+        $admin = get_admin();
+        cohort_add_member($cohort->id, (int) $admin->id);
+        $this->setAdminUser();
+
+        $sink = $this->redirectMessages();
+        $refused = $this->plugin->submit_application($instance, $outsider->id, (object) ['applydescription' => 'Out']);
+        $admitted = $this->plugin->submit_application($instance, $member->id, (object) ['applydescription' => 'In']);
+        $sink->close();
+
+        $this->assertFalse($refused);
+        $this->assertFalse($DB->record_exists('user_enrolments', [
+            'userid' => $outsider->id,
+            'enrolid' => $instance->id,
+        ]));
+        $this->assertFalse($DB->record_exists('enrol_apply_submission', ['userid' => $outsider->id]));
+
+        /* The control, in the same execution. Without it this test would keep passing if
+           submit_application() refused everybody - by throwing early, by a broken fixture,
+           or by a guard placed where nothing can get past it. */
+        $this->assertTrue($admitted);
+        $this->assertTrue($DB->record_exists('user_enrolments', [
+            'userid' => $member->id,
+            'enrolid' => $instance->id,
+        ]));
+    }
+
+    /**
+     * The write door refuses an instance that has stopped taking new applications.
+     *
+     * The second of the four restrictions that escaped the write path, and the one that is
+     * furthest from the cohort clause: it asks nothing about the applicant at all, so it
+     * holds the guard rather than the user id threaded through it.
+     *
+     * @return void
+     */
+    public function test_the_write_door_refuses_an_instance_taking_no_new_applications(): void {
+        global $DB;
+
+        $first = $this->getDataGenerator()->create_user();
+        $second = $this->getDataGenerator()->create_user();
+
+        /* The control runs first and on the untouched instance: it is what proves the
+           refusal below is customint6 and not the fixture. */
+        $this->setUser($first);
+        $sink = $this->redirectMessages();
+        $admitted = $this->plugin->submit_application($this->instance, $first->id, (object) ['applydescription' => 'Open']);
+        $sink->close();
+
+        $this->assertTrue($admitted);
+        $this->assertTrue($DB->record_exists('user_enrolments', [
+            'userid' => $first->id,
+            'enrolid' => $this->instance->id,
+        ]));
+
+        $DB->set_field('enrol', 'customint6', 0, ['id' => $this->instance->id]);
+
+        $this->setUser($second);
+        $refused = $this->plugin->submit_application(
+            $this->reload_instance(),
+            $second->id,
+            (object) ['applydescription' => 'Closed']
+        );
+
+        $this->assertFalse($refused);
+        $this->assertFalse($DB->record_exists('user_enrolments', [
+            'userid' => $second->id,
+            'enrolid' => $this->instance->id,
+        ]));
+        $this->assertFalse($DB->record_exists('enrol_apply_submission', ['userid' => $second->id]));
+    }
+
+    /**
      * Applying again after a cancellation is allowed, and produces a second record.
      *
      * The other half of the reason the natural key is not unique: the first record is a
