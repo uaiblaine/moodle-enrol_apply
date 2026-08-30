@@ -382,7 +382,7 @@ final class backup_test extends \advanced_testcase {
      * @return void
      */
     public function test_a_group_that_did_not_travel_is_dropped(): void {
-        [$course, $instance, $applicant] = $this->create_course_with_application();
+        [$course, , $applicant] = $this->create_course_with_application();
         $elsewhere = $this->getDataGenerator()->create_course();
         $foreign = $this->getDataGenerator()->create_group(['courseid' => $elsewhere->id, 'name' => 'Another course']);
         $this->record_decision($course, $applicant, [(int) $foreign->id], 0);
@@ -409,7 +409,7 @@ final class backup_test extends \advanced_testcase {
      * @return void
      */
     public function test_an_archive_without_the_new_elements_still_restores(): void {
-        [$course, $instance, $applicant] = $this->create_course_with_application();
+        [$course, , $applicant] = $this->create_course_with_application();
         $chosen = $this->getDataGenerator()->create_group(['courseid' => $course->id, 'name' => 'Chosen on approval']);
         $this->record_decision($course, $applicant, [(int) $chosen->id], 0);
 

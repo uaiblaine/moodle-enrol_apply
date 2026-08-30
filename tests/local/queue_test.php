@@ -988,7 +988,7 @@ final class queue_test extends \advanced_testcase {
      */
     public function test_an_application_outside_the_mentees_gives_no_walk_at_all(): void {
         $base = time() - DAYSECS;
-        [$elsewhere, $elsewhereinstance] = $this->course_with_instance(['visible' => 1]);
+        [, $elsewhereinstance] = $this->course_with_instance(['visible' => 1]);
         [$mentee, $menteeueid] = $this->applicant_on($elsewhereinstance);
         $this->submitted_at($menteeueid, $base + 1);
 
