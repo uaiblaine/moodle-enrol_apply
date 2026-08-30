@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Changed
+
+- **The cohort refusal no longer names the cohort.** When a non-member is refused by the
+  `customint5` restriction, `allow_apply()` used to return "Only members of cohort 'X' can apply
+  for enrolment", with X interpolated. That string is not confined to the page: `enrol_page_hook()`
+  renders it to any authenticated non-member, and it also travels through `get_enrol_info()` into
+  the `status` field of `core_enrol_get_course_enrolment_methods`. On a platform whose cohorts are
+  named after the corporation they belong to, the cohort name is itself the sensitive fact — it
+  tells a stranger which force a course belongs to. The refusal now says only that enrolment is
+  restricted to a specific cohort, which is the part an applicant can act on. Note that core's
+  `enrol_self` still names the cohort in the same situation; closing that would mean forking a core
+  plugin, and has deliberately not been done.
+
 ### Added
 
 - **An application can now be opened for a decision straight from the course participants

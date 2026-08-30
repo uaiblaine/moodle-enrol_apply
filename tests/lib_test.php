@@ -638,7 +638,24 @@ final class lib_test extends \advanced_testcase {
         $this->setUser($outsider);
         $refusal = $this->plugin->allow_apply($restricted);
         $this->assertIsString($refusal);
-        $this->assertSame(get_string('cohortnonmemberinfo', 'enrol_apply', 'Servidores 2026'), $refusal);
+        $this->assertSame(get_string('cohortnonmemberinfo', 'enrol_apply'), $refusal);
+
+        /* The refusal must not NAME the cohort. It is rendered to any authenticated
+           non-member by enrol_page_hook(), so naming it would tell a stranger which
+           group the course belongs to - on this platform, which security force. The
+           assertion is on the cohort's own name rather than on the message, so it
+           keeps holding if the wording is ever rewritten.
+
+           Both halves are needed and neither is redundant: the language string carries
+           no {$a} placeholder, and allow_apply() passes no argument. Restoring either
+           one alone leaves the name unreachable - this assertion is what fails if both
+           come back. */
+        $this->assertStringNotContainsString('Servidores 2026', $refusal);
+        $this->assertStringNotContainsString(
+            '{$a}',
+            $refusal,
+            'The string must not carry an uninterpolated placeholder either.'
+        );
     }
 
     /**
