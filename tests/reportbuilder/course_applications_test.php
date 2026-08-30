@@ -545,7 +545,8 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
     public function test_a_pseudonymised_record_is_not_listed(): void {
         global $DB;
 
-        $applicant = $this->seed('Before the course went');
+        // The call is what seeds the record; the returned user is not needed here.
+        $this->seed('Before the course went');
         // The control: it is listed while it still names somebody.
         $this->setUser($this->reader());
         $this->assertCount(1, $this->rows());
