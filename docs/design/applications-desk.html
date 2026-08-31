@@ -1,0 +1,1676 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Answers and mockups for five enrol_apply UI questions: the custom label, info.php, the approval queue, the review page and the participants bulk menu.">
+<title>The Applications Desk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+<style>
+:root{
+  --paper:#e7eaee; --card:#ffffff; --card-2:#f2f5f8; --inset:#eef1f5;
+  --ink:#13161b; --ink-soft:#525b69; --ink-faint:#7d8794;
+  --rule:#ccd3db; --rule-soft:#e0e5ea;
+  --brass:#8a610f; --brass-wash:#f6efe0;
+  --ok:#186b43; --ok-wash:#e1f1e8;
+  --warn:#845309; --warn-wash:#faeed7;
+  --bad:#992727; --bad-wash:#f8e5e5;
+  --blue:#0f6cbf; --blue-wash:#e6f0f9;
+  --shadow:0 1px 2px rgba(16,20,26,.05), 0 10px 30px -16px rgba(16,20,26,.25);
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --disp:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --serif:"Source Serif 4",Georgia,"Times New Roman",serif;
+  --ui:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --m-bg:#ffffff; --m-fg:#1d2125; --m-muted:#6a737b; --m-border:#dee2e6;
+  --m-primary:#0f6cbf; --m-card:#f8f9fa; --m-shade:#eef1f4;
+  --m-ok:#357a32; --m-okbg:#e8f3e7; --m-warn:#8a6d00; --m-warnbg:#fbf1cf;
+  --m-bad:#a33; --m-badbg:#f9e7e7; --m-onprimary:#ffffff;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#0f1216; --card:#181c21; --card-2:#1f242a; --inset:#14181d;
+  --ink:#e5e9ed; --ink-soft:#9aa4b1; --ink-faint:#6f7986;
+  --rule:#2b323a; --rule-soft:#222830;
+  --brass:#d3a44e; --brass-wash:#2a2317;
+  --ok:#59c98c; --ok-wash:#13291f;
+  --warn:#dfa848; --warn-wash:#2a2214;
+  --bad:#ef8b8b; --bad-wash:#2c1a1a;
+  --blue:#63a8e2; --blue-wash:#132435;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 12px 34px -18px rgba(0,0,0,.8);
+  --m-bg:#1b1e22; --m-fg:#e9ecef; --m-muted:#a4adb6; --m-border:#343a40;
+  --m-primary:#6ea8dc; --m-card:#23272b; --m-shade:#2a2f34;
+  --m-ok:#79c47a; --m-okbg:#1d2b1d; --m-warn:#dcb84e; --m-warnbg:#2c2716;
+  --m-bad:#e88; --m-badbg:#2e1c1c; --m-onprimary:#10151a;
+}}
+:root[data-theme="dark"]{
+  --paper:#0f1216; --card:#181c21; --card-2:#1f242a; --inset:#14181d;
+  --ink:#e5e9ed; --ink-soft:#9aa4b1; --ink-faint:#6f7986;
+  --rule:#2b323a; --rule-soft:#222830;
+  --brass:#d3a44e; --brass-wash:#2a2317;
+  --ok:#59c98c; --ok-wash:#13291f;
+  --warn:#dfa848; --warn-wash:#2a2214;
+  --bad:#ef8b8b; --bad-wash:#2c1a1a;
+  --blue:#63a8e2; --blue-wash:#132435;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 12px 34px -18px rgba(0,0,0,.8);
+  --m-bg:#1b1e22; --m-fg:#e9ecef; --m-muted:#a4adb6; --m-border:#343a40;
+  --m-primary:#6ea8dc; --m-card:#23272b; --m-shade:#2a2f34;
+  --m-ok:#79c47a; --m-okbg:#1d2b1d; --m-warn:#dcb84e; --m-warnbg:#2c2716;
+  --m-bad:#e88; --m-badbg:#2e1c1c; --m-onprimary:#10151a;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--serif);
+  font-size:17px;line-height:1.62;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1300px;margin:0 auto;padding:0 24px 96px}
+a{color:var(--brass);text-underline-offset:3px;text-decoration-thickness:1px}
+a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var(--brass);outline-offset:2px;border-radius:3px}
+h1,h2,h3,h4{font-family:var(--disp);font-weight:700;line-height:1.14;text-wrap:balance;margin:0}
+code,kbd,.mono{font-family:var(--mono);font-size:.855em}
+code{background:var(--inset);border:1px solid var(--rule-soft);border-radius:4px;padding:.06em .34em;color:var(--ink)}
+.eyebrow{font-family:var(--disp);font-size:.68rem;font-weight:600;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--brass)}
+
+/* masthead */
+.masthead{border-bottom:1px solid var(--rule);padding:52px 0 30px;margin-bottom:8px}
+.masthead h1{font-size:clamp(2.4rem,6vw,4.1rem);letter-spacing:-.025em;margin:.18em 0 .3em}
+.stand{font-size:1.2rem;color:var(--ink-soft);max-width:64ch;margin:0}
+.mastmeta{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:26px;font-family:var(--mono);
+  font-size:.78rem;color:var(--ink-faint)}
+.mastmeta b{color:var(--ink-soft);font-weight:500}
+
+/* layout */
+.cols{display:flex;flex-wrap:wrap;gap:44px;align-items:flex-start;margin-top:34px}
+.toc{position:sticky;top:20px;flex:0 0 210px;min-width:180px;font-family:var(--disp);font-size:.83rem}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;border-top:1px solid var(--rule-soft)}
+.toc li:first-child{border-top:0}
+.toc a{display:flex;gap:10px;padding:9px 0;color:var(--ink-soft);text-decoration:none;line-height:1.3}
+.toc a::before{content:counter(t,decimal-leading-zero);color:var(--brass);font-family:var(--mono);font-size:.72rem;padding-top:.15em}
+.toc a:hover{color:var(--ink)}
+.toc .extra a::before{content:"\2014 ";letter-spacing:0}
+main{flex:1 1 520px;min-width:0}
+@media (max-width:900px){.toc{display:none}}
+
+section{margin:0 0 68px;scroll-margin-top:16px}
+section>h2{font-size:clamp(1.6rem,3.2vw,2.2rem);letter-spacing:-.018em;margin:.1em 0 .1em}
+.sectnum{font-family:var(--mono);font-size:.78rem;color:var(--brass);display:block;margin-bottom:.5em}
+.quoted{border-left:3px solid var(--brass);background:var(--brass-wash);padding:14px 18px;
+  margin:20px 0;font-size:.95rem;color:var(--ink-soft)}
+.quoted p{margin:0}
+.quoted p+p{margin-top:.6em}
+h3{font-size:1.16rem;margin:34px 0 10px;letter-spacing:-.01em}
+h4{font-size:.97rem;margin:24px 0 8px;font-weight:600}
+p{margin:0 0 1em}
+ul,ol{margin:0 0 1em;padding-left:1.25em}
+li{margin:.3em 0}
+.lede{font-size:1.06rem}
+
+/* verdict cards */
+.verdicts{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px;margin:26px 0}
+.vc{background:var(--card);border:1px solid var(--rule);border-radius:10px;padding:15px 16px;box-shadow:var(--shadow)}
+.vc .q{font-family:var(--disp);font-weight:600;font-size:.95rem;line-height:1.3;margin:6px 0 8px}
+.vc .a{font-size:.87rem;color:var(--ink-soft);margin:0}
+.tag{display:inline-flex;align-items:center;gap:6px;font-family:var(--disp);font-size:.66rem;
+  font-weight:600;letter-spacing:.1em;text-transform:uppercase;padding:3px 8px;border-radius:99px;border:1px solid}
+.tag.ok{color:var(--ok);background:var(--ok-wash);border-color:color-mix(in srgb,var(--ok) 30%,transparent)}
+.tag.warn{color:var(--warn);background:var(--warn-wash);border-color:color-mix(in srgb,var(--warn) 30%,transparent)}
+.tag.bad{color:var(--bad);background:var(--bad-wash);border-color:color-mix(in srgb,var(--bad) 30%,transparent)}
+.tag.info{color:var(--blue);background:var(--blue-wash);border-color:color-mix(in srgb,var(--blue) 30%,transparent)}
+
+/* callouts */
+.note{border:1px solid var(--rule);border-left-width:3px;border-radius:8px;background:var(--card);
+  padding:14px 17px;margin:22px 0;font-size:.94rem}
+.note .lbl{font-family:var(--disp);font-size:.68rem;font-weight:600;letter-spacing:.13em;
+  text-transform:uppercase;display:block;margin-bottom:6px}
+.note.measured{border-left-color:var(--ok)} .note.measured .lbl{color:var(--ok)}
+.note.trap{border-left-color:var(--bad)} .note.trap .lbl{color:var(--bad)}
+.note.think{border-left-color:var(--brass)} .note.think .lbl{color:var(--brass)}
+.note p:last-child{margin-bottom:0}
+
+/* tables */
+.tbl{width:100%;border-collapse:collapse;font-family:var(--ui);font-size:.87rem;margin:20px 0}
+.tblwrap{overflow-x:auto;border:1px solid var(--rule);border-radius:10px;background:var(--card)}
+.tbl th{text-align:left;font-family:var(--disp);font-size:.7rem;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--ink-faint);font-weight:600;padding:11px 14px;
+  border-bottom:1px solid var(--rule);white-space:nowrap}
+.tbl td{padding:11px 14px;border-bottom:1px solid var(--rule-soft);vertical-align:top;color:var(--ink-soft)}
+.tbl tr:last-child td{border-bottom:0}
+.tbl td:first-child{color:var(--ink);font-weight:500}
+.tbl .num{font-variant-numeric:tabular-nums;white-space:nowrap}
+.cost{font-family:var(--disp);font-weight:600;font-size:.72rem;letter-spacing:.06em;text-transform:uppercase}
+.cost.free{color:var(--ok)} .cost.low{color:var(--ok)} .cost.mid{color:var(--warn)} .cost.high{color:var(--bad)}
+
+/* screen frame */
+.screen{margin:26px 0 30px;border:1px solid var(--rule);border-radius:12px;overflow:hidden;
+  background:var(--m-bg);box-shadow:var(--shadow)}
+.screen.full{width:100%}
+.screencap{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:baseline;background:var(--card-2);
+  border-bottom:1px solid var(--rule);padding:9px 14px;font-family:var(--disp);font-size:.76rem;color:var(--ink-soft)}
+.screencap b{font-weight:600;color:var(--ink);font-size:.82rem}
+.screencap .url{font-family:var(--mono);font-size:.7rem;color:var(--ink-faint)}
+.screenbody{overflow-x:auto}
+.caption{font-size:.85rem;color:var(--ink-faint);margin:-16px 0 30px;font-style:italic}
+</style>
+<style>
+/* ---- Moodle Boost lookalike kit, scoped to .mdl ---------------------------- */
+.mdl{font-family:var(--ui);font-size:14px;line-height:1.5;color:var(--m-fg);background:var(--m-bg);
+  padding:18px 20px 0;min-width:860px}
+.mdl.narrow{min-width:0}
+.mdl *{box-sizing:border-box}
+.mdl .crumb{font-size:12px;color:var(--m-muted);margin-bottom:14px}
+.mdl .crumb span+span::before{content:"/";margin:0 7px;color:var(--m-border)}
+.mdl h1{font-family:var(--ui);font-size:24px;font-weight:700;margin:0 0 2px;letter-spacing:-.01em;color:var(--m-fg)}
+.mdl h2{font-family:var(--ui);font-size:18px;font-weight:700;margin:0 0 8px;color:var(--m-fg)}
+.mdl h3{font-family:var(--ui);font-size:15px;font-weight:700;margin:0 0 6px;color:var(--m-fg)}
+.mdl .sub{color:var(--m-muted);font-size:13px;margin:0 0 16px}
+.mdl .btn{display:inline-flex;align-items:center;gap:6px;font-size:13.5px;font-weight:400;
+  padding:6px 13px;border-radius:8px;border:1px solid transparent;cursor:default;
+  background:transparent;color:var(--m-fg);white-space:nowrap;font-family:var(--ui)}
+.mdl .btn-primary{background:var(--m-primary);border-color:var(--m-primary);color:var(--m-onprimary)}
+.mdl .btn-secondary{background:transparent;border-color:var(--m-primary);color:var(--m-primary)}
+.mdl .btn-outline{background:transparent;border-color:var(--m-border);color:var(--m-fg)}
+.mdl .btn-danger{background:transparent;border-color:var(--m-bad);color:var(--m-bad)}
+.mdl .btn-sm{font-size:12.5px;padding:3px 9px;border-radius:6px}
+.mdl .badge{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;
+  padding:2.5px 9px;border-radius:99px;line-height:1.4}
+.mdl .b-wait{background:var(--m-warnbg);color:var(--m-warn)}
+.mdl .b-new{background:var(--m-okbg);color:var(--m-ok)}
+.mdl .b-info{background:var(--m-shade);color:var(--m-muted)}
+.mdl .b-bad{background:var(--m-badbg);color:var(--m-bad)}
+.mdl .ctrl{display:inline-flex;align-items:center;gap:7px;background:var(--m-bg);
+  border:1px solid var(--m-border);border-radius:8px;padding:6px 11px;font-size:13.5px;color:var(--m-fg)}
+.mdl .ctrl.muted{color:var(--m-muted)}
+.mdl .ctrl.search{flex:1 1 260px;min-width:200px}
+.mdl .ctrl.search input{border:0;background:transparent;font:inherit;color:inherit;width:100%;outline:0}
+.mdl .caret::after{content:"\2304 ";font-size:14px;line-height:0;position:relative;top:-3px;color:var(--m-muted)}
+.mdl .chip{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;background:var(--m-shade);
+  border:1px solid var(--m-border);border-radius:99px;padding:3px 10px;color:var(--m-fg)}
+.mdl .chip .x{color:var(--m-muted);font-size:13px}
+.mdl .av{width:32px;height:32px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;
+  font-size:11.5px;font-weight:700;color:#fff;background:#4a6fa5;flex:0 0 auto;letter-spacing:.02em}
+.mdl .av.lg{width:56px;height:56px;font-size:18px}
+.mdl .av.a2{background:#7a5aa8}.mdl .av.a3{background:#2f7d68}.mdl .av.a4{background:#a5673f}
+.mdl .av.a5{background:#8a4a63}.mdl .av.a6{background:#3c6ea8}
+.mdl table.gt{width:100%;border-collapse:collapse;font-size:13.5px}
+.mdl table.gt th{text-align:left;font-weight:700;font-size:12.5px;color:var(--m-fg);
+  padding:9px 10px;border-bottom:2px solid var(--m-border);white-space:nowrap}
+.mdl table.gt td{padding:11px 10px;border-bottom:1px solid var(--m-border);vertical-align:top}
+.mdl table.gt tr:last-child td{border-bottom:1px solid var(--m-border)}
+.mdl table.gt .sortable::after{content:"\2191 ";color:var(--m-muted);margin-left:5px;font-size:11px}
+.mdl .cb{width:15px;height:15px;border:1.5px solid var(--m-muted);border-radius:3px;display:inline-block;
+  vertical-align:-2px;background:var(--m-bg)}
+.mdl .cb.on{background:var(--m-primary);border-color:var(--m-primary);position:relative}
+.mdl .cb.on::after{content:"\2713 ";position:absolute;inset:0;color:#fff;font-size:11px;line-height:12px;text-align:center;font-weight:700}
+.mdl .muted{color:var(--m-muted)}
+.mdl .small{font-size:12.5px}
+.mdl .xs{font-size:11.5px}
+.mdl .idline{color:var(--m-muted);font-size:12px;margin-top:2px;display:flex;flex-wrap:wrap;gap:4px 10px}
+.mdl .idline .k{color:var(--m-muted);opacity:.75}
+.mdl .link{color:var(--m-primary);text-decoration:underline;text-underline-offset:2px}
+.mdl .kv{display:grid;grid-template-columns:auto 1fr;gap:3px 14px;font-size:13px;margin:0}
+.mdl .kv dt{color:var(--m-muted);white-space:nowrap}
+.mdl .kv dd{margin:0;color:var(--m-fg)}
+.mdl .box{border:1px solid var(--m-border);border-radius:10px;background:var(--m-card);padding:14px 16px}
+.mdl .box.plain{background:var(--m-bg)}
+.mdl .rowline{display:flex;gap:12px;align-items:flex-start}
+.mdl .stat{display:flex;flex-direction:column;gap:2px;min-width:0}
+.mdl .stat .n{font-size:21px;font-weight:700;line-height:1.1;font-variant-numeric:tabular-nums}
+.mdl .stat .l{font-size:11.5px;color:var(--m-muted);letter-spacing:.02em}
+.mdl .meter{height:6px;border-radius:99px;background:var(--m-shade);overflow:hidden;margin-top:6px}
+.mdl .meter i{display:block;height:100%;background:var(--m-primary);border-radius:99px}
+.mdl .meter i.warn{background:var(--m-warn)}
+.mdl .sticky{position:sticky;bottom:0;background:var(--m-card);border-top:1px solid var(--m-border);
+  margin:18px -20px 0;padding:14px 20px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;
+  box-shadow:0 -6px 18px -14px rgba(0,0,0,.6)}
+.mdl .sticky .grow{flex:1 1 auto}
+.mdl .toolbar{display:flex;flex-wrap:wrap;gap:9px;align-items:center;margin-bottom:14px}
+.mdl .cards{display:none}
+.mdl .notice{border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:14px}
+.mdl .notice.warn{background:var(--m-warnbg);color:var(--m-warn)}
+.mdl .notice.info{background:var(--m-shade);color:var(--m-fg)}
+.mdl .split{display:grid;grid-template-columns:minmax(0,320px) minmax(0,1fr);gap:0;
+  border:1px solid var(--m-border);border-radius:10px;overflow:hidden}
+.mdl .split .list{border-right:1px solid var(--m-border);background:var(--m-card)}
+.mdl .split .li{padding:11px 13px;border-bottom:1px solid var(--m-border);display:flex;gap:10px;align-items:flex-start}
+.mdl .split .li.sel{background:var(--m-bg);box-shadow:inset 3px 0 0 var(--m-primary)}
+.mdl .split .pane{padding:16px 18px;background:var(--m-bg)}
+.mdl .fieldpill{display:inline-flex;gap:5px;font-size:12px;background:var(--m-shade);
+  border-radius:6px;padding:2px 8px;margin:0 4px 4px 0;color:var(--m-fg)}
+.mdl .fieldpill b{font-weight:600;color:var(--m-muted)}
+.mdl .clamp{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.mdl .nav2{display:flex;justify-content:space-between;gap:12px;align-items:center;
+  border-bottom:1px solid var(--m-border);padding-bottom:12px;margin-bottom:16px;font-size:13.5px}
+.mdl.phone{max-width:392px;margin:0 auto;min-width:0}
+.mdl .mcard{border:1px solid var(--m-border);border-radius:10px;padding:12px 13px;margin-bottom:10px;background:var(--m-card)}
+</style>
+<style>
+.breakout{width:auto}
+main section > p, main section > ul, main section > ol, main section > .quoted,
+main section > .note, main section > h3, main section > h4, .caption{max-width:70ch}
+main section > .verdicts, main section > .tblwrap, main section > .screen{max-width:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="masthead">
+  <span class="eyebrow">enrol_apply &middot; design review &middot; 31 August 2026</span>
+  <h1>The Applications Desk</h1>
+  <p class="stand">Five questions about the screens where an enrolment application is decided &#8212; answered
+  against the code, with mockups for the two that need rebuilding. The product decisions they raised were
+  taken on 31 August 2026 and are recorded at the foot.</p>
+  <div class="mastmeta">
+    <span><b>repo</b> uaiblaine/moodle-enrol_apply</span>
+    <span><b>at</b> master 5efcb30 &middot; version 2026083003</span>
+    <span><b>measured on</b> m501 &amp; m502</span>
+    <span><b>nothing changed</b> &#8212; read-only investigation</span>
+  </div>
+</header>
+
+<div class="cols">
+<nav class="toc" aria-label="Sections">
+  <ol>
+    <li><a href="#s1">The custom label</a></li>
+    <li><a href="#s2">Is <code>info.php</code> dead?</a></li>
+    <li><a href="#s3">The queue, rebuilt</a></li>
+    <li><a href="#s4">The review page</a></li>
+    <li><a href="#s5">The duplicated bulk menu</a></li>
+    <li class="extra"><a href="#s6">Defer, and enrolling with no role</a></li>
+    <li class="extra"><a href="#defects">Defects found on the way</a></li>
+    <li class="extra"><a href="#decisions">Decided</a></li>
+  </ol>
+</nav>
+
+<main>
+<section id="verdicts">
+  <h2>The five answers, first</h2>
+  <p class="lede">Everything below is measured against the code on both supported branches, and on the
+  running m501 and m502 stacks. Nothing was changed.</p>
+  <div class="verdicts">
+    <div class="vc"><span class="tag warn">keep, but fix</span>
+      <p class="q">The custom label</p>
+      <p class="a">It has two readers, not one &#8212; it also labels the applicant's comment box. On your site
+      that reader never fires, because the <b>Commentary field</b> switch is off on all six instances.
+      <a href="#s1">&#167;01</a></p></div>
+    <div class="vc"><span class="tag bad">delete</span>
+      <p class="q"><code>info.php</code></p>
+      <p class="a">Identical rows, identical capability, a strict subset of the queue's columns, one
+      untested link in. Carry the comment heading across and delete 260 lines. <a href="#s2">&#167;02</a></p></div>
+    <div class="vc"><span class="tag info">rebuild</span>
+      <p class="q">The approval queue</p>
+      <p class="a">Build it as a Report Builder system report: identity fields, filters, AJAX paging and
+      the bulk bar come with the surface. Two mockups to choose between. <a href="#s3">&#167;03</a></p></div>
+    <div class="vc"><span class="tag info">rebuild, cheaply</span>
+      <p class="q">The review page</p>
+      <p class="a">The sticky footer is mechanically free &#8212; the no-JS polyfill already covers this page.
+      The bigger win is that <b>Cancel unenrols and looks exactly like Defer</b>. <a href="#s4">&#167;04</a></p></div>
+    <div class="vc"><span class="tag warn">core's bug, real defect behind it</span>
+      <p class="q">The duplicated bulk menu</p>
+      <p class="a">Core loops instances and calls a per-plugin method; <code>enrol_self</code> does the
+      same in stock core. Your premise is false, and that is where the silent defect lives.
+      <a href="#s5">&#167;05</a></p></div>
+    <div class="vc"><span class="tag bad">unfinished</span>
+      <p class="q">&#8220;Defer requests&#8221;</p>
+      <p class="a">Coherent for the manager, invisible to the applicant, and its only notification is
+      blank by default &#8212; 14 of 14 sent on m502 have an empty subject. <a href="#s6">&#167;06</a></p></div>
+    <div class="vc"><span class="tag ok">correct as it stands</span>
+      <p class="q">Enrolling with no role</p>
+      <p class="a">A role &#8212; not the suspended status &#8212; is what makes someone a participant to
+      <code>has_capability()</code>. Core states the same rule in its own words. <a href="#s6">&#167;06</a></p></div>
+  </div>
+</section>
+<section id="s1">
+  <span class="sectnum">01</span>
+  <h2>The custom label does something. On your site it just never gets the chance.</h2>
+
+  <div class="quoted"><p><em>&#8220;Custom label &#8212; aparece apenas em <code>apply/info.php</code>, n&#227;o consegui entender o
+  benef&#237;cio do campo.&#8221;</em></p></div>
+
+  <p class="lede">It has two readers, not one. It labels the applicant's comment box on the application
+  form, and it retitles the comment column on <code>info.php</code>. Your observation is still correct
+  about what you saw, and the reason is exact:</p>
+
+  <div class="note measured"><span class="lbl">Measured on m502</span>
+  <p>The comment box is added only inside <code>if ($instance-&gt;customint7)</code>
+  (<code>classes/form/application_form.php:175</code>) &#8212; the <b>Commentary field</b> switch, whose site
+  default is <code>0</code> (<code>settings.php:236</code>). All six apply instances on m502 carry <code>0</code>
+  there, so building the real form for the two instances that <em>do</em> carry a label produces no
+  <code>applydescription</code> element at all. Those two instances hold zero comments between them; the
+  two instances that hold comments carry no label. Today the setting retitles an empty column and
+  nothing else.</p></div>
+
+  <h3>Three things make it read as a mystery field</h3>
+  <ol>
+    <li><b>The default never fires, and reviving it would be worse.</b> <code>edit_form.php:131</code>
+      sets the default to the word &#8220;Comment&#8221;; <code>set_data()</code> at <code>:249</code> overrides it
+      whenever the stored value is a non-NULL scalar &#8212; including the empty string
+      <code>lib.php:1009</code> seeds. All six live rows are non-NULL, so on this site it has never
+      pre-filled. It is <em>not</em> dead code in general: the column is nullable, and a NULL row lets it
+      win. Leave it losing &#8212; if it ever pre-filled, saving the form would freeze the <b>creator's own
+      language</b> string into <code>{enrol}.customtext2</code>, after which the label would never follow
+      the language pack again. Empty is the correct default.</li>
+    <li><b>Nothing ties it to the switch it depends on.</b> No <code>hideIf</code>, no help button &#8212; so it
+      renders live and editable on an instance where the thing it labels is switched off.</li>
+    <li><b>In English it is invisible even when it works.</b> <code>comment</code> and
+      <code>applycomment</code> are both the word &#8220;Comment&#8221; (<code>lang/en/enrol_apply.php:47,81</code>),
+      so on a default site a custom label changes nothing a reader would notice.</li>
+  </ol>
+
+  <div class="note trap"><span class="lbl">Two things to check before you decide</span>
+  <p><b>The column is historically polluted.</b> Upstream stored the <em>notification recipient list</em>
+  in <code>customtext2</code> until 2016 (commit <code>3d27870</code>), and this fork ships no migration
+  for it. On a site upgraded from a pre-2016 build, the &#8220;custom label&#8221; may be carrying somebody's old
+  recipient list.</p>
+  <p><b>And it is restore-controlled.</b> <code>restore_instance()</code> sanitises
+  <code>customtext3</code>, <code>customint5</code> and <code>customtext4</code> and leaves
+  <code>customtext2</code> alone, so its value arrives verbatim from a foreign archive. Both sinks escape
+  today, which is why that is not a live hole &#8212; but with the non-default
+  <code>formatstringstriptags = 0</code> the escape flag is <em>inert</em>, and markup survives into the
+  raw <code>&lt;th&gt;</code> and the raw triple stash alike.</p></div>
+
+  <h3>What the setting is actually for</h3>
+  <p>&#8220;Why do you want to join this course?&#8221; is a different question from &#8220;Which employer are you with?&#8221;
+  Once a teacher has written that prompt, it should head the column of answers <em>everywhere the answers
+  are read</em> &#8212; and today it heads exactly one listing, the one nothing links to prominently and which
+  &#167;02 recommends deleting.</p>
+
+  <div class="tblwrap"><table class="tbl">
+    <thead><tr><th>Surface</th><th>Comment heading today</th><th>Should it use the label?</th></tr></thead>
+    <tbody>
+      <tr><td>Application form</td><td>the label <span class="tag ok">works</span></td><td>yes &#8212; already does</td></tr>
+      <tr><td><code>info.php</code></td><td>the label <span class="tag ok">works</span></td><td>page is going away</td></tr>
+      <tr><td>Approval queue <code>?id=</code></td><td><code>get_string('applycomment')</code></td><td><b>yes</b> &#8212; the instance is in hand</td></tr>
+      <tr><td>Review page <code>?userenrol=</code></td><td><code>get_string('applycomment')</code></td><td><b>yes</b> &#8212; the instance is in hand</td></tr>
+      <tr><td>Queue, site-wide / mentee scope</td><td><code>get_string('applycomment')</code></td><td>no &#8212; the rows span instances</td></tr>
+      <tr><td>&#8220;New application&#8221; e-mail</td><td><code>get_string('comment')</code></td><td>no &#8212; it renders in the recipient's language, and a per-instance literal would freeze one</td></tr>
+      <tr><td>Report Builder column</td><td><code>submission:comment</code></td><td>no, and not for the reason the docs give</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note trap"><span class="lbl">A documented reason that is wrong</span>
+  <p><code>docs/design/implementation-plan.md:1221</code> and <code>PROGRESS.md:457</code> both say the
+  per-instance header is <em>inexpressible</em> in Report Builder because
+  <code>column::set_title()</code> takes only a <code>lang_string</code>. The type is real
+  (<code>reportbuilder/classes/local/report/column.php:165</code>, identical on 5.1 and 5.2) but it is not
+  the obstacle &#8212; core's own <code>$string['customfieldcolumn'] = '{$a}'</code> passthrough carries
+  arbitrary text through it. The genuine obstacle is that one entity feeds both a site-wide datasource and
+  a course-scoped report, and a course can carry two apply instances with two different labels. Record
+  <em>that</em>, or the false reason gets repeated a third time.</p></div>
+
+  <h3>Recommendation</h3>
+  <p><b>Keep it, and make it real</b> &#8212; the cheap half first, which is worth doing under either answer:
+  delete the dead <code>setDefault</code>, add <code>hideIf('customtext2','customint7','eq',0)</code>, add
+  a <code>custom_label_help</code> string to <code>lang/en</code> and <code>lang/pt_br</code> in lockstep.
+  Then thread it into the review page's comment label, which holds <code>$instance</code>
+  unconditionally, and into the queue heading <em>on the <code>?id=</code> scope only</em> &#8212; the site-wide
+  and mentee queues span instances and need a lang-string fallback, which is exactly the shape
+  <code>info.php</code> already uses.</p>
+  <div class="note trap"><span class="lbl">The sinks do not agree, and an earlier draft of this page said they did</span>
+  <p>Two of the three render raw and want the <b>escaped</b> spelling: the queue column header
+  (<code>flexible_table:1374</code> emits it through <code>html_writer::tag</code>, which never escapes its
+  content) and the application form label (<code>element-template.mustache:50</code>, a triple stash). The
+  <b>review page's is a double stash</b> (<code>templates/review.mustache:124</code>) and wants the
+  <b>plain</b> spelling. Put the switch in one helper taking an <code>$escape</code> flag, the way core's
+  own <code>field_controller::get_formatted_name()</code> does, rather than deciding it at three call
+  sites. And note what holds this today: nothing. There is no assertion anywhere on the queue's comment
+  column header &#8212; measured, zero matches in the renderer and sort-order tests &#8212; so the split needs its
+  own test in the same change.</p></div>
+</section>
+<section id="s2">
+  <span class="sectnum">02</span>
+  <h2><code>info.php</code> is dead. Delete it, and take one thing with you.</h2>
+
+  <div class="quoted"><p><em>&#8220;<code>apply/info.php</code> me parece uma p&#225;gina morta, sem utilidade.
+  Podemos remover, algo que fa&#231;a sentido manter?&#8221;</em></p></div>
+
+  <p class="lede">Yes &#8212; and this one is not a judgement call, it is a measurement. The page is a strict
+  subset of the approval queue in every dimension that matters.</p>
+
+  <div class="tblwrap"><table class="tbl">
+    <thead><tr><th></th><th><code>info.php</code></th><th><code>manage.php</code> (the queue)</th></tr></thead>
+    <tbody>
+      <tr><td>Rows</td><td colspan="2">Same predicate, from the same helper
+        <code>queue::awaiting_decision_where()</code>; measured identical on m502 both site-wide and scoped
+        to instance 140. The one way they can differ is each page's own session-scoped initials filter,
+        keyed on its own table id &#8212; which is the defect &#167;03 recommends removing.</td></tr>
+      <tr><td>Columns</td><td>fullname, applydate, applycomment</td>
+        <td>the same three, plus the checkbox, the course and the e-mail</td></tr>
+      <tr><td>Capability</td><td colspan="2"><code>enrol/apply:manageapplications</code> for both
+        (<code>db/access.php:57-65</code>) &#8212; nobody can reach one and not the other</td></tr>
+      <tr><td>Mentor scope</td><td>none</td><td>falls back to the mentees</td></tr>
+      <tr><td>Site-wide scope</td><td>yes, with no navigation entry at all</td>
+        <td>yes, <em>and</em> an admin node (<code>settings.php:293-298</code>)</td></tr>
+      <tr><td>Links in</td><td>one &#8212; the <code>i/files</code> icon at <code>lib.php:871-875</code></td>
+        <td>the methods-page icon, the admin node, the per-row participant icon</td></tr>
+      <tr><td>Tests</td><td>the table class is covered; its <em>entry point</em> is asserted nowhere</td>
+        <td>covered, entry point included</td></tr>
+      <tr><td>Row highlight, sort, tiebreaker, user picture</td><td colspan="2">identical</td></tr>
+    </tbody>
+  </table></div>
+
+  <p>Worth noting by this repo's own standard: <b>nothing pins that heading either.</b> No test and no
+  mutation gate covers <code>info.php:48-49</code>, so deleting the override reddens nothing today.</p>
+
+  <p><b>The one thing it renders that nothing else does</b> is its third column heading: with a custom
+  label set, <code>info.php</code> reads &#8220;Why do you want to join?&#8221; where the queue reads &#8220;Comment&#8221;. That
+  is the whole unique output of the page, and it is about five lines to carry over &#8212; which is exactly
+  what &#167;01 recommends doing anyway.</p>
+
+  <div class="note trap"><span class="lbl">Do not follow the design docs here</span>
+  <p><code>implementation-plan.md:1127</code> instructs refactoring <code>info.php</code> onto the Report
+  Builder surface. Re-verified today, that is still the wrong move and would be a regression three ways:
+  rows genuinely disappear (the report reads <code>enrol_apply_submission</code>, and user enrolment 357
+  on m502 has no record); editing teachers lose the page, because <code>enrol/apply:viewreports</code> is
+  manager-only by archetype; and the site-wide scope cannot go there at all &#8212;
+  <code>course_applications::can_view()</code> refuses a non-course context. Mark that instruction
+  superseded in the same change, or the next reader will follow it.</p></div>
+
+  <h3>The deletion list</h3>
+  <p><code>info.php</code>, <code>info_table.php</code>, <code>templates/info.mustache</code>, the icon at
+  <code>lib.php:871-875</code>, the Behat url resolver at
+  <code>tests/behat/behat_enrol_apply.php:57</code>, the <code>tests/coverage.php</code> entry, the
+  <code>require_once</code> at <code>tests/sort_order_test.php:27</code>, and the
+  <code>submitted_info</code> strings in both packs (three consumers, all of them going in the same
+  change, so it retires via <code>lang/en/deprecated.txt</code>). Roughly 260 lines out, five in.</p>
+
+  <div class="note trap"><span class="lbl">The deletion blocker is not the one the design docs record</span>
+  <p><code>PROGRESS.md</code> names <code>tests/local/bootstrap_compat_test.php</code>, which reads
+  <code>info_table.php</code> with <code>file_get_contents()</code> and no <code>is_file()</code> guard &#8212;
+  a warning, fatal only under <code>--fail-on-warning</code>. The louder one is
+  <code>tests/sort_order_test.php:27</code>, which <code>require_once</code>s the file outright: that is a
+  <b>fatal</b>, not a warning. Its data provider also drops to a single entry, so decide whether a one-row
+  <code>#[DataProvider]</code> is worth keeping or the test should be inlined against the queue's table.</p></div>
+
+  <p>The only argument for a redirect stub instead of an outright delete is a live bookmark. Core keeps
+  exactly such a stub at <code>course/enrol.php</code>, so the precedent is current &#8212; but this fork has
+  never been released, the page is in no README, and its only link is being removed in the same change.
+  <b>Delete outright unless you know FUNDASEG has it bookmarked.</b></p>
+</section>
+<section id="s3">
+  <span class="sectnum">03</span>
+  <h2>The queue: rebuild it, but not on Report Builder</h2>
+
+  <div class="quoted"><p><em>&#8220;&#8230;precisa respeitar as configura&#231;&#245;es <code>showuseridentity</code>. Faltam
+  elementos que ajudem a definir se o usu&#225;rio pode ou n&#227;o ser aprovado&#8230; O nome do usu&#225;rio deveria ter um
+  link para o perfil&#8230; Filtro por letra n&#227;o &#233; necess&#225;rio&#8230; campo de busca ajax por nome com
+  accent-insensitive&#8230; tabela responsiva&#8230; pagina&#231;&#227;o e lazy loading&#8230; filtros por campo de perfil
+  requisitado&#8230; incluindo vagas remanescentes.&#8221;</em></p></div>
+
+  <p class="lede">The obvious move is to reuse the Report Builder system report this plugin already ships.
+  It is the wrong move, and the reason is a measurement rather than a preference.</p>
+
+  <div class="note trap"><span class="lbl">Why not Report Builder</span>
+  <p><code>course_applications</code>'s main table is <code>enrol_apply_submission</code>. The queue's
+  subject is <code>{user_enrolments}</code>, and <b>they are not the same row set</b>. Measured on live
+  m502 just now: six applications awaiting a decision, and one of them (<code>ue=357</code>) has no
+  submission row at all &#8212; while 21 of the 27 submission rows point at a user enrolment that no longer
+  exists. The two sets diverge in <em>both</em> directions. One row is enough to make the point, and the
+  gap is structural rather than incidental: an application approved
+  before the record existed and later suspended from the participants page never gets one, and neither
+  does a restore from an archive older than the trail. A Report Builder queue would silently under-report
+  exactly those, which is the failure mode this repository treats as the defect. Report Builder also hardcodes its checkbox group to <code>report-select-all</code>
+  (<code>system_report.php:179</code>), and core's only precedent for turning that into a bulk action
+  scrapes the checked boxes into a hidden input with JavaScript &#8212; which would destroy this plugin's
+  deliberately no-JavaScript queue and the CSS sticky-footer polyfill that protects it.</p></div>
+
+  <p><b>Build a plugin-owned <code>core_table\dynamic</code> table instead</b> &#8212;
+  <code>\enrol_apply\table\applications</code> plus its filterset, keeping <code>{user_enrolments}</code>
+  as the main table and keeping the existing POST contract. That surface gives AJAX paging, sorting, page
+  size and a <code>setFilters()</code> channel for the search box, and paging and sorting still degrade to
+  ordinary GET navigation with JavaScript off, because the dynamic module intercepts <em>real</em> anchors
+  and the paging bar emits real hrefs.</p>
+
+  <div class="note trap"><span class="lbl">Three things to design for before writing a line of it</span>
+  <p><b>1. The filters do <em>not</em> degrade.</b> <code>setFilters</code> exists only in JavaScript;
+  there is no GET encoding of a filterset anywhere, unlike <code>tsort</code>/<code>tdir</code> for sorting.
+  So the no-JS story is paging and sorting, not filtering &#8212; keep a plain GET search as the fallback.</p>
+  <p><b>2. The web service builds the table with one argument.</b> It constructs
+  <code>new $tableclass($uniqueid)</code> and then applies the filterset, so <b>the scope arrives from the
+  client</b>. And the <code>dynamic</code> interface declares exactly one
+  <code>has_capability()</code>, checked once against one <code>get_context()</code> &#8212; while this queue has
+  three scopes across two context levels. The instance id, the mentee restriction and the authorisation
+  must all be re-derived server-side from the filterset on every request, exactly as
+  <code>course_applications::can_view()</code> already does for the report. This is the single largest
+  correctness risk in the rebuild.</p>
+  <p><b>3. There is no plugin precedent.</b> Every core implementor of <code>core_table\dynamic</code> is
+  a core subsystem &#8212; participants, Report Builder, plugin management, SMS. The resolution in
+  <code>get.php</code> is generic (<code>\&lt;component&gt;\table\&lt;handler&gt;</code>), so a plugin
+  can do it; nobody in core has.</p></div>
+
+  <h3>Two things the current queue gets wrong, before any redesign</h3>
+  <div class="note trap"><span class="lbl">Measured on m502 &#8212; a disclosure</span>
+  <p><b>The queue prints every applicant's e-mail address unconditionally</b>, consulting neither
+  <code>showuseridentity</code> nor <code>hiddenuserfields</code>. On this site
+  <code>showuseridentity</code> names only <code>username</code> &#8212; which is what keeps the e-mail column
+  off core's participants page &#8212; and <code>hiddenuserfields</code> lists <code>email</code> as well. The
+  queue beside it prints the address anyway. That is your <code>showuseridentity</code> request, and it is a live
+  defect rather than a missing feature.</p></div>
+  <div class="note trap"><span class="lbl">Measured on m502 &#8212; an invisible filter</span>
+  <p><b>The initials filter stays live even when the bar is not drawn.</b> Rendering with
+  <code>out(50, false)</code> hides the control and nothing else: with a stored <code>i_first = 'Z'</code>
+  the same queue went from 3 rows to 0, with no bar on the page and nothing to explain it. Hiding the bar
+  is not removing the filter &#8212; the complete kill is overriding
+  <code>get_sql_where()</code> to return <code>['', []]</code>. (Emptying
+  <code>$userfullnamecolumns</code> also works and silently costs the fullname column its
+  firstname/lastname sub-sort links.)</p></div>
+<div class="screen">
+  <div class="screencap"><b>Today</b>
+    <span class="url">/enrol/apply/manage.php?id=140</span>
+    <span>reconstructed from <span class="mono">manage_table.php</span> + <span class="mono">templates/manage.mustache</span></span></div>
+  <div class="screenbody"><div class="mdl">
+    <h1>Enrol Confirm</h1>
+    <p class="sub">Users in gray colored rows are on the waiting list.</p>
+    <div class="small" style="margin-bottom:10px;color:var(--m-muted)">
+      Name : <span class="link">All</span> A B C D E F G H I J K L M N O P Q R S T U V W X Y Z<br>
+      Surname : <span class="link">All</span> A B C D E F G H I J K L M N O P Q R S T U V W X Y Z
+    </div>
+    <table class="gt">
+      <thead><tr>
+        <th style="width:28px"><span class="cb"></span></th>
+        <th>Course</th><th>Full name</th><th>Email address</th>
+        <th class="sortable">Enrol date</th><th>Comment</th>
+      </tr></thead>
+      <tbody>
+        <tr><td><span class="cb"></span></td><td><span class="link">Role demo</span></td>
+          <td><span class="rowline" style="align-items:center"><span class="av" style="width:24px;height:24px;font-size:9px">JG</span> Jo&#227;o Gon&#231;alves S&#225;</span></td>
+          <td>joao.sa@ufop.br</td><td>29/08/26, 09:14</td><td class="small">I teach the evening cohort&#8230;</td></tr>
+        <tr style="box-shadow:inset 3px 0 0 var(--m-muted)"><td><span class="cb"></span></td><td><span class="link">Role demo</span></td>
+          <td><span class="rowline" style="align-items:center"><span class="av a3" style="width:24px;height:24px;font-size:9px">MF</span> M&#225;rcia Fontes</span></td>
+          <td>marcia.fontes@ufop.br</td><td>08/08/26, 16:02</td><td class="small"></td></tr>
+        <tr><td><span class="cb"></span></td><td><span class="link">Role demo</span></td>
+          <td><span class="rowline" style="align-items:center"><span class="av a4" style="width:24px;height:24px;font-size:9px">RG</span> Rita Gon&#231;alves</span></td>
+          <td>rita.g@example.org</td><td>31/08/26, 07:40</td><td class="small">Cancelled in June by mistake&#8230;</td></tr>
+      </tbody>
+    </table>
+    <div style="margin-top:16px;display:flex;flex-direction:column;gap:12px;max-width:520px">
+      <label><span class="small muted">Groups to join on approval</span>
+        <div class="ctrl caret" style="width:100%;margin-top:4px">Tutorial A</div></label>
+      <label><span class="small muted">Role to assign on approval</span>
+        <div class="ctrl caret" style="width:100%;margin-top:4px">Use the enrolment method&#8217;s role</div></label>
+      <label><span class="small muted">Message to the applicant</span>
+        <div class="ctrl" style="width:100%;margin-top:4px;height:56px;align-items:flex-start"></div></label>
+    </div>
+    <div class="sticky" style="justify-content:flex-end">
+      <span class="small">With selected users...</span>
+      <span class="ctrl caret" style="font-size:13px">Choose...</span>
+      <span class="btn btn-primary">Go</span>
+    </div>
+  </div></div>
+</div>
+  <p class="caption">Today. Six columns, an A&#8211;Z bar whose filter outlives it, an e-mail address the site
+  says to hide, no capacity anywhere, no way to open a single application, and the submitted profile
+  answers &#8212; the thing the decision is actually made on &#8212; nowhere on the page. The help line promises
+  &#8220;gray colored rows&#8221;; the stylesheet draws a 3&#8239;px left rule.</p>
+
+  <h3>Mockup A &#8212; the triage queue</h3>
+  <p>One row per applicant. Identity fields ride as a second line under the name rather than as their own
+  columns, which is what makes a variable, capability-gated field list fit a table at all &#8212; and what makes
+  the mobile card fall out for free. The answers the applicant gave get their own column, because they are
+  the evidence. Capacity sits at the top, where the decision context belongs.</p>
+<div class="screen breakout full">
+  <div class="screencap"><b>Mockup A &#8212; the triage queue</b>
+    <span class="url">/enrol/apply/manage.php?id=140</span>
+    <span>desktop, 1180px</span></div>
+  <div class="screenbody"><div class="mdl">
+
+    <div class="crumb"><span>Role demo</span><span>Participants</span><span>Enrolment methods</span><span>Applications</span></div>
+
+    <div class="toolbar" style="justify-content:space-between;align-items:flex-start">
+      <div>
+        <h1>Applications</h1>
+        <p class="sub">Course enrol confirmation &middot; <b>Application form</b> &middot; Role demo</p>
+      </div>
+      <div style="display:flex;gap:8px">
+        <span class="btn btn-outline btn-sm">Settings</span>
+        <span class="btn btn-outline btn-sm">Full report &#8599;</span>
+      </div>
+    </div>
+
+    <div class="box" style="margin-bottom:16px">
+      <div style="display:flex;flex-wrap:wrap;gap:26px 40px;align-items:flex-start">
+        <div class="stat"><span class="n">12</span><span class="l">Awaiting decision</span></div>
+        <div class="stat"><span class="n">3</span><span class="l">Deferred to the waiting list</span></div>
+        <div class="stat" style="min-width:170px">
+          <span class="n">8 <span class="muted" style="font-size:14px;font-weight:400">of 20</span></span>
+          <span class="l">Places taken (approved)</span>
+          <span class="meter"><i style="width:40%"></i></span>
+        </div>
+        <div class="stat" style="min-width:170px">
+          <span class="n">35 <span class="muted" style="font-size:14px;font-weight:400">of 40</span></span>
+          <span class="l">Applications accepted</span>
+          <span class="meter"><i class="warn" style="width:87.5%"></i></span>
+        </div>
+        <div class="stat" style="flex:1 1 200px">
+          <span class="l" style="margin-bottom:4px">Status</span>
+          <span><span class="badge b-new">Open</span> <span class="small muted">closes 30 Sep 2026</span></span>
+          <span class="xs muted" style="margin-top:6px">5 more applications will be accepted before the method closes itself.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <span class="ctrl search"><span class="muted">&#128269;</span><input value="goncalves" readonly aria-label="Search applicants"></span>
+      <span class="ctrl caret">Status: <b>Awaiting decision</b></span>
+      <span class="ctrl caret">City/town</span>
+      <span class="ctrl caret muted">Institution</span>
+      <span class="ctrl caret muted">Applied</span>
+    </div>
+    <div class="toolbar" style="margin-bottom:10px">
+      <span class="chip">City/town: Ouro Preto <span class="x">&#10005;</span></span>
+      <span class="chip">Search: &#8220;goncalves&#8221; <span class="x">&#10005;</span></span>
+      <span class="small link">Clear all</span>
+      <span class="grow" style="flex:1"></span>
+      <span class="small muted" style="margin-left:auto">4 of 312 applications</span>
+    </div>
+
+    <table class="gt">
+      <thead><tr>
+        <th style="width:28px"><span class="cb"></span></th>
+        <th>Applicant</th>
+        <th class="sortable" style="width:130px">Applied</th>
+        <th style="width:290px">Submitted with the application</th>
+        <th style="width:220px">Comment</th>
+        <th style="width:96px"></th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td><span class="cb on"></span></td>
+          <td>
+            <div class="rowline">
+              <span class="av">CG</span>
+              <div style="min-width:0">
+                <span class="link" style="font-weight:600">Cl&#233;o <mark style="background:var(--m-warnbg);color:inherit;padding:0 1px">Gon&#231;alves</mark></span>
+                <div class="idline"><span>cleo.goncalves@ufop.br</span><span>cgoncalves</span><span>2026-0042</span></div>
+              </div>
+            </div>
+          </td>
+          <td class="small">2 days ago<div class="xs muted">29 Aug, 09:14</div></td>
+          <td>
+            <span class="fieldpill"><b>City</b> Ouro Preto</span>
+            <span class="fieldpill"><b>Institution</b> UFOP</span>
+          </td>
+          <td class="small clamp muted">&#8220;I teach the evening cohort and need the same materials the day group has.&#8221;</td>
+          <td style="text-align:right"><span class="btn btn-secondary btn-sm">Review</span></td>
+        </tr>
+        <tr>
+          <td><span class="cb on"></span></td>
+          <td>
+            <div class="rowline">
+              <span class="av a2">JG</span>
+              <div style="min-width:0">
+                <span class="link" style="font-weight:600">Jo&#227;o <mark style="background:var(--m-warnbg);color:inherit;padding:0 1px">Gon&#231;alves</mark> S&#225;</span>
+                <div class="idline"><span>joao.sa@ufop.br</span><span>jsa</span><span>2026-0071</span></div>
+              </div>
+            </div>
+          </td>
+          <td class="small">2 days ago<div class="xs muted">29 Aug, 09:14</div></td>
+          <td>
+            <span class="fieldpill"><b>City</b> Ouro Preto</span>
+            <span class="fieldpill muted"><b>Institution</b> <span class="muted">&#8212; not given</span></span>
+          </td>
+          <td class="small muted">&#8212;</td>
+          <td style="text-align:right"><span class="btn btn-secondary btn-sm">Review</span></td>
+        </tr>
+        <tr>
+          <td><span class="cb"></span></td>
+          <td>
+            <div class="rowline">
+              <span class="av a3">MG</span>
+              <div style="min-width:0">
+                <span class="link" style="font-weight:600">M&#225;rcia <mark style="background:var(--m-warnbg);color:inherit;padding:0 1px">Goncalves</mark> Fontes</span>
+                <span class="badge b-wait" style="margin-left:6px">Waiting list</span>
+                <div class="idline"><span>marcia.fontes@ufop.br</span><span>mfontes</span><span>2025-0918</span></div>
+              </div>
+            </div>
+          </td>
+          <td class="small">3 weeks ago<div class="xs muted">08 Aug, 16:02</div></td>
+          <td>
+            <span class="fieldpill"><b>City</b> Ouro Preto</span>
+            <span class="fieldpill"><b>Institution</b> IFMG</span>
+          </td>
+          <td class="small clamp muted">&#8220;Deferred on 10 Aug &#8212; waiting for the second group to open.&#8221;</td>
+          <td style="text-align:right"><span class="btn btn-secondary btn-sm">Review</span></td>
+        </tr>
+        <tr>
+          <td><span class="cb"></span></td>
+          <td>
+            <div class="rowline">
+              <span class="av a4">RG</span>
+              <div style="min-width:0">
+                <span class="link" style="font-weight:600">Rita <mark style="background:var(--m-warnbg);color:inherit;padding:0 1px">Gon&#231;alves</mark></span>
+                <span class="badge b-info" style="margin-left:6px">Applied before</span>
+                <div class="idline"><span>rita.g@example.org</span><span>rgoncalves</span><span class="muted">no ID number</span></div>
+              </div>
+            </div>
+          </td>
+          <td class="small">today<div class="xs muted">31 Aug, 07:40</div></td>
+          <td>
+            <span class="fieldpill"><b>City</b> Ouro Preto</span>
+            <span class="fieldpill"><b>Institution</b> UFOP</span>
+          </td>
+          <td class="small clamp muted">&#8220;Cancelled in June by mistake, applying again.&#8221;</td>
+          <td style="text-align:right"><span class="btn btn-secondary btn-sm">Review</span></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="toolbar" style="margin-top:14px;justify-content:space-between">
+      <span class="small muted">Showing 1&#8211;4 of 4 matching &middot; 312 applications in total</span>
+      <span style="display:flex;gap:6px;align-items:center">
+        <span class="ctrl caret" style="padding:4px 9px;font-size:12.5px">20 per page</span>
+      </span>
+    </div>
+
+    <details class="box" style="margin-top:16px" open>
+      <summary style="font-weight:600;cursor:default;font-size:13.5px">Decision options <span class="muted small">&#8212; applied to everything you approve below</span></summary>
+      <div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:12px">
+        <label style="flex:1 1 220px"><span class="small muted">Groups to join on approval</span>
+          <div class="ctrl caret" style="width:100%;margin-top:4px">Tutorial A</div></label>
+        <label style="flex:1 1 220px"><span class="small muted">Role to assign on approval</span>
+          <div class="ctrl caret" style="width:100%;margin-top:4px">Use the enrolment method&#8217;s role</div></label>
+        <label style="flex:1 1 100%"><span class="small muted">Message to the applicant</span>
+          <div class="ctrl" style="width:100%;margin-top:4px;height:56px;align-items:flex-start;color:var(--m-muted)">Optional &#8212; included in the message they receive.</div></label>
+      </div>
+    </details>
+
+    <div class="sticky">
+      <span class="small"><b>2 selected</b> <span class="muted">on this page</span></span>
+      <span class="grow"></span>
+      <span class="btn btn-outline btn-sm">Defer</span>
+      <span class="btn btn-outline btn-sm" style="color:var(--m-bad);border-color:var(--m-bad)">Cancel</span>
+      <span class="btn btn-primary">Confirm 2 applications</span>
+    </div>
+
+  </div></div>
+</div>
+  <p class="caption">The identity line under each name is whatever
+  <code>\core_user\fields::get_identity_fields($context)</code> returns &#8212; nothing hand-picked, so the queue
+  and the participants page cannot disagree. &#8220;2 selected <b>on this page</b>&#8221; is not padding: on any AJAX
+  table a page turn, sort or filter replaces the whole region node, so selection cannot survive one.</p>
+<div class="screen">
+  <div class="screencap"><b>Mockup A &#8212; the same queue at 375px</b>
+    <span class="url">/enrol/apply/manage.php?id=140</span>
+    <span>the table becomes one card per application</span></div>
+  <div class="screenbody"><div class="mdl narrow phone" style="padding:14px 14px 0">
+    <h1 style="font-size:19px">Applications</h1>
+    <p class="sub" style="font-size:12.5px">Application form &middot; Role demo</p>
+
+    <div class="box" style="padding:11px 13px;margin-bottom:12px">
+      <div style="display:flex;gap:18px;flex-wrap:wrap">
+        <div class="stat"><span class="n" style="font-size:17px">12</span><span class="l">Awaiting</span></div>
+        <div class="stat"><span class="n" style="font-size:17px">3</span><span class="l">Deferred</span></div>
+        <div class="stat"><span class="n" style="font-size:17px">12</span><span class="l">Places free</span></div>
+      </div>
+    </div>
+
+    <span class="ctrl search" style="width:100%;margin-bottom:8px"><span class="muted">&#128269;</span><input value="" placeholder="Search name or email" readonly aria-label="Search applicants"></span>
+    <div class="toolbar" style="gap:6px">
+      <span class="ctrl caret" style="font-size:12.5px;padding:4px 9px">Awaiting</span>
+      <span class="ctrl caret muted" style="font-size:12.5px;padding:4px 9px">Filters</span>
+      <span class="small muted" style="margin-left:auto">312</span>
+    </div>
+
+    <div class="mcard">
+      <div class="rowline" style="align-items:center">
+        <span class="cb on"></span>
+        <span class="av">CG</span>
+        <div style="min-width:0;flex:1">
+          <div class="link" style="font-weight:600">Cl&#233;o Gon&#231;alves</div>
+          <div class="xs muted">2 days ago &middot; 29 Aug, 09:14</div>
+        </div>
+      </div>
+      <div class="idline" style="margin-top:8px"><span>cleo.goncalves@ufop.br</span><span>2026-0042</span></div>
+      <div style="margin-top:8px">
+        <span class="fieldpill"><b>City</b> Ouro Preto</span>
+        <span class="fieldpill"><b>Institution</b> UFOP</span>
+      </div>
+      <p class="small muted clamp" style="margin:8px 0 10px">&#8220;I teach the evening cohort and need the same materials the day group has.&#8221;</p>
+      <div style="display:flex;gap:6px">
+        <span class="btn btn-primary btn-sm" style="flex:1;justify-content:center">Confirm</span>
+        <span class="btn btn-outline btn-sm">Defer</span>
+        <span class="btn btn-outline btn-sm">Review</span>
+      </div>
+    </div>
+
+    <div class="mcard">
+      <div class="rowline" style="align-items:center">
+        <span class="cb"></span>
+        <span class="av a3">MF</span>
+        <div style="min-width:0;flex:1">
+          <div class="link" style="font-weight:600">M&#225;rcia Goncalves Fontes</div>
+          <div class="xs muted">3 weeks ago <span class="badge b-wait" style="margin-left:4px">Waiting list</span></div>
+        </div>
+      </div>
+      <div class="idline" style="margin-top:8px"><span>marcia.fontes@ufop.br</span><span>2025-0918</span></div>
+      <div style="margin-top:8px">
+        <span class="fieldpill"><b>City</b> Ouro Preto</span>
+        <span class="fieldpill"><b>Institution</b> IFMG</span>
+      </div>
+      <div style="display:flex;gap:6px;margin-top:10px">
+        <span class="btn btn-primary btn-sm" style="flex:1;justify-content:center">Confirm</span>
+        <span class="btn btn-outline btn-sm">Review</span>
+      </div>
+    </div>
+
+    <div class="sticky" style="margin:12px -14px 0;padding:11px 14px">
+      <span class="small"><b>1 selected</b></span>
+      <span class="grow"></span>
+      <span class="btn btn-primary btn-sm">With selected &#8964;</span>
+    </div>
+  </div></div>
+</div>
+  <p class="caption">Same data, same markup, one card per application below the table breakpoint. The
+  per-row Confirm turns the commonest case into one tap.</p>
+
+  <h3>Mockup B &#8212; the reading-room split</h3>
+  <p>The alternative, if the work is mostly <em>reading</em> rather than sweeping: a compact list on the
+  left, the whole application on the right, decisions taken without leaving the page. It costs more (it is
+  a second rendering of the review page) and it earns that back if a manager spends real time on each
+  application.</p>
+<div class="screen breakout full">
+  <div class="screencap"><b>Mockup B &#8212; the reading-room split</b>
+    <span class="url">/enrol/apply/manage.php?id=140</span>
+    <span>alternative: list left, whole application right, no page reload between decisions</span></div>
+  <div class="screenbody"><div class="mdl">
+    <div class="toolbar" style="justify-content:space-between;align-items:center">
+      <div><h1 style="font-size:21px">Applications</h1>
+        <p class="sub" style="margin-bottom:0">Application form &middot; Role demo &middot; <b>12 awaiting</b>, 8 of 20 places taken</p></div>
+      <span class="ctrl search" style="max-width:300px"><span class="muted">&#128269;</span><input value="" placeholder="Search name or email" readonly aria-label="Search applicants"></span>
+    </div>
+
+    <div class="split">
+      <div class="list">
+        <div class="li" style="background:var(--m-shade);border-bottom:1px solid var(--m-border)">
+          <span class="cb"></span><span class="small" style="font-weight:600">12 awaiting</span>
+          <span class="small muted" style="margin-left:auto">Oldest first &#8964;</span>
+        </div>
+        <div class="li sel">
+          <span class="cb on"></span><span class="av a2">JG</span>
+          <div style="min-width:0;flex:1">
+            <div style="font-weight:600;font-size:13px">Jo&#227;o Gon&#231;alves S&#225;</div>
+            <div class="xs muted">29 Aug &middot; Ouro Preto &middot; UFOP</div>
+          </div>
+        </div>
+        <div class="li">
+          <span class="cb"></span><span class="av">CG</span>
+          <div style="min-width:0;flex:1">
+            <div style="font-weight:600;font-size:13px">Cl&#233;o Gon&#231;alves</div>
+            <div class="xs muted">29 Aug &middot; Ouro Preto &middot; UFOP</div>
+          </div>
+        </div>
+        <div class="li">
+          <span class="cb"></span><span class="av a3">MF</span>
+          <div style="min-width:0;flex:1">
+            <div style="font-weight:600;font-size:13px">M&#225;rcia Fontes <span class="badge b-wait">Waiting</span></div>
+            <div class="xs muted">08 Aug &middot; Ouro Preto &middot; IFMG</div>
+          </div>
+        </div>
+        <div class="li">
+          <span class="cb"></span><span class="av a4">RG</span>
+          <div style="min-width:0;flex:1">
+            <div style="font-weight:600;font-size:13px">Rita Gon&#231;alves</div>
+            <div class="xs muted">31 Aug &middot; Ouro Preto &middot; UFOP</div>
+          </div>
+        </div>
+        <div class="li" style="justify-content:space-between;color:var(--m-muted)">
+          <span class="xs">1&#8211;20 of 312</span>
+          <span class="xs"><span class="link">&#8249;</span> <b style="color:var(--m-fg)">1</b> <span class="link">2</span> <span class="link">3</span> <span class="link">&#8250;</span></span>
+        </div>
+      </div>
+      <div class="pane">
+        <div class="rowline" style="align-items:flex-start;margin-bottom:14px">
+          <span class="av lg a2">JG</span>
+          <div style="flex:1;min-width:0">
+            <h2 style="margin-bottom:2px">Jo&#227;o Gon&#231;alves S&#225;</h2>
+            <div class="idline" style="font-size:12.5px"><span>joao.sa@ufop.br</span><span>jsa</span><span>2026-0071</span></div>
+            <div class="small muted" style="margin-top:5px">Applied 29 Aug 2026, 09:14 &middot; 2 days ago</div>
+          </div>
+          <span class="btn btn-outline btn-sm">Profile &#8599;</span>
+        </div>
+
+        <div class="box plain" style="margin-bottom:12px">
+          <h3>Comment</h3>
+          <p class="small" style="margin:0">&#8220;I teach the evening cohort and need the same materials the day group has. My institution e-mail is not yet active, so I applied with the personal one.&#8221;</p>
+        </div>
+
+        <div class="box plain" style="margin-bottom:12px">
+          <h3>Submitted with the application</h3>
+          <dl class="kv"><dt>City/town</dt><dd>Ouro Preto</dd><dt>Institution</dt><dd class="muted">&#8212; not given</dd></dl>
+        </div>
+
+        <div class="notice info" style="margin-bottom:14px">
+          <b>Applied once before.</b> Cancelled on 12 Jun 2026 by Ana Souza. Not currently enrolled by any other method.
+        </div>
+
+        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding-top:12px;border-top:1px solid var(--m-border)">
+          <span class="ctrl caret" style="font-size:13px">Groups: Tutorial A</span>
+          <span class="ctrl caret muted" style="font-size:13px">Role: method default</span>
+          <span class="grow" style="flex:1"></span>
+          <span class="btn btn-outline btn-sm" style="color:var(--m-bad);border-color:var(--m-bad)">Cancel</span>
+          <span class="btn btn-outline btn-sm">Defer</span>
+          <span class="btn btn-primary">Confirm</span>
+        </div>
+      </div>
+    </div>
+  </div></div>
+</div>
+  <p class="caption">Note the paging control at the foot of the list rather than an endless scroll &#8212; see
+  the cost table below for why.</p>
+
+  <h3>Your requirements, costed</h3>
+  <div class="tblwrap"><table class="tbl">
+    <thead><tr><th>Requirement</th><th>Cost</th><th>Mechanism, and what it really costs</th></tr></thead>
+    <tbody>
+      <tr><td>Respect <code>showuseridentity</code></td><td><span class="cost low">low</span></td>
+        <td><code>fields::get_identity_fields($context)</code> for the list and
+          <code>fields::get_sql()</code> for the SELECT and the custom-field joins. It also honours
+          <code>hiddenuserfields</code>, which is the half that is broken today. Two traps: pass
+          <code>$namedparams = true</code> or <code>fix_sql_params()</code> throws
+          <code>mixedtypesqlparam</code> (the queue's existing <code>for_userpic()</code> call discards
+          params and joins, so it is not a template for this); and the custom-field join it emits is an
+          <b>INNER</b> join on <code>{user_info_field}</code>, so a configured identity field that no
+          longer exists empties the entire queue.</td></tr>
+      <tr><td>Show the requested profile fields</td><td><span class="cost low">low</span></td>
+        <td>The frozen snapshot is already joined and already masked by the report's own rule. Rendering
+          it is cheap.</td></tr>
+      <tr><td>Remaining places</td><td><span class="cost free">free</span></td>
+        <td>Four honest numbers in two pairs that must never be mixed: <em>applicants</em>
+          (<code>customint3</code>, counts pending + deferred + approved) and <em>places</em>
+          (<code>customint4</code>, counts ACTIVE only). Neither is the queue predicate.</td></tr>
+      <tr><td>Name links to the profile</td><td><span class="cost free">free</span></td>
+        <td>A plain <code>user/view.php?id=&amp;course=</code> link, which delegates every visibility
+          question to core.</td></tr>
+      <tr><td>Drop the initials bar</td><td><span class="cost free">free</span></td>
+        <td>Override <code>get_sql_where()</code>. Hiding the bar alone leaves the filter running.</td></tr>
+      <tr><td>Pagination</td><td><span class="cost free">free</span></td>
+        <td>Already there, and AJAX on a dynamic table.</td></tr>
+      <tr><td>Responsive / mobile</td><td><span class="cost mid">medium</span></td>
+        <td>Not free on any surface. A Mustache rewrite of the row into a card layout &#8212; which is why
+          identity belongs on a sub-line rather than in columns.</td></tr>
+      <tr><td>AJAX search by name</td><td><span class="cost mid">medium</span></td>
+        <td>One AMD module posting to <code>setFilters()</code>. Server side,
+          <code>users_search_sql()</code> gives core's own semantics over fullname, e-mail, idnumber and
+          the identity fields.</td></tr>
+      <tr><td>Accent-insensitive</td><td><span class="cost mid">medium &#8212; and honest about it</span></td>
+        <td><b>Not portable.</b> MariaDB gets it from the collation for nothing; PostgreSQL does not, and
+          core says so itself: <em>&#8220;postgresql does not support accent insensitive text comparisons,
+          sorry&#8221;</em> (<code>pgsql_native_moodle_database.php:1480</code>, both branches). The
+          <code>unaccent</code> route <code>local_dimensions</code> uses works, but the extension exists on
+          m502 <b>only because local_dimensions installed it</b>, and the CI PostgreSQL image has the files
+          and no created extension. A test <em>can</em> provision it for itself &#8212; the
+          <code>CREATE EXTENSION</code> is visible for the rest of the test and rolled back after, which is
+          exactly what <code>local_dimensions</code>'s own test does, provisioning and skipping only if
+          that fails. So this is testable; what it is not is <em>uniform</em>. Ship it as best-effort with a
+          documented fallback, or match core's participants search and say plainly that PostgreSQL sites
+          match accent-sensitively. Note the queue already diverges this way today: the initials bar asks
+          for accent-insensitive matching and gets it on MariaDB only.</td></tr>
+      <tr><td>Filters by requested profile field</td><td><span class="cost high">blocked</span></td>
+        <td><b>Not achievable as stated.</b> The snapshot is one <code>TEXT</code> column holding a JSON
+          <em>array</em>, so getting one field is a path search rather than a key lookup &#8212; and Moodle's DML
+          exposes no JSON abstraction at all, so it needs engine-specific SQL behind a
+          <code>get_dbfamily()</code> guard and can use no index either way. (The empty string that 18 of
+          27 live rows hold would also throw a PostgreSQL <code>::jsonb</code> cast, but that part is
+          trivially guarded &#8212; it is the portability and the missing index that block it.) This needs the
+          deferred <code>enrol_apply_submission_field</code> child table (slice 10). Nothing about the
+          chosen surface changes that.</td></tr>
+      <tr><td>Lazy loading / infinite scroll</td><td><span class="cost high">high, and it fights the
+        bulk bar</span></td>
+        <td>Core does ship a primitive &#8212; <code>scrollBottom</code> in
+          <code>core/custom_interaction_events</code> (<code>:40</code>, <code>:304-318</code>,
+          <code>:543</code>) &#8212; with two live consumers, both in the <b>message drawer</b>. But it is
+          jQuery-based, which this fleet forbids in new code, <b>no core table uses it</b>, and it
+          contradicts the selection model: a refresh replaces the whole table region, so rows scrolled past
+          would lose their checkboxes. AJAX paging with a large page size and a real search is the answer
+          that survives contact with a bulk decision &#8212; which is what both mockups show.</td></tr>
+      <tr><td>Details in a modal</td><td><span class="cost mid">medium</span></td>
+        <td>Core has no user-profile modal to reuse &#8212; the only details modal on a user list is
+          <code>core_user/status_details</code>, and that is <em>enrolment</em> details built from data
+          attributes. Build a <code>core/fragment</code> callback rendering the <b>frozen snapshot</b>
+          plus the identity fields &#8212; which is also the safe answer, because it reads nothing live. The
+          plain profile link is the fallback.</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note think"><span class="lbl">The cheap path, if you want most of it this week</span>
+  <p>Everything except AJAX search and lazy loading is reachable on the <em>existing</em>
+  <code>table_sql</code> without changing the surface at all &#8212; identity fields, killing the initials
+  filter, the profile link, the capacity header, the snapshot column, and a plain
+  <code>&lt;form method="get"&gt;</code> search using <code>users_search_sql()</code>. That is about a day,
+  no new classes, no AMD, no Behat locator churn &#8212; and it removes the e-mail disclosure now rather than
+  after a rewrite. The dynamic-table rebuild then becomes an upgrade rather than a prerequisite.</p></div>
+</section>
+<section id="s4">
+  <span class="sectnum">04</span>
+  <h2>The review page: the sticky footer is the cheap part</h2>
+
+  <div class="quoted"><p><em>&#8220;<code>apply/manage.php?userenrol=xxx</code> usar o <code>sticky_footer</code>
+  para os bot&#245;es de a&#231;&#227;o. Tamb&#233;m quero um novo mockup&#8230; que melhore a hierarquia da informa&#231;&#227;o e facilite
+  a decis&#227;o de aprovar/reprovar.&#8221;</em></p></div>
+
+  <p class="lede">The footer move is mechanically free. The page's real problem is that one of its three
+  buttons destroys an enrolment and looks exactly like the one that does not.</p>
+<div class="screen">
+  <div class="screencap"><b>Today</b>
+    <span class="url">/enrol/apply/manage.php?userenrol=395</span>
+    <span>reconstructed from <span class="mono">templates/review.mustache</span></span></div>
+  <div class="screenbody"><div class="mdl narrow" style="min-width:0">
+    <h1>Jo&#227;o Gon&#231;alves S&#225;</h1>
+    <div class="small" style="display:flex;flex-wrap:wrap;gap:14px;border-bottom:1px solid var(--m-border);
+      padding:9px 0;margin:10px 0 12px;color:var(--m-muted)">
+      <span class="link" style="border-bottom:2px solid var(--m-primary);padding-bottom:7px">Site home</span>
+      <span class="link">Participants</span><span class="link">Grades</span><span class="link">Reports</span>
+      <span class="link">More</span>
+      <span class="xs" style="margin-left:auto;color:var(--m-bad)">&#8592; all eight point at course id 1</span>
+    </div>
+    <h2 style="font-size:20px;margin:6px 0 0">Jo&#227;o Gon&#231;alves S&#225;</h2>
+    <div class="nav2" style="margin-top:12px">
+      <span class="link">&#8249; Cl&#233;o Gon&#231;alves</span><span class="link">M&#225;rcia Fontes &#8250;</span>
+    </div>
+    <dl class="kv" style="grid-template-columns:150px 1fr;row-gap:7px;font-size:13.5px">
+      <dt>Course</dt><dd><span class="link">Role demo</span></dd>
+      <dt>Email address</dt><dd>joao.sa@ufop.br</dd>
+      <dt>Enrol date</dt><dd>29/08/26, 09:14</dd>
+      <dt>Status</dt><dd>Awaiting a decision</dd>
+      <dt>Comment</dt><dd>I teach the evening cohort and need the same materials the day group has.</dd>
+    </dl>
+    <h3 style="margin-top:18px">Details submitted with this application</h3>
+    <dl class="kv" style="grid-template-columns:150px 1fr;row-gap:7px;font-size:13.5px">
+      <dt>City/town</dt><dd>Ouro Preto</dd>
+      <dt>Institution</dt><dd></dd>
+    </dl>
+    <div style="margin-top:18px;display:flex;flex-direction:column;gap:12px;max-width:520px">
+      <label><span class="small muted">Groups to join on approval</span>
+        <div class="ctrl caret" style="width:100%;margin-top:4px">Tutorial A</div></label>
+      <label><span class="small muted">Role to assign on approval</span>
+        <div class="ctrl caret" style="width:100%;margin-top:4px">Use the enrolment method&#8217;s role</div></label>
+      <label><span class="small muted">Message to the applicant</span>
+        <div class="ctrl" style="width:100%;margin-top:4px;height:64px;align-items:flex-start;color:var(--m-muted)"></div></label>
+    </div>
+    <div style="display:flex;gap:8px;margin:18px 0 20px">
+      <span class="btn btn-primary">Confirm this application</span>
+      <span class="btn btn-outline" style="border-color:var(--m-muted)">Defer this application</span>
+      <span class="btn btn-outline" style="border-color:var(--m-muted)">Cancel this application</span>
+    </div>
+  </div></div>
+</div>
+  <p class="caption">Measured on m502 (<code>?userenrol=395</code>): the applicant's name is rendered
+  <b>twice</b> &#8212; once as the page heading, once as an <code>h2</code> &#8212; and what sits between them is worse
+  than the repetition. There is no breadcrumb, and no back-to-queue link. The page <code>&lt;title&gt;</code>
+  is &#8220;Enrol Confirm&#8221;, which names neither the applicant nor the course.</p>
+
+  <div class="note trap"><span class="lbl">The thing between the two headings</span>
+  <p><b>The review page renders the site front page's secondary navigation.</b> Eight links, every one of
+  them pointing at course id 1 rather than at the course the application was made to. The cause is one
+  missing call: the review branch runs <code>require_login()</code> with no course
+  (<code>manage.php:47</code>) and then sets the context at <code>:122</code>, but never
+  <code>$PAGE-&gt;set_course()</code> &#8212; so <code>$COURSE</code> stays the site course and every navigation
+  node is built from it. That is also why there is no breadcrumb: core would render one, and does build
+  the navbar object, but the theme suppresses it on a page whose course is the site.</p></div>
+
+  <div class="note trap"><span class="lbl">And the two panels contradict each other</span>
+  <p>The snapshot panel is masked in the <b>course</b> context, so a mentor &#8212; the audience
+  <code>require_review_access()</code> exists to serve through the applicant's user context &#8212; gets only the
+  six name keys and loses city, institution, phone and every custom field. The e-mail row three lines
+  above it is an identity field too, and it is printed unconditionally. One panel withholds what the other
+  prints, on the same page, to the same reader.</p></div>
+
+  <h3>What the page does not tell you, and could</h3>
+  <div class="tblwrap"><table class="tbl">
+    <thead><tr><th>Missing</th><th>Where it already is</th><th>Cost</th></tr></thead>
+    <tbody>
+      <tr><td>The applicant's identity fields</td>
+        <td><code>$applicant</code> is the full user record (<code>manage.php:74</code>); the site's list
+          comes from <code>\core_user\fields::get_identity_fields($context)</code>, gated on the same
+          capability the snapshot masking already reads</td><td><span class="cost low">low</span></td></tr>
+      <tr><td>Places and applicant counts</td>
+        <td><code>$instance</code> is loaded; <code>capacity::places()</code> /
+          <code>places_taken()</code> is one <code>count_records_select</code></td>
+        <td><span class="cost low">low</span></td></tr>
+      <tr><td>Who deferred it, when, and what they wrote</td>
+        <td>four columns on <code>enrol_apply_submission</code>, which
+          <code>queue::application()</code> <b>already LEFT JOINs</b> and simply does not select
+          (<code>queue.php:149-157</code>) &#8212; zero extra queries</td>
+        <td><span class="cost free">free</span></td></tr>
+      <tr><td>Prior applications by this person to this course</td>
+        <td>indexed on <code>(courseid, userid)</code>, deliberately not unique. Measured live: one user
+          has eight records in one course, and the query runs in 0.067 ms</td>
+        <td><span class="cost low">low</span> + a permission question</td></tr>
+      <tr><td>A profile link and a picture <span class="tag info">partly there already</span></td>
+        <td>In the user-context scope core's own page header supplies the applicant's avatar wrapped in a
+          <code>user/profile.php</code> link. It is not the plugin's, and it is not present in every
+          scope &#8212; so make it explicit rather than relying on it.</td>
+        <td><span class="cost free">free</span></td></tr>
+      <tr><td>A way back to the queue</td>
+        <td><code>$scope-&gt;url</code> is computed at <code>manage.php:92</code> and used only for the
+          post-decision redirect</td><td><span class="cost free">free</span></td></tr>
+      <tr><td>The defaults the choosers refer to</td>
+        <td>&#8220;Use the enrolment method's role&#8221; never says which role that is</td>
+        <td><span class="cost low">low</span></td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note trap"><span class="lbl">The one that matters most</span>
+  <p><b>Cancel is irreversible and is styled identically to Defer, which is fully reversible.</b> Measured
+  markup: <code>btn-primary</code>, <code>btn-secondary</code>, <code>btn-secondary</code>.
+  <code>cancel_enrolment()</code> calls <code>unenrol_user()</code>, which deletes the
+  <code>{user_enrolments}</code> row and the comment with it. That is the single largest &#8220;make the
+  decision easier&#8221; win on this page and it costs nothing but class names.</p>
+  <p>It has a sharper edge than the styling. Confirm is the form's <b>first</b> submit, so it is the
+  default one &#8212; pressing Enter while the focus is on the group or role chooser approves the enrolment.
+  Reordering the buttons in the bar fixes the appearance; the default submit has to be dealt with on its
+  own.</p></div>
+<div class="screen breakout full">
+  <div class="screencap"><b>Mockup C &#8212; the review page, rebuilt</b>
+    <span class="url">/enrol/apply/manage.php?userenrol=395</span>
+    <span>decision in a sticky footer, evidence above it</span></div>
+  <div class="screenbody"><div class="mdl">
+
+    <div class="crumb"><span>Role demo</span><span class="link">Applications</span><span>Jo&#227;o Gon&#231;alves S&#225;</span></div>
+
+    <div class="nav2">
+      <span class="link">&#8249; Cl&#233;o Gon&#231;alves</span>
+      <span class="small muted"><span class="link">All applications</span> &middot; <b style="color:var(--m-fg)">4</b> of 12 awaiting a decision</span>
+      <span class="link">M&#225;rcia Fontes &#8250;</span>
+    </div>
+
+    <div class="rowline" style="align-items:flex-start;margin-bottom:18px">
+      <span class="av lg a2">JG</span>
+      <div style="flex:1;min-width:0">
+        <h1 style="margin-bottom:3px">Jo&#227;o Gon&#231;alves S&#225;</h1>
+        <div class="idline" style="font-size:13px">
+          <span>joao.sa@ufop.br</span><span>jsa</span><span>2026-0071</span><span>Departamento de Educa&#231;&#227;o</span>
+        </div>
+        <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <span class="badge b-new">Awaiting a decision</span>
+          <span class="small muted">Applied 29 Aug 2026, 09:14 &#8212; 2 days ago</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <span class="btn btn-outline btn-sm">Profile &#8599;</span>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start">
+      <div style="flex:1 1 55%;min-width:300px;display:flex;flex-direction:column;gap:14px">
+        <div class="box plain">
+          <h3>What they wrote</h3>
+          <p style="margin:0;font-size:14px">I teach the evening cohort and need the same materials the day group has. My institution e-mail is not yet active, so I applied with the personal one.</p>
+        </div>
+        <div class="box plain">
+          <h3>Details submitted with this application</h3>
+          <dl class="kv" style="grid-template-columns:160px 1fr;row-gap:7px">
+            <dt>City/town</dt><dd>Ouro Preto</dd>
+            <dt>Institution</dt><dd class="muted">&#8212; left blank</dd>
+          </dl>
+          <p class="xs muted" style="margin:10px 0 0">Frozen as submitted on 29 Aug 2026. This is not the applicant&#8217;s live profile.</p>
+        </div>
+      </div>
+
+      <div style="flex:1 1 34%;min-width:260px;display:flex;flex-direction:column;gap:14px">
+        <div class="box">
+          <h3>Where this lands</h3>
+          <dl class="kv" style="row-gap:6px">
+            <dt>Course</dt><dd><span class="link">Role demo</span></dd>
+            <dt>Method</dt><dd>Application form</dd>
+            <dt>Places</dt><dd>8 of 20 taken &middot; <b>12 free</b></dd>
+            <dt>Applications</dt><dd>35 of 40 accepted</dd>
+          </dl>
+        </div>
+        <div class="box">
+          <h3>History</h3>
+          <ul style="margin:0;padding-left:16px;font-size:13px">
+            <li>Applied <b>29 Aug 2026</b> &#8212; awaiting a decision</li>
+            <li class="muted">Applied 04 Jun 2026 &#8212; cancelled 12 Jun by Ana Souza</li>
+          </ul>
+          <p class="xs muted" style="margin:10px 0 0">Not enrolled in this course by any other method.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="box plain" style="margin-top:16px">
+      <h3>Decision options</h3>
+      <div style="display:flex;flex-wrap:wrap;gap:14px">
+        <label style="flex:1 1 230px"><span class="small muted">Groups to join on approval</span>
+          <div class="ctrl caret" style="width:100%;margin-top:4px">Tutorial A</div></label>
+        <label style="flex:1 1 230px"><span class="small muted">Role to assign on approval</span>
+          <div class="ctrl caret" style="width:100%;margin-top:4px">Use the enrolment method&#8217;s role</div></label>
+        <label style="flex:1 1 100%"><span class="small muted">Message to the applicant</span>
+          <div class="ctrl" style="width:100%;margin-top:4px;height:56px;align-items:flex-start;color:var(--m-muted)">Optional &#8212; added to the message they receive.</div></label>
+      </div>
+    </div>
+
+    <div class="sticky">
+      <span class="btn btn-outline btn-sm" style="color:var(--m-bad);border-color:var(--m-bad)">Reject &amp; unenrol</span>
+      <span class="grow"></span>
+      <span class="small muted"><span class="cb" style="vertical-align:-2px"></span> open the next application after deciding</span>
+      <span class="btn btn-outline btn-sm">Defer</span>
+      <span class="btn btn-primary">Confirm</span>
+    </div>
+
+  </div></div>
+</div>
+  <p class="caption">The destructive action moves to the far side of the bar as
+  <code>btn-outline-danger</code> &#8212; which resolves on both branches &#8212; so it cannot be mis-clicked for
+  Defer. Labels shorten because the bar clips rather than scrolls (see below). Everything above the bar is
+  evidence; the bar is the decision.</p>
+
+  <h3>The sticky footer: five things that must be true</h3>
+  <ol>
+    <li><b>Render it inside the form</b>, exactly as <code>manage.mustache</code> already does. Its
+      placement is CSS, never a DOM move, so the submits post normally.</li>
+    <li><b>Only the buttons go in it.</b> The bar is a fixed 80&nbsp;px box whose content area carries
+      <code>overflow:hidden</code>, leaving about 64&nbsp;px &#8212; one row of controls, and anything taller is
+      clipped with no scrollbar. Verified in four compiled sheets (boost on m501 and m502, boost_union,
+      boost_union_fundaseg). The message textarea and the two choosers stay in the page body. Note the
+      source is <em>not</em> byte-identical across branches &#8212; 5.2 adds rules 5.1 does not have &#8212; so check
+      the compiled sheet of each rather than reading one.</li>
+    <li><b>One footer per page.</b> <code>manage.php</code> cannot produce two, because the review branch
+      exits before the queue is built &#8212; but the constraint is real
+      (<code>lib/classes/output/sticky_footer.php:25</code>).</li>
+    <li><b>Never call <code>add_classes()</code>.</b> It builds a concatenation and then assigns the
+      argument over it (<code>:94-99</code>, byte-identical on both branches). Every class goes through
+      the constructor.</li>
+    <li><b>Keep <code>name="formaction"</code> as a form control</b>, not the HTML5
+      <code>formaction</code> attribute &#8212; <code>manage.php:44</code> reads the submitted field.</li>
+  </ol>
+  <div class="note measured"><span class="lbl">And one thing you get for nothing</span>
+  <p>The no-JavaScript polyfill in <code>styles.css:27-37</code> keys on
+  <code>body.path-enrol-apply:not(.jsenabled)</code> and <code>#page.drawers</code>. The rendered review
+  page carries both classes, so the footer works without JavaScript on this page with <b>no CSS
+  change at all</b>. It is worth knowing why: the rule is keyed on the <em>path</em>, not on the presence
+  of a footer, so with JavaScript off it is already reserving 80&#8239;px at the foot of every
+  <code>enrol/apply</code> page today &#8212; including the ones with no bar. Adding the bar here makes that
+  reservation correct rather than adding a new one.</p></div>
+
+  <div class="note think"><span class="lbl">Companion change, worth raising now</span>
+  <p><code>manage_table.php</code> builds <b>no <code>?userenrol=</code> link anywhere</b>. The review page
+  is reachable only from the participants-page icon, the notification e-mail, and the previous/next chain
+  &#8212; a manager working the queue cannot open one application from it. Whichever queue mockup you pick in
+  &#167;03, the &#8220;Review&#8221; affordance in it is a new door, not a restyled one.</p></div>
+</section>
+<section id="s5">
+  <span class="sectnum">05</span>
+  <h2>The duplicated bulk menu is core's. It is also the least of the problem.</h2>
+
+  <div class="quoted"><p><em>&#8220;&#8230;no dropdown de a&#231;&#245;es &#8216;With selected users...&#8217; tem as op&#231;&#245;es
+  confirm/defer/cancel para cada inst&#226;ncia de inscri&#231;&#227;o, o problema que n&#227;o d&#225; para diferenciar qual
+  inst&#226;ncia e, pelo que entendo, nem precisa aparecer em duplicidade pois o candidato s&#243; poderia se
+  candidatar em 1 por vez&#8230;&#8221;</em></p></div>
+<div class="screen">
+  <div class="screencap"><b>Today, in a course carrying two apply methods</b>
+    <span class="url">/user/index.php?id=2</span>
+    <span>the &#8220;With selected users&#8230;&#8221; menu</span></div>
+  <div class="screenbody"><div class="mdl narrow" style="min-width:0;padding-bottom:18px">
+    <div class="toolbar"><span class="small">With selected users...</span>
+      <span class="ctrl caret">Choose...</span></div>
+    <div class="box plain" style="max-width:420px;padding:6px 0">
+      <div class="xs muted" style="padding:6px 14px 3px;font-weight:700;letter-spacing:.04em">MANUAL ENROLMENTS</div>
+      <div class="small" style="padding:4px 22px">Edit selected user enrolments</div>
+      <div class="small" style="padding:4px 22px">Delete selected user enrolments</div>
+      <div class="xs muted" style="padding:9px 14px 3px;font-weight:700;letter-spacing:.04em">COURSE ENROL CONFIRMATION</div>
+      <div class="small" style="padding:4px 22px">Confirm requests</div>
+      <div class="small" style="padding:4px 22px">Defer requests</div>
+      <div class="small" style="padding:4px 22px">Cancel requests</div>
+      <div class="xs" style="padding:9px 14px 3px;font-weight:700;letter-spacing:.04em;color:var(--m-bad)">COURSE ENROL CONFIRMATION</div>
+      <div class="small" style="padding:4px 22px;color:var(--m-bad)">Confirm requests</div>
+      <div class="small" style="padding:4px 22px;color:var(--m-bad)">Defer requests</div>
+      <div class="small" style="padding:4px 22px;color:var(--m-bad)">Cancel requests</div>
+    </div>
+    <p class="small muted" style="max-width:52ch;margin-top:12px">The second group is a duplicate of the first &#8212; same label, and the links behind the six entries are byte-identical. Choosing either one decides applications of the <b>first</b> apply method only.</p>
+  </div></div>
+</div>
+  <h3>Where the duplicate comes from</h3>
+  <p><code>user/index.php:251</code> loops over enrolment <b>instances</b>, and calls
+  <code>$plugin-&gt;get_bulk_operations($manager)</code> inside that loop (<code>:257</code>) &#8212; on the same
+  plugin object every time, with a manager carrying no instance filter. The url it builds is
+  <code>['plugin' =&gt; 'apply', 'operation' =&gt; $key]</code> and nothing else (<code>:261</code>), and it
+  appends a fresh optgroup labelled with the plugin name (<code>:266-267</code>). <i>N</i> apply instances
+  therefore produce <i>N</i> byte-identical optgroups: same label, same three option values. The file is
+  byte-identical on 5.1 and 5.2.</p>
+
+  <div class="note measured"><span class="lbl">Measured on m502</span>
+  <p>Course 2 already carries two enabled apply instances (&#8220;IMA 1&#8221;, &#8220;IMA 2&#8221;) and renders two identical
+  <code>&lt;optgroup label="Course enrol confirmation"&gt;</code> blocks. <b>Stock core does the same
+  thing</b>: adding three <code>enrol_self</code> instances to a generated course gives <b>four</b> Self
+  enrolment optgroups &#8212; four, because <code>get_enrolment_instances()</code> defaults to including
+  disabled instances and a disabled one produces an optgroup exactly like an enabled one.
+  <code>enrol_manual</code> escapes the whole thing only because its <code>can_add_instance()</code>
+  forbids a second instance. So this is core's loop, not this plugin's &#8212; and
+  <code>get_bulk_operations()</code> cannot know which iteration it is on.</p></div>
+
+  <h3>Your premise is false, and that is where the real defect lives</h3>
+  <p>A candidate <b>can</b> hold two applications in one course at the same time. The lock in
+  <code>submit_application()</code> is keyed on the <em>instance</em> and the user, not the course.
+  Measured: both calls returned <code>created</code>, two <code>user_enrolments</code> rows, two
+  <code>enrol_apply_submission</code> rows &#8212; and after applying to IMA 1, the enrolment page still rendered
+  a live apply button for IMA 2. Two clicks reach the state.</p>
+
+  <p>And <code>action_redir.php:176-183</code> picks the <b>first</b> apply <code>{enrol}</code> row &#8212;
+  by <code>sortorder</code>, which a teacher can reorder, disabled instances included &#8212; then filters the
+  manager to it (<code>:188</code>), so <code>get_users_enrolments()</code> selects on
+  <code>ue.enrolid = :instanceid</code> (<code>enrol/locallib.php:1349-1351</code>). Two outcomes, and
+  they are not equally visible:</p>
+
+  <div class="tblwrap"><table class="tbl">
+    <thead><tr><th>Scenario</th><th>What happens</th><th>What the operator is told</th></tr></thead>
+    <tbody>
+      <tr><td>One apply instance <span class="tag ok">the normal case</span></td>
+        <td>Everything works. The duplicate never appears.</td><td>correct counts</td></tr>
+      <tr><td>Two instances, <b>different</b> applicants selected</td>
+        <td>Only the first instance's applicants are decided.</td>
+        <td>core warns per dropped user &#8212; <span class="tag warn">visible</span></td></tr>
+      <tr><td>Two instances, <b>one person</b> holding both</td>
+        <td>IMA 1 goes active; IMA 2 stays pending.</td>
+        <td><b>nothing.</b> &#8220;Enrolment applications decided: 1&#8221; &#8212; <span class="tag bad">silent</span></td></tr>
+      <tr><td>Two instances, the <b>first one disabled</b> <span class="tag bad">most reachable</span></td>
+        <td>The disabled instance captures the entire dispatch: <code>enrol_get_instances(..., false)</code>
+          returns it, it sorts first, and the manager is filtered to it. Every applicant of the working
+          instance is dropped.</td>
+        <td>a per-user warning, and nothing decided</td></tr>
+      <tr><td>Plugin disabled site-wide</td>
+        <td>The menu still offers all three entries; choosing one throws.</td>
+        <td><code>errorwithbulkoperation</code> &#8212; <span class="tag bad">a raw exception</span></td></tr>
+      <tr><td>Operator is a mentor (user-context capability only)</td>
+        <td>Offered nothing here, correctly &#8212; the gate is the course capability.</td>
+        <td>the queue at <code>manage.php</code> serves them instead</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note trap"><span class="lbl">Two sentences in CLAUDE.md to correct</span>
+  <p><b>&#8220;applicants of the second are dropped by core with a per-user warning&#8221;</b> &#8212; true for different
+  applicants, <em>false</em> for one applicant holding both, where core warns nothing and reports success.
+  That is exactly the shape of sentence this repo has been bitten by: it argues the next reader out of the
+  one case that is silent.</p>
+  <p><b>&#8220;The bulk menu differs because core's own driver builds it from the enabled-only list&#8221;</b> &#8212; false.
+  <code>user/index.php:250</code> passes <code>false</code> to <code>get_enrolment_plugins()</code>, which
+  means <em>include disabled</em>, and <code>get_enrolment_instances()</code> defaults to
+  <code>false</code> too (<code>enrol/locallib.php:650</code>; <code>enrol_get_instances</code> returns
+  every row when <code>$enabled</code> is falsy, <code>lib/enrollib.php:174-179</code>). It is
+  <code>action_redir.php</code> that uses the enabled-only list, which is why the menu offers what the
+  dispatch then refuses. Same on both branches.</p></div>
+
+  <h3>Recommendation</h3>
+  <ol>
+    <li><b>Collapse the menu to one entry per plugin</b> &#8212; a per-course memo in
+      <code>get_bulk_operations()</code> that returns the full set on the first unfiltered call and an
+      empty array afterwards. Honest, because the duplicate entries are the same link. Keep returning the
+      full set whenever the manager <em>does</em> carry an instance filter, which is how
+      <code>action_redir.php</code> reaches it &#8212; and note there is a third caller,
+      <code>enrol/renderer.php:387</code>, which is gated on
+      <code>get_filtered_enrolment_plugin()</code> and therefore also arrives filtered. Give that
+      separation its own test; it is the whole safety of the memo.</li>
+    <li><b>Close the silent case in <code>process()</code>.</b> It holds the surviving user ids, and the
+      instance filter is a property of one manager <em>object</em>, not of the request &#8212; so the plugin can
+      build an unfiltered manager itself and either decide those users' applications on the course's other
+      apply instances, or at minimum name them in a notice. The one selection core makes unreachable is
+      the one where <em>no</em> selected user holds a row on the first instance; for everybody who does
+      reach <code>process()</code>, this is entirely in the plugin's hands.</li>
+    <li><b>Correct the two CLAUDE.md sentences in the same change.</b></li>
+  </ol>
+  <p>Reject the intuitive fix &#8212; naming the instance in each entry. The option value is built from plugin
+  and operation only, so both entries dispatch identically; a label reading &#8220;IMA 2&#8221; on an entry that acts
+  on IMA 1 is worse than the ambiguity it replaces.</p>
+  <p>Worth reporting upstream too: because <code>enrol_self</code> reproduces it in stock core, the real
+  fix belongs in <code>user/index.php</code>.</p>
+  <div class="note measured"><span class="lbl">One mitigation already exists</span>
+  <p>The participants page's <b>per-row</b> icon handles the second instance correctly: it is built from
+  the row's own <code>{user_enrolments}</code> record and points at
+  <code>manage.php?userenrol=</code>, so it always names the right application. Your instinct that
+  &#8220;the action button takes them to the linked instance&#8221; is exactly right &#8212; it is the <em>bulk</em>
+  route, and only that route, which cannot carry an instance.</p></div>
+</section>
+<section id="s6">
+  <span class="eyebrow">Two questions you asked inside item 3</span>
+  <h2 style="margin-top:.35em">&#8220;Defer requests&#8221;, and enrolling with no role</h2>
+
+  <h3>What deferring actually does</h3>
+  <p class="lede">It moves a <em>pending</em> application into a third status only this plugin
+  understands. For the manager it is coherent and complete. For the applicant it is invisible.</p>
+
+  <div class="tblwrap"><table class="tbl">
+    <thead><tr><th>It does</th><th>Mechanism, measured on m501 and m502 alike</th></tr></thead>
+    <tbody>
+      <tr><td>Writes status <b>2</b></td>
+        <td><code>ENROL_APPLY_USER_WAIT</code>, this plugin's extension of a column core defines two
+          values for. Core tests <code>!= ENROL_USER_ACTIVE</code> everywhere, so it is inert to core.</td></tr>
+      <tr><td>Clears the expiry to the <b>integer</b> 0, leaves <code>timestart</code> alone</td>
+        <td><code>lib.php:1203</code>. Without it a once-approved row lands on the waiting list carrying a
+          past <code>timeend</code> &#8212; a state no sweep touches and no queue lists.</td></tr>
+      <tr><td>Keeps the applicant's comment</td>
+        <td>unlike approve and cancel, which delete the <code>applicationinfo</code> row.</td></tr>
+      <tr><td>Stays in the queue and stays decidable</td>
+        <td>the predicate is &#8220;not active and not expired&#8221;. Confirm and cancel accept status 1 <em>or</em> 2
+          (<code>lib.php:1286</code>); defer accepts 1 only.</td></tr>
+      <tr><td>Frees the <b>place</b>, keeps the <b>applicant slot</b></td>
+        <td><code>places_taken()</code> counts ACTIVE rows only; <code>applicants()</code> counts every
+          non-expired row. Measured before and after a deferral: applicants 1 &#8594; 1, places taken 0 &#8594; 0.</td></tr>
+    </tbody>
+  </table></div>
+
+  <p>So deferral is the overflow bucket <em>inside</em> the applicant cap: &#8220;considered, not given a place,
+  still decidable.&#8221; That is a defensible feature. It is not, however, a waiting list in the sense its own
+  label, heading and notification all claim &#8212; and here is why.</p>
+
+  <div class="note trap"><span class="lbl">Three defects, all measured</span>
+  <p><b>1. The applicant is never told.</b> The words &#8220;waiting list&#8221; reach no applicant-facing surface.
+  <code>enrol_page_hook()</code> branches only on <em>does a row exist</em> (<code>lib.php:213-215</code>),
+  so pending and deferred applicants are shown the identical &#8220;Enrolment application successfully sent&#8230;&#8221;.
+  Verified by calling the hook as the applicant on both branches. <code>applied.php:40</code> gates on the
+  same row-exists test with no status clause, so it too tells a deferred applicant their application
+  &#8220;is waiting for a decision&#8221;.</p>
+  <p><b>2. The one notification it does send is blank on the web.</b> All six subject and body settings
+  ship as the empty string (<code>settings.php:76-132</code>), and e-mail is enabled by default for every
+  provider (<code>db/messages.php</code>). On the live m502 site, <b>14 of 14</b> applicant-facing
+  notifications ever sent have an empty subject and 10 of 14 an empty body &#8212; while the 34 notifications
+  sent to <em>managers</em> over the same period all have both, because that one is built from the
+  plugin's own Mustache template rather than from an empty admin setting. The plugin writes the message
+  it composes itself and ships nothing for the three it asks an administrator to write. The class does set a
+  <code>smallmessage</code> that says the right thing, and the notification drawer does not render it &#8212;
+  it renders <code>shortenedsubject</code>
+  (<code>message/output/popup/templates/notification_content_item.mustache:67</code>), so the drawer entry
+  is blank. The exception is worth knowing rather than glossing: <code>message_output_airnotifier</code>
+  <em>does</em> read <code>smallmessage</code>, so on a site with the mobile app configured the applicant's
+  <b>phone</b> shows the correct sentence while their web notification and their e-mail show nothing.</p>
+  <p><b>3. Nothing promotes from it.</b> No position, no ordering, no automation. A place freeing triggers
+  nothing &#8212; <code>sync_enrolments</code> calls only <code>process_expirations()</code>.</p>
+  <p><b>4. And it turns &#8220;Maximum applicants&#8221; into a lifetime total.</b> This is the one to fix first.
+  <code>applicants()</code> counts every non-expired row, a deferred row carries <code>timeend = 0</code>
+  by design, and <code>process_expirations()</code> selects on <code>timeend &gt; 0</code> &#8212; so a deferred
+  application counts against <code>customint3</code> <em>for ever</em>. Nothing promotes it, nothing ages
+  it out, and the applicant cannot withdraw: <code>get_unenrolself_link()</code> requires
+  <code>status = ENROL_USER_ACTIVE</code> (<code>lib/enrollib.php:2517</code>, same on both branches, read
+  in full). The only release valve is a manager cancelling by hand. Defer a course's whole queue and it
+  stops accepting applications, with nothing on any screen able to say why. That is the same ratchet
+  shape PR&#8239;#54 fixed on the places cap, arrived at from the applicant side.</p>
+  <p>And a fourth, smaller: pressing <b>Defer</b> on an already-deferred application is a silent no-op
+  reported as &#8220;Applications updated&#8221;. The participants-page bulk path counts and reports unchanged rows
+  correctly (<code>decision_operation.php:216</code>); the queue and the review page do not.</p></div>
+
+  <h3>Recommendation on deferral</h3>
+  <p><b>Decide what it is for, then finish it or rename it.</b> Two cheap fixes are worth doing under
+  either answer: give the three applicant notifications a non-empty default (fall back to a lang string
+  when the setting is blank), and add a third branch to <code>enrol_page_hook()</code> that reads the
+  status and tells a deferred applicant where they stand. Move that branch <em>ahead</em> of
+  <code>allow_apply()</code> while you are there: today, once an instance stops accepting new applications,
+  somebody who already applied is told &#8220;Enrolment is disabled or inactive&#8221; &#8212; a message about somebody
+  else's problem.</p>
+  <p>The ratchet needs its own answer and it is not cosmetic. Three ways out, in increasing order of how
+  much they change: let the manager <em>see</em> the deferred share of the applicant count so cancelling
+  is an obvious move; give the applicant a way to withdraw, which core's own self-unenrol link cannot
+  provide for a non-active row; or make the cap concurrent by ageing deferred applications out. The first
+  is a day's work and buys most of it.</p>
+
+  <h3>Enrolling with no role &#8212; correct, and it is core's own rule</h3>
+  <p>An application has to be recorded somewhere, and <code>{user_enrolments}</code> is the only table core
+  gives an enrolment plugin. So <code>apply()</code> writes a <b>suspended</b> enrolment with
+  <code>roleid</code> null (<code>lib.php:284</code>); the role arrives on approval in
+  <code>complete_approval()</code>.</p>
+
+  <div class="note measured"><span class="lbl">Why &#8212; measured on both branches</span>
+  <p><code>has_capability()</code> never consults the enrolment at all; whether somebody may enter the
+  course is a separate test, and <b>core ships two of those with opposite defaults</b>.
+  <code>require_login($course)</code> reaches <code>enrol_get_enrolment_end()</code>, whose SQL demands
+  <code>ue.status = ENROL_USER_ACTIVE</code>, and refuses a suspended row;
+  <code>can_access_course()</code> defaults <code>$onlyactive = false</code> and <b>admits</b> it &#8212; the
+  same trap this repo already documents for the review page's own gate. So a pending applicant is not
+  invisible everywhere: measured, a course-level calendar event is visible to a pending and to a deferred
+  applicant and not to an unrelated logged-in user. What the role governs is the capability half, and
+  there the difference is total. Measured with a suspended enrolment carrying the Student role:
+  <code>has_capability()</code> yes,
+  <code>get_users_by_capability()</code> yes, <code>get_gradable_users()</code> yes,
+  <code>get_enrolled_users($ctx, 'mod/quiz:attempt')</code> yes, listed by
+  <code>get_role_users()</code> as a Student. With no role: none of them. A pending applicant can do
+  exactly one thing &#8212; appear on the participants page as a Suspended row with no roles, which is what lets
+  a teacher find them.</p>
+  <p>Core says so itself, in core's own words: <em>&#8220;Only active users in enabled instances are supposed to
+  have roles&#8221;</em> &#8212; <code>enrol/meta/locallib.php:183</code>, the same line on 5.1 and 5.2, with three
+  core enrol plugins shipping the identical call. There is a fourth cost too: core passes a component only
+  when <code>roles_protected()</code> is true, which this plugin returns false for, so a role assigned by
+  <code>enrol_user()</code> would be <b>unstamped</b> and core could not clean it up precisely.</p></div>
+
+  <p><b>Leave it exactly as it is.</b> What is worth fixing is not the mechanism but the vocabulary: an
+  administrator reading the setting &#8220;Role assigned to a user&#8230;&#8221; has no way to know it means <em>on
+  approval</em> &#8212; which is precisely where this question came from.</p>
+</section>
+<section id="defects">
+  <h2>Defects found on the way</h2>
+  <p class="lede">None of these was on the list. All are measured; the section each belongs to is named so
+  the mechanism is one click away.</p>
+  <div class="tblwrap"><table class="tbl">
+    <thead><tr><th>What</th><th>Severity</th><th>Where</th></tr></thead>
+    <tbody>
+      <tr><td>The queue prints applicants' e-mail past <code>showuseridentity</code> <em>and</em>
+        <code>hiddenuserfields</code> &#8212; on m502 the participants page shows no e-mail and the queue does</td>
+        <td><span class="tag bad">disclosure</span></td><td><a href="#s3">&#167;03</a></td></tr>
+      <tr><td>The A&#8211;Z filter keeps filtering after the bar is hidden: a stored letter cut a 3-row queue to
+        0 with no control on the page</td>
+        <td><span class="tag bad">invisible</span></td><td><a href="#s3">&#167;03</a></td></tr>
+      <tr><td>Every applicant notification ships blank &#8212; 14 of 14 sent on m502 have an empty subject, 10 of
+        14 an empty body, and the drawer renders the subject, not the summary line</td>
+        <td><span class="tag bad">user-facing</span></td><td><a href="#s6">&#167;06</a></td></tr>
+      <tr><td>One person holding two applications in a course is decided on one of them, silently, and the
+        operator is told &#8220;decided: 1&#8221;</td>
+        <td><span class="tag bad">silent</span></td><td><a href="#s5">&#167;05</a></td></tr>
+      <tr><td>Once an instance stops accepting applications, somebody who <em>already applied</em> is told
+        &#8220;Enrolment is disabled or inactive&#8221; &#8212; a message about somebody else's problem</td>
+        <td><span class="tag warn">confusing</span></td><td><a href="#s6">&#167;06</a></td></tr>
+      <tr><td>Nothing distinguishes &#8220;pending&#8221; from &#8220;on the waiting list&#8221; to the applicant</td>
+        <td><span class="tag warn">incomplete</span></td><td><a href="#s6">&#167;06</a></td></tr>
+      <tr><td>Deferring an already-deferred application is a no-op reported as &#8220;Applications updated&#8221;</td>
+        <td><span class="tag warn">misreports</span></td><td><a href="#s6">&#167;06</a></td></tr>
+      <tr><td>The bulk menu is offered when the plugin is disabled site-wide; choosing an entry throws
+        <code>errorwithbulkoperation</code></td>
+        <td><span class="tag warn">raw exception</span></td><td><a href="#s5">&#167;05</a></td></tr>
+      <tr><td><b>A deferred application counts against &#8220;Maximum applicants&#8221; for ever</b> &#8212; nothing
+        promotes it, nothing expires it (<code>timeend = 0</code> by design), and the applicant cannot
+        withdraw. Defer a whole queue and the method stops accepting applications with no screen able to
+        explain it</td><td><span class="tag bad">ratchet</span></td><td><a href="#s6">&#167;06</a></td></tr>
+      <tr><td>Cancel unenrols &#8212; irreversibly &#8212; is styled identically to Defer, and is the form's
+        <b>default</b> submit's neighbour: Confirm is first, so Enter on the role chooser approves</td>
+        <td><span class="tag warn">hazard</span></td><td><a href="#s4">&#167;04</a></td></tr>
+      <tr><td>The review page renders the <b>site front page's</b> secondary navigation &#8212; eight links, all
+        pointing at course id 1 &#8212; because the review branch never calls <code>$PAGE-&gt;set_course()</code>.
+        That is also why it has no breadcrumb</td>
+        <td><span class="tag bad">wrong course</span></td><td><a href="#s4">&#167;04</a></td></tr>
+      <tr><td>The review page prints the applicant's e-mail unconditionally while the snapshot panel
+        beside it withholds identity fields from the same reader</td>
+        <td><span class="tag warn">contradictory</span></td><td><a href="#s4">&#167;04</a></td></tr>
+      <tr><td>The review page renders the applicant's name twice, and its <code>&lt;title&gt;</code> names
+        neither the applicant nor the course</td><td><span class="tag info">cosmetic</span></td>
+        <td><a href="#s4">&#167;04</a></td></tr>
+      <tr><td>The queue builds no link to the review page at all &#8212; its only doors are the participants
+        icon, a notification e-mail and the previous/next chain</td>
+        <td><span class="tag info">gap</span></td><td><a href="#s4">&#167;04</a></td></tr>
+      <tr><td>The custom label's default is dead code: <code>set_data()</code> overwrites it on every
+        render, and always has</td><td><span class="tag info">dead</span></td><td><a href="#s1">&#167;01</a></td></tr>
+      <tr><td>The Report Builder report omits applications with no <code>enrol_apply_submission</code> row
+        &#8212; one of the six pending on m502 today</td><td><span class="tag warn">under-reports</span></td>
+        <td><a href="#s3">&#167;03</a></td></tr>
+      <tr><td>A pending applicant joins the course communication room on application: core's listener tests
+        <code>status === 1</code> and never reads &#8220;not active&#8221;. Latent &#8212; the subsystem is off on m502, and
+        the clean fix is upstream</td><td><span class="tag info">latent</span></td>
+        <td><a href="#s6">&#167;06</a></td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>And three sentences in the repo's own prose that are wrong</h3>
+  <p>This repository treats a confident wrong sentence as more expensive than a bug, because it argues the
+  next reader out of the check that catches the problem. Three qualify:</p>
+  <ul>
+    <li><b><code>CLAUDE.md</code>:</b> &#8220;applicants of the second are dropped by core with a per-user
+      warning&#8221; &#8212; true for different applicants, false for one applicant holding both, which is the silent
+      case.</li>
+    <li><b><code>CLAUDE.md</code>:</b> &#8220;the bulk menu &#8230; builds it from the enabled-only list&#8221; &#8212;
+      <code>user/index.php</code> passes <code>false</code> (meaning <em>include disabled</em>) to both
+      <code>get_enrolment_plugins()</code> and <code>get_enrolment_instances()</code>. It is
+      <code>action_redir.php</code> that uses the enabled-only list, which is why the menu offers what the
+      dispatch refuses.</li>
+    <li><b>The design docs:</b> the per-instance comment label is &#8220;inexpressible&#8221; as a Report Builder
+      column title. The <code>lang_string</code> type is real but is not the obstacle &#8212; core's own
+      <code>'{$a}'</code> passthrough carries arbitrary text through it. The real obstacle is that one
+      entity feeds two reports and a course can hold two labels.</li>
+  </ul>
+</section>
+
+<section id="decisions">
+  <h2>Decided</h2>
+  <p class="lede">All nine were answered on 31 August 2026. Recorded here so nothing below reads as still
+  open; the implementation plan is built on exactly these.</p>
+  <div class="tblwrap"><table class="tbl">
+    <thead><tr><th style="width:34%">Question</th><th>Answer</th></tr></thead>
+    <tbody>
+      <tr><td>What is deferral for?</td>
+        <td><b>A triage state, not a waiting list.</b> Approved means the criteria were met and the applicant
+          is enrolled; rejected means they were not, and there is no queue to sit in. Deferred means all or
+          part of the criteria were met and the application is waiting either for a <em>place</em> (new ones,
+          or an approved applicant dropping out) or for something to be <em>validated</em>. It becomes its own
+          filterable status, and the decider gets a field to record the reason so the trail survives.
+          <b>No automatic enrolment when places free.</b></td></tr>
+      <tr><td>Is a second apply instance in one course supported?</td>
+        <td><b>Yes.</b> A new intake, a new class, a teacher reusing a course. Not ideal practice, but common
+          &#8212; so the bulk path has to cope with it rather than assume it away.</td></tr>
+      <tr><td>Two pending applications by one person in one course?</td>
+        <td><b>Allowed.</b> Which makes the silent partial bulk decision the reachable case, not the edge one.</td></tr>
+      <tr><td>As-you-type search versus no-JavaScript?</td>
+        <td><b>Search as you type, backed by a web service</b>, built the way <code>local_dimensions</code>
+          builds its own: an <code>ajax =&gt; true</code> external function called through
+          <code>core/ajax</code>, matching with <code>sql_like_ai()</code>, capped and reporting overflow.
+          The no-JavaScript path keeps paging, sorting and a plain GET search box.</td></tr>
+      <tr><td>Accent-insensitive on PostgreSQL?</td>
+        <td><b>Best-effort</b> &#8212; <code>unaccent</code> where the extension exists, documented fallback where
+          it does not.</td></tr>
+      <tr><td>Which context judges <code>showuseridentity</code>?</td>
+        <td><b>Identity columns on the <code>?id=</code> and site-wide scopes only</b>, never the mentee scope.</td></tr>
+      <tr><td>Prior applications on the review page?</td>
+        <td><b>Yes, gated on <code>enrol/apply:viewreports</code>.</b></td></tr>
+      <tr><td>Schedule slice 10 (the per-field child table)?</td>
+        <td><b>No.</b> Filters by requested profile field stay out of scope, and the queue must not imply
+          they exist.</td></tr>
+      <tr><td><code>info.php</code>?</td>
+        <td><b>Delete outright.</b> No redirect stub.</td></tr>
+      <tr><td>The polluted <code>customtext2</code>?</td>
+        <td><b>Clean it in an upgrade step</b>; a CHANGELOG entry is all the record it needs.</td></tr>
+      <tr><td>Mockups?</td>
+        <td><b>A</b> (the triage queue) and <b>C</b> (the rebuilt review page) are approved. No details modal
+          &#8212; the applicant name is a plain profile link. Lazy loading resolves to AJAX paging with a large
+          page size and a real search.</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note think"><span class="lbl">The one thing the answers left ambiguous, and how it was read</span>
+  <p>&#8220;Search as you type, displayed dynamically below&#8221; can mean a suggestion dropdown under the box (which
+  is the <em>widget</em> <code>local_dimensions</code> uses &#8212; <code>core/form-autocomplete</code> with a
+  custom transport) or the table itself narrowing as you type. Mockup&#8239;A is approved and shows the second:
+  a filter box with removable chips above a table that re-renders. That is what the plan builds, because a
+  picker narrows to one person and defeats bulk triage. The server side is identical either way, so a
+  suggestion dropdown remains an additive change on the same web service if it is wanted later.</p></div>
+</section>
+
+<footer style="border-top:1px solid var(--rule);padding-top:22px;margin-top:20px;font-family:var(--mono);font-size:.74rem;color:var(--ink-faint)">
+  <p style="margin:0">Measured against <code>master</code> 5efcb30, version 2026083003, on the m501 and
+  m502 stacks. Mockup labels use the plugin's own <code>lang/en</code> strings where they exist. Nothing in
+  the repository or on either stack was modified.</p>
+</footer>
+</main>
+</div>
+</div>
+</body>
+</html>
