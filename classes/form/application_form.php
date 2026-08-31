@@ -399,7 +399,7 @@ class application_form extends dynamic_form {
             throw new \moodle_exception('notification', 'enrol_apply');
         }
 
-        if (\enrol_apply\local\capacity::is_full($instance)) {
+        if (\enrol_apply\local\capacity::applications_closed($instance)) {
             throw new \moodle_exception('maxenrolledreached', 'enrol_apply');
         }
     }

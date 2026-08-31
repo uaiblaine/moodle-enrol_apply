@@ -101,6 +101,20 @@ final class capacity_test extends \advanced_testcase {
     }
 
     /**
+     * Set the instance's places number and return the reloaded record.
+     *
+     * @param int $places Value for customint4.
+     * @return \stdClass The instance as the plugin will now read it.
+     */
+    protected function with_places(int $places): \stdClass {
+        global $DB;
+
+        $DB->set_field('enrol', 'customint4', $places, ['id' => $this->instance->id]);
+
+        return $DB->get_record('enrol', ['id' => $this->instance->id], '*', MUST_EXIST);
+    }
+
+    /**
      * An enrolment whose period has run out stops holding its place.
      *
      * This is the whole reason the class exists. The plugin ships
@@ -118,14 +132,14 @@ final class capacity_test extends \advanced_testcase {
         $instance = $this->with_limit(1);
 
         $this->seat(ENROL_USER_ACTIVE, time() - DAYSECS);
-        $this->assertFalse(capacity::is_full($instance));
-        $this->assertSame(0, capacity::taken($instance));
+        $this->assertFalse(capacity::applications_closed($instance));
+        $this->assertSame(0, capacity::applicants($instance));
 
         /* The control: a second occupant whose period has NOT run out fills the same single
            place. If this passed too, the cap would not be running at all. */
         $this->seat(ENROL_USER_ACTIVE, 0);
-        $this->assertTrue(capacity::is_full($instance));
-        $this->assertSame(1, capacity::taken($instance));
+        $this->assertTrue(capacity::applications_closed($instance));
+        $this->assertSame(1, capacity::applicants($instance));
     }
 
     /**
@@ -149,7 +163,7 @@ final class capacity_test extends \advanced_testcase {
             ENROL_USER_ACTIVE
         );
 
-        $this->assertTrue(capacity::is_full($instance));
+        $this->assertTrue(capacity::applications_closed($instance));
     }
 
     /**
@@ -168,11 +182,11 @@ final class capacity_test extends \advanced_testcase {
 
         $this->seat(ENROL_USER_SUSPENDED);
         $this->seat(ENROL_APPLY_USER_WAIT);
-        $this->assertFalse(capacity::is_full($instance));
+        $this->assertFalse(capacity::applications_closed($instance));
 
         $this->seat(ENROL_USER_ACTIVE);
-        $this->assertSame(3, capacity::taken($instance));
-        $this->assertTrue(capacity::is_full($instance));
+        $this->assertSame(3, capacity::applicants($instance));
+        $this->assertTrue(capacity::applications_closed($instance));
     }
 
     /**
@@ -184,10 +198,10 @@ final class capacity_test extends \advanced_testcase {
         $instance = $this->with_limit(2);
 
         $this->seat();
-        $this->assertFalse(capacity::is_full($instance));
+        $this->assertFalse(capacity::applications_closed($instance));
 
         $this->seat();
-        $this->assertTrue(capacity::is_full($instance));
+        $this->assertTrue(capacity::applications_closed($instance));
     }
 
     /**
@@ -205,8 +219,8 @@ final class capacity_test extends \advanced_testcase {
 
         foreach ([0, -1] as $limit) {
             $instance = $this->with_limit($limit);
-            $this->assertSame(0, capacity::limit($instance));
-            $this->assertFalse(capacity::is_full($instance), "customint3 = $limit should be uncapped");
+            $this->assertSame(0, capacity::applicant_limit($instance));
+            $this->assertFalse(capacity::applications_closed($instance), "customint3 = $limit should be uncapped");
         }
     }
 
@@ -226,7 +240,7 @@ final class capacity_test extends \advanced_testcase {
         $this->seat();
 
         $before = $DB->perf_get_reads();
-        $this->assertFalse(capacity::is_full($instance));
+        $this->assertFalse(capacity::applications_closed($instance));
         $this->assertSame($before, $DB->perf_get_reads());
     }
 
@@ -252,14 +266,159 @@ final class capacity_test extends \advanced_testcase {
         );
 
         // Expired: no place held, and not awaiting a decision either.
-        $this->assertSame(0, capacity::taken($instance));
+        $this->assertSame(0, capacity::applicants($instance));
         $this->assertFalse(queue::is_awaiting_decision($row));
 
         // The control: unexpired, and both agree the other way.
         $DB->set_field('user_enrolments', 'timeend', 0, ['id' => $row->id]);
         $row = $DB->get_record('user_enrolments', ['id' => $row->id], '*', MUST_EXIST);
 
-        $this->assertSame(1, capacity::taken($instance));
+        $this->assertSame(1, capacity::applicants($instance));
         $this->assertTrue(queue::is_awaiting_decision($row));
+    }
+
+    /**
+     * A place is held by an APPROVED enrolment and by nothing else.
+     *
+     * The sharpest test for the second number, and the one that keeps the two apart. An
+     * application that is pending, and one that has been deferred to the waiting list, are both
+     * in the pipeline and hold no place - which is precisely the gap the places number exists
+     * to express: accept more applications than there are places, because approval is
+     * discretionary.
+     *
+     * The assertion that the two counts DIFFER on this fixture is the load-bearing one. Without
+     * it, a places_taken() that had quietly become a second spelling of applicants() - by
+     * losing its status clause, or by being refactored to share a predicate - would pass every
+     * other assertion here.
+     *
+     * @return void
+     */
+    public function test_a_place_is_held_by_an_approved_enrolment_and_nothing_else(): void {
+        $instance = $this->with_places(1);
+
+        $this->seat(ENROL_USER_SUSPENDED);
+        $this->seat(ENROL_APPLY_USER_WAIT);
+
+        $this->assertSame(0, capacity::places_taken($instance));
+        $this->assertFalse(capacity::places_full($instance));
+
+        $this->seat(ENROL_USER_ACTIVE);
+        $this->assertSame(1, capacity::places_taken($instance));
+        $this->assertTrue(capacity::places_full($instance));
+
+        /* Three applications, one place taken. The two numbers must disagree here, or the
+           second one is not measuring what it claims to. */
+        $this->assertSame(3, capacity::applicants($instance));
+        $this->assertNotSame(capacity::applicants($instance), capacity::places_taken($instance));
+    }
+
+    /**
+     * An approval whose period has run out releases its place.
+     *
+     * The same ratchet as the applicant count, and it bites harder: under the shipped
+     * expiredaction of KEEP an expired enrolment stays ACTIVE for ever, so without the clause a
+     * course whose places filled once could never approve anybody again.
+     *
+     * The control is in the same run: a second, unexpired approval fills the same single place.
+     *
+     * @return void
+     */
+    public function test_an_expired_approval_releases_its_place(): void {
+        $instance = $this->with_places(1);
+
+        $this->seat(ENROL_USER_ACTIVE, time() - DAYSECS);
+        $this->assertSame(0, capacity::places_taken($instance));
+        $this->assertFalse(capacity::places_full($instance));
+
+        $this->seat(ENROL_USER_ACTIVE, 0);
+        $this->assertSame(1, capacity::places_taken($instance));
+        $this->assertTrue(capacity::places_full($instance));
+    }
+
+    /**
+     * An approval that has not started yet still holds its place.
+     *
+     * @return void
+     */
+    public function test_an_approval_that_has_not_started_still_holds_its_place(): void {
+        $instance = $this->with_places(1);
+
+        $this->plugin->enrol_user(
+            $this->instance,
+            $this->getDataGenerator()->create_user()->id,
+            null,
+            time() + DAYSECS,
+            time() + (2 * DAYSECS),
+            ENROL_USER_ACTIVE
+        );
+
+        $this->assertTrue(capacity::places_full($instance));
+    }
+
+    /**
+     * The places number is reached at the number, not one past it.
+     *
+     * @return void
+     */
+    public function test_places_are_reached_at_exactly_the_limit(): void {
+        $instance = $this->with_places(2);
+
+        $this->seat(ENROL_USER_ACTIVE);
+        $this->assertFalse(capacity::places_full($instance));
+
+        $this->seat(ENROL_USER_ACTIVE);
+        $this->assertTrue(capacity::places_full($instance));
+    }
+
+    /**
+     * Zero and negative both mean "no places limit".
+     *
+     * @return void
+     */
+    public function test_places_at_or_below_zero_are_no_limit(): void {
+        $this->seat(ENROL_USER_ACTIVE);
+        $this->seat(ENROL_USER_ACTIVE);
+
+        foreach ([0, -1] as $places) {
+            $instance = $this->with_places($places);
+            $this->assertSame(0, capacity::places($instance));
+            $this->assertFalse(capacity::places_full($instance), "customint4 = $places should be unlimited");
+        }
+    }
+
+    /**
+     * Places may legitimately be over-subscribed, and the class must report it rather than clamp.
+     *
+     * Nothing refuses an approval on the strength of this number - the manager is warned and
+     * decides - so taken above limit is an ordinary state, not a corrupt one. A restore, or an
+     * administrator lowering the number, produces it directly.
+     *
+     * @return void
+     */
+    public function test_places_can_be_over_subscribed(): void {
+        $instance = $this->with_places(1);
+
+        $this->seat(ENROL_USER_ACTIVE);
+        $this->seat(ENROL_USER_ACTIVE);
+        $this->seat(ENROL_USER_ACTIVE);
+
+        $this->assertSame(3, capacity::places_taken($instance));
+        $this->assertTrue(capacity::places_full($instance));
+    }
+
+    /**
+     * An instance with no places limit is answered without a query.
+     *
+     * @return void
+     */
+    public function test_an_unlimited_places_number_costs_no_query(): void {
+        global $DB;
+
+        $instance = $this->with_places(0);
+        $this->seat(ENROL_USER_ACTIVE);
+
+        $before = $DB->perf_get_reads();
+        $this->assertFalse(capacity::places_full($instance));
+        $this->assertSame($before, $DB->perf_get_reads());
     }
 }

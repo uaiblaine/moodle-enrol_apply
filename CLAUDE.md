@@ -253,8 +253,42 @@ backup/                      group mappings, comments and the durable trail, see
   template errors both rendering tests, which is the mutation that replaced the one that held
   nothing.
 
-- **One definition of the places cap, in `\enrol_apply\local\capacity` — and it is NOT the queue
-  predicate.** This is the most damaging confusion available in this plugin, so read it before
+- **TWO capacity numbers, both in `\enrol_apply\local\capacity`, and confusing them is the
+  standing hazard.** `applicant_limit`/`applicants`/`applications_closed` read `customint3` and
+  count **every** non-expired row — pending, deferred and approved — because each of those people
+  is in the pipeline. `places`/`places_taken`/`places_full` read `customint4` and count **ACTIVE**
+  rows only. The gap between them is overbooking, which is the point: approval is discretionary,
+  so a method sensibly accepts thirty applications for ten places.
+
+  The two counts are written out separately, with their own full parameter arrays, on purpose. A
+  single method taking a status flag is how they get composed — and `fix_sql_params()` tolerates
+  surplus named parameters, so a half-refactor sharing one array between them runs clean and
+  reddens nothing.
+
+  **`places_full()` blocks nothing.** It is advisory by decision: the manager is warned and
+  decides, because a hard block would contradict the plugin's premise and would have to be
+  reproduced on three routes, the per-row icon having no channel to explain a refusal at all. So
+  `places_taken()` above `places()` is an ordinary state, not corruption — a restore or a lowered
+  setting produces it directly, and the class must report it rather than clamp.
+
+  **The warning is emitted where somebody is standing, never from `complete_approval()`**, which
+  runs TWICE for a queue approval while `\core\notification::add()` does not deduplicate: a batch
+  of ten would warn twenty times, and the earlier pass sees pre-write state anyway. It lives in
+  `manage.php` before the redirect, and on the queue itself — the latter rendered **outside** the
+  template's `hasrows` section, because an instance at its applicant limit has an EMPTY queue,
+  which is exactly when the manager needs to be told why.
+
+  **`enrol_apply_plugin::is_full()` keeps its name and fronts the APPLICANT question.** Renaming
+  it breaks `local_dimensions`, `local_unlistedcourses` and `theme_boost_union_fundaseg`
+  silently, since `is_callable()` would simply start returning false and each would fall back to
+  its own unfiltered count.
+
+  **The lang key changed but the config key did not.** `maxenrolled` → `maxapplicants` with a
+  `lang/en/deprecated.txt` entry, because the string's *meaning* changed and a site that
+  customised the old wrong label would otherwise keep it. `enrol_apply/maxenrolled` stays: a
+  config key is data, and renaming it silently resets every site's configured limit.
+
+- **Neither number is the queue predicate.** This is the most damaging confusion available in this plugin, so read it before
   touching either. `queue::awaiting_decision_where()` is `status != active AND not expired`: it
   answers *which applications still need deciding*. Capacity asks *which enrolments still hold a
   place*, and an approved, **active** learner holds one — exactly what the queue's status clause

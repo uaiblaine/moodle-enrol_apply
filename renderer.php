@@ -89,12 +89,31 @@ class enrol_apply_renderer extends plugin_renderer_base {
         ]);
         $stickyfooter = $this->render(new \core\output\sticky_footer($bar, 'justify-content-end'));
 
+        /* The state worth surfacing is places exhausted while applications are still open: a
+           manager receiving applications they have nowhere to put. Only where an instance is in
+           scope - the site-wide and mentee queues span instances and have no single number.
+
+           Rendered OUTSIDE the hasrows section by the template, deliberately. An instance whose
+           applicant limit is reached has an EMPTY queue, which is exactly the moment the
+           manager most needs to be told why; inside the section the notice would vanish in the
+           state it exists for. */
+        $placesnotice = '';
+        if ($instance !== null && \enrol_apply\local\capacity::places_full($instance)) {
+            $placesnotice = get_string(
+                'placesfull',
+                'enrol_apply',
+                \enrol_apply\local\capacity::places($instance)
+            );
+        }
+
         $context = $this->decision_controls_context($instance) + [
             'formurl' => $manageurl->out(false),
             'sesskey' => sesskey(),
             'tablehtml' => $tablehtml,
             'hasrows' => $table->totalrows > 0,
             'stickyfooter' => $stickyfooter,
+            'hasplacesnotice' => $placesnotice !== '',
+            'placesnotice' => $placesnotice,
         ];
 
         if ($context['hasrows']) {

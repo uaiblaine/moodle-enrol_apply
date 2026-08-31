@@ -41,6 +41,8 @@
     {
         "formurl": "https://example.com/enrol/apply/manage.php?id=7",
         "sesskey": "Ab12Cd34Ef",
+        "hasplacesnotice": true,
+        "placesnotice": "All 20 places on this enrolment method are taken.",
         "tablehtml": "<table class=\"generaltable\"><tbody><tr><td>Student 1</td></tr></tbody></table>",
         "hasrows": true,
         "stickyfooter": "<div id=\"sticky-footer\"><button type=\"submit\">Go</button></div>",
@@ -65,6 +67,9 @@
 }}
 <form id="enrol_apply_manage_form" class="enrol_apply-manage" method="post" action="{{formurl}}">
     <input type="hidden" name="sesskey" value="{{sesskey}}">
+    {{#hasplacesnotice}}
+        <div class="alert alert-warning" role="status">{{placesnotice}}</div>
+    {{/hasplacesnotice}}
     <div class="enrol_apply-table">
         {{{tablehtml}}}
     </div>
