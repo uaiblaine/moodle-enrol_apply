@@ -24,10 +24,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - **The approval queue disclosed more than the participants page beside it.** It printed every
   applicant's e-mail address unconditionally, consulting neither `showuseridentity` nor
-  `hiddenuserfields`. On a site naming only `username` in the first and listing `email` in the
-  second — which is how the development site is configured — core's own participants page shows no
-  e-mail column at all while the queue printed the address, to the same reader, about the same
-  people. The queue now shows exactly the identity fields core would show, resolved by core's own
+  `hiddenuserfields`. On a site whose `showuseridentity` does not name `email` — and whose
+  `hiddenuserfields` lists it, which is how the development site is configured — core's own
+  participants page shows no e-mail column at all while the queue printed the address, to the same
+  reader, about the same people. The queue now shows exactly the identity fields core would show, resolved by core's own
   helper, so the two screens cannot answer differently. On a default site, where
   `showuseridentity` is `email`, nothing visible changes.
 
@@ -41,12 +41,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   narrow what a teacher sees here. It bites a custom role holding `moodle/site:viewuseridentity`
   without that override.
 
-- **The A–Z filter kept filtering after the bar was taken away.** Rendering the queue with the
-  initials bar switched off hid the control and nothing else: the filter reads its stored
-  preference and never consults whether the bar is in use, and it is appended to both the count and
-  the data query. Measured against the real queue, a stored letter took it from three rows to zero
-  with nothing on the page able to explain it — and the preference lives in the session, so it
-  survived page loads. It is now removed outright rather than hidden.
+- **The A–Z filter is gone, and so is the bar.** Filtering by first letter is not wanted here, and
+  the two halves had to go together. Switching the bar off had never removed the filter: it reads
+  its stored preference and never consults whether the bar is in use, and it is appended to both
+  the count and the data query. Measured against the real queue, a stored letter took it from three
+  rows to zero with nothing on the page able to explain it — and the preference lives in the
+  session, so it survived page loads. Removing only the filter would have been just as wrong the
+  other way, leaving a control that does nothing when clicked.
 
 - **Two strings were listed as deprecated while their definitions had been deleted**, which fails
   core's own `core\string_manager_standard_test::test_validate_deprecated_strings_files` on both

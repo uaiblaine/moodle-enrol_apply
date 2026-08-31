@@ -840,9 +840,10 @@ backup/                      group mappings, comments and the durable trail, see
   `\enrol_apply\local\identity` is the only reader; it delegates to
   `\core_user\fields::get_identity_fields()` and `for_identity()->get_sql()`, so the queue and the
   participants page beside it cannot answer differently. Before it, the queue printed the e-mail
-  address unconditionally — measured on m502, where `showuseridentity` names only `username` and
-  `hiddenuserfields` lists `email`, the participants page showed no e-mail column and the queue
-  showed the address.
+  address unconditionally — measured on m502, whose `showuseridentity` does not name `email` while
+  its `hiddenuserfields` does list it: the participants page showed no e-mail column and the queue
+  showed the address. State it that way round rather than by quoting the site's field list, which
+  is dev configuration and moves.
 
   **Which context judges it is the whole design.** `?id=` asks about its course; the site-wide
   queue asks about the system context, which is right for an operator holding the capability there
@@ -875,8 +876,16 @@ backup/                      group mappings, comments and the durable trail, see
   false)` hides the control and leaves the filter running. Measured: a stored `i_first = 'Z'` took
   a three-row queue to zero with no bar on the page. The preference lives in
   `$SESSION->flextable`, not in a user preference, so it survives page loads invisibly. The
-  override returning `['', []]` is the complete kill; emptying `$userfullnamecolumns` also works
-  and silently costs the fullname column its sub-sort links. Gate `AN`.
+  override returning `['', []]` is the complete kill for the FILTER; emptying
+  `$userfullnamecolumns` also works and silently costs the fullname column its sub-sort links.
+  Gate `AN`.
+
+  **The bar is a second override, and both are needed.** `initialbars()` is forced to false so the
+  control is not drawn — with `use_initials` false, `get_initial_first()` returns null and
+  `print_initials_bar()`'s condition fails on all three terms. It is an override and not a call
+  because the argument is not the caller's to make: `capture_table()` passes true to `out()`, and
+  core's dynamic-table service passes true unconditionally. Killing only the filter leaves an A-Z
+  bar that silently does nothing when clicked, which is worse than either end state. Gate `AP`.
 
 - **The instance's comment wording has ONE reader, `\enrol_apply\local\commentlabel`, and its
   three sinks disagree about escaping.** `customtext2` heads the applicant's comment box, the

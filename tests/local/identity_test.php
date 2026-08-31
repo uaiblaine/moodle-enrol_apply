@@ -305,6 +305,28 @@ final class identity_test extends \advanced_testcase {
     }
 
     /**
+     * The A-Z bar is not drawn, whatever the caller asks for.
+     *
+     * The display half. Killing only the filter would leave a control on the page that does
+     * nothing when clicked, which is worse than either end state - and the argument is not the
+     * caller's to make: the renderer passes true, and core's dynamic-table service passes true
+     * unconditionally, so this has to be forced at the source.
+     *
+     * @return void
+     */
+    public function test_the_initials_bar_is_not_drawn(): void {
+        $this->setAdminUser();
+        $this->applicant(['firstname' => 'Ana', 'lastname' => 'Ribeiro']);
+
+        // The second argument of out() is exactly the request the override has to refuse.
+        $html = $this->render(\context_course::instance($this->course->id));
+
+        $this->assertStringNotContainsString('initialbar', $html);
+        // The control: the table itself did render, so the assertion above is not vacuous.
+        $this->assertStringContainsString('Ribeiro', $html);
+    }
+
+    /**
      * A stored initials preference no longer filters the queue.
      *
      * Hiding the A-Z bar never removed the filter: get_sql_where() reads the stored preference and

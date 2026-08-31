@@ -299,6 +299,29 @@ class enrol_apply_manage_table extends table_sql {
     }
 
     /**
+     * No initials BAR either, whatever the caller asks for.
+     *
+     * The other half of the override below, and the two are genuinely separate:
+     * get_sql_where() stops the filter narrowing the query, this stops the control being drawn.
+     * Killing only the filter would leave an A-Z bar on the page that silently does nothing when
+     * clicked, which is worse than either end state.
+     *
+     * It is an override rather than a call because the argument is not the caller's to make here:
+     * renderer::capture_table() passes true to out(), and on core's dynamic-table path
+     * external\dynamic\get calls out($pagesize, true) unconditionally. Forcing it false at the
+     * source is what survives both.
+     *
+     * With use_initials false, get_initial_first() and get_initial_last() return null, so
+     * print_initials_bar()'s condition is false on all three of its terms and nothing is drawn.
+     *
+     * @param bool $bool Ignored.
+     * @return void
+     */
+    public function initialbars($bool) {
+        parent::initialbars(false);
+    }
+
+    /**
      * No initials filter, on either path.
      *
      * Rendering with `out(50, false)` hides the A-Z bar and does nothing else: get_sql_where()
