@@ -866,7 +866,9 @@ by its exit status.
 ### CI
 
 `mdl ci <repo> --matrix` before every push — the no-flag form is one leg (5.1 / PHP 8.3 / pgsql) and
-proves nothing about the others. Read the per-leg logs, not the summary line, which has contradicted
+proves nothing about the others. It runs all seven legs with `--behat` on an unrestricted network;
+behind a proxy the 5.02 legs fail at *install* rather than on any gate, which is a network symptom
+and not a verdict on the change. Read the per-leg logs, not the summary line, which has contradicted
 its own detail. The gates most likely to bite, by slice: `phpcs` on every new file (the blank line
 after `class X {` has been reintroduced three times in this repo); `phpdoc --max-warnings 0` on the
 test files U1 rewrites, which lose parameters when their data providers go; `validate` on the 5.02
