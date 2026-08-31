@@ -1,13 +1,23 @@
 name: ci
 
+# The push trigger is master-only, so one change is validated once. With a bare `push:`
+# every commit on a feature branch ran the full pipeline AND opening its pull request ran
+# it a second time over the identical tree - 22 jobs to validate one commit, measured on
+# pull request #58. Every branch here reaches master through a pull request, so the
+# pull_request trigger is the one that gates the work; the push trigger now covers the
+# merge commit itself, which nothing else would.
+#
 # workflow_dispatch is the manual escape hatch: without it, a push whose commits
 # carry a skip-ci marker leaves code unvalidated with no way to launch a run short
-# of pushing another commit.
+# of pushing another commit. It also covers the case this change creates - wanting a run
+# on a branch before it is ready for review.
 #
 # CI is not the only gate: the plugin is mounted on the local m501/m502 stacks
 # (moodle-dev/plugins.conf), so run `mdl ci moodle-enrol_apply` before pushing.
 on:
   push:
+    branches:
+      - master
   pull_request:
   workflow_dispatch:
 
