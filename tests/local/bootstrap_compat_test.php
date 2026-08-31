@@ -147,7 +147,7 @@ final class bootstrap_compat_test extends \basic_testcase {
                 $files[] = $file->getPathname();
             }
         }
-        foreach (['renderer.php', 'manage_table.php', 'info_table.php', 'edit_form.php'] as $name) {
+        foreach (['renderer.php', 'manage_table.php', 'edit_form.php'] as $name) {
             if (is_file($root . '/' . $name)) {
                 $files[] = $root . '/' . $name;
             }
@@ -324,7 +324,7 @@ final class bootstrap_compat_test extends \basic_testcase {
      */
     public function test_every_table_class_defines_a_header_column(): void {
         $offenders = [];
-        foreach (['manage_table.php', 'info_table.php'] as $name) {
+        foreach (['manage_table.php'] as $name) {
             $source = file_get_contents($this->plugin_root() . '/' . $name);
             if (!str_contains((string) $source, 'define_header_column(')) {
                 $offenders[] = $name;

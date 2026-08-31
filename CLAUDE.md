@@ -55,9 +55,9 @@ classes/form/application_form.php  what the applicant fills in, in a modal or on
 apply.php / applied.php      the no-JavaScript transport and the acknowledgement
 edit.php / edit_form.php     per-course instance configuration
 manage.php / manage_table.php   the approval queue and its bulk actions
-info.php / info_table.php    read-only listing of submitted comments
 renderer.php                 page rendering plus the notification e-mail body
-templates/                   manage, info, application_notification
+templates/                   manage, manage_actions, review, decision_controls,
+                             application_navigation, application_notification, profile_offer
 classes/hook_callbacks.php   reconciles approvals made outside confirm_enrolment()
 classes/local/applications.php  mentee lookup shared by the queue
 classes/local/submission.php the durable application record: constants, writes, reads
@@ -835,6 +835,30 @@ backup/                      group mappings, comments and the durable trail, see
   of a foreign archive. And a **report column does not have to satisfy `PARAM_TEXT`**: a Report
   Builder cell is raw HTML, where escaping is safe and lossless, and stripping there is a
   defect rather than a deliberate cost. Only a web service return genuinely has to strip.
+
+- **The instance's comment wording has ONE reader, `\enrol_apply\local\commentlabel`, and its
+  three sinks disagree about escaping.** `customtext2` heads the applicant's comment box, the
+  queue's comment column and the review page's comment label. Two of those render raw and want the
+  **escaped** spelling — the queue header goes through `flexible_table::print_headers()` →
+  `html_writer::tag()`, which concatenates its content without escaping it, and a moodleform
+  element label is a triple stash in `element-template.mustache`. The third, `review.mustache`'s
+  `{{commentlabel}}`, is a **double stash** and wants the **plain** spelling; the escaped one shows
+  the reader the entities. That is why `custom()` takes an `$escape` flag rather than deciding for
+  everybody, exactly as core's `field_controller::get_formatted_name()` does.
+
+  **Only the `?id=` queue may carry it.** The site-wide and mentee scopes span instances, each free
+  to word the question differently, so a single heading there would be true of some rows and false
+  of others. `manage.php` passes `''` on those scopes and the table falls back.
+
+  **The value can be a leftover recipient list.** Upstream stored the notification recipients in
+  this column until 2016 and the 2022 fix retro-edited the step that wrote them, so a site past
+  that savepoint kept `$@ALL@$` as its "label". `db/upgrade.php` clears the stored ones;
+  `custom()` also falls back for it, because `restore_instance()` does **not** sanitise
+  `customtext2` and an archive can bring one back. Only that literal is recognised — the
+  comma-separated user-id list the column could also hold is indistinguishable from a real label.
+
+  Nothing in any pipeline can see which stash a value lands in, so gates `AJ`, `AK` and `AL` are
+  what hold this.
 
 - **A name this plugin renders itself needs `'escape' => false`, and there is nothing in the
   pipeline that will tell you.** `format_string()`'s escape flag defaults to **true**, so the

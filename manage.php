@@ -205,6 +205,11 @@ if ($userenrol) {
     exit;
 }
 
-$table = new enrol_apply_manage_table($id, $mentees);
+/* The instance-scoped queue heads its comment column with whatever the teacher asked for, in the
+   ESCAPED spelling the table's header sink needs. $instance is null on the site-wide and mentee
+   scopes, which span instances and therefore have no single question to quote. */
+$commentlabel = $instance === null ? '' : \enrol_apply\local\commentlabel::custom($instance);
+
+$table = new enrol_apply_manage_table($id, $mentees, $commentlabel);
 $table->define_baseurl($manageurl);
 $renderer->manage_page($table, $manageurl, $instance);

@@ -452,6 +452,8 @@ Also, and separately: a `manageapplications`-gated report **must not** inherit t
 a different question from `viewreports` — inheriting it hands every editing teacher exactly the
 disclosure the separate capability exists to withhold.
 
+**SUPERSEDED (2026-08-31).** `info.php` is deleted, not refactored, so this whole item is moot — and the mechanism it names is wrong. `set_title()` really does take only a `lang_string`, but that is not the obstacle: core's own `$string['customfieldcolumn'] = '{$a}'` passthrough carries arbitrary text through it (`lang/en/reportbuilder.php:84`, same line on both branches). The real obstacle is scope — one entity feeds a site-wide datasource and a course-scoped report, and a course may hold two instances wording the question differently. See `ui-rebuild-plan.md` U1.4.
+
 The rest are real but ordinary: the user picture, the waiting-list row highlight
 (`system_report::get_row_class()` is available and not overridden), the per-instance
 `customtext2` header (`column::set_title()` takes only a `lang_string` and the class is

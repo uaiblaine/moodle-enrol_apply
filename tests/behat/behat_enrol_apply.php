@@ -41,7 +41,6 @@ class behat_enrol_apply extends behat_base {
      *
      * Recognised pages:
      *   "<shortname> > manage applications"   the per-course application queue
-     *   "<shortname> > application info"      the per-course submitted comments list
      *
      * @param string $type Identifies which page to resolve.
      * @param string $identifier Course short name.
@@ -52,9 +51,6 @@ class behat_enrol_apply extends behat_base {
         switch (strtolower($type)) {
             case 'manage applications':
                 return new moodle_url('/enrol/apply/manage.php', ['id' => $this->get_instance_id($identifier)]);
-
-            case 'application info':
-                return new moodle_url('/enrol/apply/info.php', ['id' => $this->get_instance_id($identifier)]);
 
             default:
                 throw new Exception("Unrecognised enrol_apply page type '{$type}'.");

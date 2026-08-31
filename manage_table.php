@@ -58,8 +58,12 @@ class enrol_apply_manage_table extends table_sql {
      *
      * @param int $enrolid Restrict to one enrol instance, 0 for no restriction.
      * @param array|null $mentees Restrict to these applicant user ids, null for no restriction.
+     * @param string $commentlabel Heading of the comment column, ALREADY ESCAPED, empty for the
+     *        shipped wording. Only the instance-scoped queue can supply one: the site-wide and
+     *        mentee scopes span instances, each of which may word the question differently, so a
+     *        single heading there would be true of some rows and false of others.
      */
-    public function __construct($enrolid = 0, $mentees = null) {
+    public function __construct($enrolid = 0, $mentees = null, $commentlabel = '') {
         global $DB;
 
         parent::__construct('enrol_apply_manage_table');
@@ -113,7 +117,7 @@ class enrol_apply_manage_table extends table_sql {
 
         $this->set_sql($fields, $from, implode(' AND ', $wheres), $params);
 
-        $this->define_table_columns();
+        $this->define_table_columns($commentlabel);
     }
 
     /**
@@ -155,9 +159,10 @@ class enrol_apply_manage_table extends table_sql {
     /**
      * Declare the columns and their headings.
      *
+     * @param string $commentlabel Heading of the comment column, already escaped, empty for the default.
      * @return void
      */
-    protected function define_table_columns() {
+    protected function define_table_columns($commentlabel = '') {
         $columns = ['checkboxcolumn', 'course', 'fullname', 'email', 'applydate'];
         $headers = [
             $this->select_all_header(),
@@ -169,7 +174,9 @@ class enrol_apply_manage_table extends table_sql {
         ];
 
         $columns[] = 'applycomment';
-        $headers[] = get_string('applycomment', 'enrol_apply');
+        /* The escaped spelling, because print_headers() emits this through html_writer::tag(),
+           which concatenates its content without escaping it. The caller supplies it that way. */
+        $headers[] = $commentlabel !== '' ? $commentlabel : get_string('applycomment', 'enrol_apply');
 
         $this->define_columns($columns);
         $this->define_headers($headers);

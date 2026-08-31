@@ -173,12 +173,11 @@ class application_form extends dynamic_form {
         }
 
         if ($instance->customint7) {
-            $label = get_string('comment', 'enrol_apply');
-            if (!empty($instance->customtext2)) {
-                /* The escaped spelling: a moodleform element label renders through a triple
-                   stash in element-template.mustache. */
-                $label = format_string($instance->customtext2, true, ['escape' => true]);
-            }
+            /* The escaped spelling: a moodleform element label renders through a triple stash
+               in element-template.mustache. The fallback moved from 'comment' to 'applycomment'
+               with the read: the two keys are the identical word in both packs, and keeping one
+               definition of this label is what stops the question and the answers drifting. */
+            $label = \enrol_apply\local\commentlabel::custom($instance);
             $mform->addElement('textarea', 'applydescription', $label, ['cols' => 80, 'rows' => 5]);
             $mform->setType('applydescription', PARAM_TEXT);
         }
