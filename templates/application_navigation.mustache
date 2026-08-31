@@ -33,22 +33,29 @@
     left flip for the chevrons, which core does not apply to any icon but fa-question; this
     plugin's own stylesheet carries that rule instead, keyed on the wrapper class below.
 
-    The whole landmark is omitted when there is no neighbour in either direction, so the one
-    application in a queue does not leave an empty navigation region for a screen reader to
-    announce and step into.
+    The whole landmark is omitted when there is nothing to link to at all, so a lone application
+    reviewed by an operator with no queue does not leave an empty navigation region for a screen
+    reader to announce and step into. It is NOT gated on the neighbours alone: the queue link has
+    to survive a queue of one, which is exactly when a reader most needs the way back.
 
     Context variables required for this template:
     * navlabel string - accessible name of the navigation landmark
-    * hasneighbours boolean - whether there is anything to link to at all
+    * hasnav boolean - whether there is anything to link to at all
     * previous object - the earlier application, absent at the start of the queue, carrying:
       * title string - the link's whole text, naming the applicant, plain spelling
       * url string - review page of that application
     * next object - the later application, absent at the end of the queue, same two keys
+    * hasqueueurl boolean - whether this operator may open the queue this walk runs in
+    * queuelabel string - text of the link back to that queue
+    * queueurl string - the queue's own page
 
     Example context (json):
     {
         "navlabel": "Applications awaiting a decision",
-        "hasneighbours": true,
+        "hasnav": true,
+        "hasqueueurl": true,
+        "queuelabel": "All applications",
+        "queueurl": "https://example.com/enrol/apply/manage.php?id=7",
         "previous": {
             "title": "Previous: Alice Anderson",
             "url": "https://example.com/enrol/apply/manage.php?userenrol=41"
@@ -59,15 +66,18 @@
         }
     }
 }}
-{{#hasneighbours}}
+{{#hasnav}}
 <nav class="enrol_apply-applicationnav mb-3" aria-label="{{navlabel}}">
-    <div class="d-flex flex-wrap gap-2">
+    <div class="d-flex flex-wrap align-items-center gap-2">
         {{#previous}}
             <a class="btn btn-link ps-0" href="{{url}}">
                 {{#pix}} i/previous, core {{/pix}}
                 {{title}}
             </a>
         {{/previous}}
+        {{#hasqueueurl}}
+            <a class="btn btn-link mx-auto" href="{{queueurl}}">{{queuelabel}}</a>
+        {{/hasqueueurl}}
         {{#next}}
             <a class="btn btn-link ms-auto pe-0" href="{{url}}">
                 {{title}}
@@ -76,4 +86,4 @@
         {{/next}}
     </div>
 </nav>
-{{/hasneighbours}}
+{{/hasnav}}

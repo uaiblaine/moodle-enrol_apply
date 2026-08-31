@@ -57,3 +57,15 @@ body.path-enrol-apply:not(.jsenabled) #page.drawers {
        nothing in this repository renders CSS. */
     transform: scale(-1, -1);
 }
+
+.enrol_apply-reviewactions {
+    /* The bar is a fixed 80px box whose .sticky-footer-content clips with overflow hidden and no
+       scrollbar, so a row that WRAPS is painted where nobody can see it: measured below about
+       656px, the third decision ended up three-quarters hidden. The row is flex-nowrap for that
+       reason, and scrolls sideways here instead - which is visible, reachable and, unlike the
+       clip, tells the reader there is more.
+
+       Verified by reading the cascade and the compiled theme CSS, NOT by an executing test:
+       nothing in this repository renders CSS. */
+    overflow-x: auto;
+}

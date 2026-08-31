@@ -45,6 +45,9 @@ use stdClass;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 final class queue {
+    /** @var int How many of an applicant's earlier applications the review page lists. */
+    public const PRIOR_APPLICATIONS_SHOWN = 5;
+
     /**
      * The SQL predicate for an application still awaiting a decision.
      *
@@ -146,8 +149,16 @@ final class queue {
         $params['ueid'] = $userenrolmentid;
         $params['enrol'] = 'apply';
 
+        /* The decision columns come from a table this query ALREADY left joins and simply did
+           not select, so they cost nothing. They are what lets the review page say who deferred
+           an application, when, and what they wrote to the applicant - which is the one case
+           where the reader is looking at something a colleague already decided and the page used
+           to say only "On the waiting list". s.id is here for the same reason: without the
+           record's own key nothing can link the two surfaces onto it. */
         $sql = "SELECT ue.id, ue.userid, ue.enrolid, ue.status, ue.timecreated AS applydate,
                        COALESCE(s.comment, ai.comment) AS applycomment, s.userinfodata AS snapshot,
+                       s.id AS submissionid, s.status AS recordstatus, s.timedecided,
+                       s.decidedby, s.outcomemessage,
                        e.courseid, c.fullname AS coursename
                   FROM {user_enrolments} ue
              LEFT JOIN {enrol_apply_applicationinfo} ai ON ai.userenrolmentid = ue.id
@@ -204,8 +215,9 @@ final class queue {
      * @param stdClass $application Application as application() returns it.
      * @param stdClass $instance Enrol instance the application under review belongs to.
      * @return stdClass Scope carrying: enrolid, the instance to restrict to or 0 for none;
-     *                  mentees, applicant ids to restrict to or null for none; and url, the
-     *                  queue's own page.
+     *                  mentees, applicant ids to restrict to or null for none; hasqueue, whether
+     *                  url names a queue this operator may actually open; and url, that queue's
+     *                  own page, or the home page for an operator who may open none.
      */
     public static function scope(stdClass $application, stdClass $instance): stdClass {
         $course = get_course($instance->courseid);
@@ -224,6 +236,7 @@ final class queue {
             return (object) [
                 'enrolid' => (int) $instance->id,
                 'mentees' => null,
+                'hasqueue' => true,
                 'url' => new moodle_url('/enrol/apply/manage.php', ['id' => (int) $instance->id]),
             ];
         }
@@ -232,6 +245,7 @@ final class queue {
             return (object) [
                 'enrolid' => 0,
                 'mentees' => null,
+                'hasqueue' => true,
                 'url' => new moodle_url('/enrol/apply/manage.php'),
             ];
         }
@@ -244,6 +258,7 @@ final class queue {
             return (object) [
                 'enrolid' => 0,
                 'mentees' => $mentees,
+                'hasqueue' => true,
                 'url' => new moodle_url('/enrol/apply/manage.php'),
             ];
         }
@@ -259,12 +274,74 @@ final class queue {
            The parameterless queue would refuse the first of those, so sending them there after
            a decision would report a success as an exception - the same defect this method exists
            to remove, arrived at from the other end. An empty mentee list is the marker; nothing
-           can be walked from it. */
+           can be walked from it. hasqueue is false for the same reason: the review page must
+           not offer a way back to a queue that would refuse this operator. */
         return (object) [
             'enrolid' => 0,
             'mentees' => [],
+            'hasqueue' => false,
             'url' => destination::home_page_url(),
         ];
+    }
+
+    /**
+     * This applicant's OTHER applications to the same course, newest first.
+     *
+     * "They were cancelled here before" is the kind of fact that makes a decision easier, and the
+     * durable record already holds it: its natural key is (courseid, userid) and is deliberately
+     * NOT unique, precisely because cancelling and re-applying is the ordinary route. The
+     * `courseuser` index is the one this reads.
+     *
+     * The live enrolment is joined because the record alone cannot say what happened. The stored
+     * status is the last decision this plugin's state machine took; the participants page, course
+     * reset, user deletion and the expiry sweep all change an enrolment without touching it, so
+     * an approved-and-enrolled row and an approved-then-unenrolled row are otherwise literally
+     * the same row. The three aliases below are exactly what the report's own outcome formatter
+     * reads, so both surfaces describe a record the same way rather than inventing two
+     * vocabularies for one fact.
+     *
+     * LEFT JOIN and not INNER: a record outlives its enrolment on purpose, which is the whole
+     * reason this table exists.
+     *
+     * @param int $courseid Course the application under review was made to.
+     * @param int $userid The applicant.
+     * @param int $excludesubmissionid Record id to leave out, normally the one being reviewed.
+     * @return array Records, newest first, carrying what the outcome formatter needs.
+     */
+    public static function prior_applications(int $courseid, int $userid, int $excludesubmissionid): array {
+        global $DB;
+
+        if ($userid <= 0) {
+            /* A pseudonymised record carries userid 0 and no longer describes anybody, so this
+               would gather the leftovers of every applicant to this ONE course rather than one
+               person's history - scoped by the courseid clause below, not unbounded, which an
+               earlier version of this comment overstated.
+
+               Not reachable from the review page: its argument comes from ue.userid, and no
+               user_enrolments row carries 0. It is here because the method is public and its
+               natural key is a pair the pseudonymisation deliberately collapses, so a later
+               caller reading straight from enrol_apply_submission would hit it. */
+            return [];
+        }
+
+        $sql = "SELECT s.id, s.status, s.timecreated, s.timedecided, s.decidedby,
+                       s.userenrolmentid AS outcomeueid,
+                       ue.status AS outcomeenrolstatus, ue.timeend AS outcomeenroltimeend
+                  FROM {enrol_apply_submission} s
+             LEFT JOIN {user_enrolments} ue ON ue.id = s.userenrolmentid
+                 WHERE s.courseid = :courseid AND s.userid = :userid AND s.id <> :excludeid
+              ORDER BY s.timecreated DESC, s.id DESC";
+
+        /* Bounded, because nothing else bounds it. The natural key is deliberately not unique and
+           a determined re-applicant can accumulate rows without limit - measured on the live site,
+           one person holds eight records in one course - and this renders as a list on a page
+           whose purpose is one decision. The newest few are what a decision turns on; the rest is
+           the report's job. */
+        return $DB->get_records_sql($sql, [
+            'courseid' => $courseid,
+            'userid' => $userid,
+            'excludeid' => $excludesubmissionid,
+        ], 0, self::PRIOR_APPLICATIONS_SHOWN);
     }
 
     /**

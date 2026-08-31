@@ -138,5 +138,33 @@ Feature: Enrolment upon approval
     And I should see "Confirm this application"
     And I should see "Student 1" in the "page-header" "region"
 
+  # The one branch this slice adds that changes state, and the only surface it lives on.
+  #
+  # No @javascript: the review page is a plain form and the confirmation is a plain page, and
+  # this is what proves the destructive decision is reachable and refusable without JavaScript.
+  # It also pins the thing no unit test can reach - that pressing Cancel does NOT unenrol until
+  # the confirmation is answered, which is the whole point of the interception.
+  Scenario: Cancelling one application asks first, and backing out changes nothing
+    Given I log in as "student1"
+    And I am on "Course 1" course homepage
+    And I press "Start application"
+    And I press "Submit application"
+    And I log out
+    And I log in as "teacher1"
+    And I am on the "Course 1" "enrolled users" page
+    And I click on "Decide this application" "link" in the "Student 1" "table_row"
+    When I press "Cancel this application"
+    Then I should see "Cancel this application?"
+    And I should see "Keep the application"
+    # Backing out leaves the application exactly where it was.
+    When I press "Keep the application"
+    Then I should see "Awaiting a decision"
+    # And going through with it does unenrol them.
+    When I press "Cancel this application"
+    And I press "Cancel and unenrol"
+    Then I should see "The selected enrolment applications have been updated."
+    And I am on the "Course 1" "enrolled users" page
+    And I should not see "Student 1"
+
   # Capability enforcement is covered by tests/lib_test.php: asserting on it here would
   # mean asserting on an exception page, which behat's exception hook fails by design.

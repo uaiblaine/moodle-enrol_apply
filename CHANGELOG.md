@@ -6,6 +6,43 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Changed
+
+- **The review page is rebuilt.** It decides one application, and it now shows what deciding one
+  needs: who the applicant is, what they wrote, what they submitted, where the application lands
+  and what else they have applied for here — with the three decisions in a bar that stays on
+  screen instead of scrolling away below the form.
+
+  **It also belongs to a course now.** It never called `$PAGE->set_course()`, so `$COURSE` stayed
+  the *site* course and every navigation node was built from it: eight secondary-navigation links
+  all pointing at course id 1, one of them the front page's own settings, on a page deciding
+  another course's application. Every review page was also titled "Enrol Confirm", so every tab and
+  every bookmark along a walk was indistinguishable; the title now names the applicant and the
+  course, and the breadcrumbs name the queue it came from.
+
+  **The applicant's e-mail address now respects `showuseridentity`**, like every other identifying
+  field. It used to have a row of its own and be printed unconditionally, while the panel directly
+  beside it withheld identity fields from the same reader — one panel hiding what the other showed.
+  On a site that does not name it, the address no longer appears here; the profile link beside the
+  name is the route to it for a reader entitled to see it.
+
+  **Cancelling asks first.** It is the only one of the three decisions that destroys something —
+  it unenrols, taking the applicant's comment with it — and it looked exactly like Defer, which is
+  fully reversible. It is now styled apart and pushed to the far side of the bar, and it asks
+  before acting. Button order alone could not have fixed this: Confirm was the form's first submit
+  and therefore its default, so Enter on either chooser approved the enrolment, and whichever
+  button comes first inherits that. Only the review page asks; the queue's bulk decision is
+  unchanged.
+
+  **The panels are gated separately, and each on the right thing.** Earlier applications to the
+  same course need `enrol/apply:viewreports`, deliberately narrower than the capability that opens
+  the page. The method's own limits and enrolment counts need the capability in the **course** —
+  so a mentor, who reaches this page through the applicant's user context and holds nothing in the
+  course, is shown the course but not its numbers, exactly as they are already shown neither the
+  group nor the role chooser. Each is worded by the report's own formatter rather than the record's stored status,
+  because a record says "approved" for ever while the enrolment it names may since have been
+  suspended or removed by a route this plugin never sees.
+
 ### Removed
 
 - **The *Enrol info* page is gone.** `enrol/apply/info.php` listed the comments submitted with

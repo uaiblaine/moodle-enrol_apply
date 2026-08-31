@@ -1,0 +1,66 @@
+{{!
+    This file is part of Moodle - http://moodle.org/
+
+    Moodle is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Moodle is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+}}
+{{!
+    @template enrol_apply/review_actions
+
+    The three decisions, rendered into a core sticky footer by the renderer.
+
+    Only the decisions live here. A core sticky footer is a fixed box whose content area clips
+    with no scrollbar, so the message box and the two choosers stay in the page body - the same
+    split the queue's own bar makes, for the same reason.
+
+    Each button carries name formaction and its own value, so the button pressed IS the decision
+    taken and manage.php reads it with optional_param. It must stay a form CONTROL rather than
+    the HTML5 formaction attribute, which would post nothing under that name.
+
+    The destructive decision is first in source order and pushed to the far edge by this row's
+    OWN justify-content-between - not the footer's, which applies its classes to a content area
+    whose only child is this row and therefore had nothing to spread.
+
+    Being first also makes Cancel the form's DEFAULT submit, which is what an operator pressing
+    Enter in a chooser gets. That is deliberate and it is safe only because manage.php intercepts
+    formaction cancel and asks: whichever button comes first inherits the default, so no ordering
+    makes both safe, and the interception is what makes this one safe. The two hold together -
+    reordering these buttons without moving the interception restores the original hazard, that
+    Enter in a chooser silently enrols the applicant.
+
+    The row does not wrap. The bar is a fixed 80px box whose content area clips with no
+    scrollbar, so a wrapped second line is painted where nobody can see it; below the width the
+    three labels need, the row scrolls sideways instead.
+
+    Context variables required for this template:
+    * actions array - one entry per decision, each with:
+      * value string - what travels as formaction
+      * label string - the button's text
+      * style string - the Bootstrap button class it carries
+
+    Example context (json):
+    {
+        "actions": [
+            {"value": "cancel", "label": "Cancel this application", "style": "btn-outline-danger"},
+            {"value": "wait", "label": "Defer this application", "style": "btn-secondary"},
+            {"value": "confirm", "label": "Confirm this application", "style": "btn-primary"}
+        ]
+    }
+}}
+<div class="enrol_apply-reviewactions d-flex flex-nowrap justify-content-between align-items-center gap-2 w-100">
+    {{#actions}}
+        <button type="submit" name="formaction" value="{{value}}" class="btn {{style}}">
+            {{label}}
+        </button>
+    {{/actions}}
+</div>

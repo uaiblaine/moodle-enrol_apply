@@ -123,8 +123,40 @@ $PAGE->set_context($context);
 $PAGE->set_url($manageurl);
 $PAGE->set_pagelayout('admin');
 $PAGE->set_heading($pageheading);
-$PAGE->navbar->add(get_string('confirmusers', 'enrol_apply'));
-$PAGE->set_title(get_string('confirmusers', 'enrol_apply'));
+
+if ($userenrol) {
+    /* The review page belongs to a course, and until this call it did not say so. require_login()
+       is deliberately not given one here - a mentor holds no course access at all, which is the
+       whole point of that delegation level - so $COURSE stayed the SITE course and every
+       navigation node was built from it: measured, eight secondary-navigation links all pointing
+       at course id 1, one of them the front page's own settings, on a page deciding another
+       course's application.
+
+       set_course() applies no access check of any kind, which is exactly what makes it safe
+       here: the operator may be a mentor, entitled to decide this application and unable to enter
+       the course at all.
+
+       It cannot clobber the context in either order, and an earlier version of this comment said
+       it could. set_course() sets the page context only `if (!$this->_context)` (lib/pagelib.php,
+       :1190 on 5.2 and :1170 on 5.1), so placed first it would set the course context and the
+       explicit set_context() below would immediately win; placed here it does nothing to the
+       context at all. Either way the mentor keeps the user context. It is called after for
+       readability, not for safety.
+
+       The crumbs are built by hand because set_course() alone does not reliably produce them. */
+    $PAGE->set_course(get_course($application->courseid));
+    $PAGE->set_title(get_string('reviewtitle', 'enrol_apply', (object) [
+        'applicant' => fullname($applicant),
+        'course' => format_string($application->coursename, true, ['context' => $context]),
+    ]));
+    if ($scope->hasqueue) {
+        $PAGE->navbar->add(get_string('confirmusers', 'enrol_apply'), $scope->url);
+    }
+    $PAGE->navbar->add(fullname($applicant));
+} else {
+    $PAGE->navbar->add(get_string('confirmusers', 'enrol_apply'));
+    $PAGE->set_title(get_string('confirmusers', 'enrol_apply'));
+}
 
 if ($formaction !== '' && $userenrolments) {
     /* State change: reject anything that is not a sesskey-carrying POST. Without this
@@ -148,6 +180,65 @@ if ($formaction !== '' && $userenrolments) {
         'groups' => optional_param_array('groups', [], PARAM_INT),
         'roleid' => optional_param('roleid', 0, PARAM_INT),
     ];
+
+    /* Cancelling is the one decision that destroys something: cancel_enrolment() unenrols, which
+       takes the {user_enrolments} row and the applicant's comment with it. On the review page it
+       is also one click from Confirm, and Confirm is the form's FIRST submit and therefore its
+       default - so Enter on either chooser used to approve the enrolment. Button order alone
+       cannot fix that: whichever submit comes first becomes the default, and neither of these two
+       is safe as one. So the destructive decision asks.
+
+       Only on the review page. The queue posts the same formaction for a whole selection and has
+       always applied it directly; intercepting there would change a shipped flow this slice is
+       not rebuilding, and would break the scenario that proves the queue still works without
+       JavaScript. Core's own precedent for asking before this exact act is enrol/unenroluser.php. */
+    if ($userenrol && $formaction === 'cancel' && !optional_param('confirmed', 0, PARAM_BOOL)) {
+        echo $OUTPUT->header();
+        echo $OUTPUT->heading(get_string('reviewcancelconfirm', 'enrol_apply'));
+        /* Both buttons are named explicitly. Core's confirm() labels its second one "Cancel",
+           which beside a decision this plugin also calls "Cancel this application" gives the
+           reader two buttons opening on the same word, one of them destructive and rendered as
+           the primary. Naming them for what they DO removes the ambiguity rather than relying on
+           the reader parsing the rest of the label. */
+        echo $OUTPUT->confirm(
+            get_string('reviewcancelconfirm_desc', 'enrol_apply', fullname($applicant)),
+            new single_button(
+                /* The key carries its own index because single_button turns each param into a
+                   hidden input whose NAME is the raw key, so `userenrolments[0]` is what
+                   optional_param_array() reads back on the next request. Not because a
+                   moodle_url param has to be scalar - it does not: url::params() explicitly
+                   leaves arrays alone and stringifies everything else (lib/classes/url.php:203,
+                   "Converts given URL parameter values that are not arrays into strings"), and
+                   an earlier version of this comment claimed the opposite.
+
+                   What travels is what this decision needs: the session key, the action, the one
+                   application and the message. The group and role choosers are deliberately NOT
+                   carried - they are the APPROVAL's parameters and cancelling reads neither, so
+                   re-emitting them would be re-emitting inputs the branch about to run ignores. */
+                new moodle_url($manageurl, [
+                    'formaction' => 'cancel',
+                    'confirmed' => 1,
+                    'sesskey' => sesskey(),
+                    'userenrolments[0]' => $userenrol,
+                    'outcomemessage' => $outcomemessage,
+                ]),
+                get_string('reviewcancelaction', 'enrol_apply'),
+                'post'
+            ),
+            /* The typed message travels back, so backing out does not throw away the prose the
+               operator wrote before they hesitated. The two choosers do not: they are the
+               APPROVAL's parameters, this branch reads neither, and re-selecting a group on the
+               way back from a cancellation would be restoring a choice for a decision that was
+               not taken. The message is different - it is what they would write for either. */
+            new single_button(
+                new moodle_url($manageurl, ['outcomemessage' => $outcomemessage]),
+                get_string('reviewkeep', 'enrol_apply'),
+                'get'
+            )
+        );
+        echo $OUTPUT->footer();
+        exit;
+    }
 
     $enrolapply = enrol_get_plugin('apply');
     switch ($formaction) {
@@ -199,9 +290,14 @@ if ($userenrol) {
     $neighbours = \enrol_apply\local\queue::neighbours($application, $scope);
     $navigation = new \enrol_apply\output\application_navigation(
         $neighbours['previous'],
-        $neighbours['next']
+        $neighbours['next'],
+        $scope->hasqueue ? $scope->url : null
     );
-    $renderer->review_page($application, $applicant, $instance, $manageurl, $navigation);
+    /* Whatever the operator had typed before they opened the confirmation and backed out of it.
+       PARAM_TEXT and rendered through a double stash, exactly as it is on the way in. */
+    $prefillmessage = optional_param('outcomemessage', '', PARAM_TEXT);
+
+    $renderer->review_page($application, $applicant, $instance, $manageurl, $navigation, $prefillmessage);
     exit;
 }
 

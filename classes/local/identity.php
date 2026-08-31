@@ -71,6 +71,58 @@ final class identity {
     }
 
     /**
+     * One applicant's identity values, resolved exactly as the queue resolves them.
+     *
+     * **Not `$user->{$field}`.** For a custom profile field core's list carries the key
+     * `profile_field_<shortname>`, and a `{user}` record has no such property - so reading it off
+     * the record yields nothing and the row silently vanishes, while the queue beside it, which
+     * goes through get_sql(), joins {user_info_data} and prints the value. Two surfaces of this
+     * plugin disagreeing about the same reader is the defect this class exists to close, and
+     * reading the record directly reopens it from the other end.
+     *
+     * So the values come from the same SQL the queue uses, over one user. That is one extra query
+     * on a page that renders a single application, and it is what makes the two surfaces agree by
+     * construction rather than by two implementations that happen to match today.
+     *
+     * @param context|null $context Context to judge in, null for a scope that spans courses.
+     * @param int $userid The applicant.
+     * @return array Ordered field name => value, with the fields this reader may not see and the
+     *         ones holding nothing both absent.
+     */
+    public static function values(?context $context, int $userid): array {
+        global $DB;
+
+        $fields = self::fields($context);
+        if (!$fields || $userid <= 0) {
+            return [];
+        }
+
+        $sql = self::sql($context, 'u');
+        $record = $DB->get_record_sql(
+            "SELECT u.id{$sql->selects} FROM {user} u {$sql->joins} WHERE u.id = :identityuserid",
+            $sql->params + ['identityuserid' => $userid]
+        );
+
+        if (!$record) {
+            /* The custom-field join core emits is an INNER one, so a field whose {user_info_field}
+               row has gone takes the whole row with it. get_identity_fields() drops such a field
+               before it can reach here - it checks the field still exists - but this query is one
+               row rather than a listing, so failing to nothing is the honest fallback. */
+            return [];
+        }
+
+        $values = [];
+        foreach ($fields as $field) {
+            $value = trim((string) ($record->{$field} ?? ''));
+            if ($value !== '') {
+                $values[$field] = $value;
+            }
+        }
+
+        return $values;
+    }
+
+    /**
      * The SELECT, joins and parameters for those fields, ready to append to a table's SQL.
      *
      * `$namedparams` is TRUE and is not a style choice: this plugin's queries bind by name, and

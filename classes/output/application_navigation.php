@@ -48,15 +48,23 @@ class application_navigation implements renderable, templatable {
     /** @var stdClass|null The application after this one, null at the end of the queue. */
     protected $next;
 
+    /** @var moodle_url|null The queue this walk runs in, null when the operator may open none. */
+    protected $queueurl;
+
     /**
      * Build the navigation from a resolved pair of neighbours.
      *
      * @param stdClass|null $previous Neighbour record carrying id, userid and the name fields.
      * @param stdClass|null $next Neighbour record carrying id, userid and the name fields.
+     * @param moodle_url|null $queueurl The queue this walk runs in, null for an operator who may
+     *        open none. Not defaulted away: the fourth scope() branch is reachable rather than
+     *        defensive, and a "back to the applications" link pointing at a queue that would
+     *        refuse this operator is worse than no link at all.
      */
-    public function __construct(?stdClass $previous, ?stdClass $next) {
+    public function __construct(?stdClass $previous, ?stdClass $next, ?moodle_url $queueurl = null) {
         $this->previous = $previous;
         $this->next = $next;
+        $this->queueurl = $queueurl;
     }
 
     /**
@@ -75,9 +83,15 @@ class application_navigation implements renderable, templatable {
      * @return array Template context.
      */
     public function export_for_template(renderer_base $output): array {
+        /* hasnav and not hasneighbours: the wrapper has to render for the queue link even when
+           this application is the only one left, and the old flag put the whole <nav> behind a
+           pair that a queue of one does not have. */
         $context = [
             'navlabel' => get_string('reviewnavigation', 'enrol_apply'),
-            'hasneighbours' => $this->previous !== null || $this->next !== null,
+            'hasnav' => $this->previous !== null || $this->next !== null || $this->queueurl !== null,
+            'hasqueueurl' => $this->queueurl !== null,
+            'queuelabel' => get_string('reviewqueue', 'enrol_apply'),
+            'queueurl' => $this->queueurl ? $this->queueurl->out(false) : '',
         ];
 
         if ($this->previous) {
