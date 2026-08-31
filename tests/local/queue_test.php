@@ -1075,4 +1075,108 @@ final class queue_test extends \advanced_testcase {
         $this->assertNull(queue::neighbours(queue::application($application), $scope)['next']);
         $this->assertSame([$application], $this->walk_from($application, $instance));
     }
+    /**
+     * The earlier-applications lookup returns this applicant's records and nobody else's.
+     *
+     * Both scoping clauses are a disclosure boundary and neither was held by anything: the
+     * capability gate on the panel decides WHETHER it renders, and these decide WHOSE rows it
+     * renders. The failure would also be silent - fix_sql_params() tolerates surplus named
+     * parameters, so dropping a clause while keeping its parameter runs clean.
+     *
+     * @return void
+     */
+    public function test_prior_applications_are_scoped_to_one_applicant_and_one_course(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+
+        $courseone = $this->getDataGenerator()->create_course();
+        $coursetwo = $this->getDataGenerator()->create_course();
+        $mine = $this->getDataGenerator()->create_user();
+        $theirs = $this->getDataGenerator()->create_user();
+
+        $record = function (int $courseid, int $userid, int $when) use ($DB): int {
+            return (int) $DB->insert_record('enrol_apply_submission', (object) [
+                'courseid' => $courseid,
+                'userid' => $userid,
+                'enrolid' => 0,
+                'userenrolmentid' => 0,
+                'status' => \enrol_apply\local\submission::STATUS_CANCELLED,
+                'comment' => '',
+                'userinfodata' => '',
+                'outcomemessage' => '',
+                'decidedgroups' => '',
+                'decidedrole' => 0,
+                'decidedby' => 0,
+                'timecreated' => $when,
+                'timedecided' => $when,
+            ]);
+        };
+
+        $wanted = $record($courseone->id, $mine->id, 1700000000);
+        $current = $record($courseone->id, $mine->id, 1700000100);
+        $othercourse = $record($coursetwo->id, $mine->id, 1700000000);
+        $otherperson = $record($courseone->id, $theirs->id, 1700000000);
+
+        $found = queue::prior_applications((int) $courseone->id, (int) $mine->id, $current);
+        $ids = array_map('intval', array_keys($found));
+
+        $this->assertContains($wanted, $ids);
+        // The application being reviewed is not listed as one of its own predecessors.
+        $this->assertNotContains($current, $ids, 'the current application must be excluded');
+        $this->assertNotContains($othercourse, $ids, 'another course must not be listed');
+        $this->assertNotContains($otherperson, $ids, "another applicant's record must not be listed");
+    }
+
+    /**
+     * A pseudonymised applicant gathers nothing.
+     *
+     * @return void
+     */
+    public function test_prior_applications_of_a_pseudonymised_record_are_not_gathered(): void {
+        $this->resetAfterTest();
+
+        $course = $this->getDataGenerator()->create_course();
+
+        $this->assertSame([], queue::prior_applications((int) $course->id, 0, 0));
+    }
+
+    /**
+     * The list is bounded, because nothing else bounds it.
+     *
+     * The natural key is deliberately not unique and a determined re-applicant accumulates rows
+     * without limit - measured on the live site, one person holds eight records in one course.
+     *
+     * @return void
+     */
+    public function test_prior_applications_are_bounded(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+
+        $course = $this->getDataGenerator()->create_course();
+        $user = $this->getDataGenerator()->create_user();
+
+        foreach (range(1, queue::PRIOR_APPLICATIONS_SHOWN + 3) as $n) {
+            $DB->insert_record('enrol_apply_submission', (object) [
+                'courseid' => $course->id,
+                'userid' => $user->id,
+                'enrolid' => 0,
+                'userenrolmentid' => 0,
+                'status' => \enrol_apply\local\submission::STATUS_CANCELLED,
+                'comment' => '',
+                'userinfodata' => '',
+                'outcomemessage' => '',
+                'decidedgroups' => '',
+                'decidedrole' => 0,
+                'decidedby' => 0,
+                'timecreated' => 1700000000 + $n,
+                'timedecided' => 1700000000 + $n,
+            ]);
+        }
+
+        $found = queue::prior_applications((int) $course->id, (int) $user->id, 0);
+
+        $this->assertCount(queue::PRIOR_APPLICATIONS_SHOWN, $found);
+    }
 }

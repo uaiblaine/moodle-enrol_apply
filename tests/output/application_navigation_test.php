@@ -101,7 +101,7 @@ final class application_navigation_test extends \advanced_testcase {
 
         $context = $navigation->export_for_template($this->renderer());
 
-        $this->assertTrue($context['hasneighbours']);
+        $this->assertTrue($context['hasnav']);
         $this->assertSame(get_string('reviewprevious', 'enrol_apply', 'Alice Anderson'), $context['previous']['title']);
         $this->assertSame(get_string('reviewnext', 'enrol_apply', 'Bob Brown'), $context['next']['title']);
         $this->assertStringContainsString('userenrol=41', $context['previous']['url']);
@@ -122,28 +122,77 @@ final class application_navigation_test extends \advanced_testcase {
 
         $context = $navigation->export_for_template($this->renderer());
 
-        $this->assertTrue($context['hasneighbours']);
+        $this->assertTrue($context['hasnav']);
         $this->assertArrayNotHasKey('previous', $context);
         $this->assertArrayHasKey('next', $context);
     }
 
     /**
-     * A queue of one renders no navigation at all, not an empty landmark.
+     * With no neighbours and no queue to go back to, nothing renders at all.
      *
      * An empty nav element is not merely useless: a screen reader announces the region and
-     * lets its user step into it, so the one application in a queue would advertise a way out
-     * of itself that does not exist.
+     * lets its user step into it, so the application would advertise a way out of itself that
+     * does not exist. This is the operator who may open no queue - reachable rather than
+     * defensive, and the one case where there is genuinely nowhere to send them.
      *
      * @return void
      */
-    public function test_a_queue_of_one_renders_no_navigation_at_all(): void {
+    public function test_no_neighbours_and_no_queue_renders_no_navigation_at_all(): void {
         $this->resetAfterTest();
 
         $renderer = $this->renderer();
-        $navigation = new application_navigation(null, null);
+        $navigation = new application_navigation(null, null, null);
 
-        $this->assertFalse($navigation->export_for_template($renderer)['hasneighbours']);
+        $this->assertFalse($navigation->export_for_template($renderer)['hasnav']);
         $this->assertStringNotContainsString('<nav', $renderer->render($navigation));
+    }
+
+    /**
+     * A queue of ONE still offers the way back to that queue.
+     *
+     * The counterpart, and the reason the wrapper is no longer gated on the neighbours: a lone
+     * application is exactly when a reader most needs the link out, and the old flag hid the
+     * whole landmark precisely then. Reviewed from the participants page or a notification
+     * e-mail, this link and the breadcrumb manage.php now builds are the only routes to the
+     * queue on the page - and the breadcrumb is the one a reader is least likely to look for.
+     *
+     * @return void
+     */
+    public function test_a_queue_of_one_still_links_back_to_the_queue(): void {
+        $this->resetAfterTest();
+
+        $renderer = $this->renderer();
+        $queueurl = new \moodle_url('/enrol/apply/manage.php', ['id' => 7]);
+        $navigation = new application_navigation(null, null, $queueurl);
+
+        $context = $navigation->export_for_template($renderer);
+        $this->assertTrue($context['hasnav']);
+        $this->assertTrue($context['hasqueueurl']);
+
+        $html = $renderer->render($navigation);
+        $this->assertStringContainsString('<nav', $html);
+        $this->assertStringContainsString('id=7', $html);
+        $this->assertStringContainsString(get_string('reviewqueue', 'enrol_apply'), $html);
+    }
+
+    /**
+     * An operator who may open no queue is offered no link to one.
+     *
+     * The fourth scope() branch sends them to the home page rather than to a queue that would
+     * refuse them, and a link here pointing at one would be an invitation to that refusal.
+     *
+     * @return void
+     */
+    public function test_an_operator_with_no_queue_is_offered_no_queue_link(): void {
+        $this->resetAfterTest();
+
+        $renderer = $this->renderer();
+        $navigation = new application_navigation($this->neighbour(41, 'Alice', 'Anderson'), null, null);
+
+        $context = $navigation->export_for_template($renderer);
+        $this->assertTrue($context['hasnav']);
+        $this->assertFalse($context['hasqueueurl']);
+        $this->assertStringNotContainsString(get_string('reviewqueue', 'enrol_apply'), $renderer->render($navigation));
     }
 
     /**

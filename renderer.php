@@ -150,9 +150,10 @@ class enrol_apply_renderer extends plugin_renderer_base {
      * that delegation carries.
      *
      * @param stdClass|null $instance Enrol instance the decision belongs to, null when unknown.
+     * @param string $message What the operator had already typed, empty on the ordinary path.
      * @return array Context for the partial.
      */
-    protected function decision_controls_context($instance): array {
+    protected function decision_controls_context($instance, $message = ''): array {
         $groups = [];
         $roles = [];
 
@@ -203,6 +204,10 @@ class enrol_apply_renderer extends plugin_renderer_base {
         return [
             'messagelabel' => get_string('outcomemessage', 'enrol_apply'),
             'messagehelp' => get_string('outcomemessage_help', 'enrol_apply'),
+            /* Non-empty only on the way back from the cancel confirmation, so the operator does
+               not lose what they wrote by hesitating. Plain spelling: the template double
+               stashes it, as it does everything else it renders itself. */
+            'messagevalue' => $message,
             'hasgroups' => (bool) $groups,
             'grouplabel' => get_string('decisiongroups', 'enrol_apply'),
             'grouphelp' => get_string('decisiongroups_help', 'enrol_apply'),
@@ -212,6 +217,203 @@ class enrol_apply_renderer extends plugin_renderer_base {
             'rolehelp' => get_string('decisionrole_help', 'enrol_apply'),
             'roledefault' => get_string('decisionroledefault', 'enrol_apply'),
             'roles' => $roles,
+        ];
+    }
+
+    /**
+     * The applicant's identifying details, as this reader may see them.
+     *
+     * One gate serving the identity line AND, through visible_keys() below, the snapshot panel,
+     * because the two used to disagree on the same page to the same reader: the e-mail address
+     * had a row of its own and was printed unconditionally, while the snapshot beside it withheld
+     * identity fields from a mentor. One panel hid what the other showed.
+     *
+     * The e-mail is now one identity field among the rest rather than a row of its own, which is
+     * a real behaviour change and the owner's decision: on a site whose `showuseridentity` does
+     * not name it, it no longer appears here at all. That is what core's own participants page
+     * does with the same configuration, and the profile link beside the name is the route to
+     * contact details for a reader entitled to them.
+     *
+     * The COURSE context, not the page's: queue::require_review_access() can return the
+     * applicant's own USER context on the mentor path, and identity resolved against that would
+     * be answering about the wrong thing. It costs a mentor the identity fields, which is the
+     * stricter reading of a genuine question and the one the report already took.
+     *
+     * Values go out PLAIN and the template double stashes them. s() is not used here for the
+     * same reason the snapshot does not: the sink escapes, and escaping twice shows the entities.
+     *
+     * @param stdClass $applicant Applicant user record.
+     * @param \context_course $coursecontext Course the application was made to.
+     * @return array Template context: hasidentity and one entry per field this reader may see.
+     */
+    protected function identity_context($applicant, $coursecontext): array {
+        $rows = [];
+        $values = \enrol_apply\local\identity::values($coursecontext, (int) $applicant->id);
+        foreach ($values as $field => $value) {
+            $rows[] = [
+                /* Labelled, because these run together on one line and several of them are
+                   opaque without one: a bare "2026-0042" beside a bare "jsa" tells a screen
+                   reader nothing, and tells a sighted reader little more. */
+                'label' => \core_user\fields::get_display_name($field),
+                'value' => $value,
+            ];
+        }
+
+        return [
+            'hasidentity' => (bool) $rows,
+            'identity' => $rows,
+        ];
+    }
+
+    /**
+     * The decision that produced the state this application is in, when a colleague took one.
+     *
+     * A deferred application is the one case where the reader is looking at something somebody
+     * else already decided, and the page used to say only "On the waiting list" - not who, not
+     * when, and not the note they wrote to the applicant. All of it comes from columns
+     * queue::application() already selects off a table it already joins, so this costs nothing.
+     *
+     * Only for a DEFERRED application. A pending one has no decision to describe, and for the
+     * other two states the page is not reachable at all - queue::application() returns null once
+     * an application stops awaiting a decision.
+     *
+     * The decider's name is read live and is not masked: it is a member of staff acting in this
+     * course, not the applicant, and the same name is already on the report. The message is the
+     * one written TO the applicant, so it is shown as written.
+     *
+     * @param stdClass $application Application as \enrol_apply\local\queue::application() returns it.
+     * @return array Template context: hasdecision and the sentence describing it.
+     */
+    protected function decision_context($application): array {
+        if ((int) $application->status !== ENROL_APPLY_USER_WAIT || empty($application->timedecided)) {
+            return ['hasdecision' => false];
+        }
+
+        $decider = empty($application->decidedby)
+            ? null
+            : \core_user::get_user((int) $application->decidedby, '*', IGNORE_MISSING);
+
+        $message = trim((string) ($application->outcomemessage ?? ''));
+
+        return [
+            'hasdecision' => true,
+            'decisionlabel' => get_string('reviewdecision', 'enrol_apply'),
+            'decision' => $decider
+                ? get_string('reviewdeferredby', 'enrol_apply', (object) [
+                    'who' => fullname($decider),
+                    'when' => userdate((int) $application->timedecided, get_string('strftimedatetimeshort', 'langconfig')),
+                ])
+                : get_string('reviewdeferredon', 'enrol_apply', userdate(
+                    (int) $application->timedecided,
+                    get_string('strftimedatetimeshort', 'langconfig')
+                )),
+            'hasdecisionmessage' => $message !== '',
+            /* Already escaped, with the decider's own line breaks kept, exactly as the
+               applicant's comment is - and for the same reason. */
+            'decisionmessage' => format_text($message, FORMAT_PLAIN),
+        ];
+    }
+
+    /**
+     * What else this applicant has applied for in this course.
+     *
+     * Gated on enrol/apply:viewreports, which is deliberately narrower than the capability that
+     * opens this page: the prior applications are the same disclosure the report exists to
+     * control - what somebody applied for and what was decided - and an editing teacher holding
+     * only manageapplications is not granted it by archetype. A reader without it sees no panel
+     * at all rather than an empty one, because a heading that appears only when there IS history
+     * is itself a disclosure.
+     *
+     * Each row's wording comes from the REPORT's own outcome formatter rather than the record's
+     * bare status, so the two surfaces cannot describe the same record differently. That matters
+     * here specifically: a record says APPROVED for ever, while the enrolment it names may since
+     * have been suspended or removed by a route this plugin never sees.
+     *
+     * @param stdClass $application Application as \enrol_apply\local\queue::application() returns it.
+     * @param \context_course $coursecontext Course the application was made to.
+     * @return array Template context: hashistory, its label, and one entry per prior application.
+     */
+    protected function history_context($application, $coursecontext): array {
+        if (!has_capability('enrol/apply:viewreports', $coursecontext)) {
+            return ['hashistory' => false, 'history' => []];
+        }
+
+        $formatter = \enrol_apply\reportbuilder\local\formatters\submission::class;
+        $priors = \enrol_apply\local\queue::prior_applications(
+            (int) $application->courseid,
+            (int) $application->userid,
+            (int) ($application->submissionid ?? 0)
+        );
+
+        $rows = [];
+        foreach ($priors as $prior) {
+            $rows[] = [
+                'applied' => userdate((int) $prior->timecreated, get_string('strftimedatetimeshort', 'langconfig')),
+                'outcome' => $formatter::outcome($prior->status, $prior),
+            ];
+        }
+
+        return [
+            'hashistory' => (bool) $rows,
+            'historylabel' => get_string('reviewhistory', 'enrol_apply'),
+            'history' => $rows,
+        ];
+    }
+
+    /**
+     * How much room the enrolment method has left.
+     *
+     * The four numbers answer two different questions and must never be mixed: applicants counts
+     * every non-expired row - pending, deferred and approved alike - because each of those people
+     * is in the pipeline, while places counts ACTIVE rows only. The gap between them is
+     * overbooking, which is the point in a plugin where approval is discretionary.
+     *
+     * Shown as a neutral readout rather than the queue's warning: the queue warns only when the
+     * places are gone, which is the right shape for a listing somebody is sweeping, while a
+     * single decision wants the number whatever it is.
+     *
+     * **Gated on the COURSE capability, which is stricter than the page**, and for the same
+     * reason the group and role choosers a few lines above are: these are the enrolment method's
+     * own settings and its enrolment counts, and a mentor reaches this page through the
+     * applicant's user context holding nothing in the course at all. Telling them how many people
+     * are enrolled there, and what the method's configured limits are, is a disclosure their
+     * delegation does not carry - they are trusted with one applicant, not with the shape of the
+     * course. What they lose is context for their decision; the instance's own limits still apply
+     * to it either way, exactly as the groups and the role do.
+     *
+     * @param stdClass $instance Enrol instance the application belongs to.
+     * @return array Template context for the capacity panel.
+     */
+    protected function capacity_context($instance): array {
+        $coursecontext = \context_course::instance($instance->courseid);
+        if (!has_capability('enrol/apply:manageapplications', $coursecontext)) {
+            return ['hascapacity' => false];
+        }
+
+        $capacity = \enrol_apply\local\capacity::class;
+        $places = $capacity::places($instance);
+        $limit = $capacity::applicant_limit($instance);
+        $nolimit = get_string('reviewnolimit', 'enrol_apply');
+
+        return [
+            'hascapacity' => true,
+            'capacitylabel' => get_string('reviewcapacity', 'enrol_apply'),
+            'placeslabel' => get_string('places', 'enrol_apply'),
+            'places' => $places > 0
+                ? get_string('reviewofmany', 'enrol_apply', (object) [
+                    'taken' => $capacity::places_taken($instance),
+                    'total' => $places,
+                ])
+                : $nolimit,
+            /* Not the setting's own label. "Maximum applicants: 35 of 40" reads as though 35
+               were the maximum; this row reports how many the method is HOLDING against it. */
+            'applicantslabel' => get_string('reviewapplicants', 'enrol_apply'),
+            'applicants' => $limit > 0
+                ? get_string('reviewofmany', 'enrol_apply', (object) [
+                    'taken' => $capacity::applicants($instance),
+                    'total' => $limit,
+                ])
+                : $nolimit,
         ];
     }
 
@@ -295,13 +497,20 @@ class enrol_apply_renderer extends plugin_renderer_base {
      *        applications. Required, and not defaulted to null: manage.php always resolves a
      *        pair before it renders, so a "not being walked" mode would be a parameter claiming
      *        a state the plugin never produces - the same claim the queue table's own removed
-     *        constructor parameter was making. The navigation renders as nothing on its own
-     *        when there is no neighbour either way, which is what a queue of one needs.
+     *        constructor parameter was making. It renders as nothing only when there is no
+     *        neighbour AND no queue to go back to; a queue of one still gets the way back, which
+     *        is exactly when a reader most needs it.
+     * @param string $message What the operator had already typed, carried back from the cancel
+     *        confirmation so that hesitating does not discard it.
      * @return void
      */
-    public function review_page($application, $applicant, $instance, $manageurl, $navigation) {
+    public function review_page($application, $applicant, $instance, $manageurl, $navigation, $message = '') {
         echo $this->header();
-        echo $this->heading(fullname($applicant));
+        /* No heading here. Core already renders the applicant's name as the page's own <h1>
+           from $PAGE->set_heading(), and $this->heading() defaults to level 2 - so the page
+           opened with the same name twice, at the same visual size, with the whole secondary
+           navigation between them. The <h2>s now belong to the panels below. */
+
         /* Above the form, where core puts a tertiary navigation bar, and not below it:
            the last control an operator reads before a decision should be the decision.
 
@@ -319,7 +528,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
            to the template file name, and renaming either without the other throws, which
            the two rendering tests hold. */
         echo $this->render($navigation);
-        echo $this->review_form($application, $applicant, $instance, $manageurl);
+        echo $this->review_form($application, $applicant, $instance, $manageurl, $message);
         echo $this->footer();
     }
 
@@ -327,20 +536,32 @@ class enrol_apply_renderer extends plugin_renderer_base {
      * The single-application decision form.
      *
      * The POST is byte for byte the one the queue makes - formaction, userenrolments[] and the
-     * session key - so manage.php's handler needs no branch of its own and every guard it
-     * applies to a queue decision applies here unchanged.
+     * session key - so every guard manage.php applies to a queue decision applies here unchanged.
+     *
+     * It is no longer true that the handler needs NO branch of its own: the destructive decision
+     * is intercepted on this path and asks before acting, which the queue's bulk equivalent does
+     * not. That is the one branch, and it is about confirmation rather than authorisation - the
+     * second request arrives on the same contract and passes the same guards.
      *
      * @param stdClass $application Application as \enrol_apply\local\queue::application() returns it.
      * @param stdClass $applicant Applicant user record.
      * @param stdClass $instance Enrol instance the application belongs to.
      * @param moodle_url $manageurl Url the decision form posts back to.
+     * @param string $message What the operator had already typed, carried back from the cancel
+     *        confirmation so that hesitating does not discard it.
      * @return string Rendered markup.
      */
-    public function review_form($application, $applicant, $instance, $manageurl) {
+    public function review_form($application, $applicant, $instance, $manageurl, $message = '') {
         $waiting = (int) $application->status === ENROL_APPLY_USER_WAIT;
 
-        $context = $this->decision_controls_context($instance)
+        $coursecontext = \context_course::instance($application->courseid);
+
+        $context = $this->decision_controls_context($instance, $message)
             + $this->snapshot_context($application)
+            + $this->identity_context($applicant, $coursecontext)
+            + $this->history_context($application, $coursecontext)
+            + $this->decision_context($application)
+            + $this->capacity_context($instance)
             + [
             'formurl' => $manageurl->out(false),
             'sesskey' => sesskey(),
@@ -352,8 +573,15 @@ class enrol_apply_renderer extends plugin_renderer_base {
                 'escape' => false,
             ]),
             'courseurl' => (new moodle_url('/course/view.php', ['id' => $application->courseid]))->out(false),
-            'emaillabel' => get_string('email'),
-            'email' => $applicant->email,
+            /* No e-mail row. It used to be printed here unconditionally while the snapshot panel
+               beside it masked identity fields from the same reader - one panel hiding what the
+               other showed. It is now one identity field among the rest, so on a site whose
+               showuseridentity does not name it, it does not appear. See identity_context(). */
+            'profileurl' => (new moodle_url('/user/view.php', [
+                'id' => (int) $applicant->id,
+                'course' => (int) $application->courseid,
+            ]))->out(false),
+            'profilelabel' => get_string('viewprofile'),
             'appliedlabel' => get_string('applydate', 'enrol_apply'),
             'applied' => userdate((int) $application->applydate, get_string('strftimedatetimeshort', 'langconfig')),
             'statuslabel' => get_string('submissionstatus', 'enrol_apply'),
@@ -383,12 +611,39 @@ class enrol_apply_renderer extends plugin_renderer_base {
                "Confirm requests", which is right above a list and wrong above one application -
                and on this page the button IS the decision, so its label is the last thing the
                operator reads before an applicant is enrolled or unenrolled. */
+            /* Order is the layout: the bar spreads these with justify-content-between, so the
+               destructive decision sits at the far edge and cannot be mis-clicked for the one
+               beside it, and the approval sits where the eye finishes. Cancel also gets its own
+               style, because it is the only one of the three that destroys something -
+               cancel_enrolment() unenrols, taking the row and the applicant's comment with it -
+               and it used to look exactly like Defer, which is fully reversible.
+               btn-outline-danger is a button variant rather than a bare bg-* utility, which is
+               what keeps bootstrap_compat_test's contrast rule satisfied. */
             'actions' => [
-                ['value' => 'confirm', 'label' => get_string('reviewconfirm', 'enrol_apply'), 'primary' => true],
-                ['value' => 'wait', 'label' => get_string('reviewwait', 'enrol_apply'), 'primary' => false],
-                ['value' => 'cancel', 'label' => get_string('reviewcancel', 'enrol_apply'), 'primary' => false],
+                ['value' => 'cancel', 'label' => get_string('reviewcancel', 'enrol_apply'), 'style' => 'btn-outline-danger'],
+                ['value' => 'wait', 'label' => get_string('reviewwait', 'enrol_apply'), 'style' => 'btn-secondary'],
+                ['value' => 'confirm', 'label' => get_string('reviewconfirm', 'enrol_apply'), 'style' => 'btn-primary'],
             ],
         ];
+
+        /* The decisions go into a core sticky footer, rendered here and interpolated INSIDE the
+           form by the template - its placement is CSS and never a DOM move, so its submits post
+           with everything else. Only the buttons: the bar is a fixed box whose content area
+           clips with no scrollbar, so the message box and the two choosers stay in the page body,
+           exactly as they do on the queue.
+
+           The spreading class goes on the PARTIAL's own row, not through the footer: the footer
+           applies its classes to a content area whose only child is that row, so
+           justify-content-between there had nothing to spread and the three buttons packed
+           together at the left - measured, 8px apart, with the destructive one nowhere near the
+           far edge it was supposed to be pushed to. Nothing is passed to the constructor now, and
+           add_classes() is still not called: it builds its concatenation and then assigns the
+           argument over it, so a later "just add a class" would silently drop whatever was
+           there. */
+        $bar = $this->render_from_template('enrol_apply/review_actions', [
+            'actions' => $context['actions'],
+        ]);
+        $context['stickyfooter'] = $this->render(new \core\output\sticky_footer($bar));
 
         return $this->render_from_template('enrol_apply/review', $context);
     }

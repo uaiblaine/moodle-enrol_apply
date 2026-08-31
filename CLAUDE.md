@@ -162,7 +162,15 @@ backup/                      group mappings, comments and the durable trail, see
   without that gate the page listed every group name in a course the reader cannot open. The
   instance's own groups and role still apply to their decision.
 
-- **The review page's profile snapshot is read frozen, and NOTHING on that page reads the live
+- **Slice U2 narrowed the bullet below, and the headline no longer holds as written.** The
+  snapshot is still read frozen and still never re-resolved. But the page now carries an identity
+  line, which DOES read the live profile - through `\core_user\fields::get_identity_fields()` and
+  `for_identity()->get_sql()`, for the fields the site named and this reader may see, and never
+  from a stored snapshot key. The distinction is the whole point: what was fixed was handing an
+  archive-controlled key to a live column with no allowlist, not the idea of reading a profile at
+  all. Read the bullet with that in mind.
+
+- **The review page's profile snapshot is read frozen, and NOTHING IN THE SNAPSHOT PANEL reads the live
   profile.** It comes from `submission::read_snapshot()` and never from `diff::compute()`, which
   re-resolves the field set from the LIVE instance and re-classifies it against the current user
   — so a field the teacher has since stopped asking for silently vanishes from a record of what
@@ -187,7 +195,13 @@ backup/                      group mappings, comments and the durable trail, see
   fields** — they hold nothing in the course — which is the stricter reading of a real question
   rather than an obviously right answer. Withheld rows are dropped whether or not they hold a
   value: a marker appearing only where there is data is a presence oracle. The masking governs
-  the PANEL, not the page: the applicant's e-mail address has its own row and always did.
+  the PANEL, not the page. **That last sentence used to read "the applicant's e-mail address has
+  its own row and always did", and slice U2 reversed it (2026-08-31, owner's decision):** the
+  address is now one identity field among the rest, so a site whose `showuseridentity` does not
+  name it does not show it here at all. The page DOES read the live profile now, through
+  `\core_user\fields` and for identity fields only - which is a different thing from the stored
+  snapshot key that once reached a live column with no allowlist, and is why that read is gated by
+  core's own helper rather than by this plugin's.
 
   **Field keys are `s_<column>` and `c_<id>`, not `standard:<column>`.** Build them with
   `fields::standard_key()`. A hand-written prefix fails two ways at once and neither is loud:
@@ -835,6 +849,46 @@ backup/                      group mappings, comments and the durable trail, see
   of a foreign archive. And a **report column does not have to satisfy `PARAM_TEXT`**: a Report
   Builder cell is raw HTML, where escaping is safe and lossless, and stripping there is a
   defect rather than a deliberate cost. Only a web service return genuinely has to strip.
+
+- **The review page belongs to a COURSE, and `$PAGE->set_course()` is what says so.** Without it
+  `$COURSE` stays the site course and the page renders the front page's own secondary navigation -
+  measured, eight nodes all pointing at course id 1, including the front page's settings, on a page
+  deciding another course's application. Three mechanics, and the order is load bearing: call it
+  **after** `set_context()`, because it sets the page context to the course only when none is set
+  and would otherwise silently replace the applicant's USER context on the mentor path; it applies
+  **no access check at all**, which is exactly what makes it safe for a mentor who may decide the
+  application without being able to enter the course; and it does not reliably produce a breadcrumb,
+  so the crumbs are built by hand.
+
+- **One identity rule serves the whole review page**, and the e-mail address is inside it. It used
+  to have a row of its own, printed unconditionally, while the snapshot panel beside it masked
+  identity fields from the same reader - one panel hiding what the other showed. Both now resolve
+  through the course context, so a site that does not name `email` in `showuseridentity` does not
+  see it here either. That is the owner's decision (2026-08-31) and it is a real behaviour change:
+  the profile link is the route to contact details for a reader entitled to them. Gate `AR`.
+
+  **The earlier-applications panel is gated on `enrol/apply:viewreports`, not on the capability
+  that opens the page.** What somebody applied for and what was decided is the disclosure the
+  report exists to control, and an editing teacher holding only `manageapplications` is not granted
+  it by archetype. A reader without it gets no panel rather than an empty one - a heading that
+  appears only when there IS history is itself a disclosure. Each row is worded by the REPORT's own
+  outcome formatter, never the record's bare status: a record says APPROVED for ever while the
+  enrolment it names may since have been suspended or removed by a route this plugin never sees.
+  Gate `AQ`.
+
+- **Cancelling asks, and button order could never have been the fix.** Confirm was the form's
+  first submit and therefore its default, so Enter on either chooser approved the enrolment -
+  and whichever button comes first inherits that, so no ordering makes both safe. `manage.php`
+  intercepts `formaction === 'cancel'` without a `confirmed` flag and re-renders a confirmation
+  that re-emits the whole POST contract, `formaction` included. **Only on the review page:** the
+  queue posts the same action for a whole selection and has always applied it directly, and
+  intercepting there would break the scenario that proves the queue works without JavaScript.
+
+- **The review page's navigation wrapper is gated on `hasnav`, not on the neighbours.** A queue of
+  one is exactly when a reader most needs the link back, and the old flag hid the whole landmark
+  precisely then. The fourth `scope()` branch - an operator who may open no queue, which is
+  reachable rather than defensive - passes null and gets no link, because one pointing at a queue
+  that would refuse them is worse than none. Gate `AS`.
 
 - **The queue's identifying columns are core's decision, and the mentee scope gets none.**
   `\enrol_apply\local\identity` is the only reader; it delegates to

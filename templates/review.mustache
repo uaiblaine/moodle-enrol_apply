@@ -29,7 +29,7 @@
     Every value this template renders ITSELF is the PLAIN spelling and is output through a
     double stash, which escapes each exactly once - the course name included, for which the
     renderer asks for the plain spelling explicitly because format_string()'s escape flag
-    defaults to true. The two exceptions are both deliberate and both flagged where they sit:
+    defaults to true. The exceptions are deliberate and flagged where they sit:
     the comment, which arrives already escaped from format_text(FORMAT_PLAIN) so that the line
     breaks the applicant typed survive, and the role names inside the partial this template
     includes, which core's own element-select.mustache also triple stashes.
@@ -41,8 +41,36 @@
     * courselabel string - label of the course row
     * coursename string - full name of the course applied for, plain spelling
     * courseurl string - link to the course
-    * emaillabel string - label of the email row
-    * email string - the applicant's email address, plain spelling
+    * hasidentity boolean - whether this reader may see any identifying detail of the applicant
+    * identity array - one entry per identity field the site named and this reader may see, each
+      carrying a label and a value, both in the PLAIN spelling. They are labelled because they
+      run together on one line and several are opaque without one. There is no e-mail row of its
+      own any more:
+      the address is one of these when showuseridentity names it and absent when it does not,
+      which is what stops this panel and the snapshot below it disagreeing about the same reader
+    * profileurl string - the applicant's profile in this course
+    * profilelabel string - text of the profile link
+    * hascapacity boolean - whether this reader may see the method's own limits and counts. A
+      mentor reaches this page through the applicant's user context and holds nothing in the
+      course, so they are shown the course but not its enrolment numbers - the same line the
+      group and role choosers draw
+    * capacitylabel string - heading of the panel saying where the application lands
+    * placeslabel string - label of the places row
+    * places string - places taken against the limit, already formatted, or the no-limit wording
+    * applicantslabel string - label of the applicants row
+    * applicants string - applications held against the limit, or the no-limit wording
+    * hasdecision boolean - whether a colleague has already decided this one, which today means
+      it was deferred; a pending application has no decision to describe, and the page is not
+      reachable at all for the other two states
+    * decisionlabel string - heading of that panel
+    * decision string - who deferred it and when, plain spelling
+    * hasdecisionmessage boolean - whether they wrote anything to the applicant
+    * decisionmessage string - what they wrote, ALREADY escaped with its line breaks converted,
+      which is why it is triple stashed
+    * hashistory boolean - whether this reader may see earlier applications AND there are any
+    * historylabel string - heading of the earlier-applications list
+    * history array - one entry per earlier application, each with the date it was submitted and
+      the outcome as the report's own formatter words it
     * appliedlabel string - label of the application date row
     * applied string - when the application was submitted, already formatted
     * statuslabel string - label of the state row
@@ -60,8 +88,10 @@
       cell carries the same white-space rule the report's own free-text cells do rather than
       converting them to markup
     * everything enrol_apply/decision_controls requires
-    * actions array - one entry per decision, each with a formaction value, its label, and a
-      primary flag choosing between the primary and the secondary button style
+    * stickyfooter string - the three decisions, already rendered into a core sticky footer by
+      the renderer and interpolated INSIDE this form. The footer is never moved in the DOM -
+      its placement is CSS - so the submits inside it post with the rest of the form, exactly as
+      the queue's own bar does
 
     Example context (json):
     {
@@ -71,9 +101,30 @@
         "courselabel": "Course",
         "coursename": "R&D < Team induction",
         "courseurl": "https://example.com/course/view.php?id=7",
-        "emaillabel": "Email address",
-        "email": "applicant@example.com",
-        "appliedlabel": "Enrol date",
+        "hasidentity": true,
+        "identity": [
+            {"label": "Username", "value": "jsa"},
+            {"label": "ID number", "value": "2026-0071"}
+        ],
+        "profileurl": "https://example.com/user/view.php?id=5&course=7",
+        "profilelabel": "View profile",
+        "hascapacity": true,
+        "capacitylabel": "Where this lands",
+        "placeslabel": "Places",
+        "places": "8 of 20",
+        "applicantslabel": "Maximum applicants",
+        "applicants": "35 of 40",
+        "hasdecision": true,
+        "decisionlabel": "The decision so far",
+        "decision": "Deferred by Ana Souza on 10/08/26, 14:02.",
+        "hasdecisionmessage": true,
+        "decisionmessage": "Waiting for the second group to open.",
+        "hashistory": true,
+        "historylabel": "Earlier applications to this course",
+        "history": [
+            {"applied": "04/06/26, 11:02", "outcome": "Cancelled"}
+        ],
+        "appliedlabel": "Application date",
         "applied": "25/08/26, 09:14",
         "statuslabel": "Status",
         "status": "Awaiting a decision",
@@ -102,49 +153,81 @@
         ],
         "messagelabel": "Message to the applicant",
         "messagehelp": "Included in the message they receive. Optional.",
-        "actions": [
-            {"value": "confirm", "label": "Confirm this application", "primary": true},
-            {"value": "wait", "label": "Defer this application", "primary": false},
-            {"value": "cancel", "label": "Cancel this application", "primary": false}
-        ]
+        "stickyfooter": "<div id=\"sticky-footer\"><button type=\"submit\">Confirm</button></div>"
     }
 }}
 <form id="enrol_apply_review_form" class="enrol_apply-review" method="post" action="{{formurl}}">
     <input type="hidden" name="sesskey" value="{{sesskey}}">
     <input type="hidden" name="userenrolments[]" value="{{userenrolmentid}}">
-    <dl class="enrol_apply-application row">
-        <dt class="col-sm-3">{{courselabel}}</dt>
-        <dd class="col-sm-9"><a href="{{courseurl}}">{{coursename}}</a></dd>
-        <dt class="col-sm-3">{{emaillabel}}</dt>
-        <dd class="col-sm-9">{{email}}</dd>
-        <dt class="col-sm-3">{{appliedlabel}}</dt>
-        <dd class="col-sm-9">{{applied}}</dd>
-        <dt class="col-sm-3">{{statuslabel}}</dt>
-        <dd class="col-sm-9">{{status}}</dd>
-        <dt class="col-sm-3">{{commentlabel}}</dt>
-        <dd class="col-sm-9">
-            {{#hascomment}}{{{comment}}}{{/hascomment}}
-            {{^hascomment}}<span class="text-muted">{{nocomment}}</span>{{/hascomment}}
-        </dd>
-    </dl>
-    {{#hassnapshot}}
-        <div class="enrol_apply-snapshot mt-3">
-            <h3 class="h5">{{snapshotlabel}}</h3>
-            <dl class="row">
-                {{#snapshot}}
-                    <dt class="col-sm-3">{{label}}</dt>
-                    <dd class="col-sm-9 enrol_apply-linebreaks">{{value}}</dd>
-                {{/snapshot}}
-            </dl>
+    <div class="enrol_apply-applicant d-flex flex-wrap align-items-start gap-2 mb-3">
+        <div class="flex-grow-1">
+            {{#hasidentity}}
+                <dl class="enrol_apply-identity small text-muted mb-1 d-flex flex-wrap gap-3">
+                    {{#identity}}
+                        <div><dt class="d-inline fw-normal">{{label}}:</dt>
+                            <dd class="d-inline ms-1">{{value}}</dd></div>
+                    {{/identity}}
+                </dl>
+            {{/hasidentity}}
+            <p class="mb-0">{{statuslabel}}: <strong>{{status}}</strong>
+                <span class="text-muted">&middot; {{appliedlabel}} {{applied}}</span></p>
         </div>
-    {{/hassnapshot}}
-    {{> enrol_apply/decision_controls }}
-    <div class="enrol_apply-reviewactions mt-3 d-flex flex-wrap gap-2">
-        {{#actions}}
-            <button type="submit" name="formaction" value="{{value}}"
-                class="btn {{#primary}}btn-primary{{/primary}}{{^primary}}btn-secondary{{/primary}}">
-                {{label}}
-            </button>
-        {{/actions}}
+        <a class="btn btn-outline-secondary btn-sm" href="{{profileurl}}">{{profilelabel}}</a>
     </div>
+
+    <div class="row">
+        <div class="col-lg-7">
+            {{#hasdecision}}
+                <div class="alert alert-info" role="status">
+                    <strong>{{decisionlabel}}</strong> {{decision}}
+                    {{#hasdecisionmessage}}<div class="mt-1">{{{decisionmessage}}}</div>{{/hasdecisionmessage}}
+                </div>
+            {{/hasdecision}}
+            <h2 class="h5">{{commentlabel}}</h2>
+            <div class="mb-3">
+                {{#hascomment}}{{{comment}}}{{/hascomment}}
+                {{^hascomment}}<span class="text-muted">{{nocomment}}</span>{{/hascomment}}
+            </div>
+            {{#hassnapshot}}
+                {{!
+                    The wrapper is load bearing, not decoration: renderer_test scopes its
+                    live-profile assertions to this class, because the page legitimately shows
+                    identifying values elsewhere and a whole-page assertion would either fail for
+                    an unrelated reason or pass while holding the wrong thing.
+                }}
+                <div class="enrol_apply-snapshot">
+                    <h2 class="h5">{{snapshotlabel}}</h2>
+                    <dl class="row">
+                        {{#snapshot}}
+                            <dt class="col-sm-4">{{label}}</dt>
+                            <dd class="col-sm-8 enrol_apply-linebreaks">{{value}}</dd>
+                        {{/snapshot}}
+                    </dl>
+                </div>
+            {{/hassnapshot}}
+        </div>
+        <div class="col-lg-5">
+            <h2 class="h5">{{courselabel}}</h2>
+            <p><a href="{{courseurl}}">{{coursename}}</a></p>
+            {{#hascapacity}}
+                <h2 class="h5">{{capacitylabel}}</h2>
+                <dl class="row">
+                    <dt class="col-6">{{placeslabel}}</dt>
+                    <dd class="col-6">{{places}}</dd>
+                    <dt class="col-6">{{applicantslabel}}</dt>
+                    <dd class="col-6">{{applicants}}</dd>
+                </dl>
+            {{/hascapacity}}
+            {{#hashistory}}
+                <h2 class="h5">{{historylabel}}</h2>
+                <ul class="list-unstyled">
+                    {{#history}}
+                        <li class="text-muted">{{applied}} &mdash; {{outcome}}</li>
+                    {{/history}}
+                </ul>
+            {{/hashistory}}
+        </div>
+    </div>
+    {{> enrol_apply/decision_controls }}
+    {{{stickyfooter}}}
 </form>

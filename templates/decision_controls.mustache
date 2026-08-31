@@ -43,6 +43,8 @@
       strings that have never been escaped at all.
     * messagelabel string - label of the optional message to the applicant
     * messagehelp string - hint explaining who reads the message and when
+    * messagevalue string - what the operator had already typed, non-empty only on the way back
+      from the cancel confirmation; plain spelling, escaped by the double stash
 
     Example context (json):
     {
@@ -62,7 +64,8 @@
             {"id": 3, "name": "R&amp;D &lt; Team"}
         ],
         "messagelabel": "Message to the applicant",
-        "messagehelp": "Included in the message they receive. Optional."
+        "messagehelp": "Included in the message they receive. Optional.",
+        "messagevalue": ""
     }
 }}
 {{#hasgroups}}
@@ -93,6 +96,6 @@
 <div class="enrol_apply-outcomemessage mt-3">
     <label class="form-label" for="enrol_apply_outcomemessage">{{messagelabel}}</label>
     <textarea class="form-control" id="enrol_apply_outcomemessage" name="outcomemessage"
-        rows="3" aria-describedby="enrol_apply_outcomemessage_help"></textarea>
+        rows="3" aria-describedby="enrol_apply_outcomemessage_help">{{messagevalue}}</textarea>
     <div class="form-text" id="enrol_apply_outcomemessage_help">{{messagehelp}}</div>
 </div>

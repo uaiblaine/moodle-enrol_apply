@@ -345,18 +345,25 @@ final class renderer_test extends \advanced_testcase {
      * @param int $status One of ENROL_USER_SUSPENDED and ENROL_APPLY_USER_WAIT.
      * @param string $snapshot Stored profile snapshot envelope, empty for none.
      * @param array $applicantfields Extra fields for the applicant's own user record.
+     * @param \stdClass|null $applicant Apply as this existing user instead of a fresh one, for
+     *        the tests that have to seed something about them first.
      * @return string Rendered markup.
      */
     private function render_review(
         string $comment = 'Please let me in',
         int $status = ENROL_USER_SUSPENDED,
         string $snapshot = '',
-        array $applicantfields = []
+        array $applicantfields = [],
+        ?\stdClass $applicant = null
     ): string {
         global $DB, $PAGE;
 
-        $this->setAdminUser();
-        $applicant = $this->getDataGenerator()->create_user($applicantfields);
+        /* Only when the caller has not already chosen a reader. The capability tests set a
+           teacher and would have it replaced by the administrator here. */
+        if ($applicant === null) {
+            $this->setAdminUser();
+        }
+        $applicant = $applicant ?? $this->getDataGenerator()->create_user($applicantfields);
         $this->plugin->enrol_user($this->instance, $applicant->id, null, 0, 0, $status);
         $ueid = (int) $DB->get_field(
             'user_enrolments',
@@ -364,6 +371,12 @@ final class renderer_test extends \advanced_testcase {
             ['userid' => $applicant->id, 'enrolid' => $this->instance->id],
             MUST_EXIST
         );
+        /* Replaced rather than inserted: a test may render the same applicant twice - the
+           capability tests render once per reader - and applicationinfo carries a unique key on
+           the user enrolment, so a second insert would die rather than fail an assertion. */
+        $DB->delete_records('enrol_apply_applicationinfo', ['userenrolmentid' => $ueid]);
+        $DB->delete_records('enrol_apply_submission', ['userenrolmentid' => $ueid]);
+
         /* Written to the DURABLE record, which is where queue::application() reads it from
            first; the applicationinfo row carries something different on purpose, so a
            COALESCE that took the wrong arm would show it. */
@@ -462,6 +475,276 @@ final class renderer_test extends \advanced_testcase {
         $this->assertStringContainsString(self::ESCAPED_ONCE, $select[0]);
         $this->assertStringNotContainsString(self::ESCAPED_TWICE, $select[0]);
         $this->assertStringNotContainsString(self::AWKWARD_NAME, $select[0]);
+    }
+
+    /**
+     * The identity line carries what the site named, and nothing else.
+     *
+     * The e-mail address used to have a row of its own and be printed unconditionally, while the
+     * snapshot panel beside it masked identity fields from the same reader. It is now one
+     * identity field among the rest, resolved by core's own helper - so a site that does not
+     * name it does not see it here, exactly as its participants page behaves.
+     *
+     * @return void
+     */
+    public function test_the_identity_line_respects_showuseridentity(): void {
+        global $CFG;
+
+        $CFG->showuseridentity = 'idnumber';
+        $CFG->hiddenuserfields = '';
+
+        $html = $this->render_review('Please let me in', ENROL_USER_SUSPENDED, '', [
+            'idnumber' => 'RA-2026-0042',
+            'email' => 'ana@example.org',
+        ]);
+
+        $this->assertStringContainsString('RA-2026-0042', $html);
+        // The address is not named by the site, so this page does not show it either.
+        $this->assertStringNotContainsString('ana@example.org', $html);
+    }
+
+    /**
+     * And it shows the address when the site does name it.
+     *
+     * The control for the test above: without it, a page that had dropped the identity line
+     * altogether would satisfy "the address is absent" just as well as a correct one.
+     *
+     * @return void
+     */
+    public function test_the_identity_line_shows_the_address_when_the_site_names_it(): void {
+        global $CFG;
+
+        $CFG->showuseridentity = 'email';
+        $CFG->hiddenuserfields = '';
+
+        $html = $this->render_review('Please let me in', ENROL_USER_SUSPENDED, '', [
+            'email' => 'ana@example.org',
+        ]);
+
+        $this->assertStringContainsString('ana@example.org', $html);
+    }
+
+    /**
+     * The earlier applications need their own capability, not the one that opens the page.
+     *
+     * enrol/apply:viewreports is manager-only by archetype and deliberately narrower than
+     * manageapplications: what somebody applied for and what was decided is the disclosure the
+     * report exists to control. A reader without it gets no panel at all rather than an empty
+     * one, because a heading that appears only when there IS history is itself a disclosure.
+     *
+     * @return void
+     */
+    public function test_earlier_applications_need_the_report_capability(): void {
+        global $DB;
+
+        $applicant = $this->getDataGenerator()->create_user();
+        // An earlier, cancelled application by the same person to the same course.
+        $DB->insert_record('enrol_apply_submission', (object) [
+            'courseid' => $this->course->id,
+            'userid' => $applicant->id,
+            'enrolid' => $this->instance->id,
+            'userenrolmentid' => 0,
+            'status' => \enrol_apply\local\submission::STATUS_CANCELLED,
+            'comment' => '',
+            'userinfodata' => '',
+            'outcomemessage' => '',
+            'decidedgroups' => '',
+            'decidedrole' => 0,
+            'decidedby' => 0,
+            'timecreated' => time() - DAYSECS,
+            'timedecided' => time() - DAYSECS,
+        ]);
+
+        $this->setAdminUser();
+        $html = $this->render_review('Please let me in', ENROL_USER_SUSPENDED, '', [], $applicant);
+        $this->assertStringContainsString(get_string('reviewhistory', 'enrol_apply'), $html);
+
+        /* A teacher holds manageapplications and opens this page, and does NOT hold viewreports
+           by archetype - which is the whole point of the second capability. */
+        $teacher = $this->getDataGenerator()->create_and_enrol($this->course, 'editingteacher');
+        $this->setUser($teacher);
+        $html = $this->render_review('Please let me in', ENROL_USER_SUSPENDED, '', [], $applicant);
+        $this->assertStringNotContainsString(get_string('reviewhistory', 'enrol_apply'), $html);
+    }
+
+    /**
+     * The capacity panel reports both numbers, and says so when there is no limit.
+     *
+     * @return void
+     */
+    public function test_the_capacity_panel_reports_both_numbers(): void {
+        global $DB;
+
+        $this->setAdminUser();
+
+        /* Two DIFFERENT limits, and a fixture whose two counts also differ. The first version of
+           this test capped places and left applicants uncapped, which reads as a fair test and is
+           not one: it passed with the two numbers fully swapped, because "of 20" appeared either
+           way. Mixing these two is the standing hazard this plugin records in CLAUDE.md, so the
+           test has to be able to see it. */
+        $DB->set_field('enrol', 'customint4', 20, ['id' => $this->instance->id]);
+        $DB->set_field('enrol', 'customint3', 30, ['id' => $this->instance->id]);
+        $this->instance = $DB->get_record('enrol', ['id' => $this->instance->id], '*', MUST_EXIST);
+
+        /* One ACTIVE enrolment and one still awaiting a decision. Places count the active row
+           only; applicants count both - so the two counts are 1 and 2 and cannot be confused. */
+        $approved = $this->getDataGenerator()->create_user();
+        $this->plugin->enrol_user($this->instance, $approved->id, null, 0, 0, ENROL_USER_ACTIVE);
+
+        $html = $this->render_review();
+
+        $this->assertStringContainsString(get_string('reviewcapacity', 'enrol_apply'), $html);
+
+        /* Each value asserted INSIDE its own row. A bare assertStringContainsString over the whole
+           page cannot see the two numbers swapped - both strings are still present, just against
+           the other label - and the first two versions of this test passed against exactly that
+           mutation. It is the trap CLAUDE.md states in general: extract the element, then assert
+           inside it. */
+        $this->assertSame(
+            get_string('reviewofmany', 'enrol_apply', (object) ['taken' => 1, 'total' => 20]),
+            $this->capacity_row($html, get_string('places', 'enrol_apply')),
+            'places must count the ACTIVE enrolment only, against customint4'
+        );
+        $this->assertSame(
+            get_string('reviewofmany', 'enrol_apply', (object) ['taken' => 2, 'total' => 30]),
+            $this->capacity_row($html, get_string('reviewapplicants', 'enrol_apply')),
+            'applicants must count every non-expired row, against customint3'
+        );
+    }
+
+    /**
+     * The value rendered against one label of the capacity panel.
+     *
+     * @param string $html The rendered review page.
+     * @param string $label The row's label.
+     * @return string The value beside it, or the empty string when the row is absent.
+     */
+    private function capacity_row(string $html, string $label): string {
+        $pattern = '~<dt[^>]*>' . preg_quote($label, '~') . '</dt>\s*<dd[^>]*>(.*?)</dd>~s';
+
+        return preg_match($pattern, $html, $m) ? trim($m[1]) : '';
+    }
+
+    /**
+     * A mentor is shown the course, and not the method's limits or its enrolment counts.
+     *
+     * They reach this page through the applicant's own user context holding nothing in the
+     * course, which is the whole point of that delegation - and the same line the group and role
+     * choosers already draw. What they lose is context for their decision; the instance's limits
+     * still apply to it either way.
+     *
+     * @return void
+     */
+    public function test_a_mentor_is_not_shown_the_methods_capacity(): void {
+        global $DB;
+
+        $DB->set_field('enrol', 'customint4', 20, ['id' => $this->instance->id]);
+        $this->instance = $DB->get_record('enrol', ['id' => $this->instance->id], '*', MUST_EXIST);
+
+        /* A user holding the deciding capability in a USER context and nothing in the course -
+           the mentor shape, built the way applications_test builds it. */
+        $mentor = $this->getDataGenerator()->create_user();
+        $applicant = $this->getDataGenerator()->create_user();
+        $roleid = $this->getDataGenerator()->create_role([
+            'shortname' => 'applymentor2',
+            'name' => 'Apply mentor',
+            'archetype' => '',
+        ]);
+        set_role_contextlevels($roleid, [CONTEXT_USER]);
+        assign_capability(
+            'enrol/apply:manageapplications',
+            CAP_ALLOW,
+            $roleid,
+            \context_system::instance()->id
+        );
+        role_assign($roleid, $mentor->id, \context_user::instance($applicant->id)->id);
+
+        $this->setUser($mentor);
+        $html = $this->render_review('Please let me in', ENROL_USER_SUSPENDED, '', [], $applicant);
+
+        $this->assertStringNotContainsString(get_string('reviewcapacity', 'enrol_apply'), $html);
+        $this->assertStringNotContainsString('of 20', $html);
+        // The control: they are seeing the page, and the course it belongs to.
+        $this->assertStringContainsString($this->course->fullname, $html);
+    }
+
+    /**
+     * An uncapped number says so rather than showing a bare zero.
+     *
+     * @return void
+     */
+    public function test_the_capacity_panel_says_when_there_is_no_limit(): void {
+        global $DB;
+
+        $this->setAdminUser();
+
+        $DB->set_field('enrol', 'customint4', 0, ['id' => $this->instance->id]);
+        $DB->set_field('enrol', 'customint3', 0, ['id' => $this->instance->id]);
+        $this->instance = $DB->get_record('enrol', ['id' => $this->instance->id], '*', MUST_EXIST);
+
+        $html = $this->render_review();
+
+        $this->assertStringContainsString(get_string('reviewnolimit', 'enrol_apply'), $html);
+        $this->assertStringNotContainsString('of 0', $html);
+    }
+
+    /**
+     * A deferred application says who deferred it, when, and what they wrote.
+     *
+     * The one case where the reader is looking at something a colleague already decided. The page
+     * used to say only "On the waiting list", while every one of these facts sat on a table
+     * queue::application() was already joining and simply not selecting.
+     *
+     * @return void
+     */
+    public function test_a_deferred_application_names_its_decider(): void {
+        global $DB;
+
+        $decider = $this->getDataGenerator()->create_user(['firstname' => 'Ana', 'lastname' => 'Souza']);
+        $this->setAdminUser();
+
+        $html = $this->render_review('Please let me in', ENROL_APPLY_USER_WAIT);
+
+        // The fixture writes the record as pending; stamp the decision the page has to describe.
+        $ueid = (int) $DB->get_field_sql(
+            "SELECT MAX(id) FROM {user_enrolments} WHERE enrolid = :enrolid",
+            ['enrolid' => $this->instance->id]
+        );
+        $where = ['userenrolmentid' => $ueid];
+        $waiting = \enrol_apply\local\submission::STATUS_WAITING;
+        $DB->set_field('enrol_apply_submission', 'status', $waiting, $where);
+        $DB->set_field('enrol_apply_submission', 'decidedby', $decider->id, $where);
+        $DB->set_field('enrol_apply_submission', 'timedecided', 1786000000, $where);
+        $DB->set_field('enrol_apply_submission', 'outcomemessage', 'Waiting for the second group.', $where);
+
+        global $PAGE;
+        $application = \enrol_apply\local\queue::application($ueid);
+        $applicant = \core_user::get_user($application->userid, '*', MUST_EXIST);
+        $html = $PAGE->get_renderer('enrol_apply')->review_form(
+            $application,
+            $applicant,
+            $this->instance,
+            new \moodle_url('/enrol/apply/manage.php', ['userenrol' => $ueid])
+        );
+
+        $this->assertStringContainsString('Ana Souza', $html);
+        $this->assertStringContainsString('Waiting for the second group.', $html);
+    }
+
+    /**
+     * A pending application describes no decision, because none has been taken.
+     *
+     * The control: without it, a panel that rendered for every application would satisfy the
+     * test above just as well as one that rendered for the right ones.
+     *
+     * @return void
+     */
+    public function test_a_pending_application_describes_no_decision(): void {
+        $this->setAdminUser();
+
+        $html = $this->render_review();
+
+        $this->assertStringNotContainsString(get_string('reviewdecision', 'enrol_apply'), $html);
     }
 
     /**
@@ -798,10 +1081,12 @@ final class renderer_test extends \advanced_testcase {
         $this->assertNotEmpty($applicant->password);
         $this->assertNotEmpty($applicant->email);
 
-        /* Scoped to the PANEL and not to the page. The review page shows the applicant's e-mail
-           address in its own row on purpose, so a whole-page assertion would fail for a reason
-           that has nothing to do with the snapshot - and a whole-page assertion that happened to
-           pass would be holding the wrong thing. */
+        /* Scoped to the PANEL and not to the page. The page legitimately shows identifying
+           values elsewhere - the identity line carries whatever showuseridentity names, which on
+           a default site includes the e-mail address - so a whole-page assertion would fail for a
+           reason that has nothing to do with the snapshot, and one that happened to pass would be
+           holding the wrong thing. The wrapper class this matches is kept in review.mustache for
+           exactly this. */
         $this->assertMatchesRegularExpression('/enrol_apply-snapshot/', $html);
         preg_match('#<div class="enrol_apply-snapshot.*?</div>#s', $html, $panel);
         $this->assertNotEmpty($panel, 'the snapshot panel did not render');
