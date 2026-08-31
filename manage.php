@@ -210,6 +210,16 @@ if ($userenrol) {
    scopes, which span instances and therefore have no single question to quote. */
 $commentlabel = $instance === null ? '' : \enrol_apply\local\commentlabel::custom($instance);
 
-$table = new enrol_apply_manage_table($id, $mentees, $commentlabel);
+/* Which context judges the applicant's identity fields, and null where none can. The instance
+   queue has one course; the site-wide queue is opened by a system-level capability holder and the
+   system context is the right question for them. The MENTEE queue is the null one: it spans
+   courses in a single statement, so no context is right for it and a per-row mask would be unsound
+   for a sortable column. $mentees is non-null on exactly that branch. */
+$identitycontext = null;
+if ($mentees === null) {
+    $identitycontext = $instance === null ? context_system::instance() : $context;
+}
+
+$table = new enrol_apply_manage_table($id, $mentees, $commentlabel, $identitycontext);
 $table->define_baseurl($manageurl);
 $renderer->manage_page($table, $manageurl, $instance);

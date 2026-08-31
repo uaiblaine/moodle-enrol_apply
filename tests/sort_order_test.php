@@ -87,7 +87,11 @@ final class sort_order_test extends \advanced_testcase {
     public function test_every_sort_the_operator_can_choose_ends_in_a_unique_key(): void {
         $this->resetAfterTest();
 
-        foreach (['course', 'fullname', 'email', 'applydate'] as $column) {
+        /* No 'email' here any more: the queue's columns beyond these three are whatever
+           showuseridentity names and this reader may see, and the table built below is given no
+           context, so it offers none. The identity columns' own sorting is covered in
+           identity_test, which can set up a reader and a context to have any. */
+        foreach (['course', 'fullname', 'applydate'] as $column) {
             foreach ([SORT_ASC, SORT_DESC] as $order) {
                 $sort = $this->table([['sortby' => $column, 'sortorder' => $order]])->get_sql_sort();
 

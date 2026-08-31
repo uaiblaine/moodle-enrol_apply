@@ -47,6 +47,9 @@ class enrol_apply_manage_table extends table_sql {
      */
     public const TOGGLE_GROUP = 'enrol-apply-queue';
 
+    /** @var array Identity field names this reader may see, from \enrol_apply\local\identity. */
+    protected $extrafields = [];
+
     /**
      * Build the table for the requested scope.
      *
@@ -62,8 +65,11 @@ class enrol_apply_manage_table extends table_sql {
      *        shipped wording. Only the instance-scoped queue can supply one: the site-wide and
      *        mentee scopes span instances, each of which may word the question differently, so a
      *        single heading there would be true of some rows and false of others.
+     * @param \context|null $identitycontext Context to judge the applicant's identity fields in,
+     *        null for a scope that spans courses and therefore shows none. See
+     *        \enrol_apply\local\identity for why the mentee scope is the null one.
      */
-    public function __construct($enrolid = 0, $mentees = null, $commentlabel = '') {
+    public function __construct($enrolid = 0, $mentees = null, $commentlabel = '', ?\context $identitycontext = null) {
         global $DB;
 
         parent::__construct('enrol_apply_manage_table');
@@ -90,6 +96,12 @@ class enrol_apply_manage_table extends table_sql {
             }
         }
 
+        /* The identity fields this reader may see, and the SQL for them. Everything about which
+           fields those are is core's decision - see \enrol_apply\local\identity - so that the
+           queue and the participants page beside it cannot answer differently. */
+        $this->extrafields = \enrol_apply\local\identity::fields($identitycontext);
+        $identitysql = \enrol_apply\local\identity::sql($identitycontext, 'u');
+
         $userfieldsapi = \core_user\fields::for_userpic()->including('username');
         $userfields = $userfieldsapi->get_sql('u', false, '', 'userid', false)->selects;
 
@@ -107,15 +119,16 @@ class enrol_apply_manage_table extends table_sql {
            would show each of their rows twice. */
         $fields = "ue.id AS userenrolmentid, ue.status AS enrolstatus, ue.timecreated AS applydate,
                    COALESCE(s.comment, ai.comment) AS applycomment, c.fullname AS course,
-                   c.id AS courseid, {$userfields}";
+                   c.id AS courseid, {$userfields}{$identitysql->selects}";
         $from = "{user_enrolments} ue
             LEFT JOIN {enrol_apply_applicationinfo} ai ON ai.userenrolmentid = ue.id
             LEFT JOIN {enrol_apply_submission} s ON s.userenrolmentid = ue.id
                  JOIN {user} u ON u.id = ue.userid
                  JOIN {enrol} e ON e.id = ue.enrolid
-                 JOIN {course} c ON c.id = e.courseid";
+                 JOIN {course} c ON c.id = e.courseid
+                 {$identitysql->joins}";
 
-        $this->set_sql($fields, $from, implode(' AND ', $wheres), $params);
+        $this->set_sql($fields, $from, implode(' AND ', $wheres), $params + $identitysql->params);
 
         $this->define_table_columns($commentlabel);
     }
@@ -163,15 +176,25 @@ class enrol_apply_manage_table extends table_sql {
      * @return void
      */
     protected function define_table_columns($commentlabel = '') {
-        $columns = ['checkboxcolumn', 'course', 'fullname', 'email', 'applydate'];
+        $columns = ['checkboxcolumn', 'course', 'fullname'];
         $headers = [
             $this->select_all_header(),
             get_string('course'),
             // The heading of a column named 'fullname' is filled in by table_sql itself.
             'fullname',
-            get_string('email'),
-            get_string('applydate', 'enrol_apply'),
         ];
+
+        /* The e-mail column used to sit here unconditionally, which is what made the queue
+           disclose more than the participants page next to it. It is now one identity field among
+           whichever ones the site configured and this reader may see - so on a default site it is
+           still here, and on a site that hides it, it is not. */
+        foreach ($this->extrafields as $field) {
+            $columns[] = $field;
+            $headers[] = \core_user\fields::get_display_name($field);
+        }
+
+        $columns[] = 'applydate';
+        $headers[] = get_string('applydate', 'enrol_apply');
 
         $columns[] = 'applycomment';
         /* The escaped spelling, because print_headers() emits this through html_writer::tag(),
@@ -251,6 +274,71 @@ class enrol_apply_manage_table extends table_sql {
             'label' => get_string('selectapplicant', 'enrol_apply', fullname($row)),
             'labelclasses' => 'visually-hidden',
         ]));
+    }
+
+    /**
+     * Render an identity column.
+     *
+     * **This is the escaping boundary and it is easy to miss.** flexible_table writes
+     * `$row->$column` into the cell with no escaping of its own, so an identity field - which is
+     * user-controlled text - reaches the markup raw unless something escapes it here. Core's own
+     * participants table closes exactly this, with exactly this method, returning s() of the value;
+     * this is that shape. The queue's other columns each have a col_*() method doing their own
+     * escaping, which is why only the identity ones need this.
+     *
+     * @param string $colname Column being rendered.
+     * @param stdClass $row Row data.
+     * @return string Rendered cell, or the empty string for a column this method does not own.
+     */
+    public function other_cols($colname, $row) {
+        if (!in_array($colname, $this->extrafields, true)) {
+            return '';
+        }
+
+        return s($row->{$colname});
+    }
+
+    /**
+     * No initials BAR either, whatever the caller asks for.
+     *
+     * The other half of the override below, and the two are genuinely separate:
+     * get_sql_where() stops the filter narrowing the query, this stops the control being drawn.
+     * Killing only the filter would leave an A-Z bar on the page that silently does nothing when
+     * clicked, which is worse than either end state.
+     *
+     * It is an override rather than a call because the argument is not the caller's to make here:
+     * renderer::capture_table() passes true to out(), and on core's dynamic-table path
+     * external\dynamic\get calls out($pagesize, true) unconditionally. Forcing it false at the
+     * source is what survives both.
+     *
+     * With use_initials false, get_initial_first() and get_initial_last() return null, so
+     * print_initials_bar()'s condition is false on all three of its terms and nothing is drawn.
+     *
+     * @param bool $bool Ignored.
+     * @return void
+     */
+    public function initialbars($bool) {
+        parent::initialbars(false);
+    }
+
+    /**
+     * No initials filter, on either path.
+     *
+     * Rendering with `out(50, false)` hides the A-Z bar and does nothing else: get_sql_where()
+     * reads `prefs['i_first']` and `prefs['i_last']` and never consults `use_initials`, and
+     * table_sql::query_db() appends the result to both the count and the data query. Measured
+     * against the real queue: with a stored `i_first = 'Z'` and no bar anywhere on the page, a
+     * three-row queue returned nothing, with no control on screen able to explain it. The
+     * preference lives in $SESSION->flextable, so it survives page loads and is invisible.
+     *
+     * Overriding this is the complete kill. Emptying $userfullnamecolumns also stops the filter
+     * and silently costs the fullname column its firstname/lastname sub-sort links, which is why
+     * it is not what this does.
+     *
+     * @return array Empty where clause and no parameters.
+     */
+    public function get_sql_where() {
+        return ['', []];
     }
 
     /**
