@@ -836,6 +836,48 @@ backup/                      group mappings, comments and the durable trail, see
   Builder cell is raw HTML, where escaping is safe and lossless, and stripping there is a
   defect rather than a deliberate cost. Only a web service return genuinely has to strip.
 
+- **The queue's identifying columns are core's decision, and the mentee scope gets none.**
+  `\enrol_apply\local\identity` is the only reader; it delegates to
+  `\core_user\fields::get_identity_fields()` and `for_identity()->get_sql()`, so the queue and the
+  participants page beside it cannot answer differently. Before it, the queue printed the e-mail
+  address unconditionally — measured on m502, where `showuseridentity` names only `username` and
+  `hiddenuserfields` lists `email`, the participants page showed no e-mail column and the queue
+  showed the address.
+
+  **Which context judges it is the whole design.** `?id=` asks about its course; the site-wide
+  queue asks about the system context, which is right for an operator holding the capability there
+  and fails closed for anybody else. The **mentee** queue passes null and is offered nothing: it
+  spans courses in one statement, so no single context is right, and a per-row mask is unsound for
+  a sortable column — a reader could recover a hidden value by sorting on it. Gate `AO`.
+
+  **Three things not to defend against twice, all measured in core.** `get_identity_fields()`
+  already drops a custom profile field that no longer exists, already drops a standard field named
+  in `$CFG->hiddenuserfields` unless the reader holds the override, and already returns `[]`
+  without `moodle/site:viewuseridentity`. So the INNER join `get_sql()` emits on
+  `{user_info_field}` cannot empty the queue through this path — it could only do that if the field
+  list came from somewhere other than that helper.
+
+  **Two things that DO need care.** `get_sql()` must be asked for named parameters or
+  `fix_sql_params()` throws `mixedtypesqlparam` — and the placeholders exist only for CUSTOM
+  profile fields, so a fixture naming standard fields alone passes against the bug. And
+  `flexible_table` writes `$row->$column` into the cell **with no escaping**, so `other_cols()`
+  returning `s()` is this plugin's own XSS boundary, exactly as it is in core's participants table.
+  Gate `AM`.
+
+  **Both teacher archetypes hold `moodle/course:viewhiddenuserfields`**, so on a stock site
+  `hiddenuserfields` never narrows what a teacher sees here; it bites a custom role holding
+  `moodle/site:viewuseridentity` without that override. A test using a stock teacher to prove the
+  hidden-field rule asserts the opposite of what it looks like it asserts.
+
+- **The queue has no initials filter, and hiding the bar was never the same as removing it.**
+  `get_sql_where()` reads `prefs['i_first']`/`['i_last']` and never consults `use_initials`, and
+  `table_sql::query_db()` appends the result to both the count and the data query — so `out(50,
+  false)` hides the control and leaves the filter running. Measured: a stored `i_first = 'Z'` took
+  a three-row queue to zero with no bar on the page. The preference lives in
+  `$SESSION->flextable`, not in a user preference, so it survives page loads invisibly. The
+  override returning `['', []]` is the complete kill; emptying `$userfullnamecolumns` also works
+  and silently costs the fullname column its sub-sort links. Gate `AN`.
+
 - **The instance's comment wording has ONE reader, `\enrol_apply\local\commentlabel`, and its
   three sinks disagree about escaping.** `customtext2` heads the applicant's comment box, the
   queue's comment column and the review page's comment label. Two of those render raw and want the
