@@ -1,6 +1,73 @@
 # Handoff — read this before touching anything
 
-State at the end of 2026-08-31. **Everything is merged; nothing is in flight.**
+State at the end of 2026-09-01. **Everything is merged; nothing is in flight.**
+
+## 2026-09-01 — the decision screens
+
+`master` at `9a5ba1b`, `version.php` at `2026083106`. Four pull requests, all green, all merged:
+[#57](https://github.com/uaiblaine/moodle-enrol_apply/pull/57) (U1),
+[#58](https://github.com/uaiblaine/moodle-enrol_apply/pull/58) (U1b),
+[#59](https://github.com/uaiblaine/moodle-enrol_apply/pull/59) (CI trigger),
+[#60](https://github.com/uaiblaine/moodle-enrol_apply/pull/60) (U2).
+
+The design and the plan they execute are new documents:
+[`applications-desk.html`](applications-desk.html) (the five answers, the mockups, and the
+decisions taken from them on 2026-08-31) and [`ui-rebuild-plan.md`](ui-rebuild-plan.md) (eight
+slices, U0–U5b). **U0, U1, U1b and U2 are done. U3 is next.**
+
+### Environment facts that cost time to rediscover
+
+- **`admin/tool/phpunit/cli/init.php --disable-composer`.** Core's init runs `composer
+  self-update`, which needs the network; this host has none through the container, so `mdl
+  phpunit-init` fails with a composer usage dump that looks like a `mdl` bug and is not. The same
+  flag exists on `admin/tool/behat/cli/init.php`. With it, the whole local environment works —
+  including core's own test suites.
+- **The MOODLE_502_STABLE CI legs cannot be built here.** `moodle-plugin-ci install` runs `npm run
+  update-packages`, which fetches 5.2's React bundle from esm.sh. It fails at *install*, before any
+  gate. The 5.01 legs install from cache and run everything. So local `--matrix` is a 5.01-only
+  verdict, and the 5.02 legs are what CI is for.
+- **The CI runner's Behat is broken independently of any change** — `http://mdlci-run-…:8000 is not
+  available`, in the matrix and in a single leg alike. Use `mdl behat m502` instead, which works.
+- **Every `version.php` bump stales both test sites.** Re-init before the mutation sweep, and judge
+  it by the test COUNT, never the failure count.
+
+### Three defects no gate in this repository could have caught
+
+- **A red gate that had been red for some time.** Core's
+  `string_manager_standard_test::test_validate_deprecated_strings_files` asserts `string_exists()`
+  for every line of every `lang/en/deprecated.txt`, and Moodle's deprecation contract KEEPS the
+  definition. `maxenrolled` and `maxenrolled_help` were listed *and* deleted, so it failed on both
+  branches. `moodle-plugin-ci` runs `--testsuite enrol_apply_testsuite`, so the plugin's own CI
+  cannot see it. **Invoke it by hand whenever `deprecated.txt` changes.**
+- **`db/upgrade.php` is executed by nothing but `mdl upgrade`.** A step calling a
+  `db/upgradelib.php` helper without requiring it died with "Call to undefined function" and left
+  the site on the version it started at — through a full green CI run, because CI installs fresh
+  from `install.xml` and never runs the upgrade path. **Running `mdl upgrade` is part of shipping a
+  step, not an optional check.**
+- **A five-lens adversarial pass over U2 found 65 confirmed findings on a slice that was already
+  green, mutation-checked and Behat-covered** — four of them defects, including a
+  `justify-content-between` that spread nothing (it was passed to a container with one child) and
+  an identity line that silently dropped every custom profile field. It is worth the run.
+
+### The trap that was met twice in one slice
+
+`test_the_capacity_panel_reports_both_numbers` passed with places and applicants **fully swapped**,
+and so did the first attempt at strengthening it: both strings remain on the page, just against the
+other label. Only assertions scoped to their own row can see it. This is the general rule CLAUDE.md
+already states — extract the element, then assert inside it — and it is easy to walk past twice.
+
+Also recorded: a mutation that "reddens nothing" may be a mutation that **did not apply**. One
+here printed a confident `OK` having changed no bytes. Check the pattern matched before believing
+the result.
+
+### What U3 changes, and the one thing to decide first
+
+U3 makes deferral a first-class triage state: a `decisionnote` column, an applicant-facing state,
+non-empty notification defaults, and a remedy for the applicant-cap ratchet. **The remedy must
+change data rather than the predicate** — three plugins outside this repo reach
+`enrol_apply_plugin::is_full()` through `is_callable()`, and gate `AC` proves only that it still
+delegates, not that its answer is unchanged.
+
 
 This covers one long session that ran across midnight. `git log --date=short` is the authority
 for dates and always has been here: #52, #53 and #54 merged on 2026-08-30, #55 on 2026-08-31.
