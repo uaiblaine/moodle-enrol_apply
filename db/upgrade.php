@@ -422,5 +422,25 @@ function xmldb_enrol_apply_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026083003, 'enrol', 'apply');
     }
 
+    if ($oldversion < 2026083104) {
+        /* db/upgradelib.php is not autoloaded and nothing else in this request has required it,
+           so the step that uses it requires it - the shape the 2026080600 step above already
+           uses. Missing this is not a warning: the step dies with "Call to undefined function"
+           part way through the upgrade, and no gate in this repository can see it, because CI
+           installs the plugin fresh from install.xml and never executes this file. */
+        require_once($CFG->dirroot . '/enrol/apply/db/upgradelib.php');
+
+        /* Clear a Custom label that is really a leftover notification recipient list. See
+           enrol_apply_clear_legacy_comment_labels() for the provenance; the short version is
+           that upstream stored the list in this column until 2016 and the 2022 fix retro-edited
+           the step that wrote it, so a site past that savepoint kept the value.
+
+           One-way: a cleared label falls back to the shipped wording, and the recipient list it
+           held has lived in customtext3 since 2022, so nothing is lost that anything still reads. */
+        enrol_apply_clear_legacy_comment_labels();
+
+        upgrade_plugin_savepoint(true, 2026083104, 'enrol', 'apply');
+    }
+
     return true;
 }

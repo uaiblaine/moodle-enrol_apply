@@ -1997,6 +1997,10 @@ profile_save_data($usernew);                    <i>// fires no event at all</i>
 
     <h3>Refactoring <code>info.php</code></h3>
     <p>
+      <p><strong>SUPERSEDED (2026-08-31).</strong> <code>info.php</code> is deleted rather than refactored, and the
+      mechanism below is wrong: <code>set_title()</code> does take only a <code>lang_string</code>, but core's own
+      <code>$string['customfieldcolumn'] = '{$a}'</code> passthrough carries arbitrary text through it. The real
+      obstacle is scope, not type. See <code>ui-rebuild-plan.md</code> U1.4.</p>
       It fits, keeping the URL and the <code>id</code> parameter so neither the action icon nor the Behat context has to
       be touched. Two losses are structural and have to be accepted explicitly: the comment column header coming from
       <code>customtext2</code> is <strong>inexpressible</strong> (<code>column::set_title()</code> accepts only a

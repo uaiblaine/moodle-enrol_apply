@@ -126,9 +126,24 @@ class enrol_apply_edit_form extends moodleform {
         $mform->setDefault('customint7', 0);
         $mform->addHelpButton('customint7', 'opt_commentaryzone', 'enrol_apply');
 
+        /* No setDefault. The one that stood here was dead - set_data() overrides it for any
+           non-NULL scalar and get_instance_defaults() seeds '' - and reviving it would be worse
+           than leaving it dead: the value it pre-filled was a get_string() call, so saving the
+           form would freeze the CREATING teacher's own language into {enrol}.customtext2, after
+           which the label would never follow the language pack again. Empty is the correct
+           default, and both readers fall back to the shipped wording when it is empty.
+
+           hideIf, because the element labels a field that only exists when the commentary zone
+           is on, and a live editable text box for a control that is switched off is what made
+           this setting read as a mystery. It costs nothing stored: hideIf sets the hidden
+           attribute and display:none on the wrapper and does NOT disable the input
+           (lib/form/form.js, the _updateDependentElement hide branch), so a label survives its
+           zone being switched off and comes back with it. disabledIf would not - a disabled
+           field posts nothing. */
         $mform->addElement('text', 'customtext2', get_string('custom_label', 'enrol_apply'));
         $mform->setType('customtext2', PARAM_TEXT);
-        $mform->setDefault('customtext2', get_string('comment', 'enrol_apply'));
+        $mform->addHelpButton('customtext2', 'custom_label', 'enrol_apply');
+        $mform->hideIf('customtext2', 'customint7', 'eq', 0);
 
         /* The two capacity numbers, and they answer different questions. customint3 is how
            many people may APPLY; customint4 is how many may be APPROVED at once. The gap

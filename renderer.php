@@ -360,7 +360,11 @@ class enrol_apply_renderer extends plugin_renderer_base {
             'status' => $waiting
                 ? get_string('outcomewaiting', 'enrol_apply')
                 : get_string('outcomeawaiting', 'enrol_apply'),
-            'commentlabel' => get_string('applycomment', 'enrol_apply'),
+            /* Plain, not escaped: review.mustache renders this through a DOUBLE stash, so
+               Mustache escapes it there and the escaped spelling would show the entities. This
+               is the one of the three label sinks that differs, which is why the helper takes a
+               flag rather than deciding for everybody. */
+            'commentlabel' => \enrol_apply\local\commentlabel::custom($instance, false),
             'hascomment' => trim((string) $application->applycomment) !== '',
             /* Escaped exactly once, and with the line breaks the applicant typed. A double
                stash alone would escape correctly and then render every paragraph as one run,
@@ -411,23 +415,6 @@ class enrol_apply_renderer extends plugin_renderer_base {
             get_string('backtoapplications', 'enrol_apply'),
             'get'
         ))->export_for_template($this));
-        echo $this->footer();
-    }
-
-    /**
-     * Render the page listing the comments submitted with the applications.
-     *
-     * @param enrol_apply_info_table $table Table listing the applications and their comments.
-     * @param moodle_url $manageurl Base url of the page.
-     * @param stdClass|null $instance Enrol instance when the page is scoped to one, null otherwise.
-     * @return void
-     */
-    public function info_page($table, $manageurl, $instance) {
-        echo $this->header();
-        echo $this->heading(get_string('submitted_info', 'enrol_apply'));
-        echo $this->render_from_template('enrol_apply/info', [
-            'tablehtml' => $this->capture_table($table),
-        ]);
         echo $this->footer();
     }
 

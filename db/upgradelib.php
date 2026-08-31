@@ -111,3 +111,48 @@ function enrol_apply_seed_field_pool(): bool {
 
     return true;
 }
+
+/**
+ * Blank every Custom label that is really a leftover notification recipient list.
+ *
+ * Upstream made customtext2 the notification recipient list in commit 3d27870 (2016-06-13) while
+ * the custom label was still read from the same column. Three writers put a value there - the
+ * 2016060803 upgrade step, add_instance()'s defaults and the instance edit form - and all three
+ * could write the literal marker below. Alexander Bias's b88a8d2 (2022-02-04), titled "for fresh
+ * installations only", moved all three to customtext3 and RETRO-EDITED the 2016 step, so a site
+ * already past that savepoint never re-ran it and kept the value. Such a site shows the marker as
+ * the heading of the applicant's comment box.
+ *
+ * Only the exact marker is cleared. The same column could also hold a comma-separated list of
+ * user ids, and that shape is deliberately left alone: it cannot be told apart from a label
+ * somebody typed, and this one can. A reader-side guard in \enrol_apply\local\commentlabel
+ * covers what a restore can still bring back, since customtext2 is the one custom field
+ * restore_instance() does not sanitise.
+ *
+ * Idempotent by construction: the WHERE is the negation of the step's own effect.
+ *
+ * @return int How many instances were cleaned.
+ */
+function enrol_apply_clear_legacy_comment_labels(): int {
+    global $DB;
+
+    $marker = \enrol_apply\local\commentlabel::LEGACY_MARKER;
+
+    $affected = $DB->count_records_select(
+        'enrol',
+        'enrol = :enrol AND customtext2 = :marker',
+        ['enrol' => 'apply', 'marker' => $marker]
+    );
+
+    if ($affected > 0) {
+        $DB->set_field_select(
+            'enrol',
+            'customtext2',
+            '',
+            'enrol = :enrol AND customtext2 = :marker',
+            ['enrol' => 'apply', 'marker' => $marker]
+        );
+    }
+
+    return $affected;
+}

@@ -6,6 +6,59 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Removed
+
+- **The *Enrol info* page is gone.** `enrol/apply/info.php` listed the comments submitted with
+  the applications awaiting a decision. Measured against the approval queue, it was a strict
+  subset of it in every dimension that matters: the same rows, built from the same predicate
+  helper; the same capability, so nobody could reach one and not the other; and three columns the
+  queue already had. Its only inbound link was one action icon on the enrolment methods page, and
+  no test asserted that icon existed. The one thing it rendered that nothing else did — the
+  instance's own wording above the comment column — now appears on the approval queue and the
+  review page instead, which is where the comments are actually read.
+
+  The `submitted_info` string is retired through `lang/en/deprecated.txt` and, as core's
+  deprecation contract requires, its definition stays in both packs.
+
+### Fixed
+
+- **Two strings were listed as deprecated while their definitions had been deleted**, which fails
+  core's own `core\string_manager_standard_test::test_validate_deprecated_strings_files` on both
+  supported branches. Moodle's deprecation contract keeps the definition and warns at
+  `debugdeveloper` when it is used; deleting it means every deprecated string in the file fails
+  the assertion. `maxenrolled` and `maxenrolled_help` are restored. Nothing in this plugin's own
+  CI could see it: `moodle-plugin-ci` runs the plugin's testsuite, and that test is core's.
+
+- **The *Custom label* setting could be showing a leftover notification recipient list.** Upstream
+  made `customtext2` the notification recipient list in June 2016 while still reading the custom
+  label from the same column, and the February 2022 fix that moved the list to `customtext3`
+  retro-edited the upgrade step that had written it — so a site already past that savepoint never
+  re-ran the step and kept the value. On such a site the applicant's comment box is headed
+  `$@ALL@$`. An upgrade step now clears exactly that literal, and the reader falls back to the
+  shipped wording for it as well, because a restore can bring one back: `customtext2` is the one
+  custom field `restore_instance()` does not sanitise.
+
+  Only that literal is cleared. The same column could also hold a comma-separated list of user
+  ids, and that shape is deliberately left alone — it cannot be told apart from a label somebody
+  genuinely typed. The cleanup is one-way; the recipient list itself has lived in `customtext3`
+  since 2022, so nothing that is still read is lost.
+
+- **The *Custom label* now does something visible, and says when it does not.** Its wording heads
+  the comment column on the approval queue and the label on the review page, so the question a
+  teacher asks and the answers they read carry the same words. The field is hidden unless
+  *Commentary field* is on — it labels a box that otherwise does not exist — and it has a help
+  text saying so. Its dead default is gone: it never once pre-filled, and reviving it would have
+  frozen the creating teacher's own language into the database.
+
+  Each of the three places the wording is read needs a different escaping, and nothing in any
+  pipeline can see which: two render raw markup and one renders through a Mustache double stash.
+  One helper now owns the switch, and three mutation gates hold it.
+
+- **Two English strings said the wrong thing.** *Enrol date* is the date the **application** was
+  submitted, which the Brazilian pack has always said correctly; it is now *Application date*. And
+  the queue's help text promised grey rows while the stylesheet has drawn a grey left bar since
+  the queue was restyled.
+
 ### Changed
 
 - **The cohort refusal no longer names the cohort.** When a non-member is refused by the

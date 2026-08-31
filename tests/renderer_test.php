@@ -465,6 +465,31 @@ final class renderer_test extends \advanced_testcase {
     }
 
     /**
+     * The instance's own comment label heads the review page, escaped exactly once.
+     *
+     * This is the sink that differs from the other two, and the reason the helper takes a flag.
+     * The queue's column header and the applicant form's element label both render RAW and want
+     * the escaped spelling; review.mustache renders this one through a DOUBLE stash, so it wants
+     * the PLAIN spelling and Mustache escapes it. Handing it the escaped one shows the reader the
+     * entities, which is a defect no gate in this repository can see - phpcs reads PHP, the
+     * mustache lint reads structure, and neither knows which stash a value lands in.
+     *
+     * @return void
+     */
+    public function test_the_instance_comment_label_reaches_the_review_page_escaped_once(): void {
+        global $DB;
+
+        $DB->set_field('enrol', 'customtext2', self::AWKWARD_NAME, ['id' => $this->instance->id]);
+        $DB->set_field('enrol', 'customint7', 1, ['id' => $this->instance->id]);
+        $this->instance = $DB->get_record('enrol', ['id' => $this->instance->id], '*', MUST_EXIST);
+
+        $html = $this->render_review();
+
+        $this->assertStringContainsString(self::ESCAPED_ONCE, $html);
+        $this->assertStringNotContainsString(self::ESCAPED_TWICE, $html);
+    }
+
+    /**
      * The course name reaches the review page escaped exactly once.
      *
      * @return void

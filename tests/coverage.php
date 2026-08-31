@@ -67,8 +67,6 @@ class enrol_apply_coverage extends phpunit_coverage_info {
         'db/upgradelib.php',
         'edit.php',
         'edit_form.php',
-        'info.php',
-        'info_table.php',
         'manage.php',
         'manage_table.php',
         'notification.php',

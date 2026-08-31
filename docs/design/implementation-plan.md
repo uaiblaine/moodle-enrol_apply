@@ -1217,6 +1217,7 @@ dropdown' you liked".
 - **Do not copy `manage.php`'s `can_view()` into `info.php`.** `info.php`'s authorisation is narrower
   — course (`info.php:44-45`) or system (`:52-53`) only, without the mentor's user-context branch.
   Copying `manage.php` silently widens who reads the submitted comments.
+- **SUPERSEDED (2026-08-31).** `info.php` is deleted, not refactored, so this whole item is moot — and the mechanism it names is wrong. `set_title()` really does take only a `lang_string`, but that is not the obstacle: core's own `$string['customfieldcolumn'] = '{$a}'` passthrough carries arbitrary text through it (`lang/en/reportbuilder.php:84`, same line on both branches). The real obstacle is scope — one entity feeds a site-wide datasource and a course-scoped report, and a course may hold two instances wording the question differently. See `ui-rebuild-plan.md` U1.4.
 - **Two structural losses in the `info.php` refactor, to accept explicitly.** The comment column
   header coming from `customtext2` is inexpressible (`column::set_title()` accepts only a
   `lang_string` — `reportbuilder/classes/local/report/column.php:165` — and the class is `final` at

@@ -1,2 +1,3 @@
 maxenrolled,enrol_apply
 maxenrolled_help,enrol_apply
+submitted_info,enrol_apply

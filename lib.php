@@ -867,12 +867,6 @@ class enrol_apply_plugin extends enrol_plugin {
                 $managelink,
                 new pix_icon('i/users', get_string('confirmenrol', 'enrol_apply'), 'core', ['class' => 'iconsmall'])
             );
-
-            $infolink = new moodle_url('/enrol/apply/info.php', ['id' => $instance->id]);
-            $icons[] = $OUTPUT->action_icon(
-                $infolink,
-                new pix_icon('i/files', get_string('submitted_info', 'enrol_apply'), 'core', ['class' => 'iconsmall'])
-            );
         }
 
         /* Its own capability, checked separately: the report shows the frozen profile snapshot

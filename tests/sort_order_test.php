@@ -17,17 +17,15 @@
 namespace enrol_apply;
 
 use PHPUnit\Framework\Attributes\CoversClass;
-use PHPUnit\Framework\Attributes\DataProvider;
 
 defined('MOODLE_INTERNAL') || die();
 
 global $CFG;
 require_once($CFG->dirroot . '/enrol/apply/lib.php');
 require_once($CFG->dirroot . '/enrol/apply/manage_table.php');
-require_once($CFG->dirroot . '/enrol/apply/info_table.php');
 
 /**
- * Both listings order their rows by something unique.
+ * The approval queue orders its rows by something unique.
  *
  * These assert on the ORDER BY the table emits, deliberately, and not on the order rows come
  * back in. A tie only reorders when the database chooses to reorder it, and at fixture size it
@@ -40,32 +38,18 @@ require_once($CFG->dirroot . '/enrol/apply/info_table.php');
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 #[CoversClass(\enrol_apply_manage_table::class)]
-#[CoversClass(\enrol_apply_info_table::class)]
 final class sort_order_test extends \advanced_testcase {
-    /**
-     * The two listings, and the sortable columns each offers.
-     *
-     * @return array Table class => the sortable column names it defines.
-     */
-    public static function table_provider(): array {
-        return [
-            'approval queue' => [\enrol_apply_manage_table::class, ['course', 'fullname', 'email', 'applydate']],
-            'submitted comments' => [\enrol_apply_info_table::class, ['fullname', 'applydate']],
-        ];
-    }
-
     /**
      * Build a table of the given class, set up as a page would.
      *
      * setup() reads the sort parameters from the request and is what makes get_sort_columns()
      * callable at all, so it cannot be skipped.
      *
-     * @param string $class Table class to build.
      * @param array $sortdata Sort items as flexible_table::set_sortdata() takes them.
      * @return \table_sql The table, set up.
      */
-    protected function table(string $class, array $sortdata = []): \table_sql {
-        $table = new $class();
+    protected function table(array $sortdata = []): \table_sql {
+        $table = new \enrol_apply_manage_table();
         $table->define_baseurl(new \moodle_url('/enrol/apply/manage.php'));
         if ($sortdata) {
             $table->set_sortdata($sortdata);
@@ -81,16 +65,14 @@ final class sort_order_test extends \advanced_testcase {
     /**
      * The default sort ends in a unique key.
      *
-     * @param string $class Table class under test.
      * @return void
      */
-    #[DataProvider('table_provider')]
-    public function test_the_default_sort_ends_in_a_unique_key(string $class): void {
+    public function test_the_default_sort_ends_in_a_unique_key(): void {
         $this->resetAfterTest();
 
-        $sort = $this->table($class)->get_sql_sort();
+        $sort = $this->table()->get_sql_sort();
 
-        $this->assertMatchesRegularExpression('/\bue\.id ASC\b[^,]*$/', $sort, $class . ': ' . $sort);
+        $this->assertMatchesRegularExpression('/\bue\.id ASC\b[^,]*$/', $sort, $sort);
     }
 
     /**
@@ -100,29 +82,23 @@ final class sort_order_test extends \advanced_testcase {
      * gradereport_history appends its unique key only when the sort is exactly the default one,
      * so clicking any other heading silently drops it.
      *
-     * @param string $class Table class under test.
-     * @param array $columns Every sortable column the table defines.
      * @return void
      */
-    #[DataProvider('table_provider')]
-    public function test_every_sort_the_operator_can_choose_ends_in_a_unique_key(
-        string $class,
-        array $columns
-    ): void {
+    public function test_every_sort_the_operator_can_choose_ends_in_a_unique_key(): void {
         $this->resetAfterTest();
 
-        foreach ($columns as $column) {
+        foreach (['course', 'fullname', 'email', 'applydate'] as $column) {
             foreach ([SORT_ASC, SORT_DESC] as $order) {
-                $sort = $this->table($class, [['sortby' => $column, 'sortorder' => $order]])->get_sql_sort();
+                $sort = $this->table([['sortby' => $column, 'sortorder' => $order]])->get_sql_sort();
 
                 $this->assertMatchesRegularExpression(
                     '/\bue\.id ASC\b[^,]*$/',
                     $sort,
-                    $class . ' sorted by ' . $column . ': ' . $sort
+                    'sorted by ' . $column . ': ' . $sort
                 );
                 // The control: the column the operator picked really is in the sort, so the
                 // assertion above is not being satisfied by a sort that ignored the click.
-                $this->assertStringContainsString($column, $sort, $class . ': ' . $sort);
+                $this->assertStringContainsString($column, $sort, $sort);
             }
         }
     }
@@ -138,10 +114,7 @@ final class sort_order_test extends \advanced_testcase {
     public function test_the_unique_key_comes_last(): void {
         $this->resetAfterTest();
 
-        $sort = $this->table(
-            \enrol_apply_manage_table::class,
-            [['sortby' => 'course', 'sortorder' => SORT_ASC]]
-        )->get_sql_sort();
+        $sort = $this->table([['sortby' => 'course', 'sortorder' => SORT_ASC]])->get_sql_sort();
 
         /* Matched by prefix rather than by equality: construct_order_by() appends the driver's
            own NULL ordering, so PostgreSQL gives "ue.id ASC NULLS FIRST" where MariaDB gives

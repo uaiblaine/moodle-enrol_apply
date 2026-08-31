@@ -8,6 +8,8 @@ leaves it out of the release zip.
 |---|---|---|
 | [`profile-fields-and-audit.html`](profile-fields-and-audit.html) | Approved | The design and its rationale, with UI mockups. Read this to understand *why*. |
 | [`implementation-plan.md`](implementation-plan.md) | Ready, not started | Eleven slices with files, traps and a runnable verification checklist each. Read this to know *what to do*. |
+| [`applications-desk.html`](applications-desk.html) | Decided 2026-08-31 | Answers to five UI questions about the approval screens, with mockups of a rebuilt queue and review page, and the decisions taken from them. Read this to understand *what the screens should be*. |
+| [`ui-rebuild-plan.md`](ui-rebuild-plan.md) | Ready, not started | Eight slices (U0&ndash;U5b) rebuilding the two decision screens and fixing what the investigation found. Read this to know *what to do*. |
 
 Start with the decision log below, then the plan. The HTML document is the
 reference you go back to when a decision looks arbitrary — it always has a reason,
@@ -18,6 +20,14 @@ It carries UI mockups of the enrolment card, the application form, the
 post-submission page, the instance configuration and the course report. Fonts load
 from Google Fonts, so the page falls back to system faces offline; nothing in the
 content depends on them.
+
+`applications-desk.html` is a self-contained page too, and answers a different
+question: not what the data model should be, but what the two decision screens
+should look like. It carries mockups of the approval queue (desktop, mobile and a
+split reading view), the single-application review page, and the participants-page
+bulk menu, plus a costed list of the requirements behind them and the defects the
+investigation turned up on the way. Its quoted requirements are the owner's own
+words, kept verbatim in Brazilian Portuguese; everything else is English.
 
 ## Decision log
 
