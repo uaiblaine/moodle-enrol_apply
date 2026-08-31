@@ -213,7 +213,7 @@ class enrol_apply_plugin extends enrol_plugin {
             $body = $allowapply;
         } else if ($DB->record_exists('user_enrolments', ['userid' => $USER->id, 'enrolid' => $instance->id])) {
             $body = get_string('notification', 'enrol_apply');
-        } else if (\enrol_apply\local\capacity::is_full($instance)) {
+        } else if (\enrol_apply\local\capacity::applications_closed($instance)) {
             $body = get_string('maxenrolledreached', 'enrol_apply');
         } else {
             $body = get_string('youwillchecknddetails', 'enrol_apply');
@@ -324,7 +324,7 @@ class enrol_apply_plugin extends enrol_plugin {
      * @return bool True when the instance has no place left.
      */
     public function is_full(stdClass $instance) {
-        return \enrol_apply\local\capacity::is_full($instance);
+        return \enrol_apply\local\capacity::applications_closed($instance);
     }
 
     /**
@@ -407,7 +407,7 @@ class enrol_apply_plugin extends enrol_plugin {
             if ($DB->record_exists('user_enrolments', ['userid' => $userid, 'enrolid' => $instance->id])) {
                 return \enrol_apply\local\application_result::already_applied();
             }
-            if (\enrol_apply\local\capacity::is_full($instance)) {
+            if (\enrol_apply\local\capacity::applications_closed($instance)) {
                 /* No placeholder. The count is not the maximum - it is only known to have
                    reached it - and the ceiling is competitive information an applicant
                    cannot act on anyway. */
@@ -1001,6 +1001,7 @@ class enrol_apply_plugin extends enrol_plugin {
         $fields['status'] = $this->get_config('status');
         $fields['roleid'] = $this->get_config('roleid', 0);
         $fields['customint3'] = (int) $this->get_config('maxenrolled', 0);
+        $fields['customint4'] = (int) $this->get_config('places', 0);
         $fields['customint5'] = 0;
         $fields['customint6'] = $this->get_config('newenrols');
         $fields['customint7'] = (int) $this->get_config('opt_commentaryzone', 0);

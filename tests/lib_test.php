@@ -436,7 +436,7 @@ final class lib_test extends \advanced_testcase {
      * is_callable() on the plugin object, because for each of them enrol_apply is an OPTIONAL
      * dependency and a reference into its namespace is one the autoloader would have to
      * resolve on a site without it. local_dimensions enforces that with a test over its own
-     * source. So this is not a redundant wrapper over capacity::is_full(): it is the only
+     * source. So this is not a redundant wrapper over capacity::applications_closed(): it is the only
      * spelling those callers are allowed to use, and deleting it breaks them silently, since
      * is_callable() would simply start returning false and each would fall back to the
      * unfiltered count this change exists to stop.
@@ -460,7 +460,7 @@ final class lib_test extends \advanced_testcase {
         $this->plugin->enrol_user($this->instance, $expired->id, null, 0, time() - DAYSECS, ENROL_USER_ACTIVE);
         $instance = $this->reload_instance();
         $this->assertSame(
-            \enrol_apply\local\capacity::is_full($instance),
+            \enrol_apply\local\capacity::applications_closed($instance),
             $this->plugin->is_full($instance)
         );
     }

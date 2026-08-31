@@ -19,6 +19,46 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `enrol_self` still names the cohort in the same situation; closing that would mean forking a core
   plugin, and has deliberately not been done.
 
+### Added
+
+- **Places: a second, separate number.** The enrolment method now carries two limits that answer
+  two different questions. *Maximum applicants* is how many applications it will accept — when
+  that is reached, nobody else may apply. *Places* is how many applicants may be **approved** at
+  one time.
+
+  The gap between them is the point. Approval here is discretionary, so not every applicant is
+  approved, and a method can sensibly accept thirty applications for ten places. Until now there
+  was one number trying to be both.
+
+  **Reaching the places number does not block an approval.** The manager is told and decides —
+  which is the premise the whole plugin is built on. The warning appears on the approval queue,
+  including when that queue is *empty*, which is exactly when somebody most needs to know why
+  nothing is arriving.
+
+  Both numbers ignore enrolments whose period has ended, for the same reason the applicant limit
+  already did. Places default to 0, meaning no limit, on every existing enrolment method: the
+  feature is opt-in and nothing changes until somebody sets a number.
+
+  Applicants are not shown either number. They are told that applications are open or closed,
+  and nothing more. Showing how many places remain would be honest about the places and
+  misleading about the odds, because what actually decides an applicant's chances is how many
+  other applications are pending — the number the site is least willing to publish.
+
+### Changed
+
+- **"Max enrolled users" is now "Maximum applicants", which is what it always counted.** The
+  label said *enrolled*, the help text said *apply*, and the code counted applications — the
+  label and the help had contradicted each other since the feature was written, and the help was
+  the one telling the truth. The setting also moves out of the *Profile fields requested* section
+  of the instance form, where it had been sitting by accident: nothing closed that section, so
+  everything after it inherited the wrong heading — and when a method requested no profile
+  fields the heading was never opened and the same setting appeared somewhere else entirely.
+
+  Sites that translated the old label will see the shipped English until they translate the new
+  one. That is deliberate: the string's *meaning* changed, so a site that customised the old,
+  wrong label would otherwise keep it — now beside a second number it no longer distinguishes
+  itself from.
+
 ### Fixed
 
 - **A course whose places expired stopped accepting applications for ever.** The limit on how

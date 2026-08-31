@@ -907,4 +907,75 @@ final class renderer_test extends \advanced_testcase {
             $url
         );
     }
+
+    /**
+     * The queue tells the manager when the places are gone.
+     *
+     * The state worth surfacing is places exhausted while applications are still open: a
+     * manager receiving applications they have nowhere to put. Places never block an approval -
+     * they are an indicator, and the decision stays the manager's - so this notice is the whole
+     * of how that number reaches the person who set it.
+     *
+     * The control renders the same queue with a place free, and is not optional: an assertion
+     * that the notice IS present passes just as well against a renderer that shows it always.
+     *
+     * @return void
+     */
+    public function test_the_queue_says_when_the_places_are_gone(): void {
+        global $DB, $PAGE;
+
+        $DB->set_field('enrol', 'customint4', 1, ['id' => $this->instance->id]);
+        $instance = $DB->get_record('enrol', ['id' => $this->instance->id], '*', MUST_EXIST);
+
+        $url = new \moodle_url('/enrol/apply/manage.php', ['id' => $this->instance->id]);
+        $PAGE->set_url($url);
+        $PAGE->set_context(\context_course::instance($this->course->id));
+        $renderer = $PAGE->get_renderer('enrol_apply');
+        $notice = get_string('placesfull', 'enrol_apply', 1);
+
+        // The control: one place, nobody approved, so nothing to say.
+        $table = new \enrol_apply_manage_table($this->instance->id);
+        $table->define_baseurl($url);
+        $this->assertStringNotContainsString($notice, $renderer->manage_form($table, $url, $instance));
+
+        // Fill it.
+        $taker = $this->getDataGenerator()->create_user();
+        $this->plugin->enrol_user($this->instance, $taker->id, null, 0, 0, ENROL_USER_ACTIVE);
+
+        $table = new \enrol_apply_manage_table($this->instance->id);
+        $table->define_baseurl($url);
+        $this->assertStringContainsString($notice, $renderer->manage_form($table, $url, $instance));
+    }
+
+    /**
+     * The notice survives an empty queue, which is the state it exists for.
+     *
+     * An instance whose APPLICANT limit is reached has nothing left to list, and that is exactly
+     * when the manager most needs to know why. Rendering the notice inside the template's
+     * hasrows section would make it disappear in precisely that case - the failure this test
+     * exists to prevent, and one no assertion about a populated queue could ever see.
+     *
+     * @return void
+     */
+    public function test_the_places_notice_survives_an_empty_queue(): void {
+        global $DB, $PAGE;
+
+        $DB->set_field('enrol', 'customint4', 1, ['id' => $this->instance->id]);
+        $instance = $DB->get_record('enrol', ['id' => $this->instance->id], '*', MUST_EXIST);
+
+        $taker = $this->getDataGenerator()->create_user();
+        $this->plugin->enrol_user($this->instance, $taker->id, null, 0, 0, ENROL_USER_ACTIVE);
+
+        $url = new \moodle_url('/enrol/apply/manage.php', ['id' => $this->instance->id]);
+        $PAGE->set_url($url);
+        $PAGE->set_context(\context_course::instance($this->course->id));
+
+        $table = new \enrol_apply_manage_table($this->instance->id);
+        $table->define_baseurl($url);
+        $html = $PAGE->get_renderer('enrol_apply')->manage_form($table, $url, $instance);
+
+        // The precondition: there really is nothing awaiting a decision.
+        $this->assertSame(0, (int) $table->totalrows);
+        $this->assertStringContainsString(get_string('placesfull', 'enrol_apply', 1), $html);
+    }
 }

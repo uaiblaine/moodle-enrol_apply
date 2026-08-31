@@ -239,8 +239,20 @@ if ($ADMIN->fulltree) {
 
     $settings->add(new admin_setting_configtext(
         'enrol_apply/maxenrolled',
-        get_string('maxenrolled', 'enrol_apply'),
-        get_string('maxenrolled_help', 'enrol_apply'),
+        get_string('maxapplicants', 'enrol_apply'),
+        get_string('maxapplicants_help', 'enrol_apply'),
+        0,
+        PARAM_INT
+    ));
+
+    /* The config key stays 'maxenrolled' while the strings become 'maxapplicants'. The lang key
+       had to change because its MEANING did - it now names one of two numbers rather than the
+       only one - but a config key is data: renaming it would silently reset the limit every site
+       has already configured. */
+    $settings->add(new admin_setting_configtext(
+        'enrol_apply/places',
+        get_string('places', 'enrol_apply'),
+        get_string('places_help', 'enrol_apply'),
         0,
         PARAM_INT
     ));

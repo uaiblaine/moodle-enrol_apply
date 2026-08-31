@@ -163,6 +163,27 @@ if ($formaction !== '' && $userenrolments) {
         default:
             throw new moodle_exception('invalidformaction', 'enrol_apply');
     }
+    /* Warn when the places are gone, re-reading AFTER the decisions rather than predicting -
+       the same discipline the counts in classes/bulk/ apply, and the only truthful reading when
+       a decision method can silently skip a row.
+
+       Places do not block an approval: the manager is told and decides, which is the whole
+       premise of a plugin built around discretion. So this is a warning beside the success
+       message, not a refusal instead of one.
+
+       Emitted here and never from complete_approval(), which runs TWICE for a queue approval -
+       the before_user_enrolment_updated hook reaches it before confirm_enrolment() does - while
+       \core\notification::add() does not deduplicate. A batch of ten would warn twenty times,
+       and the earlier of the two passes sees pre-write state anyway.
+
+       Only where an instance is in scope: the site-wide and mentee queues span instances, and
+       there is no single places number to report for them. */
+    if ($instance !== null && \enrol_apply\local\capacity::places_full($instance)) {
+        \core\notification::warning(
+            get_string('placesfull', 'enrol_apply', \enrol_apply\local\capacity::places($instance))
+        );
+    }
+
     redirect(
         $afterdecisionurl ?? $manageurl,
         get_string('applicationsupdated', 'enrol_apply'),

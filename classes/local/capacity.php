@@ -19,37 +19,51 @@ namespace enrol_apply\local;
 use stdClass;
 
 /**
- * How many places an apply instance has, and how many are still held.
+ * The two capacity numbers an apply instance carries, and how many of each are held.
  *
- * One definition, read by the enrolment card, the form's access check and the write door.
- * It used to be written out at all three, which is how it came to be enforced on some doors
- * and not others: the cap was held by a single test on one of the three, so deleting it
- * reddened nothing at all.
+ * **They are two different numbers answering two different questions**, and everything in this
+ * class exists to keep them apart:
  *
- * **This is NOT queue::awaiting_decision_where(), and composing the two is the most damaging
- * mistake available here.** That predicate is "not active AND not expired" - it answers which
- * applications are still waiting for somebody to decide them. Capacity asks a different
- * question: which enrolments still hold a place. An approved, active learner holds one, and
- * that is exactly what the queue's `status != active` clause excludes. Borrowing it, or
- * indexing into the array it returns to lift the timeend half out, makes the cap exceedable by
- * the number of approvals - and it does so silently, because fix_sql_params() tolerates
- * surplus named parameters, so a half-refactor that passes the whole parameter array with one
- * clause runs clean and fails no test.
+ * - APPLICANTS (customint3) is how many applications the method will accept. Pending, deferred
+ *   and approved rows all count, because each of those people is in the pipeline. When it is
+ *   reached, nobody else may apply.
+ * - PLACES (customint4) is how many applicants may be approved at once. Only ACTIVE rows count.
+ *   When it is reached the manager is warned and nothing is blocked - see below.
  *
- * **It is also not core's access predicate.** enrol_get_all_users_courses() and friends pair
- * the timeend test with `timestart < :now`, and that half must not be copied: somebody enrolled
- * with a future start date will get access, so they hold a place now. The line this class
- * draws is "will this row ever grant access again?" - expired: no; not started yet: yes.
+ * The gap between them is what makes overbooking expressible: accept thirty applications for ten
+ * places, because approval is discretionary and most plugins in this space wrongly assume it is
+ * not. Before this class had both numbers, the single cap was labelled for one and implemented
+ * as the other.
  *
- * **It diverges from core's own count, on purpose.** The Users column on the Enrolment methods
- * page (enrol/instances.php) counts {user_enrolments} unfiltered, and so does enrol_self's cap.
- * So an administrator can see "Users: 10" against a limit of 10 on a course that is still
- * accepting applications. That is confusing, and it is the lesser of the two evils: counting
- * expired rows makes the cap a ratchet that only ever tightens. This plugin ships
- * expiredaction = ENROL_EXT_REMOVED_KEEP, whose arm in process_expirations() is literally "no
- * changes", so an expired enrolment keeps its row forever - and a course whose places were
- * filled and then expired had applications closed permanently, with an empty approval queue
- * and no screen anywhere able to say why.
+ * **Places do not block an approval, by decision.** The manager is warned and decides. This
+ * plugin's whole premise is that a human judges each application, and a hard block would also
+ * have to be reproduced on three routes - the queue, the participants-page bulk action and the
+ * per-row icon - the last of which has no channel to explain a refusal at all. The warning is
+ * emitted where somebody is standing; never from complete_approval(), which runs TWICE for a
+ * queue approval and would double every message.
+ *
+ * **Neither is queue::awaiting_decision_where().** That predicate is "not active AND not
+ * expired" and answers which applications still need deciding. It is the complement of
+ * places_taken() over the non-expired rows, not a substitute for either method here, and
+ * borrowing it silently: fix_sql_params() tolerates surplus named parameters, so a half-refactor
+ * that shares one parameter array between two counts runs clean and reddens nothing. That is
+ * also why the two counts below are two methods with two full parameter arrays, rather than one
+ * method taking a status flag.
+ *
+ * **Neither copies core's access predicate.** enrol_get_all_users_courses() and friends pair the
+ * expiry test with `timestart < :now`. Somebody approved with a future start date will get
+ * access, so they hold a place now. The line drawn here is "will this row ever grant access
+ * again?" - expired: no; not started yet: yes.
+ *
+ * **Both exclude expired rows, and that is not optional.** The plugin ships
+ * expiredaction = ENROL_EXT_REMOVED_KEEP, whose arm of process_expirations() is literally "no
+ * changes", so an expired row survives - and stays ACTIVE, which is why places needs the clause
+ * just as much as applicants does. Counted, either number becomes a ratchet that only ever
+ * tightens: applications closed for ever, or a course that can never approve anybody again.
+ *
+ * The cost is a deliberate divergence from core's unfiltered Users column
+ * (enrol/instances.php) and from enrol_self's cap. Documented rather than hidden, because a
+ * teacher comparing the two screens will notice.
  *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine
@@ -57,33 +71,31 @@ use stdClass;
  */
 final class capacity {
     /**
-     * How many places the instance allows.
+     * How many applications this method will accept in total.
      *
-     * Anything at or below zero means "no limit", which is the reading all three call sites
-     * have always had. It must stay `> 0` rather than `!== 0`: db/upgrade.php writes
-     * customint3 = null on one path, and a negative value would otherwise turn an uncapped
-     * instance into a permanently full one.
+     * Anything at or below zero means "no limit", which is the reading every call site has
+     * always had. It must stay `> 0` rather than `!== 0`: db/upgrade.php writes customint3 =
+     * null on one path, and a negative would otherwise mean "permanently closed".
      *
      * @param stdClass $instance Course enrol instance.
-     * @return int Places allowed, or 0 when the instance is uncapped.
+     * @return int Applications allowed, or 0 when there is no limit.
      */
-    public static function limit(stdClass $instance): int {
+    public static function applicant_limit(stdClass $instance): int {
         $limit = (int) ($instance->customint3 ?? 0);
 
         return $limit > 0 ? $limit : 0;
     }
 
     /**
-     * How many enrolments still hold a place on the instance.
+     * How many applications the method is holding.
      *
      * Every status counts - pending, waiting list and approved alike - because each of those
-     * people is either in the course or waiting to be let into it. What does not count is an
-     * enrolment whose period has run out, which is the whole point of this class.
+     * people is either in the course or waiting to be let into it.
      *
      * @param stdClass $instance Course enrol instance.
-     * @return int Enrolments still occupying a place.
+     * @return int Applications still in the pipeline.
      */
-    public static function taken(stdClass $instance): int {
+    public static function applicants(stdClass $instance): int {
         global $DB;
 
         return $DB->count_records_select(
@@ -94,20 +106,77 @@ final class capacity {
     }
 
     /**
-     * Whether the instance has no place left.
+     * Whether the method will accept another application.
      *
-     * An uncapped instance short-circuits before the query, so this costs exactly what the
-     * inline version cost: all three call sites already guarded their count behind `$cap > 0`.
+     * An unlimited instance short-circuits before the query, so this costs exactly what the
+     * inline version it replaced cost: every call site already guarded its count behind a
+     * `> 0` test.
      *
      * @param stdClass $instance Course enrol instance.
-     * @return bool True when no place is left.
+     * @return bool True when no further application may be made.
      */
-    public static function is_full(stdClass $instance): bool {
-        $limit = self::limit($instance);
+    public static function applications_closed(stdClass $instance): bool {
+        $limit = self::applicant_limit($instance);
         if ($limit === 0) {
             return false;
         }
 
-        return self::taken($instance) >= $limit;
+        return self::applicants($instance) >= $limit;
+    }
+
+    /**
+     * How many applicants the method may have approved at one time.
+     *
+     * Zero and negative both mean "no limit", matching applicant_limit() for the same reason:
+     * an upgrade seeds this column at 0, and a restore can carry any value at all.
+     *
+     * @param stdClass $instance Course enrol instance.
+     * @return int Places allowed, or 0 when there is no limit.
+     */
+    public static function places(stdClass $instance): int {
+        $places = (int) ($instance->customint4 ?? 0);
+
+        return $places > 0 ? $places : 0;
+    }
+
+    /**
+     * How many places are occupied.
+     *
+     * ACTIVE rows only, which is the whole difference from applicants(): a pending application
+     * and a deferred one are in the pipeline but hold no place, and ENROL_APPLY_USER_WAIT is on
+     * the application side of that line rather than the place side. Written out in full rather
+     * than sharing a fragment with applicants(), so the two predicates cannot be composed by
+     * accident.
+     *
+     * @param stdClass $instance Course enrol instance.
+     * @return int Places currently occupied.
+     */
+    public static function places_taken(stdClass $instance): int {
+        global $DB;
+
+        return $DB->count_records_select(
+            'user_enrolments',
+            'enrolid = :enrolid AND status = :active AND (timeend = 0 OR timeend > :now)',
+            ['enrolid' => (int) $instance->id, 'active' => ENROL_USER_ACTIVE, 'now' => time()]
+        );
+    }
+
+    /**
+     * Whether every place is taken.
+     *
+     * Advisory: nothing refuses an approval on the strength of it. It can legitimately report
+     * true with places_taken() ABOVE places(), because no route enforces it and because a
+     * restore, or an administrator lowering the number, produces that state directly.
+     *
+     * @param stdClass $instance Course enrol instance.
+     * @return bool True when no place is left.
+     */
+    public static function places_full(stdClass $instance): bool {
+        $places = self::places($instance);
+        if ($places === 0) {
+            return false;
+        }
+
+        return self::places_taken($instance) >= $places;
     }
 }

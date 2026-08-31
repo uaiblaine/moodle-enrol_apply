@@ -130,6 +130,44 @@ class enrol_apply_edit_form extends moodleform {
         $mform->setType('customtext2', PARAM_TEXT);
         $mform->setDefault('customtext2', get_string('comment', 'enrol_apply'));
 
+        /* The two capacity numbers, and they answer different questions. customint3 is how
+           many people may APPLY; customint4 is how many may be APPROVED at once. The gap
+           between them is overbooking, which is the point in a plugin where approval is
+           discretionary.
+
+           They sit here, in the main section, and not where the first of them used to. The
+           header opened for the profile fields below is never closed - renderHeader() closes a
+           fieldset only when opening another, and the only other closer is the one
+           add_action_buttons() emits - so everything after it rendered under a legend reading
+           "Profile fields requested". Worse, it moved: with no offerable fields that header is
+           not opened at all and the same element landed in the main section instead. Section
+           membership was decided by configuration. */
+        $mform->addElement('text', 'customint3', get_string('maxapplicants', 'enrol_apply'));
+        $mform->setType('customint3', PARAM_INT);
+        $mform->setDefault('customint3', $plugin->get_config('maxenrolled', 0));
+        $mform->addHelpButton('customint3', 'maxapplicants', 'enrol_apply');
+
+        $mform->addElement('text', 'customint4', get_string('places', 'enrol_apply'));
+        $mform->setType('customint4', PARAM_INT);
+        $mform->setDefault('customint4', $plugin->get_config('places', 0));
+        $mform->addHelpButton('customint4', 'places', 'enrol_apply');
+
+        /* What the two numbers currently hold, for the person setting them - who otherwise has
+           the least context about what the instance is carrying. Only for an instance that
+           exists: a new one has nothing to count, and counting would query for a guaranteed
+           zero. */
+        if (!empty($instance->id)) {
+            $mform->addElement(
+                'static',
+                'currentoccupancy',
+                get_string('places', 'enrol_apply'),
+                get_string('placestaken', 'enrol_apply', (object) [
+                    'taken' => \enrol_apply\local\capacity::places_taken($instance),
+                    'limit' => \enrol_apply\local\capacity::places($instance),
+                ])
+            );
+        }
+
         /* The profile fields this instance asks an applicant for, picked from the pool the
            administrator allows. Two checkboxes per field: collect it, and require it. The
            "required" box is hidden until the field itself is ticked, which is presentation
@@ -172,11 +210,6 @@ class enrol_apply_edit_form extends moodleform {
         }
         $notify = $mform->addElement('select', 'notify', get_string('notify_desc', 'enrol_apply'), $choices);
         $notify->setMultiple(true);
-
-        $mform->addElement('text', 'customint3', get_string('maxenrolled', 'enrol_apply'));
-        $mform->setType('customint3', PARAM_INT);
-        $mform->setDefault('customint3', $plugin->get_config('maxenrolled', 0));
-        $mform->addHelpButton('customint3', 'maxenrolled', 'enrol_apply');
 
         /* Restrict applications to one cohort. The element is emitted even when there is
            nothing to choose from, as a hidden constant zero: enrol_plugin::update_instance()

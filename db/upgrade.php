@@ -390,5 +390,37 @@ function xmldb_enrol_apply_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026083002, 'enrol', 'apply');
     }
 
+    if ($oldversion < 2026083003) {
+        /* Places: a second, separate number. customint3 is how many people may APPLY;
+           customint4 is how many may be APPROVED at once. Both are opt-in at 0, and seeding
+           anything else here would switch a feature on for every existing site at a threshold
+           nobody chose.
+
+           The GLOBAL get_config(), deliberately, and not the plugin object's:
+           enrol_plugin::get_config() returns its $default - null - for an absent setting and
+           never false, so the `$plugin->get_config(...) === false` shape used by the
+           2026081000 step above can never be true and its seeds have never run. Measured on
+           5.1 and 5.2. That step is left as it is: it has already run everywhere, and editing
+           a past step changes nothing on a site that has passed it. */
+        if (get_config('enrol_apply', 'places') === false) {
+            set_config('places', 0, 'enrol_apply');
+        }
+
+        /* Existing rows carry NULL, which every reader already treats as 0 - capacity::places()
+           coalesces and casts. This is for consistency rather than correctness: new instances
+           get a real 0 from get_instance_defaults(), and a column holding two spellings of the
+           same answer is how somebody later writes a reader that only handles one.
+           Idempotent by construction: the WHERE is the negation of the step's own effect. */
+        $DB->set_field_select(
+            'enrol',
+            'customint4',
+            0,
+            "enrol = :enrol AND customint4 IS NULL",
+            ['enrol' => 'apply']
+        );
+
+        upgrade_plugin_savepoint(true, 2026083003, 'enrol', 'apply');
+    }
+
     return true;
 }
