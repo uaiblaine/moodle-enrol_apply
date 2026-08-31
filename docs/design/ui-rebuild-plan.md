@@ -43,16 +43,16 @@ identical either way, so a dropdown stays an additive change on the same web ser
 
 | Slice | What | Depends on | Version bump | Upgrade step |
 |---|---|---|---|---|
-| **U0** | Re-establish the baseline: coverage, `--strict`, the mutation sweep | — | no | no |
-| **U1** | Delete `info.php`; finish the custom label; the small defects; the documentation corrections | U0 | yes | yes (clean `customtext2`) |
-| **U1b** | Stop the queue leaking identity, and stop it filtering invisibly | U0 | yes | no |
-| **U2** | Rebuild the review page as Mockup C | — | yes | no |
+| ~~**U0**~~ | ~~Re-establish the baseline~~ — **done 2026-09-01** | — | no | no |
+| ~~**U1**~~ | ~~Delete `info.php`; finish the custom label~~ — **done**, [#57](https://github.com/uaiblaine/moodle-enrol_apply/pull/57) | U0 | yes | yes (clean `customtext2`) |
+| ~~**U1b**~~ | ~~Stop the queue leaking identity, and stop it filtering invisibly~~ — **done**, [#58](https://github.com/uaiblaine/moodle-enrol_apply/pull/58) | U0 | yes | no |
+| ~~**U2**~~ | ~~Rebuild the review page as Mockup C~~ — **done**, [#60](https://github.com/uaiblaine/moodle-enrol_apply/pull/60) | — | yes | no |
 | **U3** | Deferral as a first-class triage state | — | yes | yes (new column) |
 | **U4** | The participants-page bulk menu | — | yes | no |
 | **U5a** | Rebuild the queue as Mockup A on `core_table\dynamic`, without the search | U1, U1b, U3 | yes | no |
 | **U5b** | The as-you-type search over a plugin web service | U5a | yes | no |
 
-**Order:** U0 → U1 → U1b → U2 → U3 → U4 → U5a → U5b.
+**Order:** ~~U0 → U1 → U1b → U2~~ (done 2026-09-01) → **U3** → U4 → U5a → U5b.
 
 **Why that order.**
 
