@@ -15,19 +15,38 @@ The design and the plan they execute are new documents:
 decisions taken from them on 2026-08-31) and [`ui-rebuild-plan.md`](ui-rebuild-plan.md) (eight
 slices, U0–U5b). **U0, U1, U1b and U2 are done. U3 is next.**
 
-### Environment facts that cost time to rediscover
+### Three "environment facts" that were nothing of the kind
 
-- **`admin/tool/phpunit/cli/init.php --disable-composer`.** Core's init runs `composer
-  self-update`, which needs the network; this host has none through the container, so `mdl
-  phpunit-init` fails with a composer usage dump that looks like a `mdl` bug and is not. The same
-  flag exists on `admin/tool/behat/cli/init.php`. With it, the whole local environment works —
-  including core's own test suites.
-- **The MOODLE_502_STABLE CI legs cannot be built here.** `moodle-plugin-ci install` runs `npm run
-  update-packages`, which fetches 5.2's React bundle from esm.sh. It fails at *install*, before any
-  gate. The 5.01 legs install from cache and run everything. So local `--matrix` is a 5.01-only
-  verdict, and the 5.02 legs are what CI is for.
-- **The CI runner's Behat is broken independently of any change** — `http://mdlci-run-…:8000 is not
-  available`, in the matrix and in a single leg alike. Use `mdl behat m502` instead, which works.
+**Recorded as a caution about this file rather than about the environment.** An earlier version of
+this section stated as properties of the host that `mdl phpunit-init` could not run without
+`--disable-composer`, that the `MOODLE_502_STABLE` CI legs could not be built locally at all, and
+that the runner's Behat was broken. All three were true when measured and none of them was a
+property of anything: the machine was on a **restricted network**, and every one of those failures
+was an outbound request being refused.
+
+Re-measured on an unrestricted network the same day: `getcomposer.org`, `esm.sh` and
+`registry.npmjs.org` all reachable from inside the container; `admin/tool/phpunit/cli/init.php`
+completes with no flag; and `mdl ci --matrix --behat` runs **all seven legs green** — 390 PHPUnit
+tests and 6 Behat scenarios on each, with the logs audited for `: FAILED` rather than the summary
+column trusted.
+
+What survives, and is worth keeping:
+
+- **The symptoms, so they are recognised rather than diagnosed twice.** A restricted network makes
+  `mdl phpunit-init` fail with a **composer usage dump**, which reads exactly like a `mdl` bug;
+  makes the 5.02 legs fail at *install* with `Download failed: Client network socket
+  disconnected`, before any gate runs; and makes the runner's Behat report
+  `http://mdlci-run-…:8000 is not available`. None of the three names the network.
+- **The workaround, for when you are behind such a proxy.** `--disable-composer` on
+  `admin/tool/phpunit/cli/init.php` and on `admin/tool/behat/cli/init.php` skips the self-update
+  and the dependency refresh, and the rest of the local environment then works — including core's
+  own test suites. `mdl behat m502` also works where the CI runner's Behat does not.
+- **The lesson, which is the general one this file keeps relearning.** "This cannot be done here"
+  is a claim about a moment, and writing it as a claim about the machine is how the next reader
+  stops trying. Measure the network before concluding anything about the host.
+
+### Facts that ARE about the environment
+
 - **Every `version.php` bump stales both test sites.** Re-init before the mutation sweep, and judge
   it by the test COUNT, never the failure count.
 
@@ -43,7 +62,8 @@ slices, U0–U5b). **U0, U1, U1b and U2 are done. U3 is next.**
   `db/upgradelib.php` helper without requiring it died with "Call to undefined function" and left
   the site on the version it started at — through a full green CI run, because CI installs fresh
   from `install.xml` and never runs the upgrade path. **Running `mdl upgrade` is part of shipping a
-  step, not an optional check.**
+  step, not an optional check.** This one is real and is not about the network: CI installs fresh
+  by design, on any network at all.
 - **A five-lens adversarial pass over U2 found 65 confirmed findings on a slice that was already
   green, mutation-checked and Behat-covered** — four of them defects, including a
   `justify-content-between` that spread nothing (it was passed to a container with one child) and
