@@ -927,6 +927,51 @@ template; and `grunt --max-lint-warnings 0` on U5b alone.
 
 ---
 
+## U6 — The audit report is scoped to a method, not to a course
+
+**Found in use on 2026-09-01, outside this plan, and not part of any slice above.** Recorded here
+with its decision already taken so neither is lost.
+
+`report.php` takes an enrol INSTANCE id, and uses it only to choose the course and authorise the
+request: the report's own base condition is `courseid = <context>->instanceid`, so two apply
+methods in one course produce byte-identical reports under two different urls. Measured on m502,
+course 2: instance 4 ("IMA 1") holds eight applications and instance 195 ("IMA 2") holds none, and
+`report.php?id=195` renders IMA 1's eight. An audit report of a method's applications, under that
+method's url, containing none of them.
+
+The affordance is unambiguous about what it promises: `get_action_icons()` builds one icon per
+instance and puts the instance id in the url.
+
+**The security reasoning in `report.php`'s own comment is correct and must survive the fix.** The
+scope has to come from the CONTEXT, resolved server-side, and never from `get_parameter()` — those
+arrive as `PARAM_RAW` in the filterset and are json_decoded straight into the report. What that
+argument establishes is "the url's id is not a security boundary". It does not establish "the url's
+id is inert", which is what the code currently does with it.
+
+**Decision, taken by the owner on 2026-09-01: per method, with the filter pre-applied.** Arriving
+from a method's icon opens the report filtered to that method; clearing the filter widens it to the
+course, which is the view that exists today. The `submission:method` filter is already built and
+already offered whenever a course has more than one apply instance — it simply is not applied.
+
+Two properties make this safe, and both are worth stating because they are what keep the fix out of
+the security boundary:
+
+- The base condition stays context-derived and untouched. The method filter can only ever NARROW
+  within it, so a forged filter value shows fewer rows, never another course's — the intersection
+  of `courseid = X` and a foreign enrolid is empty.
+- Nothing here is a disclosure either way. A reader holding `enrol/apply:viewreports` in the course
+  is entitled to every row the course-wide view shows, which is why this is a correctness and
+  affordance defect rather than a leak, and why the fix has exactly one constraint: it must not
+  widen.
+
+**Not bundled with U4**, which was committed and verified before this was found. No existing test
+asserts the report shows both instances' rows, so the work is close to additive: the pre-applied
+filter, a test that arriving from each icon shows that method's rows and not the other's, a test
+that clearing the filter still widens to the course, a mutation gate, and a correction to
+`report.php`'s comment, which currently states the present behaviour as intended.
+
+---
+
 ## What this plan does not do
 
 Recorded so the next reader does not take silence for an oversight.
