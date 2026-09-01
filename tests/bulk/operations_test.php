@@ -71,6 +71,48 @@ final class operations_test extends \advanced_testcase {
     }
 
     /**
+     * A second apply instance on the same course, which is the shape U4 exists for.
+     *
+     * Two apply methods in one course is supported on purpose - they are two intakes - and it is
+     * the configuration in which core's dispatch quietly reaches only one of them.
+     *
+     * @param bool $enabled Whether the new instance is enabled.
+     * @param int|null $sortorder Where it sits in the course's own ordering; core's dispatch takes
+     *        the first apply row by sortorder, disabled or not.
+     * @return \stdClass The new enrol instance record.
+     */
+    protected function second_instance(bool $enabled = true, ?int $sortorder = null): \stdClass {
+        global $DB;
+
+        $id = $this->plugin->add_instance($this->course, $this->plugin->get_instance_defaults());
+        if (!$enabled) {
+            $DB->set_field('enrol', 'status', ENROL_INSTANCE_DISABLED, ['id' => $id]);
+        }
+        if ($sortorder !== null) {
+            $DB->set_field('enrol', 'sortorder', $sortorder, ['id' => $id]);
+        }
+
+        return $DB->get_record('enrol', ['id' => $id], '*', MUST_EXIST);
+    }
+
+    /**
+     * The participants page's own manager: the whole course, with no instance filter.
+     *
+     * The helper above always filters, because that is what core's DISPATCH does. This is the
+     * other caller - user/index.php - and the two must be told apart, because the menu memo
+     * applies to one of them and would break the other.
+     *
+     * @return \course_enrolment_manager The unfiltered manager.
+     */
+    protected function unfiltered_manager(): \course_enrolment_manager {
+        global $PAGE;
+
+        $PAGE->set_url('/user/index.php', ['id' => $this->course->id]);
+
+        return new \course_enrolment_manager($PAGE, $this->course);
+    }
+
+    /**
      * A fresh user with a real application on the apply instance, left in the given state.
      *
      * Applications are submitted through the plugin itself rather than by enrolling the user
@@ -199,6 +241,139 @@ final class operations_test extends \advanced_testcase {
         return array_map(
             static fn($notification): string => $notification->get_message(),
             \core\notification::fetch()
+        );
+    }
+
+    /**
+     * The participants menu is offered once per COURSE, not once per instance.
+     *
+     * user/index.php loops over the course's enrolment instances and calls get_bulk_operations()
+     * for each of them, on the same plugin object, with a manager carrying no instance filter and
+     * a url built from the plugin name and the operation alone - so N instances gave N identical
+     * optgroups. It reproduces in stock core with enrol_self and no third-party plugin at all.
+     *
+     * The control is the second half: a FILTERED manager is never suppressed, because that is
+     * core's dispatch and suppressing it would break every bulk decision rather than tidy a menu.
+     *
+     * @return void
+     */
+    public function test_the_participants_menu_is_offered_once_per_course(): void {
+        $this->second_instance();
+        $this->setUser($this->teacher());
+
+        $manager = $this->unfiltered_manager();
+        $this->assertNotEmpty($this->plugin->get_bulk_operations($manager));
+        $this->assertSame([], $this->plugin->get_bulk_operations($manager));
+
+        /* The control, on the same plugin object the memo lives on: the dispatch's own filtered
+           manager still gets its operations, and gets them every time. */
+        [$filtered] = $this->selection([]);
+        $this->assertNotEmpty($this->plugin->get_bulk_operations($filtered));
+        $this->assertNotEmpty($this->plugin->get_bulk_operations($filtered));
+    }
+
+    /**
+     * A menu refused for the capability does not silence the next caller.
+     *
+     * The memo is set only once every gate above it has passed, and this is what holds that
+     * ordering. It had to be written for it: the obvious candidate,
+     * test_the_bulk_menu_is_empty_without_the_capability, asks with a FILTERED manager and so
+     * never enters the memo branch at all - it holds a different property, that the memo does not
+     * ignore the filter, and it cannot hold this one.
+     *
+     * Not reachable in production today, and that is worth stating rather than implying
+     * otherwise: one request asks with one $USER and one context, so the capability answer is
+     * constant across user/index.php's loop. The ordering is a property of the code that nothing
+     * would notice losing, which is exactly the kind this repository pins.
+     *
+     * @return void
+     */
+    public function test_a_menu_refused_for_the_capability_does_not_silence_the_next_one(): void {
+        $outsider = $this->getDataGenerator()->create_user();
+        $this->getDataGenerator()->enrol_user($outsider->id, $this->course->id, 'student');
+        $manager = $this->unfiltered_manager();
+
+        $this->setUser($outsider);
+        $this->assertSame([], $this->plugin->get_bulk_operations($manager));
+
+        $this->setUser($this->teacher());
+        $this->assertNotEmpty($this->plugin->get_bulk_operations($manager));
+    }
+
+    /**
+     * The memo lives on the plugin OBJECT, so a fresh one offers the menu again.
+     *
+     * enrol_get_plugins() constructs a new plugin object per call, which is why this must not be
+     * a static: a static memo would outlive the manager it belongs to, silence the menu on every
+     * later page load of the same request, and leak across tests in one PHPUnit run.
+     *
+     * @return void
+     */
+    public function test_a_fresh_plugin_object_offers_the_menu_again(): void {
+        $this->setUser($this->teacher());
+        $manager = $this->unfiltered_manager();
+
+        $this->assertNotEmpty($this->plugin->get_bulk_operations($manager));
+        $this->assertSame([], $this->plugin->get_bulk_operations($manager));
+
+        $this->assertNotEmpty(enrol_get_plugin('apply')->get_bulk_operations($manager));
+    }
+
+    /**
+     * A site-disabled plugin offers no menu, because its entries could only throw.
+     *
+     * Core's two sides disagree: user/index.php builds the menu from get_enrolment_plugins(false),
+     * which INCLUDES disabled plugins, while action_redir.php resolves the dispatch through the
+     * enabled-only default and throws errorwithbulkoperation. So the entries were offered and then
+     * refused. This is the opposite of what the per-row action icon does, deliberately - that one
+     * leads to a queue that still works.
+     *
+     * @return void
+     */
+    public function test_a_disabled_plugin_offers_no_bulk_menu(): void {
+        $this->setUser($this->teacher());
+        $manager = $this->unfiltered_manager();
+
+        // The control: enabled, and the menu is there.
+        $this->assertNotEmpty($this->plugin->get_bulk_operations($manager));
+
+        $enabled = enrol_get_plugins(true);
+        unset($enabled['apply']);
+        set_config('enrol_plugins_enabled', implode(',', array_keys($enabled)));
+
+        $this->assertSame([], enrol_get_plugin('apply')->get_bulk_operations($this->unfiltered_manager()));
+    }
+
+    /**
+     * The dispatch instance is the FIRST apply row by sortorder, disabled or not.
+     *
+     * Reproducing action_redir.php literally is the whole point: a disabled method sorting first
+     * captures the entire dispatch, the manager is filtered to it, and core redirects with "No
+     * users selected". Taking the enabled-only list here would agree with core exactly when it
+     * does not matter and disagree in the case this exists to name.
+     *
+     * @return void
+     */
+    public function test_the_dispatch_instance_is_the_first_one_disabled_or_not(): void {
+        global $DB;
+
+        // Sorted ahead of the fixture's own instance, and disabled.
+        $first = $this->second_instance(false, -1);
+
+        $this->assertEquals(
+            (int) $first->id,
+            (int) decision_operation::dispatch_instance((int) $this->course->id)->id
+        );
+
+        // The control: a course with no apply method at all has no dispatch instance.
+        $elsewhere = $this->getDataGenerator()->create_course();
+        $this->assertNull(decision_operation::dispatch_instance((int) $elsewhere->id));
+
+        // And the fixture's own instance is what is returned once the disabled one sorts later.
+        $DB->set_field('enrol', 'sortorder', 99, ['id' => $first->id]);
+        $this->assertEquals(
+            (int) $this->instance->id,
+            (int) decision_operation::dispatch_instance((int) $this->course->id)->id
         );
     }
 
@@ -764,6 +939,112 @@ final class operations_test extends \advanced_testcase {
         $this->assertStringContainsString($escapedonce, $select[0]);
         $this->assertStringNotContainsString($awkward, $select[0]);
         $this->assertStringNotContainsString($escapedtwice, $select[0]);
+    }
+
+    /**
+     * A bulk decision warns about the same person's applications on another method.
+     *
+     * The silent case, and the reachable one. Core's dispatch filters the manager to ONE apply
+     * instance, so get_users_enrolments() returns only that instance's row - and for one person
+     * holding an application on each of two, nothing is "removed", core warns nothing, and the
+     * plugin reported a clean success. Two applications in one course are supported on purpose:
+     * two apply methods are two intakes.
+     *
+     * The other application must still be there afterwards. That is the second half of the
+     * decision recorded in the plan - warn, never decide - and without it this test would pass
+     * against an implementation that had helpfully decided both.
+     *
+     * @return void
+     */
+    public function test_a_bulk_decision_warns_about_applications_on_another_method(): void {
+        global $DB;
+
+        $this->setUser($this->teacher());
+        $applicant = $this->applicant();
+        $other = $this->second_instance();
+        $this->plugin->enrol_user($other, $applicant->id, null, 0, 0, ENROL_USER_SUSPENDED);
+        $otherueid = (int) $DB->get_field(
+            'user_enrolments',
+            'id',
+            ['userid' => $applicant->id, 'enrolid' => $other->id],
+            MUST_EXIST
+        );
+
+        [$manager, $users] = $this->selection([$applicant]);
+        // The precondition: core really did hand over one row, which is why it warns nothing.
+        $this->assertCount(1, $users[$applicant->id]->enrolments);
+
+        $sink = $this->redirectMessages();
+        (new wait_operation($manager, $this->plugin))
+            ->process($manager, $users, (object) ['outcomemessage' => '', 'decisionnote' => '']);
+        $sink->close();
+
+        $this->assertContains(
+            get_string('bulkothermethods', 'enrol_apply', (object) [
+                'count' => 1,
+                'method' => get_string('pluginname', 'enrol_apply'),
+            ]),
+            $this->notifications()
+        );
+
+        // Warned, never decided: the other application is exactly as it was.
+        $this->assertEquals(
+            ENROL_USER_SUSPENDED,
+            (int) $DB->get_field('user_enrolments', 'status', ['id' => $otherueid], MUST_EXIST)
+        );
+    }
+
+    /**
+     * One method in the course means nothing to warn about.
+     *
+     * The control. Without it the assertion above passes just as well against an operation that
+     * warns on every decision it takes.
+     *
+     * @return void
+     */
+    public function test_a_single_method_produces_no_other_methods_warning(): void {
+        $this->setUser($this->teacher());
+        $applicant = $this->applicant();
+
+        [$manager, $users] = $this->selection([$applicant]);
+        $sink = $this->redirectMessages();
+        (new wait_operation($manager, $this->plugin))
+            ->process($manager, $users, (object) ['outcomemessage' => '', 'decisionnote' => '']);
+        $sink->close();
+
+        foreach ($this->notifications() as $message) {
+            $this->assertStringNotContainsString('will be left alone', $message);
+            $this->assertStringNotContainsString('left alone', $message);
+        }
+    }
+
+    /**
+     * The confirmation form says it too, before anything is written.
+     *
+     * The only surface in this flow that can speak before the decision. A warning that arrives
+     * afterwards is a report; this one is a chance to stop and use the approval queue instead,
+     * which reaches every method.
+     *
+     * @return void
+     */
+    public function test_the_confirmation_form_warns_before_anything_is_written(): void {
+        $this->setUser($this->teacher());
+        $applicant = $this->applicant();
+        $other = $this->second_instance();
+        $this->plugin->enrol_user($other, $applicant->id, null, 0, 0, ENROL_USER_SUSPENDED);
+
+        [$manager, $users] = $this->selection([$applicant]);
+        $html = (new wait_operation($manager, $this->plugin))
+            ->get_form(new \moodle_url('/user/action_redir.php'), ['users' => $users])
+            ->render();
+
+        $this->assertStringContainsString(
+            get_string('bulkothermethodsform', 'enrol_apply', (object) [
+                'count' => 1,
+                'method' => get_string('pluginname', 'enrol_apply'),
+            ]),
+            $html
+        );
     }
 
     /**

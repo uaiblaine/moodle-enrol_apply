@@ -743,8 +743,16 @@ backup/                      group mappings, comments and the durable trail, see
   **What the icon deliberately does not check is whether the plugin is enabled site wide.** Core's
   own Edit and Unenrol icons render on a disabled plugin's rows here (the manager resolves plugins
   through `get_enrolment_plugins(false)`) and `manage.php` has no enabled check either, so a check
-  on the icon alone would hide the way in to a queue that still works. The bulk menu differs
-  because core's own driver builds it from the enabled-only list.
+  on the icon alone would hide the way in to a queue that still works.
+
+  **The bulk menu differs, and an earlier version of this sentence named the wrong file for why.**
+  It is not that core builds the menu from the enabled-only list — `user/index.php:250` passes
+  `false`, meaning *include disabled*, exactly as the icon's manager does. The asymmetry is that
+  `action_redir.php:189` resolves the DISPATCH through `get_enrolment_plugins()` with its default
+  of enabled-only and throws `errorwithbulkoperation`. So a disabled plugin's menu entries are
+  offered and then refuse to work, which is why `get_bulk_operations()` gates on
+  `enrol_is_enabled()` and the icon does not: one leads to a queue that still works, the other
+  leads to an exception page.
 
   **`enrol/locallib.php`'s `get_users_for_display()` is dead code** — measured, zero callers on
   either branch — so `user/classes/table/participants.php` is the only live caller of this method
@@ -823,15 +831,36 @@ backup/                      group mappings, comments and the durable trail, see
   `\core\notification::error()` — which is also why all three operations return a form rather
   than acting immediately, a bulk cancellation being an unenrolment.
 
-- **A bulk decision reaches ONE apply instance per course, and nothing can be done about it here.**
-  `action_redir.php` picks the FIRST `{enrol}` row of the plugin in the course
-  (`enrol_get_instances($courseid, false)`, `break` on the first match) and filters the manager to
-  it, while the menu url carries only the plugin name — there is nowhere to say which instance was
-  meant, and `user/index.php` renders the operations once per instance with identical urls. So a
-  course carrying two apply instances bulk-decides the first one's applications only; applicants of
-  the second are dropped by core with a per-user warning. That is not a reason to forbid a second
-  instance — the plugin supports them on purpose, and `enrol_gapply` gets exactly that wrong. The
-  queue reaches all of them.
+- **A bulk decision reaches ONE apply instance per course, and the case core does NOT warn about
+  is the reachable one.** `action_redir.php` picks the FIRST `{enrol}` row of the plugin in the
+  course (`enrol_get_instances($courseid, false)`, `break` on the first match — so a **disabled**
+  instance sorting first captures the whole dispatch) and filters the manager to it, while the menu
+  url carries only the plugin name. There is nowhere to say which instance was meant, and
+  `user/index.php` asks for the operations once per instance with identical urls — so the menu
+  used to carry one byte-identical optgroup per instance. **`get_bulk_operations()` now memoises
+  per plugin object**, keyed on `empty($manager->get_enrolment_filter())`, so the participants
+  page gets one group per course while the two FILTERED callers — the dispatch itself and
+  `enrol/renderer.php` — are never suppressed. The duplication reproduces in stock core with
+  `enrol_self`, so the real fix belongs in `user/index.php`; this is what can be done from here.
+
+  An earlier version of this paragraph said "applicants of the second are dropped by core with a
+  per-user warning", full stop, and that sentence argues the next reader out of the only silent
+  case. It is true when the selected people are DIFFERENT: `get_users_enrolments()` returns no row
+  for somebody with no enrolment on the filtered instance, and core reports the difference. For
+  **one person holding an application on each of two instances** it is false — they come back
+  carrying the filtered instance's row, `$removed` is empty, core warns nothing and the plugin
+  reports a clean success. Measured. And that case is the reachable one, because two applications
+  in one course are supported on purpose: two apply instances are two intakes.
+
+  `queue::other_applications()` is what closes it, and it WARNS rather than deciding — twice, on
+  the confirmation form before anything is written and in the report after. Deciding the others is
+  the intuitive fix and is wrong on its own terms: the decision carries per-instance data (the role
+  fallback, the groups, both caps), so approving one intake is a statement about that intake alone,
+  a deferral note written about one is a falsehood attached to the other, and a warning is
+  reversible by the operator where a decision is not.
+
+  None of this is a reason to forbid a second instance — the plugin supports them on purpose, and
+  `enrol_gapply` gets exactly that wrong. The queue reaches all of them.
 
 - **The bulk menu needs JavaScript, which is the opposite of the queue's own bar.** Core ships the
   "With selected users..." select `disabled` in the server markup and only `core/checkbox-toggleall`

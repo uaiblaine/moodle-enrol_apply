@@ -1,0 +1,4 @@
+# BU: set the memo before the capability is checked, so a call refused for the capability
+# silences the next one. Not reachable in production - one request asks with one $USER and one
+# context - which is exactly why nothing would notice the ordering being lost.
+s#        if \(!has_capability\('enrol/apply:manageapplications', \$manager->get_context\(\)\)\) \{\n            return \[\];\n        \}\n\n(.*?)        if \(empty\(\$manager->get_enrolment_filter\(\)\)\) \{\n            if \(\$this->bulkmenuoffered\) \{\n                return \[\];\n            \}\n            \$this->bulkmenuoffered = true;\n        \}#        if (empty(\$manager->get_enrolment_filter())) {\n            if (\$this->bulkmenuoffered) {\n                return [];\n            }\n            \$this->bulkmenuoffered = true;\n        }\n\n        if (!has_capability('enrol/apply:manageapplications', \$manager->get_context())) {\n            return [];\n        }\n\n${1}#s;

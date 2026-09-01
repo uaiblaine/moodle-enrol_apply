@@ -79,6 +79,99 @@ abstract class decision_operation extends enrol_bulk_enrolment_operation {
     }
 
     /**
+     * The enrol instance core's dispatch will actually decide, for this course.
+     *
+     * user/action_redir.php:176-183 reproduced literally, and the two details that look like
+     * carelessness are the whole point. It is enrol_get_instances($courseid, FALSE), which
+     * INCLUDES disabled instances, and it takes the first match in sortorder - so a disabled
+     * apply method sorting first captures the entire dispatch, the manager is filtered to it,
+     * get_users_enrolments() returns nothing, and core redirects with "No users selected".
+     * Measured on both branches, and far more reachable than two enabled instances: disabling
+     * rather than deleting an old method is ordinary practice, and sortorder is teacher-editable
+     * from enrol/instances.php.
+     *
+     * It is deliberately NOT the manager's own instance, which is already filtered and would
+     * therefore agree by construction and prove nothing, and not the enabled-only call, which is
+     * the very difference being reproduced.
+     *
+     * **This does not gate the menu, and must not.** Refusing to render on a disabled dispatch
+     * instance is the intuitive fix and the wrong test: an ENABLED instance that simply is not
+     * the one the selection lives on breaks the dispatch identically, so a status gate closes one
+     * door and leaves its twin open. What this is for is NAMING the method in the warning.
+     *
+     * That naming is only as good as the names, and on a default site it is not good: an instance
+     * with no custom name comes back as the plugin's own "Course enrol confirmation", so a course
+     * whose two intakes were never named produces a warning quoting one wording for both.
+     * Measured. It is core's limitation rather than one introduced here - enrol/instances.php
+     * repeats the same name in the same case - and the warning is still true and still says how
+     * many applications were left alone, which is the part the operator acts on. Naming the
+     * instances is the fix, and it is the teacher's to make.
+     *
+     * @param int $courseid Course the dispatch runs in.
+     * @return stdClass|null The instance core will filter to, or null when the course has none.
+     */
+    public static function dispatch_instance(int $courseid): ?stdClass {
+        foreach (enrol_get_instances($courseid, false) as $instance) {
+            if ($instance->enrol === 'apply') {
+                return $instance;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * The sentence naming what a bulk decision will not reach, or the empty string.
+     *
+     * Said TWICE on purpose, and this is the half that comes first: the confirmation form is the
+     * only surface in this flow that can speak before anything is written, and a warning after
+     * the fact is a report rather than a chance to stop.
+     *
+     * The method name is normalised through format_string(), which hands back the ESCAPED
+     * spelling - the right one here, because both sinks render raw. A moodleform static element
+     * is a triple stash in core's element-template.mustache, and \core\output\notification
+     * exports its message through clean_text() into a template that does the same.
+     * get_instance_name() returns a MIXED list exactly as get_assignable_roles() does: a method
+     * carrying a custom name comes back through format_string() already escaped, while one
+     * without returns a bare language string that has never been escaped at all.
+     *
+     * @param course_enrolment_manager $manager Manager core built for the course.
+     * @param array $users Selected users carrying their user enrolments.
+     * @param string $stringid Which wording to use: the form's or the report's.
+     * @return string The localised sentence, empty when nothing is left behind.
+     */
+    protected function other_applications_notice(
+        course_enrolment_manager $manager,
+        array $users,
+        string $stringid
+    ): string {
+        $courseid = (int) $manager->get_course()->id;
+        $others = queue::other_applications(
+            $courseid,
+            array_map('intval', array_keys($users)),
+            array_keys(static::enrolments_of($users))
+        );
+        if (!$others) {
+            return '';
+        }
+
+        $instance = static::dispatch_instance($courseid);
+        $method = $instance === null
+            ? get_string('pluginname', 'enrol_apply')
+            : format_string($this->plugin->get_instance_name($instance), true, [
+                'context' => $manager->get_context(),
+            ]);
+
+        /* A literal per branch, never an id built from $stringid: the fleet standard bans a
+           computed string id and the language file checker cannot see one. */
+        $data = (object) ['count' => count($others), 'method' => $method];
+
+        return $stringid === 'form'
+            ? get_string('bulkothermethodsform', 'enrol_apply', $data)
+            : get_string('bulkothermethods', 'enrol_apply', $data);
+    }
+
+    /**
      * Which of those are actually applications awaiting a decision.
      *
      * The predicate itself is queue::is_awaiting_decision(), which is where the plugin's
@@ -152,6 +245,15 @@ abstract class decision_operation extends enrol_bulk_enrolment_operation {
         $customdata['courseid'] = (int) $this->manager->get_course()->id;
         $customdata['withdecision'] = $this->offers_decision_controls();
 
+        /* Said before the decision as well as after it. The dispatch reaches one enrolment
+           method and cannot be widened from here, so the only thing that helps an operator is
+           knowing it before they press the button. */
+        $customdata['othernotice'] = $this->other_applications_notice(
+            $this->manager,
+            is_array($defaultcustomdata) ? ($defaultcustomdata['users'] ?? []) : [],
+            'form'
+        );
+
         return new bulk_decision_form($defaultaction, $customdata);
     }
 
@@ -219,6 +321,16 @@ abstract class decision_operation extends enrol_bulk_enrolment_operation {
         $unchanged = count($candidates) - $decided;
         if ($unchanged) {
             \core\notification::warning(get_string('bulkunchanged', 'enrol_apply', $unchanged));
+        }
+
+        /* The fourth counter, and the only one that is about applications this operation never
+           saw. Read AFTER the decision, like the other three and for a sharper reason: approval
+           and cancellation take their own rows out of the "awaiting a decision" predicate, so
+           reading before would count them as untouched. Deferral does not, which is what the
+           exclusion list is for. */
+        $othernotice = $this->other_applications_notice($manager, $users, 'report');
+        if ($othernotice !== '') {
+            \core\notification::warning($othernotice);
         }
 
         return true;

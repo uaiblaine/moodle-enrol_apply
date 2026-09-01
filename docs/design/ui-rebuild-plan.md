@@ -48,11 +48,11 @@ identical either way, so a dropdown stays an additive change on the same web ser
 | ~~**U1b**~~ | ~~Stop the queue leaking identity, and stop it filtering invisibly~~ — **done**, [#58](https://github.com/uaiblaine/moodle-enrol_apply/pull/58) | U0 | yes | no |
 | ~~**U2**~~ | ~~Rebuild the review page as Mockup C~~ — **done**, [#60](https://github.com/uaiblaine/moodle-enrol_apply/pull/60) | — | yes | no |
 | ~~**U3**~~ | ~~Deferral as a first-class triage state~~ — **done 2026-08-31** | — | yes | yes (new column) |
-| **U4** | The participants-page bulk menu | — | yes | no |
+| ~~**U4**~~ | ~~The participants-page bulk menu~~ — **done 2026-09-01** | — | yes | no |
 | **U5a** | Rebuild the queue as Mockup A on `core_table\dynamic`, without the search | U1, U1b, U3 | yes | no |
 | **U5b** | The as-you-type search over a plugin web service | U5a | yes | no |
 
-**Order:** ~~U0 → U1 → U1b → U2~~ (done 2026-09-01) → ~~**U3**~~ (done 2026-08-31) → **U4** → U5a → U5b.
+**Order:** ~~U0 → U1 → U1b → U2~~ (done 2026-09-01) → ~~U3~~ (2026-08-31) → ~~**U4**~~ (2026-09-01) → **U5a** → U5b.
 
 **Why that order.**
 
@@ -659,6 +659,22 @@ returns false in the base and true only in `confirm_operation`, passed through `
 Worth one tracker issue: the duplication reproduces in **stock core** with `enrol_self` and no
 third-party plugin, so the fix belongs in `user/index.php`. Component Enrolments/Participants,
 affects both stable branches.
+
+### U4.8 — What U4 shipped, and the one thing it did not
+
+**U4.6 was already done**, in U3: the note box went onto the bulk confirmation form for all three
+decisions rather than for deferral alone, so no second `offers_decision_controls()`-shaped flag was
+needed. The argument for widening it there is the same one that put the note on every decision —
+a field the queue and the review page both offer while the third surface silently does not is how
+three surfaces come to describe one record differently.
+
+**No new Behat scenario**, and that is a decision rather than an omission. What U4 changes is
+reached through core's own dispatch, and `tests/bulk/operations_test.php` drives exactly that —
+a real `course_enrolment_manager`, core's own `get_users_enrolments()`, the real `process()`. The
+one thing a browser would add is the rendered optgroup count, and a two-instance course makes the
+application flow's own locators ambiguous by construction: two "Start application" buttons on one
+page, with no label to tell them apart. The menu's shape is held by
+`test_the_participants_menu_is_offered_once_per_course` and gate `BM` instead.
 
 ---
 
