@@ -6,7 +6,54 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Added
+
+- **Deferral is a triage state now, with a reason attached.** Every decision — approve, defer and
+  cancel alike — can carry a **note for the record**, stored in a new `decisionnote` column on the
+  durable application record and shown to whoever opens the application next. It is the opposite
+  of *Message to the applicant* in every respect that matters: it is never mailed, never rendered
+  on any applicant-facing page, and exists so that "waiting for a place" and "waiting for
+  something to be checked" — the two things deferral actually means here — survive past the person
+  who decided.
+
+  Free text rather than a coded vocabulary, which was a decision and not a default: the two
+  scenarios are a real distinction but a thin one to freeze into a schema, and a coded reason
+  offered as a queue filter would silently under-report — measured, the queue's row set and the
+  record's diverge in both directions. A filterable column can be added later beside a note that
+  already exists.
+
+  The note travels everywhere the rest of the decision does: the queue, the review page, the
+  participants-page bulk decisions, the applications report (a column and a text filter), the
+  privacy export **to both subjects**, and a backup and restore. Writing it empty CLEARS it, so a
+  re-queued application cannot inherit the reason of a decision that was superseded.
+
+- **The queue says when the applicant limit is reached, and how many of the applications holding
+  it are deferred.** That state can legitimately show an EMPTY queue — a deferred row is freed by
+  nothing — so a course could refuse every new applicant with nothing on any screen able to
+  explain it. The review page's capacity panel gained the same number beside places and
+  applicants.
+
 ### Changed
+
+- **The participants-page bulk counter names the enrolment.** "Applications left unchanged" is
+  read as *nothing happened*, which stopped being true the moment a deferral could write a note to
+  a row whose enrolment does not move. It now says "Applications whose enrolment did not change".
+
+- **A decision reports what it actually decided.** Every decision method silently skips a row it
+  will not act on — one no longer awaiting a decision, one in a course the operator may not decide
+  in, one whose enrolment has gone — and the page printed "The selected enrolment applications
+  have been updated" regardless. It now counts what moved, says so when nothing did, and names how
+  many were left alone.
+
+- **Deferring an application already deferred does something.** The lookup demanded a *suspended*
+  enrolment, so a second deferral found no row at all: it changed nothing, reported success, and —
+  more to the point — made the REASON on a deferred application impossible to correct, which is
+  the state this plugin's model spends the longest in. It now admits deferred rows exactly as
+  approval and cancellation already did.
+
+- **The waiting-list wording is deferral wording.** No key was renamed: status 2 is still status 2
+  and the referent has not changed, so by this repository's own rule the strings are re-worded in
+  place. "On the waiting list" reads "Deferred" wherever it appeared.
 
 - **The review page is rebuilt.** It decides one application, and it now shows what deciding one
   needs: who the applicant is, what they wrote, what they submitted, where the application lands
@@ -57,7 +104,53 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   The `submitted_info` string is retired through `lang/en/deprecated.txt` and, as core's
   deprecation contract requires, its definition stays in both packs.
 
+- **The `notification` string is retired**, the same way and for the same reason. It was the one
+  wording every applicant got about their own application, on all three surfaces and in all three
+  states; the three states now have three strings of their own. Its definition stays in both packs
+  as the deprecation contract requires.
+
 ### Fixed
+
+- **Applicants were told about somebody else's problem, in three places.** The enrolment page's
+  panel, the acknowledgement page and the application form's own refusal all branched on nothing
+  but *does a row exist*, so a deferred applicant read that their application was waiting for a
+  decision somebody had already taken, and an applicant approved onto an enrolment that is not
+  active read the same. Worse, the enrolment page and the form both asked `allow_apply()` FIRST —
+  so the moment a method stopped accepting applications, everybody who had already applied was
+  shown "Enrolment is disabled or inactive", a message about a state that has nothing to do with
+  them. All three now read the applicant's own row first, and describe the state it is really in:
+  waiting for a decision, deferred, approved and enrolled, or approved onto an enrolment that
+  grants no access. That last pair is a pair on purpose — the acknowledgement page's gate asks for
+  an application and nothing more, so a fully enrolled participant who keeps the link opens it
+  legitimately and must not be told their enrolment is broken.
+
+- **Correcting the reason on a deferred application no longer re-mails the applicant, nor
+  re-attributes the decision.** Admitting deferred rows is what makes the correction possible, and
+  it is what made both of these possible with it: everything the first deferral did ran again,
+  including the "your application was deferred" notification and the stamp naming who decided.
+  A deferral that does not move the enrolment now leaves the original decider and date alone and
+  notifies nobody — unless the decider typed a message for the applicant, which is sent, because
+  a message written into a box that exists to reach somebody must not be silently dropped.
+
+- **A decision on an application older than the durable record was stored nowhere and mailed
+  nowhere.** `record_outcome_message()` loops over the rows it finds and, with none, writes
+  nothing and says nothing — so an applicant enrolled before that table existed, or through any
+  route that does not write one, could be sent a message that vanished in silence with the status
+  looking perfectly correct. The three decision methods now reconstruct the record first, from the
+  enrolment and the application comment, keeping the application's own date.
+
+- **The applicant notifications had no subject and no body on a stock site.** All six settings
+  ship as the empty string and e-mail is on by default for every provider; measured on the
+  development site, 14 of 14 applicant-facing notifications ever sent had an empty subject and 10
+  of 14 an empty body, while all 34 sent to managers had both — because that one is built from the
+  plugin's own template rather than from an empty admin setting. There is now shipped wording
+  behind each, applied at read time, because a default declared in `settings.php` can never reach
+  an existing site: `admin_apply_default_settings()` runs only from `install_core()` and skips any
+  setting already stored. An administrator's own wording is untouched, and the subject and the
+  body fall back independently.
+
+  Not fixed here, and recorded rather than half-done: every applicant notification is still
+  composed in the DECIDER's language, the shipped defaults included.
 
 - **The approval queue disclosed more than the participants page beside it.** It printed every
   applicant's e-mail address unconditionally, consulting neither `showuseridentity` nor

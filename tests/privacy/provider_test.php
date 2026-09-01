@@ -149,6 +149,10 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         $this->assertArrayHasKey('userid', $submissionfields);
         $this->assertArrayHasKey('decidedby', $submissionfields);
         $this->assertArrayHasKey('userinfodata', $submissionfields);
+        /* The decider's note. Declared here because the site holds it, exported below to both
+           subjects: metadata promising a column no export delivers is the worse of the two
+           failures available, because the promise is what a subject reads first. */
+        $this->assertArrayHasKey('decisionnote', $submissionfields);
     }
 
     /**
@@ -335,13 +339,15 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
      * @param array $groupids Group ids the decider chose.
      * @param int $roleid Role id the decider chose, 0 for the instance default.
      * @param string $message Message the decider wrote to the applicant.
+     * @param string $note Note the decider recorded about the decision.
      * @return void
      */
     protected function record_decision(
         \stdClass $applicant,
         array $groupids = [],
         int $roleid = 0,
-        string $message = ''
+        string $message = '',
+        string $note = ''
     ): void {
         global $DB;
 
@@ -350,6 +356,7 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
             'decidedgroups' => implode(',', $groupids),
             'decidedrole' => $roleid,
             'outcomemessage' => $message,
+            'decisionnote' => $note,
         ]);
     }
 
@@ -372,7 +379,13 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         $context = context_course::instance($this->course->id);
         $group = $this->getDataGenerator()->create_group(['courseid' => $this->course->id, 'name' => 'Cohort A']);
         $roleid = (int) $this->getDataGenerator()->create_role(['name' => 'Site mentor', 'shortname' => 'sitementor']);
-        $this->record_decision($applicant, [(int) $group->id], $roleid, 'Welcome aboard.');
+        $this->record_decision(
+            $applicant,
+            [(int) $group->id],
+            $roleid,
+            'Welcome aboard.',
+            'Transcript verified with the registrar.'
+        );
         $recordid = $this->submission_id_of($applicant);
 
         foreach (['privacy:roleapplicant' => $applicant, 'privacy:roledecider' => $decider] as $rolekey => $subject) {
@@ -388,6 +401,12 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
             $this->assertSame('Welcome aboard.', $exported->outcomemessage, $rolekey);
             $this->assertSame(['Cohort A'], $exported->decidedgroups, $rolekey);
             $this->assertSame('Site mentor', $exported->decidedrole, $rolekey);
+            /* The note goes to BOTH, and the applicant's half is the one worth arguing for.
+               Nothing shows this note to the applicant in the ordinary course of things - it is
+               written for the next member of staff - and that is precisely why a subject access
+               request has to reach it: it is a member of staff's assessment of them, held by the
+               site, which they have no other way of seeing. */
+            $this->assertSame('Transcript verified with the registrar.', $exported->decisionnote, $rolekey);
         }
     }
 

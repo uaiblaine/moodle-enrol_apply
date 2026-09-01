@@ -27,6 +27,13 @@
     * sesskey string - session key guarding the state change
     * tablehtml string - pre-rendered applications table
     * hasrows boolean - whether the table has at least one application
+    * hasplacesnotice boolean - whether every place on the method is taken
+    * placesnotice string - the sentence saying so
+    * hasclosednotice boolean - whether the method has reached its applicant limit and is
+      refusing new applications. Rendered outside the hasrows section on purpose: the state it
+      names can legitimately hold an EMPTY queue, which is exactly when nothing else explains it
+    * closednotice string - the sentence saying so, naming how many of the held applications are
+      deferred, because a deferred row is freed by nothing and cancelling those is the way out
     * stickyfooter string - the bulk action bar, already rendered into a core sticky footer by
       the renderer and interpolated INSIDE this form, because the POST carries the row checkboxes
       from the table and the action from the bar. Core does the same in grade/templates/edit_tree
@@ -43,11 +50,17 @@
         "sesskey": "Ab12Cd34Ef",
         "hasplacesnotice": true,
         "placesnotice": "All 20 places on this enrolment method are taken.",
+        "hasclosednotice": true,
+        "closednotice": "This enrolment method holds 40 of a maximum 40 applications and is accepting no more. 12 of them are deferred; cancelling the ones no longer needed makes room.",
         "tablehtml": "<table class=\"generaltable\"><tbody><tr><td>Student 1</td></tr></tbody></table>",
         "hasrows": true,
         "stickyfooter": "<div id=\"sticky-footer\"><button type=\"submit\">Go</button></div>",
         "messagelabel": "Message to the applicant",
         "messagehelp": "Included in the message they receive. Optional.",
+        "messagevalue": "",
+        "notelabel": "Note for the record",
+        "notehelp": "Kept with the application for whoever looks at it next. The applicant never sees it.",
+        "notevalue": "",
         "hasgroups": true,
         "grouplabel": "Groups to join on approval",
         "grouphelp": "Leave empty to use the groups configured on the enrolment method.",
@@ -70,6 +83,9 @@
     {{#hasplacesnotice}}
         <div class="alert alert-warning" role="status">{{placesnotice}}</div>
     {{/hasplacesnotice}}
+    {{#hasclosednotice}}
+        <div class="alert alert-warning" role="status">{{closednotice}}</div>
+    {{/hasclosednotice}}
     <div class="enrol_apply-table">
         {{{tablehtml}}}
     </div>

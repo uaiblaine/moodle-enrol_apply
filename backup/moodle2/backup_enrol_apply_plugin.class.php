@@ -75,6 +75,7 @@ class backup_enrol_apply_plugin extends backup_enrol_plugin {
             'userinfodata',
             'status',
             'outcomemessage',
+            'decisionnote',
             'decidedgroups',
             'decidedrole',
             'timecreated',

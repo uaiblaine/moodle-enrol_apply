@@ -67,6 +67,17 @@ defect that shipped:
 - **Perl interpolates `$variables` on both sides of `s///`, and `\Q...\E` does not stop
   it.** A pattern naming `$manager` matches nothing; a replacement naming `$row` writes
   nothing. Both happened here, in opposite directions, in one afternoon.
+- **Never delimit with a character the pattern needs literally.** Perl strips the backslash from
+  an ESCAPED DELIMITER before compiling the regex, so `\|\|` inside a `s|…|…|` becomes a bare
+  `||` — alternation with an empty branch, which matches at offset 0. `BI` was written that way
+  and inserted its replacement before the opening `<?php`: `--dry-run` showed a diff, the pattern
+  "matched", and the gate reddened nothing. Use `#` for anything containing a pipe. The same trap
+  waits for `{}` delimiters and an unbalanced brace, which is what a replacement opening a block
+  always has — three of the U3 scripts had to move off `s{…}{…}` for that reason.
+- **Mutate the VALUE, not the guard around it.** `AT` swapped the two `> 0` tests that choose
+  between a number and the no-limit wording, which changes nothing whenever both numbers are set
+  — and both are set in every fixture able to see a swap at all. It reddened nothing on the first
+  full sweep that included it, having read as a perfectly sensible mutation for two slices.
 - **Anchor on what makes the line unique.** `lib.php` contains the same
   `has_capability('enrol/apply:manageapplications', $manager->get_context())` twice — in
   `get_bulk_operations()` and in `get_user_enrolment_actions()` — and only the

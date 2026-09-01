@@ -158,7 +158,7 @@ final class queue {
         $sql = "SELECT ue.id, ue.userid, ue.enrolid, ue.status, ue.timecreated AS applydate,
                        COALESCE(s.comment, ai.comment) AS applycomment, s.userinfodata AS snapshot,
                        s.id AS submissionid, s.status AS recordstatus, s.timedecided,
-                       s.decidedby, s.outcomemessage,
+                       s.decidedby, s.outcomemessage, s.decisionnote,
                        e.courseid, c.fullname AS coursename
                   FROM {user_enrolments} ue
              LEFT JOIN {enrol_apply_applicationinfo} ai ON ai.userenrolmentid = ue.id

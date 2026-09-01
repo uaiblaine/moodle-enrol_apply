@@ -166,5 +166,47 @@ Feature: Enrolment upon approval
     And I am on the "Course 1" "enrolled users" page
     And I should not see "Student 1"
 
+  # Deferral end to end, and the only place the three halves of it meet. No @javascript, for
+  # the same reason the cancellation scenario above has none: the review page is a plain form.
+  #
+  # Three things no unit test can put together. The note survives the decision and is read back
+  # by the next person to open the application - which is the whole reason the column exists.
+  # The application stays decidable afterwards, so the reason can be corrected rather than
+  # frozen. And the applicant reads about THEIR OWN state on the course page, where every one of
+  # the three states used to read as "waiting for a decision".
+  Scenario: Deferring one application records why, and the applicant is told what happened
+    Given I log in as "student1"
+    And I am on "Course 1" course homepage
+    And I press "Start application"
+    And I press "Submit application"
+    And I log out
+    And I log in as "teacher1"
+    And I am on the "Course 1" "enrolled users" page
+    And I click on "Decide this application" "link" in the "Student 1" "table_row"
+    When I set the field "Message to the applicant" to "You are third on the list."
+    And I set the field "Note for the record" to "Holding for the September intake."
+    And I press "Defer this application"
+    Then I should see "The selected enrolment applications have been updated."
+    # Reopened, the application says it was deferred and says why.
+    And I am on the "Course 1" "enrolled users" page
+    And I click on "Decide this application" "link" in the "Student 1" "table_row"
+    # Scoped to the status row and not a bare "Deferred": the capacity panel on the same page is
+    # headed with that very word, so the bare assertion passes whatever the status says.
+    Then I should see "Status: Deferred"
+    And I should see "Holding for the September intake."
+    # The box is NOT pre-filled: the note belongs to the decision being taken, so a second
+    # decision cannot inherit the first one's reason by leaving the box alone.
+    And the field "Note for the record" matches value ""
+    # And the reason can still be corrected, which the old lookup made impossible.
+    When I set the field "Note for the record" to "Waiting for the transcript."
+    And I press "Defer this application"
+    Then I should see "The selected enrolment applications have been updated."
+    And I log out
+    # The applicant reads their own state, not the pending wording every state used to get.
+    And I log in as "student1"
+    And I am on "Course 1" course homepage
+    Then I should see "Your enrolment application has been deferred."
+    And I should not see "New section"
+
   # Capability enforcement is covered by tests/lib_test.php: asserting on it here would
   # mean asserting on an exception page, which behat's exception hook fails by design.

@@ -308,6 +308,82 @@ final class application_form_test extends \advanced_testcase {
     }
 
     /**
+     * The refusal names the applicant's OWN state, in each of its three reachable spellings.
+     *
+     * The third decision surface, and it had both halves of the same defect the two pages had.
+     * One fixed wording - the pending one - went to everybody with a row, so reopening the modal
+     * told a deferred applicant their application had been "successfully sent".
+     *
+     * The assertion is on the exception's string IDENTIFIER rather than its rendered message,
+     * which is what moodle_exception actually carries and what a caller could act on.
+     *
+     * @return void
+     */
+    public function test_the_refusal_names_the_applicants_own_state(): void {
+        global $DB;
+
+        $this->plugin->submit_application($this->instance, $this->applicant->id, (object) []);
+        $ueid = (int) $DB->get_field(
+            'user_enrolments',
+            'id',
+            ['userid' => $this->applicant->id, 'enrolid' => $this->instance->id],
+            MUST_EXIST
+        );
+
+        $cases = [
+            ENROL_USER_SUSPENDED => 'applicationsubmitted_body',
+            ENROL_APPLY_USER_WAIT => 'applicationdeferred_body',
+            ENROL_USER_ACTIVE => 'applicationapproved_body',
+        ];
+
+        foreach ($cases as $status => $expected) {
+            $DB->set_field('user_enrolments', 'status', $status, ['id' => $ueid]);
+            try {
+                $this->make_form()->check_access_for_dynamic_submission();
+                $this->fail('status ' . $status . ' must be refused');
+            } catch (\moodle_exception $e) {
+                $this->assertSame($expected, $e->errorcode, 'status ' . $status);
+            }
+        }
+    }
+
+    /**
+     * A method that has stopped taking applications still tells its applicants about theirs.
+     *
+     * The ordering half, and the reason the applicant's own row is now read BEFORE
+     * allow_apply(). Until it was, the moment a method stopped accepting applications everybody
+     * who had already applied was refused with "Enrolment is disabled or inactive", which is a
+     * fact about somebody else's problem.
+     *
+     * The control is in the same run: a user with NO row still gets that refusal, so this cannot
+     * pass against a form that had simply stopped calling allow_apply().
+     *
+     * @return void
+     */
+    public function test_an_applicant_is_not_refused_with_somebody_elses_reason(): void {
+        global $DB;
+
+        $this->plugin->submit_application($this->instance, $this->applicant->id, (object) []);
+        $DB->set_field('enrol', 'customint6', 0, ['id' => $this->instance->id]);
+
+        try {
+            $this->make_form()->check_access_for_dynamic_submission();
+            $this->fail('an applicant with a row must still be refused');
+        } catch (\moodle_exception $e) {
+            $this->assertSame('applicationsubmitted_body', $e->errorcode);
+        }
+
+        // The control: somebody with no application reads the method's own refusal.
+        $this->setUser($this->getDataGenerator()->create_user());
+        try {
+            $this->make_form()->check_access_for_dynamic_submission();
+            $this->fail('a closed method must refuse a stranger');
+        } catch (\moodle_exception $e) {
+            $this->assertSame('cantenrol', $e->errorcode);
+        }
+    }
+
+    /**
      * The places cap is enforced before the form opens.
      *
      * @return void

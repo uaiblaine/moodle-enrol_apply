@@ -278,13 +278,15 @@ final class backup_test extends \advanced_testcase {
      * @param \stdClass $applicant The applicant.
      * @param array $groupids Group ids the decider chose.
      * @param int $roleid Role id the decider chose.
+     * @param string $note Note the decider recorded about the decision.
      * @return void
      */
     protected function record_decision(
         \stdClass $course,
         \stdClass $applicant,
         array $groupids,
-        int $roleid
+        int $roleid,
+        string $note = ''
     ): void {
         global $DB;
 
@@ -299,6 +301,13 @@ final class backup_test extends \advanced_testcase {
             'enrol_apply_submission',
             'decidedrole',
             $roleid,
+            'courseid = :courseid AND userid = :userid',
+            ['courseid' => $course->id, 'userid' => $applicant->id]
+        );
+        $DB->set_field_select(
+            'enrol_apply_submission',
+            'decisionnote',
+            $note,
             'courseid = :courseid AND userid = :userid',
             ['courseid' => $course->id, 'userid' => $applicant->id]
         );
@@ -417,7 +426,9 @@ final class backup_test extends \advanced_testcase {
             $path = $basepath . '/course/enrolments.xml';
             $xml = file_get_contents($path);
             $this->assertStringContainsString('<decidedgroups>', $xml, 'the premise: the elements were written');
+            $this->assertStringContainsString('<decisionnote>', $xml, 'the premise: the note was written');
             $xml = preg_replace('#\s*<decided(groups|role)>.*?</decided(groups|role)>#s', '', $xml);
+            $xml = preg_replace('#\s*<decisionnote>.*?</decisionnote>#s', '', $xml);
             file_put_contents($path, $xml);
         };
 
@@ -426,6 +437,31 @@ final class backup_test extends \advanced_testcase {
 
         $this->assertSame('', (string) $restored->decidedgroups);
         $this->assertSame(0, (int) $restored->decidedrole);
+        /* The note's own ?? is what this reaches. It differs from the two above in how it fails:
+           an absent property is a PHP warning rather than a TypeError, and Moodle's PHPUnit runs
+           with failOnWarning - so without the guard this is a failed run rather than a wrong
+           value, and nothing about the row would look wrong afterwards. */
+        $this->assertSame('', (string) $restored->decisionnote);
+    }
+
+    /**
+     * The decision note survives a backup and restore.
+     *
+     * It holds no ids, so it is carried verbatim and annotates nobody - which is why it is not
+     * enough to know that the two id-bearing columns travel. A column simply left out of the
+     * backup element is silent in both directions: the archive is well formed and the restored
+     * record is complete apart from the one field nobody looks at.
+     *
+     * @return void
+     */
+    public function test_the_decision_note_survives_a_restore(): void {
+        [$course, , $applicant] = $this->create_course_with_application();
+        $this->record_decision($course, $applicant, [], 0, 'Transcript verified with the registrar.');
+
+        $newcourseid = $this->backup_and_restore($course, true);
+        $restored = $this->restored_record($newcourseid);
+
+        $this->assertSame('Transcript verified with the registrar.', (string) $restored->decisionnote);
     }
 
     /**

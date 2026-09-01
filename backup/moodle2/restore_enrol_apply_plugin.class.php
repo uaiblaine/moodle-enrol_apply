@@ -137,6 +137,11 @@ class restore_enrol_apply_plugin extends restore_enrol_plugin {
             'userinfodata' => $data->userinfodata,
             'status' => (int) $data->status,
             'outcomemessage' => $data->outcomemessage,
+            /* The same ?? and the same reason as the two below: an EMPTY element parses back
+               as NULL rather than as the empty string it was written from, so this is the
+               ORDINARY path - every decision taken without a note - and not the edge one. It
+               also covers an archive predating the element, where the property is absent. */
+            'decisionnote' => $data->decisionnote ?? '',
             /* The ?? on both is not defensive padding, and the reason it is here is not the
                one it looks like. An EMPTY element parses back as NULL, not as the empty
                string it was written from - measured: without these, the very first record

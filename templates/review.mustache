@@ -59,6 +59,10 @@
     * places string - places taken against the limit, already formatted, or the no-limit wording
     * applicantslabel string - label of the applicants row
     * applicants string - applications held against the limit, or the no-limit wording
+    * deferredlabel string - label of the deferred row
+    * deferred string - how many of those applications are deferred. A bare count and not "n of
+      m": it is a subset of the applicants row rather than a limit of its own, and it is here
+      because nothing ever frees a deferred row from the applicant cap
     * hasdecision boolean - whether a colleague has already decided this one, which today means
       it was deferred; a pending application has no decision to describe, and the page is not
       reachable at all for the other two states
@@ -67,6 +71,12 @@
     * hasdecisionmessage boolean - whether they wrote anything to the applicant
     * decisionmessage string - what they wrote, ALREADY escaped with its line breaks converted,
       which is why it is triple stashed
+    * hasdecisionnote boolean - whether they left a note for whoever reads this next
+    * decisionnotelabel string - label of that note
+    * decisionnote string - the note, ALREADY escaped with its line breaks converted, hence the
+      triple stash. It is shown here and deliberately NOT pre-filled into the note box below,
+      because that writer clears on empty and a pre-filled box would carry one decision's reason
+      into the next
     * hashistory boolean - whether this reader may see earlier applications AND there are any
     * historylabel string - heading of the earlier-applications list
     * history array - one entry per earlier application, each with the date it was submitted and
@@ -114,11 +124,16 @@
         "places": "8 of 20",
         "applicantslabel": "Maximum applicants",
         "applicants": "35 of 40",
+        "deferredlabel": "Deferred",
+        "deferred": "12",
         "hasdecision": true,
         "decisionlabel": "The decision so far",
         "decision": "Deferred by Ana Souza on 10/08/26, 14:02.",
         "hasdecisionmessage": true,
         "decisionmessage": "Waiting for the second group to open.",
+        "hasdecisionnote": true,
+        "decisionnotelabel": "Note for the record",
+        "decisionnote": "Second intake opens in September; hold until the registrar confirms.",
         "hashistory": true,
         "historylabel": "Earlier applications to this course",
         "history": [
@@ -153,6 +168,10 @@
         ],
         "messagelabel": "Message to the applicant",
         "messagehelp": "Included in the message they receive. Optional.",
+        "messagevalue": "",
+        "notelabel": "Note for the record",
+        "notehelp": "Kept with the application for whoever looks at it next. The applicant never sees it.",
+        "notevalue": "",
         "stickyfooter": "<div id=\"sticky-footer\"><button type=\"submit\">Confirm</button></div>"
     }
 }}
@@ -181,6 +200,9 @@
                 <div class="alert alert-info" role="status">
                     <strong>{{decisionlabel}}</strong> {{decision}}
                     {{#hasdecisionmessage}}<div class="mt-1">{{{decisionmessage}}}</div>{{/hasdecisionmessage}}
+                    {{#hasdecisionnote}}
+                        <div class="mt-1"><strong>{{decisionnotelabel}}:</strong> {{{decisionnote}}}</div>
+                    {{/hasdecisionnote}}
                 </div>
             {{/hasdecision}}
             <h2 class="h5">{{commentlabel}}</h2>
@@ -216,6 +238,8 @@
                     <dd class="col-6">{{places}}</dd>
                     <dt class="col-6">{{applicantslabel}}</dt>
                     <dd class="col-6">{{applicants}}</dd>
+                    <dt class="col-6">{{deferredlabel}}</dt>
+                    <dd class="col-6">{{deferred}}</dd>
                 </dl>
             {{/hascapacity}}
             {{#hashistory}}

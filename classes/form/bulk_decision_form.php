@@ -92,6 +92,20 @@ class bulk_decision_form extends moodleform {
         $mform->setType('outcomemessage', PARAM_TEXT);
         $mform->addHelpButton('outcomemessage', 'outcomemessage', 'enrol_apply');
 
+        /* The decider's own note, offered here for the same reason the message is: this is a
+           third decision surface, and a field the queue and the review page both offer while
+           this one silently does not is exactly how two surfaces come to describe the same
+           record differently. Same PARAM_TEXT, same durable record, opposite audience - the
+           applicant never reads this one. */
+        $mform->addElement(
+            'textarea',
+            'decisionnote',
+            get_string('decisionnote', 'enrol_apply'),
+            ['rows' => 4, 'cols' => 60]
+        );
+        $mform->setType('decisionnote', PARAM_TEXT);
+        $mform->addHelpButton('decisionnote', 'decisionnote', 'enrol_apply');
+
         if (!empty($this->_customdata['withdecision'])) {
             $this->add_decision_controls((int) $this->_customdata['courseid']);
         }

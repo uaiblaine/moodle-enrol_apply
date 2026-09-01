@@ -580,6 +580,7 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
             'submission:timecreated',
             'submission:timedecided',
             'submission:comment',
+            'submission:decisionnote',
             'submission:enrolment',
             'submission:outcome',
             'submission:snapshot',
@@ -595,6 +596,7 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
             'submission:timecreated',
             'submission:timedecided',
             'submission:comment',
+            'submission:decisionnote',
             'applydecider:fullname',
         ], $this->filter_ids());
     }
@@ -1078,6 +1080,34 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
         $table = new \core_table\flexible_table('enrol_apply_export_probe');
         $exported = (new \core_table\base_export_format($table))->format_text($rendered);
         $this->assertSame($comment, $exported);
+    }
+
+    /**
+     * The decision note reaches the reader, and the download, whole.
+     *
+     * The same formatter and therefore the same pair of defects as the comment column beside it,
+     * and asserted the same way: format_text(FORMAT_PLAIN) would write "&#039;" for an apostrophe
+     * that nothing decodes back, and would inject a "<br />" whose ">" lets a decoded "<" swallow
+     * the rest of the line. Both halves, because they fail on different inputs.
+     *
+     * @return void
+     */
+    public function test_the_decision_note_column_reaches_the_reader_and_the_download_whole(): void {
+        global $DB;
+
+        $note = "O'Brien says: hold while A<B\nand R&D confirm";
+        $applicant = $this->seed();
+        $DB->set_field('enrol_apply_submission', 'decisionnote', $note, ['userid' => $applicant->id]);
+
+        $this->setUser($this->reader());
+        $rendered = (string) $this->rows()[0]->{'submission:decisionnote'};
+
+        $this->assertStringNotContainsString('<br', $rendered);
+        $this->assertStringNotContainsString('&#039;', $rendered);
+
+        $table = new \core_table\flexible_table('enrol_apply_note_export_probe');
+        $exported = (new \core_table\base_export_format($table))->format_text($rendered);
+        $this->assertSame($note, $exported);
     }
 
     /**

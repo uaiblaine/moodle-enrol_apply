@@ -170,6 +170,12 @@ if ($formaction !== '' && $userenrolments) {
        markup into the durable record, which outlives the enrolment it belongs to. */
     $outcomemessage = trim(optional_param('outcomemessage', '', PARAM_TEXT));
 
+    /* The decider's own note, on the same contract as the message above and with the opposite
+       audience: it is never sent to the applicant and never leaves the site. PARAM_TEXT for the
+       same reason - it outlives the enrolment it belongs to, so a forged post must not be able
+       to put markup into the durable record. */
+    $decisionnote = trim(optional_param('decisionnote', '', PARAM_TEXT));
+
     /* Cleaned to integers here and allowlisted per instance inside confirm_enrolment(), not
        here: the batch can span courses when the queue is opened site wide, so a group or a role
        that is legitimate for one application is not necessarily legitimate for the next. Both
@@ -179,6 +185,11 @@ if ($formaction !== '' && $userenrolments) {
     $decision = [
         'groups' => optional_param_array('groups', [], PARAM_INT),
         'roleid' => optional_param('roleid', 0, PARAM_INT),
+        /* Present on every decision, which is what lets the key be read with
+           array_key_exists() rather than tested for emptiness: an empty note submitted with a
+           decision CLEARS the previous one, and only a caller that omits the key entirely
+           leaves it alone. */
+        'note' => $decisionnote,
     ];
 
     /* Cancelling is the one decision that destroys something: cancel_enrolment() unenrols, which
@@ -221,6 +232,7 @@ if ($formaction !== '' && $userenrolments) {
                     'sesskey' => sesskey(),
                     'userenrolments[0]' => $userenrol,
                     'outcomemessage' => $outcomemessage,
+                    'decisionnote' => $decisionnote,
                 ]),
                 get_string('reviewcancelaction', 'enrol_apply'),
                 'post'
@@ -231,7 +243,10 @@ if ($formaction !== '' && $userenrolments) {
                way back from a cancellation would be restoring a choice for a decision that was
                not taken. The message is different - it is what they would write for either. */
             new single_button(
-                new moodle_url($manageurl, ['outcomemessage' => $outcomemessage]),
+                new moodle_url($manageurl, [
+                    'outcomemessage' => $outcomemessage,
+                    'decisionnote' => $decisionnote,
+                ]),
                 get_string('reviewkeep', 'enrol_apply'),
                 'get'
             )
@@ -243,16 +258,30 @@ if ($formaction !== '' && $userenrolments) {
     $enrolapply = enrol_get_plugin('apply');
     switch ($formaction) {
         case 'confirm':
-            $enrolapply->confirm_enrolment($userenrolments, $outcomemessage, $decision);
+            $decided = $enrolapply->confirm_enrolment($userenrolments, $outcomemessage, $decision);
             break;
         case 'wait':
-            $enrolapply->wait_enrolment($userenrolments, $outcomemessage);
+            $decided = $enrolapply->wait_enrolment($userenrolments, $outcomemessage, $decision);
             break;
         case 'cancel':
-            $enrolapply->cancel_enrolment($userenrolments, $outcomemessage);
+            $decided = $enrolapply->cancel_enrolment($userenrolments, $outcomemessage, $decision);
             break;
         default:
             throw new moodle_exception('invalidformaction', 'enrol_apply');
+    }
+
+    /* What the decision methods actually did, reported rather than assumed. Each of them skips
+       a row it will not act on - one that is no longer awaiting a decision, one in a course this
+       operator may not decide in, one whose enrolment has gone - and it skips it in silence, so
+       "Applications updated" was printed for a post that changed nothing at all. The count comes
+       from the method, which is the only thing that knows which rows it reached.
+
+       A skipped row is not an error and does not replace the success message: a selection can
+       legitimately hold both, because the queue is a listing somebody else may be working at the
+       same time. */
+    $skipped = count($userenrolments) - $decided;
+    if ($skipped > 0) {
+        \core\notification::warning(get_string('applicationsskipped', 'enrol_apply', $skipped));
     }
     /* Warn when the places are gone, re-reading AFTER the decisions rather than predicting -
        the same discipline the counts in classes/bulk/ apply, and the only truthful reading when
@@ -277,9 +306,13 @@ if ($formaction !== '' && $userenrolments) {
 
     redirect(
         $afterdecisionurl ?? $manageurl,
-        get_string('applicationsupdated', 'enrol_apply'),
+        $decided > 0
+            ? get_string('applicationsupdated', 'enrol_apply')
+            : get_string('applicationsnonedecided', 'enrol_apply'),
         null,
-        \core\output\notification::NOTIFY_SUCCESS
+        $decided > 0
+            ? \core\output\notification::NOTIFY_SUCCESS
+            : \core\output\notification::NOTIFY_INFO
     );
 }
 
@@ -296,8 +329,18 @@ if ($userenrol) {
     /* Whatever the operator had typed before they opened the confirmation and backed out of it.
        PARAM_TEXT and rendered through a double stash, exactly as it is on the way in. */
     $prefillmessage = optional_param('outcomemessage', '', PARAM_TEXT);
+    // The note travels back on the same journey and for the same reason.
+    $prefillnote = optional_param('decisionnote', '', PARAM_TEXT);
 
-    $renderer->review_page($application, $applicant, $instance, $manageurl, $navigation, $prefillmessage);
+    $renderer->review_page(
+        $application,
+        $applicant,
+        $instance,
+        $manageurl,
+        $navigation,
+        $prefillmessage,
+        $prefillnote
+    );
     exit;
 }
 
