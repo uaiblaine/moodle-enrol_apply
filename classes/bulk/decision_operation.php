@@ -89,12 +89,15 @@ abstract class decision_operation extends enrol_bulk_enrolment_operation {
      * enrolment that has since lapsed reads as suspended and comes back looking exactly like
      * a fresh application unless the second half of the rule is applied.
      *
-     * Of the three decisions, deferral is the one that makes a state nothing can undo:
-     * wait_enrolment() calls update_user_enrol() with no dates, and update_user_enrol()
-     * writes a date only when one is passed, so an expired row keeps its past timeend and
-     * becomes a waiting-list application carrying an expiry - which no queue will list, and
-     * which the ENROL_EXT_REMOVED_UNENROL branch of process_expirations() unenrols on sight,
-     * selecting on timeend alone with no status filter.
+     * Of the three decisions, deferral USED to be the one that made a state nothing could undo:
+     * wait_enrolment() called update_user_enrol() with no dates, and update_user_enrol() writes a
+     * date only when one is passed, so an expired row kept its past timeend and became a deferred
+     * application carrying an expiry - which no queue will list, and which the
+     * ENROL_EXT_REMOVED_UNENROL branch of process_expirations() unenrols on sight, selecting on
+     * timeend alone with no status filter. It passes 0 explicitly now, so the expiry is cleared.
+     * The predicate still excludes expired rows, and for a reason that does not depend on that
+     * fix: a lapsed approval is not an application awaiting a decision, whichever decision would
+     * be taken on it.
      *
      * Rows excluded here stay in the selection for the counting, so the operator is told how
      * many people the decision did not apply to.

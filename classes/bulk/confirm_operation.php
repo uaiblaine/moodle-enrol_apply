@@ -81,6 +81,7 @@ class confirm_operation extends decision_operation {
         $decision = [
             'groups' => array_map('intval', (array) ($properties->groups ?? [])),
             'roleid' => (int) ($properties->roleid ?? 0),
+            'note' => (string) ($properties->decisionnote ?? ''),
         ];
 
         $this->plugin->confirm_enrolment($userenrolmentids, $message, $decision);

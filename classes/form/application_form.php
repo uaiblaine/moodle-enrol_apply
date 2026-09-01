@@ -385,17 +385,38 @@ class application_form extends dynamic_form {
             throw new \moodle_exception('noguestaccess', 'enrol');
         }
 
-        if (!\core_course_category::can_view_course_info($course) && !is_enrolled($context, $USER, '', true)) {
+        $hasaccess = is_enrolled($context, $USER, '', true);
+        if (!\core_course_category::can_view_course_info($course) && !$hasaccess) {
             throw new \moodle_exception('coursehidden', '', $CFG->wwwroot . '/');
+        }
+
+        /* The applicant's OWN row is read, and read BEFORE allow_apply(), which is the same
+           ordering the enrolment page's panel takes and for the same reason. Two defects sat
+           here. The refusal threw one fixed wording - the PENDING one - at everybody who already
+           had a row, so reopening this form told a deferred applicant their application had been
+           "successfully sent". And asking allow_apply() first meant that the moment the method
+           stopped accepting applications - the window closing, the instance being disabled, the
+           cohort changing - an applicant reopening the form was refused with "Enrolment is
+           disabled or inactive", which is a fact about somebody else's problem.
+
+           The access fact is passed rather than derived: an ACTIVE row that really does grant
+           access means "you are enrolled", not "your enrolment is broken". */
+        $ownrow = $DB->get_record(
+            'user_enrolments',
+            ['userid' => $USER->id, 'enrolid' => $instance->id],
+            'id, status',
+            IGNORE_MULTIPLE
+        );
+        if ($ownrow) {
+            throw new \moodle_exception(
+                \enrol_apply\local\applicantstate::message_key($ownrow, $hasaccess),
+                'enrol_apply'
+            );
         }
 
         $allowapply = $this->get_plugin()->allow_apply($instance);
         if ($allowapply !== true) {
             throw new \moodle_exception('cantenrol', 'enrol_apply');
-        }
-
-        if ($DB->record_exists('user_enrolments', ['userid' => $USER->id, 'enrolid' => $instance->id])) {
-            throw new \moodle_exception('notification', 'enrol_apply');
         }
 
         if (\enrol_apply\local\capacity::applications_closed($instance)) {

@@ -56,10 +56,12 @@ apply.php / applied.php      the no-JavaScript transport and the acknowledgement
 edit.php / edit_form.php     per-course instance configuration
 manage.php / manage_table.php   the approval queue and its bulk actions
 renderer.php                 page rendering plus the notification e-mail body
-templates/                   manage, manage_actions, review, decision_controls,
+templates/                   manage, manage_actions, review, review_actions, decision_controls,
                              application_navigation, application_notification, profile_offer
 classes/hook_callbacks.php   reconciles approvals made outside confirm_enrolment()
+classes/local/applicantstate.php  what an applicant is told about their OWN application
 classes/local/applications.php  mentee lookup shared by the queue
+classes/local/capacity.php   the two capacity numbers, and how many deferrals hold one
 classes/local/submission.php the durable application record: constants, writes, reads
 classes/observers.php        course_deleted, orphan cleanup for the plugin-disabled case
 classes/privacy/provider.php full provider: two tables, two personal-data roles
@@ -75,6 +77,69 @@ backup/                      group mappings, comments and the durable trail, see
   visible only to this plugin. Any query filtering applications must use
   `status != ENROL_USER_ACTIVE`, never `status = ENROL_USER_SUSPENDED`, or deferred
   applications vanish from the queue.
+
+- **An applicant is told about their OWN row first, on all three surfaces, by one describer.**
+  `\enrol_apply\local\applicantstate` exists because the enrolment page's panel, `applied.php`
+  and `application_form::check_access_for_dynamic_submission()` each branched on nothing but *does
+  a row exist* and so read the PENDING wording to everybody — a deferred applicant was told a
+  decision nobody had taken was still pending, and so was somebody approved onto an enrolment that
+  grants no access.
+
+  **Four states, not three, and ACCESS is a parameter rather than something read off the row.**
+  An ACTIVE row can grant access or grant none, and only the second may say the enrolment is not
+  active: `applied.php`'s gate asks for an application and nothing more, so a fully enrolled
+  participant who keeps the link opens it legitimately, and a describer that read ACTIVE as
+  "approved with no access" told a working participant their enrolment was broken and sent them to
+  bother their teacher. The row alone cannot tell the two apart — core pairs the status with the
+  enrolment's window AND the enrol instance's own status — so each caller passes what it knows,
+  which is `is_enrolled(..., onlyactive: true)` for two of them and a guaranteed false for the
+  enrolment page, whose panel core only renders to somebody it has already refused.
+
+  Two more consequences worth keeping. **The applicant's own row must be tested BEFORE
+  `allow_apply()`, on the form as well as on the page**, or a method that stops accepting
+  applications tells everybody who already applied "Enrolment is disabled or inactive" — a message
+  about somebody else's problem. And the form's refusal takes `message_key()` rather than
+  `describe()`, because `moodle_exception` wants an identifier: that is the one place the
+  state-to-wording mapping is allowed to be read as a key, and it is still a `match` over literals
+  rather than a computed id.
+
+- **The decision methods reconstruct a missing record before they write to it.**
+  `record_outcome_message()` and `record_decision_note()` both loop over the rows they find and
+  write nothing when there are none, in silence — so a decision on an application older than
+  `enrol_apply_submission`, or made through any route that never wrote one, stored the operator's
+  message nowhere and mailed it nowhere while the status looked perfectly correct.
+  `submission::ensure()` closes that. It reconstructs only what a pending application can honestly
+  claim: the comment from `enrol_apply_applicationinfo`, the enrolment's OWN `timecreated` (not
+  this moment — `prior_applications()` orders by it and the retention sweep filters on it), an
+  empty snapshot, and `STATUS_PENDING` whatever the enrolment is doing, because the caller stamps
+  the real decision immediately afterwards.
+
+- **Correcting a deferral's reason is not a second decision, and `wait_enrolment()` has to know
+  the difference.** Admitting already-deferred rows is what lets the reason be edited at all, and
+  it is what makes everything the first deferral did run a second time. Two guards keep it
+  honest, both keyed on one `$moved` read BEFORE the update (afterwards every row is deferred,
+  whether it arrived just now or last month): `decide()` is passed `$moved` rather than `true`, so
+  its own guard leaves the ORIGINAL decider and date alone; and the applicant is notified only
+  when the enrolment moved **or** the decider typed a message for them. The second half is not
+  symmetry — a message written into a box whose whole purpose is to reach somebody must not be
+  silently dropped. Gates `BI` and `BJ`.
+
+- **`decisionnote` is the decider's, `outcomemessage` is the applicant's, and nothing may blur
+  them.** The note is never mailed and appears on no applicant-facing page; it is read by the
+  review page, the report and the privacy export. Both writers CLEAR on empty, which is not
+  tidiness: without it a re-queued application — which core's "Edit enrolment" screen and an
+  `expiredaction` of *suspend* both produce — is decided a second time carrying the first
+  decision's reason with nothing on screen to say so. For the same reason the review page SHOWS
+  the stored note but never pre-fills the box with it.
+
+- **The notification wording falls back at READ time, in `notify_applicant()`.** All six settings
+  ship empty and a `settings.php` default cannot reach an existing site:
+  `admin_apply_default_settings(NULL, true)` runs only from `install_core()` and skips any setting
+  whose `get_setting()` is not null. The subject and the body fall back independently, and they
+  want **opposite spellings** of the course name — the body is HTML and goes through
+  `update_mail_content()`, which escapes what it substitutes; the subject is not HTML and is
+  escaped again by the message sink, so it takes the plain spelling. Still unfixed and recorded
+  rather than half-done: every applicant notification is composed in the DECIDER's language.
 
 - **`?userenrol=` is a page, not a narrower queue, and it is tested before `id=` for that
   reason.** It used to render `enrol_apply_manage_table` filtered to one row, bulk bar and all,
@@ -291,6 +356,22 @@ backup/                      group mappings, comments and the durable trail, see
   `manage.php` before the redirect, and on the queue itself — the latter rendered **outside** the
   template's `hasrows` section, because an instance at its applicant limit has an EMPTY queue,
   which is exactly when the manager needs to be told why.
+
+  **A deferred row counts against the applicant cap for ever, and the remedy is DATA rather than
+  the predicate.** `applicants()` has no status clause, `wait_enrolment()` writes `timeend = 0` so
+  no arm of `process_expirations()` reaches the row, and `get_unenrolself_link()` demands
+  `ENROL_USER_ACTIVE` so the applicant cannot withdraw. `capacity::deferred()` makes the number
+  visible — on the review page's capacity panel and in the queue's applications-closed notice —
+  and cancelling those rows is what frees the room. **Excluding them from `applicants()` is
+  forbidden**: it changes what `is_full()` ANSWERS for the three plugins that reach it through
+  `is_callable()`, and gate `AC` proves only that the method still delegates.
+
+  `deferred()` needs a `require_once` of this plugin's `lib.php` inside the method, because
+  `ENROL_APPLY_USER_WAIT` lives there and `classes/local/` is autoloaded while `lib.php` is not.
+  Without it the method is a **fatal on first call**, not a wrong answer. Inside the method rather
+  than at file scope, which is where the report formatter and the bulk operation already put the
+  identical line: a require at file scope would drag in the `MOODLE_INTERNAL` guard the file
+  correctly does without.
 
   **`enrol_apply_plugin::is_full()` keeps its name and fronts the APPLICANT question.** Renaming
   it breaks `local_dimensions`, `local_unlistedcourses` and `theme_boost_union_fundaseg`
@@ -697,22 +778,31 @@ backup/                      group mappings, comments and the durable trail, see
   written to keep away from the decision methods. `awaiting_decision()` is where the whole
   predicate now lives.
 
-  **Deferral is the worst of the three, not cancellation, which is the opposite of what it looks
-  like.** `wait_enrolment()` calls `update_user_enrol()` with no dates and that method writes a
-  date only when one is passed, so an expired row keeps its past `timeend` and becomes a
-  waiting-list application carrying an expiry — a state no queue lists, and one the
+  **Deferral used to be the worst of the three, not cancellation, which is the opposite of what it
+  looks like.** `wait_enrolment()` called `update_user_enrol()` with no dates and that method
+  writes a date only when one is passed, so an expired row kept its past `timeend` and became a
+  deferred application carrying an expiry — a state no queue lists, and one the
   `ENROL_EXT_REMOVED_UNENROL` branch of `process_expirations()` unenrols on sight, selecting on
   `timeend` alone with no status filter. It is exactly the state "Never put a `timeend` on a
-  pending application" above forbids, arrived at from the other end.
+  pending application" above forbids, arrived at from the other end. **It passes `null, 0` now**
+  (gate `AA`), so the expiry is cleared; the predicate still excludes expired rows, because a
+  lapsed approval is not an application awaiting a decision whatever the deferral would do to it.
 
 - **Counts are taken by re-reading, never by predicting, and there are three of them rather than
   one.** The three decision methods skip a row they will not act on and skip it silently, so the
   only truthful report is of the rows whose state actually moved. One bucket would have to carry
   three unrelated reasons under a sentence naming a single one — "not awaiting a decision" is false
-  of an application already on the waiting list, which `wait_enrolment()` skips because it looks up
-  `status = ENROL_USER_SUSPENDED` strictly, and false again of one refused by
-  `can_manage_application()`. Each counter is computed from the set its string describes and
-  nothing else.
+  of an application refused by `can_manage_application()`, and false again of one whose enrolment
+  did not move because it was already in the state being asked for. Each counter is computed from
+  the set its string describes and nothing else.
+
+  **The queue counts too, and it counts something narrower.** Each decision method RETURNS how
+  many of the given applications it reached — found, authorised and written to — and `manage.php`
+  reports the rest as left alone. Before that it printed "The selected enrolment applications have
+  been updated" for a post that had changed nothing at all. Note that `wait_enrolment()` no longer
+  skips an application already deferred: its lookup is `get_pending_user_enrolment()`, the same one
+  approval and cancellation use, which is what lets a decider correct the REASON on a deferred
+  application (gate `BF`).
 
 - **Core's own bulk form cannot be reused, and the one line worth copying from it is invisible.**
   `enrol_bulk_enrolment_change_form` indexes an options array whose only keys are `-1`, `0` and `1`

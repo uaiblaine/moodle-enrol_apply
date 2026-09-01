@@ -180,6 +180,32 @@ class submission extends base {
             ->add_attributes(['class' => 'enrol_apply-linebreaks'])
             ->add_callback([formatter::class, 'plaintext']);
 
+        /* The decider's own note, beside the applicant's comment and rendered identically -
+           same free-text formatter, same white-space rule, same "not sortable" - because a
+           reader scanning a report wants the two to read alike. What differs is who wrote it
+           and who it was written for, which the column's label says.
+
+           No capability of its own, and the reason is NOT that a gate above already covers it -
+           an earlier version of this comment said so and was wrong. The COURSE report has a
+           can_view() on enrol/apply:viewreports; an entity is shared with the site-wide
+           datasource, which has no can_view() at all because core offers a plugin no hook to
+           gate one (see the datasource's own docblock). What governs a custom report is the
+           Report Builder capabilities and the report's audience. This column is therefore given
+           exactly the treatment the applicant's own comment beside it has, which is the value
+           with the stronger claim to protection of the two - the snapshot column, which is
+           different in kind, carries its own moodle/user:viewalldetails gate. */
+        $columns[] = (new column(
+            'decisionnote',
+            new lang_string('decisionnote', 'enrol_apply'),
+            $this->get_entity_name()
+        ))
+            ->add_joins($this->get_joins())
+            ->set_type(column::TYPE_LONGTEXT)
+            ->add_field("{$alias}.decisionnote", 'submissiondecisionnote')
+            ->set_is_sortable(false)
+            ->add_attributes(['class' => 'enrol_apply-linebreaks'])
+            ->add_callback([formatter::class, 'plaintext']);
+
         $uealias = $this->get_table_alias('user_enrolments');
 
         /* What the enrolment is doing NOW, which the stored status cannot say. The record holds
@@ -334,6 +360,20 @@ class submission extends base {
             new lang_string('applycomment', 'enrol_apply'),
             $this->get_entity_name(),
             "{$alias}.comment"
+        ))
+            ->add_joins($this->get_joins());
+
+        /* A text filter and not a select, which is the whole reason the note is free text: the
+           two scenarios it records - waiting for a place, waiting for something to be validated
+           - are a real distinction but a thin one to freeze into a schema, and a coded reason
+           offered here would under-report. If it proves load bearing in use, a coded column can
+           be added beside a note that already exists. */
+        $filters[] = (new filter(
+            text::class,
+            'decisionnote',
+            new lang_string('decisionnote', 'enrol_apply'),
+            $this->get_entity_name(),
+            "{$alias}.decisionnote"
         ))
             ->add_joins($this->get_joins());
 

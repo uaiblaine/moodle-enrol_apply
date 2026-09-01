@@ -63,11 +63,15 @@ class cancel_operation extends decision_operation {
      *
      * @param array $userenrolmentids User enrolment ids of the whole selection.
      * @param string $message Message the decider wrote to the applicants, empty for none.
-     * @param stdClass $properties Submitted form data, unused: a cancellation carries no choices.
+     * @param stdClass $properties Submitted form data, for the decision note; a cancellation carries no choices.
      * @return void
      */
     protected function decide(array $userenrolmentids, string $message, stdClass $properties): void {
-        $this->plugin->cancel_enrolment($userenrolmentids, $message);
+        $this->plugin->cancel_enrolment(
+            $userenrolmentids,
+            $message,
+            ['note' => (string) ($properties->decisionnote ?? '')]
+        );
     }
 
     /**

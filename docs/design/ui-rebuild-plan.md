@@ -47,12 +47,12 @@ identical either way, so a dropdown stays an additive change on the same web ser
 | ~~**U1**~~ | ~~Delete `info.php`; finish the custom label~~ — **done**, [#57](https://github.com/uaiblaine/moodle-enrol_apply/pull/57) | U0 | yes | yes (clean `customtext2`) |
 | ~~**U1b**~~ | ~~Stop the queue leaking identity, and stop it filtering invisibly~~ — **done**, [#58](https://github.com/uaiblaine/moodle-enrol_apply/pull/58) | U0 | yes | no |
 | ~~**U2**~~ | ~~Rebuild the review page as Mockup C~~ — **done**, [#60](https://github.com/uaiblaine/moodle-enrol_apply/pull/60) | — | yes | no |
-| **U3** | Deferral as a first-class triage state | — | yes | yes (new column) |
+| ~~**U3**~~ | ~~Deferral as a first-class triage state~~ — **done 2026-08-31** | — | yes | yes (new column) |
 | **U4** | The participants-page bulk menu | — | yes | no |
 | **U5a** | Rebuild the queue as Mockup A on `core_table\dynamic`, without the search | U1, U1b, U3 | yes | no |
 | **U5b** | The as-you-type search over a plugin web service | U5a | yes | no |
 
-**Order:** ~~U0 → U1 → U1b → U2~~ (done 2026-09-01) → **U3** → U4 → U5a → U5b.
+**Order:** ~~U0 → U1 → U1b → U2~~ (done 2026-09-01) → ~~**U3**~~ (done 2026-08-31) → **U4** → U5a → U5b.
 
 **Why that order.**
 
@@ -499,8 +499,11 @@ ratchet into a two-click bulk cancel.
   which reach it through `is_callable()`. Gate `AC` proves only that the method still delegates; it
   cannot see a change in the answer.
 - *A separate cap for deferred rows* — rejected as a setting nobody asked for.
-- *An applicant withdraw control* — this is the real fix, and it needs a decision the owner has not
-  taken: whether an applicant may withdraw at all, and what that does to the cap. Recorded, not built.
+- *An applicant withdraw control* — this is the real fix, and it needed a decision the owner had
+  not taken. **Taken on 2026-08-31: not now.** U3 therefore shipped the visibility remedy alone:
+  `capacity::deferred()`, the number on both the review page's capacity panel and a new
+  applications-closed notice on the queue, and cancelling the rows it names is what frees the
+  room.
 
 ### U3.6 — Vocabulary
 
@@ -512,6 +515,27 @@ That is the `maxenrolledreached` precedent, not the `maxenrolled` one.
 collide on **0, 1 and 2** — not only on 2 — and at 0 and 1 the same integer means opposite things
 (`ENROL_USER_ACTIVE` is 0 while `STATUS_PENDING` is 0). The queue's filter is over the **enrolment**
 vocabulary, because its main table is `{user_enrolments}`.
+
+### U3.7 — What U3 shipped beyond this plan, and why
+
+Recorded so the next reader does not read silence as an oversight. Three things were added that
+the six sub-steps above did not name, each because leaving it out would have left the defect the
+slice is about alive on a surface the slice already touches.
+
+- **The bulk decision form offers the note.** The participants page is the third decision surface,
+  and `decision_controls` is shared between the other two precisely so they cannot offer different
+  things. A field on two of the three is how the three come to describe the same record
+  differently.
+- **`application_form::check_access_for_dynamic_submission()` was the third copy of U3.2's
+  defect.** It threw one fixed wording — the PENDING one — at every applicant who already had a
+  row, so reopening the modal told a deferred applicant their application had been "successfully
+  sent". It now asks `applicantstate::message_key()`, which is the same describer the two pages
+  use. It is also what made the `notification` string retirable: the string was still live there.
+- **The queue gained an applications-closed notice.** U3.5 asked for the deferred number in "the
+  queue's capacity header"; the queue has no such header until U5a, and building one now would
+  collide with that rewrite. The number is on the review page's capacity panel, where the other two
+  live, and the queue instead gained the notice for the state the ratchet actually produces — the
+  applicant limit reached with an empty queue.
 
 ---
 
@@ -896,9 +920,9 @@ Recorded so the next reader does not take silence for an oversight.
 - **A details modal on the queue.** Not needed (decided); the applicant name is a plain profile link.
 - **Automatic promotion from the waiting list.** Explicitly not wanted (decided) — and it would be
   the first thing in this plugin to enrol somebody without a human decision.
-- **An applicant withdraw control.** The real fix for the applicant-cap ratchet, and it needs a
-  product decision that has not been taken: whether an applicant may withdraw at all, and what that
-  does to the cap.
+- **An applicant withdraw control.** The real fix for the applicant-cap ratchet. **The decision
+  was taken on 2026-08-31: not now.** Nothing in the schema closes the door; if it is built later
+  it is a write door exposed to the applicant, and needs every guard one carries.
 - **Notifications in the applicant's language.** Two of the three are composed in the decider's
   language and the third in the site default. The remedy is one `force_current_language()` wrapper,
   but it changes every applicant-facing message at once and belongs in its own change.

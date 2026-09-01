@@ -654,10 +654,11 @@ final class operations_test extends \advanced_testcase {
     /**
      * An application already on the waiting list is reported as unchanged, not as absent.
      *
-     * wait_enrolment() looks its row up with a strict status = suspended predicate, so an
-     * already-deferred application is skipped. It is still an application awaiting a
-     * decision - the queue lists it - so counting it under the "no application awaiting a
-     * decision" heading would tell the operator something the plugin's own queue denies.
+     * The row IS reached now - wait_enrolment()'s lookup admits a deferred application, which is
+     * what lets a decider edit its reason - but its enrolment does not move, so the operation
+     * counts it as unchanged. It is still an application awaiting a decision, which the queue
+     * lists, so counting it under the "no application awaiting a decision" heading would tell
+     * the operator something the plugin's own queue denies.
      *
      * @return void
      */
@@ -763,5 +764,54 @@ final class operations_test extends \advanced_testcase {
         $this->assertStringContainsString($escapedonce, $select[0]);
         $this->assertStringNotContainsString($awkward, $select[0]);
         $this->assertStringNotContainsString($escapedtwice, $select[0]);
+    }
+
+    /**
+     * All three bulk decisions offer the note box and record what is typed in it.
+     *
+     * The participants page is the third decision surface, and a field the queue and the review
+     * page both offer while this one silently does not is how two surfaces come to describe the
+     * same record differently. The loop covers all three because each operation builds its own
+     * call into the plugin and only confirmation shares a code path with the choosers.
+     *
+     * @return void
+     */
+    public function test_every_bulk_decision_offers_the_note_and_records_it(): void {
+        global $DB;
+
+        $classes = [
+            confirm_operation::class => 'Transcript verified.',
+            wait_operation::class => 'Holding for the September intake.',
+            cancel_operation::class => 'Duplicate of last week.',
+        ];
+
+        foreach ($classes as $class => $note) {
+            $this->setUser($this->teacher());
+            $applicant = $this->applicant();
+            $ueid = $this->ueid($applicant);
+
+            [$manager, $users] = $this->selection([$applicant]);
+            $operation = new $class($manager, $this->plugin);
+
+            // The control: the box is really offered, so the recording below is reachable by hand.
+            $html = $operation->get_form(new \moodle_url('/user/action_redir.php'), ['users' => $users])->render();
+            $this->assertMatchesRegularExpression('~<textarea[^>]*name="decisionnote"~', $html, $class);
+
+            $sink = $this->redirectMessages();
+            $operation->process($manager, $users, (object) ['outcomemessage' => '', 'decisionnote' => $note]);
+            $sink->close();
+            $this->notifications();
+
+            $this->assertSame(
+                $note,
+                (string) $DB->get_field(
+                    'enrol_apply_submission',
+                    'decisionnote',
+                    ['userenrolmentid' => $ueid],
+                    MUST_EXIST
+                ),
+                $class
+            );
+        }
     }
 }

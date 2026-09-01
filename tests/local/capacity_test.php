@@ -421,4 +421,82 @@ final class capacity_test extends \advanced_testcase {
         $this->assertFalse(capacity::places_full($instance));
         $this->assertSame($before, $DB->perf_get_reads());
     }
+
+    /**
+     * Deferred applications are counted, and nothing else is.
+     *
+     * The third number, and the sharpest assertion is the one that keeps it a strict SUBSET of
+     * applicants(): three applications in three different states, all counting against the
+     * applicant cap, and exactly one of them deferred. A predicate that had lost its status
+     * clause - which is how this becomes a second spelling of applicants() - would report three.
+     *
+     * @return void
+     */
+    public function test_only_a_deferred_application_is_counted_as_deferred(): void {
+        $this->seat(ENROL_USER_SUSPENDED);
+        $this->seat(ENROL_USER_ACTIVE);
+        $this->seat(ENROL_APPLY_USER_WAIT);
+
+        $this->assertSame(1, capacity::deferred($this->instance));
+        // All three are still in the pipeline, which is the number the cap is measured against.
+        $this->assertSame(3, capacity::applicants($this->instance));
+    }
+
+    /**
+     * An expired deferred row is excluded, exactly as the other two counts exclude theirs.
+     *
+     * Not consistency for its own sake: this number is reported to a manager as part of the
+     * applicant total, so a predicate that counted a row applicants() does not would produce
+     * "4 held, 5 of them deferred" on a live screen.
+     *
+     * @return void
+     */
+    public function test_an_expired_deferred_application_is_not_counted(): void {
+        $this->seat(ENROL_APPLY_USER_WAIT, time() - DAYSECS);
+
+        $this->assertSame(0, capacity::deferred($this->instance));
+        // The control: unexpired, and it counts.
+        $this->seat(ENROL_APPLY_USER_WAIT);
+        $this->assertSame(1, capacity::deferred($this->instance));
+    }
+
+    /**
+     * Nothing deferred is zero rather than an error.
+     *
+     * The method reaches ENROL_APPLY_USER_WAIT, which lives in a file the class under test is
+     * not loaded with, so without its own require the method is a fatal on first call rather
+     * than a wrong answer. **No test in this file can provoke that fatal**, and saying so is
+     * worth more than implying otherwise: this file requires lib.php at file scope, as every
+     * test file naming the constant must. What holds the require is the production caller -
+     * a report render or a queue page where \enrol_apply\local\capacity is autoloaded alone.
+     *
+     * @return void
+     */
+    public function test_an_instance_with_nothing_deferred_counts_none(): void {
+        $this->seat(ENROL_USER_SUSPENDED);
+
+        $this->assertSame(0, capacity::deferred($this->instance));
+    }
+
+    /**
+     * The count is scoped to its own instance.
+     *
+     * A course carrying two apply methods is supported on purpose, and the applicant cap is per
+     * method - so a count that spanned them would report one method's backlog against another's
+     * limit.
+     *
+     * @return void
+     */
+    public function test_the_deferred_count_is_scoped_to_one_instance(): void {
+        global $DB;
+
+        $otherid = $this->plugin->add_instance($this->course, $this->plugin->get_instance_defaults());
+        $other = $DB->get_record('enrol', ['id' => $otherid], '*', MUST_EXIST);
+
+        $user = $this->getDataGenerator()->create_user();
+        $this->plugin->enrol_user($other, $user->id, null, 0, 0, ENROL_APPLY_USER_WAIT);
+
+        $this->assertSame(1, capacity::deferred($other));
+        $this->assertSame(0, capacity::deferred($this->instance));
+    }
 }

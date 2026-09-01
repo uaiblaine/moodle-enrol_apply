@@ -106,6 +106,26 @@ class enrol_apply_renderer extends plugin_renderer_base {
             );
         }
 
+        /* The other exhausted state, and the one nothing on any screen could explain until now:
+           the APPLICANT limit is reached, so the method refuses new applications - and the rows
+           holding it against that limit may all be deferred, in which case the queue below is
+           empty and the course is closed to everybody with no visible cause. A deferred row is
+           freed by nothing (see capacity::deferred()), so the number is named here and
+           cancelling those rows is the way out.
+
+           Rendered outside the hasrows section by the template, deliberately and for the same
+           reason the places notice is: this is the state whose whole symptom is an empty queue,
+           so a notice inside that section would vanish exactly when it is needed. */
+        $closednotice = '';
+        if ($instance !== null && \enrol_apply\local\capacity::applications_closed($instance)) {
+            $capacity = \enrol_apply\local\capacity::class;
+            $closednotice = get_string('applicationsclosednotice', 'enrol_apply', (object) [
+                'held' => $capacity::applicants($instance),
+                'limit' => $capacity::applicant_limit($instance),
+                'deferred' => $capacity::deferred($instance),
+            ]);
+        }
+
         $context = $this->decision_controls_context($instance) + [
             'formurl' => $manageurl->out(false),
             'sesskey' => sesskey(),
@@ -114,6 +134,8 @@ class enrol_apply_renderer extends plugin_renderer_base {
             'stickyfooter' => $stickyfooter,
             'hasplacesnotice' => $placesnotice !== '',
             'placesnotice' => $placesnotice,
+            'hasclosednotice' => $closednotice !== '',
+            'closednotice' => $closednotice,
         ];
 
         if ($context['hasrows']) {
@@ -151,9 +173,10 @@ class enrol_apply_renderer extends plugin_renderer_base {
      *
      * @param stdClass|null $instance Enrol instance the decision belongs to, null when unknown.
      * @param string $message What the operator had already typed, empty on the ordinary path.
+     * @param string $note The decision note they had already typed, empty on the ordinary path.
      * @return array Context for the partial.
      */
-    protected function decision_controls_context($instance, $message = ''): array {
+    protected function decision_controls_context($instance, $message = '', $note = ''): array {
         $groups = [];
         $roles = [];
 
@@ -208,6 +231,15 @@ class enrol_apply_renderer extends plugin_renderer_base {
                not lose what they wrote by hesitating. Plain spelling: the template double
                stashes it, as it does everything else it renders itself. */
             'messagevalue' => $message,
+            /* The decider's own note. Offered on every decision rather than on deferral alone,
+               and NOT gated on the course capability the two choosers above are: the choosers
+               change what the approval DOES, while the note only records why it was taken - a
+               mentor deciding one application is as entitled to say why as anybody else, and a
+               trail with a hole in it wherever a mentor decided would be worth less than one
+               without the field. */
+            'notelabel' => get_string('decisionnote', 'enrol_apply'),
+            'notehelp' => get_string('decisionnote_help', 'enrol_apply'),
+            'notevalue' => $note,
             'hasgroups' => (bool) $groups,
             'grouplabel' => get_string('decisiongroups', 'enrol_apply'),
             'grouphelp' => get_string('decisiongroups_help', 'enrol_apply'),
@@ -294,6 +326,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
             : \core_user::get_user((int) $application->decidedby, '*', IGNORE_MISSING);
 
         $message = trim((string) ($application->outcomemessage ?? ''));
+        $note = trim((string) ($application->decisionnote ?? ''));
 
         return [
             'hasdecision' => true,
@@ -311,6 +344,18 @@ class enrol_apply_renderer extends plugin_renderer_base {
             /* Already escaped, with the decider's own line breaks kept, exactly as the
                applicant's comment is - and for the same reason. */
             'decisionmessage' => format_text($message, FORMAT_PLAIN),
+            /* The note the last decider left for whoever reads this next, and the reason the
+               column exists. It is shown here rather than pre-filled into the note box below:
+               the writer clears on empty on purpose, so a pre-filled box would carry one
+               decision's reason silently into the next - which is the defect that clearing was
+               introduced to fix for the outcome message.
+
+               No capability of its own. This whole panel is already behind the gate that opens
+               the review page, and the note says less about the applicant than the comment
+               printed a few lines further down does. */
+            'hasdecisionnote' => $note !== '',
+            'decisionnotelabel' => get_string('decisionnote', 'enrol_apply'),
+            'decisionnote' => format_text($note, FORMAT_PLAIN),
         ];
     }
 
@@ -414,6 +459,14 @@ class enrol_apply_renderer extends plugin_renderer_base {
                     'total' => $limit,
                 ])
                 : $nolimit,
+            /* How many of those applications are deferred, which is a SUBSET of the applicants
+               row above and not a fourth limit. It is here because a deferred row counts
+               against the applicant cap for ever and nothing frees it - see capacity::deferred()
+               - so a method refusing new applications with an empty queue is otherwise
+               unexplainable from any screen. A bare count, not "n of m": there is no limit on
+               deferrals to report it against. */
+            'deferredlabel' => get_string('reviewdeferred', 'enrol_apply'),
+            'deferred' => (string) $capacity::deferred($instance),
         ];
     }
 
@@ -502,9 +555,18 @@ class enrol_apply_renderer extends plugin_renderer_base {
      *        is exactly when a reader most needs it.
      * @param string $message What the operator had already typed, carried back from the cancel
      *        confirmation so that hesitating does not discard it.
+     * @param string $note The decision note they had already typed, carried back the same way.
      * @return void
      */
-    public function review_page($application, $applicant, $instance, $manageurl, $navigation, $message = '') {
+    public function review_page(
+        $application,
+        $applicant,
+        $instance,
+        $manageurl,
+        $navigation,
+        $message = '',
+        $note = ''
+    ) {
         echo $this->header();
         /* No heading here. Core already renders the applicant's name as the page's own <h1>
            from $PAGE->set_heading(), and $this->heading() defaults to level 2 - so the page
@@ -528,7 +590,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
            to the template file name, and renaming either without the other throws, which
            the two rendering tests hold. */
         echo $this->render($navigation);
-        echo $this->review_form($application, $applicant, $instance, $manageurl, $message);
+        echo $this->review_form($application, $applicant, $instance, $manageurl, $message, $note);
         echo $this->footer();
     }
 
@@ -549,14 +611,15 @@ class enrol_apply_renderer extends plugin_renderer_base {
      * @param moodle_url $manageurl Url the decision form posts back to.
      * @param string $message What the operator had already typed, carried back from the cancel
      *        confirmation so that hesitating does not discard it.
+     * @param string $note The decision note they had already typed, carried back the same way.
      * @return string Rendered markup.
      */
-    public function review_form($application, $applicant, $instance, $manageurl, $message = '') {
+    public function review_form($application, $applicant, $instance, $manageurl, $message = '', $note = '') {
         $waiting = (int) $application->status === ENROL_APPLY_USER_WAIT;
 
         $coursecontext = \context_course::instance($application->courseid);
 
-        $context = $this->decision_controls_context($instance, $message)
+        $context = $this->decision_controls_context($instance, $message, $note)
             + $this->snapshot_context($application)
             + $this->identity_context($applicant, $coursecontext)
             + $this->history_context($application, $coursecontext)

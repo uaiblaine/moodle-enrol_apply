@@ -442,5 +442,24 @@ function xmldb_enrol_apply_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026083104, 'enrol', 'apply');
     }
 
+    if ($oldversion < 2026083107) {
+        /* The decider's own note, which is NOT the outcome message: that one is written to the
+           applicant and is mailed to them, while this one is the record of why the decision was
+           taken and never leaves the site. Nullable, because every row already in the table
+           predates it and no default could honestly say what any of them was decided for.
+
+           Idempotent by construction: field_exists() is the guard, and a re-run of a step that
+           has already added the column matches and does nothing. The DDL is the whole step -
+           there is no DML half here, so the trap this file has already paid for once (a guard
+           that made the DDL idempotent and left the DML to run twice) has nothing to bite. */
+        $table = new xmldb_table('enrol_apply_submission');
+        $field = new xmldb_field('decisionnote', XMLDB_TYPE_TEXT, null, null, null, null, null, 'decidedrole');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        upgrade_plugin_savepoint(true, 2026083107, 'enrol', 'apply');
+    }
+
     return true;
 }

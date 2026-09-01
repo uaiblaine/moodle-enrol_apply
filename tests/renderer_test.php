@@ -613,6 +613,54 @@ final class renderer_test extends \advanced_testcase {
     }
 
     /**
+     * The capacity panel reports how many of those applications are deferred.
+     *
+     * A third row, and it is a subset of the applicants row rather than a limit of its own. It
+     * is here because a deferred application counts against the applicant cap for ever and
+     * nothing frees it - so a method refusing new applications with an empty queue has no other
+     * screen able to explain itself.
+     *
+     * The three rows carry three DIFFERENT values on this fixture, and each is asserted inside
+     * its own row. That is the trap this file has already walked into twice: both numbers stay
+     * on the page when they are swapped, so only a row-scoped assertion can see it.
+     *
+     * @return void
+     */
+    public function test_the_capacity_panel_reports_the_deferred_count(): void {
+        global $DB;
+
+        $this->setAdminUser();
+
+        $DB->set_field('enrol', 'customint4', 20, ['id' => $this->instance->id]);
+        $DB->set_field('enrol', 'customint3', 30, ['id' => $this->instance->id]);
+        $this->instance = $DB->get_record('enrol', ['id' => $this->instance->id], '*', MUST_EXIST);
+
+        $deferred = $this->getDataGenerator()->create_user();
+        $this->plugin->enrol_user($this->instance, $deferred->id, null, 0, 0, ENROL_APPLY_USER_WAIT);
+        $approved = $this->getDataGenerator()->create_user();
+        $this->plugin->enrol_user($this->instance, $approved->id, null, 0, 0, ENROL_USER_ACTIVE);
+
+        // Adds a third, still awaiting a decision.
+        $html = $this->render_review();
+
+        $this->assertSame(
+            '1',
+            $this->capacity_row($html, get_string('reviewdeferred', 'enrol_apply')),
+            'the deferred row must count the deferred row and nothing else'
+        );
+        $this->assertSame(
+            get_string('reviewofmany', 'enrol_apply', (object) ['taken' => 1, 'total' => 20]),
+            $this->capacity_row($html, get_string('places', 'enrol_apply')),
+            'places must still count the ACTIVE enrolment only'
+        );
+        $this->assertSame(
+            get_string('reviewofmany', 'enrol_apply', (object) ['taken' => 3, 'total' => 30]),
+            $this->capacity_row($html, get_string('reviewapplicants', 'enrol_apply')),
+            'applicants must still count all three'
+        );
+    }
+
+    /**
      * The value rendered against one label of the capacity panel.
      *
      * @param string $html The rendered review page.
@@ -729,6 +777,93 @@ final class renderer_test extends \advanced_testcase {
 
         $this->assertStringContainsString('Ana Souza', $html);
         $this->assertStringContainsString('Waiting for the second group.', $html);
+    }
+
+    /**
+     * Both decision surfaces offer the note box, because both read one partial.
+     *
+     * The queue and the review page share enrol_apply/decision_controls precisely so that they
+     * cannot offer different things, and a field present on one and silently absent on the other
+     * is how two surfaces come to describe the same record differently.
+     *
+     * @return void
+     */
+    public function test_both_decision_surfaces_offer_the_note_box(): void {
+        global $DB, $PAGE;
+
+        $this->assertMatchesRegularExpression(
+            '~<textarea[^>]*name="decisionnote"~',
+            $this->render_review()
+        );
+
+        $applicant = $this->getDataGenerator()->create_user();
+        $this->plugin->enrol_user($this->instance, $applicant->id, null, 0, 0, ENROL_USER_SUSPENDED);
+        $instance = $DB->get_record('enrol', ['id' => $this->instance->id], '*', MUST_EXIST);
+        $url = new \moodle_url('/enrol/apply/manage.php', ['id' => $this->instance->id]);
+        $PAGE->set_url($url);
+        $PAGE->set_context(\context_course::instance($this->course->id));
+        $table = new \enrol_apply_manage_table($this->instance->id);
+        $table->define_baseurl($url);
+
+        $this->assertMatchesRegularExpression(
+            '~<textarea[^>]*name="decisionnote"~',
+            $PAGE->get_renderer('enrol_apply')->manage_form($table, $url, $instance)
+        );
+    }
+
+    /**
+     * A deferred application shows the note the last decider left, and does NOT pre-fill it.
+     *
+     * The two halves are one property. The note is shown because that is what the column is
+     * for - the next member of staff reads why. It is not pre-filled into the box because the
+     * writer clears on empty on purpose: a pre-filled box would carry one decision's reason
+     * silently into the next, which is the exact defect the outcome message was fixed for.
+     *
+     * A whole-page assertion cannot see the second half, because the note is legitimately on the
+     * page twice over in the failing case. The textarea is extracted and read on its own.
+     *
+     * @return void
+     */
+    public function test_a_deferred_application_shows_its_note_without_pre_filling_the_box(): void {
+        global $DB, $PAGE;
+
+        $this->setAdminUser();
+        $this->render_review('Please let me in', ENROL_APPLY_USER_WAIT);
+
+        $ueid = (int) $DB->get_field_sql(
+            "SELECT MAX(id) FROM {user_enrolments} WHERE enrolid = :enrolid",
+            ['enrolid' => $this->instance->id]
+        );
+        $where = ['userenrolmentid' => $ueid];
+        $DB->set_field('enrol_apply_submission', 'status', \enrol_apply\local\submission::STATUS_WAITING, $where);
+        $DB->set_field('enrol_apply_submission', 'timedecided', 1786000000, $where);
+        $DB->set_field('enrol_apply_submission', 'decisionnote', 'Holding for the September intake.', $where);
+
+        $application = \enrol_apply\local\queue::application($ueid);
+        $applicant = \core_user::get_user($application->userid, '*', MUST_EXIST);
+        $html = $PAGE->get_renderer('enrol_apply')->review_form(
+            $application,
+            $applicant,
+            $this->instance,
+            new \moodle_url('/enrol/apply/manage.php', ['userenrol' => $ueid])
+        );
+
+        $this->assertStringContainsString('Holding for the September intake.', $html);
+        $this->assertStringContainsString(get_string('decisionnote', 'enrol_apply'), $html);
+        $this->assertSame('', $this->textarea_value($html, 'decisionnote'), $html);
+    }
+
+    /**
+     * What one named textarea actually contains.
+     *
+     * @param string $html Rendered markup.
+     * @param string $name The textarea's name attribute.
+     * @return string Its content, or the empty string when there is no such textarea.
+     */
+    private function textarea_value(string $html, string $name): string {
+        $pattern = '~<textarea[^>]*name="' . preg_quote($name, '~') . '"[^>]*>(.*?)</textarea>~s';
+
+        return preg_match($pattern, $html, $m) ? trim($m[1]) : '';
     }
 
     /**
@@ -1287,5 +1422,98 @@ final class renderer_test extends \advanced_testcase {
         // The precondition: there really is nothing awaiting a decision.
         $this->assertSame(0, (int) $table->totalrows);
         $this->assertStringContainsString(get_string('placesfull', 'enrol_apply', 1), $html);
+    }
+
+    /**
+     * The queue says when the APPLICANT limit is reached, and names the deferred backlog.
+     *
+     * The other exhausted state, and until now nothing on any screen could explain it: the method
+     * refuses new applications, and the rows holding it against its limit may all be deferred -
+     * in which case the queue is empty, the course is closed to everybody, and no number anywhere
+     * says why. A deferred row is freed by nothing, so the notice names how many there are.
+     *
+     * The control renders the same queue one application below the limit, and is not optional:
+     * asserting only that the notice IS present passes against a renderer that shows it always.
+     *
+     * @return void
+     */
+    public function test_the_queue_says_when_applications_are_closed(): void {
+        global $DB, $PAGE;
+
+        $DB->set_field('enrol', 'customint3', 2, ['id' => $this->instance->id]);
+        $instance = $DB->get_record('enrol', ['id' => $this->instance->id], '*', MUST_EXIST);
+
+        $url = new \moodle_url('/enrol/apply/manage.php', ['id' => $this->instance->id]);
+        $PAGE->set_url($url);
+        $PAGE->set_context(\context_course::instance($this->course->id));
+        $renderer = $PAGE->get_renderer('enrol_apply');
+
+        $deferred = $this->getDataGenerator()->create_user();
+        $this->plugin->enrol_user($this->instance, $deferred->id, null, 0, 0, ENROL_APPLY_USER_WAIT);
+
+        // The control: one application against a limit of two, so there is room and nothing to say.
+        $table = new \enrol_apply_manage_table($this->instance->id);
+        $table->define_baseurl($url);
+        $this->assertStringNotContainsString(
+            get_string('applicationsclosednotice', 'enrol_apply', (object) [
+                'held' => 1,
+                'limit' => 2,
+                'deferred' => 1,
+            ]),
+            $renderer->manage_form($table, $url, $instance)
+        );
+
+        $second = $this->getDataGenerator()->create_user();
+        $this->plugin->enrol_user($this->instance, $second->id, null, 0, 0, ENROL_APPLY_USER_WAIT);
+
+        $table = new \enrol_apply_manage_table($this->instance->id);
+        $table->define_baseurl($url);
+        $this->assertStringContainsString(
+            get_string('applicationsclosednotice', 'enrol_apply', (object) [
+                'held' => 2,
+                'limit' => 2,
+                'deferred' => 2,
+            ]),
+            $renderer->manage_form($table, $url, $instance)
+        );
+    }
+
+    /**
+     * That notice survives an empty queue, which is the state it exists for.
+     *
+     * An instance whose applicant limit is held entirely by APPROVED enrolments lists nothing at
+     * all - the queue shows applications awaiting a decision, and there are none. Rendering the
+     * notice inside the template's hasrows section would make it vanish in exactly the case it
+     * was written for, and no assertion about a populated queue could see that.
+     *
+     * @return void
+     */
+    public function test_the_closed_notice_survives_an_empty_queue(): void {
+        global $DB, $PAGE;
+
+        $DB->set_field('enrol', 'customint3', 1, ['id' => $this->instance->id]);
+        $instance = $DB->get_record('enrol', ['id' => $this->instance->id], '*', MUST_EXIST);
+
+        $taker = $this->getDataGenerator()->create_user();
+        $this->plugin->enrol_user($this->instance, $taker->id, null, 0, 0, ENROL_USER_ACTIVE);
+
+        $url = new \moodle_url('/enrol/apply/manage.php', ['id' => $this->instance->id]);
+        $PAGE->set_url($url);
+        $PAGE->set_context(\context_course::instance($this->course->id));
+
+        $table = new \enrol_apply_manage_table($this->instance->id);
+        $table->define_baseurl($url);
+        $html = $PAGE->get_renderer('enrol_apply')->manage_form($table, $url, $instance);
+
+        // The precondition: there really is nothing awaiting a decision.
+        $this->assertSame(0, (int) $table->totalrows);
+        $this->assertStringContainsString(
+            get_string('applicationsclosednotice', 'enrol_apply', (object) [
+                'held' => 1,
+                'limit' => 1,
+                'deferred' => 0,
+            ]),
+            $html
+        );
     }
 }

@@ -208,11 +208,43 @@ class enrol_apply_plugin extends enrol_plugin {
         $buttonurl = null;
         $buttonattrs = [];
 
-        $allowapply = $this->allow_apply($instance);
-        if ($allowapply !== true) {
+        /* The applicant's OWN row is tested first, and the order is the fix rather than a
+           tidy-up. allow_apply() used to be asked first, so the moment a method stopped
+           accepting applications - the window closing, the instance being disabled, the cohort
+           restriction changing - everybody who had already applied was told "Enrolment is
+           disabled or inactive", which is a message about somebody else's problem and says
+           nothing about the application they are waiting on. Their own row answers a question
+           none of the three tests below can.
+
+           IGNORE_MULTIPLE rather than MUST_EXIST semantics: {user_enrolments} is unique on
+           (enrolid, userid) so there is only ever one, but get_record() raises a debugging
+           notice on a duplicate and this is a page, not a query. */
+        $ownrow = $DB->get_record(
+            'user_enrolments',
+            ['userid' => $USER->id, 'enrolid' => $instance->id],
+            'id, status',
+            IGNORE_MULTIPLE
+        );
+
+        $notifytype = \core\output\notification::NOTIFY_INFO;
+        $allowapply = $ownrow ? true : $this->allow_apply($instance);
+
+        if ($ownrow) {
+            /* Four ways to already have a row here, and they are not one message. See
+               \enrol_apply\local\applicantstate, which the acknowledgement page and the
+               application form both share so the three surfaces cannot describe one row
+               differently. The access fact is asked of core rather than assumed: this panel is
+               only rendered to somebody core has already refused, so the answer is false in
+               practice - but "in practice" is what makes a caller's assumption rot quietly, and
+               is_enrolled() costs one cached lookup. */
+            $state = \enrol_apply\local\applicantstate::describe(
+                $ownrow,
+                is_enrolled(context_course::instance($instance->courseid), $USER, '', true)
+            );
+            $body = $state['message'];
+            $notifytype = $state['type'];
+        } else if ($allowapply !== true) {
             $body = $allowapply;
-        } else if ($DB->record_exists('user_enrolments', ['userid' => $USER->id, 'enrolid' => $instance->id])) {
-            $body = get_string('notification', 'enrol_apply');
         } else if (\enrol_apply\local\capacity::applications_closed($instance)) {
             $body = get_string('maxenrolledreached', 'enrol_apply');
         } else {
@@ -229,7 +261,7 @@ class enrol_apply_plugin extends enrol_plugin {
             $PAGE->requires->js_call_amd('enrol_apply/enrol_page', 'init', [$instance->id]);
         }
 
-        $notification = new \core\output\notification($body, \core\output\notification::NOTIFY_INFO, false);
+        $notification = new \core\output\notification($body, $notifytype, false);
         $notification->set_extra_classes(['mb-0']);
 
         $page = new \core_enrol\output\enrol_page(
@@ -1049,11 +1081,14 @@ class enrol_apply_plugin extends enrol_plugin {
      *
      * @param array $enrols User enrolment ids to confirm.
      * @param string $message Message the decider wrote to the applicant, empty for none.
-     * @param array|null $decision Chosen groups and enrolment period, null for the instance defaults.
-     * @return void
+     * @param array|null $decision Chosen groups, role, enrolment period and decision note; null
+     *        for the instance defaults and no note.
+     * @return int How many of the given applications this call actually decided.
      */
     public function confirm_enrolment($enrols, string $message = '', ?array $decision = null) {
         global $DB;
+
+        $decided = 0;
 
         foreach ($enrols as $enrol) {
             $userenrolment = $this->get_pending_user_enrolment($enrol);
@@ -1067,11 +1102,20 @@ class enrol_apply_plugin extends enrol_plugin {
                 continue;
             }
 
+            $decided++;
+
+            /* A record to write to. Without it record_outcome_message() below loops over
+               nothing and returns in silence, so an application older than that table takes a
+               decision whose message is stored nowhere and mailed nowhere. See ensure(). */
+            \enrol_apply\local\submission::ensure((int) $userenrolment->id);
+
             /* Recorded before the status changes, never after and never through decide().
                update_user_enrol() below dispatches the hook that reaches complete_approval()
                first, and decide() skips a row already at the target status - so a message
                carried any further than here is dropped in silence. */
             \enrol_apply\local\submission::record_outcome_message((int) $userenrolment->id, $message);
+
+            $this->record_decision_note($userenrolment, $decision);
 
             /* The role, allowlisted per instance for the same reason and by the same shape core
                uses at enrol/manual/externallib.php:98-104. It is not optional politeness:
@@ -1153,25 +1197,44 @@ class enrol_apply_plugin extends enrol_plugin {
             // The applicant's notification is queued by complete_approval(); see it for why.
             $this->complete_approval($instance, (int) $userenrolment->userid, (int) $userenrolment->id);
         }
+
+        return $decided;
     }
 
     /**
-     * Move the given applications onto the waiting list.
+     * Defer the given applications: they keep waiting, and nobody is enrolled or unenrolled.
+     *
+     * The lookup is get_pending_user_enrolment(), which admits SUSPENDED and WAIT alike exactly
+     * as confirm and cancel already do. It used to demand SUSPENDED, and that was two defects
+     * rather than a narrower predicate. Deferring an application already deferred found no row,
+     * did nothing at all, and reported "Applications updated" - and, more to the point, an
+     * already-deferred application could never have its REASON edited, which is the state this
+     * plugin's own model spends the longest in.
+     *
+     * **Editing the reason is not a second decision, and the difference is load bearing.** An
+     * application already deferred does not move, so it is not restamped - decide()'s own guard
+     * keeps the ORIGINAL decider and date, which is the point of that guard - and the applicant
+     * is not told again, because "your application was deferred" is news they already had. The
+     * one exception is a message TYPED for them: the message box exists to reach the applicant,
+     * so a message written and then silently not sent would be the defect class this plugin has
+     * fixed twice already. Without both of these, correcting a two-word internal note re-mails
+     * the applicant and re-attributes somebody else's decision to whoever did the correcting.
      *
      * @param array $enrols User enrolment ids to defer.
      * @param string $message Message the decider wrote to the applicant, empty for none.
-     * @return void
+     * @param array|null $decision The decision note, under the 'note' key; null for none. The
+     *        same triple confirm_enrolment() takes, deliberately - a caller that passes the
+     *        note positionally to the wrong one of the three would be ignored in silence,
+     *        because PHP drops surplus arguments to a userland function without a word.
+     * @return int How many of the given applications this call actually decided.
      */
-    public function wait_enrolment($enrols, string $message = '') {
+    public function wait_enrolment($enrols, string $message = '', ?array $decision = null) {
         global $DB, $USER;
 
+        $decided = 0;
+
         foreach ($enrols as $enrol) {
-            $userenrolment = $DB->get_record(
-                'user_enrolments',
-                ['id' => $enrol, 'status' => ENROL_USER_SUSPENDED],
-                '*',
-                IGNORE_MISSING
-            );
+            $userenrolment = $this->get_pending_user_enrolment($enrol);
             if (!$userenrolment) {
                 continue;
             }
@@ -1182,7 +1245,19 @@ class enrol_apply_plugin extends enrol_plugin {
                 continue;
             }
 
+            $decided++;
+
+            /* Whether this call moves the enrolment at all. Read BEFORE the update below, which
+               is the only moment it can be read: afterwards every row is on the waiting list
+               whether it arrived there just now or last month. */
+            $moved = (int) $userenrolment->status !== ENROL_APPLY_USER_WAIT;
+
+            // A record to write to; see confirm_enrolment() and submission::ensure().
+            \enrol_apply\local\submission::ensure((int) $userenrolment->id);
+
             \enrol_apply\local\submission::record_outcome_message((int) $userenrolment->id, $message);
+
+            $this->record_decision_note($userenrolment, $decision);
 
             /* Deferring CLEARS the expiry, and the literal 0 matters twice over.
                update_user_enrol() gates on isset(), so null means "leave this date alone" and
@@ -1201,21 +1276,36 @@ class enrol_apply_plugin extends enrol_plugin {
                print the expiry that was just cleared. */
             $userenrolment->timeend = 0;
 
+            /* $moved and not a bare true. The flag means "the caller knows the enrolment really
+               moved", and on a re-deferral it did not: passing true there would restamp
+               timedecided and decidedby onto whoever edited the note, so the trail would credit
+               the decision to somebody who only corrected its reason. With false, decide()'s
+               own guard sees a row already at the target status and leaves the original decider
+               and date alone, which is exactly what that guard exists for. */
             \enrol_apply\local\submission::decide(
                 (int) $userenrolment->id,
                 \enrol_apply\local\submission::STATUS_WAITING,
                 (int) $USER->id,
-                true
+                $moved
             );
 
-            $this->notify_applicant(
-                $instance,
-                $userenrolment,
-                'waitinglist',
-                get_config('enrol_apply', 'waitmailsubject'),
-                get_config('enrol_apply', 'waitmailcontent')
-            );
+            /* Notified when the enrolment moved, or when the decider typed something for the
+               applicant to read - and on neither count when they merely corrected the internal
+               note. The second half is not symmetry: the message box's whole purpose is to
+               reach the applicant, so a message typed and then not sent would be a silent loss
+               of exactly the kind this plugin has already fixed twice. */
+            if ($moved || trim($message) !== '') {
+                $this->notify_applicant(
+                    $instance,
+                    $userenrolment,
+                    'waitinglist',
+                    get_config('enrol_apply', 'waitmailsubject'),
+                    get_config('enrol_apply', 'waitmailcontent')
+                );
+            }
         }
+
+        return $decided;
     }
 
     /**
@@ -1223,10 +1313,14 @@ class enrol_apply_plugin extends enrol_plugin {
      *
      * @param array $enrols User enrolment ids to cancel.
      * @param string $message Message the decider wrote to the applicant, empty for none.
-     * @return void
+     * @param array|null $decision The decision note, under the 'note' key; null for none. See
+     *        wait_enrolment() for why all three take the same triple.
+     * @return int How many of the given applications this call actually decided.
      */
-    public function cancel_enrolment($enrols, string $message = '') {
+    public function cancel_enrolment($enrols, string $message = '', ?array $decision = null) {
         global $DB, $USER;
+
+        $decided = 0;
 
         foreach ($enrols as $enrol) {
             $userenrolment = $this->get_pending_user_enrolment($enrol);
@@ -1240,7 +1334,15 @@ class enrol_apply_plugin extends enrol_plugin {
                 continue;
             }
 
+            $decided++;
+
+            /* A record to write to, and here it must also be written BEFORE the unenrolment:
+               unenrol_user() deletes the {user_enrolments} row this reconstruction reads. */
+            \enrol_apply\local\submission::ensure((int) $userenrolment->id);
+
             \enrol_apply\local\submission::record_outcome_message((int) $userenrolment->id, $message);
+
+            $this->record_decision_note($userenrolment, $decision);
 
             /* Stamped before the unenrolment, not after: unenrol_user() deletes the
                user_enrolments row, and the id it carried is how the durable record is
@@ -1264,6 +1366,32 @@ class enrol_apply_plugin extends enrol_plugin {
                 get_config('enrol_apply', 'cancelmailcontent')
             );
         }
+
+        return $decided;
+    }
+
+    /**
+     * Write the decision note, when the caller had one to write.
+     *
+     * array_key_exists and never !empty, exactly as the group chooser's gate is: an EMPTY
+     * posted note has to reach the writer, because clearing is what stops a re-queued
+     * application inheriting the last decision's reason. A caller with nothing to say about
+     * the note - the out-of-band approval route, which carries no operator input at all -
+     * omits the key entirely and the stored note is left alone.
+     *
+     * @param stdClass $userenrolment User enrolment the decision applies to.
+     * @param array|null $decision The decision the operator submitted, null for none.
+     * @return void
+     */
+    protected function record_decision_note($userenrolment, ?array $decision) {
+        if ($decision === null || !array_key_exists('note', $decision)) {
+            return;
+        }
+
+        \enrol_apply\local\submission::record_decision_note(
+            (int) $userenrolment->id,
+            (string) $decision['note']
+        );
     }
 
     /**
@@ -1311,6 +1439,31 @@ class enrol_apply_plugin extends enrol_plugin {
             return;
         }
 
+        /* The shipped defaults for all six of these settings are the EMPTY string, and e-mail is
+           on by default for every provider - so a stock site sends the applicant a notification
+           with no subject and no body. Measured on m502: 14 of 14 applicant-facing notifications
+           ever sent carry an empty subject and 10 of 14 an empty body, while all 34 sent to
+           MANAGERS carry both, because that one is built from this plugin's own template rather
+           than from an empty admin setting.
+
+           The fallback is at READ time and it has to be. A default declared in settings.php can
+           never reach an existing site: admin_apply_default_settings(NULL, true) runs only from
+           install_core(), and its recursive pass skips any setting whose get_setting() is not
+           null - and every site that has ever opened this settings page already stores these.
+
+           Resolved BEFORE update_mail_content(), so the default body goes through the same
+           placeholder substitution, and the same escaping, that an administrator's own body
+           does. An administrator who has written a subject or a body keeps it; the two halves
+           fall back independently, because a site that filled one in and not the other is the
+           commonest state of all. */
+        [$defaultsubject, $defaultcontent] = $this->default_notification($type, $course);
+        if (trim((string) $subject) === '') {
+            $subject = $defaultsubject;
+        }
+        if (trim((string) $content) === '') {
+            $content = $defaultcontent;
+        }
+
         $content = $this->update_mail_content($content, $course, $user, $userenrolment);
 
         /* Read from the durable record rather than passed in, which is what lets one lookup
@@ -1335,6 +1488,58 @@ class enrol_apply_plugin extends enrol_plugin {
             $instance->courseid
         );
         message_send($message);
+    }
+
+    /**
+     * The wording to send when the administrator has configured none.
+     *
+     * **The subject and the body want opposite spellings, and that is the whole reason this
+     * returns a pair rather than one string.** The body lands in fullmessagehtml and is put
+     * through update_mail_content(), which escapes every value it substitutes with s() and
+     * format_string() - so the body is HTML and the course name reaches it escaped. The subject
+     * is not HTML at all and the message sink escapes it again, so it takes the PLAIN spelling
+     * and a site whose course is called "R&D induction" would otherwise read "R&amp;D induction"
+     * in its own inbox.
+     *
+     * A literal string id per branch, never one built from $type: a computed id is banned by the
+     * fleet standard and is invisible to the language file checker. The default arm returns the
+     * empty pair rather than a guess - a type this method has no wording for keeps whatever the
+     * administrator's settings hold, and enrol_apply_notification's own constructor is the one
+     * place that refuses an unknown type.
+     *
+     * **Recorded and deliberately not fixed here: every applicant notification is composed in
+     * the DECIDER's language**, including the smallmessage the Moodle app shows, because nothing
+     * on this path calls force_current_language(). These defaults inherit that, exactly as the
+     * administrator's own settings already do. The remedy is one wrapper and it changes every
+     * applicant-facing message at once, so it belongs in its own change rather than half-done
+     * inside this one. See docs/design/ui-rebuild-plan.md.
+     *
+     * @param string $type Notification type: confirmation, cancelation or waitinglist.
+     * @param stdClass $course Course the application belongs to.
+     * @return array Two-element list: the subject, then the body.
+     */
+    protected function default_notification($type, $course) {
+        // Plain, because the subject is not HTML; see the docblock.
+        $coursename = format_string($course->fullname, true, [
+            'context' => context_course::instance($course->id),
+            'escape' => false,
+        ]);
+
+        return match ($type) {
+            'confirmation' => [
+                get_string('confirmmailsubject_default', 'enrol_apply', $coursename),
+                get_string('confirmmailcontent_default', 'enrol_apply'),
+            ],
+            'cancelation' => [
+                get_string('cancelmailsubject_default', 'enrol_apply', $coursename),
+                get_string('cancelmailcontent_default', 'enrol_apply'),
+            ],
+            'waitinglist' => [
+                get_string('waitmailsubject_default', 'enrol_apply', $coursename),
+                get_string('waitmailcontent_default', 'enrol_apply'),
+            ],
+            default => ['', ''],
+        };
     }
 
     /**

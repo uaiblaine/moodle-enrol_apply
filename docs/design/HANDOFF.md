@@ -1,6 +1,104 @@
 # Handoff — read this before touching anything
 
-State at the end of 2026-09-01. **Everything is merged; nothing is in flight.**
+State at the end of 2026-08-31. **Everything is merged; nothing is in flight.**
+
+## 2026-08-31 — U3, deferral as a triage state
+
+`version.php` is `2026083107`. One pull request, green and merged.
+
+**U0, U1, U1b, U2 and U3 are done. U4 is next**, and it depends on nothing.
+
+Note the date. `git log --date=short` says **2026-08-31** for U2 and for this, while the section
+below is headed 2026-09-01 because that session crossed midnight in UTC and this file took the UTC
+date. The git date is the authority, as this file has said all along; the heading below is left
+alone rather than quietly corrected, because it is the evidence for the caution.
+
+### The decision the owner took
+
+**An applicant may not withdraw their own application — not now.** That was the open product
+question U3.5 recorded, and it is the real remedy for the applicant-cap ratchet. U3 shipped the
+remedy that does not depend on it: `capacity::deferred()`, the number on the review page's
+capacity panel and in a new applications-closed notice on the queue, and a two-click bulk cancel
+once U5 adds the Deferred filter. Nothing in the schema closes the door.
+
+### Verification
+
+- **All seven CI legs pass locally** (`mdl ci --matrix --behat`): 433 PHPUnit tests and 7 Behat
+  scenarios (173 steps) on every leg, MariaDB and PHP 8.2 included. The logs were kept and swept
+  for `: FAILED`, which returns nothing — the summary column was not trusted.
+- **63 mutation gates, 63 reddening**, with `tests run: 433` constant across all 64 runs of the
+  final sweep. That constant is the load-bearing half.
+- `mdl upgrade m502` ran the new step; the column exists on the site.
+- Core's `provider_test::test_table_coverage` and `string_manager_standard_test::
+  test_validate_deprecated_strings_files` were both invoked by hand and pass. The former reports
+  one failure, and it belongs to `local_unifiedgrader`, a different mounted plugin.
+- **Coverage was not re-measured**, and `mdl ci --strict` was not re-run. Both are stale; treat
+  them as absent rather than as numbers.
+
+### The two mutation gates that reddened nothing, and what each one taught
+
+The sweep's whole purpose, paid off twice in one run.
+
+- **`BI` was written with `s|…|…|` and a `\|\|` in the pattern.** Perl strips the backslash from
+  an escaped DELIMITER before compiling, so `\|\|` became bare `||` — alternation with an empty
+  branch, which matches at offset 0. The mutation inserted its replacement before the opening
+  `<?php`. **`--dry-run` showed a diff and reported the pattern as matching**, so the cheap
+  pre-flight said it was fine; only the real sweep saw that it changed no behaviour.
+- **`AT` had been wrong since U2 and looked entirely sensible.** It swapped the two `> 0` tests
+  that choose between a number and the no-limit wording — never the numbers themselves — so it
+  changes nothing whenever both limits are set, which is every fixture able to see a swap at all.
+  It survived two slices of review that way.
+
+Both are rewritten, both now redden the tests they name, and both traps are in
+`mutations/README.md` beside the `$variable` interpolation one it already carried.
+
+### What the adversarial pass found, and the way it lied about itself
+
+Six lenses over a slice that was already green, mutation-dry-run clean and Behat-covered raised
+**22 findings, 9 distinct after deduplication, and all nine were real.** Two were defects the
+slice had just introduced:
+
+- **`applied.php` told a working participant their enrolment was broken.** That page's gate asks
+  for an application and nothing more, so a fully enrolled student who keeps the link opens it
+  legitimately — and the new describer read every ACTIVE row as "approved with no access". The fix
+  is a fourth state and, more to the point, **access as a PARAMETER**: the row alone cannot answer
+  it, because core pairs the status with the enrolment's window *and* the enrol instance's own
+  status. Each caller passes what it knows.
+- **Correcting a deferral's reason re-mailed the applicant and re-attributed the decision.**
+  Widening `wait_enrolment()`'s lookup is what makes the correction possible, and it is what made
+  everything the first deferral did run again. Both halves are now keyed on one `$moved` read
+  before the update.
+
+The other seven: a public method with no callers whose docblock named three readers that did not
+exist; three confidently wrong prose claims (a datasource gate that does not exist, an `ensure()`
+guard described as reachable when no decision method can reach it, a test docblock claiming a
+fatal its own file prevents); the application form still asking `allow_apply()` before the
+applicant's own row, which is the third copy of the defect the slice was fixing; a bulk counter
+that had stopped being true; and a Behat assertion satisfied by an unrelated label on the same
+page.
+
+**The run reported "0 raised, 0 confirmed".** The refutation stage was written as
+`parallel([agent(…), agent(…)])` — promises where thunks were wanted — so every verify call threw,
+every finding dropped to null, and a summary of nothing was returned after 3.5M tokens and 50
+agents. The findings were recovered from the run's `journal.jsonl` and checked by hand against the
+code. **A workflow that returns nothing has not necessarily found nothing**: read the journal
+before believing the summary, which is what this file already says about `mdl ci`'s own summary
+line.
+
+### Three facts worth keeping
+
+- **`is_enrolled()` memoises "enrolled until" on the session user.** A test that edits
+  `{user_enrolments}` directly and asks again gets the previous answer, and the case is silently
+  skipped — the assertion passes for the wrong reason. `setUser()` again to rebuild `$USER`.
+  Production is unaffected, because `update_user_enrol()` resets those caches, which is exactly
+  why this only ever bites in a fixture.
+- **Core's deprecated-strings test earns its keep on every `deprecated.txt` change.** Retiring
+  `notification` surfaced — as a PHPUnit *notice*, not a failure — that the string was still live
+  in `application_form.php`, which turned out to be the third surface carrying the very defect
+  U3.2 was written to fix. Nothing else in any pipeline would have said so.
+- **Two docblocks in files this slice merely touched had been false since #54.** Both said
+  deferral leaves a carried expiry behind; `wait_enrolment()` has passed `0` explicitly since that
+  PR. They are corrected. Prose about a fix goes stale in the files the fix did not have to edit.
 
 ## 2026-09-01 — the decision screens
 

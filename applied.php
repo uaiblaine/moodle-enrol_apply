@@ -35,27 +35,44 @@ $context = context_course::instance($course->id, MUST_EXIST);
 
 require_login();
 
-/* The whole gate. Without it this page tells any logged-in user that a given enrolment
-   method exists on a course they may not be able to see at all. */
-if (!$DB->record_exists('user_enrolments', ['userid' => $USER->id, 'enrolid' => $instance->id])) {
+/* The whole gate, and the false arm is unchanged on purpose: without it this page tells any
+   logged-in user that a given enrolment method exists on a course they may not be able to see at
+   all. What changed is that the row is now READ rather than merely counted, because this page
+   used to describe every applicant's application with the pending wording - the identical defect
+   the enrolment page's own panel had, and it takes the identical fix. Somebody who was deferred,
+   or approved onto an enrolment that is not active, read "waiting for a decision" here while the
+   decision had in fact been taken. */
+$ownrow = $DB->get_record(
+    'user_enrolments',
+    ['userid' => $USER->id, 'enrolid' => $instance->id],
+    'id, status',
+    IGNORE_MULTIPLE
+);
+if (!$ownrow) {
     throw new moodle_exception('invalidaccess', 'error');
 }
+
+/* Heading, body and notification level together, so the three cannot fall out of step - and
+   the access fact alongside, because this page is NOT only reached by somebody who is shut out.
+   Its gate asks for a row and nothing more, so a fully enrolled participant who keeps the link
+   opens it perfectly legitimately; without this argument they were told their enrolment was not
+   active and sent to bother their teacher. */
+$state = \enrol_apply\local\applicantstate::describe(
+    $ownrow,
+    is_enrolled($context, $USER, '', true)
+);
 
 $PAGE->set_course($course);
 $PAGE->set_context($context->get_parent_context());
 $PAGE->set_pagelayout('incourse');
 $PAGE->set_url('/enrol/apply/applied.php', ['instance' => $instance->id]);
-$PAGE->set_title(get_string('applicationsubmitted', 'enrol_apply'));
+$PAGE->set_title($state['heading']);
 $PAGE->set_heading(format_string($course->fullname));
 $PAGE->add_body_class('limitedwidth');
 
 echo $OUTPUT->header();
-echo $OUTPUT->heading(get_string('applicationsubmitted', 'enrol_apply'));
-echo $OUTPUT->notification(
-    get_string('applicationsubmitted_body', 'enrol_apply'),
-    \core\output\notification::NOTIFY_SUCCESS,
-    false
-);
+echo $OUTPUT->heading($state['heading']);
+echo $OUTPUT->notification($state['message'], $state['type'], false);
 
 if (\enrol_apply\local\profilewriter::is_enabled($instance)) {
     // Writing is allowed: offer to save what was just typed, and write nothing until asked.

@@ -73,6 +73,7 @@ class provider implements
                 'decidedrole' => 'privacy:metadata:enrol_apply_submission:decidedrole',
                 'status' => 'privacy:metadata:enrol_apply_submission:status',
                 'outcomemessage' => 'privacy:metadata:enrol_apply_submission:outcomemessage',
+                'decisionnote' => 'privacy:metadata:enrol_apply_submission:decisionnote',
                 'timecreated' => 'privacy:metadata:enrol_apply_submission:timecreated',
                 'timedecided' => 'privacy:metadata:enrol_apply_submission:timedecided',
                 'decidedby' => 'privacy:metadata:enrol_apply_submission:decidedby',
@@ -257,6 +258,17 @@ class provider implements
                subject reads. */
             $export->outcomemessage = trim((string) $row->outcomemessage) !== ''
                 ? $row->outcomemessage
+                : null;
+
+            /* The decider's note goes to BOTH subjects too, and the applicant's half is the one
+               worth arguing for. Nothing shows this note to the applicant in the ordinary course
+               of things - it is written for the next member of staff to read - but a subject
+               access request is not the ordinary course of things: it asks what the site holds
+               about a person, and this column holds a member of staff's assessment of them.
+               Withholding it because it was never meant for their eyes is the reason it is
+               exactly what such a request exists to reach. */
+            $export->decisionnote = trim((string) $row->decisionnote) !== ''
+                ? $row->decisionnote
                 : null;
             $export->decidedgroups = self::group_names((string) $row->decidedgroups, $context);
             $export->decidedrole = self::role_name((int) $row->decidedrole);

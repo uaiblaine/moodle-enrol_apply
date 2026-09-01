@@ -45,6 +45,12 @@
     * messagehelp string - hint explaining who reads the message and when
     * messagevalue string - what the operator had already typed, non-empty only on the way back
       from the cancel confirmation; plain spelling, escaped by the double stash
+    * notelabel string - label of the decider's own note
+    * notehelp string - hint saying who reads the note and who does not
+    * notevalue string - the note the operator had already typed, non-empty only on the way back
+      from the cancel confirmation. It is NOT pre-filled with the note already stored on the
+      application: the writer clears on empty on purpose, so a pre-filled box would carry one
+      decision's reason silently into the next. The stored note is shown in the panel above
 
     Example context (json):
     {
@@ -65,7 +71,10 @@
         ],
         "messagelabel": "Message to the applicant",
         "messagehelp": "Included in the message they receive. Optional.",
-        "messagevalue": ""
+        "messagevalue": "",
+        "notelabel": "Note for the record",
+        "notehelp": "Kept with the application for whoever looks at it next. The applicant never sees it.",
+        "notevalue": ""
     }
 }}
 {{#hasgroups}}
@@ -98,4 +107,10 @@
     <textarea class="form-control" id="enrol_apply_outcomemessage" name="outcomemessage"
         rows="3" aria-describedby="enrol_apply_outcomemessage_help">{{messagevalue}}</textarea>
     <div class="form-text" id="enrol_apply_outcomemessage_help">{{messagehelp}}</div>
+</div>
+<div class="enrol_apply-decisionnote mt-3">
+    <label class="form-label" for="enrol_apply_decisionnote">{{notelabel}}</label>
+    <textarea class="form-control" id="enrol_apply_decisionnote" name="decisionnote"
+        rows="3" aria-describedby="enrol_apply_decisionnote_help">{{notevalue}}</textarea>
+    <div class="form-text" id="enrol_apply_decisionnote_help">{{notehelp}}</div>
 </div>

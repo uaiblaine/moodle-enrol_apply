@@ -1222,6 +1222,175 @@ final class lib_test extends \advanced_testcase {
     }
 
     /**
+     * Render the enrolment page's own panel for the current user.
+     *
+     * $PAGE needs a url before anything may be added to its requirements, which enrol_page_hook()
+     * does on the one branch that offers the application button.
+     *
+     * @param \stdClass|null $instance Instance to render, the fixture's own by default.
+     * @return string The rendered markup.
+     */
+    protected function enrol_panel(?\stdClass $instance = null): string {
+        global $PAGE;
+
+        $PAGE->set_url('/enrol/index.php', ['id' => $this->course->id]);
+
+        return (string) $this->plugin->enrol_page_hook($instance ?? $this->instance);
+    }
+
+    /**
+     * Somebody who has applied reads about their OWN application, in each of its four states.
+     *
+     * One test rather than four, because what is being pinned is that they DIFFER: the page used
+     * to branch on nothing but "does a row exist", so every state read the pending wording and a
+     * deferred applicant was told a decision nobody had taken was still pending. Four separate
+     * tests would each pass against that.
+     *
+     * The last two are the pair worth the setup. An ACTIVE enrolment that grants access is
+     * approved and working; one whose period has run out is approved and shut out, and only the
+     * second may say so - telling the first that their enrolment is not active sends a working
+     * participant to bother their teacher.
+     *
+     * @return void
+     */
+    public function test_the_enrolment_panel_describes_the_applicants_own_state(): void {
+        global $DB;
+
+        [$applicant, $ueid] = $this->create_application();
+        $this->setUser($applicant);
+
+        $this->assertStringContainsString(
+            get_string('applicationsubmitted_body', 'enrol_apply'),
+            $this->enrol_panel()
+        );
+
+        $DB->set_field('user_enrolments', 'status', ENROL_APPLY_USER_WAIT, ['id' => $ueid]);
+        $this->assertStringContainsString(
+            get_string('applicationdeferred_body', 'enrol_apply'),
+            $this->enrol_panel()
+        );
+
+        $DB->set_field('user_enrolments', 'status', ENROL_USER_ACTIVE, ['id' => $ueid]);
+        // The precondition: this row really does grant access, so the next assertion is about that.
+        $this->assertTrue(is_enrolled(\context_course::instance($this->course->id), $applicant, '', true));
+        $this->assertStringContainsString(
+            get_string('applicationapproved_body', 'enrol_apply'),
+            $this->enrol_panel()
+        );
+
+        $DB->set_field('user_enrolments', 'timeend', time() - DAYSECS, ['id' => $ueid]);
+        /* is_enrolled() memoises "enrolled until" on the session user and this fixture writes the
+           row behind its back, so $USER is rebuilt rather than left holding the previous answer.
+           Production does not need it - update_user_enrol() resets those caches - but a test that
+           edits {user_enrolments} directly does, and without this the assertion below reads the
+           memo and the whole case is silently skipped. */
+        $this->setUser($applicant);
+        $this->assertFalse(is_enrolled(\context_course::instance($this->course->id), $applicant, '', true));
+        $this->assertStringContainsString(
+            get_string('applicationinactive_body', 'enrol_apply'),
+            $this->enrol_panel()
+        );
+    }
+
+    /**
+     * A method that has stopped taking applications still tells its applicants about theirs.
+     *
+     * The ordering fix, and the reason the applicant's own row is now the FIRST test. Before it,
+     * the moment a method stopped accepting applications - the window closing, the instance
+     * being disabled, the cohort restriction changing - everybody who had already applied was
+     * shown "Enrolment is disabled or inactive", which is a message about somebody else's
+     * problem and says nothing about what they are waiting on.
+     *
+     * The control is in the same run: somebody who has NOT applied still gets the refusal, so
+     * this cannot pass against a hook that had simply stopped calling allow_apply().
+     *
+     * @return void
+     */
+    public function test_an_applicant_is_not_told_about_somebody_elses_refusal(): void {
+        global $DB;
+
+        [$applicant] = $this->create_application();
+        $DB->set_field('enrol', 'customint6', 0, ['id' => $this->instance->id]);
+        $closed = $DB->get_record('enrol', ['id' => $this->instance->id], '*', MUST_EXIST);
+
+        $this->setUser($applicant);
+        $panel = $this->enrol_panel($closed);
+        $this->assertStringContainsString(get_string('applicationsubmitted_body', 'enrol_apply'), $panel);
+        $this->assertStringNotContainsString(get_string('cantenrol', 'enrol_apply'), $panel);
+
+        // The control: a stranger to this method still reads the refusal.
+        $this->setUser($this->getDataGenerator()->create_user());
+        $this->assertStringContainsString(
+            get_string('cantenrol', 'enrol_apply'),
+            $this->enrol_panel($closed)
+        );
+    }
+
+    /**
+     * With the notification settings empty, the applicant still gets a subject and a body.
+     *
+     * All six ship as the empty string and e-mail is on by default for every provider, so a
+     * stock site sent its applicants a notification with neither. A default in settings.php
+     * could not have fixed it: admin_apply_default_settings() runs from install_core() only, and
+     * skips any setting already stored - which every site that has opened the page has.
+     *
+     * The subject is asserted in its PLAIN spelling against a course name carrying an ampersand,
+     * which is the half that is easy to get backwards: the body is HTML and wants the escaped
+     * name, the subject is not and is escaped again by the message sink.
+     *
+     * @return void
+     */
+    public function test_an_unconfigured_notification_still_carries_a_subject_and_a_body(): void {
+        global $DB;
+
+        $DB->set_field('course', 'fullname', 'R&D induction', ['id' => $this->course->id]);
+        [$applicant, $ueid] = $this->create_application();
+        $this->setAdminUser();
+
+        $sink = $this->redirectMessages();
+        $this->plugin->wait_enrolment([$ueid]);
+        $messages = $sink->get_messages();
+        $sink->close();
+
+        $this->assertCount(1, $messages);
+        $message = reset($messages);
+        $this->assertSame(
+            get_string('waitmailsubject_default', 'enrol_apply', 'R&D induction'),
+            (string) $message->subject
+        );
+        $this->assertNotEmpty(trim((string) $message->fullmessagehtml));
+        $this->assertStringContainsString($applicant->firstname, (string) $message->fullmessagehtml);
+        // The body's own course name IS escaped, because it lands in fullmessagehtml.
+        $this->assertStringContainsString('R&amp;D induction', (string) $message->fullmessagehtml);
+    }
+
+    /**
+     * An administrator who has written their own wording keeps it, and the two halves are
+     * independent.
+     *
+     * The control for the fallback above, and the sharper half is the independence: a site that
+     * filled in one of the pair and not the other is the commonest state there is, so a fallback
+     * that switched on "either is empty" would throw away a configured subject.
+     *
+     * @return void
+     */
+    public function test_a_configured_notification_wording_is_not_replaced(): void {
+        [, $ueid] = $this->create_application();
+        $this->setAdminUser();
+        set_config('waitmailsubject', 'We have your application', 'enrol_apply');
+
+        $sink = $this->redirectMessages();
+        $this->plugin->wait_enrolment([$ueid]);
+        $messages = $sink->get_messages();
+        $sink->close();
+
+        $message = reset($messages);
+        $this->assertSame('We have your application', (string) $message->subject);
+        // The body was left empty, so it still falls back on its own.
+        $this->assertNotEmpty(trim((string) $message->fullmessagehtml));
+    }
+
+    /**
      * The single durable record of one applicant, failing the test when there is not exactly one.
      *
      * @param \stdClass $user Applicant.

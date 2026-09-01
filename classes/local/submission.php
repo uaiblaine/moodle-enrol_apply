@@ -113,7 +113,89 @@ class submission {
                because schema churn is the expensive part; the screen that lets a decider
                write a message to the applicant arrives later and is its only writer. */
             'outcomemessage' => '',
+            /* Empty for the same reason, and it stays empty on a new application by
+               construction: the note belongs to a decision, and no decision has been taken. */
+            'decisionnote' => '',
             'timecreated' => time(),
+            'timedecided' => 0,
+            'decidedby' => 0,
+        ]);
+    }
+
+    /**
+     * Make sure the application named by a user enrolment has a durable record.
+     *
+     * Written for the three decision methods, and it closes a live defect rather than
+     * hardening against an imagined one. record_outcome_message() loops over the rows it
+     * finds and, when there are none, writes nothing and says nothing - so a decider deciding
+     * an application that predates this table types a message that is stored nowhere and sent
+     * nowhere. Measured on m502: an enrolment created before the record existed accepts a
+     * message on the review page, reports "Applications updated", and the applicant's mail
+     * arrives without it. The same silence would swallow every decision note.
+     *
+     * What it reconstructs is only what a pending application can honestly claim. The comment
+     * is recovered from enrol_apply_applicationinfo, which is the row this table was extracted
+     * from and is still written beside it; the profile snapshot is NOT, because the values the
+     * applicant typed were never stored anywhere else and an empty envelope is the truthful
+     * answer rather than a reconstructed one. The status is PENDING whatever the enrolment is
+     * doing, because the caller stamps the real decision immediately afterwards through
+     * decide() - writing a guess here would be the record claiming a decision nobody took.
+     *
+     * A user enrolment that is not this plugin's, or that is already gone, writes nothing. The
+     * enrol-type predicate is NOT reachable from the three decision methods, and saying so is
+     * the point: each of them resolves the instance with a MUST_EXIST lookup keyed on
+     * enrol = 'apply' and refuses a foreign id there, several lines before this runs. The
+     * predicate is here because this is a public method on a public class - the tests call it
+     * directly, and so may anything else - and writing an enrol_apply trail against another
+     * plugin's enrolment would be a row no reader of this table could interpret.
+     *
+     * It is NOT a substitute for create(), which is the writer for a real application and is
+     * the only one that can hold the snapshot. This one exists for rows create() never saw.
+     *
+     * @param int $userenrolmentid User enrolment the decision is about.
+     * @return void
+     */
+    public static function ensure(int $userenrolmentid): void {
+        global $DB;
+
+        if ($DB->record_exists('enrol_apply_submission', ['userenrolmentid' => $userenrolmentid])) {
+            return;
+        }
+
+        $sql = "SELECT ue.id, ue.userid, ue.enrolid, ue.timecreated, e.courseid
+                  FROM {user_enrolments} ue
+                  JOIN {enrol} e ON e.id = ue.enrolid AND e.enrol = :enrol
+                 WHERE ue.id = :ueid";
+        $enrolment = $DB->get_record_sql($sql, ['enrol' => 'apply', 'ueid' => $userenrolmentid]);
+        if (!$enrolment) {
+            return;
+        }
+
+        /* False when there is no comment row either, which (string) turns into the empty
+           string - the same value create() writes for an application submitted without one. */
+        $comment = $DB->get_field(
+            'enrol_apply_applicationinfo',
+            'comment',
+            ['userenrolmentid' => (int) $enrolment->id]
+        );
+
+        $DB->insert_record('enrol_apply_submission', (object) [
+            'courseid' => (int) $enrolment->courseid,
+            'userid' => (int) $enrolment->userid,
+            'enrolid' => (int) $enrolment->enrolid,
+            'userenrolmentid' => (int) $enrolment->id,
+            'comment' => (string) $comment,
+            'userinfodata' => '',
+            'status' => self::STATUS_PENDING,
+            'outcomemessage' => '',
+            'decidedgroups' => '',
+            'decidedrole' => 0,
+            'decisionnote' => '',
+            /* The ENROLMENT's date, not this moment. The record is the trail of an application
+               that was submitted long before anybody reached this method, and stamping it now
+               would put the reconstruction's own date on it - which prior_applications() orders
+               by and the retention sweep filters on. */
+            'timecreated' => (int) $enrolment->timecreated,
             'timedecided' => 0,
             'decidedby' => 0,
         ]);
@@ -212,9 +294,10 @@ class submission {
 
         $DB->execute(
             "UPDATE {enrol_apply_submission}
-                SET userid = 0, decidedby = 0, comment = ?, userinfodata = ?, outcomemessage = ?
+                SET userid = 0, decidedby = 0, comment = ?, userinfodata = ?, outcomemessage = ?,
+                    decisionnote = ?
               WHERE courseid = ?",
-            ['', '', '', $courseid]
+            ['', '', '', '', $courseid]
         );
     }
 
@@ -354,6 +437,53 @@ class submission {
             $DB->update_record('enrol_apply_submission', (object) [
                 'id' => $row->id,
                 'outcomemessage' => $clean,
+            ]);
+        }
+    }
+
+    /**
+     * Record what the decider wrote for their colleagues about this decision.
+     *
+     * The twin of record_outcome_message() in shape and the opposite of it in audience. That
+     * one is the APPLICANT's: notify_applicant() appends it to the mail body and the privacy
+     * export hands it to the person it was written to. This one never leaves the site - it is
+     * the answer to "why was this deferred", which the owner's two scenarios (waiting for a
+     * place, waiting for something to be validated) both need and neither of which belongs in
+     * a message to the person waiting.
+     *
+     * Free text rather than a coded vocabulary, decided in docs/design/ui-rebuild-plan.md:
+     * the distinction is real but thin, and a coded reason offered as a queue filter would
+     * under-report - measured, the queue's row set and the record's diverge in both directions.
+     * A filterable column can be added later beside a note that already exists.
+     *
+     * Written for all three decisions rather than for deferral alone, so the two decision
+     * surfaces cannot offer different things and a re-queued application cannot inherit an
+     * explanation written for a decision that was superseded.
+     *
+     * **The empty value is WRITTEN, not skipped**, exactly as it is for the outcome message
+     * and for the same defect: returning early makes a stored note sticky, so an application
+     * that comes back to the queue - which core's "Edit enrolment" screen and an expiredaction
+     * of suspend both do - is decided a second time carrying the first decision's reason, with
+     * nothing on screen to say so. The note belongs to the decision being taken, so "nothing
+     * typed" has to be able to mean nothing.
+     *
+     * @param int $userenrolmentid User enrolment the decision applies to.
+     * @param string $note What the decider typed, empty for none.
+     * @return void
+     */
+    public static function record_decision_note(int $userenrolmentid, string $note): void {
+        global $DB;
+
+        /* Trimmed rather than merely tested for blankness, which keeps the two properties
+           apart: whitespace alone is not a note and is stored as the empty string, and an
+           empty decision still clears an earlier one. */
+        $clean = trim($note);
+
+        $rows = $DB->get_records('enrol_apply_submission', ['userenrolmentid' => $userenrolmentid], '', 'id');
+        foreach ($rows as $row) {
+            $DB->update_record('enrol_apply_submission', (object) [
+                'id' => $row->id,
+                'decisionnote' => $clean,
             ]);
         }
     }
