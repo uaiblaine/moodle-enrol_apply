@@ -1,6 +1,104 @@
 # Handoff — read this before touching anything
 
-State at the end of 2026-09-01. **Everything is merged; nothing is in flight.**
+State at the end of 2026-09-02. **Everything is merged; nothing is in flight** — this file cannot
+name the commit that merges it, which is the caution the entries below have paid for four times.
+
+## 2026-09-02 — U6, the report belongs to its method
+
+**U0, U1, U1b, U2, U3, U4 and U6 are done. U5a is next.**
+
+`report.php` took an enrol instance id and used it only to choose the course and authorise the
+request, so a course with two apply methods produced byte-identical reports under two different
+urls — while `get_action_icons()` builds that icon PER METHOD and puts the method's id in the url.
+Measured: one method held no applications and its report rendered the other's eight.
+
+**The security reasoning that was already in that file is correct and survived the fix**, which is
+the part worth carrying forward. The report's SCOPE must come from the context, because a report's
+parameters arrive as `PARAM_RAW` in the filterset. What that argument establishes is that the url's
+id is not a security boundary; it does not establish that the id is inert, and the old comment drew
+that second conclusion and stated it as intended behaviour. The method is applied as a FILTER
+value, which can only ever restrict within `courseid = <context>`.
+
+**The base condition is the whole of the safety, and the first version of this fix argued it
+backwards.** It said a forged value "shows fewer rows ... the intersection is empty"; the
+intersection is never computed. `select::get_sql_filter()` validates the value against its own
+options list and returns `['', []]` when it is absent, so a forged value produces NO filter and
+the report widens to the course — which the reader already holds `enrol/apply:viewreports` for. It
+fails open into a permitted view, not closed, and a reader trusting the old sentence would have
+concluded the opposite.
+
+**And the fix held only for the first page load until an adversarial pass caught it.** The scope
+lives in `reportbuilder_user_filter`, keyed on (reportid, usercreated) and nothing else, while the
+report persistent was keyed on the COURSE — so both methods shared one stored scope. Everything
+after the initial render reads that store and nothing else: sorting and paging go through
+`core_table_get_dynamic_table_content`, whose filterset carries the reportid and the report's own
+parameters and nothing that names a method, and Download posts the same id. Opening the second
+method's report answered the first one's next click with the second one's rows, and its CSV too.
+`for_method()` gives each method its own persistent, and `test_two_methods_keep_independent_scopes`
+reaches the mechanism the defect used rather than a proxy for it — the test helper builds
+`system_report_table::create($reportid, [])`, the same entry point handed the same input, a report
+id and nothing else. It is not literally the AJAX branch: the constructor defers loading only when
+`optional_param('info')` is `core_table_get_dynamic_table_content`, which no PHPUnit request sets.
+What both branches share is what the defect exploited — the report is rebuilt from the persistent
+the id names, and its scope read back from that persistent's stored values.
+
+Two things the plan's estimate did not name:
+
+- **Core's precedent replaces; this merges.** `admin/tasklogs.php` seeds a system report from a url
+  parameter with `set_filter_values()`, which overwrites everything. A reader's status or date
+  filter is not this page's to discard, so the value is merged in — with `array_merge` and never
+  the `+` operator, which keeps the LEFT side on a duplicate key and would have let the stored
+  value silently beat the url's. It was written with `+` first. Gate `BW`.
+- **The wiring needed Behat.** `report.php` is a page script: a call left inline there can be
+  deleted with the whole PHPUnit suite still green, so the decision was extracted onto the report
+  class as `scope_to_method()` and the call is held by a scenario. That scenario runs as **admin**,
+  because the report icon is gated on `enrol/apply:viewreports` and the editingteacher archetype
+  does not carry it — the first draft failed on a row that legitimately had no icon, which a
+  faildump settled in one read.
+
+### The generated applicant names are RANDOM, and two of them collided
+
+Found by the U6 mutation sweep, whose **baseline** went red on
+`test_two_methods_keep_independent_scopes` forty minutes after the identical suite had passed —
+the shape this repository distrusts most, a green result and a red one from the same code.
+
+`create_user()` does not number its users. With no name given it calls `rand()` four times over
+`data_generator`'s `$firstnames`/`$lastnames` pools, and those pools repeat inside a band: one
+first name appears four times among ten, another three. So two generated applicants draw the same
+`fullname()` every few hundred runs — and when they do, the assertion that a row does NOT carry
+the other applicant's name contradicts the assertion above it that it carries this one's. Same
+needle, both directions, guaranteed red, no code at fault. Two of U6's tests were exposed
+(`test_two_methods_keep_independent_scopes` and `test_the_url_method_wins_over_a_stored_one`), and
+seven CI legs multiply the odds.
+
+`second_method()` now names its applicant explicitly, which is the whole fix: a name from outside
+the pool cannot collide with one drawn from it. **Any assertion that distinguishes two generated
+users by their rendered name needs at least one of them named** — the rest of this repository
+already asserts on literals, so the hazard was confined to that one helper.
+
+The wider caution, and it is the reason this is written down rather than just fixed: a suite that
+passed is not evidence a suite is deterministic. The first green run and the red baseline differed
+by nothing but `rand()`.
+
+### `[skip ci]` on the head commit of a PR branch cancels the PR's whole run
+
+Worth knowing here because it cost four hours and reads as success. GitHub Actions skips a workflow
+when the **head** commit message carries the token, for the `pull_request` event as well — so a
+handoff commit pushed last onto a feature branch suppresses every job. PR #64 sat with **no checks
+at all**, which the pull request page presents as nothing blocking, and two `gh pr view` waiters
+span for four hours on a rollup that was permanently empty.
+
+The token is safe in a commit that is not the head of the branch, and safe on `master`. Before
+merging, check the run EXISTS rather than that nothing is red:
+`gh pr view <n> --json statusCheckRollup --jq '.statusCheckRollup | length'` — zero is a finding.
+Recorded fleet-wide in `~/dev/CLAUDE.md` beside the Catalyst trap, which has the same shape.
+
+### The stack lock, in moodle-dev
+
+`mdl init`, `phpunit-init`, `behat-init`, `phpunit`, `behat` and `mdl mutate` now take a lock on a
+stack's test environment; a second caller is told who holds it. It exists because a sibling session
+reinitialised m502 two hours into a 73-gate sweep. It is worth knowing here because the failure it
+prevents presents as this plugin's suite behaving strangely.
 
 ## 2026-09-01 — U4, the participants-page bulk menu
 

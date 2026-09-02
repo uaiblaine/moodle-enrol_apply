@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Fixed
+
+- **The applications report now belongs to the enrolment method whose icon opened it.**
+  `report.php` takes an enrol instance id and used it only to choose the course and authorise the
+  request, so a course with two apply methods produced byte-identical reports under two different
+  urls — while the icon that opens it is built per method and puts that method's id in the url.
+  Measured on a live course: one method held no applications at all and its report rendered the
+  other's eight. An audit report of a method's applications, under that method's url, containing
+  none of them.
+
+  The scope is applied as a **filter value**, not as a base condition, and that is what keeps the
+  fix outside the security boundary the page already had: the report reads
+  `courseid = <context>` and always will, because a report's parameters arrive as `PARAM_RAW` and
+  cannot be what decides which course is read. **The base condition is the whole of the safety**:
+  a value outside the filter's own options list produces no filter at all and the report widens to
+  the course, which is the view the reader already holds the capability for. Clearing the filter
+  does the same thing deliberately, and the reader's other filters are merged rather than replaced.
+
+  Each method also gets its own report identity, so the two do not share a stored scope. Without
+  that the fix held only for the first page load: the scope lives in a per-user, per-report
+  preference, while sorting, paging and the download carry nothing but the report id — so opening
+  a second method's report answered the first one's next click with the second one's rows.
+
 ### Added
 
 - **The participants-page bulk menu says what it will not reach.** A bulk decision taken from that

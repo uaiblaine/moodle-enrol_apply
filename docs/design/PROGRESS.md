@@ -3,7 +3,7 @@
 Running state of the eleven-slice plan in
 [`implementation-plan.md`](implementation-plan.md). Update this file as slices land.
 
-Last updated: 2026-08-23.
+Last updated: 2026-09-02.
 
 ## Merged
 
@@ -390,13 +390,17 @@ Record them here so a later reader does not "fix" them back.
     `test_an_undecided_application_does_not_report_user_zero` — which still catches a switch to
     `add_userids()`, which does no filtering.
 
-11. **The report is scoped by its context, not by the `id` in its URL** (slice 7). The `id`
-    chooses the course and authorises the request; the report then lists that *course's*
-    applications rather than that enrolment method's. A course's applications are a
-    course-level question, both icons in a course with two apply methods should open the same
-    thing, and where a course has more than one the report offers a filter to narrow by method.
-    The `id` is not carried into the query at all — it cannot be, because the pages that fetch
-    every subsequent row never see it.
+11. **The report's SCOPE is its context, and its IDENTITY is the `id` in its URL** (slice 7,
+    corrected by U6 on 2026-09-02). The `id` chooses the course and authorises the request, and
+    the query is built from the context and never from the `id`, which a client can set. What
+    slice 7 concluded from that — that the `id` should therefore be inert, so both icons in a
+    course with two apply methods open the same report — was wrong, and shipped a method's report
+    containing none of that method's applications. The `id` now selects the report's persistent
+    (`for_method()`) and pre-applies the method filter, both of which narrow inside the context
+    and neither of which decides which rows may be read. Clearing the filter widens to the course.
+    The `id` now does reach the query, as the filter's stored value rather than as a condition,
+    and the per-method persistent is what lets the pages fetching every subsequent row find the
+    right stored scope — they carry the report id and nothing that names a method.
 12. **Identity fields are masked by absence, never by a display callback** (slice 7). Core's
     own `get_identity_columns($context)` and `get_identity_filters($context)` return nothing
     without `moodle/site:viewuseridentity`, so the column, its filter and its sort are all
