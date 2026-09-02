@@ -32,7 +32,6 @@ defined('MOODLE_INTERNAL') || die();
 
 global $CFG;
 require_once($CFG->dirroot . '/enrol/apply/lib.php');
-require_once($CFG->dirroot . '/enrol/apply/manage_table.php');
 
 /**
  * Tests for the role an approval assigns.
@@ -69,7 +68,7 @@ final class decision_role_test extends \advanced_testcase {
      * @return void
      */
     protected function setUp(): void {
-        global $DB;
+        global $DB, $PAGE;
 
         parent::setUp();
         $this->resetAfterTest();
@@ -87,6 +86,11 @@ final class decision_role_test extends \advanced_testcase {
         $fields['roleid'] = $this->studentroleid;
         $instanceid = $this->plugin->add_instance($this->course, $fields);
         $this->instance = $DB->get_record('enrol', ['id' => $instanceid], '*', MUST_EXIST);
+        /* The queue's table is dynamic, and get_dynamic_table_html_end() builds its
+           "show all" link from $PAGE->url - so rendering one without a page url makes core
+           emit a debugging() call, which advanced_testcase turns into a notice. manage.php
+           always sets it; a test that renders the table is standing in for that page. */
+        $PAGE->set_url(new \moodle_url('/enrol/apply/manage.php'));
     }
 
     /**
@@ -511,8 +515,7 @@ final class decision_role_test extends \advanced_testcase {
         $url = new \moodle_url('/enrol/apply/manage.php', ['id' => $this->instance->id]);
         $PAGE->set_url($url);
         $PAGE->set_context(\context_course::instance($this->course->id));
-        $table = new \enrol_apply_manage_table($this->instance->id);
-        $table->define_baseurl($url);
+        $table = \enrol_apply\table\applications::for_scope((int) $this->instance->id);
 
         $html = $PAGE->get_renderer('enrol_apply')->manage_form($table, $url, $this->instance);
 

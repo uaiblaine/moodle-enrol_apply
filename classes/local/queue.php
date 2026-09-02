@@ -285,6 +285,126 @@ final class queue {
     }
 
     /**
+     * Everything the applications LISTING is scoped by, derived from one enrol instance id.
+     *
+     * The counterpart of scope() above, and the two answer different questions. scope() asks
+     * "which queue does this operator work in", from an application they are already reviewing.
+     * This asks "what does the queue at this url show", from the id in that url.
+     *
+     * **It exists because the listing became a dynamic table, and that moved where the scope
+     * arrives from.** core_table\external\dynamic\get builds the table, calls set_filterset()
+     * with whatever the client sent, then validate_context() and has_capability() - once, against
+     * one context (lib/table/classes/external/dynamic/get.php:228-231, byte-identical on 5.1 and
+     * 5.2). It never calls filterset::check_validity(). So the client names the scope on every
+     * request after the first, while this queue has three scopes across two context levels, and
+     * the mentee restriction is not something a client may be trusted to state.
+     *
+     * The resolution is that ONE integer travels - the enrol instance id - and everything the
+     * listing is narrowed by is recomputed here from it: the course, the context, the mentee id
+     * list and whether this operator may see any of it. A forged id is answered by the
+     * capability check against ITS course, which is the same refusal manage.php?id= gives today.
+     * The mentee list never travels at all, so no request can widen it.
+     *
+     * **Total by construction: it never throws and never returns false.** Both are load bearing.
+     * get_context() is called before has_capability() and its return type is a context, so a
+     * resolver that answered false for a refusal would produce a TypeError rather than a refusal
+     * - and one that threw on an unknown id would answer a forged request with a database
+     * exception instead of "no permission". An id that resolves to nothing therefore comes back
+     * with the system context and allowed false.
+     *
+     * `allowed` is the capability half only. The course-ACCESS half is applied by each caller in
+     * the way its own path applies it: manage.php calls require_login($course) itself, and on the
+     * web service path external_api::validate_context() calls require_login($course, false, $cm,
+     * false, true) from the context this returns (lib/external/classes/external_api.php:520-521).
+     * Folding that in here would duplicate a check one caller has already made and the other
+     * cannot skip.
+     *
+     * @param int $enrolid Enrol instance to list, 0 for every instance this operator may decide in.
+     * @return stdClass Object carrying enrolid, instance, context, mentees, identitycontext,
+     *                  allowed and url. See the property comments in the body for each.
+     */
+    public static function listing_scope(int $enrolid): stdClass {
+        global $DB;
+
+        if ($enrolid) {
+            $instance = $DB->get_record('enrol', ['id' => $enrolid, 'enrol' => 'apply']);
+            if (!$instance) {
+                /* An id naming no apply instance. Refused rather than raised: on the web service
+                   path this is simply what a forged filter value looks like. */
+                return self::refused();
+            }
+
+            $context = context_course::instance($instance->courseid, MUST_EXIST);
+
+            return (object) [
+                'enrolid' => (int) $instance->id,
+                'instance' => $instance,
+                'context' => $context,
+                // One instance, so no mentee restriction and one course to judge identity in.
+                'mentees' => null,
+                'identitycontext' => $context,
+                'allowed' => has_capability('enrol/apply:manageapplications', $context),
+                'url' => new moodle_url('/enrol/apply/manage.php', ['id' => (int) $instance->id]),
+            ];
+        }
+
+        $system = context_system::instance();
+        $url = new moodle_url('/enrol/apply/manage.php');
+
+        if (has_capability('enrol/apply:manageapplications', $system)) {
+            return (object) [
+                'enrolid' => 0,
+                'instance' => null,
+                'context' => $system,
+                'mentees' => null,
+                // The system context is the right question for a site-wide capability holder.
+                'identitycontext' => $system,
+                'allowed' => true,
+                'url' => $url,
+            ];
+        }
+
+        /* No site-wide capability, so the mentees. A null restriction means "every application"
+           and an empty list would widen the query the same way, which is why the capability test
+           has to come first and why an empty list refuses rather than lists.
+
+           The identity context is null here and nowhere else: this scope spans courses in a
+           single statement, so no one context is the right question for it, and a per-row mask
+           would be unsound for a sortable column. */
+        $mentees = applications::get_mentees();
+
+        return (object) [
+            'enrolid' => 0,
+            'instance' => null,
+            'context' => $system,
+            'mentees' => $mentees,
+            'identitycontext' => null,
+            'allowed' => (bool) $mentees,
+            'url' => $url,
+        ];
+    }
+
+    /**
+     * The scope that shows nothing, for an operator or an id that has no listing.
+     *
+     * The system context and not null, because get_context() must return a context whatever the
+     * answer is; the refusal is carried by `allowed`, which is the only field a caller may act on.
+     *
+     * @return stdClass The refused scope.
+     */
+    private static function refused(): stdClass {
+        return (object) [
+            'enrolid' => 0,
+            'instance' => null,
+            'context' => context_system::instance(),
+            'mentees' => [],
+            'identitycontext' => null,
+            'allowed' => false,
+            'url' => new moodle_url('/enrol/apply/manage.php'),
+        ];
+    }
+
+    /**
      * This applicant's OTHER applications to the same course, newest first.
      *
      * "They were cancelled here before" is the kind of fact that makes a decision easier, and the
@@ -365,10 +485,11 @@ final class queue {
      * The walk is pinned to (timecreated ASC, ue.id ASC) - the table's own default sort, with
      * the unique final key that keeps a tied group from trading places. It is pinned because a
      * server-resolved neighbour has no meaning otherwise: the table is user-sortable and
-     * flexible_table keeps that choice in $SESSION->flextable['enrol_apply_manage_table'] (a
-     * user preference only when is_persistent(true) is called, which this table does not do),
-     * so "next" would otherwise depend on state this page cannot see. It follows that the walk
-     * can disagree with a re-sorted queue. That divergence is documented rather than silent,
+     * flexible_table keeps that choice in the session, under
+     * \enrol_apply\table\applications::UNIQUEID (a user preference only when is_persistent(true)
+     * is called, which this table does not do), so "next" would otherwise depend on state this
+     * page cannot see. It follows that the walk can disagree with a re-sorted queue. That
+     * divergence is documented rather than silent,
      * and the link names the applicant it leads to, so the operator reads where they are going
      * before they go there.
      *

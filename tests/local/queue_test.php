@@ -22,7 +22,6 @@ defined('MOODLE_INTERNAL') || die();
 
 global $CFG;
 require_once($CFG->dirroot . '/enrol/apply/lib.php');
-require_once($CFG->dirroot . '/enrol/apply/manage_table.php');
 
 /**
  * What counts as an application awaiting a decision, and who may review one.
@@ -48,7 +47,7 @@ final class queue_test extends \advanced_testcase {
      * @return void
      */
     protected function setUp(): void {
-        global $DB;
+        global $DB, $PAGE;
 
         parent::setUp();
         $this->resetAfterTest();
@@ -61,6 +60,11 @@ final class queue_test extends \advanced_testcase {
         $this->course = $this->getDataGenerator()->create_course();
         $instanceid = $this->plugin->add_instance($this->course, $this->plugin->get_instance_defaults());
         $this->instance = $DB->get_record('enrol', ['id' => $instanceid], '*', MUST_EXIST);
+        /* The queue's table is dynamic, and get_dynamic_table_html_end() builds its
+           "show all" link from $PAGE->url - so rendering one without a page url makes core
+           emit a debugging() call, which advanced_testcase turns into a notice. manage.php
+           always sets it; a test that renders the table is standing in for that page. */
+        $PAGE->set_url(new \moodle_url('/enrol/apply/manage.php'));
     }
 
     /**
@@ -277,13 +281,17 @@ final class queue_test extends \advanced_testcase {
     /**
      * The order the queue's own table lists a scope in.
      *
-     * @param int $enrolid Enrol instance to list, 0 for every one of them.
-     * @param array|null $mentees Applicant ids to restrict to, null for no restriction.
+     * The mentee restriction used to be a second argument here and is not one any more: the
+     * table resolves it from the CURRENT USER through queue::listing_scope(), so a test that
+     * wants the mentee scope sets up a mentor and asks for scope 0 rather than naming the ids.
+     * That is the point of the change - a caller can no longer state a restriction the server
+     * did not derive.
+     *
+     * @param int $enrolid Enrol instance to list, 0 for every one this operator may decide in.
      * @return array User enrolment ids in the listing's order.
      */
-    private function listed(int $enrolid = 0, ?array $mentees = null): array {
-        $table = new \enrol_apply_manage_table($enrolid, $mentees);
-        $table->define_baseurl(new \moodle_url('/enrol/apply/manage.php'));
+    private function listed(int $enrolid = 0): array {
+        $table = \enrol_apply\table\applications::for_scope($enrolid);
         ob_start();
         $table->out(50, false);
         ob_end_clean();
@@ -380,12 +388,7 @@ final class queue_test extends \advanced_testcase {
         $DB->set_field('user_enrolments', 'timeend', time() - DAYSECS, ['id' => $expired]);
         [, $active] = $this->applicant(ENROL_USER_ACTIVE);
 
-        $table = new \enrol_apply_manage_table($this->instance->id);
-        $table->define_baseurl(new \moodle_url('/enrol/apply/manage.php'));
-        ob_start();
-        $table->out(50, false);
-        ob_end_clean();
-        $listed = array_map(static fn($row) => (int) $row->userenrolmentid, array_values($table->rawdata));
+        $listed = $this->listed((int) $this->instance->id);
 
         $found = [];
         foreach ($DB->get_fieldset_select('user_enrolments', 'id', 'enrolid = ?', [$this->instance->id]) as $ueid) {

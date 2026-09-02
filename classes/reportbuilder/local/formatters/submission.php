@@ -123,7 +123,7 @@ class submission {
      * approved-then-unenrolled are otherwise literally the same row.
      *
      * The suspended case is split by timeend because the two mean opposite things to the
-     * operator. A suspension with no period is a manual one, and manage_table.php's predicate
+     * operator. A suspension with no period is a manual one, and the queue's predicate
      * (status != active AND (timeend = 0 OR timeend > now)) puts that row straight back in the
      * approval queue - so the report must say so, or the queue and the report disagree in public
      * with neither mentioning the other. A suspension with a period in the past is the expiry

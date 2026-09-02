@@ -31,7 +31,6 @@ defined('MOODLE_INTERNAL') || die();
 
 global $CFG;
 require_once($CFG->dirroot . '/enrol/apply/lib.php');
-require_once($CFG->dirroot . '/enrol/apply/manage_table.php');
 
 /**
  * Tests for the instance comment label and the spelling each sink needs.
@@ -48,6 +47,23 @@ require_once($CFG->dirroot . '/enrol/apply/manage_table.php');
  */
 #[CoversClass(commentlabel::class)]
 final class commentlabel_test extends \advanced_testcase {
+    /**
+     * Give the page a url before anything renders the queue.
+     *
+     * The queue's table is dynamic, and get_dynamic_table_html_end() builds its "show all" link
+     * from $PAGE->url - so rendering one without a page url makes core emit a debugging() call,
+     * which advanced_testcase turns into a notice. manage.php always sets it; a test that renders
+     * the table is standing in for that page.
+     *
+     * @return void
+     */
+    protected function setUp(): void {
+        global $PAGE;
+
+        parent::setUp();
+        $PAGE->set_url(new \moodle_url('/enrol/apply/manage.php'));
+    }
+
     /** @var string A label whose two spellings differ. */
     protected const LABEL = 'Why you & who referred you';
 
@@ -160,6 +176,10 @@ final class commentlabel_test extends \advanced_testcase {
      * The header sink is html_writer::tag(), which concatenates its content without escaping it,
      * so the plain spelling here would put a raw ampersand into the markup.
      *
+     * The label is no longer handed to the table - it derives it from the instance the scope
+     * resolves - so this now holds two things where it used to hold one: that the derivation
+     * happens at all, and that it comes out in the spelling the sink needs.
+     *
      * @return void
      */
     public function test_the_queue_header_carries_the_escaped_label(): void {
@@ -169,12 +189,7 @@ final class commentlabel_test extends \advanced_testcase {
         $instance = $this->instance(self::LABEL);
         $this->seed_application($instance);
 
-        $table = new \enrol_apply_manage_table(
-            $instance->id,
-            null,
-            commentlabel::custom($instance)
-        );
-        $table->define_baseurl(new \moodle_url('/enrol/apply/manage.php', ['id' => $instance->id]));
+        $table = \enrol_apply\table\applications::for_scope((int) $instance->id);
 
         ob_start();
         $table->out(50, true);
@@ -200,8 +215,7 @@ final class commentlabel_test extends \advanced_testcase {
         $instance = $this->instance();
         $this->seed_application($instance);
 
-        $table = new \enrol_apply_manage_table($instance->id, null, commentlabel::custom($instance));
-        $table->define_baseurl(new \moodle_url('/enrol/apply/manage.php', ['id' => $instance->id]));
+        $table = \enrol_apply\table\applications::for_scope((int) $instance->id);
 
         ob_start();
         $table->out(50, true);

@@ -3,6 +3,79 @@
 State at the end of 2026-09-02. **Everything is merged; nothing is in flight** — this file cannot
 name the commit that merges it, which is the caution the entries below have paid for four times.
 
+## 2026-09-02 — U5a PR 1, the queue becomes a dynamic table
+
+**U0, U1, U1b, U2, U3, U4 and U6 are done. U5a is FOUR pull requests and this is the first**; the
+scope was widened by the owner on 2026-09-02 to the whole of Mockup A, the filter dropdowns
+included, which absorbs U5b. The split and its reasons are in the plan under `## U5a`.
+
+This one is structural and changes nothing an operator can see. Behat reports the same 8 scenarios
+and 195 steps as before the move, which is the evidence for that claim rather than a hope about it.
+
+### The scope is the whole of the risk, and it moved
+
+`core_table\external\dynamic\get` builds the table, hands it the filters the **client** sent,
+then calls `validate_context(get_context())` and `has_capability()` — one check, one context — and
+it **never calls `filterset::check_validity()`**. This queue has three scopes across two context
+levels, one of which is "the users you mentor".
+
+So one integer travels, the enrol instance id, and `queue::listing_scope()` recomputes the course,
+the context, the mentee id list and the capability from it on every request. The mentee list never
+travels. `manage.php` resolves its own scope through the same method, so the page and the requests
+that replace its rows cannot answer differently.
+
+`listing_scope()` is **total** — never throws, never returns false — and both halves are load
+bearing. `get_context()` is called before `has_capability()` and returns a `context`, so answering
+`false` for a refusal is a TypeError rather than a refusal; and throwing would answer a forged
+filter value with a database exception rather than "no permission".
+
+### Two things the adversarial pass caught, both of them in this slice's own work
+
+- **`check_validity()` does not do what its docblock claimed.** It tests `array_key_exists()`
+  against the filterset's map and stops — it never asks whether the filter carries a value. A
+  client sending `{"name":"enrolid","jointype":1,"values":[]}` — well formed against core's own
+  service — passes it; `filter::current()` answers `null`, because `rewind()` only takes a position
+  `if (count($this->filtervalues))`; and `(int) null` is **0**, which is not a refusal here but the
+  WIDEST scope this queue has. The value is now read and tested. Gate `CF`.
+- **Gate `CE` reddened nothing when first written.** It moves the mentee scope's identity context
+  from `null` to the system one, and the mentor fixture held no `moodle/site:viewuseridentity` — so
+  `identity::fields()` returned an empty array whichever context resolved. The gate was measuring a
+  reader who could not see the difference. **A gate that reddens nothing is the finding, including
+  when it is your own gate written the same hour.**
+
+### What the sweep cost, and why the number of runs is not the number of gates
+
+Ten gates, and it took three attempts. A sibling session bumped `auth_loginsteps` at 13:53 and
+`local_dimensions` at 14:08, and each bump staled the PHPUnit environment mid-sweep;
+`mdl mutate` aborted both times with "produced no PHPUnit verdict — the suite did not run",
+which is the tool refusing to report a run that never happened as "reddened nothing". The last
+gate was verified by hand instead: control run green, mutation applied, only the named test red,
+restore compared byte for byte against the git index. That is faster than a whole sweep and it is
+the check the sweep performs anyway.
+
+**The stack lock does not stop this, and it is worth knowing which failure it does stop.** It
+serialises whoever asks it for the environment — it refused my own run correctly once, and
+`MDL_LOCK_WAIT` queued behind it. What it cannot see is a version bump in another repo, which
+invalidates the environment without touching the lock at all. Nor does it survive a caller that
+`pkill`s `cli/init.php` before starting, which killed one of my inits outright.
+
+### The proxy, again, and the shape it takes when returning to the office
+
+`mdl phpunit-init` died on `composer self-update` with `curl 000` from inside the container. The
+containers were *started* and not *recreated* since the Docker proxy key was flipped back, so they
+carried zero proxy variables while Docker in `system` mode routed their egress through a squid
+demanding Basic auth. `mdl down m502 && mdl up m502` fixed it — six variables, `curl` 200 — and the
+volumes survived. The 5.02 CI legs still die at `install`, on core 5.2's own `update-react` step
+reaching esm.sh through Node's native fetch, which ignores the proxy; that one remains unsolved and
+GitHub is unaffected.
+
+### One measured fact the plan did not name
+
+A dynamic table reads `$PAGE->url` in `get_dynamic_table_html_end()` to build its "show all" link.
+The old table never did. Eighteen PHPUnit notices came from tests rendering the queue with no page
+url — a state no real page has, since `manage.php` always sets one. The fixtures now set it rather
+than the call being suppressed.
+
 ## 2026-09-02 — U6, the report belongs to its method
 
 **U0, U1, U1b, U2, U3, U4 and U6 are done. U5a is next.**

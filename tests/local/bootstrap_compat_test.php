@@ -147,7 +147,11 @@ final class bootstrap_compat_test extends \basic_testcase {
                 $files[] = $file->getPathname();
             }
         }
-        foreach (['renderer.php', 'manage_table.php', 'edit_form.php'] as $name) {
+        /* The root-level files that render. The queue's table is NOT among them any more -
+           it moved to classes/table/, which the recursive scan above already covers. Note that
+           this list is guarded by is_file(), so a name that stops existing drops out silently:
+           it is a list of places to look, not a list of things that must be there. */
+        foreach (['renderer.php', 'edit_form.php'] as $name) {
             if (is_file($root . '/' . $name)) {
                 $files[] = $root . '/' . $name;
             }
@@ -324,7 +328,7 @@ final class bootstrap_compat_test extends \basic_testcase {
      */
     public function test_every_table_class_defines_a_header_column(): void {
         $offenders = [];
-        foreach (['manage_table.php'] as $name) {
+        foreach (['classes/table/applications.php'] as $name) {
             $source = file_get_contents($this->plugin_root() . '/' . $name);
             if (!str_contains((string) $source, 'define_header_column(')) {
                 $offenders[] = $name;

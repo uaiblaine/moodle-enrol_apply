@@ -36,8 +36,8 @@ defined('MOODLE_INTERNAL') || die();
  *
  * For an enrol plugin that default measures classes/, lib.php and renderer.php, and leaves out
  * 1933 lines of top-level code plus db/upgrade.php - measured on this plugin. That is not glue:
- * manage_table.php is the approval queue's SQL, edit_form.php is the whole instance configuration
- * form, and backup/moodle2/ is the pair of classes tests/backup_test.php exists for. A number over
+ * edit_form.php is the whole instance configuration form, and backup/moodle2/ is the pair of
+ * classes tests/backup_test.php exists for. A number over
  * the default denominator would be flattering by construction.
  *
  * The lists below ADD to the defaults rather than replacing them - get_includelists() array_merges
@@ -68,7 +68,6 @@ class enrol_apply_coverage extends phpunit_coverage_info {
         'edit.php',
         'edit_form.php',
         'manage.php',
-        'manage_table.php',
         'notification.php',
         'profile.php',
         'report.php',

@@ -777,7 +777,7 @@ final class operations_test extends \advanced_testcase {
      *
      * process_expirations() re-suspends an enrolment whose period ran out, so somebody
      * approved and enrolled long ago comes back looking exactly like a fresh application.
-     * The plugin's queue excludes that row deliberately - manage_table.php pairs
+     * The plugin's queue excludes that row deliberately - its predicate pairs
      * "status != active" with a timeend clause, and
      * tests/lib_test.php::test_expired_enrolment_does_not_reappear_in_the_queue pins it -
      * but the exclusion lives only in the LISTING, and the participants page is a second

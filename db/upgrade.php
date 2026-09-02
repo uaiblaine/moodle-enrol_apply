@@ -244,7 +244,7 @@ function xmldb_enrol_apply_upgrade($oldversion) {
            period has run out when expiredaction is "suspend", so somebody approved long ago
            and since expired reads as status != active. Backfilling that as an application
            nobody ever decided is a false audit record, which is the one thing this table must
-           never hold. Same predicate as manage_table.php, deliberately. */
+           never hold. Same predicate as the queue's, deliberately. */
         $sql = "SELECT ue.id AS userenrolmentid, ue.userid, ue.timecreated, ue.status,
                        e.id AS enrolid, e.courseid, ai.comment
                   FROM {user_enrolments} ue

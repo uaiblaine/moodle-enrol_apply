@@ -54,7 +54,8 @@ lib.php                      enrol_apply_plugin: the whole state machine
 classes/form/application_form.php  what the applicant fills in, in a modal or on apply.php
 apply.php / applied.php      the no-JavaScript transport and the acknowledgement
 edit.php / edit_form.php     per-course instance configuration
-manage.php / manage_table.php   the approval queue and its bulk actions
+manage.php                      the approval queue and its bulk actions
+classes/table/applications.php  the queue's table, a core_table\dynamic one
 renderer.php                 page rendering plus the notification e-mail body
 templates/                   manage, manage_actions, review, review_actions, decision_controls,
                              application_navigation, application_notification, profile_offer
@@ -142,7 +143,7 @@ backup/                      group mappings, comments and the durable trail, see
   rather than half-done: every applicant notification is composed in the DECIDER's language.
 
 - **`?userenrol=` is a page, not a narrower queue, and it is tested before `id=` for that
-  reason.** It used to render `enrol_apply_manage_table` filtered to one row, bulk bar and all,
+  reason.** It used to render the queue's table filtered to one row, bulk bar and all,
   and it required the capability in the applicant's own USER context and nowhere else — which
   made it a mentor's page by accident. Measured on both branches: a teacher holding
   `enrol/apply:manageapplications` in the course an application was made to fails that check, so
@@ -297,7 +298,9 @@ backup/                      group mappings, comments and the durable trail, see
   `prefs['i_last']`; an earlier version of this bullet said "only `get_initial_first()` consults
   `use_initials`", which is wrong three ways over — `get_initial_last()` and
   `print_initials_bar()` read it too, and none of them is the filter. The preference
-  itself lives in `$SESSION->flextable['enrol_apply_manage_table']`, **not** in a user preference:
+  itself lives in `$SESSION->flextable['enrol_apply_manage_table']`, **not** in a user preference
+  (that key is `\enrol_apply\table\applications::UNIQUEID`, kept verbatim through the move to
+  that class so no operator's stored sort was discarded):
   `flexible_table::$persistent` defaults to false on both branches and this table never calls
   `is_persistent(true)`. And honouring it would make the page depend on session state it does
   not render, so a bookmarked or emailed review link would lose its neighbours because of a
@@ -306,7 +309,7 @@ backup/                      group mappings, comments and the durable trail, see
 
   **Test the walk against the LISTING, not against a hand-written expectation.**
   `test_the_walk_visits_exactly_what_the_queue_lists_and_in_its_order` walks from one row to both
-  ends and compares with `enrol_apply_manage_table`'s own rows. Sharing code between the two
+  ends and compares with the queue table's own rows. Sharing code between the two
   would only make them agree on whatever that code said; this asserts the behaviour, so a scope
   clause, a join or an order that drifts on either side reddens it.
 
@@ -624,7 +627,7 @@ backup/                      group mappings, comments and the durable trail, see
 
 - **The queue's selection is core's `checkbox_toggleall`, and two things about it are not
   obvious.** The header checkbox, every row checkbox and the bulk action share the one group
-  named by `enrol_apply_manage_table::TOGGLE_GROUP`. Targets are matched by PREFIX and the action
+  named by `\enrol_apply\table\applications::TOGGLE_GROUP`. Targets are matched by PREFIX and the action
   element by an EXACT string, so a mismatch disables nothing and reports nothing — which is why
   `tests/renderer_test.php` asserts the group literal in all three places rather than reading the
   constant.
@@ -777,7 +780,7 @@ backup/                      group mappings, comments and the durable trail, see
   `allow_unenrol_user()` and `unenrol_user()`.
 
 - **The bulk path had to reproduce the QUEUE's predicate, and the half that is easy to miss is
-  `timeend`.** `manage_table.php` pairs `ue.status != :active` with `(ue.timeend = 0 OR ue.timeend
+  `timeend`.** The queue pairs `ue.status != :active` with `(ue.timeend = 0 OR ue.timeend
   > :now)`, and only the second clause keeps an expired enrolment out: `process_expirations()`
   re-suspends an enrolment whose period ran out, so somebody approved and enrolled long ago comes
   back looking exactly like a fresh application. That exclusion has only ever lived in the
@@ -889,7 +892,7 @@ backup/                      group mappings, comments and the durable trail, see
   exists to remove.
 
   **The suspended case is split on `timeend` because the halves mean opposite things.** A manual
-  suspension carries no period and `manage_table.php`'s predicate puts that row back in the
+  suspension carries no period and the queue's predicate puts that row back in the
   approval queue; an expiry carries one in the past and does not. One word for both would file
   half of them in the wrong place.
 
@@ -1095,7 +1098,7 @@ backup/                      group mappings, comments and the durable trail, see
   one of its tests.
 
   **The opposite calls in this plugin are correct and must not be "fixed" to match.**
-  `edit_form.php:76` and `:284` feed moodleform selects, `manage_table.php:225` feeds
+  `edit_form.php:76` and `:284` feed moodleform selects, the queue's comment heading feeds
   `html_writer::link()`, and every `$PAGE->set_heading(format_string(...))` feeds a triple
   stash — all four sinks render raw and want the escaped spelling. The rule is the sink, never
   the helper.
