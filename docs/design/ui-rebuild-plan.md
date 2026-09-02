@@ -50,7 +50,11 @@ identical either way, so a dropdown stays an additive change on the same web ser
 | ~~**U3**~~ | ~~Deferral as a first-class triage state~~ — **done 2026-08-31** | — | yes | yes (new column) |
 | ~~**U4**~~ | ~~The participants-page bulk menu~~ — **done 2026-09-01** | — | yes | no |
 | **U5a** | Rebuild the queue as Mockup A on `core_table\dynamic`, without the search | U1, U1b, U3 | yes | no |
-| **U5b** | The as-you-type search over a plugin web service | U5a | yes | no |
+| **U5b** | The as-you-type search | U5a | yes | no |
+
+**Superseded 2026-09-02 — see the decision recorded under U5a.** The scope was widened to the
+whole of Mockup A, the filter controls included, and the work was split across four pull requests
+of which the last two absorb U5b.
 
 **Order:** ~~U0 → U1 → U1b → U2~~ (done 2026-09-01) → ~~U3~~ (2026-08-31) → ~~**U4**~~ (2026-09-01) → **U5a** → U5b.
 
@@ -678,7 +682,23 @@ page, with no label to tell them apart. The menu's shape is held by
 
 ---
 
-## U5a — Rebuild the queue as Mockup A, without the search
+## U5a — Rebuild the queue as Mockup A
+
+**Scope decided by the owner on 2026-09-02: the whole of Mockup A, the filter dropdowns
+included.** This heading used to read "without the search", and the slice's own body contradicted
+it — U5a.4's fourth point and U5a.6 both describe the GET search form as part of the surface, and
+U5a.5 requires `guess_base_url()` to carry "every GET-encoded filter — status included". The
+widest reading is the one taken.
+
+**That makes U5a four pull requests rather than one, and U5b disappears into the last two.**
+
+| PR | What | Why the boundary is there |
+|---|---|---|
+| **1** | `queue::listing_scope()`, `\enrol_apply\table\applications` and its filterset, the death of `manage_table.php`, the four gates that named it, the eight test files that built it | Structural, with **no visible change**. The diff is large and the behaviour is not, so a regression in it is legible |
+| **2** | The capacity header, the per-row Review link, the applicant cell (picture, name, badges, identity as a second line), the footer counts, responsive cards, a bulk bar that does not lie | Mockup A's surface, on a structure that already holds |
+| **3** | The search (GET, then as-you-type) and the status filter, the chip row, "clear all", the counts | The two filters that narrow columns the query already has |
+| **4** | The identity filters (city, institution) and the date filter | Both depend on site configuration — the identity field list varies — and a date range is a different filter class |
+
 
 ### U5a.1 — The surface
 

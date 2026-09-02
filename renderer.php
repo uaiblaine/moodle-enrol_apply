@@ -37,7 +37,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
     /**
      * Render the page listing the applications awaiting a decision.
      *
-     * @param enrol_apply_manage_table $table Table listing the applications.
+     * @param \enrol_apply\table\applications $table Table listing the applications.
      * @param moodle_url $manageurl Url the decision form posts back to.
      * @param stdClass|null $instance Enrol instance when the page is scoped to one, null otherwise.
      * @return void
@@ -53,7 +53,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
     /**
      * Render the decision form wrapping the applications table.
      *
-     * @param enrol_apply_manage_table $table Table listing the applications.
+     * @param \enrol_apply\table\applications $table Table listing the applications.
      * @param moodle_url $manageurl Url the form posts back to.
      * @param stdClass|null $instance Enrol instance the queue is scoped to, null site wide.
      * @return string Rendered markup.
@@ -81,7 +81,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
            concatenation and then throws it away by assigning the argument over it, measured on
            both branches, so a later "just add a class" would silently drop this one. */
         $bar = $this->render_from_template('enrol_apply/manage_actions', [
-            'togglegroup' => \enrol_apply_manage_table::TOGGLE_GROUP,
+            'togglegroup' => \enrol_apply\table\applications::TOGGLE_GROUP,
             'actionlabel' => get_string('withselectedusers'),
             'choosedots' => get_string('choosedots'),
             'golabel' => get_string('go'),
@@ -146,7 +146,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
             $this->page->requires->js_call_amd(
                 'enrol_apply/manage',
                 'init',
-                [\enrol_apply_manage_table::TOGGLE_GROUP]
+                [\enrol_apply\table\applications::TOGGLE_GROUP]
             );
         }
 

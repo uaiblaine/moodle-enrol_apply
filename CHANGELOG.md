@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Changed
+
+- **The approval queue is a dynamic table.** Its rows now refresh over
+  `core_table_get_dynamic_table_content` instead of reloading the page, which is what the rebuilt
+  queue is assembled on. Paging and sorting still emit real anchors, so both keep working with
+  JavaScript off.
+
+  The queue's table moved from the root-level `enrol_apply_manage_table` to an autoloaded
+  `\enrol_apply\table\applications`, beside the `\enrol_apply\table\applications_filterset`
+  core derives the name of. Its unique id is unchanged, so no operator's stored sort was
+  discarded.
+
+  **The scope is the part worth reading.** Core builds a dynamic table, hands it the filters the
+  CLIENT sent, and then applies exactly one capability check against exactly one context — while
+  this queue has three scopes across two context levels, one of which is "the users you mentor".
+  So exactly one integer travels, the enrol instance id, and the course, the context, the mentee
+  id list and the capability are recomputed from it server-side on every request by a new
+  `queue::listing_scope()`. The mentee restriction never travels at all, so no request can widen
+  it; a forged instance id is answered by the capability check against that instance's own
+  course, which is the refusal `manage.php?id=` already gave.
+
+  `manage.php` resolves its own scope through the same method, so the page and the requests that
+  replace its rows cannot answer differently about who sees what.
+
 ### Fixed
 
 - **The applications report now belongs to the enrolment method whose icon opened it.**

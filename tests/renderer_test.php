@@ -31,7 +31,6 @@ defined('MOODLE_INTERNAL') || die();
 
 global $CFG;
 require_once($CFG->dirroot . '/enrol/apply/lib.php');
-require_once($CFG->dirroot . '/enrol/apply/manage_table.php');
 
 /**
  * Tests for how the renderer spells the names it hands to its templates.
@@ -80,7 +79,7 @@ final class renderer_test extends \advanced_testcase {
      * @return void
      */
     protected function setUp(): void {
-        global $DB;
+        global $DB, $PAGE;
 
         parent::setUp();
         $this->resetAfterTest();
@@ -93,6 +92,11 @@ final class renderer_test extends \advanced_testcase {
         $this->course = $this->getDataGenerator()->create_course();
         $instanceid = $this->plugin->add_instance($this->course, $this->plugin->get_instance_defaults());
         $this->instance = $DB->get_record('enrol', ['id' => $instanceid], '*', MUST_EXIST);
+        /* The queue's table is dynamic, and get_dynamic_table_html_end() builds its
+           "show all" link from $PAGE->url - so rendering one without a page url makes core
+           emit a debugging() call, which advanced_testcase turns into a notice. manage.php
+           always sets it; a test that renders the table is standing in for that page. */
+        $PAGE->set_url(new \moodle_url('/enrol/apply/manage.php'));
     }
 
     /**
@@ -127,8 +131,7 @@ final class renderer_test extends \advanced_testcase {
         $PAGE->set_url($url);
         $PAGE->set_context(\context_course::instance($this->course->id));
 
-        $table = new \enrol_apply_manage_table($this->instance->id);
-        $table->define_baseurl($url);
+        $table = \enrol_apply\table\applications::for_scope((int) $this->instance->id);
 
         $html = $PAGE->get_renderer('enrol_apply')->manage_form($table, $url, $this->instance);
 
@@ -216,8 +219,7 @@ final class renderer_test extends \advanced_testcase {
         $PAGE->set_url($url);
         $PAGE->set_context(\context_course::instance($this->course->id));
 
-        $table = new \enrol_apply_manage_table($this->instance->id);
-        $table->define_baseurl($url);
+        $table = \enrol_apply\table\applications::for_scope((int) $this->instance->id);
 
         return $PAGE->get_renderer('enrol_apply')->manage_form($table, $url, $this->instance);
     }
@@ -802,8 +804,7 @@ final class renderer_test extends \advanced_testcase {
         $url = new \moodle_url('/enrol/apply/manage.php', ['id' => $this->instance->id]);
         $PAGE->set_url($url);
         $PAGE->set_context(\context_course::instance($this->course->id));
-        $table = new \enrol_apply_manage_table($this->instance->id);
-        $table->define_baseurl($url);
+        $table = \enrol_apply\table\applications::for_scope((int) $this->instance->id);
 
         $this->assertMatchesRegularExpression(
             '~<textarea[^>]*name="decisionnote"~',
@@ -1082,7 +1083,7 @@ final class renderer_test extends \advanced_testcase {
     public function test_the_review_page_carries_no_toggle_apparatus(): void {
         $html = $this->render_review();
 
-        $this->assertStringNotContainsString(\enrol_apply_manage_table::TOGGLE_GROUP, $html, $html);
+        $this->assertStringNotContainsString(\enrol_apply\table\applications::TOGGLE_GROUP, $html, $html);
         $this->assertStringNotContainsString('data-action="toggle"', $html, $html);
         // The control: the page really did render, so the absences above are absences.
         $this->assertStringContainsString('enrol_apply_review_form', $html);
@@ -1379,16 +1380,14 @@ final class renderer_test extends \advanced_testcase {
         $notice = get_string('placesfull', 'enrol_apply', 1);
 
         // The control: one place, nobody approved, so nothing to say.
-        $table = new \enrol_apply_manage_table($this->instance->id);
-        $table->define_baseurl($url);
+        $table = \enrol_apply\table\applications::for_scope((int) $this->instance->id);
         $this->assertStringNotContainsString($notice, $renderer->manage_form($table, $url, $instance));
 
         // Fill it.
         $taker = $this->getDataGenerator()->create_user();
         $this->plugin->enrol_user($this->instance, $taker->id, null, 0, 0, ENROL_USER_ACTIVE);
 
-        $table = new \enrol_apply_manage_table($this->instance->id);
-        $table->define_baseurl($url);
+        $table = \enrol_apply\table\applications::for_scope((int) $this->instance->id);
         $this->assertStringContainsString($notice, $renderer->manage_form($table, $url, $instance));
     }
 
@@ -1415,8 +1414,7 @@ final class renderer_test extends \advanced_testcase {
         $PAGE->set_url($url);
         $PAGE->set_context(\context_course::instance($this->course->id));
 
-        $table = new \enrol_apply_manage_table($this->instance->id);
-        $table->define_baseurl($url);
+        $table = \enrol_apply\table\applications::for_scope((int) $this->instance->id);
         $html = $PAGE->get_renderer('enrol_apply')->manage_form($table, $url, $instance);
 
         // The precondition: there really is nothing awaiting a decision.
@@ -1452,8 +1450,7 @@ final class renderer_test extends \advanced_testcase {
         $this->plugin->enrol_user($this->instance, $deferred->id, null, 0, 0, ENROL_APPLY_USER_WAIT);
 
         // The control: one application against a limit of two, so there is room and nothing to say.
-        $table = new \enrol_apply_manage_table($this->instance->id);
-        $table->define_baseurl($url);
+        $table = \enrol_apply\table\applications::for_scope((int) $this->instance->id);
         $this->assertStringNotContainsString(
             get_string('applicationsclosednotice', 'enrol_apply', (object) [
                 'held' => 1,
@@ -1466,8 +1463,7 @@ final class renderer_test extends \advanced_testcase {
         $second = $this->getDataGenerator()->create_user();
         $this->plugin->enrol_user($this->instance, $second->id, null, 0, 0, ENROL_APPLY_USER_WAIT);
 
-        $table = new \enrol_apply_manage_table($this->instance->id);
-        $table->define_baseurl($url);
+        $table = \enrol_apply\table\applications::for_scope((int) $this->instance->id);
         $this->assertStringContainsString(
             get_string('applicationsclosednotice', 'enrol_apply', (object) [
                 'held' => 2,
@@ -1501,8 +1497,7 @@ final class renderer_test extends \advanced_testcase {
         $PAGE->set_url($url);
         $PAGE->set_context(\context_course::instance($this->course->id));
 
-        $table = new \enrol_apply_manage_table($this->instance->id);
-        $table->define_baseurl($url);
+        $table = \enrol_apply\table\applications::for_scope((int) $this->instance->id);
         $html = $PAGE->get_renderer('enrol_apply')->manage_form($table, $url, $instance);
 
         // The precondition: there really is nothing awaiting a decision.

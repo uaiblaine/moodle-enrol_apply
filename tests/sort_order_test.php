@@ -22,7 +22,6 @@ defined('MOODLE_INTERNAL') || die();
 
 global $CFG;
 require_once($CFG->dirroot . '/enrol/apply/lib.php');
-require_once($CFG->dirroot . '/enrol/apply/manage_table.php');
 
 /**
  * The approval queue orders its rows by something unique.
@@ -37,20 +36,46 @@ require_once($CFG->dirroot . '/enrol/apply/manage_table.php');
  * @copyright  2026 Anderson Blaine
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-#[CoversClass(\enrol_apply_manage_table::class)]
+#[CoversClass(\enrol_apply\table\applications::class)]
 final class sort_order_test extends \advanced_testcase {
     /**
-     * Build a table of the given class, set up as a page would.
+     * Give the page a url before anything renders the queue.
+     *
+     * The queue's table is dynamic, and get_dynamic_table_html_end() builds its "show all" link
+     * from $PAGE->url - so rendering one without a page url makes core emit a debugging() call,
+     * which advanced_testcase turns into a notice. manage.php always sets it; a test that renders
+     * the table is standing in for that page.
+     *
+     * @return void
+     */
+    protected function setUp(): void {
+        global $PAGE;
+
+        parent::setUp();
+        $PAGE->set_url(new \moodle_url('/enrol/apply/manage.php'));
+    }
+
+    /**
+     * Build the table for the site-wide scope, set up as a page would.
      *
      * setup() reads the sort parameters from the request and is what makes get_sort_columns()
      * callable at all, so it cannot be skipped.
+     *
+     * As ADMIN, and the table is asked for a scope rather than built bare, because a dynamic
+     * table has no bare state: set_filterset() is what resolves the scope, defines the columns
+     * and builds the query, so a table that was never given a filterset has no columns to sort
+     * by at all. The site-wide scope is the one that needs no fixture.
+     *
+     * define_baseurl() is deliberately NOT called: guess_base_url() sets it from the scope, and
+     * calling it here would mask a broken one.
      *
      * @param array $sortdata Sort items as flexible_table::set_sortdata() takes them.
      * @return \table_sql The table, set up.
      */
     protected function table(array $sortdata = []): \table_sql {
-        $table = new \enrol_apply_manage_table();
-        $table->define_baseurl(new \moodle_url('/enrol/apply/manage.php'));
+        $this->setAdminUser();
+
+        $table = \enrol_apply\table\applications::for_scope(0);
         if ($sortdata) {
             $table->set_sortdata($sortdata);
         }
@@ -87,11 +112,21 @@ final class sort_order_test extends \advanced_testcase {
     public function test_every_sort_the_operator_can_choose_ends_in_a_unique_key(): void {
         $this->resetAfterTest();
 
-        /* No 'email' here any more: the queue's columns beyond these three are whatever
-           showuseridentity names and this reader may see, and the table built below is given no
-           context, so it offers none. The identity columns' own sorting is covered in
-           identity_test, which can set up a reader and a context to have any. */
-        foreach (['course', 'fullname', 'applydate'] as $column) {
+        /* Read off the table rather than listed here, and that is the point: the columns beyond
+           the fixed three are whatever showuseridentity names and this reader may see, so a
+           hardcoded list would either miss them or pin a site setting. Deriving them means a
+           column added later is covered the day it is added.
+
+           The two the table declares unsortable are the two excluded. */
+        $table = $this->table();
+        $sortable = array_diff(array_keys($table->columns), ['checkboxcolumn', 'applycomment']);
+
+        /* The control, because a derived list can be derived from nothing: an empty or truncated
+           set would make the loop below assert on air. Admin on a default site sees email as an
+           identity column, so the four are course, fullname, email and applydate. */
+        $this->assertGreaterThanOrEqual(4, count($sortable), implode(', ', $sortable));
+
+        foreach ($sortable as $column) {
             foreach ([SORT_ASC, SORT_DESC] as $order) {
                 $sort = $this->table([['sortby' => $column, 'sortorder' => $order]])->get_sql_sort();
 
@@ -160,8 +195,8 @@ final class sort_order_test extends \advanced_testcase {
         // Every application in the same second, which is what the tiebreaker exists for.
         $DB->set_field('user_enrolments', 'timecreated', 1700000000, ['enrolid' => $instance->id]);
 
-        $table = new \enrol_apply_manage_table($instance->id);
-        $table->define_baseurl(new \moodle_url('/enrol/apply/manage.php'));
+        $this->setAdminUser();
+        $table = \enrol_apply\table\applications::for_scope((int) $instance->id);
         ob_start();
         $table->out(50, false);
         ob_end_clean();

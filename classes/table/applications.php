@@ -14,29 +14,54 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+namespace enrol_apply\table;
+
+use context;
+use core_table\dynamic as dynamic_table;
+use core_table\local\filter\filterset;
+use core_table\local\filter\integer_filter;
+use enrol_apply\local\commentlabel;
+use enrol_apply\local\identity;
+use enrol_apply\local\queue;
+use html_writer;
+use moodle_url;
+use stdClass;
+use user_picture;
+
 /**
  * Table listing the enrolment applications awaiting a decision.
+ *
+ * Dynamic, so that paging, sorting and (in later slices) filtering refresh the table over
+ * core_table_get_dynamic_table_content instead of reloading the page. Core resolves the handler
+ * generically as \{component}\table\{handler} (lib/table/classes/external/dynamic/get.php:202), so
+ * a plugin can implement the interface even though no plugin type in core does - the only
+ * implementors are admin, ai, reportbuilder, sms and user.
+ *
+ * **The scope is the whole of the risk, and it is why queue::listing_scope() exists.** get.php
+ * builds the table, calls set_filterset() with the client's filters, and then applies exactly one
+ * capability check against exactly one context. This queue has three scopes across two context
+ * levels. So one integer arrives - the enrol instance id - and the course, the context, the mentee
+ * id list and the capability are all recomputed from it server-side on every request. The mentee
+ * restriction never travels, so nothing a client sends can widen it.
  *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine
  * @copyright  2016 sudile GbR (http://www.sudile.com)
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @author     Johannes Burk <johannes.burk@sudile.com>
  */
+class applications extends \table_sql implements dynamic_table {
+    /**
+     * The table's unique id, and it is a compatibility contract rather than a name.
+     *
+     * flexible_table keys stored preferences on it - $SESSION->flextable[<uniqueid>] holds the
+     * sort, the collapsed columns and the initials - so renaming it silently discards every
+     * operator's saved sort. It is the id the old root-level enrol_apply_manage_table used, kept
+     * verbatim through the move to this class for exactly that reason.
+     *
+     * @var string
+     */
+    public const UNIQUEID = 'enrol_apply_manage_table';
 
-defined('MOODLE_INTERNAL') || die();
-
-require_once($CFG->libdir . '/tablelib.php');
-
-/**
- * Table listing the enrolment applications awaiting a decision.
- *
- * @package    enrol_apply
- * @copyright  2026 Anderson Blaine
- * @copyright  2016 sudile GbR (http://www.sudile.com)
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-class enrol_apply_manage_table extends table_sql {
     /**
      * @var string The core/checkbox-toggleall group tying the header checkbox, rows and bulk bar.
      *
@@ -47,50 +72,166 @@ class enrol_apply_manage_table extends table_sql {
      */
     public const TOGGLE_GROUP = 'enrol-apply-queue';
 
+    /** @var stdClass|null Everything this listing is scoped by, from queue::listing_scope(). */
+    protected $scope = null;
+
     /** @var array Identity field names this reader may see, from \enrol_apply\local\identity. */
     protected $extrafields = [];
 
     /**
-     * Build the table for the requested scope.
+     * Build the table.
      *
-     * There used to be a third parameter restricting the table to ONE user enrolment, which is
-     * how a single application was shown before it got a page of its own. Since manage.php
-     * tests userenrol before id and leaves that branch through the review page, the only caller
-     * could only ever pass 0 for it, so the one-row mode was unreachable. It is removed rather
-     * than left in place: a constructor parameter is a claim that the mode exists.
-     *
-     * @param int $enrolid Restrict to one enrol instance, 0 for no restriction.
-     * @param array|null $mentees Restrict to these applicant user ids, null for no restriction.
-     * @param string $commentlabel Heading of the comment column, ALREADY ESCAPED, empty for the
-     *        shipped wording. Only the instance-scoped queue can supply one: the site-wide and
-     *        mentee scopes span instances, each of which may word the question differently, so a
-     *        single heading there would be true of some rows and false of others.
-     * @param \context|null $identitycontext Context to judge the applicant's identity fields in,
-     *        null for a scope that spans courses and therefore shows none. See
-     *        \enrol_apply\local\identity for why the mentee scope is the null one.
+     * **No argument, deliberately, and core is what decides that.** get.php calls
+     * `new $tableclass($uniqueid)` and PHP silently ignores an argument a constructor does not
+     * declare, so the shape core's own dynamic tables use - core_sms\table\sms_gateway_table:45
+     * and core_admin\table\plugin_management_table:51 - is to take none and pin the id here. That
+     * also removes the last route by which a caller could name a scope: there is now exactly one,
+     * the filterset, and exactly one thing in it.
      */
-    public function __construct($enrolid = 0, $mentees = null, $commentlabel = '', ?\context $identitycontext = null) {
+    public function __construct() {
+        parent::__construct(self::UNIQUEID);
+    }
+
+    /**
+     * The table for one scope, built the way the web service builds it.
+     *
+     * A named constructor so the page path and the refresh path go through the SAME door: a
+     * filterset carrying the enrol instance id, and set_filterset() resolving everything else from
+     * it. manage.php could assemble that itself, and an earlier shape had it do so - but then the
+     * page and its own AJAX refreshes would have had two independent statements of how a scope is
+     * established, which is the drift this whole slice exists to remove.
+     *
+     * The cast is not cosmetic. integer_filter::add_filter_value() tests is_int() and throws a
+     * TypeError on anything else (lib/table/classes/local/filter/integer_filter.php:47), and a
+     * later slice will read this id out of a data attribute, where everything is a string.
+     *
+     * @param int $enrolid Enrol instance to list, 0 for every one this operator may decide in.
+     * @return self The table, scoped.
+     */
+    public static function for_scope(int $enrolid): self {
+        $filterset = new applications_filterset();
+        $filterset->add_filter(new integer_filter('enrolid', null, [$enrolid]));
+
+        $table = new self();
+        $table->set_filterset($filterset);
+
+        return $table;
+    }
+
+    /**
+     * Take the client's filters, resolve the scope from them, and build the query.
+     *
+     * **check_validity() is called here because nothing else calls it.** get.php goes
+     * set_filterset() then validate_context() then has_capability() and never asks the filterset
+     * whether its required filters are present (:228-231, byte-identical on 5.1 and 5.2), so
+     * "required" in applications_filterset is a claim only this line enforces. Without it a
+     * request omitting enrolid would reach get_filter() and die with a coding_exception naming
+     * an array key, which is the same outcome told worse - and core's own participants table
+     * relies on exactly that.
+     *
+     * Order matters twice. The scope is resolved BEFORE parent::set_filterset(), because that
+     * calls guess_base_url() and the url is built from the scope. And the columns are defined
+     * here rather than in the constructor, because which identity columns exist is a question
+     * about the scope's context and the constructor has no scope yet.
+     *
+     * @param filterset $filterset Filters as the client sent them.
+     * @return void
+     */
+    public function set_filterset(filterset $filterset): void {
+        $filterset->check_validity();
+
+        /* check_validity() proves the filter is THERE and proves nothing about what it holds: it
+           tests array_key_exists() against the filterset's own map and stops
+           (lib/table/classes/local/filter/filterset.php:231-248). A filter carrying an EMPTY
+           value list is a well-formed request to core's service - get.php declares `values` as a
+           multiple structure, which validates an empty array happily - and filter::current()
+           answers null for one, because rewind() only takes a position `if
+           (count($this->filtervalues))` (filter.php:137-145). `(int) null` is 0, which is not a
+           refusal here: it is the WIDEST scope this queue has. So the value is read and tested,
+           and the same exception raised, because "you named no scope" is one thing to a caller
+           however the request managed to say it. */
+        $enrolid = $filterset->get_filter('enrolid')->current();
+        if ($enrolid === null) {
+            throw new \moodle_exception('missingrequiredfields', 'core_table', '', 'enrolid');
+        }
+
+        $this->scope = queue::listing_scope((int) $enrolid);
+
+        parent::set_filterset($filterset);
+
+        $this->build_sql();
+        $this->define_table_columns();
+    }
+
+    /**
+     * The context this table is read in.
+     *
+     * Mandatory because get.php:230 calls it, not because the interface declares it - the
+     * interface declares has_capability() and nothing else.
+     *
+     * Never null and never false: the return type is a context, so a refusal has to be carried by
+     * has_capability() below. queue::listing_scope() answers an unresolvable id with the system
+     * context and allowed false for that reason.
+     *
+     * @return context The scope's context.
+     */
+    public function get_context(): context {
+        return $this->scope->context;
+    }
+
+    /**
+     * Whether this operator may read this listing at all.
+     *
+     * The capability half only. The course-ACCESS half is applied on this path by
+     * external_api::validate_context(), which calls require_login() from the context above, and on
+     * the page path by manage.php itself.
+     *
+     * @return bool True when the listing may be read.
+     */
+    public function has_capability(): bool {
+        return (bool) $this->scope->allowed;
+    }
+
+    /**
+     * The url paging and sorting link back to.
+     *
+     * Mandatory for a dynamic table - flexible_table::guess_base_url() throws for one that does
+     * not override it - and called by set_filterset(), which is why the scope is resolved first.
+     *
+     * Every filter that can be GET-encoded has to be carried here, or the no-JavaScript path
+     * silently loses it on the first page turn. Today that is the scope alone.
+     *
+     * @return void
+     */
+    public function guess_base_url(): void {
+        $this->baseurl = $this->scope->url;
+    }
+
+    /**
+     * Build the query for the resolved scope.
+     *
+     * @return void
+     */
+    protected function build_sql(): void {
         global $DB;
 
-        parent::__construct('enrol_apply_manage_table');
-
         // The one definition of "awaiting a decision"; see the method for both its clauses.
-        [$wheres, $params] = \enrol_apply\local\queue::awaiting_decision_where();
+        [$wheres, $params] = queue::awaiting_decision_where();
 
-        if ($enrolid) {
+        if ($this->scope->enrolid) {
             $wheres[] = 'e.id = :enrolid';
-            $params['enrolid'] = $enrolid;
+            $params['enrolid'] = $this->scope->enrolid;
         } else {
             $wheres[] = 'e.enrol = :enrol';
             $params['enrol'] = 'apply';
         }
 
-        if ($mentees !== null) {
-            if (!$mentees) {
+        if ($this->scope->mentees !== null) {
+            if (!$this->scope->mentees) {
                 // No mentees means nothing to show; a never-true predicate keeps the SQL valid.
                 $wheres[] = '1 = 0';
             } else {
-                [$insql, $inparams] = $DB->get_in_or_equal($mentees, SQL_PARAMS_NAMED, 'mentee');
+                [$insql, $inparams] = $DB->get_in_or_equal($this->scope->mentees, SQL_PARAMS_NAMED, 'mentee');
                 $wheres[] = "ue.userid {$insql}";
                 $params += $inparams;
             }
@@ -99,8 +240,8 @@ class enrol_apply_manage_table extends table_sql {
         /* The identity fields this reader may see, and the SQL for them. Everything about which
            fields those are is core's decision - see \enrol_apply\local\identity - so that the
            queue and the participants page beside it cannot answer differently. */
-        $this->extrafields = \enrol_apply\local\identity::fields($identitycontext);
-        $identitysql = \enrol_apply\local\identity::sql($identitycontext, 'u');
+        $this->extrafields = identity::fields($this->scope->identitycontext);
+        $identitysql = identity::sql($this->scope->identitycontext, 'u');
 
         $userfieldsapi = \core_user\fields::for_userpic()->including('username');
         $userfields = $userfieldsapi->get_sql('u', false, '', 'userid', false)->selects;
@@ -129,8 +270,6 @@ class enrol_apply_manage_table extends table_sql {
                  {$identitysql->joins}";
 
         $this->set_sql($fields, $from, implode(' AND ', $wheres), $params + $identitysql->params);
-
-        $this->define_table_columns($commentlabel);
     }
 
     /**
@@ -172,10 +311,16 @@ class enrol_apply_manage_table extends table_sql {
     /**
      * Declare the columns and their headings.
      *
-     * @param string $commentlabel Heading of the comment column, already escaped, empty for the default.
+     * The comment heading comes from the scope rather than from a caller. It used to be a
+     * constructor argument, and a dynamic table has no constructor arguments to pass it in -
+     * which is no loss, because the instance it is read from is exactly what the scope resolves.
+     * The site-wide and mentee scopes span instances, each of which may word the question
+     * differently, so a single heading there would be true of some rows and false of others;
+     * those scopes carry no instance and get the shipped wording.
+     *
      * @return void
      */
-    protected function define_table_columns($commentlabel = '') {
+    protected function define_table_columns(): void {
         $columns = ['checkboxcolumn', 'course', 'fullname'];
         $headers = [
             $this->select_all_header(),
@@ -198,8 +343,11 @@ class enrol_apply_manage_table extends table_sql {
 
         $columns[] = 'applycomment';
         /* The escaped spelling, because print_headers() emits this through html_writer::tag(),
-           which concatenates its content without escaping it. The caller supplies it that way. */
-        $headers[] = $commentlabel !== '' ? $commentlabel : get_string('applycomment', 'enrol_apply');
+           which concatenates its content without escaping it. commentlabel::custom() defaults to
+           that spelling. */
+        $headers[] = $this->scope->instance === null
+            ? get_string('applycomment', 'enrol_apply')
+            : commentlabel::custom($this->scope->instance);
 
         $this->define_columns($columns);
         $this->define_headers($headers);
@@ -330,6 +478,12 @@ class enrol_apply_manage_table extends table_sql {
      * against the real queue: with a stored `i_first = 'Z'` and no bar anywhere on the page, a
      * three-row queue returned nothing, with no control on screen able to explain it. The
      * preference lives in $SESSION->flextable, so it survives page loads and is invisible.
+     *
+     * On the dynamic path there is a third way in that the page path never had: get.php reads
+     * `firstinitial` and `lastinitial` straight off the request and calls set_first_initial() /
+     * set_last_initial() with them (:238-244). Those write the same preference, so a crafted
+     * request could re-arm the filter this override exists to kill - and this override is what
+     * keeps that harmless, because the preference is never read.
      *
      * Overriding this is the complete kill. Emptying $userfullnamecolumns also stops the filter
      * and silently costs the fullname column its firstname/lastname sub-sort links, which is why

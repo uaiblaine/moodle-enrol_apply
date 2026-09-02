@@ -36,7 +36,6 @@
 
 require_once('../../config.php');
 require_once($CFG->dirroot . '/enrol/apply/lib.php');
-require_once($CFG->dirroot . '/enrol/apply/manage_table.php');
 require_once($CFG->dirroot . '/enrol/apply/renderer.php');
 
 $id = optional_param('id', 0, PARAM_INT);
@@ -48,7 +47,6 @@ require_login();
 
 $manageurlparams = [];
 $instance = null;
-$mentees = null;
 $afterdecisionurl = null;
 
 if ($userenrol) {
@@ -90,31 +88,40 @@ if ($userenrol) {
        stranger than sending all three to the queue. */
     $scope = \enrol_apply\local\queue::scope($application, $instance);
     $afterdecisionurl = $scope->url;
-} else if ($id) {
-    // Scope: one course enrolment instance.
-    $instance = $DB->get_record('enrol', ['id' => $id, 'enrol' => 'apply'], '*', MUST_EXIST);
-    $course = get_course($instance->courseid);
-    require_login($course);
-    $context = context_course::instance($course->id, MUST_EXIST);
-    require_capability('enrol/apply:manageapplications', $context);
-    $manageurlparams['id'] = $instance->id;
-    $pageheading = format_string($course->fullname);
 } else {
-    /* Scope: everything the current user may decide on. Site-wide for holders of the
-       capability at system level; otherwise restricted to the users they mentor, which
-       here means the users they hold a role assignment over in those users' own
-       contexts. */
-    $context = context_system::instance();
-    if (!has_capability('enrol/apply:manageapplications', $context)) {
-        /* No site-wide capability, so fall back to the mentees. A null restriction means
-           "every application"; an empty list would silently widen the query the same way,
-           which is why the capability check has to come first. */
-        $mentees = \enrol_apply\local\applications::get_mentees();
-        if (!$mentees) {
-            require_capability('enrol/apply:manageapplications', $context);
-        }
+    /* The two LISTING scopes - one enrolment instance, or everything this operator may decide
+       on - and both are resolved by queue::listing_scope(), which the table resolves from too.
+       Named $listing and not $scope, because the review branch above already binds $scope to
+       queue::scope()'s answer, which is a different object answering a different question.
+       That is the point of it: the page and the AJAX refreshes that replace its rows would
+       otherwise hold two independent statements of who may see what, and the refresh path is
+       the one a client can address directly. */
+    $listing = \enrol_apply\local\queue::listing_scope($id);
+
+    if ($id) {
+        /* A url naming no apply instance is an error here and not an empty queue, the same way
+           report.php's MUST_EXIST makes it one. listing_scope() cannot raise it: it is total on
+           purpose, because on the web service path an unresolvable id is simply what a forged
+           filter value looks like, and refusing quietly is the right answer there. */
+        $found = $DB->get_record('enrol', ['id' => $id, 'enrol' => 'apply'], '*', MUST_EXIST);
+        $course = get_course($found->courseid);
+        require_login($course);
+        $manageurlparams['id'] = (int) $found->id;
+        $pageheading = format_string($course->fullname);
+    } else {
+        $pageheading = get_string('confirmusers', 'enrol_apply');
     }
-    $pageheading = get_string('confirmusers', 'enrol_apply');
+
+    $context = $listing->context;
+    $instance = $listing->instance;
+
+    if (!$listing->allowed) {
+        /* The refusal both scopes gave before, raised here rather than inside the resolver:
+           the dynamic table's has_capability() answers with a bool, so the resolver reports and
+           each caller raises in the way its own path raises. The context differs by scope - the
+           course for ?id=, the system context otherwise - and each is the one that was checked. */
+        require_capability('enrol/apply:manageapplications', $context);
+    }
 }
 
 $manageurl = new moodle_url('/enrol/apply/manage.php', $manageurlparams);
@@ -344,21 +351,9 @@ if ($userenrol) {
     exit;
 }
 
-/* The instance-scoped queue heads its comment column with whatever the teacher asked for, in the
-   ESCAPED spelling the table's header sink needs. $instance is null on the site-wide and mentee
-   scopes, which span instances and therefore have no single question to quote. */
-$commentlabel = $instance === null ? '' : \enrol_apply\local\commentlabel::custom($instance);
-
-/* Which context judges the applicant's identity fields, and null where none can. The instance
-   queue has one course; the site-wide queue is opened by a system-level capability holder and the
-   system context is the right question for them. The MENTEE queue is the null one: it spans
-   courses in a single statement, so no context is right for it and a per-row mask would be unsound
-   for a sortable column. $mentees is non-null on exactly that branch. */
-$identitycontext = null;
-if ($mentees === null) {
-    $identitycontext = $instance === null ? context_system::instance() : $context;
-}
-
-$table = new enrol_apply_manage_table($id, $mentees, $commentlabel, $identitycontext);
-$table->define_baseurl($manageurl);
+/* One argument, and everything the listing is narrowed by - the mentee ids, the context that
+   judges the identity fields, the wording of the comment heading - resolved from it inside. Those
+   three used to be computed here and passed in, which meant this page and the web service that
+   refreshes its rows each decided them separately. */
+$table = \enrol_apply\table\applications::for_scope((int) $id);
 $renderer->manage_page($table, $manageurl, $instance);

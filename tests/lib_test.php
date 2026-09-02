@@ -52,7 +52,7 @@ final class lib_test extends \advanced_testcase {
      * @return void
      */
     protected function setUp(): void {
-        global $DB;
+        global $DB, $PAGE;
 
         parent::setUp();
         $this->resetAfterTest();
@@ -65,6 +65,11 @@ final class lib_test extends \advanced_testcase {
         $this->course = $this->getDataGenerator()->create_course();
         $instanceid = $this->plugin->add_instance($this->course, $this->plugin->get_instance_defaults());
         $this->instance = $DB->get_record('enrol', ['id' => $instanceid], '*', MUST_EXIST);
+        /* The queue's table is dynamic, and get_dynamic_table_html_end() builds its
+           "show all" link from $PAGE->url - so rendering one without a page url makes core
+           emit a debugging() call, which advanced_testcase turns into a notice. manage.php
+           always sets it; a test that renders the table is standing in for that page. */
+        $PAGE->set_url(new \moodle_url('/enrol/apply/manage.php'));
     }
 
     /**
@@ -336,13 +341,7 @@ final class lib_test extends \advanced_testcase {
      * @return array Array of user ids.
      */
     protected function queued_user_ids(): array {
-        global $CFG;
-
-        // Not autoloaded: the table classes live in plain files, not under classes/.
-        require_once($CFG->dirroot . '/enrol/apply/manage_table.php');
-
-        $table = new \enrol_apply_manage_table($this->instance->id);
-        $table->define_baseurl(new \moodle_url('/enrol/apply/manage.php'));
+        $table = \enrol_apply\table\applications::for_scope((int) $this->instance->id);
 
         ob_start();
         $table->out(50, false);

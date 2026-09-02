@@ -31,7 +31,6 @@ defined('MOODLE_INTERNAL') || die();
 
 global $CFG;
 require_once($CFG->dirroot . '/enrol/apply/lib.php');
-require_once($CFG->dirroot . '/enrol/apply/manage_table.php');
 
 /**
  * Tests for the applicant identity fields the queue shows, and the scopes that get none.
@@ -55,7 +54,7 @@ final class identity_test extends \advanced_testcase {
      * @return void
      */
     protected function setUp(): void {
-        global $DB;
+        global $DB, $PAGE;
 
         parent::setUp();
         $this->resetAfterTest();
@@ -68,6 +67,11 @@ final class identity_test extends \advanced_testcase {
         $this->course = $this->getDataGenerator()->create_course();
         $instanceid = $plugin->add_instance($this->course, $plugin->get_instance_defaults());
         $this->instance = $DB->get_record('enrol', ['id' => $instanceid], '*', MUST_EXIST);
+        /* The queue's table is dynamic, and get_dynamic_table_html_end() builds its
+           "show all" link from $PAGE->url - so rendering one without a page url makes core
+           emit a debugging() call, which advanced_testcase turns into a notice. manage.php
+           always sets it; a test that renders the table is standing in for that page. */
+        $PAGE->set_url(new \moodle_url('/enrol/apply/manage.php'));
     }
 
     /**
@@ -85,14 +89,62 @@ final class identity_test extends \advanced_testcase {
     }
 
     /**
-     * Render the queue for the given scope.
+     * A mentor of the given applicant, holding no capability anywhere else.
      *
-     * @param \context|null $identitycontext Context to judge identity in, null for the mentee scope.
+     * The role is DEFINED at the system context and ASSIGNED only in the mentee's user context,
+     * which is what makes the distinction this file needs: has_capability() at the system context
+     * is false for them, so queue::listing_scope(0) takes the mentee branch rather than the
+     * site-wide one.
+     *
+     * **And they hold moodle/site:viewuseridentity at the system context, which is the whole
+     * point of the fixture rather than a detail of it.** Without it identity::fields() returns
+     * an empty array for ANY context, so this reader would see no identity columns whichever
+     * context the mentee scope resolved - and the test below would pass just as happily against
+     * a scope that resolved the system context, which is the defect it exists to catch. Measured:
+     * gate CE reddened nothing until this capability was granted.
+     *
+     * The reader is reachable rather than contrived. Holding viewuseridentity site-wide without
+     * holding enrol/apply:manageapplications site-wide is the ordinary shape of a support or
+     * enquiries role, and mentoring is delegated to exactly that kind of account.
+     *
+     * @param \stdClass $mentee The applicant they mentor.
+     * @return \stdClass The mentor.
+     */
+    protected function mentor(\stdClass $mentee): \stdClass {
+        $mentor = $this->getDataGenerator()->create_user();
+        $roleid = $this->getDataGenerator()->create_role(['shortname' => 'applymentor']);
+        set_role_contextlevels($roleid, [CONTEXT_USER]);
+        assign_capability('enrol/apply:manageapplications', CAP_ALLOW, $roleid, \context_system::instance());
+        role_assign($roleid, $mentor->id, \context_user::instance($mentee->id)->id);
+
+        /* A SECOND role, carrying the identity capability and nothing else, assigned at the
+           system context - because a role assignment in a user context grants nothing at the
+           system one, and identity::fields() asks there. Keeping it separate is what stops the
+           apply capability coming along with it, which would move this reader to the site-wide
+           branch and take the mentee scope out of the test entirely. */
+        $siteroleid = $this->getDataGenerator()->create_role(['shortname' => 'applyidentityonly']);
+        set_role_contextlevels($siteroleid, [CONTEXT_SYSTEM]);
+        assign_capability('moodle/site:viewuseridentity', CAP_ALLOW, $siteroleid, \context_system::instance());
+        role_assign($siteroleid, $mentor->id, \context_system::instance()->id);
+
+        return $mentor;
+    }
+
+    /**
+     * Render the queue for a scope, named the way a url names one.
+     *
+     * The identity context used to be handed in here and is not any more: the table derives it
+     * from the scope, so these tests now produce the scope and read the consequence rather than
+     * asserting a consequence of a context they injected. That is a stronger claim - the mapping
+     * from scope to context is itself under test - and it is the only claim available, because a
+     * caller can no longer state a context at all.
+     *
+     * @param int|null $enrolid Enrol instance to list, 0 for the scope with no instance, null for
+     *                          this fixture's own instance.
      * @return string The rendered table.
      */
-    protected function render(?\context $identitycontext): string {
-        $table = new \enrol_apply_manage_table($this->instance->id, null, '', $identitycontext);
-        $table->define_baseurl(new \moodle_url('/enrol/apply/manage.php', ['id' => $this->instance->id]));
+    protected function render(?int $enrolid = null): string {
+        $table = \enrol_apply\table\applications::for_scope($enrolid ?? (int) $this->instance->id);
 
         ob_start();
         $table->out(50, true);
@@ -114,7 +166,7 @@ final class identity_test extends \advanced_testcase {
 
         $this->applicant(['email' => 'ana@example.org', 'idnumber' => 'RA-2026-0042', 'phone1' => '555-1234']);
 
-        $html = $this->render(\context_course::instance($this->course->id));
+        $html = $this->render();
 
         $this->assertStringContainsString('ana@example.org', $html);
         $this->assertStringContainsString('RA-2026-0042', $html);
@@ -151,7 +203,7 @@ final class identity_test extends \advanced_testcase {
 
         $this->applicant(['email' => 'ana@example.org', 'idnumber' => 'RA-2026-0042']);
 
-        $html = $this->render($context);
+        $html = $this->render();
 
         $this->assertStringNotContainsString('ana@example.org', $html);
         // The control: the reader is seeing the queue at all, and the other field is still there.
@@ -178,7 +230,7 @@ final class identity_test extends \advanced_testcase {
 
         $this->applicant(['email' => 'ana@example.org']);
 
-        $html = $this->render(\context_course::instance($this->course->id));
+        $html = $this->render();
 
         $this->assertStringContainsString('ana@example.org', $html);
     }
@@ -204,7 +256,7 @@ final class identity_test extends \advanced_testcase {
 
         $this->assertSame([], identity::fields($context));
 
-        $html = $this->render($context);
+        $html = $this->render();
 
         $this->assertStringNotContainsString('ana@example.org', $html);
         $this->assertStringNotContainsString('RA-2026-0042', $html);
@@ -213,24 +265,32 @@ final class identity_test extends \advanced_testcase {
     /**
      * The mentee scope gets no identity columns, because no single context can judge it.
      *
+     * Driven by a real MENTOR now rather than by handing the table a null context, and the
+     * change is what gives the test its subject back. The mapping from scope to identity
+     * context lives in queue::listing_scope(), so a test that injected null was asserting
+     * identity::fields(null)'s behaviour twice and the mapping not at all - it would have passed
+     * with the mentee branch resolving the system context.
+     *
      * @return void
      */
     public function test_the_mentee_scope_gets_no_identity_fields(): void {
         global $CFG;
 
-        $this->setAdminUser();
         $CFG->showuseridentity = 'email,idnumber';
         $CFG->hiddenuserfields = '';
 
-        $this->applicant(['email' => 'ana@example.org', 'idnumber' => 'RA-2026-0042']);
+        $applicant = $this->applicant(['email' => 'ana@example.org', 'idnumber' => 'RA-2026-0042']);
+        $this->setUser($this->mentor($applicant));
 
         $this->assertSame([], identity::fields(null));
 
-        // Even for an administrator, who would see everything in any real context.
-        $html = $this->render(null);
+        $html = $this->render(0);
 
         $this->assertStringNotContainsString('ana@example.org', $html);
         $this->assertStringNotContainsString('RA-2026-0042', $html);
+        /* The control, and this scope needs one badly: a listing that showed no rows at all
+           would satisfy both assertions above. The applicant is there, without their details. */
+        $this->assertStringContainsString(fullname($applicant), $html);
     }
 
     /**
@@ -275,7 +335,7 @@ final class identity_test extends \advanced_testcase {
             'dataformat' => 0,
         ]);
 
-        $html = $this->render(\context_course::instance($this->course->id));
+        $html = $this->render();
 
         $this->assertStringContainsString('Directorate of Training', $html);
     }
@@ -298,7 +358,7 @@ final class identity_test extends \advanced_testcase {
 
         $this->applicant(['idnumber' => 'R&D <b>2026</b>']);
 
-        $html = $this->render(\context_course::instance($this->course->id));
+        $html = $this->render();
 
         $this->assertStringContainsString('R&amp;D &lt;b&gt;2026&lt;/b&gt;', $html);
         $this->assertStringNotContainsString('<b>2026</b>', $html);
@@ -319,7 +379,7 @@ final class identity_test extends \advanced_testcase {
         $this->applicant(['firstname' => 'Ana', 'lastname' => 'Ribeiro']);
 
         // The second argument of out() is exactly the request the override has to refuse.
-        $html = $this->render(\context_course::instance($this->course->id));
+        $html = $this->render();
 
         $this->assertStringNotContainsString('initialbar', $html);
         // The control: the table itself did render, so the assertion above is not vacuous.
@@ -353,8 +413,7 @@ final class identity_test extends \advanced_testcase {
             'collapse' => [],
         ]];
 
-        $table = new \enrol_apply_manage_table($this->instance->id);
-        $table->define_baseurl(new \moodle_url('/enrol/apply/manage.php', ['id' => $this->instance->id]));
+        $table = \enrol_apply\table\applications::for_scope((int) $this->instance->id);
 
         ob_start();
         $table->out(50, true);

@@ -385,7 +385,7 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
     /**
      * A manually suspended approval says so, which is what puts it back in the queue.
      *
-     * The second reported symptom. manage_table.php's predicate is
+     * The second reported symptom. The queue's predicate is
      * "status != active AND (timeend = 0 OR timeend > now)", so a suspension with no period
      * re-queues the application - and the report went on saying "Approved" while the queue
      * showed the same person awaiting a decision, with neither screen mentioning the other.
