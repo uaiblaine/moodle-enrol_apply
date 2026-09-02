@@ -256,7 +256,12 @@ class enrol_apply_renderer extends plugin_renderer_base {
 
         $remaining = $limit > 0 ? $limit - $capacity::applicants($instance) : 0;
 
-        return $context + [
+        /* array_merge and never the + operator. `+` keeps the LEFT side on a duplicate key, and
+           $context already carries 'hasstatus' => false from the site-wide default above - so the
+           + form silently kept the false and the whole status block never rendered, on every
+           instance-scoped queue. Found by looking at the page; no test asserted the block, and
+           the slice that documented this exact trap (U6, gate BW) is four hours old. */
+        return array_merge($context, [
             'hasstatus' => true,
             'statuslabel' => get_string('queuestatus', 'enrol_apply'),
             'isopen' => $open,
@@ -272,7 +277,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
                above the table rather than three times over. */
             'hasremaining' => $open && $limit > 0 && $remaining > 0 && $remaining * 5 <= $limit,
             'remainingtext' => get_string('queueremaining', 'enrol_apply', $remaining),
-        ];
+        ]);
     }
 
     /**

@@ -36,6 +36,29 @@ this file's convention and is why this header exists.
    PR 1 is a good starting point.
 5. Commit, push, PR, check the rollup COUNT is positive, merge.
 
+### Logging into m502 by hand needs `?nocpf=1`
+
+`http://localhost:8502/login/index.php?nocpf=1`. The plain url refuses admin/moodle while
+`auth_loginsteps` is enabled there, and every check aimed at the ACCOUNT comes back clean -
+`password_verify('moodle', ...)` true, `auth=manual`, unsuspended - so nothing about the failure
+points at the cause. It cost most of an afternoon here, and the cost was not the login: with the
+browser locked out the fallback was CLI reproductions of the web service, and those are exactly
+the instrument that cannot see the two defects below.
+
+### Three defects, and what did NOT catch them
+
+- **Column definition ran before there was a page context.** See the section on the slice below.
+- **A missing `require_once` of the plugin's `lib.php`**, so an undefined constant - fatal on PHP 8
+  - on the refresh path and on nothing else.
+- **The status block never rendered.** `return $context + [...]` where the context already carried
+  `'hasstatus' => false`: `+` keeps the LEFT side on a duplicate key. **This repository documented
+  that exact trap in U6 and gated it as `BW` four hours earlier.** Gate `CM` now holds this one.
+
+The first two hid from the whole PHPUnit suite, from a test written specifically for the refresh
+path, and from a CLI reproduction of the same call - all three share one blind spot, which is that
+a test process already has what a request starts without. The third hid from every test because no
+test asserted the block existed. **All three were found by looking at the page in a browser.**
+
 ### The one defect worth reading before touching this again
 
 Column definition used to happen in `set_filterset()`. `get.php` calls that BEFORE

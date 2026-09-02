@@ -225,6 +225,24 @@ final class renderer_test extends \advanced_testcase {
     }
 
     /**
+     * Render the queue for the scope that spans enrolment methods.
+     *
+     * @return string The rendered form.
+     */
+    private function render_sitewide_queue(): string {
+        global $PAGE;
+
+        $this->setAdminUser();
+        $url = new \moodle_url('/enrol/apply/manage.php');
+        $PAGE->set_url($url);
+        $PAGE->set_context(\context_system::instance());
+
+        $table = \enrol_apply\table\applications::for_scope(0);
+
+        return $PAGE->get_renderer('enrol_apply')->manage_form($table, $url, null);
+    }
+
+    /**
      * The decision context renders on an EMPTY queue, which is when it explains the most.
      *
      * The whole reason the header sits outside the hasrows section of the template. A method
@@ -274,6 +292,30 @@ final class renderer_test extends \advanced_testcase {
         // The control: the page really did render, so this is not passing over an empty string.
         $this->assertStringContainsString(get_string('queueawaiting', 'enrol_apply'), $html);
         $this->assertStringNotContainsString('{$a', $html);
+    }
+
+    /**
+     * The status block renders for a queue scoped to one enrolment method.
+     *
+     * It did not, and the reason is the trap this repository documented four hours earlier and
+     * gated as `BW`: the context was returned with `$context + [...]`, and `+` keeps the LEFT
+     * side on a duplicate key - so the `hasstatus => false` set for the scopes that span methods
+     * silently won over the `true` set here, and the block never appeared on any instance-scoped
+     * queue. Every test passed, because none of them asserted the block existed.
+     *
+     * @return void
+     */
+    public function test_the_status_block_renders_for_one_method(): void {
+        $html = $this->render_queue();
+
+        $this->assertStringContainsString(get_string('queuestatus', 'enrol_apply'), $html);
+        $this->assertStringContainsString(get_string('queueapplicationsopen', 'enrol_apply'), $html);
+        /* The control: the scope that spans methods really does go without it, so this is about
+           the merge rather than about a block that renders unconditionally. */
+        $this->assertStringNotContainsString(
+            get_string('queuestatus', 'enrol_apply'),
+            $this->render_sitewide_queue()
+        );
     }
 
     /**
