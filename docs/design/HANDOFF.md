@@ -56,6 +56,30 @@ Two things the plan's estimate did not name:
   does not carry it — the first draft failed on a row that legitimately had no icon, which a
   faildump settled in one read.
 
+### The generated applicant names are RANDOM, and two of them collided
+
+Found by the U6 mutation sweep, whose **baseline** went red on
+`test_two_methods_keep_independent_scopes` forty minutes after the identical suite had passed —
+the shape this repository distrusts most, a green result and a red one from the same code.
+
+`create_user()` does not number its users. With no name given it calls `rand()` four times over
+`data_generator`'s `$firstnames`/`$lastnames` pools, and those pools repeat inside a band: one
+first name appears four times among ten, another three. So two generated applicants draw the same
+`fullname()` every few hundred runs — and when they do, the assertion that a row does NOT carry
+the other applicant's name contradicts the assertion above it that it carries this one's. Same
+needle, both directions, guaranteed red, no code at fault. Two of U6's tests were exposed
+(`test_two_methods_keep_independent_scopes` and `test_the_url_method_wins_over_a_stored_one`), and
+seven CI legs multiply the odds.
+
+`second_method()` now names its applicant explicitly, which is the whole fix: a name from outside
+the pool cannot collide with one drawn from it. **Any assertion that distinguishes two generated
+users by their rendered name needs at least one of them named** — the rest of this repository
+already asserts on literals, so the hazard was confined to that one helper.
+
+The wider caution, and it is the reason this is written down rather than just fixed: a suite that
+passed is not evidence a suite is deterministic. The first green run and the red baseline differed
+by nothing but `rand()`.
+
 ### `[skip ci]` on the head commit of a PR branch cancels the PR's whole run
 
 Worth knowing here because it cost four hours and reads as success. GitHub Actions skips a workflow

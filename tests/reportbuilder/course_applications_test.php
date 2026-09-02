@@ -575,7 +575,20 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
         $DB->set_field('enrol', 'name', $name, ['id' => $id]);
         $instance = $DB->get_record('enrol', ['id' => $id], '*', MUST_EXIST);
 
-        $user = $this->getDataGenerator()->create_user();
+        /* Named explicitly, and it is not decoration: create_user() picks a name at RANDOM
+           (lib/testing/generator/data_generator.php calls rand() four times over its $firstnames
+           and $lastnames pools), and those pools repeat within a band - one first name appears
+           four times among ten, another three. Two generated applicants therefore collide on
+           fullname() every few hundred runs, and the assertions below that this row does NOT
+           carry the other applicant's name then contradict the ones above them saying it carries
+           this one's: same needle, both directions, guaranteed red. Measured on m502 on
+           2026-09-02, when a mutation sweep's baseline failed on two applicants who had drawn
+           the same name, forty minutes after the identical suite had passed. A name from outside
+           the pool cannot collide with one drawn from it. */
+        $user = $this->getDataGenerator()->create_user([
+            'firstname' => 'Second',
+            'lastname' => 'Applicant',
+        ]);
         $DB->insert_record('enrol_apply_submission', (object) [
             'courseid' => $this->course->id,
             'userid' => $user->id,
