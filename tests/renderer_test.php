@@ -225,6 +225,98 @@ final class renderer_test extends \advanced_testcase {
     }
 
     /**
+     * The decision context renders on an EMPTY queue, which is when it explains the most.
+     *
+     * The whole reason the header sits outside the hasrows section of the template. A method
+     * whose applicant limit is reached holds an empty queue - every application it is counting
+     * may be deferred, and a deferred one is freed by nothing - so the state whose only symptom
+     * is "there is nothing here" is exactly the state the numbers are for. Inside that section
+     * they would vanish at that moment.
+     *
+     * @return void
+     */
+    public function test_the_capacity_header_renders_on_an_empty_queue(): void {
+        global $PAGE;
+
+        $this->setAdminUser();
+        $url = new \moodle_url('/enrol/apply/manage.php', ['id' => $this->instance->id]);
+        $PAGE->set_url($url);
+        $PAGE->set_context(\context_course::instance($this->course->id));
+
+        $table = \enrol_apply\table\applications::for_scope((int) $this->instance->id);
+        $html = $PAGE->get_renderer('enrol_apply')->manage_form($table, $url, $this->instance);
+
+        // The precondition: the queue really is empty, so this is about the empty case.
+        $this->assertSame(0, (int) $table->totalrows);
+        $this->assertStringContainsString(get_string('queueawaiting', 'enrol_apply'), $html);
+        $this->assertStringContainsString(get_string('queuedeferred', 'enrol_apply'), $html);
+        /* The control: the section that DOES depend on rows really is gone, so the assertions
+           above are not being satisfied by a template that renders everything unconditionally. */
+        $this->assertStringNotContainsString(get_string('withselectedusers'), $html);
+    }
+
+    /**
+     * No lang string reaches the queue with its placeholder still in it.
+     *
+     * **A test asserting that get_string(X) appears in the markup cannot see this**, because both
+     * sides of the comparison read the same broken string and agree. Measured: five strings were
+     * written with an escaped placeholder - `{\$a}` rather than `{$a}`, which PHP single quotes
+     * keep verbatim - and every unit test over them passed while the page rendered the literal
+     * text "{\$a} selected on this page". A Behat scenario spelling the expected words out is what
+     * caught it, and this is the cheap general form of that: one assertion for the whole class,
+     * over a page that renders the header, the rows and the bulk bar.
+     *
+     * @return void
+     */
+    public function test_no_placeholder_survives_into_the_queue(): void {
+        $html = $this->render_queue();
+
+        // The control: the page really did render, so this is not passing over an empty string.
+        $this->assertStringContainsString(get_string('queueawaiting', 'enrol_apply'), $html);
+        $this->assertStringNotContainsString('{$a', $html);
+    }
+
+    /**
+     * A meter never draws past the end of its bar.
+     *
+     * Both numbers can legitimately exceed their own limit: an administrator can enrol past the
+     * places cap by hand, and the applicant limit can be lowered under applications already held.
+     * An unclamped width would render as a bar overflowing its track, which reads as a rendering
+     * fault rather than as the over-capacity state it is.
+     *
+     * @return void
+     */
+    public function test_a_meter_never_overflows_its_bar(): void {
+        global $DB, $PAGE;
+
+        $this->setAdminUser();
+
+        // One PLACE (customint4), and two applicants already approved into it.
+        $this->instance->customint4 = 1;
+        $DB->update_record('enrol', $this->instance);
+        foreach (range(1, 2) as $ignored) {
+            $user = $this->getDataGenerator()->create_user();
+            $this->plugin->enrol_user($this->instance, $user->id, null, 0, 0, ENROL_USER_ACTIVE);
+        }
+
+        $url = new \moodle_url('/enrol/apply/manage.php', ['id' => $this->instance->id]);
+        $PAGE->set_url($url);
+        $PAGE->set_context(\context_course::instance($this->course->id));
+        $table = \enrol_apply\table\applications::for_scope((int) $this->instance->id);
+        $html = $PAGE->get_renderer('enrol_apply')->manage_form($table, $url, $this->instance);
+
+        // The precondition: the meter is really over capacity, so a clamp is what is under test.
+        $this->assertStringContainsString(
+            get_string('reviewofmany', 'enrol_apply', (object) ['taken' => 2, 'total' => 1]),
+            $html
+        );
+        $this->assertMatchesRegularExpression('/enrol_apply-meterfill[^"]*"\s+style="width: 100%"/', $html, $html);
+        /* The value the arithmetic produces without the clamp, named exactly. A pattern for "any
+           width over 100" is the shape that goes wrong here: 100 itself matches most of them. */
+        $this->assertStringNotContainsString('width: 200%', $html);
+    }
+
+    /**
      * Every checkbox in the queue speaks core/checkbox-toggleall's vocabulary, in one group.
      *
      * The three data attributes are what core's module matches on; the plugin's own markup

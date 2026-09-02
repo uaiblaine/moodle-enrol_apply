@@ -112,19 +112,22 @@ final class sort_order_test extends \advanced_testcase {
     public function test_every_sort_the_operator_can_choose_ends_in_a_unique_key(): void {
         $this->resetAfterTest();
 
-        /* Read off the table rather than listed here, and that is the point: the columns beyond
-           the fixed three are whatever showuseridentity names and this reader may see, so a
-           hardcoded list would either miss them or pin a site setting. Deriving them means a
-           column added later is covered the day it is added.
-
-           The two the table declares unsortable are the two excluded. */
+        /* Read off the table, both halves of it, and the second half was learned the hard way.
+           An earlier version derived the COLUMNS from the table and then subtracted a hardcoded
+           list of the unsortable ones - which is a second statement of a fact the table already
+           holds, and it drifted the day a column was added: the review button's column joined the
+           loop and the test demanded a sort by a column the table refuses to sort. is_sortable()
+           is the table's own answer, so there is now one statement of it. */
         $table = $this->table();
-        $sortable = array_diff(array_keys($table->columns), ['checkboxcolumn', 'applycomment']);
+        $sortable = array_filter(
+            array_keys($table->columns),
+            static fn(string $column): bool => $table->is_sortable($column)
+        );
 
         /* The control, because a derived list can be derived from nothing: an empty or truncated
            set would make the loop below assert on air. Admin on a default site sees email as an
-           identity column, so the four are course, fullname, email and applydate. */
-        $this->assertGreaterThanOrEqual(4, count($sortable), implode(', ', $sortable));
+           identity column, so the three are course, fullname and applydate. */
+        $this->assertGreaterThanOrEqual(3, count($sortable), implode(', ', $sortable));
 
         foreach ($sortable as $column) {
             foreach ([SORT_ASC, SORT_DESC] as $order) {

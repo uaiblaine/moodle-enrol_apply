@@ -690,14 +690,27 @@ it — U5a.4's fourth point and U5a.6 both describe the GET search form as part 
 U5a.5 requires `guess_base_url()` to carry "every GET-encoded filter — status included". The
 widest reading is the one taken.
 
-**That makes U5a four pull requests rather than one, and U5b disappears into the last two.**
+**That makes U5a five pull requests rather than one, and U5b disappears into the last two.**
 
 | PR | What | Why the boundary is there |
 |---|---|---|
 | **1** | `queue::listing_scope()`, `\enrol_apply\table\applications` and its filterset, the death of `manage_table.php`, the four gates that named it, the eight test files that built it | Structural, with **no visible change**. The diff is large and the behaviour is not, so a regression in it is legible |
 | **2** | The capacity header, the per-row Review link, the applicant cell (picture, name, badges, identity as a second line), the footer counts, responsive cards, a bulk bar that does not lie | Mockup A's surface, on a structure that already holds |
+| **2b** | The "Submitted with the application" column | See below — it is in the mockup and in neither task list, and it is not a cell like the others |
 | **3** | The search (GET, then as-you-type) and the status filter, the chip row, "clear all", the counts | The two filters that narrow columns the query already has |
 | **4** | The identity filters (city, institution) and the date filter | Both depend on site configuration — the identity field list varies — and a date range is a different filter class |
+
+**PR 2b exists because a column went missing from both task lists.** Mockup A carries a
+*"Submitted with the application"* column, and its own caption calls those answers "the evidence" —
+"the thing the decision is actually made on — nowhere on the page" is the complaint the mockup was
+drawn to answer. U5a.3 above does not list it, and neither did the first cut of this table.
+
+It is not a cell like the others. Every other column in Mockup A reads a value the queue's query
+already selects; this one needs `enrol_apply_submission.userinfodata` per row, resolved through the
+same masking the review page applies in `renderer::snapshot_context()` — which is a security
+boundary with its own history (it once rendered a password hash from a crafted archive). Folding
+that into PR 2, on top of the header, the row rebuild, the cards, the bulk bar and the AMD module,
+would produce a pull request nobody can review. It gets its own.
 
 
 ### U5a.1 — The surface

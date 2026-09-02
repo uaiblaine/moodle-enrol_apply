@@ -1,7 +1,108 @@
 # Handoff — read this before touching anything
 
-State at the end of 2026-09-02. **Everything is merged; nothing is in flight** — this file cannot
-name the commit that merges it, which is the caution the entries below have paid for four times.
+State at the end of 2026-09-02. **One slice IS in flight — see the first section below.** Every
+other entry describes merged work. This file cannot name the commit that merges it, which is the
+caution the entries below have paid for four times, and is why an unmerged slice gets a header
+saying so rather than an entry that reads like the others.
+
+## IN FLIGHT — U5a PR 2, on `feature/the-queue-shows-the-decision`
+
+**This is the one entry in this file written about work that is NOT merged.** Read it before
+anything else; the section below it describes the same slice as though it were finished, which is
+this file's convention and is why this header exists.
+
+`version.php` is `2026090300`. Branch pushed, no pull request opened yet.
+
+### Verified so far
+
+| | |
+|---|---|
+| PHPUnit m501 | `OK (471 tests)` |
+| Behat m501 | **9 scenarios, 218 steps, all passing** — including the new `@javascript` one, which provokes a real AJAX refresh |
+| Templates | all three render against their own example contexts |
+| eslint / stylelint | clean at CI strictness, run offline from the node:22 image |
+| Mutation pre-flight | the four new scripts (`CG`, `CH`, `CJ`, `CK`) and the repointed `AM` each simulated outside the tree and `php -l`ed |
+
+### Still owed, in this order
+
+1. `mdl phpunit m502 enrol_apply` and `mdl behat m502 @enrol_apply` — the 5.02 half. **Blocked at the
+   time of writing**: a sibling session held the m502 lock for a 20-gate sweep of
+   `local_unlistedcourses` from 16:40. `MDL_LOCK_WAIT=3600` queues behind it.
+2. `mdl mutate moodle-enrol_apply mutations/gates.conf --keep-logs --only AM_identity_not_escaped,CG_course_column_always_shown,CH_capacity_header_inside_hasrows,CJ_meter_unclamped,CK_applied_before_counts_itself`
+3. `mdl ci moodle-enrol_apply --matrix --behat --keep-logs`. Expect the four 5.02 legs to die in
+   `moodle-plugin-ci install` on core 5.2's esm.sh fetch through a proxy Node ignores; that is
+   environmental and GitHub is unaffected.
+4. An adversarial pass over the slice — six lenses on Sonnet, adjudicated inline. The script from
+   PR 1 is a good starting point.
+5. Commit, push, PR, check the rollup COUNT is positive, merge.
+
+### The one defect worth reading before touching this again
+
+Column definition used to happen in `set_filterset()`. `get.php` calls that BEFORE
+`validate_context()`, and `select_all_header()` renders a core renderable through `$OUTPUT` - so on
+the refresh path there was no page context yet and the first render threw. It is in `setup()` now.
+
+**Three things passed green over it**: the whole PHPUnit suite, the test written specifically for
+the refresh path calling `get::execute()`, and a CLI reproduction of the same web service call.
+All three share one blind spot - `$PAGE` already carries a context from whatever ran before. A test
+process is not a request. Only the `@javascript` scenario saw it.
+
+The same blind spot hid a second defect in the same hour: the table reaches for
+`ENROL_APPLY_USER_WAIT`, which lives in `lib.php` and is not autoloaded. `manage.php` requires that
+file; the web service requires nothing of the sort. Fourth site in this plugin needing the same
+`require_once`, and the first where the page path hid the omission.
+
+## 2026-09-02 — U5a PR 2, the queue shows what the decision needs
+
+**PR 1 is merged (`fd3ff8e`). This is PR 2 of five**; PR 2b, 3 and 4 follow. The split is in the
+plan under `## U5a`.
+
+The queue was a list of names, an address and a date, with no door into any of the rows it listed.
+It now carries the decision context above the table, a Review link on every row, badges for the two
+facts that change a decision, identity underneath the name rather than as columns, and a bulk bar
+that says what is selected and stops saying it when the selection is destroyed.
+
+### Where PR 2b came from
+
+Mockup A has a **"Submitted with the application"** column and its own caption calls those answers
+the evidence — "the thing the decision is actually made on — nowhere on the page" is the complaint
+the mockup was drawn to answer. It is in neither U5a.3 nor the first cut of the PR table. It is not
+a cell like the others: it needs `userinfodata` per row through the same masking
+`renderer::snapshot_context()` applies, which is a boundary that once rendered a password hash from
+a crafted archive. It gets its own pull request rather than being folded into this one.
+
+### Two things this slice broke and the reason both were the same mistake
+
+- **`sort_order_test` derived the columns from the table and then subtracted a hardcoded list of
+  the unsortable ones.** That list is a second statement of a fact the table already holds, and it
+  drifted the moment a column was added: the Review button's column joined the loop and the test
+  demanded a sort by a column the table refuses to sort. `is_sortable()` is the table's own answer
+  and there is now one statement of it. The derivation was introduced in PR 1 as an improvement
+  over a pinned list; it was half an improvement.
+- **A negative assertion matched the very value it was written to permit.**
+  `assertDoesNotMatchRegularExpression('/width: [1-9][0-9]{2,}%/')` forbids "over 100 percent" and
+  `100` matches it. Name the value the arithmetic would produce without the guard - here
+  `width: 200%` - rather than describing a range that contains the good answer.
+
+### The identity escaping boundary MOVED, and the gate moved with it
+
+`other_cols()` is gone: identity fields are not columns any more, they are the applicant cell's
+second line. The escaping they needed did not go away with them - `flexible_table` writes a cell's
+value into the markup with no escaping of its own - so it lives in `col_fullname()` now, and gate
+`AM` was repointed there. A gate whose target disappears is a gate that stops holding anything
+while still being listed.
+
+### What is held by what
+
+The Review link, the badges, the conditional course column and the earlier-applications predicate
+are all rendered by the table class, so PHPUnit reaches them. The capacity header's placement is
+held by a renderer test **and** by a gate on the mustache file itself, because "outside the
+`hasrows` section" is a one-line edit in a template that no PHP test would notice.
+
+The module's own behaviour - the count and the reset - is held only by an `@javascript` scenario,
+which is the honest place for it: nothing else in this repository executes the plugin's
+JavaScript. The reset is provoked by SORTING rather than by paging, because a sort is a refresh
+that needs one row rather than fifty-one.
 
 ## 2026-09-02 — U5a PR 1, the queue becomes a dynamic table
 

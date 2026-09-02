@@ -33,6 +33,9 @@
 
     Context variables required for this template:
     * togglegroup string - name of the core/checkbox-toggleall group the table's rows belong to
+    * selectedlabel string - the count of selected rows, worded "on this page" because that is
+      what a selection is: refreshTableContent() replaces the whole table region on a page turn,
+      a sort or a filter change, so every checkbox in it is destroyed and the count starts again
     * actionlabel string - label of the bulk action select
     * choosedots string - placeholder option of the bulk action select
     * golabel string - label of the submit button
@@ -41,6 +44,7 @@
     Example context (json):
     {
         "togglegroup": "enrol-apply-queue",
+        "selectedlabel": "0 selected on this page",
         "actionlabel": "With selected users...",
         "choosedots": "Choose...",
         "golabel": "Go",
@@ -52,6 +56,8 @@
     }
 }}
 <div class="enrol_apply-formaction d-flex flex-wrap align-items-center gap-2">
+    <span class="enrol_apply-selectedcount small text-muted" data-region="selectedcount"
+        aria-live="polite">{{selectedlabel}}</span>
     <label class="mb-0" for="enrol_apply_formaction">{{actionlabel}}</label>
     <select class="form-select w-auto" id="enrol_apply_formaction" name="formaction"
         data-action="toggle" data-toggle="action" data-togglegroup="{{togglegroup}}">

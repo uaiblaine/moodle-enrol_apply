@@ -1,12 +1,102 @@
-form#enrol_apply_manage_form tr {
-    border-left: 3px solid transparent;
+/* The queue's own tokens, and every root it paints. Custom properties inherit down the DOM, and
+   the sticky footer is moved by CSS rather than by script, so it stays inside the form - but a
+   token block scoped to one element still has to name every element the values are read from.
+   An unresolved var() is not "fall back to the literal": the whole declaration is invalid at
+   computed-value time, so a background would be NO background rather than the default one.
+
+   The chains read the theme's own tokens rather than inventing a palette. 5.1 and 5.2 both ship
+   dark mode, so a literal grey renders as a light slab inside a dark page; and a site with its own
+   institutional colour must not see this plugin's instead. */
+.enrol_apply-manage,
+.enrol_apply-capacity {
+    --enrol-apply-line: var(--bs-border-color, #dee2e6);
+    --enrol-apply-muted: var(--bs-secondary-color, #6c757d);
+    --enrol-apply-fill: var(--bs-primary, #0f6cbf);
+    --enrol-apply-warn: var(--bs-warning, #f0ad4e);
+    --enrol-apply-track: var(--bs-secondary-bg, #e9ecef);
 }
 
-form#enrol_apply_manage_form tr.enrol_apply_waitinglist_highlight {
-    /* Read the theme's own token: 5.1 and 5.2 both ship dark mode, and a literal grey
-       renders as a light bar inside a dark page. The chain falls back to the Bootstrap 4
-       name and then to a literal, because neither branch defines both spellings. */
-    border-color: var(--bs-secondary-color, var(--gray, #6c757d));
+/* The decision context above the table. */
+.enrol_apply-capacity .card-body {
+    gap: 1.5rem 2.5rem;
+}
+
+.enrol_apply-tile {
+    display: flex;
+    flex-direction: column;
+}
+
+.enrol_apply-tile-meter {
+    /* A percentage basis with a rem floor, and not repeat(auto-fit, minmax(...)): the gate rejects
+       minmax(max(...)) outright, and a plain auto-fit silently yields three columns on a wide
+       card where two were meant. */
+    flex: 1 1 20%;
+    min-width: 11rem;
+}
+
+.enrol_apply-tile-status {
+    flex: 1 1 30%;
+    min-width: 14rem;
+}
+
+.enrol_apply-tilevalue {
+    font-size: 1.5rem;
+    font-weight: 600;
+    line-height: 1.2;
+    /* Digits that line up between tiles without changing the face. A monospace family here would
+       make the plugin look like a different product on the same page. */
+    font-variant-numeric: tabular-nums;
+}
+
+.enrol_apply-tilelabel {
+    color: var(--enrol-apply-muted);
+    font-size: 0.875rem;
+}
+
+.enrol_apply-meter {
+    background-color: var(--enrol-apply-track);
+    border-radius: 2px;
+    display: block;
+    height: 4px;
+    margin-top: 0.35rem;
+    overflow: hidden;
+}
+
+.enrol_apply-meterfill {
+    background-color: var(--enrol-apply-fill);
+    display: block;
+    height: 100%;
+}
+
+.enrol_apply-meterfill-warn {
+    background-color: var(--enrol-apply-warn);
+}
+
+/* The applicant's cell: picture, name and badges on one line, identity underneath. */
+.enrol_apply-applicant {
+    align-items: flex-start;
+    display: flex;
+    gap: 0.5rem;
+}
+
+.enrol_apply-applicanttext {
+    min-width: 0;
+}
+
+.enrol_apply-applicantname {
+    font-weight: 600;
+}
+
+.enrol_apply-identityline > .enrol_apply-identityvalue + .enrol_apply-identityvalue::before {
+    /* A separator drawn by the stylesheet and not by the markup, so the values stay individually
+       selectable and a screen reader reads them as values rather than as one run-on string. */
+    color: var(--enrol-apply-line);
+    content: "\00b7";
+    padding: 0 0.4rem;
+}
+
+.enrol_apply-applyago {
+    white-space: nowrap;
 }
 
 /* The bulk action bar lives in a core sticky footer, and core parks that footer OFF SCREEN
@@ -68,4 +158,48 @@ body.path-enrol-apply:not(.jsenabled) #page.drawers {
        Verified by reading the cascade and the compiled theme CSS, NOT by an executing test:
        nothing in this repository renders CSS. */
     overflow-x: auto;
+}
+
+/* Below the breakpoint each row becomes a card and every labelled cell draws its own heading,
+   read from the data-label flexible_table::set_columnsattributes() put on it.
+
+   A media query and not a container query: the gate's csstree validator rejects container-type
+   and @container outright ("Unknown property", "Unknown at-rule"), so the viewport is the only
+   thing this can ask about. That is a real limitation on an admin page - #region-main is narrower
+   than the window by however wide the block drawer happens to be - and it is the reason the
+   breakpoint is set low: at 768px the drawer is already closed on every layout this page uses, so
+   the two measurements agree there even though they do not agree at 1200px. */
+@media (max-width: 767.98px) {
+    .enrol_apply-table table thead {
+        /* Not display:none. The headings still name the columns for a screen reader reading the
+           table as a table, and clip is the technique that keeps them available to one. */
+        clip: rect(0 0 0 0);
+        height: 1px;
+        overflow: hidden;
+        position: absolute;
+        width: 1px;
+    }
+
+    .enrol_apply-table table tr {
+        border: 1px solid var(--enrol-apply-line);
+        border-radius: 4px;
+        display: block;
+        margin-bottom: 0.75rem;
+        padding: 0.5rem;
+    }
+
+    .enrol_apply-table table td,
+    .enrol_apply-table table th {
+        border: 0;
+        display: block;
+        padding: 0.25rem 0;
+    }
+
+    .enrol_apply-table table td[data-label]::before {
+        color: var(--enrol-apply-muted);
+        content: attr(data-label);
+        display: block;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+    }
 }
