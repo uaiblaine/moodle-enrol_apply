@@ -45,9 +45,9 @@ class course_applications extends system_report {
      * Built by core from the entity name and the filter name in add_report_filters() below, and
      * repeated here because report.php needs to name it. The coupling is held by
      * test_the_method_filter_identifier_is_the_one_the_page_scopes_by directly, and by every
-     * test that scopes and then counts rows - renaming either half makes scope_to_method() write
-     * a key no filter reads, so the row counts stop moving. The named test is the one that says
-     * WHY it went red.
+     * test that scopes and then counts rows - renaming either half makes scope_to_method()'s
+     * array_key_exists guard miss, so it returns false having written nothing at all and the row
+     * counts stop moving. The named test is the one that says WHY it went red.
      *
      * @var string
      */
@@ -205,9 +205,10 @@ class course_applications extends system_report {
      * the context, and the component/area/itemid given here. With one report per COURSE both
      * apply methods therefore shared a single stored scope, and every request after the initial
      * page load reads that store and nothing else - sorting and paging go through
-     * core_table_get_dynamic_table_content, whose filterset carries only the reportid, and the
-     * Download button posts the same id to /reportbuilder/download.php. Opening the second
-     * method's report answered the first method's next click with the second method's rows.
+     * core_table_get_dynamic_table_content, whose filterset carries the reportid and the
+     * report's own parameters and nothing that names a method, and the Download button posts the
+     * same id to /reportbuilder/download.php. Opening the second method's report answered the
+     * first method's next click with the second method's rows.
      *
      * The itemid is IDENTITY and never scope, and can_view() says why the distinction holds: it
      * selects which of this reader's stored choices come back, inside a course whose rows they
@@ -251,7 +252,8 @@ class course_applications extends system_report {
      *
      * @param int $enrolid Enrol instance to narrow to.
      * @return bool False when this course has no method filter to set, which is every course
-     *              carrying a single apply method - the filter is only added where it can narrow.
+     *              carrying a single live apply method - the filter is added only where the
+     *              course offers a choice between methods.
      */
     public function scope_to_method(int $enrolid): bool {
         if (!array_key_exists(self::METHOD_FILTER, $this->get_filter_instances())) {
@@ -290,8 +292,13 @@ class course_applications extends system_report {
         $this->add_filter_from_entity(self::DECIDER . ':fullname');
 
         /* The method filter earns its place only where there is a choice to make. A course with
-           one apply instance would get a filter with a single option, which cannot narrow
-           anything and reads as a control that does not work. */
+           one apply instance would get a filter offering a single choice, which reads as a
+           control that does not work.
+           Not that it could never narrow: enrol_apply_submission rows outlive the instance they
+           name - delete_instance() leaves them deliberately - so a course reduced from two
+           methods to one holds rows whose enrolid names no live instance, and a one-option
+           filter would exclude exactly those. Those rows stay listed, which is the course-wide
+           view this report falls back to whenever it cannot scope. */
         $instances = $DB->get_records(
             'enrol',
             ['courseid' => $this->get_context()->instanceid, 'enrol' => 'apply'],

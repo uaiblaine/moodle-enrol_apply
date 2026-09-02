@@ -31,11 +31,16 @@ concluded the opposite.
 lives in `reportbuilder_user_filter`, keyed on (reportid, usercreated) and nothing else, while the
 report persistent was keyed on the COURSE — so both methods shared one stored scope. Everything
 after the initial render reads that store and nothing else: sorting and paging go through
-`core_table_get_dynamic_table_content`, whose filterset carries only the reportid, and Download
-posts the same id. Opening the second method's report answered the first one's next click with the
-second one's rows, and its CSV too. `for_method()` gives each method its own persistent, and
-`test_two_methods_keep_independent_scopes` walks the AJAX path rather than a proxy for it — the
-test helper builds `system_report_table::create($reportid, [])`, which is that route exactly.
+`core_table_get_dynamic_table_content`, whose filterset carries the reportid and the report's own
+parameters and nothing that names a method, and Download posts the same id. Opening the second
+method's report answered the first one's next click with the second one's rows, and its CSV too.
+`for_method()` gives each method its own persistent, and `test_two_methods_keep_independent_scopes`
+reaches the mechanism the defect used rather than a proxy for it — the test helper builds
+`system_report_table::create($reportid, [])`, the same entry point handed the same input, a report
+id and nothing else. It is not literally the AJAX branch: the constructor defers loading only when
+`optional_param('info')` is `core_table_get_dynamic_table_content`, which no PHPUnit request sets.
+What both branches share is what the defect exploited — the report is rebuilt from the persistent
+the id names, and its scope read back from that persistent's stored values.
 
 Two things the plan's estimate did not name:
 

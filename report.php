@@ -66,8 +66,9 @@ $PAGE->navbar->add(get_string('report:course_applications', 'enrol_apply'));
    the source, the context and these three - so with one report per COURSE both methods shared a
    single stored scope. Every request after the initial page load reads that store and nothing
    else: sorting and paging go through core_table_get_dynamic_table_content, whose filterset
-   carries only the reportid, and the Download button posts the same id to
-   /reportbuilder/download.php. Two tabs open on two methods therefore overwrote each other, and
+   carries the reportid and the report's own parameters and nothing that names a method, and the
+   Download button posts the same id to /reportbuilder/download.php. Two tabs open on two methods
+   therefore overwrote each other, and
    the second one's scope answered the first one's next click - reinstating the very defect this
    page exists to remove, for every request but the first.
 
@@ -101,7 +102,11 @@ $report = course_applications::for_method($context, (int) $instance->id);
    script - and a reload of a method's url puts that method back.
 
    Only where the filter exists at all: the report adds it only when the course carries more than
-   one apply method, because a filter with one option cannot narrow anything. */
+   one LIVE apply method, because a filter offering a single choice reads as a control that does
+   not work. Not because it could never narrow - enrol_apply_submission rows outlive the instance
+   they name, so a course that once had two methods holds rows whose enrolid names no live
+   instance, and a one-option filter would exclude exactly those. They stay in the report, which
+   is the course-wide view this page falls back to anyway. */
 $report->scope_to_method((int) $instance->id);
 
 echo $OUTPUT->header();

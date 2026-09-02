@@ -97,8 +97,10 @@ every application the course has recorded — who applied, when, the comment, th
 details submitted, the outcome, who decided it and when — with per-user filters, sorting,
 paging and a CSV or Excel download.
 
-It opens scoped to the enrolment method whose icon you clicked, and clearing the method filter
-widens it to every application in the course. Each method remembers your filters separately.
+Where a course carries more than one Course enrol confirmation method, the report opens scoped to
+the one whose icon you clicked, clearing the method filter widens it to every application in the
+course, and each method remembers your filters separately. A course with a single method offers no
+such filter, and its report lists that course's applications as it always did.
 
 ## Site-wide custom reports
 

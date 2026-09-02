@@ -667,13 +667,18 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
      * (reportid, usercreated) and nothing else, and the report persistent used to be keyed on
      * the COURSE - so both methods shared one stored scope. Every request after the initial page
      * load reads that store and nothing else: sorting and paging go through
-     * core_table_get_dynamic_table_content, whose filterset carries only the reportid, and the
-     * Download button posts the same id. Opening the second method's report therefore answered
-     * the first method's next click with the second method's rows - the very thing this slice
-     * exists to remove, reinstated for every request but the first.
+     * core_table_get_dynamic_table_content, whose filterset carries the reportid and the
+     * report's own parameters and nothing that names a method, and the Download button posts the
+     * same id. Opening the second method's report therefore answered the first method's next
+     * click with the second method's rows - the very thing this slice exists to remove,
+     * reinstated for every request but the first.
      *
-     * rows() builds system_report_table::create($reportid, []) - the AJAX path exactly - so this
-     * test walks the route the defect used rather than a proxy for it.
+     * rows() builds system_report_table::create($reportid, []) - the same entry point the AJAX
+     * request uses, handed the same input: a report id and nothing else. Not literally the AJAX
+     * branch, because the constructor defers loading only when optional_param('info') is
+     * core_table_get_dynamic_table_content and no PHPUnit request sets that. What both branches
+     * share is the whole of what the defect exploited: the report is rebuilt from the persistent
+     * the id names, and its scope read back from that persistent's stored filter values.
      *
      * @return void
      */
