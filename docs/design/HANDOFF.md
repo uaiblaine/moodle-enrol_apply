@@ -1,6 +1,86 @@
 # Handoff — read this before touching anything
 
-State at the end of 2026-08-31. **Everything is merged; nothing is in flight.**
+State at the end of 2026-09-01. **Everything is merged; nothing is in flight.**
+
+## 2026-09-01 — U4, the participants-page bulk menu
+
+`version.php` is `2026090100`. One pull request.
+
+**U0, U1, U1b, U2, U3 and U4 are done. U5a is next**, and U6 — found in use this session and
+decided — is described at the end of the plan.
+
+### The defect worth remembering
+
+A bulk decision taken from the participants page is filtered by core to ONE enrolment method:
+`action_redir.php` takes the first `{enrol}` row of the plugin in the course, and the menu's url
+carries only the plugin name. **Core warns about that only when the selected people are
+DIFFERENT.** For one person holding an application on each of two methods it says nothing at all —
+they come back carrying the filtered instance's row, nothing is "removed", and the plugin reported
+a clean success over a half-done decision. Two apply methods in one course are supported on
+purpose (two intakes), so that is the reachable case, not the exotic one.
+
+`queue::other_applications()` now finds what the dispatch will not reach, and it is said twice: on
+the confirmation form BEFORE anything is written, which is the only surface in this flow that can
+speak first, and in the report after. They are warned about and never decided — the decision
+carries per-instance data, so approving one intake is a statement about that intake alone.
+
+### Verification, and it was three runs rather than one
+
+| | |
+|---|---|
+| `mdl ci --matrix --behat` | 7/7 legs, 445 PHPUnit tests and 7 Behat scenarios each, logs swept for `: FAILED` |
+| Mutation gates | **73 of 73 redden**, `tests run: 445` constant in every run |
+| Adversarial pass | 12 findings raised, 5 distinct, all 5 real and closed |
+
+**The sweep is the union of three runs, not one sweep**, and that is worth stating rather than
+letting the number read as a single clean pass. The first was killed at gate 24 by a sibling
+session reinitialising m502; a second, run from that sibling session, covered part of the rest; the
+third covered what neither could account for. Every gate has a log carrying a verdict, and the
+consolidation is by that criterion.
+
+### The finding that came out of a docblock of mine
+
+The adversarial pass caught `other_applications()` claiming it "inherits gates C and D with the
+queue and the action icon". It does not: **C and D patch `is_awaiting_decision()`, the OBJECT form
+of "awaiting a decision", and leave every query in `queue.php` byte-identical.** The SQL form —
+which the queue listing, the review page, the walk and `other_applications()` are all built from —
+was held by **no mutation at all**, and had been since it was written. Gate `BV` holds it now and
+reddens seven tests across four files, which is how you know the predicate really is shared.
+
+A wrong comment pointed at a real hole. That is the argument for treating prose as load bearing.
+
+### The refuters were right about behaviour and wrong about prose
+
+Both refuters per finding, each told to default to refuted, and a finding survived only if BOTH
+kept it. Every refutation of a BEHAVIOUR claim that was read was correct. But that unanimity rule
+killed five findings that were real — all of them about documentation: a public method with no
+callers whose docblock named three readers, three confidently wrong claims, a bulk counter that
+had stopped being true. **Split the rule if this is run again**: majority for prose, unanimity for
+behaviour.
+
+### Two ways evidence was lost, both mine, both the same shape
+
+Neither cost correctness — every gate was eventually measured — but both cost hours, and both are
+the failure this repository chases in its tests: an artefact with the right shape and the wrong
+contents.
+
+- **`cp -n` does not follow a file that is still being written.** A watcher copying another run's
+  gate logs preserved the first 333 bytes of 38 executions and never looked again. It reported 51
+  files copied, every name correct.
+- **Copy ORDER is not a criterion.** Consolidating those snapshots afterwards, the truncated
+  copies overwrote four complete logs, losing results that had already been measured. Selection is
+  now on whether a log carries a verdict, not on which source was copied second.
+
+The general rule both point at: `mdl-mutate` deletes its log directory on ANY exit where the tree
+restores, pass or fail. **Run a long sweep with `--keep-logs`.**
+
+### The stack lock, which is a change to a different repository
+
+The sibling-session collision above is fixed at the source, in `moodle-dev`: `mdl init`,
+`phpunit-init`, `behat-init`, `phpunit`, `behat` and `mdl mutate` now take a lock on the stack's
+TEST environment, and a second caller is told who holds it. See that repo's `CLAUDE.md`. It is
+worth knowing here because the failure it prevents presents as this plugin's suite behaving
+strangely, which is where the next reader will start looking.
 
 ## 2026-08-31 — U3, deferral as a triage state
 

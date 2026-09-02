@@ -1179,4 +1179,146 @@ final class queue_test extends \advanced_testcase {
 
         $this->assertCount(queue::PRIOR_APPLICATIONS_SHOWN, $found);
     }
+
+    /**
+     * A second apply method on the same course, which is what other_applications() is about.
+     *
+     * @return \stdClass The new enrol instance record.
+     */
+    private function second_instance(): \stdClass {
+        global $DB;
+
+        $id = $this->plugin->add_instance($this->course, $this->plugin->get_instance_defaults());
+
+        return $DB->get_record('enrol', ['id' => $id], '*', MUST_EXIST);
+    }
+
+    /**
+     * Enrol an EXISTING user on a given instance and return the user enrolment id.
+     *
+     * The file's other helpers create the user, which is exactly what cannot happen here: the
+     * silent case a bulk decision produces is ONE person holding an application on each of two
+     * methods, and two different people would be the case core already warns about.
+     *
+     * @param \stdClass $user The applicant.
+     * @param \stdClass $instance Instance to apply to.
+     * @param int $status Enrolment status to leave the row in.
+     * @return int The user enrolment id.
+     */
+    private function also_applies_on(\stdClass $user, \stdClass $instance, int $status = ENROL_USER_SUSPENDED): int {
+        global $DB;
+
+        $this->plugin->enrol_user($instance, $user->id, null, 0, 0, $status);
+
+        return (int) $DB->get_field(
+            'user_enrolments',
+            'id',
+            ['userid' => $user->id, 'enrolid' => $instance->id],
+            MUST_EXIST
+        );
+    }
+
+    /**
+     * One person's application on a second method is reported, and the decided one is not.
+     *
+     * The whole reason the method exists. A participants-page bulk decision is filtered to one
+     * enrolment method, and for one person holding an application on each of two, core says
+     * nothing at all - they come back carrying the filtered instance's row, nothing is "removed",
+     * and the plugin used to report a clean success.
+     *
+     * The exclusion list is asserted rather than assumed, and it carries its own weight only for
+     * a DEFERRAL: approval and cancellation take their rows out of the awaiting-a-decision
+     * predicate by themselves, so a test that only ever approved would pass with the exclusion
+     * deleted.
+     *
+     * @return void
+     */
+    public function test_an_application_on_another_method_is_reported(): void {
+        [$user, $decided] = $this->applicant();
+        $other = $this->second_instance();
+        $otherueid = $this->also_applies_on($user, $other);
+
+        $found = queue::other_applications((int) $this->course->id, [(int) $user->id], [$decided]);
+
+        $this->assertSame([$otherueid], array_map('intval', array_keys($found)));
+        $this->assertEquals($other->id, (int) reset($found)->enrolid);
+    }
+
+    /**
+     * Without the exclusion list, the decided application would be reported as untouched.
+     *
+     * The control for the assertion above, and the shape that makes it non-vacuous: a deferred
+     * row is still awaiting a decision, so it satisfies the predicate and only the exclusion
+     * keeps it out.
+     *
+     * @return void
+     */
+    public function test_the_decided_application_is_only_excluded_by_the_exclusion_list(): void {
+        [$user, $decided] = $this->applicant(ENROL_APPLY_USER_WAIT);
+
+        $this->assertSame(
+            [],
+            queue::other_applications((int) $this->course->id, [(int) $user->id], [$decided])
+        );
+        $this->assertSame(
+            [$decided],
+            array_map('intval', array_keys(
+                queue::other_applications((int) $this->course->id, [(int) $user->id], [])
+            ))
+        );
+    }
+
+    /**
+     * Only applications still awaiting a decision are reported, and only in this course.
+     *
+     * The predicate is awaiting_decision_where(), shared with the queue and the action icon, so
+     * an approved enrolment and one whose period has run out are both out - and warning about
+     * either would be telling the operator to go and decide something already decided.
+     *
+     * @return void
+     */
+    public function test_only_undecided_applications_in_this_course_are_reported(): void {
+        global $DB;
+
+        [$user, $decided] = $this->applicant();
+        $other = $this->second_instance();
+        $approved = $this->also_applies_on($user, $other, ENROL_USER_ACTIVE);
+
+        // The decided one is excluded throughout; what is under test is the OTHER method's row.
+        $ask = fn(): array => array_map('intval', array_keys(
+            queue::other_applications((int) $this->course->id, [(int) $user->id], [$decided])
+        ));
+
+        $this->assertSame([], $ask());
+
+        // Suspended again, but expired: still not awaiting a decision.
+        $DB->update_record('user_enrolments', (object) [
+            'id' => $approved,
+            'status' => ENROL_USER_SUSPENDED,
+            'timeend' => time() - DAYSECS,
+        ]);
+        $this->assertSame([], $ask());
+
+        // The control: unexpired, and it is reported.
+        $DB->set_field('user_enrolments', 'timeend', 0, ['id' => $approved]);
+        $this->assertSame([$approved], $ask());
+
+        // And another course's application is never reported here.
+        [, $elsewhereinstance] = $this->course_with_instance();
+        $this->also_applies_on($user, $elsewhereinstance);
+        $this->assertSame([$approved], $ask());
+    }
+
+    /**
+     * An empty user list asks nothing rather than throwing.
+     *
+     * get_in_or_equal() refuses an empty array, and the caller can legitimately reach here with
+     * one: a selection carrying none of this plugin's enrolments is handled by the operation
+     * above this, but the guard is what makes the method safe to call unconditionally.
+     *
+     * @return void
+     */
+    public function test_no_users_reports_nothing(): void {
+        $this->assertSame([], queue::other_applications((int) $this->course->id, [], []));
+    }
 }

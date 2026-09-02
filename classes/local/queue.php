@@ -398,6 +398,87 @@ final class queue {
     }
 
     /**
+     * The applications these people have in this course that a bulk decision does NOT reach.
+     *
+     * A participants-page bulk decision reaches exactly ONE enrolment method, and nothing in
+     * this plugin can widen it: user/action_redir.php resolves the plugin to the FIRST {enrol}
+     * row of that type in the course - enrol_get_instances($courseid, false), break on the
+     * first match, so a DISABLED method sorting first captures the whole dispatch - and filters
+     * the manager to it, while the menu's url carries only the plugin name and the operation.
+     * There is nowhere to say which method was meant.
+     *
+     * Core warns about this only when the people are different: get_users_enrolments() returns
+     * no row for somebody with no enrolment on that instance, and action_redir.php reports the
+     * difference. **One person holding two applications in one course is the silent case** -
+     * they come back carrying the filtered instance's row, nothing is "removed", core says
+     * nothing, and the plugin reports a clean success. That case is reachable rather than
+     * exotic: two applications in one course is supported on purpose, because two apply
+     * instances are two intakes.
+     *
+     * This method is what lets the operator be told. It deliberately does NOT let the other
+     * applications be decided, and the reasoning is recorded in docs/design/ui-rebuild-plan.md:
+     * the decision carries per-instance data - the role fallback is that instance's roleid, the
+     * groups come from its own enrol_apply_groups, the two caps are its own - so approving one
+     * intake is a statement about that intake and nothing else, a deferral note written about
+     * one is a falsehood attached to the other, and a warning is reversible by the operator
+     * where a decision is not.
+     *
+     * Built from awaiting_decision_where() rather than from a predicate of its own, so a change
+     * to the queue's own definition of "awaiting a decision" moves this with it. **That is the
+     * SQL form of the rule, and gates C and D hold its twin rather than this one** - both patch
+     * is_awaiting_decision(), the object form the participants page uses, and leave every query
+     * in this file byte-identical. An earlier version of this docblock claimed this method
+     * inherited them, which it does not; gate BV holds the SQL form. It does not join {course}:
+     * unlike neighbour(), which must reproduce the listing's FROM exactly, nothing here reads a
+     * course and the scope is expressed by e.courseid directly.
+     *
+     * @param int $courseid Course the bulk decision was dispatched in.
+     * @param array $userids Users the operator selected.
+     * @param array $excludeueids User enrolment ids the decision reached, excluded because a
+     *        DEFERRAL leaves its row awaiting a decision - approval and cancellation remove
+     *        themselves from this query's own predicate, and deferral does not.
+     * @return array The other applications, keyed by user enrolment id; empty when there are none.
+     */
+    public static function other_applications(int $courseid, array $userids, array $excludeueids): array {
+        global $DB;
+
+        /* get_in_or_equal() throws on an empty array and this query takes two id lists. The
+           first is the whole question - no users, no applications - so it returns early; the
+           second is optional and its clause is simply left out. */
+        if (!$userids) {
+            return [];
+        }
+
+        [$wheres, $params] = self::awaiting_decision_where();
+        $wheres[] = 'e.enrol = :enrol';
+        $wheres[] = 'e.courseid = :courseid';
+        $params['enrol'] = 'apply';
+        $params['courseid'] = $courseid;
+
+        [$insql, $inparams] = $DB->get_in_or_equal($userids, SQL_PARAMS_NAMED, 'otheruser');
+        $wheres[] = "ue.userid {$insql}";
+        $params += $inparams;
+
+        if ($excludeueids) {
+            [$notinsql, $notinparams] = $DB->get_in_or_equal(
+                $excludeueids,
+                SQL_PARAMS_NAMED,
+                'decided',
+                false
+            );
+            $wheres[] = "ue.id {$notinsql}";
+            $params += $notinparams;
+        }
+
+        $sql = "SELECT ue.id, ue.userid, ue.enrolid
+                  FROM {user_enrolments} ue
+                  JOIN {enrol} e ON e.id = ue.enrolid
+                 WHERE " . implode(' AND ', $wheres);
+
+        return $DB->get_records_sql($sql, $params);
+    }
+
+    /**
      * The one application before or after this one in the pinned order.
      *
      * @param stdClass $application Application as application() returns it.

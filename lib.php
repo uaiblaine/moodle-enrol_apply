@@ -44,6 +44,13 @@ define('ENROL_APPLY_USER_WAIT', 2);
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class enrol_apply_plugin extends enrol_plugin {
+    /**
+     * Whether an unfiltered manager has already been offered the participants-page bulk menu.
+     *
+     * @var bool
+     */
+    protected $bulkmenuoffered = false;
+
     /** @var stdClass|null Cached enroller user record, see get_enroller(). */
     protected $lasternoller = null;
 
@@ -743,8 +750,57 @@ class enrol_apply_plugin extends enrol_plugin {
            Both core precedents reach it the same way, through their own locallib. */
         require_once($CFG->dirroot . '/enrol/locallib.php');
 
+        /* Site-disabled plugins are OFFERED this menu and then refused when it is used. Core's
+           two sides disagree: user/index.php builds the participants menu from
+           get_enrolment_plugins(FALSE) - include disabled - while action_redir.php resolves the
+           dispatch through get_enrolment_plugins() with its default of enabled-only and throws
+           errorwithbulkoperation when the plugin is not in it. So without this gate a disabled
+           enrol_apply puts three entries in the menu whose only outcome is an exception page.
+
+           This is the opposite of what the per-row action icon does, deliberately: core's own
+           Edit and Unenrol icons render on a disabled plugin's rows, and manage.php has no
+           enabled check either, so hiding the icon would close the way in to a queue that still
+           works. Here the way in leads nowhere at all. */
+        if (!enrol_is_enabled($this->get_name())) {
+            return [];
+        }
+
         if (!has_capability('enrol/apply:manageapplications', $manager->get_context())) {
             return [];
+        }
+
+        /* One optgroup per COURSE, not one per instance. user/index.php loops over the course's
+           enrolment instances and calls this method once for each of them, on the same plugin
+           object, with a manager carrying no instance filter and a url built from
+           ['plugin' => …, 'operation' => …] and nothing else - so N instances produce N
+           byte-identical optgroups. It reproduces in stock core: three added enrol_self
+           instances give FOUR "Self enrolment" groups, four because a disabled instance
+           produces one exactly like an enabled one. Worth a tracker issue upstream; the fix
+           belongs in user/index.php, and this is what can be done from here.
+
+           The predicate is the manager's own filter, which is an exact discriminator across all
+           three callers: the participants menu is the only unfiltered one, while
+           action_redir.php's dispatch and enrol/renderer.php are always filtered and must never
+           be suppressed. It is tested with empty() and never with `=== null`, because
+           get_enrolment_filter() returns null, the integer 0, OR the id as a STRING.
+
+           An instance property and never a static: enrol_get_plugins() constructs a fresh
+           plugin object per call, so a static memo would outlive the manager it belongs to and
+           leak across PHPUnit tests.
+
+           The memo is set only once every gate above has passed, so a call refused for the
+           capability cannot silence the next one. That ordering is held by
+           test_a_menu_refused_for_the_capability_does_not_silence_the_next_one, which had to be
+           written for it: an earlier version of this comment named
+           test_the_bulk_menu_is_empty_without_the_capability, and that test asks with a FILTERED
+           manager and so never enters this branch at all. The ordering is not reachable in
+           production today - one request asks with one $USER and one context, so the capability
+           answer is constant across the loop - which is exactly why nothing would have noticed. */
+        if (empty($manager->get_enrolment_filter())) {
+            if ($this->bulkmenuoffered) {
+                return [];
+            }
+            $this->bulkmenuoffered = true;
         }
 
         $offered = [

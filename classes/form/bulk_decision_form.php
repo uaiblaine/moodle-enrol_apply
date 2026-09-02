@@ -60,6 +60,25 @@ class bulk_decision_form extends moodleform {
            screen, no notification and no validation error. */
         $mform->addElement('static', 'bulkdescription', '', $this->_customdata['description']);
 
+        /* What this decision will NOT reach, said before anything is written. The dispatch core
+           hands the plugin is filtered to ONE enrolment method and cannot be widened from here,
+           and the case where that is silent - one person holding applications on two of them -
+           is reachable rather than exotic, because two apply methods are two intakes.
+
+           Rendered through the renderer's own notification rather than as bare text: it is a
+           warning and it has to read as one beside a submit button. A static element's content
+           is written into core's element-template.mustache through a TRIPLE stash, so the
+           sentence arrives already escaped, which is what other_applications_notice() produces. */
+        if (!empty($this->_customdata['othernotice'])) {
+            global $OUTPUT;
+
+            $mform->addElement('static', 'bulkothermethods', '', $OUTPUT->notification(
+                $this->_customdata['othernotice'],
+                \core\output\notification::NOTIFY_WARNING,
+                false
+            ));
+        }
+
         /* Names go through s() because a static element is rendered by core's own
            element-template.mustache through a triple stash. */
         $names = [];

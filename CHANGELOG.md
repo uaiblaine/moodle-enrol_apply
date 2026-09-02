@@ -8,6 +8,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **The participants-page bulk menu says what it will not reach.** A bulk decision taken from that
+  page is filtered by core to **one** enrolment method — `user/action_redir.php` takes the first
+  `{enrol}` row of the plugin in the course and there is nowhere in the menu's url to say which one
+  was meant. Core warns about that only when the selected people are *different*; for one person
+  holding an application on each of two methods it says nothing at all, and the plugin reported a
+  clean success over a half-done decision. That case is the reachable one, because two apply
+  methods in one course are supported on purpose: they are two intakes.
+
+  It is now said twice — on the confirmation form **before** anything is written, which is the only
+  surface in this flow that can speak first, and in the report after — and it names the method that
+  was actually decided. The other applications are **warned about, never decided**: the decision
+  carries per-instance data (the role fallback, the groups, both capacity numbers), so approving
+  one intake is a statement about that intake alone, a deferral note written about one is a
+  falsehood attached to the other, and a warning is reversible by the operator where a decision is
+  not. The approval queue reaches every method and is where to decide them.
+
 - **Deferral is a triage state now, with a reason attached.** Every decision — approve, defer and
   cancel alike — can carry a **note for the record**, stored in a new `decisionnote` column on the
   durable application record and shown to whoever opens the application next. It is the opposite
@@ -34,6 +50,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   applicants.
 
 ### Changed
+
+- **The participants-page menu has one entry per course, not one per enrolment method.**
+  `user/index.php` loops over the course's enrolment instances and asks each plugin for its bulk
+  operations once per instance, with a url carrying only the plugin name and the operation — so a
+  course with three apply methods offered three byte-identical "Course enrol confirmation" groups.
+  It reproduces in stock core with `enrol_self` and no third-party plugin at all, so the real fix
+  belongs upstream; this is what can be done from here.
+
+- **A site-disabled plugin offers no bulk menu.** Core's two sides disagreed and the plugin
+  inherited it: the menu is built from the *include-disabled* plugin list while the dispatch
+  resolves through the enabled-only one and throws `errorwithbulkoperation`. The entries were
+  offered and then refused. This is deliberately the opposite of what the per-row action icon
+  does — that one leads to a queue that still works.
 
 - **The participants-page bulk counter names the enrolment.** "Applications left unchanged" is
   read as *nothing happened*, which stopped being true the moment a deferral could write a note to
