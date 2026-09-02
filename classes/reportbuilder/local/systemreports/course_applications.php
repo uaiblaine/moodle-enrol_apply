@@ -16,6 +16,7 @@
 
 namespace enrol_apply\reportbuilder\local\systemreports;
 
+use context;
 use context_course;
 use core\lang_string;
 use core_reportbuilder\local\entities\user;
@@ -23,6 +24,7 @@ use core_reportbuilder\local\helpers\database;
 use core_reportbuilder\local\filters\select;
 use core_reportbuilder\local\report\filter;
 use core_reportbuilder\system_report;
+use core_reportbuilder\system_report_factory;
 use enrol_apply\reportbuilder\local\entities\submission;
 use enrol_apply\reportbuilder\local\formatters\submission as formatter;
 
@@ -36,6 +38,20 @@ use enrol_apply\reportbuilder\local\formatters\submission as formatter;
 class course_applications extends system_report {
     /** @var string Entity name of the second user entity, the one naming the decider. */
     protected const DECIDER = 'applydecider';
+
+    /**
+     * Unique identifier of the filter that narrows the report to one enrolment method.
+     *
+     * Built by core from the entity name and the filter name in add_report_filters() below, and
+     * repeated here because report.php needs to name it. The coupling is held by
+     * test_the_method_filter_identifier_is_the_one_the_page_scopes_by directly, and by every
+     * test that scopes and then counts rows - renaming either half makes scope_to_method() write
+     * a key no filter reads, so the row counts stop moving. The named test is the one that says
+     * WHY it went red.
+     *
+     * @var string
+     */
+    public const METHOD_FILTER = 'submission:method';
 
     /**
      * Whether the current user may see this report at all.
@@ -89,7 +105,15 @@ class course_applications extends system_report {
         $this->add_entity($entity);
 
         /* The only scoping there is. Not get_parameter(), which a client sets freely, and not
-           the persistent's itemid, which is client-settable through the mobile web services. */
+           the persistent's itemid, which is client-settable through the mobile web services.
+
+           report.php now passes the enrol instance AS that itemid, and the two facts live
+           together rather than contradicting each other: the itemid decides which report
+           persistent is loaded, and therefore which of this reader's stored filter choices come
+           back, and it decides nothing about which rows may be read. Swapping it reaches another
+           method's stored choice inside the same course - a view the same capability already
+           allows - and never another course, because the condition below is built from the
+           CONTEXT. It is identity, not scope. */
         $courseid = database::generate_param_name();
         $this->add_base_condition_sql("{$alias}.courseid = :{$courseid}", [
             $courseid => $this->get_context()->instanceid,
@@ -170,6 +194,74 @@ class course_applications extends system_report {
         );
 
         $this->add_column_from_entity(self::DECIDER . ':fullname');
+    }
+
+    /**
+     * This report, identified by the enrolment method it was opened from.
+     *
+     * The identity matters and is not decoration. scope_to_method() below stores the reader's
+     * choice through set_filter_values(), which writes reportbuilder_user_filter keyed on
+     * (reportid, usercreated) and nothing else; the report persistent is keyed on the source,
+     * the context, and the component/area/itemid given here. With one report per COURSE both
+     * apply methods therefore shared a single stored scope, and every request after the initial
+     * page load reads that store and nothing else - sorting and paging go through
+     * core_table_get_dynamic_table_content, whose filterset carries only the reportid, and the
+     * Download button posts the same id to /reportbuilder/download.php. Opening the second
+     * method's report answered the first method's next click with the second method's rows.
+     *
+     * The itemid is IDENTITY and never scope, and can_view() says why the distinction holds: it
+     * selects which of this reader's stored choices come back, inside a course whose rows they
+     * already hold enrol/apply:viewreports for, and it decides nothing about which rows may be
+     * read - the base condition is built from the context.
+     *
+     * A named constructor rather than a call inlined in report.php, because report.php is a page
+     * script: nothing in the PHPUnit suite runs it, so an itemid dropped there would be invisible
+     * to every test. test_two_methods_keep_independent_scopes reaches this instead.
+     *
+     * @param context $context Course context the report belongs to.
+     * @param int $enrolid Enrol instance the reader opened it from.
+     * @return \core_reportbuilder\system_report The report.
+     */
+    public static function for_method(context $context, int $enrolid): \core_reportbuilder\system_report {
+        return system_report_factory::create(self::class, $context, 'enrol_apply', 'method', $enrolid);
+    }
+
+    /**
+     * Narrow this reader's view to one enrolment method, leaving their other filters alone.
+     *
+     * A FILTER value and never a base condition, which is what keeps this out of the security
+     * boundary: the base condition is `courseid = <context>->instanceid` and stays that way, so
+     * nothing a filter carries can reach outside the course.
+     *
+     * **That, and not an empty intersection, is where the safety comes from**, and an earlier
+     * version of this docblock had it the wrong way round. It said a forged value "shows fewer
+     * rows ... the intersection of one course and a foreign enrolid is empty", and that
+     * intersection is never computed: select::get_sql_filter() validates the submitted value
+     * against its own options list and returns ['', []] when it is absent, so a forged value
+     * produces NO filter at all and the report widens to the whole course. That is still safe -
+     * it is the view every reader of this report already holds enrol/apply:viewreports for - but
+     * it is the opposite of what the sentence claimed, and a reader trusting it would have
+     * concluded that a bad value fails closed. It fails open, into a view that is permitted.
+     *
+     * Merged rather than replacing: set_filter_values() overwrites everything, and the reader's
+     * status or date filters are not this page's to discard. array_merge and never the +
+     * operator - + keeps the LEFT side on a duplicate key, so the stored value would silently win
+     * over the caller's and this method would do nothing for anybody who had ever touched the
+     * filter. test_the_url_method_wins_over_a_stored_one is what holds that direction.
+     *
+     * @param int $enrolid Enrol instance to narrow to.
+     * @return bool False when this course has no method filter to set, which is every course
+     *              carrying a single apply method - the filter is only added where it can narrow.
+     */
+    public function scope_to_method(int $enrolid): bool {
+        if (!array_key_exists(self::METHOD_FILTER, $this->get_filter_instances())) {
+            return false;
+        }
+
+        return $this->set_filter_values(array_merge($this->get_filter_values(), [
+            self::METHOD_FILTER . '_operator' => select::EQUAL_TO,
+            self::METHOD_FILTER . '_value' => $enrolid,
+        ]));
     }
 
     /**

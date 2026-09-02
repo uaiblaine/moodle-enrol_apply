@@ -927,7 +927,7 @@ template; and `grunt --max-lint-warnings 0` on U5b alone.
 
 ---
 
-## U6 — The audit report is scoped to a method, not to a course
+## ~~U6~~ — The audit report is scoped to a method, not to a course — **done 2026-09-02**
 
 **Found in use on 2026-09-01, outside this plan, and not part of any slice above.** Recorded here
 with its decision already taken so neither is lost.
@@ -956,19 +956,29 @@ already offered whenever a course has more than one apply instance — it simply
 Two properties make this safe, and both are worth stating because they are what keep the fix out of
 the security boundary:
 
-- The base condition stays context-derived and untouched. The method filter can only ever NARROW
-  within it, so a forged filter value shows fewer rows, never another course's — the intersection
-  of `courseid = X` and a foreign enrolid is empty.
+- The base condition stays context-derived and untouched, and **that is the whole of the safety**.
+  This bullet originally reasoned it the other way round — "a forged filter value shows fewer
+  rows, never another course's — the intersection of `courseid = X` and a foreign enrolid is
+  empty" — and that intersection is never computed: `select::get_sql_filter()` checks the value
+  against its own options list and returns `['', []]` when it is absent, so a forged value
+  produces NO filter and the report widens to the course. Still safe, because that is the view the
+  reader already holds `enrol/apply:viewreports` for, but it fails OPEN into a permitted view
+  rather than closed.
 - Nothing here is a disclosure either way. A reader holding `enrol/apply:viewreports` in the course
   is entitled to every row the course-wide view shows, which is why this is a correctness and
   affordance defect rather than a leak, and why the fix has exactly one constraint: it must not
   widen.
 
-**Not bundled with U4**, which was committed and verified before this was found. No existing test
-asserts the report shows both instances' rows, so the work is close to additive: the pre-applied
-filter, a test that arriving from each icon shows that method's rows and not the other's, a test
-that clearing the filter still widens to the course, a mutation gate, and a correction to
-`report.php`'s comment, which currently states the present behaviour as intended.
+**Not bundled with U4**, which was committed and verified before this was found.
+
+**Built as described**, with two things the estimate did not name. Core's own precedent for seeding
+a system report from a url parameter is `admin/tasklogs.php`, and it REPLACES the filter values;
+here they are merged, because a reader's status or date filter is not this page's to discard. And
+the decision was extracted onto the report class as `scope_to_method()` — `report.php` is a page
+script, so a call left inline could be deleted with the whole PHPUnit suite still green. That
+wiring is held by a Behat scenario instead, driven as **admin** rather than as a teacher: the
+report icon is gated on `enrol/apply:viewreports`, which the editingteacher archetype does not
+carry, and the first draft of the scenario failed on a row that legitimately had no icon.
 
 ---
 

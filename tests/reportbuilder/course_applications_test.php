@@ -180,13 +180,19 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
     /**
      * The report, built for the course under test.
      *
+     * @param int $enrolid Enrol instance to identify the report by, 0 for the course-level one.
      * @return \core_reportbuilder\system_report The report.
      */
-    protected function report(): \core_reportbuilder\system_report {
-        return system_report_factory::create(
-            course_applications::class,
-            context_course::instance($this->course->id)
-        );
+    protected function report(int $enrolid = 0): \core_reportbuilder\system_report {
+        $context = context_course::instance($this->course->id);
+
+        /* With an enrolid, through the same named constructor report.php uses - so a test that
+           scopes is walking the production door rather than a copy of it. Without one, the bare
+           course-level report the older tests were written against, which has no itemid and is
+           therefore a different persistent. */
+        return $enrolid
+            ? course_applications::for_method($context, $enrolid)
+            : system_report_factory::create(course_applications::class, $context);
     }
 
     /**
@@ -554,6 +560,265 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
         $DB->set_field('enrol_apply_submission', 'userid', 0, ['courseid' => $this->course->id]);
 
         $this->assertCount(0, $this->rows());
+    }
+
+    /**
+     * A second apply method on this course, and one application on it.
+     *
+     * @param string $name Instance name, so the two are told apart in a failure message.
+     * @return array The instance record and the applicant seeded on it.
+     */
+    private function second_method(string $name = 'Second intake'): array {
+        global $DB;
+
+        $id = $this->plugin->add_instance($this->course, $this->plugin->get_instance_defaults());
+        $DB->set_field('enrol', 'name', $name, ['id' => $id]);
+        $instance = $DB->get_record('enrol', ['id' => $id], '*', MUST_EXIST);
+
+        $user = $this->getDataGenerator()->create_user();
+        $DB->insert_record('enrol_apply_submission', (object) [
+            'courseid' => $this->course->id,
+            'userid' => $user->id,
+            'enrolid' => $id,
+            'userenrolmentid' => 0,
+            'comment' => 'Please let me in',
+            'userinfodata' => '',
+            'status' => submission::STATUS_PENDING,
+            'outcomemessage' => '',
+            'timecreated' => time(),
+            'timedecided' => 0,
+            'decidedby' => 0,
+        ]);
+
+        return [$instance, $user];
+    }
+
+    /**
+     * Arriving from a method's icon scopes the report to THAT method.
+     *
+     * The defect this closes: report.php takes an enrol instance id and used it only to choose
+     * the course and authorise the request, so two apply methods produced byte-identical reports
+     * under two different urls. Measured on the development site, one of them held no
+     * applications at all and its report rendered the other's - an audit report of a method's
+     * applications, under that method's url, containing none of them.
+     *
+     * Both directions are asserted, which is the half that matters: scoping to A and finding A's
+     * row proves nothing on a fixture where A's row is the only one the report would show anyway.
+     *
+     * @return void
+     */
+    public function test_arriving_from_a_methods_icon_scopes_the_report_to_it(): void {
+        $first = $this->seed();
+        [$second, $secondapplicant] = $this->second_method();
+        $this->setUser($this->reader());
+
+        // The control: unscoped, the report is the whole course and holds both.
+        $this->assertCount(2, $this->rows());
+
+        $firstid = (int) $this->instance->id;
+        $this->assertTrue($this->report($firstid)->scope_to_method($firstid));
+        $rows = $this->rows($this->report($firstid));
+        $this->assertCount(1, $rows);
+        $this->assertStringContainsString(fullname($first), (string) $rows[0]->{'user:fullnamewithlink'});
+
+        $this->assertTrue($this->report((int) $second->id)->scope_to_method((int) $second->id));
+        $rows = $this->rows($this->report((int) $second->id));
+        $this->assertCount(1, $rows);
+        $this->assertStringContainsString(
+            fullname($secondapplicant),
+            (string) $rows[0]->{'user:fullnamewithlink'}
+        );
+    }
+
+    /**
+     * Each method gets a report persistent of its own, which is what makes the scope stick.
+     *
+     * The mechanism behind the test below, asserted directly because it is the half that lives
+     * in production and that no page-load test can see: the stored scope is keyed on the report
+     * id, so two methods sharing one id share one scope however carefully either is applied.
+     *
+     * @return void
+     */
+    public function test_each_method_gets_its_own_report_identity(): void {
+        $this->seed();
+        [$second] = $this->second_method();
+        $this->setUser($this->reader());
+
+        $context = context_course::instance($this->course->id);
+        $firstid = (int) course_applications::for_method($context, (int) $this->instance->id)
+            ->get_report_persistent()->get('id');
+        $secondid = (int) course_applications::for_method($context, (int) $second->id)
+            ->get_report_persistent()->get('id');
+
+        $this->assertNotSame($firstid, $secondid);
+        // Stable: asking twice for the same method returns the same persistent, not a new one.
+        $this->assertSame(
+            $firstid,
+            (int) course_applications::for_method($context, (int) $this->instance->id)
+                ->get_report_persistent()->get('id')
+        );
+    }
+
+    /**
+     * Two methods keep independent scopes, so one report cannot answer the other's requests.
+     *
+     * The defect this closes, and it survived the first implementation of the whole slice. The
+     * scope is stored by set_filter_values() in reportbuilder_user_filter, keyed on
+     * (reportid, usercreated) and nothing else, and the report persistent used to be keyed on
+     * the COURSE - so both methods shared one stored scope. Every request after the initial page
+     * load reads that store and nothing else: sorting and paging go through
+     * core_table_get_dynamic_table_content, whose filterset carries only the reportid, and the
+     * Download button posts the same id. Opening the second method's report therefore answered
+     * the first method's next click with the second method's rows - the very thing this slice
+     * exists to remove, reinstated for every request but the first.
+     *
+     * rows() builds system_report_table::create($reportid, []) - the AJAX path exactly - so this
+     * test walks the route the defect used rather than a proxy for it.
+     *
+     * @return void
+     */
+    public function test_two_methods_keep_independent_scopes(): void {
+        $first = $this->seed();
+        [$second, $secondapplicant] = $this->second_method();
+        $this->setUser($this->reader());
+
+        $firstid = (int) $this->instance->id;
+        $this->report($firstid)->scope_to_method($firstid);
+        // The second report is opened afterwards, which is what used to overwrite the first.
+        $this->report((int) $second->id)->scope_to_method((int) $second->id);
+
+        // The first method's report must still answer with its own row.
+        $rows = $this->rows($this->report($firstid));
+        $this->assertCount(1, $rows);
+        $this->assertStringContainsString(fullname($first), (string) $rows[0]->{'user:fullnamewithlink'});
+        $this->assertStringNotContainsString(
+            fullname($secondapplicant),
+            (string) $rows[0]->{'user:fullnamewithlink'}
+        );
+
+        // And the second's with its own, so this is not passing by ignoring the scope entirely.
+        $rows = $this->rows($this->report((int) $second->id));
+        $this->assertCount(1, $rows);
+        $this->assertStringContainsString(
+            fullname($secondapplicant),
+            (string) $rows[0]->{'user:fullnamewithlink'}
+        );
+    }
+
+    /**
+     * Clearing the filter widens the report back to the course.
+     *
+     * The view this page showed before the scoping, and the reason the scope is a FILTER value
+     * rather than a base condition: a base condition could not be cleared by the reader at all.
+     *
+     * @return void
+     */
+    public function test_clearing_the_method_filter_widens_to_the_course(): void {
+        $this->seed();
+        $this->second_method();
+        $this->setUser($this->reader());
+
+        $this->report()->scope_to_method((int) $this->instance->id);
+        // The precondition: it really is scoped, so what follows is about widening.
+        $this->assertCount(1, $this->rows($this->report()));
+
+        $report = $this->report();
+        $report->set_filter_values(array_merge($report->get_filter_values(), [
+            course_applications::METHOD_FILTER . '_operator' => select::ANY_VALUE,
+        ]));
+
+        $this->assertCount(2, $this->rows($this->report()));
+    }
+
+    /**
+     * The url's method wins over one the reader had already chosen.
+     *
+     * The direction is the whole test. `array_merge` puts the caller's value on top; the `+`
+     * operator would keep the LEFT side on a duplicate key, so the stored value would silently
+     * win and scoping would do nothing for anybody who had ever touched this filter - which is
+     * every reader who has used the report twice. It was written with `+` first.
+     *
+     * @return void
+     */
+    public function test_the_url_method_wins_over_a_stored_one(): void {
+        $this->seed();
+        [$second, $secondapplicant] = $this->second_method();
+        $this->setUser($this->reader());
+
+        // The reader had chosen the second method by hand.
+        $this->report()->scope_to_method((int) $second->id);
+        $this->assertCount(1, $this->rows($this->report()));
+
+        // Arriving from the FIRST method's icon must move them.
+        $this->report()->scope_to_method((int) $this->instance->id);
+        $rows = $this->rows($this->report());
+        $this->assertCount(1, $rows);
+        $this->assertStringNotContainsString(
+            fullname($secondapplicant),
+            (string) $rows[0]->{'user:fullnamewithlink'}
+        );
+    }
+
+    /**
+     * Scoping keeps the reader's other filters.
+     *
+     * set_filter_values() overwrites everything it is given, so a scope that replaced rather than
+     * merged would silently reset a status or date filter every time the page loaded - the report
+     * would look like it had forgotten what the reader asked for, on a page they arrived at by
+     * clicking an icon.
+     *
+     * @return void
+     */
+    public function test_scoping_keeps_the_readers_other_filters(): void {
+        $this->seed();
+        $this->second_method();
+        $this->setUser($this->reader());
+
+        $report = $this->report();
+        $report->set_filter_values(['submission:status_operator' => select::EQUAL_TO,
+            'submission:status_value' => submission::STATUS_CANCELLED]);
+
+        $this->report()->scope_to_method((int) $this->instance->id);
+
+        $values = $this->report()->get_filter_values();
+        $this->assertSame(submission::STATUS_CANCELLED, (int) $values['submission:status_value']);
+        $this->assertSame((int) $this->instance->id, (int) $values[course_applications::METHOD_FILTER . '_value']);
+    }
+
+    /**
+     * A course with a single apply method has nothing to scope, and says so.
+     *
+     * The filter is only added where it can narrow, so on the commonest course of all there is
+     * none - and scope_to_method() must report that rather than writing a value for a filter the
+     * report does not have, which would sit in the reader's preferences unread for ever.
+     *
+     * @return void
+     */
+    public function test_a_course_with_one_method_has_nothing_to_scope(): void {
+        $this->seed();
+        $this->setUser($this->reader());
+
+        $this->assertFalse($this->report()->scope_to_method((int) $this->instance->id));
+        $this->assertSame([], $this->report()->get_filter_values());
+        // The control: the report still works and still shows the course.
+        $this->assertCount(1, $this->rows());
+    }
+
+    /**
+     * The identifier report.php scopes by is the one the filter actually carries.
+     *
+     * The constant repeats what core builds from the entity name and the filter name, and nothing
+     * else would notice either half being renamed: the scope would simply stop applying, on a
+     * page that would go on rendering perfectly.
+     *
+     * @return void
+     */
+    public function test_the_method_filter_identifier_is_the_one_the_page_scopes_by(): void {
+        $this->seed();
+        $this->second_method();
+        $this->setUser($this->reader());
+
+        $this->assertContains(course_applications::METHOD_FILTER, $this->filter_ids());
     }
 
     /**

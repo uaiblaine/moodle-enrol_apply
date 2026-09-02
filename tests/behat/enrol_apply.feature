@@ -208,5 +208,42 @@ Feature: Enrolment upon approval
     Then I should see "Your enrolment application has been deferred."
     And I should not see "New section"
 
+  # The audit report belongs to the method whose icon opened it. No @javascript: the icons on
+  # the enrolment methods page are ordinary links and the report renders server side.
+  #
+  # This is the one thing no unit test in this repository can hold. report.php's call to
+  # scope_to_method() is the whole feature, and it lives in a page script - delete it and every
+  # PHPUnit test still passes, because they call that method directly. Here the deletion shows up
+  # as the second method's report listing an application that is not its own, which is the defect
+  # exactly as it was measured.
+  #
+  # The second method is added AFTER the application is submitted, deliberately: with two methods
+  # on the course the enrolment page renders two panels and "Start application" stops being an
+  # unambiguous button. Ordering the fixture this way needs no scoping and no second applicant.
+  #
+  # Driven as ADMIN and not as teacher1, and that is a fact about the plugin rather than a
+  # convenience: the report icon is gated on enrol/apply:viewreports, which is deliberately
+  # narrower than manageapplications and which the editingteacher archetype does not carry. A
+  # teacher sees the Edit and Manage icons on that row and no report icon at all - measured in a
+  # faildump when this scenario was first written against teacher1.
+  Scenario: The applications report shows the method whose icon opened it
+    Given I log in as "student1"
+    And I am on "Course 1" course homepage
+    And I press "Start application"
+    And I press "Submit application"
+    And I log out
+    When I log in as "admin"
+    And I add "Course enrol confirmation" enrolment method in "Course 1" with:
+      | Custom instance name | Second intake |
+    And I am on the "Course 1" "enrolment methods" page
+    # The method the application was made to lists it.
+    And I click on "Enrolment applications" "link" in the "Apply for this course" "table_row"
+    Then I should see "Student 1"
+    # The other method has none of its own, and must not borrow them.
+    And I am on the "Course 1" "enrolment methods" page
+    And I click on "Enrolment applications" "link" in the "Second intake" "table_row"
+    Then I should see "Nothing to display"
+    And I should not see "Student 1"
+
   # Capability enforcement is covered by tests/lib_test.php: asserting on it here would
   # mean asserting on an exception page, which behat's exception hook fails by design.

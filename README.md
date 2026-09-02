@@ -97,9 +97,8 @@ every application the course has recorded — who applied, when, the comment, th
 details submitted, the outcome, who decided it and when — with per-user filters, sorting,
 paging and a CSV or Excel download.
 
-It shows the course's applications rather than one enrolment method's, so both icons in a
-course with two apply methods open the same report; where a course has more than one, the
-report offers a filter to narrow by method.
+It opens scoped to the enrolment method whose icon you clicked, and clearing the method filter
+widens it to every application in the course. Each method remembers your filters separately.
 
 ## Site-wide custom reports
 
