@@ -17,12 +17,15 @@
 namespace enrol_apply\table;
 
 use context;
+use context_course;
 use core_table\dynamic as dynamic_table;
 use core_table\local\filter\filterset;
 use core_table\local\filter\integer_filter;
 use enrol_apply\local\commentlabel;
 use enrol_apply\local\identity;
 use enrol_apply\local\queue;
+use enrol_apply\local\submission as submissionrecord;
+use enrol_apply\reportbuilder\local\formatters\submission as submissionformatter;
 use html_writer;
 use moodle_url;
 use stdClass;
@@ -77,6 +80,9 @@ class applications extends \table_sql implements dynamic_table {
 
     /** @var array Identity field names this reader may see, from \enrol_apply\local\identity. */
     protected $extrafields = [];
+
+    /** @var array Snapshot keys this reader may see, memoised by course id; see visible_keys(). */
+    protected $visiblekeys = [];
 
     /** @var bool Whether define_table_columns() has run; see setup() for why it is deferred. */
     protected $columnsdefined = false;
@@ -346,8 +352,14 @@ class applications extends \table_sql implements dynamic_table {
                                AND (s.id IS NULL OR prior.id <> s.id)
                           ) THEN 1 ELSE 0 END AS appliedbefore";
 
+        /* s.userinfodata is the frozen record of what the applicant typed, and it costs nothing
+           to select: the row it comes from is already joined for the comment. There is no
+           fallback to enrol_apply_applicationinfo the way applycomment has one, because that row
+           has never held a snapshot - an application predating the durable record shows no
+           evidence rather than an empty envelope that would read as "they filled nothing in". */
         $fields = "ue.id AS userenrolmentid, ue.status AS enrolstatus, ue.timecreated AS applydate,
-                   COALESCE(s.comment, ai.comment) AS applycomment, c.fullname AS course,
+                   COALESCE(s.comment, ai.comment) AS applycomment, s.userinfodata AS snapshot,
+                   c.fullname AS course,
                    c.id AS courseid, {$priorsql}, {$userfields}{$identitysql->selects}";
         $from = "{user_enrolments} ue
             LEFT JOIN {enrol_apply_applicationinfo} ai ON ai.userenrolmentid = ue.id
@@ -435,6 +447,22 @@ class applications extends \table_sql implements dynamic_table {
         $columns[] = 'applydate';
         $headers[] = get_string('applydate', 'enrol_apply');
 
+        /* The evidence, and the reason this queue exists at all: the answers the applicant gave
+           are what the decision is made on, and the page this replaces showed them nowhere.
+
+           Absent on the mentee scope, by the decision recorded in the plan: identity fields
+           appear on the ?id= and site-wide scopes only, never there. These pills are identity
+           data of exactly that kind - a site offers city, institution and custom profile fields
+           through this form - so the decision governs them too, and `identitycontext === null` is
+           the predicate that already means "the mentee scope" everywhere else in this class.
+           It is not that the column COULD not be masked there; visible_keys() judges each row in
+           its own course and would answer for a mentor as well as for anybody. It is that the
+           owner decided this data does not belong on that surface. */
+        if ($this->scope->identitycontext !== null) {
+            $columns[] = 'snapshot';
+            $headers[] = get_string('queuesubmitted', 'enrol_apply');
+        }
+
         $columns[] = 'applycomment';
         /* The escaped spelling, because print_headers() emits this through html_writer::tag(),
            which concatenates its content without escaping it. commentlabel::custom() defaults to
@@ -458,6 +486,9 @@ class applications extends \table_sql implements dynamic_table {
            against the applicant's name rather than reading a wall of bare values. */
         $this->define_header_column('fullname');
         $this->no_sorting('checkboxcolumn');
+        /* Unsortable because there is nothing to sort on: the column renders a list of pairs out
+           of a JSON envelope, and no database this plugin supports can order by one of them. */
+        $this->no_sorting('snapshot');
         $this->no_sorting('applycomment');
         $this->no_sorting('review');
         $this->sortable(true, 'applydate', SORT_ASC);
@@ -723,6 +754,103 @@ class applications extends \table_sql implements dynamic_table {
                 userdate($row->applydate, get_string('strftimedatetimeshort', 'langconfig')),
                 'enrol_apply-applyon small text-muted'
             );
+    }
+
+    /**
+     * The snapshot keys this reader may see for one row, judged in that row's own course.
+     *
+     * **Per row, and an earlier version of this class got it wrong in a way worth recording.**
+     * That version resolved the mask once from the SCOPE's context, and justified it in a
+     * docblock claiming that a capability held at system level is held in every course below it,
+     * so a system-context mask could never be more permissive than a per-row one. That claim is
+     * false, and core says so plainly: has_capability_in_accessdata() builds its list of contexts
+     * by walking UPWARD from the one it is given (lib/accesslib.php:792-800, byte-identical on
+     * 5.1 and 5.2) and returns false only for a CAP_PROHIBIT found in that list. A prohibit
+     * recorded at a course context is therefore invisible to a check made at the system context.
+     * So an operator holding moodle/site:viewuseridentity site-wide, with it prohibited in one
+     * course - which is what the Permissions page exists to do - passed the system check and had
+     * every pill of that course's applicants rendered to them.
+     *
+     * Judging each row in its own course context removes that, and it is also what makes this
+     * column agree with renderer::snapshot_context(), which has always masked on
+     * context_course::instance($application->courseid). The two surfaces onto this record now ask
+     * literally the same question.
+     *
+     * The identity line in the applicant's cell beside these pills still asks the scope's
+     * context, and that is NOT an oversight left behind: identity::fields() decides the SELECT
+     * list, so one statement spanning courses has one field list and cannot be masked per row at
+     * all. The snapshot is a JSON envelope rendered per row and carries no such constraint, which
+     * is why the correct answer is available here and not there.
+     *
+     * Memoised because a site-wide queue spans courses: one context load and one capability check
+     * per distinct course, not per row.
+     *
+     * @param int $courseid Course the row's application was made to.
+     * @return array|bool Keys this reader may see, or submissionformatter::ALL_FIELDS.
+     */
+    protected function visible_keys(int $courseid) {
+        if (!array_key_exists($courseid, $this->visiblekeys)) {
+            $this->visiblekeys[$courseid] = submissionformatter::visible_keys(
+                context_course::instance($courseid)
+            );
+        }
+
+        return $this->visiblekeys[$courseid];
+    }
+
+    /**
+     * What the applicant submitted with this application.
+     *
+     * Read from the frozen snapshot the applicant's own submission wrote, and from nothing else.
+     * The rule is the review page's and the reasoning is recorded in full on
+     * renderer::snapshot_context(): re-resolving the field set from the LIVE enrol instance would
+     * drop a field the teacher has since stopped asking for, and dereferencing a stored key
+     * against the applicant's live profile once rendered a password hash from a crafted archive.
+     * The stored labels are used for the same reason - they are the wording the applicant saw
+     * when they typed.
+     *
+     * That also settles what the mockup calls a "not given" pill, which this column deliberately
+     * does not draw. fields::submitted_values() never records an empty answer, so a field left
+     * blank and a field that was never offered are the same absence in the envelope, and telling
+     * them apart would need exactly the live re-resolution the paragraph above forbids - per row,
+     * and impossible at all on a scope spanning instances that offer different fields. Showing
+     * only what was actually answered is the honest half of the mockup.
+     *
+     * **This is an escaping boundary.** flexible_table::format_row() writes a cell's value into
+     * the markup with no escaping of its own, and both halves of every pair are user-controlled:
+     * the value is what the applicant typed, and a custom field's label is what an administrator
+     * named it. s() on both, and not format_string(), whose strip_tags() would delete a restored
+     * value from the first "<" onwards. Gate CP is the one that reddens if either stops.
+     *
+     * Nothing at all when there is nothing to show, the card label included: a card headed
+     * "Submitted with the application" over empty space claims a section the record does not have.
+     *
+     * @param stdClass $row Row data carrying the stored envelope as `snapshot`.
+     * @return string Rendered cell.
+     */
+    public function col_snapshot($row) {
+        $visible = $this->visible_keys((int) $row->courseid);
+
+        $pills = '';
+        foreach (submissionrecord::read_snapshot($row->snapshot ?? null) as $entry) {
+            if ($visible !== submissionformatter::ALL_FIELDS && !in_array($entry['key'], $visible, true)) {
+                /* Withheld from every row rather than only from the rows holding a value: a
+                   marker appearing exactly where there is data is a presence oracle, which is
+                   the rule the report's own formatter states and both other surfaces inherit. */
+                continue;
+            }
+
+            $pills .= html_writer::span(
+                html_writer::span(s($entry['label']), 'enrol_apply-fieldname') . ' ' . s($entry['value']),
+                'enrol_apply-fieldpill'
+            );
+        }
+
+        if ($pills === '') {
+            return '';
+        }
+
+        return $this->card_label(s(get_string('queuesubmitted', 'enrol_apply'))) . $pills;
     }
 
     /**

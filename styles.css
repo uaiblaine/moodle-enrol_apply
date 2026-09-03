@@ -14,6 +14,9 @@
     --enrol-apply-fill: var(--bs-primary, #0f6cbf);
     --enrol-apply-warn: var(--bs-warning, #f0ad4e);
     --enrol-apply-track: var(--bs-secondary-bg, #e9ecef);
+    /* The foreground that pairs with --enrol-apply-track. Bootstrap designs the two together,
+       so they are read together; see .enrol_apply-fieldpill for what reading only one costs. */
+    --enrol-apply-ink: var(--bs-body-color, #1d2125);
 }
 
 /* The decision context above the table. */
@@ -97,6 +100,39 @@
 
 .enrol_apply-applyago {
     white-space: nowrap;
+}
+
+/* The evidence cell: one pill per answer the applicant gave.
+
+   inline-flex rather than inline-block so a long value wraps under its own label instead of
+   under the label of the pill before it, and align-items: baseline so a wrapped value still
+   sits on the label's line. The pills themselves wrap within the cell, which is what lets an
+   instance offering five fields grow the row rather than push the column off the edge. */
+.enrol_apply-fieldpill {
+    align-items: baseline;
+    background-color: var(--enrol-apply-track);
+    /* The fill's own foreground, never the inherited one, and it is the badge rule of this
+       fleet applied one level up. Moodle 5.2 ships TWO dark mechanisms and only one of them
+       moves the Bootstrap tokens: [data-bs-theme="dark"] flips every --bs-* value, while the
+       legacy .theme-dark recolours text directly and leaves them at their light values.
+       Measured on m502 - under .theme-dark an inherited colour arrives as #dee2e6 while this
+       fill is still #e9ecef, which is 1.10:1 and simply invisible. Taking both halves from the
+       same token family gives 13.66:1 there (a light chip on a dark page - loud, but readable)
+       and 8.84:1 under the token mechanism, where the pair flips together as Bootstrap
+       intends. */
+    color: var(--enrol-apply-ink);
+    border-radius: 3px;
+    display: inline-flex;
+    flex-wrap: wrap;
+    font-size: 0.8125rem;
+    gap: 0 0.3rem;
+    margin: 0 0.25rem 0.25rem 0;
+    padding: 0.1rem 0.4rem;
+}
+
+.enrol_apply-fieldname {
+    color: var(--enrol-apply-muted);
+    font-weight: 600;
 }
 
 /* The bulk action bar lives in a core sticky footer, and core parks that footer OFF SCREEN
