@@ -29,9 +29,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   The queue also shows **what the applicant submitted** — the answers the decision is actually
   made on, which were on no screen but the review page. One pill per answer, read from the frozen
   record the submission wrote and never recomputed from the live enrolment method or the live
-  profile, and masked by the same rule the report and the review page apply: a reader without
-  `moodle/site:viewuseridentity` in the course sees the name fields and nothing else, on every row
-  rather than only on the rows that hold a value. The mockup's "not given" pill is deliberately
+  profile, and masked by the same rule the review page applies, judged in each row's own course: a
+  reader without `moodle/site:viewuseridentity` there sees the name fields and nothing else, on
+  every row rather than only on the rows that hold a value — so a per-course permission override is
+  honoured on the site-wide queue as well as on the review page. The mockup's "not given" pill is deliberately
   not drawn — an answer left blank was never recorded, so it cannot be told apart from a field the
   method never asked for. The column is absent on the mentee scope, where it would be empty on
   every row.

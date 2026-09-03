@@ -17,6 +17,7 @@
 namespace enrol_apply\table;
 
 use context;
+use context_course;
 use core_table\dynamic as dynamic_table;
 use core_table\local\filter\filterset;
 use core_table\local\filter\integer_filter;
@@ -80,12 +81,7 @@ class applications extends \table_sql implements dynamic_table {
     /** @var array Identity field names this reader may see, from \enrol_apply\local\identity. */
     protected $extrafields = [];
 
-    /**
-     * @var array|bool Snapshot field keys this reader may see, or submissionformatter::ALL_FIELDS.
-     *
-     * Resolved once from the scope rather than per row; see build_sql() for why the scope's
-     * context is the right question and a per-row one would be the wrong one.
-     */
+    /** @var array Snapshot keys this reader may see, memoised by course id; see visible_keys(). */
     protected $visiblekeys = [];
 
     /** @var bool Whether define_table_columns() has run; see setup() for why it is deferred. */
@@ -319,24 +315,6 @@ class applications extends \table_sql implements dynamic_table {
         $this->extrafields = identity::fields($this->scope->identitycontext);
         $identitysql = identity::sql($this->scope->identitycontext, 'u');
 
-        /* What of the frozen submission this reader may see. The mask is the report's own, so
-           the three surfaces onto this record - the report, the review page and now the queue -
-           cannot answer differently about the same reader.
-
-           It is resolved from the SCOPE's context and not from each row's course, and the
-           direction that choice errs in is provable rather than argued. On the ?id= scope the
-           two are the same context. On the site-wide scope the scope's context is the system
-           one, and a capability held at system level is held in every course below it - so
-           has_capability(system) implies has_capability(course) for every row, never the
-           reverse. Masking on the system context is therefore never more permissive than
-           masking per row, and it is what keeps this column agreeing with the identity line
-           beside it in the same cell, which identity::fields() resolves the same way. A per-row
-           mask would show an applicant's city as a pill here while withholding it two lines
-           above, which reads as a leak whichever of the two is right. */
-        $this->visiblekeys = $this->scope->identitycontext === null
-            ? []
-            : submissionformatter::visible_keys($this->scope->identitycontext);
-
         $userfieldsapi = \core_user\fields::for_userpic()->including('username');
         $userfields = $userfieldsapi->get_sql('u', false, '', 'userid', false)->selects;
 
@@ -472,12 +450,14 @@ class applications extends \table_sql implements dynamic_table {
         /* The evidence, and the reason this queue exists at all: the answers the applicant gave
            are what the decision is made on, and the page this replaces showed them nowhere.
 
-           Absent on the mentee scope, and that costs nothing. It is where identity::fields()
-           already returns nothing - one statement spans courses there, so no single context is
-           the right question - and the mask this column applies would be the names-only one for
-           every row, which for an instance offering city and institution renders an empty column
-           on every row. An always-empty column is worse than no column, so the same scope test
-           the identity line uses governs this one. */
+           Absent on the mentee scope, by the decision recorded in the plan: identity fields
+           appear on the ?id= and site-wide scopes only, never there. These pills are identity
+           data of exactly that kind - a site offers city, institution and custom profile fields
+           through this form - so the decision governs them too, and `identitycontext === null` is
+           the predicate that already means "the mentee scope" everywhere else in this class.
+           It is not that the column COULD not be masked there; visible_keys() judges each row in
+           its own course and would answer for a mentor as well as for anybody. It is that the
+           owner decided this data does not belong on that surface. */
         if ($this->scope->identitycontext !== null) {
             $columns[] = 'snapshot';
             $headers[] = get_string('queuesubmitted', 'enrol_apply');
@@ -777,6 +757,48 @@ class applications extends \table_sql implements dynamic_table {
     }
 
     /**
+     * The snapshot keys this reader may see for one row, judged in that row's own course.
+     *
+     * **Per row, and an earlier version of this class got it wrong in a way worth recording.**
+     * That version resolved the mask once from the SCOPE's context, and justified it in a
+     * docblock claiming that a capability held at system level is held in every course below it,
+     * so a system-context mask could never be more permissive than a per-row one. That claim is
+     * false, and core says so plainly: has_capability_in_accessdata() builds its list of contexts
+     * by walking UPWARD from the one it is given (lib/accesslib.php:792-800, byte-identical on
+     * 5.1 and 5.2) and returns false only for a CAP_PROHIBIT found in that list. A prohibit
+     * recorded at a course context is therefore invisible to a check made at the system context.
+     * So an operator holding moodle/site:viewuseridentity site-wide, with it prohibited in one
+     * course - which is what the Permissions page exists to do - passed the system check and had
+     * every pill of that course's applicants rendered to them.
+     *
+     * Judging each row in its own course context removes that, and it is also what makes this
+     * column agree with renderer::snapshot_context(), which has always masked on
+     * context_course::instance($application->courseid). The two surfaces onto this record now ask
+     * literally the same question.
+     *
+     * The identity line in the applicant's cell beside these pills still asks the scope's
+     * context, and that is NOT an oversight left behind: identity::fields() decides the SELECT
+     * list, so one statement spanning courses has one field list and cannot be masked per row at
+     * all. The snapshot is a JSON envelope rendered per row and carries no such constraint, which
+     * is why the correct answer is available here and not there.
+     *
+     * Memoised because a site-wide queue spans courses: one context load and one capability check
+     * per distinct course, not per row.
+     *
+     * @param int $courseid Course the row's application was made to.
+     * @return array|bool Keys this reader may see, or submissionformatter::ALL_FIELDS.
+     */
+    protected function visible_keys(int $courseid) {
+        if (!array_key_exists($courseid, $this->visiblekeys)) {
+            $this->visiblekeys[$courseid] = submissionformatter::visible_keys(
+                context_course::instance($courseid)
+            );
+        }
+
+        return $this->visiblekeys[$courseid];
+    }
+
+    /**
      * What the applicant submitted with this application.
      *
      * Read from the frozen snapshot the applicant's own submission wrote, and from nothing else.
@@ -807,10 +829,11 @@ class applications extends \table_sql implements dynamic_table {
      * @return string Rendered cell.
      */
     public function col_snapshot($row) {
+        $visible = $this->visible_keys((int) $row->courseid);
+
         $pills = '';
         foreach (submissionrecord::read_snapshot($row->snapshot ?? null) as $entry) {
-            if ($this->visiblekeys !== submissionformatter::ALL_FIELDS
-                    && !in_array($entry['key'], $this->visiblekeys, true)) {
+            if ($visible !== submissionformatter::ALL_FIELDS && !in_array($entry['key'], $visible, true)) {
                 /* Withheld from every row rather than only from the rows holding a value: a
                    marker appearing exactly where there is data is a presence oracle, which is
                    the rule the report's own formatter states and both other surfaces inherit. */

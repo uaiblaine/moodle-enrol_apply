@@ -717,9 +717,10 @@ unanswered field, and the record cannot produce one: `fields::submitted_values()
 answer, so a field left blank and a field the method never asked for are the same absence in the
 envelope, and separating them needs exactly the live re-resolution `snapshot_context()` forbids —
 per row, and undefined on a scope spanning instances that offer different fields. And the masking
-context is the **scope's**, not the row's: a capability held at system level is held in every
-course below it, so the site-wide mask is never more permissive than a per-row one would be, and it
-is what keeps the pills agreeing with the identity line in the same cell.
+context is the **row's own course**, which is what the review page has always used. A first cut
+resolved it once from the scope's context on the claim that a system-level capability is held in
+every course below it; `has_capability_in_accessdata()` walks upward only, so a course-level
+`CAP_PROHIBIT` is invisible from the system context and that claim is false — see the handoff.
 
 It also turned up a defect **outside** its own scope, recorded in the handoff: `.theme-dark` and
 `[data-bs-theme="dark"]` are two different dark mechanisms and only the second moves the `--bs-*`

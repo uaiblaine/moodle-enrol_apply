@@ -14,19 +14,31 @@ The queue now carries a **Submitted with the application** column: one pill per 
 applicant gave, read from the frozen record and masked by the report's own `visible_keys()` rule.
 Three decisions in it are worth knowing before changing anything:
 
-- **The mask comes from the SCOPE's context, not from each row's course**, and the direction that
-  errs in is provable rather than argued: a capability held at system level is held in every course
-  below it, so the site-wide scope's system-context mask is never more permissive than a per-row
-  one. It is also what keeps this column agreeing with the identity line beside it in the same
-  cell, which `identity::fields()` resolves the same way. A per-row mask would show an applicant's
-  city as a pill while withholding it two lines above.
+- **The mask is judged in each ROW's own course**, which is what `renderer::snapshot_context()` has
+  always done, so the two surfaces onto this record ask literally the same question. The first cut
+  of this slice resolved it once from the scope's context instead, on a docblock claiming that a
+  capability held at system level is held in every course below it and that a system-context mask
+  could therefore never be more permissive. **That claim is false**, and core refutes it directly:
+  `has_capability_in_accessdata()` builds its context list by walking UPWARD from the context it is
+  given (`lib/accesslib.php:792-800`, byte-identical on 5.1 and 5.2) and returns false only for a
+  `CAP_PROHIBIT` found in that list — so a prohibit recorded at a course is invisible to a check
+  made at the system context. An operator holding `moodle/site:viewuseridentity` site-wide with it
+  prohibited in one course — which is what the Permissions page exists to do — passed the system
+  check and was shown every pill of that course's applicants.
+  `test_a_course_level_prohibit_withholds_that_courses_evidence` and gate `CT` hold it now.
+- **The identity line beside the pills still asks the scope's context, and that is not an oversight
+  left behind.** `identity::fields()` decides the SELECT list, so one statement spanning courses
+  has one field list and cannot be masked per row at all. The snapshot is a JSON envelope rendered
+  per row and carries no such constraint, which is why the correct answer is available here and not
+  there. The identity line's exposure under the same override is pre-existing and unchanged.
 - **The mockup's "not given" pill is deliberately not drawn.** `fields::submitted_values()` never
   records an empty answer, so a field left blank and a field the method never asked for are the
   same absence in the envelope. Telling them apart needs the live re-resolution
   `renderer::snapshot_context()` forbids in full — and is impossible on a scope spanning instances
   that offer different fields.
-- **The column is absent on the mentee scope**, where `identitycontext` is null. A mentor holds
-  nothing in the course, so the mask would be the names-only one and every cell would be empty.
+- **The column is absent on the mentee scope**, by the decision recorded in the plan — identity
+  fields on the `?id=` and site-wide scopes only. Not because it could not be masked there:
+  `visible_keys()` judges each row in its own course and would answer for a mentor too.
 
 ### The dark-mode finding, which is bigger than this column
 
@@ -40,9 +52,11 @@ on m502 against the plugin's own pill:
 
 `.theme-dark` recolours text directly and leaves every `--bs-*` token alone. So a fill read from a
 token and a colour left to inheritance come from **different mechanisms**, and under `.theme-dark`
-the pills rendered `#dee2e6` on `#e9ecef` — **1.05:1, invisible** — with every gate green. Fixed by
+the pills rendered `#dee2e6` on `#e9ecef` — **1.10:1, invisible** — with every gate green. Fixed by
 pairing both halves from the same family (`--enrol-apply-ink` beside `--enrol-apply-track`), which
-gives 15:1 under the legacy class and 8.9:1 under the token mechanism.
+gives 13.66:1 under the legacy class and 8.84:1 under the token mechanism. (Those three ratios were
+first published here as 1.05, 15 and 8.9 — asserted from the hex pairs by eye rather than computed,
+and all three wrong. A number presented as measured has to have been measured.)
 
 `tests/local/bootstrap_compat_test::test_every_stylesheet_fill_declares_its_own_text_colour` is the
 ratchet: any rule painting a background without declaring a colour fails, unless its selector is
@@ -60,6 +74,12 @@ that was a mutated `if` statement.
 **Nothing else may read the tree while a sweep is in flight**, `mdl ci` included. The tell is a
 failure that reproduces on one branch and not another for no reason the code can explain; before
 theorising, `git diff` the file the failing test covers.
+
+A second, smaller trap from the same slice: **a gate's pattern is coupled to the exact source shape
+of the line it mutates.** Reformatting the guarded line — here a two-line `if` collapsed onto one —
+silently voids the gate. `mdl mutate` catches it and exits 1 saying the pattern matched nothing,
+which is the right behaviour and is easy to misread as the sweep having been killed. Check the exit
+code and the last line of the log before concluding anything about a run that stopped early.
 
 **What is NOT settled:** whether a real 5.2 site turns dark mode on through `.theme-dark`, through
 `data-bs-theme`, or both. This site's theme exposes no switch, so both states were synthesised.

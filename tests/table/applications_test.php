@@ -587,11 +587,21 @@ final class applications_test extends \advanced_testcase {
     protected function snapshot(string $city = 'Ouropretoville'): string {
         return (string) json_encode([
             'version' => submission::SNAPSHOT_VERSION,
-            'fields' => [
-                ['key' => 's_firstname', 'label' => 'Given name', 'value' => 'Zephyrina'],
-                ['key' => 's_city', 'label' => 'Hometown', 'value' => $city],
-            ],
+            'fields' => $this->snapshot_fields($city),
         ]);
+    }
+
+    /**
+     * The fields that envelope holds, so a test can count pills without hardcoding how many.
+     *
+     * @param string $city Value for the identity half.
+     * @return array One entry per field, in the shape read_snapshot() returns.
+     */
+    protected function snapshot_fields(string $city = 'Ouropretoville'): array {
+        return [
+            ['key' => 's_firstname', 'label' => 'Given name', 'value' => 'Zephyrina'],
+            ['key' => 's_city', 'label' => 'Hometown', 'value' => $city],
+        ];
     }
 
     /**
@@ -639,7 +649,14 @@ final class applications_test extends \advanced_testcase {
 
         $rendered = $this->rendered((int) $this->instance->id);
 
-        $this->assertStringContainsString(get_string('queuesubmitted', 'enrol_apply'), $rendered);
+        /* The CELL's own heading, not the string on its own: the column header carries the same
+           wording and would satisfy a bare assertion whatever col_snapshot() did. Found by an
+           adversarial pass, and it is the same shape as this repository's regex trap - matching
+           the wanted text anywhere downstream rather than inside the thing under test. */
+        $this->assertStringContainsString(
+            'enrol_apply-cardlabel">' . get_string('queuesubmitted', 'enrol_apply'),
+            $rendered
+        );
         $this->assertStringContainsString('Hometown', $rendered);
         $this->assertStringContainsString('Ouropretoville', $rendered);
     }
@@ -716,9 +733,87 @@ final class applications_test extends \advanced_testcase {
 
         $rendered = $this->rendered((int) $this->instance->id);
 
-        // One row carries an envelope and one does not, so exactly one cell may hold pills.
-        $this->assertSame(2, substr_count($rendered, 'enrol_apply-fieldpill'));
+        /* One row carries an envelope and one does not, so exactly one cell may hold pills - and
+           that cell holds one per field, which snapshot() writes two of. Counted rather than
+           merely found, because "no pill on the empty row" is invisible to a containment
+           assertion once the other row has drawn some. */
+        $this->assertSame(count($this->snapshot_fields()), substr_count($rendered, 'enrol_apply-fieldpill'));
         $this->assertSame(1, substr_count($rendered, 'enrol_apply-cardlabel">' . get_string('queuesubmitted', 'enrol_apply')));
+    }
+
+    /**
+     * A course-level prohibit withholds that course's evidence on the site-wide queue.
+     *
+     * **The test the first cut of this column did not have, and it is why the first cut was
+     * wrong.** That version resolved the mask once from the scope's context, on a docblock claim
+     * that a capability held at system level is held in every course below it. Core disagrees:
+     * has_capability_in_accessdata() walks UPWARD from the context it is given
+     * (lib/accesslib.php:792-800) and can never see a CAP_PROHIBIT recorded below it. So an
+     * operator holding moodle/site:viewuseridentity site-wide, with it prohibited in one course -
+     * which is exactly what the Permissions page is for - passed the system check and was shown
+     * every pill of that course's applicants.
+     *
+     * The second course is the control, and it carries the whole weight of the test: the same
+     * reader, the same site-wide render, the same field. Without it a mask that withheld
+     * everything would pass, and so would a column that had stopped rendering.
+     *
+     * @return void
+     */
+    public function test_a_course_level_prohibit_withholds_that_courses_evidence(): void {
+        $open = $this->second_instance();
+
+        $this->applicant(null, $this->snapshot('Prohibitedtown'));
+        $this->applicant($open, $this->snapshot('Permittedtown'));
+
+        $this->setUser($this->sitewide_reader_prohibited_in($this->course));
+        $rendered = $this->rendered(0);
+
+        $this->assertStringContainsString('Permittedtown', $rendered);
+        $this->assertStringNotContainsString('Prohibitedtown', $rendered);
+    }
+
+    /**
+     * A second course with its own apply instance, for the scopes that span courses.
+     *
+     * @return \stdClass The enrol instance.
+     */
+    protected function second_instance(): \stdClass {
+        global $DB;
+
+        $course = $this->getDataGenerator()->create_course();
+        $id = $this->plugin->add_instance($course, $this->plugin->get_instance_defaults());
+
+        return $DB->get_record('enrol', ['id' => $id], '*', MUST_EXIST);
+    }
+
+    /**
+     * A site-wide decider who may see identity data everywhere except in one course.
+     *
+     * Both capabilities are granted at the system context, so this reader reaches the site-wide
+     * scope; the prohibit is recorded at the one course, which is the override a check made at
+     * the system context cannot see.
+     *
+     * @param \stdClass $course Course to withhold identity data in.
+     * @return \stdClass The user.
+     */
+    protected function sitewide_reader_prohibited_in(\stdClass $course): \stdClass {
+        $user = $this->getDataGenerator()->create_user();
+        $roleid = $this->getDataGenerator()->create_role();
+        $system = \context_system::instance();
+
+        assign_capability('enrol/apply:manageapplications', CAP_ALLOW, $roleid, $system->id, true);
+        assign_capability('moodle/site:viewuseridentity', CAP_ALLOW, $roleid, $system->id, true);
+        role_assign($roleid, $user->id, $system->id);
+
+        assign_capability(
+            'moodle/site:viewuseridentity',
+            CAP_PROHIBIT,
+            $roleid,
+            \context_course::instance($course->id)->id,
+            true
+        );
+
+        return $user;
     }
 
     /**

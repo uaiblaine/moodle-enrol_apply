@@ -116,9 +116,10 @@
        moves the Bootstrap tokens: [data-bs-theme="dark"] flips every --bs-* value, while the
        legacy .theme-dark recolours text directly and leaves them at their light values.
        Measured on m502 - under .theme-dark an inherited colour arrives as #dee2e6 while this
-       fill is still #e9ecef, which is 1.05:1 and simply invisible. Taking both halves from the
-       same token family gives 15:1 there (a light chip on a dark page - loud, but readable) and
-       8.9:1 under the token mechanism, where the pair flips together as Bootstrap intends. */
+       fill is still #e9ecef, which is 1.10:1 and simply invisible. Taking both halves from the
+       same token family gives 13.66:1 there (a light chip on a dark page - loud, but readable)
+       and 8.84:1 under the token mechanism, where the pair flips together as Bootstrap
+       intends. */
     color: var(--enrol-apply-ink);
     border-radius: 3px;
     display: inline-flex;

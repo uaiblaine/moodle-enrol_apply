@@ -299,7 +299,7 @@ final class bootstrap_compat_test extends \basic_testcase {
      * token, while the legacy .theme-dark recolours text directly and leaves the tokens at their
      * light values. So a fill read from a token and a colour left to inheritance come from
      * different mechanisms, and under .theme-dark the queue's evidence pills rendered #dee2e6 on
-     * #e9ecef - 1.05:1, invisible - while every automated gate stayed green. Nothing in the
+     * #e9ecef - 1.10:1, invisible - while every automated gate stayed green. Nothing in the
      * pipeline can see this: stylelint validates syntax, and no branch of CI renders a page in
      * either dark mode.
      *
