@@ -91,14 +91,22 @@ final class applications_test extends \advanced_testcase {
      *
      * @param \stdClass|null $instance Instance to apply to, null for this fixture's own.
      * @param string $snapshot Stored envelope of what they submitted, empty for none.
+     * @param array $userfields Overrides for the generated user, so a test can name them.
+     * @param int $enrolstatus Enrolment status to create them with; the queue's two are
+     *        ENROL_USER_SUSPENDED (pending) and ENROL_APPLY_USER_WAIT (deferred).
      * @return \stdClass The applicant.
      */
-    protected function applicant(?\stdClass $instance = null, string $snapshot = ''): \stdClass {
+    protected function applicant(
+        ?\stdClass $instance = null,
+        string $snapshot = '',
+        array $userfields = [],
+        int $enrolstatus = ENROL_USER_SUSPENDED
+    ): \stdClass {
         global $DB;
 
         $instance = $instance ?? $this->instance;
-        $user = $this->getDataGenerator()->create_user();
-        $this->plugin->enrol_user($instance, $user->id, null, 0, 0, ENROL_USER_SUSPENDED);
+        $user = $this->getDataGenerator()->create_user($userfields);
+        $this->plugin->enrol_user($instance, $user->id, null, 0, 0, $enrolstatus);
 
         /* **The row gets its OWN durable record, and that is not decoration.** Enrolling through
            enrol_user() alone leaves the queue's `s` join NULL, which makes
@@ -842,5 +850,281 @@ final class applications_test extends \advanced_testcase {
             get_string('queuesubmitted', 'enrol_apply'),
             $this->rendered(0)
         );
+    }
+
+    /**
+     * The listing scoped and narrowed, as the page builds it.
+     *
+     * @param int $enrolid Enrol instance to list, 0 for the scope with no instance.
+     * @param string $search Term to narrow by.
+     * @param int|null $status Enrolment status to narrow to.
+     * @return array User enrolment ids, in the order listed.
+     */
+    protected function narrowed(int $enrolid, string $search = '', ?int $status = null): array {
+        $table = applications::for_scope($enrolid, $search, $status);
+
+        ob_start();
+        $table->out(50, false);
+        ob_end_clean();
+
+        return array_map(static fn($row) => (int) $row->userenrolmentid, array_values($table->rawdata));
+    }
+
+    /**
+     * A search matches the applicant's name.
+     *
+     * The control is the second applicant, who is in the same queue and does not match: without
+     * one, a search that returned everything would pass just as well as a search that worked.
+     *
+     * @return void
+     */
+    public function test_a_search_narrows_the_queue_to_a_matching_name(): void {
+        $this->setAdminUser();
+        $wanted = $this->applicant(null, '', ['firstname' => 'Zephyrina', 'lastname' => 'Quillsworth']);
+        $this->applicant(null, '', ['firstname' => 'Bartholomew', 'lastname' => 'Underbough']);
+
+        $listed = $this->narrowed((int) $this->instance->id, 'quillsworth');
+
+        $this->assertCount(1, $listed);
+        $this->assertSame(
+            (int) $this->userenrolment($wanted),
+            $listed[0]
+        );
+    }
+
+    /**
+     * A search filter carrying the empty string lists the whole queue.
+     *
+     * Not a hypothetical request. string_filter::add_filter_value() is a complete override gating
+     * only on is_string(), so it never reaches the base class's rejection of '' - a client can
+     * install a live search filter carrying nothing, and treating that as a narrowing filter
+     * empties the queue the moment somebody clears the box.
+     *
+     * Driven through a filterset rather than through for_scope(), because for_scope() refuses an
+     * empty term itself and would hide the case this pins.
+     *
+     * @return void
+     */
+    public function test_a_search_filter_carrying_nothing_narrows_nothing(): void {
+        $this->setAdminUser();
+        $this->applicant();
+        $this->applicant();
+
+        $filterset = new applications_filterset();
+        $filterset->add_filter(new integer_filter('enrolid', null, [(int) $this->instance->id]));
+        $filterset->add_filter(new \core_table\local\filter\string_filter('search', null, ['']));
+
+        $table = new applications();
+        $table->set_filterset($filterset);
+        ob_start();
+        $table->out(50, false);
+        ob_end_clean();
+
+        $this->assertCount(2, $table->rawdata);
+        $this->assertFalse($table->is_narrowed());
+    }
+
+    /**
+     * A percent sign is a character to match, not a wildcard.
+     *
+     * **The control has to be a row only the BROKEN version reaches**, and the first version of
+     * this test had one that both versions rejected: against "100%Sure" and "Sure", searching
+     * "100%S" returns exactly one row either way, because "Sure" contains no "100" and so misses
+     * the wildcard reading too. Gate CY reddened nothing, which is how that was found.
+     *
+     * "100 Super" is the row that separates them. Escaped, the term is the literal "100%S" and
+     * only "100%Sure" holds it. Unescaped it becomes LIKE '%100%S%', where the middle percent is
+     * a wildcard - so "100 Super" matches as well, and an operator hunting one application is
+     * handed a queue with no indication why.
+     *
+     * @return void
+     */
+    public function test_a_percent_sign_in_a_search_is_matched_literally(): void {
+        $this->setAdminUser();
+        $wanted = $this->applicant(null, '', ['firstname' => 'Ninety', 'lastname' => '100%Sure']);
+        $decoy = $this->applicant(null, '', ['firstname' => 'Ninety', 'lastname' => '100 Super']);
+
+        $listed = $this->narrowed((int) $this->instance->id, '100%S');
+
+        $this->assertSame([(int) $this->userenrolment($wanted)], $listed);
+        $this->assertNotContains((int) $this->userenrolment($decoy), $listed);
+    }
+
+    /**
+     * The search reaches only what this reader can already see.
+     *
+     * A mentor gets no identity fields at all - identity::fields(null) returns nothing on the
+     * mentee scope - so their e-mail address must not be matchable either. It is in the SELECT
+     * regardless, because core's for_userpic() pulls it in, which is exactly why the search
+     * columns are derived from the identity mappings rather than from the projection.
+     *
+     * Searching is an oracle even when the value is never printed: submit a guess, read the count.
+     *
+     * The control is the same address searched on the instance scope as a reader who DOES hold the
+     * identity capability - it matches there, so an empty result above is about the mask and not
+     * about a search that never worked.
+     *
+     * @return void
+     */
+    public function test_a_reader_cannot_search_an_identity_field_they_may_not_see(): void {
+        $mentee = $this->applicant(null, '', ['email' => 'unguessable.address@example.org']);
+
+        $this->setUser($this->mentor($mentee));
+        $this->assertSame([], $this->narrowed(0, 'unguessable.address'));
+
+        // The control: the capability makes the same address matchable in the same fixture.
+        $this->setUser($this->decider(true));
+        $this->assertSame(
+            [(int) $this->userenrolment($mentee)],
+            $this->narrowed((int) $this->instance->id, 'unguessable.address')
+        );
+    }
+
+    /**
+     * The status filter narrows to one state, and the other one is the control.
+     *
+     * @return void
+     */
+    public function test_the_status_filter_separates_pending_from_deferred(): void {
+        $this->setAdminUser();
+        $pending = $this->applicant();
+        $deferred = $this->applicant(null, '', [], ENROL_APPLY_USER_WAIT);
+
+        $this->assertSame(
+            [(int) $this->userenrolment($pending)],
+            $this->narrowed((int) $this->instance->id, '', ENROL_USER_SUSPENDED)
+        );
+        $this->assertSame(
+            [(int) $this->userenrolment($deferred)],
+            $this->narrowed((int) $this->instance->id, '', ENROL_APPLY_USER_WAIT)
+        );
+    }
+
+    /**
+     * The status filter reads the ENROLMENT's status, not the durable record's.
+     *
+     * **The obvious trajectory cannot be tested, and choosing it made the first version of this
+     * test vacuous.** An approved participant later suspended from the participants page carries
+     * APPROVED on the record and SUSPENDED on the enrolment - and `submission::STATUS_APPROVED`
+     * is 1 while `ENROL_USER_SUSPENDED` is also 1, so both columns hold the same number and NO
+     * assertion on that row can tell the two apart. Gate CW is what found it: the mutation
+     * swapping the columns left that test green. It is the same "equal by coincidence rather
+     * than by contract" the table's own docblock warns about, arrived at from the fixture end.
+     *
+     * This trajectory separates them. An application is deferred, so the record says WAITING (2);
+     * an administrator then suspends the enrolment by hand from core's "Edit enrolment" screen,
+     * which touches no record of this plugin's, so the enrolment says SUSPENDED (1). The queue
+     * lists what is awaiting a decision NOW, which is the enrolment's question, so this row must
+     * answer to Pending. Read from the record it answers to Deferred instead - and an operator
+     * working the pending queue never sees it again.
+     *
+     * @return void
+     */
+    public function test_a_hand_suspended_deferral_is_pending_by_its_enrolment(): void {
+        global $DB;
+
+        $this->setAdminUser();
+        $applicant = $this->applicant();
+        $ueid = (int) $this->userenrolment($applicant);
+
+        // Deferred once, then the enrolment suspended by a route that writes no record.
+        $DB->set_field('enrol_apply_submission', 'status', submission::STATUS_WAITING, ['userenrolmentid' => $ueid]);
+
+        $this->assertSame([$ueid], $this->narrowed((int) $this->instance->id, '', ENROL_USER_SUSPENDED));
+        // And it is NOT reachable through the option its stale record names.
+        $this->assertSame([], $this->narrowed((int) $this->instance->id, '', ENROL_APPLY_USER_WAIT));
+    }
+
+    /**
+     * Every status the queue offers to filter by is one it can actually list.
+     *
+     * The list is the select's options, the values manage.php will accept back, and the values the
+     * predicate compares against - so a member that matches nothing is an option that empties the
+     * queue for no stated reason. ENROL_USER_ACTIVE is the one that must never be in it:
+     * queue::awaiting_decision_where() excludes it by construction, so it would be an option that
+     * can only ever return zero rows.
+     *
+     * This is the vocabulary half of a defect Behat caught and no unit test could: the select's
+     * "any status" option carries the empty string, the GET form submits `status=` regardless, and
+     * PARAM_INT cleans that to 0 - which IS ENROL_USER_ACTIVE. Reading it with a `>= 0` sentinel
+     * turned every search made through the form into a filter on a status no row can hold.
+     *
+     * @return void
+     */
+    public function test_every_filterable_status_can_actually_be_listed(): void {
+        $this->setAdminUser();
+
+        $statuses = applications::filterable_statuses();
+        $this->assertNotEmpty($statuses);
+        $this->assertNotContains(ENROL_USER_ACTIVE, $statuses);
+
+        foreach ($statuses as $status) {
+            $applicant = $this->applicant(null, '', [], $status);
+            $this->assertSame(
+                [(int) $this->userenrolment($applicant)],
+                $this->narrowed((int) $this->instance->id, '', $status),
+                'a filterable status listed nothing'
+            );
+            // Cleared before the next one, so each assertion is about its own status alone.
+            $this->plugin->unenrol_user($this->instance, $applicant->id);
+        }
+    }
+
+    /**
+     * The scope total is what the filters are measured against, so no filter moves it.
+     *
+     * It is the "of 312" in the count line and the number the capacity header reports, and those
+     * two being one method is the point: a filtered total in the header renders "4 awaiting
+     * decision" beside a deferred count that is instance-wide.
+     *
+     * @return void
+     */
+    public function test_the_scope_total_ignores_the_filters(): void {
+        $this->setAdminUser();
+        $this->applicant(null, '', ['firstname' => 'Zephyrina', 'lastname' => 'Quillsworth']);
+        $this->applicant();
+        $this->applicant(null, '', [], ENROL_APPLY_USER_WAIT);
+
+        $table = applications::for_scope((int) $this->instance->id, 'quillsworth');
+        ob_start();
+        $table->out(50, false);
+        ob_end_clean();
+
+        $this->assertCount(1, $table->rawdata);
+        $this->assertSame(3, $table->scope_total());
+    }
+
+    /**
+     * Paging and sorting carry the filters, which no row-level assertion can see.
+     *
+     * Every test above stays green if guess_base_url() drops them - the rows are right, and the
+     * defect is that the SECOND page of them is not. So this asserts the emitted url.
+     *
+     * @return void
+     */
+    public function test_the_base_url_carries_the_filters(): void {
+        $this->setAdminUser();
+
+        $table = applications::for_scope((int) $this->instance->id, 'quillsworth', ENROL_APPLY_USER_WAIT);
+
+        $this->assertSame('quillsworth', $table->baseurl->param('search'));
+        $this->assertSame(ENROL_APPLY_USER_WAIT, (int) $table->baseurl->param('status'));
+        $this->assertSame((int) $this->instance->id, (int) $table->baseurl->param('id'));
+    }
+
+    /**
+     * The user enrolment id of an applicant on this fixture's instance.
+     *
+     * @param \stdClass $user The applicant.
+     * @param \stdClass|null $instance Instance they applied to, null for this fixture's own.
+     * @return int The user enrolment id.
+     */
+    protected function userenrolment(\stdClass $user, ?\stdClass $instance = null): int {
+        global $DB;
+
+        return (int) $DB->get_field('user_enrolments', 'id', [
+            'userid' => $user->id,
+            'enrolid' => (int) ($instance ?? $this->instance)->id,
+        ], MUST_EXIST);
     }
 }

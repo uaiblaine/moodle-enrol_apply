@@ -39,7 +39,7 @@ mdl mutate moodle-enrol_apply mutations/gates.conf --dry-run   # patterns only, 
 mdl mutate moodle-enrol_apply mutations/gates.conf             # the mutation sweep
 ```
 
-**`mutations/gates.conf` pairs nine guards with the test each one must redden**, and it is
+**`mutations/gates.conf` pairs a hundred guards with the test each one must redden**, and it is
 the executable form of a claim this repository makes constantly in prose. Add a mutation in
 the same change as the guard it protects; a guard whose mutation reddens nothing is held by
 no test, whatever its comment says. `mutations/README.md` has the rules, including the two

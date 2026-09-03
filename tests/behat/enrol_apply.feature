@@ -84,6 +84,47 @@ Feature: Enrolment upon approval
     And I am on "Course 1" course homepage
     And I should not see "New section"
 
+  # No @javascript, and that is the point of this one. The filters have to work as a plain GET
+  # form, and this scenario is also the ONLY thing holding manage.php's url threading: the search
+  # has to survive the decision round trip, which no unit test can see because a page script's url
+  # assembly has no unit to redden. mutations/gates.conf records that absence deliberately.
+  Scenario: Searching the queue narrows it, and the search survives a decision
+    Given the following "users" exist:
+      | username | firstname  | lastname    | email                  |
+      | student2 | Zephyrina  | Quillsworth | student2@example.com   |
+    And I log in as "student1"
+    And I am on "Course 1" course homepage
+    And I press "Start application"
+    And I press "Submit application"
+    And I log out
+    And I log in as "student2"
+    And I am on "Course 1" course homepage
+    And I press "Start application"
+    And I press "Submit application"
+    And I log out
+    When I log in as "teacher1"
+    And I am on the "C1" "enrol_apply > manage applications" page
+    Then I should see "Student 1"
+    And I should see "Zephyrina Quillsworth"
+    # Narrowing to one of the two, with the other as the control on every assertion below.
+    When I set the field "Search" to "quillsworth"
+    And I press "Apply filters"
+    Then I should see "Zephyrina Quillsworth"
+    And I should not see "Student 1"
+    And I should see "Search quillsworth"
+    And I should see "1 of 2 applications"
+    # The decision returns through manage.php's own redirect, which is where the search is lost
+    # if the url does not carry it.
+    When I set the field "Select Zephyrina Quillsworth" to "1"
+    And I set the field "With selected users..." to "Confirm requests"
+    And I press "Go"
+    Then I should see "Search quillsworth"
+    And I should see "No application matches the filters applied"
+    # And clearing it brings back the application the filter was hiding all along.
+    When I follow "Clear all"
+    Then I should see "Student 1"
+    And I should not see "Search quillsworth"
+
   # The second decision route: core's own participants page. @javascript is not a choice
   # here and it is the opposite of the queue's bar above - core ships the "With selected
   # users..." select DISABLED and only core/checkbox-toggleall clears it, so without

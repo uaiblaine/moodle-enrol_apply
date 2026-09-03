@@ -42,6 +42,24 @@ $id = optional_param('id', 0, PARAM_INT);
 $userenrol = optional_param('userenrol', 0, PARAM_INT);
 $formaction = optional_param('formaction', '', PARAM_ALPHA);
 $userenrolments = optional_param_array('userenrolments', [], PARAM_INT);
+/* The queue's own filters, read here rather than left to the table, because three other things on
+   this page are built from them: $PAGE->set_url(), the decision form's action, and the redirect a
+   decision returns through. PARAM_NOTAGS and not PARAM_RAW - the value is echoed into an input's
+   value, into a chip label and into a lang-string parameter, and PARAM_NOTAGS additionally runs
+   fix_utf8(), without which flexible_table's json_encode() of the filterset returns false on
+   invalid input. The status sentinel is -1 rather than 0 because 0 is a real enrolment status. */
+$search = trim(optional_param('search', '', PARAM_NOTAGS));
+/* Read as text and validated against the vocabulary, NOT as PARAM_INT with a sentinel. The status
+   select's "any status" option carries the empty string, so the GET form submits `status=`
+   whenever no status is chosen - and PARAM_INT cleans '' to 0, which is ENROL_USER_ACTIVE. With a
+   `>= 0` sentinel every search made through the form therefore also applied a status no row in
+   this queue can hold, and came back empty. Only a Behat scenario that pressed the button could
+   see it: every hand-built url in testing carried no status parameter at all. */
+$statusparam = optional_param('status', '', PARAM_RAW_TRIMMED);
+$status = null;
+if ($statusparam !== '' && in_array((int) $statusparam, \enrol_apply\table\applications::filterable_statuses(), true)) {
+    $status = (int) $statusparam;
+}
 
 require_login();
 
@@ -121,6 +139,23 @@ if ($userenrol) {
            each caller raises in the way its own path raises. The context differs by scope - the
            course for ?id=, the system context otherwise - and each is the one that was checked. */
         require_capability('enrol/apply:manageapplications', $context);
+    }
+}
+
+/* Before the url is built, and that ordering is the whole point. This url is $PAGE->set_url(),
+   which is where flexible_table's "Show all / Show per page" link reads its parameters from
+   (get_dynamic_table_html_end() uses $PAGE->url, not the table's base url); it is the decision
+   form's action; and it is what a decision redirects back to. Leave the filters out of it and an
+   operator who narrows the queue to four rows and confirms them lands back in all 312.
+
+   Only on the listing path: on the review path the parameters name nothing, and carrying them
+   would put a stale search into the url of a page that has no queue on it. */
+if (!$userenrol) {
+    if ($search !== '') {
+        $manageurlparams['search'] = $search;
+    }
+    if ($status !== null) {
+        $manageurlparams['status'] = $status;
     }
 }
 
@@ -355,5 +390,5 @@ if ($userenrol) {
    judges the identity fields, the wording of the comment heading - resolved from it inside. Those
    three used to be computed here and passed in, which meant this page and the web service that
    refreshes its rows each decided them separately. */
-$table = \enrol_apply\table\applications::for_scope((int) $id);
+$table = \enrol_apply\table\applications::for_scope((int) $id, $search, $status);
 $renderer->manage_page($table, $manageurl, $instance);

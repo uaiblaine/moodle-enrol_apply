@@ -1,0 +1,116 @@
+{{!
+    This file is part of Moodle - http://moodle.org/
+
+    Moodle is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Moodle is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+}}
+{{!
+    @template enrol_apply/queue_filters
+
+    The controls that narrow the applications queue.
+
+    A GET form, and it sits OUTSIDE the decision form on purpose: manage.mustache wraps the whole
+    body in a single POST form and HTML forbids nesting one form inside another, so a search box
+    placed inside it would submit the decision instead.
+
+    It carries the scope as a hidden field because a GET submit replaces the query string entirely
+    rather than merging into it. It deliberately carries no paging or sorting parameters: core never
+    clamps a stale page number, so keeping page three across a search that now matches four rows
+    would render an empty table.
+
+    Every chip's remove control is a real link naming the filters that survive it, so the row works
+    with scripting off. Describe tags in prose here rather than writing them, because a Mustache
+    comment ends at the first closing pair of braces.
+
+    Classes required for JS:
+    * none - the module attaches by data-region.
+
+    Data attributes required for JS:
+    * data-region="queuefilters" on the form, the module's root.
+    * data-region="searchinput" on the search field.
+    * data-region="statusselect" on the status field.
+    * data-region="filtercount" on the count line.
+
+    Context variables required for this template:
+    * formaction string - url the GET form submits to
+    * hasscope boolean - whether a scope id must ride along
+    * scopeid int - the enrol instance id
+    * searchlabel string - visible label for the search field
+    * searchvalue string - the term currently applied
+    * searchhelp string - rendered help icon for the search field
+    * statuslabel string - visible label for the status select
+    * statusoptions array - value, label and selected for each option
+    * haschips boolean - whether any filter is applied
+    * chips array - name, value, removeurl and removelabel for each applied filter
+    * clearurl string - url that removes every filter
+    * clearlabel string - wording of the clear-all control
+    * counttext string - how many applications match, of how many
+
+    Example context (json): {
+        "formaction": "https://example.com/enrol/apply/manage.php",
+        "hasscope": true,
+        "scopeid": 140,
+        "searchlabel": "Search",
+        "searchvalue": "goncalves",
+        "searchhelp": "",
+        "statuslabel": "Application status",
+        "statusoptions": [
+            {"value": "", "label": "Any status", "selected": false},
+            {"value": "1", "label": "Pending", "selected": true},
+            {"value": "2", "label": "Deferred", "selected": false}
+        ],
+        "haschips": true,
+        "chips": [
+            {
+                "name": "Search",
+                "value": "goncalves",
+                "removeurl": "https://example.com/enrol/apply/manage.php?id=140",
+                "removelabel": "Remove the filter Search: goncalves"
+            }
+        ],
+        "clearurl": "https://example.com/enrol/apply/manage.php?id=140",
+        "clearlabel": "Clear all",
+        "counttext": "4 of 312 applications"
+    }
+}}
+<form method="get" action="{{formaction}}" class="enrol_apply-filters mb-3" data-region="queuefilters">
+    {{#hasscope}}<input type="hidden" name="id" value="{{scopeid}}">{{/hasscope}}
+    <div class="enrol_apply-filterrow">
+        <div class="enrol_apply-filterfield">
+            <label class="form-label" for="enrol_apply_search">{{searchlabel}}{{{searchhelp}}}</label>
+            <input type="text" class="form-control" id="enrol_apply_search" name="search"
+                   value="{{searchvalue}}" data-region="searchinput" autocomplete="off">
+        </div>
+        <div class="enrol_apply-filterfield">
+            <label class="form-label" for="enrol_apply_status">{{statuslabel}}</label>
+            <select class="form-select" id="enrol_apply_status" name="status" data-region="statusselect">
+                {{#statusoptions}}
+                    <option value="{{value}}" {{#selected}}selected{{/selected}}>{{label}}</option>
+                {{/statusoptions}}
+            </select>
+        </div>
+        <div class="enrol_apply-filterfield enrol_apply-filtersubmit">
+            <button type="submit" class="btn btn-secondary">{{#str}}applyfilters, core{{/str}}</button>
+        </div>
+    </div>
+    <div class="enrol_apply-chiprow">
+        {{#chips}}
+            <span class="enrol_apply-chip">
+                <span class="enrol_apply-chipname">{{name}}</span> {{value}}
+                <a href="{{removeurl}}" class="enrol_apply-chipremove" aria-label="{{removelabel}}">&#10005;</a>
+            </span>
+        {{/chips}}
+        {{#haschips}}<a href="{{clearurl}}" class="enrol_apply-clearall small">{{clearlabel}}</a>{{/haschips}}
+        <span class="enrol_apply-filtercount small text-muted" data-region="filtercount" aria-live="polite">{{counttext}}</span>
+    </div>
+</form>

@@ -7,8 +7,10 @@
    The chains read the theme's own tokens rather than inventing a palette. 5.1 and 5.2 both ship
    dark mode, so a literal grey renders as a light slab inside a dark page; and a site with its own
    institutional colour must not see this plugin's instead. */
+.enrol_apply-queue,
 .enrol_apply-manage,
-.enrol_apply-capacity {
+.enrol_apply-capacity,
+.enrol_apply-filters {
     --enrol-apply-line: var(--bs-border-color, #dee2e6);
     --enrol-apply-muted: var(--bs-secondary-color, #6c757d);
     --enrol-apply-fill: var(--bs-primary, #0f6cbf);
@@ -100,6 +102,67 @@
 
 .enrol_apply-applyago {
     white-space: nowrap;
+}
+
+/* The controls that narrow the queue. A percentage basis with a rem floor rather than
+   repeat(auto-fit, minmax(...)): the gate rejects minmax(max(...)) outright, and a plain auto-fit
+   yields a third column on a wide page where two were meant. */
+.enrol_apply-filterrow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+}
+
+.enrol_apply-filterfield {
+    flex: 1 1 30%;
+    min-width: 12rem;
+}
+
+/* Boost sizes a bare select to its content, so the status control ended a third of the way
+   across a field that had already claimed its share of the row - a gap that reads as a missing
+   control rather than as spare width. */
+.enrol_apply-filterfield select {
+    width: 100%;
+}
+
+.enrol_apply-filtersubmit {
+    align-self: flex-end;
+    flex: 0 0 auto;
+    min-width: 0;
+}
+
+.enrol_apply-chiprow {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.75rem;
+    margin-top: 0.5rem;
+}
+
+/* Both halves of the pair from the same token family, never an inherited foreground: Moodle 5.2
+   ships two dark mechanisms and only [data-bs-theme="dark"] moves the --bs-* tokens, so a fill
+   taken from a token beside text taken from inheritance is unreadable under the legacy
+   .theme-dark. The stylesheet test enforces this on every rule that paints a background. */
+.enrol_apply-chip {
+    background-color: var(--enrol-apply-track);
+    border-radius: 3px;
+    color: var(--enrol-apply-ink);
+    font-size: 0.8125rem;
+    padding: 0.1rem 0.4rem;
+}
+
+.enrol_apply-chipname {
+    color: var(--enrol-apply-muted);
+    font-weight: 600;
+}
+
+.enrol_apply-chipremove {
+    margin-left: 0.35rem;
+    text-decoration: none;
+}
+
+.enrol_apply-filtercount {
+    margin-left: auto;
 }
 
 /* The evidence cell: one pill per answer the applicant gave.

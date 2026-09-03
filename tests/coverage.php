@@ -63,6 +63,7 @@ class enrol_apply_coverage extends phpunit_coverage_info {
     protected $includelistfiles = [
         'applied.php',
         'apply.php',
+        'db/install.php',
         'db/upgrade.php',
         'db/upgradelib.php',
         'edit.php',

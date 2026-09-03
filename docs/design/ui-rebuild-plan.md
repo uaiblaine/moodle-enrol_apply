@@ -697,7 +697,8 @@ widest reading is the one taken.
 | **1** | `queue::listing_scope()`, `\enrol_apply\table\applications` and its filterset, the death of `manage_table.php`, the four gates that named it, the eight test files that built it | Structural, with **no visible change**. The diff is large and the behaviour is not, so a regression in it is legible |
 | **2** | The capacity header, the per-row Review link, the applicant cell (picture, name, badges, identity as a second line), the footer counts, responsive cards, a bulk bar that does not lie | Mockup A's surface, on a structure that already holds |
 | ~~**2b**~~ | ~~The "Submitted with the application" column~~ — **done 2026-09-03** | See below — it is in the mockup and in neither task list, and it is not a cell like the others |
-| **3** | The search (GET, then as-you-type) and the status filter, the chip row, "clear all", the counts | The two filters that narrow columns the query already has |
+| **3a** | The search (GET), the status filter, the chip row, "clear all", the counts — everything server-side | The two filters that narrow columns the query already has |
+| **3b** | The as-you-type half: the debounce, chip removal without a reload, the rebuilt AMD bundle | Split from 3a for the reason U5a/U5b were split in the first place — `amd/build/**` and the `grunt --max-lint-warnings 0` gate enter on their own slice, so a red leg is attributable to one mechanism rather than three |
 | **4** | The identity filters (city, institution) and the date filter | Both depend on site configuration — the identity field list varies — and a date range is a different filter class |
 
 **PR 2b exists because a column went missing from both task lists.** Mockup A carries a

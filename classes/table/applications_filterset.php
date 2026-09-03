@@ -18,6 +18,7 @@ namespace enrol_apply\table;
 
 use core_table\local\filter\filterset;
 use core_table\local\filter\integer_filter;
+use core_table\local\filter\string_filter;
 
 /**
  * What the applications table may be filtered by.
@@ -63,13 +64,28 @@ class applications_filterset extends filterset {
     /**
      * The filters that may be present.
      *
-     * None yet. The status, search and identity-field filters of the rebuilt queue arrive in
-     * their own slices, and each is optional by definition: a listing with no filters applied is
-     * the ordinary case.
+     * Optional by definition: a listing with no filters applied is the ordinary case, and the
+     * required enrolid above is the only thing a request must say.
+     *
+     * `search` is a string_filter and `status` an integer_filter, and the two classes behave
+     * differently in a way that decides code elsewhere. integer_filter::add_filter_value() tests
+     * is_int() and throws a TypeError on anything else, so a value read from a DOM dataset - where
+     * everything is a string - has to be cast first. string_filter::add_filter_value() is a
+     * COMPLETE override that gates only on is_string() and never reaches the base class, whose
+     * `''` rejection (lib/table/classes/local/filter/filter.php:218-221) therefore never runs for
+     * it: an empty search string installs a live filter carrying nothing. applications::set_filterset()
+     * treats that as no filter, because the alternative is a queue that empties itself the moment
+     * somebody clears the box.
+     *
+     * The identity-field and date filters of the mockup are not here: they arrive in their own
+     * slice, and both depend on site configuration this one does not read.
      *
      * @return array Filter name => filter class.
      */
     public function get_optional_filters(): array {
-        return [];
+        return [
+            'search' => string_filter::class,
+            'status' => integer_filter::class,
+        ];
     }
 }

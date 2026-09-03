@@ -197,6 +197,129 @@ final class renderer_test extends \advanced_testcase {
     }
 
     /**
+     * The queue rendered with a filter applied that matches nothing.
+     *
+     * @param string $search Term to narrow by.
+     * @return string The rendered form.
+     */
+    private function render_filtered_queue(string $search): string {
+        global $DB, $PAGE;
+
+        $this->setAdminUser();
+        $applicant = $this->getDataGenerator()->create_user(['firstname' => 'Zephyrina', 'lastname' => 'Quillsworth']);
+        $this->plugin->enrol_user($this->instance, $applicant->id, null, 0, 0, ENROL_USER_SUSPENDED);
+        $ueid = (int) $DB->get_field(
+            'user_enrolments',
+            'id',
+            ['userid' => $applicant->id, 'enrolid' => $this->instance->id],
+            MUST_EXIST
+        );
+        $DB->insert_record('enrol_apply_applicationinfo', (object) ['userenrolmentid' => $ueid, 'comment' => '']);
+
+        $url = new \moodle_url('/enrol/apply/manage.php', ['id' => $this->instance->id, 'search' => $search]);
+        $PAGE->set_url($url);
+        $PAGE->set_context(\context_course::instance($this->course->id));
+
+        $table = \enrol_apply\table\applications::for_scope((int) $this->instance->id, $search);
+
+        return $PAGE->get_renderer('enrol_apply')->manage_form($table, $url, $this->instance);
+    }
+
+    /**
+     * A filter that matches nothing leaves every control on the page.
+     *
+     * The queue used to gate its count line, its decision controls and its sticky footer on the
+     * server-side "has rows", which a search that matches nothing makes false - so the operator
+     * lost the box they had just typed in and had no way back but the browser's own history. It
+     * is worse over AJAX: the refresh replaces the table's region alone and never re-renders this
+     * template, so clearing the filter brought rows and checkboxes back with no bar to act on.
+     *
+     * The control is the row that exists but does not match: it proves the fixture has an
+     * application, so an empty table here is the filter's doing.
+     *
+     * @return void
+     */
+    public function test_a_filter_matching_nothing_keeps_the_controls(): void {
+        $rendered = $this->render_filtered_queue('nothingmatchesthis');
+
+        // The row exists and did not match, which is what makes the assertions below about the filter.
+        $this->assertStringNotContainsString('Quillsworth', $rendered);
+        $this->assertStringContainsString(get_string('queuefilterempty', 'enrol_apply'), $rendered);
+        $this->assertStringContainsString('data-region="queuefilters"', $rendered);
+        $this->assertStringContainsString('name="search"', $rendered);
+        // The bulk bar and its chooser, which used to vanish with the rows.
+        $this->assertStringContainsString('enrol-apply-queue', $rendered);
+    }
+
+    /**
+     * The capacity header counts the whole queue while the table counts the matches.
+     *
+     * The tile beside it reports deferrals read straight from \enrol_apply\local\capacity and is
+     * instance-wide whatever was typed, so a filtered number in the first tile renders a pair that
+     * cannot both be true - and it reads as a fault in the capacity figures rather than in the
+     * count.
+     *
+     * @return void
+     */
+    public function test_the_capacity_header_counts_the_whole_queue_not_the_matches(): void {
+        $rendered = $this->render_filtered_queue('nothingmatchesthis');
+
+        // One application in scope, none matching: the header says 1 and the count line says 0 of 1.
+        $this->assertStringContainsString('>1<', $rendered);
+        $this->assertStringContainsString(
+            get_string('queuefiltercount', 'enrol_apply', (object) ['matched' => 0, 'total' => 1]),
+            $rendered
+        );
+    }
+
+    /**
+     * An empty queue with no filter applied still says what core says.
+     *
+     * The control on the filtered-empty message. That override exists because "Nothing to display"
+     * over a search that matched nothing reads as "this queue is empty", which sends the operator
+     * looking for a fault in the enrolment method rather than at the box they just typed in. Make
+     * it fire unconditionally, though, and a method with no applications at all tells its manager
+     * to clear filters that are not there.
+     *
+     * A Behat scenario asserts core's string on this same state, so the pair is held on both
+     * sides; this is the half a mutation sweep can see, since mdl mutate runs PHPUnit.
+     *
+     * @return void
+     */
+    public function test_an_empty_queue_with_no_filter_says_what_core_says(): void {
+        global $PAGE;
+
+        $this->setAdminUser();
+        $url = new \moodle_url('/enrol/apply/manage.php', ['id' => $this->instance->id]);
+        $PAGE->set_url($url);
+        $PAGE->set_context(\context_course::instance($this->course->id));
+
+        $table = \enrol_apply\table\applications::for_scope((int) $this->instance->id);
+        $rendered = $PAGE->get_renderer('enrol_apply')->manage_form($table, $url, $this->instance);
+
+        $this->assertStringContainsString(get_string('nothingtodisplay'), $rendered);
+        $this->assertStringNotContainsString(get_string('queuefilterempty', 'enrol_apply'), $rendered);
+    }
+
+    /**
+     * A chip names the filter it removes, and its link drops only that one.
+     *
+     * @return void
+     */
+    public function test_a_chip_names_its_filter_and_removes_only_itself(): void {
+        $rendered = $this->render_filtered_queue('quillsworth');
+
+        $this->assertStringContainsString(
+            get_string('queueremovefilter', 'enrol_apply', (object) [
+                'name' => get_string('queuesearch', 'enrol_apply'),
+                'value' => 'quillsworth',
+            ]),
+            $rendered
+        );
+        $this->assertStringContainsString(get_string('queueclearfilters', 'enrol_apply'), $rendered);
+    }
+
+    /**
      * Render the queue for one instance, with one pending application in it.
      *
      * @return string The rendered form.
@@ -245,11 +368,17 @@ final class renderer_test extends \advanced_testcase {
     /**
      * The decision context renders on an EMPTY queue, which is when it explains the most.
      *
-     * The whole reason the header sits outside the hasrows section of the template. A method
-     * whose applicant limit is reached holds an empty queue - every application it is counting
-     * may be deferred, and a deferred one is freed by nothing - so the state whose only symptom
-     * is "there is nothing here" is exactly the state the numbers are for. Inside that section
-     * they would vanish at that moment.
+     * The whole reason the header sits outside the decision form. A method whose applicant limit
+     * is reached holds an empty queue - every application it is counting may be deferred, and a
+     * deferred one is freed by nothing - so the state whose only symptom is "there is nothing
+     * here" is exactly the state the numbers are for. Gated on rows, they would vanish at that
+     * moment.
+     *
+     * The control used to be that the bulk bar is ABSENT here, which stopped being true when the
+     * filters arrived: a search matching nothing must not take away the controls, so the template
+     * gates nothing on the row count any more. The closed notice replaces it - this instance has
+     * no applicant limit, so that notice is genuinely withheld, and the assertions above are
+     * still not being satisfied by a template that renders everything it is given.
      *
      * @return void
      */
@@ -268,9 +397,16 @@ final class renderer_test extends \advanced_testcase {
         $this->assertSame(0, (int) $table->totalrows);
         $this->assertStringContainsString(get_string('queueawaiting', 'enrol_apply'), $html);
         $this->assertStringContainsString(get_string('queuedeferred', 'enrol_apply'), $html);
-        /* The control: the section that DOES depend on rows really is gone, so the assertions
-           above are not being satisfied by a template that renders everything unconditionally. */
-        $this->assertStringNotContainsString(get_string('withselectedusers'), $html);
+        /* The control: a section the template really does withhold. Without an applicant limit
+           there is no closed notice, so the assertions above are not being satisfied by a
+           template that renders every string it is handed. */
+        $this->assertStringNotContainsString(get_string('applicationsclosednotice', 'enrol_apply', (object) [
+            'held' => 0,
+            'limit' => 0,
+            'deferred' => 0,
+        ]), $html);
+        // And the bulk bar IS here now, on an empty queue, which is the behaviour that replaced it.
+        $this->assertStringContainsString(get_string('withselectedusers'), $html);
     }
 
     /**
@@ -556,8 +692,11 @@ final class renderer_test extends \advanced_testcase {
         $footerat = strpos($html, 'id="sticky-footer"');
         $this->assertNotFalse($footerat, 'the bar is rendered into core\'s sticky footer');
 
-        $formopen = strpos($html, '<form ');
-        $formclose = strpos($html, '</form>');
+        /* The DECISION form specifically. A plain search for the first "<form " now finds the
+           filter bar's GET form, which is rendered before this one and must be - HTML forbids
+           nested forms, so a search box inside the decision form would submit a decision. */
+        $formopen = strpos($html, '<form id="enrol_apply_manage_form"');
+        $formclose = strpos($html, '</form>', $formopen);
         $this->assertNotFalse($formopen);
         $this->assertNotFalse($formclose);
         $this->assertGreaterThan($formopen, $footerat, 'the footer opens after the form does');

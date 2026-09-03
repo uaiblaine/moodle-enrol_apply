@@ -37,6 +37,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   method never asked for. The column is absent on the mentee scope, where it would be empty on
   every row.
 
+  **The queue can now be narrowed.** A search box matches the applicant's name, the identity fields
+  the reader is allowed to see, the application comment, and — on the queues that span courses —
+  the course name. It matches only what that reader could already read on the row: a column that
+  merely happens to be in the query, such as the e-mail address core's user-picture fields always
+  select, is not searchable, because a hit count answers a question about a value the page never
+  showed. Accents are ignored on MySQL and MariaDB, and on PostgreSQL sites whose database allows
+  the `unaccent` extension to be installed; elsewhere the search stays accent-sensitive, and the
+  search field's help says so. A percent sign is matched literally rather than as a wildcard.
+
+  Beside it a status filter separates applications still pending from those deferred to the waiting
+  list, reading the enrolment's own status so that an approved participant later suspended — who
+  re-enters this queue — is listed as pending rather than disappearing. Each applied filter gets a
+  chip naming it, removable on its own, with a "Clear all" beside them and a count of how many
+  applications match out of how many the queue holds. All of it works with JavaScript off, as a
+  plain GET form, and paging and sorting keep the filters.
+
+  Two things that were wrong before and are corrected by the same change: the capacity header's
+  first tile now counts the whole queue rather than the filtered rows, which it had to for the
+  deferred count beside it to be arithmetically possible; and the decision controls, the bulk bar
+  and the count line no longer disappear when the table has no rows — a filter that matches nothing
+  used to take away the box the operator had just typed in.
+
   Below the breakpoint each row becomes a card. The bulk bar says how many rows are selected **on
   this page**, and resets itself when a page turn, a sort or a filter change replaces the table —
   the bar lives outside the region that gets replaced, so it used to survive with a stale count
