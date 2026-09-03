@@ -90,9 +90,10 @@ final class applications_test extends \advanced_testcase {
      * Put one applicant on the given instance's queue.
      *
      * @param \stdClass|null $instance Instance to apply to, null for this fixture's own.
+     * @param string $snapshot Stored envelope of what they submitted, empty for none.
      * @return \stdClass The applicant.
      */
-    protected function applicant(?\stdClass $instance = null): \stdClass {
+    protected function applicant(?\stdClass $instance = null, string $snapshot = ''): \stdClass {
         global $DB;
 
         $instance = $instance ?? $this->instance;
@@ -116,7 +117,7 @@ final class applications_test extends \advanced_testcase {
                 'enrolid' => (int) $instance->id,
             ], MUST_EXIST),
             'comment' => 'Please let me in',
-            'userinfodata' => '',
+            'userinfodata' => $snapshot,
             'status' => submission::STATUS_PENDING,
             'outcomemessage' => '',
             'timecreated' => time(),
@@ -571,5 +572,180 @@ final class applications_test extends \advanced_testcase {
         /* And the scope they DO hold still works, so the refusal above is about the instance and
            not about the operator. */
         $this->assertTrue(applications::for_scope(0)->has_capability());
+    }
+
+    /**
+     * A stored envelope holding one name field and one identity field.
+     *
+     * Two fields on purpose, and the second is what makes every masking assertion in this file
+     * non-vacuous: a reader without the identity capability keeps the name and loses the city,
+     * so an empty cell fails the test instead of passing it.
+     *
+     * @param string $city Value for the identity half, so a test can vary it.
+     * @return string The JSON envelope, as the submission would have written it.
+     */
+    protected function snapshot(string $city = 'Ouropretoville'): string {
+        return (string) json_encode([
+            'version' => submission::SNAPSHOT_VERSION,
+            'fields' => [
+                ['key' => 's_firstname', 'label' => 'Given name', 'value' => 'Zephyrina'],
+                ['key' => 's_city', 'label' => 'Hometown', 'value' => $city],
+            ],
+        ]);
+    }
+
+    /**
+     * A decider on this course's applications, with or without the identity capability.
+     *
+     * The capability is PROHIBITed rather than left unset for the negative case, because this
+     * role is assigned beside whatever else the site gives an authenticated user and a default
+     * elsewhere would decide the test rather than the code.
+     *
+     * @param bool $identity Whether they may see identity data in the course.
+     * @return \stdClass The user.
+     */
+    protected function decider(bool $identity): \stdClass {
+        $context = \context_course::instance($this->course->id);
+        $user = $this->getDataGenerator()->create_user();
+        $roleid = $this->getDataGenerator()->create_role();
+
+        assign_capability('enrol/apply:manageapplications', CAP_ALLOW, $roleid, $context->id, true);
+        assign_capability(
+            'moodle/site:viewuseridentity',
+            $identity ? CAP_ALLOW : CAP_PROHIBIT,
+            $roleid,
+            $context->id,
+            true
+        );
+        role_assign($roleid, $user->id, $context->id);
+
+        return $user;
+    }
+
+    /**
+     * The queue shows the answers the decision is actually made on.
+     *
+     * The complaint the whole rebuild answers: the page this replaces showed the applicant, the
+     * date and a comment, and the submitted profile answers - the evidence - nowhere at all.
+     *
+     * Label and value are both asserted. A cell printing values with no labels is a list of
+     * strings nobody can read, and one printing labels with no values is a presence oracle.
+     *
+     * @return void
+     */
+    public function test_the_queue_shows_what_the_applicant_submitted(): void {
+        $this->setAdminUser();
+        $this->applicant(null, $this->snapshot());
+
+        $rendered = $this->rendered((int) $this->instance->id);
+
+        $this->assertStringContainsString(get_string('queuesubmitted', 'enrol_apply'), $rendered);
+        $this->assertStringContainsString('Hometown', $rendered);
+        $this->assertStringContainsString('Ouropretoville', $rendered);
+    }
+
+    /**
+     * A reader who may not see identity data does not see it here either.
+     *
+     * The mask is the report's own, so the three surfaces onto this record cannot answer
+     * differently about the same reader. The name field is the control: it survives, so an empty
+     * cell - or a column that stopped rendering at all - cannot pass this test.
+     *
+     * The label is asserted absent alongside the value, because a withheld field that still
+     * prints its label tells the reader which applicants filled that field in.
+     *
+     * @return void
+     */
+    public function test_the_evidence_is_masked_for_a_reader_without_the_identity_capability(): void {
+        $this->applicant(null, $this->snapshot());
+
+        // The control, and it is a reader rather than admin so that only the capability differs.
+        $this->setUser($this->decider(true));
+        $withidentity = $this->rendered((int) $this->instance->id);
+        $this->assertStringContainsString('Zephyrina', $withidentity);
+        $this->assertStringContainsString('Ouropretoville', $withidentity);
+
+        $this->setUser($this->decider(false));
+        $without = $this->rendered((int) $this->instance->id);
+
+        $this->assertStringContainsString('Zephyrina', $without);
+        $this->assertStringNotContainsString('Ouropretoville', $without);
+        $this->assertStringNotContainsString('Hometown', $without);
+    }
+
+    /**
+     * Both halves of every pair are escaped on the way into the cell.
+     *
+     * flexible_table::format_row() writes a cell's value into the markup with no escaping of its
+     * own, and this cell carries two user-controlled strings: what the applicant typed, and what
+     * an administrator named a custom field. The fixture is a bare ampersand and a "<" followed
+     * by a letter, because tag-shaped text proves nothing here - format_string() would strip it
+     * and s() would escape it, and the two are indistinguishable in the output.
+     *
+     * @return void
+     */
+    public function test_the_evidence_is_escaped(): void {
+        $this->setAdminUser();
+        $this->applicant(null, (string) json_encode([
+            'version' => submission::SNAPSHOT_VERSION,
+            'fields' => [
+                ['key' => 's_city', 'label' => 'Town & city', 'value' => 'Ouro <Preto'],
+            ],
+        ]));
+
+        $rendered = $this->rendered((int) $this->instance->id);
+
+        $this->assertStringContainsString('Town &amp; city', $rendered);
+        $this->assertStringContainsString('Ouro &lt;Preto', $rendered);
+        $this->assertStringNotContainsString('Ouro <Preto', $rendered);
+    }
+
+    /**
+     * An application with nothing stored renders no heading over the empty space.
+     *
+     * The row that DOES carry an envelope is the control: it proves the column is there and the
+     * cell is reached, so this is an assertion about one row rather than about a column that
+     * never rendered.
+     *
+     * @return void
+     */
+    public function test_an_application_with_no_stored_answers_shows_no_pill(): void {
+        $this->setAdminUser();
+        $this->applicant();
+        $this->applicant(null, $this->snapshot());
+
+        $rendered = $this->rendered((int) $this->instance->id);
+
+        // One row carries an envelope and one does not, so exactly one cell may hold pills.
+        $this->assertSame(2, substr_count($rendered, 'enrol_apply-fieldpill'));
+        $this->assertSame(1, substr_count($rendered, 'enrol_apply-cardlabel">' . get_string('queuesubmitted', 'enrol_apply')));
+    }
+
+    /**
+     * The mentee scope carries no evidence column, exactly as it carries no identity line.
+     *
+     * A mentor holds nothing in the course, so the mask that scope would apply is the names-only
+     * one and the column would be empty on every row. The site-wide scope is the control: the
+     * same application, the same reader capability level, and the column is there.
+     *
+     * @return void
+     */
+    public function test_the_mentee_scope_carries_no_evidence_column(): void {
+        $mentee = $this->applicant(null, $this->snapshot());
+        $this->setUser($this->mentor($mentee));
+
+        $this->assertStringNotContainsString(
+            get_string('queuesubmitted', 'enrol_apply'),
+            $this->rendered(0)
+        );
+
+        /* The control. Admin reaches the same scope with the site-wide capability rather than
+           through mentees, and there the column is drawn - so the assertion above is about the
+           mentee scope and not about a heading that never renders anywhere. */
+        $this->setAdminUser();
+        $this->assertStringContainsString(
+            get_string('queuesubmitted', 'enrol_apply'),
+            $this->rendered(0)
+        );
     }
 }

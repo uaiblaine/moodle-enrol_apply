@@ -244,6 +244,7 @@ $string['queuereviewapplicant'] = 'Analisar a solicitação de {$a}';
 $string['queueselectedonpage'] = '{$a} selecionadas nesta página';
 $string['queueshowing'] = 'Mostrando {$a->from}-{$a->to} de {$a->total}';
 $string['queuestatus'] = 'Situação';
+$string['queuesubmitted'] = 'Enviado com a solicitação';
 $string['queuewaitinglist'] = 'Lista de espera';
 $string['report:course_applications'] = 'Solicitações de inscrição';
 $string['requestedfields'] = 'Campos de perfil solicitados';

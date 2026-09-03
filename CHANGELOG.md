@@ -26,6 +26,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   reads as how long ago it was, with the exact date beneath it. A queue opened from one enrolment
   method no longer repeats that method's course down the page.
 
+  The queue also shows **what the applicant submitted** — the answers the decision is actually
+  made on, which were on no screen but the review page. One pill per answer, read from the frozen
+  record the submission wrote and never recomputed from the live enrolment method or the live
+  profile, and masked by the same rule the report and the review page apply: a reader without
+  `moodle/site:viewuseridentity` in the course sees the name fields and nothing else, on every row
+  rather than only on the rows that hold a value. The mockup's "not given" pill is deliberately
+  not drawn — an answer left blank was never recorded, so it cannot be told apart from a field the
+  method never asked for. The column is absent on the mentee scope, where it would be empty on
+  every row.
+
   Below the breakpoint each row becomes a card. The bulk bar says how many rows are selected **on
   this page**, and resets itself when a page turn, a sort or a filter change replaces the table —
   the bar lives outside the region that gets replaced, so it used to survive with a stale count

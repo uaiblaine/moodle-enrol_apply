@@ -696,7 +696,7 @@ widest reading is the one taken.
 |---|---|---|
 | **1** | `queue::listing_scope()`, `\enrol_apply\table\applications` and its filterset, the death of `manage_table.php`, the four gates that named it, the eight test files that built it | Structural, with **no visible change**. The diff is large and the behaviour is not, so a regression in it is legible |
 | **2** | The capacity header, the per-row Review link, the applicant cell (picture, name, badges, identity as a second line), the footer counts, responsive cards, a bulk bar that does not lie | Mockup A's surface, on a structure that already holds |
-| **2b** | The "Submitted with the application" column | See below — it is in the mockup and in neither task list, and it is not a cell like the others |
+| ~~**2b**~~ | ~~The "Submitted with the application" column~~ — **done 2026-09-03** | See below — it is in the mockup and in neither task list, and it is not a cell like the others |
 | **3** | The search (GET, then as-you-type) and the status filter, the chip row, "clear all", the counts | The two filters that narrow columns the query already has |
 | **4** | The identity filters (city, institution) and the date filter | Both depend on site configuration — the identity field list varies — and a date range is a different filter class |
 
@@ -711,6 +711,20 @@ same masking the review page applies in `renderer::snapshot_context()` — which
 boundary with its own history (it once rendered a password hash from a crafted archive). Folding
 that into PR 2, on top of the header, the row rebuild, the cards, the bulk bar and the AMD module,
 would produce a pull request nobody can review. It gets its own.
+
+**Two things it settled that the mockup could not.** The mockup draws a *"— not given"* pill for an
+unanswered field, and the record cannot produce one: `fields::submitted_values()` skips an empty
+answer, so a field left blank and a field the method never asked for are the same absence in the
+envelope, and separating them needs exactly the live re-resolution `snapshot_context()` forbids —
+per row, and undefined on a scope spanning instances that offer different fields. And the masking
+context is the **scope's**, not the row's: a capability held at system level is held in every
+course below it, so the site-wide mask is never more permissive than a per-row one would be, and it
+is what keeps the pills agreeing with the identity line in the same cell.
+
+It also turned up a defect **outside** its own scope, recorded in the handoff: `.theme-dark` and
+`[data-bs-theme="dark"]` are two different dark mechanisms and only the second moves the `--bs-*`
+tokens, so any rule taking its fill from a token and its text from inheritance is unreadable under
+the first. Everything in `styles.css` reading a token has that exposure.
 
 
 ### U5a.1 — The surface

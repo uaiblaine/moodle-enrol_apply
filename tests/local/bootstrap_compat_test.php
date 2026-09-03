@@ -292,6 +292,66 @@ final class bootstrap_compat_test extends \basic_testcase {
     }
 
     /**
+     * Every fill this stylesheet paints must state the text colour that goes on it.
+     *
+     * The badge rule above, one level up, and it is a defect this plugin measured rather than
+     * imagined. Moodle 5.2 ships TWO dark mechanisms: [data-bs-theme="dark"] flips every --bs-*
+     * token, while the legacy .theme-dark recolours text directly and leaves the tokens at their
+     * light values. So a fill read from a token and a colour left to inheritance come from
+     * different mechanisms, and under .theme-dark the queue's evidence pills rendered #dee2e6 on
+     * #e9ecef - 1.05:1, invisible - while every automated gate stayed green. Nothing in the
+     * pipeline can see this: stylelint validates syntax, and no branch of CI renders a page in
+     * either dark mode.
+     *
+     * A block painting no text is exempt, and the exemption is by selector rather than by a
+     * heuristic: the meters are bars, and requiring a colour on them would teach the next reader
+     * to add one wherever the test complains rather than to think about it.
+     *
+     * @return void
+     */
+    public function test_every_stylesheet_fill_declares_its_own_text_colour(): void {
+        /* Selectors whose block contains no text, with the reason. A rule added here has to be
+           able to state one. */
+        $textless = [
+            '.enrol_apply-meter' => 'a track, drawn empty',
+            '.enrol_apply-meterfill' => 'the bar inside the track',
+            '.enrol_apply-meterfill-warn' => 'the same bar, recoloured',
+        ];
+
+        $offenders = [];
+        foreach ($this->stylesheets() as $sheet) {
+            $css = $this->strip_css_comments((string) file_get_contents($sheet));
+            /* Rule blocks, selector and body. Nested at-rules are handled by the body pattern
+               refusing to cross a brace, so a media query's own header never matches. */
+            preg_match_all('/([^{}]+)\{([^{}]*)\}/s', $css, $matches, PREG_SET_ORDER);
+            foreach ($matches as $rule) {
+                $selector = trim((string) preg_replace('/\s+/', ' ', $rule[1]));
+                $body = $rule[2];
+                if (!preg_match('/(?<![-\w])background(-color)?\s*:/i', $body)) {
+                    continue;
+                }
+                if (preg_match('/(?<![-\w])color\s*:/i', $body)) {
+                    continue;
+                }
+                if (array_key_exists($selector, $textless)) {
+                    continue;
+                }
+                $offenders[] = basename($sheet) . ' { ' . $selector . ' }';
+            }
+        }
+        sort($offenders);
+        $this->assertSame(
+            [],
+            $offenders,
+            'These rules paint a background and leave the text colour to inheritance. The two then '
+                . 'come from different dark-mode mechanisms - .theme-dark moves the inherited '
+                . 'colour and not the --bs-* tokens - so one of them renders the text on top of '
+                . 'itself. Declare both, or name the selector in this test as painting no text: '
+                . implode('; ', $offenders)
+        );
+    }
+
+    /**
      * The plugin must not declare custom properties inside core's design-system namespace.
      *
      * Moodle 5.2 ships theme/boost/scss/design-system/ with $mds-* tokens and 5.3 LTS brings MDS

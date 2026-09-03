@@ -246,6 +246,7 @@ $string['queuereviewapplicant'] = 'Review the application from {$a}';
 $string['queueselectedonpage'] = '{$a} selected on this page';
 $string['queueshowing'] = 'Showing {$a->from}-{$a->to} of {$a->total}';
 $string['queuestatus'] = 'Status';
+$string['queuesubmitted'] = 'Submitted with the application';
 $string['queuewaitinglist'] = 'Waiting list';
 $string['report:course_applications'] = 'Enrolment applications';
 $string['requestedfields'] = 'Profile fields requested';
