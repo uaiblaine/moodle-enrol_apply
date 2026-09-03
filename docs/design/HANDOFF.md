@@ -1,12 +1,15 @@
 # Handoff — read this before touching anything
 
-State at the end of 2026-09-03. **U5a PR 3a is IN FLIGHT** — see the header immediately below.
-Everything before it is merged. This file cannot name the commit that merges the change carrying
-it, so an unmerged slice gets an `IN FLIGHT` header and the change that merges it deletes it.
+State at the end of 2026-09-03. **Everything is merged; nothing is in flight** — this file cannot
+name the commit that merges it, which is the caution the entries below have paid for six times.
+When a slice IS unmerged it gets an `IN FLIGHT` header, and that header is deleted by the change
+that merges it, which is what happened here.
 
-## IN FLIGHT — U5a PR 3a, narrowing the queue
+## 2026-09-03 — U5a PR 3a, narrowing the queue
 
-Branch `feature/the-queue-can-be-narrowed`. `version.php` is `2026090302`; 101 mutation gates.
+Merged as [#71](https://github.com/uaiblaine/moodle-enrol_apply/pull/71); `version.php` is
+`2026090302` and the plugin carries 101 mutation gates. **U5a PR 3b and 4 remain**; the split is in
+the plan under `## U5a`.
 **PR 3 was split**: 3a is everything server-side, 3b is the as-you-type half and the rebuilt AMD
 bundle — the same seam U5a/U5b were split on, so `amd/build/**` and the grunt gate enter alone.
 
