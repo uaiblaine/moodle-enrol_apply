@@ -1,64 +1,62 @@
 # Handoff — read this before touching anything
 
-State at the end of 2026-09-02. **One slice IS in flight — see the first section below.** Every
-other entry describes merged work. This file cannot name the commit that merges it, which is the
-caution the entries below have paid for four times, and is why an unmerged slice gets a header
-saying so rather than an entry that reads like the others.
+State at the end of 2026-09-02. **Everything is merged; nothing is in flight** — this file cannot
+name the commit that merges it, which is the caution the entries below have paid for four times.
+When a slice IS unmerged it gets an `IN FLIGHT` header saying so, and that header is deleted by the
+change that merges it, which is what happened here.
 
-## IN FLIGHT — U5a PR 2, on `feature/the-queue-shows-the-decision`
+## 2026-09-02 — U5a PR 2 verification, and the seven legs that finally ran
 
-**The one entry in this file about work that is NOT merged.** The section below it describes the
-same slice as though it were finished, which is this file's convention and is why this header
-exists. `version.php` is `2026090300`.
+Merged as [#67](https://github.com/uaiblaine/moodle-enrol_apply/pull/67); `version.php` is
+`2026090300` and the plugin carries 89 mutation gates. **U5a PR 2b, 3 and 4 remain**; the split is
+in the plan under `## U5a`.
 
-### Verified
+### `mdl ci --matrix` ran all seven legs for the first time in this fleet
 
-| | |
-|---|---|
-| PHPUnit | m502 and m501, both green |
-| Behat | **9 scenarios, 218 steps**, green on both stacks, including the `@javascript` one that provokes a real AJAX refresh |
-| Mutation gates | seven touched by this slice (`AM`, `CG`, `CH`, `CJ`, `CK`, `CM`, `CN`), each reddening the test it names |
-| eslint / stylelint | clean at CI strictness |
-| Adversarial pass | six Sonnet lenses, thirteen findings, **six real and fixed** |
+Every run of it before this one reported four dead 5.02 legs, and this repository and the fleet
+file both recorded that as a fact about the environment. It is a fact about **the corporate
+network**: core 5.2's `update-react` step fetches from esm.sh through Node's native fetch, which
+ignores `HTTP_PROXY`, so behind the office proxy those legs cannot install at all. At home there is
+no proxy and they install, run and pass.
 
-### Still owed
+So MariaDB and PHP 8.2 have now actually executed this plugin's suite — 475 tests and 9 Behat
+scenarios on each of the seven legs — rather than being assumed green from GitHub. **Re-read any
+note claiming a leg "cannot run locally" as claiming it cannot run behind the proxy.**
 
-1. `mdl ci moodle-enrol_apply --matrix --behat --keep-logs`. **On the home network this should be
-   the first time all seven legs run**: the four 5.02 legs used to die in `moodle-plugin-ci
-   install` on core 5.2's esm.sh fetch through a proxy Node ignores, and there is no proxy here.
-2. Commit, push, PR, check the rollup COUNT is positive, merge.
+Getting there needed one thing that is easy to forget: Docker's containers keep the proxy
+environment they were CREATED with. `~/.docker/config.json` had already been flipped by `.zshrc`'s
+`auto_proxy`, and the running stacks still carried six proxy variables pointing at an unreachable
+squid — `curl` returned 000 from inside them. `mdl down <stack> && mdl up <stack>` clears it; the
+volumes survive.
 
-### What the adversarial pass found, and why none of it was caught earlier
+### The adversarial pass, and a gate that was vacuous from the fixture end
 
-Two were regressions from THIS slice's own earlier fixes, which is the part worth reading:
+Six Sonnet lenses, thirteen findings, six real. Two were regressions from the slice's own earlier
+fixes, and the second is the one to remember:
 
 - **Deferring column definition to `setup()` made `sql_table::out()` probe.** Core runs
   `if (!$this->columns) { SELECT <fields> FROM <from> WHERE <where>; }` BEFORE calling `setup()`,
-  purely to name columns from a row's keys - so every render, page and refresh alike, ran a
-  second unpaginated query with all the joins and the EXISTS subquery. The columns are defined in
-  an `out()` override now, which sits after `validate_context()` and before core's probe.
-- **Gate `CK` reddened nothing.** The fixture enrolled applicants without giving them the durable
-  record the plugin writes, so the queue's own `s` join was always NULL and the clause the gate
-  deletes was always true. **A gate can be vacuous from the FIXTURE end, not just the assertion
-  end** - and this one had been written the same day by someone who knew the rule.
+  to name columns from a row's keys — so every render gained a second unpaginated query carrying
+  all the joins and the `EXISTS` subquery. Defined in an `out()` override now: after
+  `validate_context()`, before the probe.
+- **Gate `CK` reddened nothing, and not because the assertion was weak.** The fixture enrolled
+  applicants through `enrol_user()` without writing the durable record the plugin writes, so the
+  queue's own `s` join was always NULL and the clause the gate deletes was always true. **A gate
+  can be vacuous from the FIXTURE end**, and this one was written the same day by someone who
+  knows the rule. Check both ends.
 
-The rest: the card's heading ignored the instance's custom wording while the desktop header used
-it; `capacity::applicants()` ran three times per render; and two false claims in my own prose (the
-`columnsdefined` guard's justification - core's `define_columns()` REPLACES, it does not append -
-and a "four hours" that was most of a day).
+### The card headings are real text, and `role="cell"` was refused
 
-One reviewer finding was wrong: Behat's pending-JS timeout was reported as ten seconds, and the
-message in the logs says twenty.
+They were `data-label` attributes drawn with `content: attr()`. Generated content is announced
+inconsistently, and — the part that decides it — turning rows and cells into blocks costs the table
+its semantics in the accessibility tree, so a value's association with its `thead` heading is gone
+anyway, which is what the attribute was leaning on. Text inside the cell needs neither.
 
-### The card headings are real text, deliberately
-
-They were `data-label` attributes drawn with `content: attr()`. That reads as tidier and is
-weaker: generated content is announced inconsistently, and turning rows and cells into blocks
-costs the table its semantics in the accessibility tree, so a value's association with its `thead`
-heading is gone anyway. `role="cell"` was the other candidate and was rejected - `flexible_table`
-offers no hook for ROW attributes, so cells could have been given a role and rows could not, and
-an orphan `role="cell"` is worse than none. Gate `CN` holds the headings, which is needed because
-nothing a desktop reader sees would change if they vanished.
+`role="cell"` and friends were the alternative and were rejected on a measurable ground:
+`flexible_table` offers no hook for ROW attributes, so cells could have been given a role and rows
+could not, and an orphan `role="cell"` with no `role="row"` ancestor is worse than none. Gate `CN`
+holds the headings, which is needed exactly because nothing a desktop reader sees would change if
+they vanished.
 
 ## 2026-09-02 — U5a PR 2, the queue shows what the decision needs
 
