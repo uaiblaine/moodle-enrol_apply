@@ -53,6 +53,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   applications match out of how many the queue holds. All of it works with JavaScript off, as a
   plain GET form, and paging and sorting keep the filters.
 
+  **With JavaScript the queue narrows as you type.** A quarter-second after the last keystroke the
+  rows are replaced without a page load, and the chip row, the "Clear all" control and the count
+  line are redrawn with them — all three live outside the region a refresh replaces, so without
+  that they would go on describing the filters that were applied when the page loaded. The chips
+  are rendered from the same template the server uses, so the markup exists once. The address bar
+  is kept in step as well: a search applied by typing survives a reload, a bookmark and a link
+  copied out of the address bar, which it would not otherwise. Refreshes are serialised, because
+  two in flight let the slower one overwrite the faster one's result with a stale queue. None of
+  this is required: the search box is a plain form and everything above still works with
+  JavaScript off, and pressing Enter still reloads onto a url carrying the filter.
+
   Two things that were wrong before and are corrected by the same change: the capacity header's
   first tile now counts the whole queue rather than the filtered rows, which it had to for the
   deferred count beside it to be arithmetically possible; and the decision controls, the bulk bar
