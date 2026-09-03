@@ -1,9 +1,80 @@
 # Handoff — read this before touching anything
 
-State at the end of 2026-09-03. **Everything is merged; nothing is in flight** — this file cannot
-name the commit that merges it, which is the caution the entries below have paid for six times.
-When a slice IS unmerged it gets an `IN FLIGHT` header, and that header is deleted by the change
-that merges it, which is what happened here.
+State at the end of 2026-09-03. **U5a PR 3b is IN FLIGHT** — see the header immediately below.
+Everything before it is merged. This file cannot name the commit that merges the change carrying
+it, so an unmerged slice gets an `IN FLIGHT` header and the change that merges it deletes it.
+
+## IN FLIGHT — U5a PR 3b, narrowing the queue as you type
+
+Branch `feature/the-queue-narrows-as-you-type`. `version.php` is `2026090303`; 101 gates
+(unchanged — this slice adds no PHP guard, and why is below).
+
+The client half of the filters: a 250 ms debounce on the search box, an immediate refresh on the
+status select, chip removal and "Clear all" without a page load, and the chip row, the clear-all
+control and the count line redrawn on every refresh.
+
+### Everything the filter bar shows lives outside the region a refresh replaces
+
+`refreshTableContent()` swaps the `[data-region="core_table/dynamic"]` node and nothing else, so
+the chips, the clear-all link and the count would all go on describing the filters that were
+applied when the page loaded. They are redrawn from `tableContentRefreshed` for that reason. The
+chips come from **the same Mustache partial the server renders**, through `core/templates` — two
+hand-written copies of that markup would be two things to keep in step, and the one that drifts is
+the one nobody is looking at.
+
+The count needs both halves and only one of them is on the refreshed table:
+`data-table-total-rows` is the matched count, and the scope total is written once into
+`data-scopetotal` on the count line, because no filter changes it.
+
+The address bar is kept in step too, and that has a second half the first version missed: a filter
+change resets the table to page one, so `syncAddressBar()` deletes `flexible_table`'s own paging and
+sorting parameters as well. Without that, an operator who arrived on a real paging link and then
+typed kept `page=3` in the url while looking at page one, and a reload landed on nothing.
+
+### Three things core's dynamic table does not do for you
+
+- **`setFilters()` takes the whole envelope.** It stringifies what it is given straight into
+  `dataset.tableFilters`, which `refreshTableContent()` reads back expecting `jointype` beside
+  `filters` — a bare map produces a request with no join type. The module reads the existing
+  envelope and replaces only its own two filters, which also preserves the scope's required
+  `enrolid` without knowing what it is.
+- **There is no abort and no sequence number.** `refreshTableContent()` captures the node it was
+  given, fetches, and replaces that node; jQuery's `replaceWith` only calls `replaceChild` when the
+  target still has a parent, so whichever response lands second is dropped in silence if the first
+  already detached the node — and the operator keeps the STALE result. Refreshes are serialised
+  here for that reason, **and the guard sits inside `applyFilters()` rather than inside the
+  debounce**: three things call it and only one is the debounce. An earlier version guarded the
+  debounce alone while this entry claimed refreshes were serialised — typing a term and then
+  clicking a chip put two in flight, which is ordinary use, and the adversarial pass is what caught
+  the claim being false rather than the code being subtle.
+- **A page reset comes free.** `updateTable()` sets `pageNumber = 1` whenever the filter set
+  changed, so the AJAX path cannot land on a page that no longer exists. Only the GET path needed
+  care, and PR 3a handled it by emitting no paging parameters.
+
+### The Behat failure that was an accessibility defect
+
+The chip's remove control carried only an `aria-label`. Mink's `link` selector matches an anchor's
+id, text, title, `rel` and image alt — **`aria-label` is on none of those paths** — so no Behat step
+naming it could click it, and the scenario failed on exactly that. It is real text in a
+`visually-hidden` span now, with the glyph `aria-hidden`.
+
+The Behat half is measured. The accessibility half is a reason rather than a finding: hidden text is
+generally handled more consistently than an `aria-label` on a link, and it is translated like the
+rest of the interface — but nothing here tested a screen reader, and the first draft of this entry
+said "announced inconsistently by screen readers" as though something had.
+
+Consequence for assertions, recorded in the partial's own docblock: that hidden text is real page
+text, so the chip carries its name and value **twice** — "Remove the filter Search: x" beside
+"Search x". A whole-page assertion has to pick wording only one of them holds, which the colon does.
+
+### No new mutation gate, deliberately
+
+`mdl mutate` runs PHPUnit, and every guard in this slice is JavaScript — nothing in this
+repository's PHP suite can redden when a debounce, a serialisation flag or a redraw is deleted. The
+`@javascript` scenario is the whole guard, which is why it asserts the count, the chip and the
+selection reset rather than stopping at "the rows changed". Recorded here so the absence reads as a
+decision rather than an omission, exactly as the `manage.php` url threading is recorded in
+`gates.conf`.
 
 ## 2026-09-03 — U5a PR 3a, narrowing the queue
 

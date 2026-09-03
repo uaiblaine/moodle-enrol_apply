@@ -39,7 +39,12 @@
     * data-region="queuefilters" on the form, the module's root.
     * data-region="searchinput" on the search field.
     * data-region="statusselect" on the status field.
-    * data-region="filtercount" on the count line.
+    * data-region="chiprow" on the chip row, which the module empties and refills.
+    * data-region="clearall" on the clear-all link, hidden with d-none when nothing is applied
+      rather than omitted, so the module has a node to unhide instead of one to invent.
+    * data-region="filtercount" on the count line, carrying data-scopetotal - the count is
+      "matched of total", the refreshed table reports only the matched half in its own
+      data-table-total-rows, and the total is a property of the scope that no refresh changes.
 
     Context variables required for this template:
     * formaction string - url the GET form submits to
@@ -55,6 +60,7 @@
     * clearurl string - url that removes every filter
     * clearlabel string - wording of the clear-all control
     * counttext string - how many applications match, of how many
+    * scopetotal int - how many the queue holds before any filter, for the module to recount with
 
     Example context (json): {
         "formaction": "https://example.com/enrol/apply/manage.php",
@@ -72,6 +78,7 @@
         "haschips": true,
         "chips": [
             {
+                "filter": "search",
                 "name": "Search",
                 "value": "goncalves",
                 "removeurl": "https://example.com/enrol/apply/manage.php?id=140",
@@ -80,7 +87,8 @@
         ],
         "clearurl": "https://example.com/enrol/apply/manage.php?id=140",
         "clearlabel": "Clear all",
-        "counttext": "4 of 312 applications"
+        "counttext": "4 of 312 applications",
+        "scopetotal": 312
     }
 }}
 <form method="get" action="{{formaction}}" class="enrol_apply-filters mb-3" data-region="queuefilters">
@@ -103,14 +111,13 @@
             <button type="submit" class="btn btn-secondary">{{#str}}applyfilters, core{{/str}}</button>
         </div>
     </div>
-    <div class="enrol_apply-chiprow">
+    <div class="enrol_apply-chiprow" data-region="chiprow">
         {{#chips}}
-            <span class="enrol_apply-chip">
-                <span class="enrol_apply-chipname">{{name}}</span> {{value}}
-                <a href="{{removeurl}}" class="enrol_apply-chipremove" aria-label="{{removelabel}}">&#10005;</a>
-            </span>
+            {{> enrol_apply/queue_chip }}
         {{/chips}}
-        {{#haschips}}<a href="{{clearurl}}" class="enrol_apply-clearall small">{{clearlabel}}</a>{{/haschips}}
-        <span class="enrol_apply-filtercount small text-muted" data-region="filtercount" aria-live="polite">{{counttext}}</span>
+        <a href="{{clearurl}}" class="enrol_apply-clearall small {{^haschips}}d-none{{/haschips}}"
+           data-region="clearall">{{clearlabel}}</a>
+        <span class="enrol_apply-filtercount small text-muted" data-region="filtercount"
+              data-scopetotal="{{scopetotal}}" aria-live="polite">{{counttext}}</span>
     </div>
 </form>

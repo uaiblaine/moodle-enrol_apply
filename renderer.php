@@ -245,6 +245,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
         $chips = [];
         if ($search !== '') {
             $chips[] = $this->queue_filter_chip(
+                'search',
                 get_string('queuesearch', 'enrol_apply'),
                 $search,
                 $base($scoped ? ['id', 'status'] : ['status'])
@@ -252,6 +253,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
         }
         if ($status !== null) {
             $chips[] = $this->queue_filter_chip(
+                'status',
                 get_string('queuefilterstatus', 'enrol_apply'),
                 $statuses[$status] ?? (string) $status,
                 $base($scoped ? ['id', 'search'] : ['search'])
@@ -275,6 +277,11 @@ class enrol_apply_renderer extends plugin_renderer_base {
                 'matched' => (int) $table->totalrows,
                 'total' => $table->scope_total(),
             ]),
+            /* The total on its own, for the module to recompose the line after an as-you-type
+               refresh. The refreshed table reports the MATCHED half in its own
+               data-table-total-rows and nothing else; the total is a property of the scope, which
+               no filter changes, so it is written once here rather than recounted per keystroke. */
+            'scopetotal' => $table->scope_total(),
         ];
     }
 
@@ -285,13 +292,15 @@ class enrol_apply_renderer extends plugin_renderer_base {
      * a lang-string parameter, which the string helper escapes exactly once on its own. Escaping
      * here would show an operator who searched for "A & B" a chip reading "A &amp;amp; B".
      *
-     * @param string $name What the filter is called.
+     * @param string $filter The filter's name as the table's filterset knows it.
+     * @param string $name What the filter is called, in the reader's language.
      * @param string $value What it is set to.
      * @param string $removeurl Url of the same listing without this filter.
      * @return array Template context for one chip.
      */
-    protected function queue_filter_chip(string $name, string $value, string $removeurl): array {
+    protected function queue_filter_chip(string $filter, string $name, string $value, string $removeurl): array {
         return [
+            'filter' => $filter,
             'name' => $name,
             'value' => $value,
             'removeurl' => $removeurl,

@@ -277,6 +277,49 @@ Feature: Enrolment upon approval
     And I should see "0 selected on this page"
     And the "With selected users..." "field" should be disabled
 
+  # The as-you-type half. @javascript is not a preference here: without it nothing in this
+  # scenario exists - the debounce, the refresh, the chip the module renders and the count it
+  # rewrites are all the module's, and with scripting off the queue narrows through a page load
+  # that the non-JavaScript scenario above already covers.
+  #
+  # It also pins the interaction the two halves have with each other: a filter change replaces the
+  # table region, which destroys every checkbox in it, while the bulk bar lives outside that region
+  # and would otherwise go on claiming a selection that no longer exists.
+  @javascript
+  Scenario: The queue narrows as the operator types, and the selection does not survive it
+    Given the following "users" exist:
+      | username | firstname  | lastname    | email                  |
+      | student2 | Zephyrina  | Quillsworth | student2@example.com   |
+    And I log in as "student1"
+    And I am on "Course 1" course homepage
+    And I press "Start application"
+    And I press "Submit application"
+    And I log out
+    And I log in as "student2"
+    And I am on "Course 1" course homepage
+    And I press "Start application"
+    And I press "Submit application"
+    And I log out
+    When I log in as "teacher1"
+    And I am on the "C1" "enrol_apply > manage applications" page
+    Then I should see "2 of 2 applications"
+    # A selection the operator is about to lose, and the bar that must stop claiming it.
+    And I click on "Select all" "checkbox"
+    And I should see "2 selected on this page"
+    # Narrowing without a page load: the module applies it, the chip is its own work.
+    When I set the field "Search" to "quillsworth"
+    Then I should see "Zephyrina Quillsworth"
+    And I should not see "Student 1"
+    And I should see "1 of 2 applications"
+    And I should see "Search quillsworth"
+    And I should see "0 selected on this page"
+    And the "With selected users..." "field" should be disabled
+    # And removing it puts the queue back, chip and all, still without a page load.
+    When I click on "Remove the filter Search: quillsworth" "link"
+    Then I should see "Student 1"
+    And I should see "2 of 2 applications"
+    And I should not see "Search quillsworth"
+
   # The audit report belongs to the method whose icon opened it. No @javascript: the icons on
   # the enrolment methods page are ordinary links and the report renders server side.
   #

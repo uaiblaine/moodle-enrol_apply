@@ -1,0 +1,75 @@
+{{!
+    This file is part of Moodle - http://moodle.org/
+
+    Moodle is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Moodle is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+}}
+{{!
+    @template enrol_apply/queue_chip
+
+    One applied filter, named and removable.
+
+    A partial of its own so that the markup exists ONCE. The server renders it in a loop when the
+    page loads, and the queue's own module renders it through core/templates after an as-you-type
+    refresh - because the refresh replaces the table's region alone and never re-renders the filter
+    bar, so a chip row left as the server wrote it would describe a filter that is no longer
+    applied. Two hand-written copies of this markup would be two things to keep in step, and the
+    one that drifts is always the one nobody is looking at.
+
+    The remove control is a real link and keeps a working href, so it survives with scripting off
+    and gives the right address to a middle-click or a copied link; the module intercepts the
+    click rather than replacing the element.
+
+    Its label is REAL text in a visually-hidden span rather than an aria-label, and the glyph is
+    hidden from assistive technology so the two are not announced together.
+
+    One reason for that is measured and one is not, and they are worth keeping apart. The measured
+    one: an aria-label is not findable by name, so no Behat step naming the control can click it -
+    Mink's link selector matches an anchor's id, text, title, rel and image alt, and aria-label is
+    on none of those paths. The scenario failed on exactly that. The unmeasured one, offered as a
+    reason rather than a finding: hidden text is generally handled more consistently by assistive
+    technology than an aria-label on a link, and it is translated by the same machinery as the
+    rest of the interface. Nothing here tested a screen reader, and an earlier version of this
+    docblock said "every screen reader" as though something had.
+
+    Note the consequence for assertions. This hidden text is real page text, so it contains the
+    filter's name and value a second time - "Remove the filter Search: goncalves" beside the
+    chip's own "Search goncalves". A whole-page assertion has to pick wording that only one of
+    them carries, which the colon does.
+
+    Classes required for JS:
+    * none - the module matches on data-region.
+
+    Data attributes required for JS:
+    * data-region="chip" on the wrapper, so the row can be emptied and refilled.
+    * data-filter on the remove link, naming which filter it drops.
+
+    Context variables required for this template:
+    * filter string - the filter's name, as the table's filterset knows it
+    * name string - what the filter is called, in the reader's language
+    * value string - what it is set to
+    * removeurl string - url of the same listing without this one filter
+    * removelabel string - accessible wording of the remove control
+
+    Example context (json): {
+        "filter": "search",
+        "name": "Search",
+        "value": "goncalves",
+        "removeurl": "https://example.com/enrol/apply/manage.php?id=140",
+        "removelabel": "Remove the filter Search: goncalves"
+    }
+}}
+<span class="enrol_apply-chip" data-region="chip">
+    <span class="enrol_apply-chipname">{{name}}</span> {{value}}
+    <a href="{{removeurl}}" class="enrol_apply-chipremove" data-filter="{{filter}}"><span aria-hidden="true">&#10005;</span><span class="visually-hidden">{{removelabel}}</span></a>
+</span>
