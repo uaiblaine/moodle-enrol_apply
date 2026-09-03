@@ -1,13 +1,16 @@
 # Handoff — read this before touching anything
 
-State at the end of 2026-09-03. **U5a PR 3b is IN FLIGHT** — see the header immediately below.
-Everything before it is merged. This file cannot name the commit that merges the change carrying
-it, so an unmerged slice gets an `IN FLIGHT` header and the change that merges it deletes it.
+State at the end of 2026-09-03. **Everything is merged; nothing is in flight** — this file cannot
+name the commit that merges it, which is the caution the entries below have paid for seven times.
+When a slice IS unmerged it gets an `IN FLIGHT` header, and that header is deleted by the change
+that merges it, which is what happened here.
 
-## IN FLIGHT — U5a PR 3b, narrowing the queue as you type
+## 2026-09-03 — U5a PR 3b, narrowing the queue as you type
 
-Branch `feature/the-queue-narrows-as-you-type`. `version.php` is `2026090303`; 101 gates
-(unchanged — this slice adds no PHP guard, and why is below).
+Merged as [#73](https://github.com/uaiblaine/moodle-enrol_apply/pull/73); `version.php` is
+`2026090303` and the plugin carries 101 gates (unchanged — this slice adds no PHP guard, and why is
+below). **U5a is complete apart from PR 4**, the identity and date filters; the split is in the plan
+under `## U5a`.
 
 The client half of the filters: a 250 ms debounce on the search box, an immediate refresh on the
 status select, chip removal and "Clear all" without a page load, and the chip row, the clear-all
