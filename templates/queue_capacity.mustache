@@ -1,0 +1,93 @@
+{{!
+    This file is part of Moodle - http://moodle.org/
+
+    Moodle is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Moodle is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+}}
+{{!
+    @template enrol_apply/queue_capacity
+
+    The decision context above the applications queue: how many are waiting, how many are
+    deferred, how full the method is and whether it is still accepting applications.
+
+    Rendered OUTSIDE the section that depends on the queue having rows, deliberately. A method
+    whose applicant limit is reached has an EMPTY queue, and that is exactly the moment its
+    numbers explain something - inside that section they would vanish when they are most needed.
+
+    Context variables required for this template:
+    * tiles array - the plain counts, each an object with a value and a label
+    * meters array - the counts that have a limit to sit against, each with a value, a label, a
+      percentage for the bar's width and a boolean saying whether the bar is at the warning level
+    * hasstatus boolean - whether an open/closed state can be reported at all, which needs an
+      enrolment method in scope
+    * statuslabel string - the heading of the status tile
+    * isopen boolean - whether the method is accepting applications
+    * statustext string - the word for that state
+    * hasclosing boolean - whether a closing date is set
+    * closingtext string - the sentence naming it
+    * hasremaining boolean - whether the applicant limit is close enough to be worth naming
+    * remainingtext string - the sentence saying how many more will be accepted
+
+    Example context (json):
+    {
+        "tiles": [
+            {"value": "12", "label": "Awaiting decision"},
+            {"value": "3", "label": "Deferred to the waiting list"}
+        ],
+        "meters": [
+            {"value": "8 of 20", "label": "Places taken (approved)", "percent": 40, "warn": false},
+            {"value": "35 of 40", "label": "Applications held", "percent": 88, "warn": true}
+        ],
+        "hasstatus": true,
+        "statuslabel": "Status",
+        "isopen": true,
+        "statustext": "Open",
+        "hasclosing": true,
+        "closingtext": "closes 30 September 2026",
+        "hasremaining": true,
+        "remainingtext": "5 more applications will be accepted before the method closes itself."
+    }
+}}
+<div class="enrol_apply-capacity card mb-3">
+    <div class="card-body d-flex flex-wrap">
+        {{#tiles}}
+            <div class="enrol_apply-tile">
+                <span class="enrol_apply-tilevalue">{{value}}</span>
+                <span class="enrol_apply-tilelabel">{{label}}</span>
+            </div>
+        {{/tiles}}
+        {{#meters}}
+            <div class="enrol_apply-tile enrol_apply-tile-meter">
+                <span class="enrol_apply-tilevalue">{{value}}</span>
+                <span class="enrol_apply-tilelabel">{{label}}</span>
+                <span class="enrol_apply-meter" role="presentation">
+                    <span class="enrol_apply-meterfill {{#warn}}enrol_apply-meterfill-warn{{/warn}}"
+                          style="width: {{percent}}%"></span>
+                </span>
+            </div>
+        {{/meters}}
+        {{#hasstatus}}
+            <div class="enrol_apply-tile enrol_apply-tile-status">
+                <span class="enrol_apply-tilelabel">{{statuslabel}}</span>
+                <span>
+                    {{#isopen}}<span class="badge bg-success text-white">{{statustext}}</span>{{/isopen}}
+                    {{^isopen}}<span class="badge bg-secondary text-dark">{{statustext}}</span>{{/isopen}}
+                    {{#hasclosing}}<span class="small text-muted">{{closingtext}}</span>{{/hasclosing}}
+                </span>
+                {{#hasremaining}}
+                    <span class="small text-muted">{{remainingtext}}</span>
+                {{/hasremaining}}
+            </div>
+        {{/hasstatus}}
+    </div>
+</div>

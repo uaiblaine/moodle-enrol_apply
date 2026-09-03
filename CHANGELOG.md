@@ -6,6 +6,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Added
+
+- **The applications queue shows what the decision needs.** It was a list of names, an e-mail
+  address and a date, with no way to open any of the rows it listed.
+
+  Above the table there is now the decision context: how many applications are waiting, how many
+  are deferred, how many places are taken and how many applications the method is holding against
+  its limit, each of the last two with a bar, plus whether the method is still accepting
+  applications and when it closes. **It renders on an empty queue too**, which is the state it
+  explains best: a method that has reached its applicant limit holds no undecided applications and
+  refuses new ones, and nothing on any screen used to say why.
+
+  Every row now carries a **Review** link — the queue had no door into a single application at
+  all; its only routes were the participants-page icon, the notification e-mail and the
+  previous/next chain. The applicant's cell carries their picture, their name as a profile link,
+  a badge when the application is deferred or when that person has applied to this course before,
+  and their identity fields underneath rather than as columns of their own. The application date
+  reads as how long ago it was, with the exact date beneath it. A queue opened from one enrolment
+  method no longer repeats that method's course down the page.
+
+  Below the breakpoint each row becomes a card. The bulk bar says how many rows are selected **on
+  this page**, and resets itself when a page turn, a sort or a filter change replaces the table —
+  the bar lives outside the region that gets replaced, so it used to survive with a stale count
+  and a stale enabled state. Paging and sorting now refresh the table in place; both still work
+  with JavaScript off, as real links.
+
 ### Changed
 
 - **The approval queue is a dynamic table.** Its rows now refresh over

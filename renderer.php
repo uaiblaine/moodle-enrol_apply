@@ -82,6 +82,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
            both branches, so a later "just add a class" would silently drop this one. */
         $bar = $this->render_from_template('enrol_apply/manage_actions', [
             'togglegroup' => \enrol_apply\table\applications::TOGGLE_GROUP,
+            'selectedlabel' => get_string('queueselectedonpage', 'enrol_apply', 0),
             'actionlabel' => get_string('withselectedusers'),
             'choosedots' => get_string('choosedots'),
             'golabel' => get_string('go'),
@@ -126,11 +127,27 @@ class enrol_apply_renderer extends plugin_renderer_base {
             ]);
         }
 
+        /* Which rows of how many are on screen. table_sql prints a paging bar and never says
+           this, so on a queue of three pages an operator reading page two has nothing telling
+           them which three hundred they are looking at.
+           Read AFTER capture_table(), which is what populates totalrows and currpage. */
+        $from = (int) ($table->currpage * $table->pagesize) + 1;
+        $showing = get_string('queueshowing', 'enrol_apply', (object) [
+            'from' => $from,
+            'to' => (int) min($table->totalrows, $from + $table->pagesize - 1),
+            'total' => (int) $table->totalrows,
+        ]);
+
         $context = $this->decision_controls_context($instance) + [
             'formurl' => $manageurl->out(false),
             'sesskey' => sesskey(),
+            'capacityhtml' => $this->render_from_template(
+                'enrol_apply/queue_capacity',
+                $this->queue_capacity_context($instance, (int) $table->totalrows)
+            ),
             'tablehtml' => $tablehtml,
             'hasrows' => $table->totalrows > 0,
+            'showingtext' => $showing,
             'stickyfooter' => $stickyfooter,
             'hasplacesnotice' => $placesnotice !== '',
             'placesnotice' => $placesnotice,
@@ -151,6 +168,137 @@ class enrol_apply_renderer extends plugin_renderer_base {
         }
 
         return $this->render_from_template('enrol_apply/manage', $context);
+    }
+
+    /**
+     * The decision context above the queue: how many are waiting, and how full the method is.
+     *
+     * **Not built from allow_apply().** That method is the applicant's gate and mixes a question
+     * about the METHOD with one about a PERSON - its cohort clause asks whether *this user* may
+     * apply - so a manager outside a restricted cohort would be told the method is closed when it
+     * is open to everybody it is meant for. What this reports is the instance's own state: whether
+     * it is enabled, whether it takes new enrolments, its dates, and its applicant limit. The two
+     * must agree about those four and deliberately part company on the fifth; if allow_apply()
+     * ever grows another instance-level reason, it belongs here as well.
+     *
+     * The counts come from \enrol_apply\local\capacity, which is where every other surface reads
+     * them, so the queue header and the review page cannot report different numbers.
+     *
+     * @param stdClass|null $instance Enrol instance the queue is scoped to, null when it spans them.
+     * @param int $awaiting How many applications the queue is listing.
+     * @return array Context for the enrol_apply/queue_capacity template.
+     */
+    protected function queue_capacity_context($instance, int $awaiting): array {
+        $capacity = \enrol_apply\local\capacity::class;
+
+        $context = [
+            'tiles' => [[
+                'value' => (string) $awaiting,
+                'label' => get_string('queueawaiting', 'enrol_apply'),
+            ]],
+            'meters' => [],
+            'hasstatus' => false,
+        ];
+
+        /* Everything below this line is about ONE enrolment method. The site-wide and mentee
+           queues span methods, each with its own limits and its own dates, so there is no single
+           number to report - and reporting one course's would be worse than reporting none. They
+           get the count of what is waiting and nothing else, which is still the thing an operator
+           opened the page to see. */
+        if ($instance === null) {
+            return $context;
+        }
+
+        $context['tiles'][] = [
+            'value' => (string) $capacity::deferred($instance),
+            'label' => get_string('queuedeferred', 'enrol_apply'),
+        ];
+
+        $places = $capacity::places($instance);
+        if ($places > 0) {
+            $taken = $capacity::places_taken($instance);
+            $context['meters'][] = [
+                'value' => get_string('reviewofmany', 'enrol_apply', (object) [
+                    'taken' => $taken,
+                    'total' => $places,
+                ]),
+                'label' => get_string('queueplacestaken', 'enrol_apply'),
+                'percent' => self::meter_percent($taken, $places),
+                'warn' => false,
+            ];
+        }
+
+        $limit = $capacity::applicant_limit($instance);
+        // Counted ONCE. The meter, the open/closed test and the room-left sentence all want it.
+        $held = $limit > 0 ? $capacity::applicants($instance) : 0;
+        if ($limit > 0) {
+            $context['meters'][] = [
+                'value' => get_string('reviewofmany', 'enrol_apply', (object) [
+                    'taken' => $held,
+                    'total' => $limit,
+                ]),
+                'label' => get_string('reviewapplicants', 'enrol_apply'),
+                'percent' => self::meter_percent($held, $limit),
+                /* Warned at four fifths rather than at the limit, because the limit is the point
+                   at which the method stops accepting applications and nobody can do anything
+                   about it any more. The bar is there to be seen BEFORE that. */
+                'warn' => $held * 5 >= $limit * 4,
+            ];
+        }
+
+        $enddate = (int) ($instance->enrolenddate ?? 0);
+        $startdate = (int) ($instance->enrolstartdate ?? 0);
+        $now = time();
+        $open = $instance->status == ENROL_INSTANCE_ENABLED
+            && !empty($instance->customint6)
+            && !($startdate > 0 && $startdate > $now)
+            && !($enddate > 0 && $enddate < $now)
+            /* capacity::applications_closed() inlined, and it must keep agreeing with it: that
+               method is `$limit !== 0 && applicants() >= $limit`, and applicant_limit() clamps a
+               negative to 0, so `$limit > 0` and its `$limit !== 0` are the same test. Inlined
+               only to stop a third identical COUNT over {user_enrolments} in one render - $held
+               is that count, taken once above. If that method grows a clause, this grows it. */
+            && !($limit > 0 && $held >= $limit);
+
+        $remaining = $limit > 0 ? $limit - $held : 0;
+
+        /* array_merge and never the + operator. `+` keeps the LEFT side on a duplicate key, and
+           $context already carries 'hasstatus' => false from the site-wide default above - so the
+           + form silently kept the false and the whole status block never rendered, on every
+           instance-scoped queue. Found by looking at the page; no test asserted the block, and
+           the slice that documented this exact trap (U6, gate BW) landed earlier the same day. */
+        return array_merge($context, [
+            'hasstatus' => true,
+            'statuslabel' => get_string('queuestatus', 'enrol_apply'),
+            'isopen' => $open,
+            'statustext' => $open
+                ? get_string('queueapplicationsopen', 'enrol_apply')
+                : get_string('queueapplicationsclosed', 'enrol_apply'),
+            'hasclosing' => $open && $enddate > 0,
+            'closingtext' => $enddate > 0
+                ? get_string('queuecloseson', 'enrol_apply', userdate($enddate, get_string('strftimedate', 'langconfig')))
+                : '',
+            /* Named only while it is still true and still close. A limit ten applications away is
+               not news, and one already reached is said by the status badge and by the notice
+               above the table rather than three times over. */
+            'hasremaining' => $open && $limit > 0 && $remaining > 0 && $remaining * 5 <= $limit,
+            'remainingtext' => get_string('queueremaining', 'enrol_apply', $remaining),
+        ]);
+    }
+
+    /**
+     * A meter's width, as a whole percentage that never leaves the bar.
+     *
+     * Clamped at 100 because both numbers this is called with can legitimately exceed their own
+     * limit: places_taken() counts approved enrolments and an administrator can enrol past the
+     * cap by hand, and the applicant limit can be lowered under applications already held.
+     *
+     * @param int $value The count.
+     * @param int $total The limit it sits against, always greater than zero here.
+     * @return int Whole percentage between 0 and 100.
+     */
+    protected static function meter_percent(int $value, int $total): int {
+        return (int) min(100, max(0, round($value * 100 / $total)));
     }
 
     /**

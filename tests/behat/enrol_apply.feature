@@ -208,6 +208,34 @@ Feature: Enrolment upon approval
     Then I should see "Your enrolment application has been deferred."
     And I should not see "New section"
 
+  # The bulk bar must not lie about what is selected, and only a browser can hold this. The bar
+  # lives in the sticky footer, OUTSIDE the region a refresh replaces, so it survives a page turn,
+  # a sort or a filter change with whatever count and whatever enabled state it had - while every
+  # checkbox it was counting has just been destroyed. Sorting is the cheapest refresh to provoke:
+  # since the table became dynamic, clicking a column heading replaces the region over AJAX
+  # instead of reloading the page.
+  #
+  # @javascript is not a choice here. The count and the reset are the module's whole behaviour,
+  # and the non-JavaScript driver executes none of it.
+  @javascript
+  Scenario: Selecting rows counts them, and a sort puts the count back
+    Given I log in as "student1"
+    And I am on "Course 1" course homepage
+    And I press "Start application"
+    And I press "Submit application"
+    And I log out
+    When I log in as "teacher1"
+    And I am on the "C1" "enrol_apply > manage applications" page
+    Then I should see "0 selected on this page"
+    And I click on "Select all" "checkbox"
+    And I should see "1 selected on this page"
+    And the "With selected users..." "field" should be enabled
+    # The refresh. The row comes back, and with it a checkbox nobody has ticked.
+    And I click on "Application date" "link"
+    And I should see "Student 1"
+    And I should see "0 selected on this page"
+    And the "With selected users..." "field" should be disabled
+
   # The audit report belongs to the method whose icon opened it. No @javascript: the icons on
   # the enrolment methods page are ordinary links and the report renders server side.
   #

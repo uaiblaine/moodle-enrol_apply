@@ -1,7 +1,116 @@
 # Handoff — read this before touching anything
 
-State at the end of 2026-09-02. **Everything is merged; nothing is in flight** — this file cannot
-name the commit that merges it, which is the caution the entries below have paid for four times.
+State at the end of 2026-09-02. **One slice IS in flight — see the first section below.** Every
+other entry describes merged work. This file cannot name the commit that merges it, which is the
+caution the entries below have paid for four times, and is why an unmerged slice gets a header
+saying so rather than an entry that reads like the others.
+
+## IN FLIGHT — U5a PR 2, on `feature/the-queue-shows-the-decision`
+
+**The one entry in this file about work that is NOT merged.** The section below it describes the
+same slice as though it were finished, which is this file's convention and is why this header
+exists. `version.php` is `2026090300`.
+
+### Verified
+
+| | |
+|---|---|
+| PHPUnit | m502 and m501, both green |
+| Behat | **9 scenarios, 218 steps**, green on both stacks, including the `@javascript` one that provokes a real AJAX refresh |
+| Mutation gates | seven touched by this slice (`AM`, `CG`, `CH`, `CJ`, `CK`, `CM`, `CN`), each reddening the test it names |
+| eslint / stylelint | clean at CI strictness |
+| Adversarial pass | six Sonnet lenses, thirteen findings, **six real and fixed** |
+
+### Still owed
+
+1. `mdl ci moodle-enrol_apply --matrix --behat --keep-logs`. **On the home network this should be
+   the first time all seven legs run**: the four 5.02 legs used to die in `moodle-plugin-ci
+   install` on core 5.2's esm.sh fetch through a proxy Node ignores, and there is no proxy here.
+2. Commit, push, PR, check the rollup COUNT is positive, merge.
+
+### What the adversarial pass found, and why none of it was caught earlier
+
+Two were regressions from THIS slice's own earlier fixes, which is the part worth reading:
+
+- **Deferring column definition to `setup()` made `sql_table::out()` probe.** Core runs
+  `if (!$this->columns) { SELECT <fields> FROM <from> WHERE <where>; }` BEFORE calling `setup()`,
+  purely to name columns from a row's keys - so every render, page and refresh alike, ran a
+  second unpaginated query with all the joins and the EXISTS subquery. The columns are defined in
+  an `out()` override now, which sits after `validate_context()` and before core's probe.
+- **Gate `CK` reddened nothing.** The fixture enrolled applicants without giving them the durable
+  record the plugin writes, so the queue's own `s` join was always NULL and the clause the gate
+  deletes was always true. **A gate can be vacuous from the FIXTURE end, not just the assertion
+  end** - and this one had been written the same day by someone who knew the rule.
+
+The rest: the card's heading ignored the instance's custom wording while the desktop header used
+it; `capacity::applicants()` ran three times per render; and two false claims in my own prose (the
+`columnsdefined` guard's justification - core's `define_columns()` REPLACES, it does not append -
+and a "four hours" that was most of a day).
+
+One reviewer finding was wrong: Behat's pending-JS timeout was reported as ten seconds, and the
+message in the logs says twenty.
+
+### The card headings are real text, deliberately
+
+They were `data-label` attributes drawn with `content: attr()`. That reads as tidier and is
+weaker: generated content is announced inconsistently, and turning rows and cells into blocks
+costs the table its semantics in the accessibility tree, so a value's association with its `thead`
+heading is gone anyway. `role="cell"` was the other candidate and was rejected - `flexible_table`
+offers no hook for ROW attributes, so cells could have been given a role and rows could not, and
+an orphan `role="cell"` is worse than none. Gate `CN` holds the headings, which is needed because
+nothing a desktop reader sees would change if they vanished.
+
+## 2026-09-02 — U5a PR 2, the queue shows what the decision needs
+
+**PR 1 is merged (`fd3ff8e`). This is PR 2 of five**; PR 2b, 3 and 4 follow. The split is in the
+plan under `## U5a`.
+
+The queue was a list of names, an address and a date, with no door into any of the rows it listed.
+It now carries the decision context above the table, a Review link on every row, badges for the two
+facts that change a decision, identity underneath the name rather than as columns, and a bulk bar
+that says what is selected and stops saying it when the selection is destroyed.
+
+### Where PR 2b came from
+
+Mockup A has a **"Submitted with the application"** column and its own caption calls those answers
+the evidence — "the thing the decision is actually made on — nowhere on the page" is the complaint
+the mockup was drawn to answer. It is in neither U5a.3 nor the first cut of the PR table. It is not
+a cell like the others: it needs `userinfodata` per row through the same masking
+`renderer::snapshot_context()` applies, which is a boundary that once rendered a password hash from
+a crafted archive. It gets its own pull request rather than being folded into this one.
+
+### Two things this slice broke and the reason both were the same mistake
+
+- **`sort_order_test` derived the columns from the table and then subtracted a hardcoded list of
+  the unsortable ones.** That list is a second statement of a fact the table already holds, and it
+  drifted the moment a column was added: the Review button's column joined the loop and the test
+  demanded a sort by a column the table refuses to sort. `is_sortable()` is the table's own answer
+  and there is now one statement of it. The derivation was introduced in PR 1 as an improvement
+  over a pinned list; it was half an improvement.
+- **A negative assertion matched the very value it was written to permit.**
+  `assertDoesNotMatchRegularExpression('/width: [1-9][0-9]{2,}%/')` forbids "over 100 percent" and
+  `100` matches it. Name the value the arithmetic would produce without the guard - here
+  `width: 200%` - rather than describing a range that contains the good answer.
+
+### The identity escaping boundary MOVED, and the gate moved with it
+
+`other_cols()` is gone: identity fields are not columns any more, they are the applicant cell's
+second line. The escaping they needed did not go away with them - `flexible_table` writes a cell's
+value into the markup with no escaping of its own - so it lives in `col_fullname()` now, and gate
+`AM` was repointed there. A gate whose target disappears is a gate that stops holding anything
+while still being listed.
+
+### What is held by what
+
+The Review link, the badges, the conditional course column and the earlier-applications predicate
+are all rendered by the table class, so PHPUnit reaches them. The capacity header's placement is
+held by a renderer test **and** by a gate on the mustache file itself, because "outside the
+`hasrows` section" is a one-line edit in a template that no PHP test would notice.
+
+The module's own behaviour - the count and the reset - is held only by an `@javascript` scenario,
+which is the honest place for it: nothing else in this repository executes the plugin's
+JavaScript. The reset is provoked by SORTING rather than by paging, because a sort is a refresh
+that needs one row rather than fifty-one.
 
 ## 2026-09-02 — U5a PR 1, the queue becomes a dynamic table
 

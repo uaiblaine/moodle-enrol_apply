@@ -78,6 +78,9 @@ class applications extends \table_sql implements dynamic_table {
     /** @var array Identity field names this reader may see, from \enrol_apply\local\identity. */
     protected $extrafields = [];
 
+    /** @var bool Whether define_table_columns() has run; see setup() for why it is deferred. */
+    protected $columnsdefined = false;
+
     /**
      * Build the table.
      *
@@ -160,7 +163,70 @@ class applications extends \table_sql implements dynamic_table {
         parent::set_filterset($filterset);
 
         $this->build_sql();
+    }
+
+    /**
+     * Render the table, having defined its columns first.
+     *
+     * **The columns cannot be defined in set_filterset(), and they cannot be left to setup()
+     * either. This is the one place that satisfies both constraints.**
+     *
+     * Not set_filterset(), because select_all_header() renders a core renderable through $OUTPUT
+     * and get.php calls set_filterset() BEFORE validate_context() - so on the refresh path there
+     * is no page context yet, $OUTPUT is still the bootstrap placeholder, and the first render
+     * throws "$PAGE->context was not set". That worked on every page load, because manage.php
+     * sets the context long before it builds the table, and only a real AJAX refresh in a real
+     * browser ever showed it.
+     *
+     * Not setup() alone, because sql_table::out() PROBES for columns before it calls setup():
+     * `if (!$this->columns)` runs an unpaginated `SELECT <fields> FROM <from> WHERE <where>` and
+     * names the columns after that row's keys (lib/table/classes/sql_table.php:213-222). With the
+     * definition deferred to setup() that branch fired on every single render - a second full
+     * query, joins and the EXISTS subquery included, thrown away moments later. Defining them
+     * here, before core's own out() is entered, is what keeps the branch cold.
+     *
+     * @param int $pagesize Rows per page.
+     * @param bool $useinitialsbar Ignored downstream; see initialbars().
+     * @param string $downloadhelpbutton Passed through to core.
+     * @return void
+     */
+    public function out($pagesize, $useinitialsbar, $downloadhelpbutton = '') {
+        $this->define_columns_once();
+
+        parent::out($pagesize, $useinitialsbar, $downloadhelpbutton);
+    }
+
+    /**
+     * Define the columns before core sets the table up.
+     *
+     * The other entry point, for a caller that reaches setup() without going through out().
+     *
+     * @return bool False when the table cannot be set up, as core's own does.
+     */
+    public function setup() {
+        $this->define_columns_once();
+
+        return parent::setup();
+    }
+
+    /**
+     * Define the columns, once, however many of the entry points above are reached.
+     *
+     * Idempotent by a flag rather than by define_columns() being idempotent - it is: core's
+     * define_columns() rebuilds $this->columns from scratch and resets the per-column styles and
+     * classes with it (lib/table/classes/flexible_table.php:460-476). So a second call would not
+     * duplicate anything; it would redo the identity lookup and the comment-label resolution for
+     * no reason. The flag says once and means it.
+     *
+     * @return void
+     */
+    protected function define_columns_once(): void {
+        if ($this->columnsdefined) {
+            return;
+        }
+
         $this->define_table_columns();
+        $this->columnsdefined = true;
     }
 
     /**
@@ -258,9 +324,31 @@ class applications extends \table_sql implements dynamic_table {
            key of that table but is deliberately not unique: an applicant who was cancelled
            and applied again has two records for the same course, and joining on the pair
            would show each of their rows twice. */
+        /* Whether this applicant has a record of applying to this course BEFORE. It is a badge
+           on the row rather than a number, because what it changes is whether the operator opens
+           the review page - "they were cancelled here in June" is the kind of fact that turns a
+           30-second decision into a 3-minute one, and the queue is where that choice is made.
+
+           A correlated EXISTS rather than a join, so the row count cannot change: a join to a
+           table whose natural key (courseid, userid) is deliberately NOT unique - cancelling and
+           re-applying is the ordinary route - would multiply the row per earlier application.
+           The courseuser index is the one this reads. CASE WHEN EXISTS is portable; both
+           database families CI runs plan it as a semi-join.
+
+           `s.id IS NULL OR prior.id <> s.id` excludes the row's own record: a submission that IS
+           the current application is not evidence of an earlier one. The null branch is for the
+           applications that predate the durable record, which have no s.id to exclude. */
+        $priorsql = "CASE WHEN EXISTS (
+                            SELECT 1
+                              FROM {enrol_apply_submission} prior
+                             WHERE prior.courseid = c.id
+                               AND prior.userid = ue.userid
+                               AND (s.id IS NULL OR prior.id <> s.id)
+                          ) THEN 1 ELSE 0 END AS appliedbefore";
+
         $fields = "ue.id AS userenrolmentid, ue.status AS enrolstatus, ue.timecreated AS applydate,
                    COALESCE(s.comment, ai.comment) AS applycomment, c.fullname AS course,
-                   c.id AS courseid, {$userfields}{$identitysql->selects}";
+                   c.id AS courseid, {$priorsql}, {$userfields}{$identitysql->selects}";
         $from = "{user_enrolments} ue
             LEFT JOIN {enrol_apply_applicationinfo} ai ON ai.userenrolmentid = ue.id
             LEFT JOIN {enrol_apply_submission} s ON s.userenrolmentid = ue.id
@@ -321,22 +409,28 @@ class applications extends \table_sql implements dynamic_table {
      * @return void
      */
     protected function define_table_columns(): void {
-        $columns = ['checkboxcolumn', 'course', 'fullname'];
-        $headers = [
-            $this->select_all_header(),
-            get_string('course'),
-            // The heading of a column named 'fullname' is filled in by table_sql itself.
-            'fullname',
-        ];
+        $columns = ['checkboxcolumn'];
+        $headers = [$this->select_all_header()];
 
-        /* The e-mail column used to sit here unconditionally, which is what made the queue
-           disclose more than the participants page next to it. It is now one identity field among
-           whichever ones the site configured and this reader may see - so on a default site it is
-           still here, and on a site that hides it, it is not. */
-        foreach ($this->extrafields as $field) {
-            $columns[] = $field;
-            $headers[] = \core_user\fields::get_display_name($field);
+        /* The course, and only where a row's course is not already known from the url. Every row
+           of an instance-scoped queue belongs to the same course, so the column would repeat one
+           value down the page and cost the applicant's own cell the width to do it. The site-wide
+           and mentee scopes span courses and cannot do without it. */
+        if ($this->scope->instance === null) {
+            $columns[] = 'course';
+            $headers[] = get_string('course');
         }
+
+        $columns[] = 'fullname';
+        // The heading of a column named 'fullname' is filled in by table_sql itself.
+        $headers[] = 'fullname';
+
+        /* The identity fields are NOT columns any more; they ride as a second line inside the
+           applicant's cell, and that is what makes a variable, capability-gated field list fit a
+           table at all - a site naming five of them would otherwise push the evidence off the
+           right-hand edge. What it costs is their sortability, which is a real loss and a small
+           one: sorting a triage queue by institution is not a thing operators do, and the filters
+           of a later slice are the affordance that replaces it. */
 
         $columns[] = 'applydate';
         $headers[] = get_string('applydate', 'enrol_apply');
@@ -349,15 +443,51 @@ class applications extends \table_sql implements dynamic_table {
             ? get_string('applycomment', 'enrol_apply')
             : commentlabel::custom($this->scope->instance);
 
+        /* The door to one application, and the queue had none. Its only routes in were the
+           participants-page icon, the notification e-mail and the previous/next chain, so an
+           operator reading the queue could not open the row they were reading. The header is
+           empty on purpose: a column of buttons needs no name, and every button carries one. */
+        $columns[] = 'review';
+        $headers[] = '';
+
         $this->define_columns($columns);
         $this->define_headers($headers);
+
         /* Names the cell that identifies each row, so table_sql emits it as a
            <th scope="row"> and a screen reader announces every other cell of the row
            against the applicant's name rather than reading a wall of bare values. */
         $this->define_header_column('fullname');
         $this->no_sorting('checkboxcolumn');
         $this->no_sorting('applycomment');
+        $this->no_sorting('review');
         $this->sortable(true, 'applydate', SORT_ASC);
+    }
+
+    /**
+     * A cell's own heading, for the card the row becomes below the breakpoint.
+     *
+     * **Real text in the markup, and NOT `content: attr(data-label)`.** The first cut of the card
+     * view put the wording in a data-* attribute and drew it from the stylesheet, which reads as
+     * the tidier answer and is the weaker one: CSS-generated content is announced inconsistently
+     * across screen readers, and - worse - turning the rows and cells into blocks costs the table
+     * its own semantics in the accessibility tree, so the association between a value and its
+     * column heading in the thead goes with it. Text inside the cell needs neither: it is
+     * announced everywhere, and it is beside the value it names whatever the display is.
+     *
+     * `role="cell"` and friends were the other candidate and were rejected: flexible_table
+     * offers no hook for ROW attributes, so the cells could have been given a role and the rows
+     * could not, and an orphan role="cell" with no role="row" ancestor is worse than none.
+     *
+     * Hidden above the breakpoint by styles.css, where the thead already says all this.
+     *
+     * The caller passes the ESCAPED spelling: html_writer::span() concatenates its content
+     * without escaping it, exactly as html_writer::tag() does for the headers.
+     *
+     * @param string $label Heading for this cell, already escaped.
+     * @return string The heading markup, to prefix the cell's own content with.
+     */
+    protected function card_label(string $label): string {
+        return html_writer::span($label, 'enrol_apply-cardlabel');
     }
 
     /**
@@ -390,19 +520,6 @@ class applications extends \table_sql implements dynamic_table {
     }
 
     /**
-     * Extra CSS classes for a row.
-     *
-     * @param stdClass $row Row data, an object carrying every selected column.
-     * @return string Value added to the class attribute of the row.
-     */
-    public function get_row_class($row) {
-        if ($row->enrolstatus == ENROL_APPLY_USER_WAIT) {
-            return 'enrol_apply_waitinglist_highlight';
-        }
-        return '';
-    }
-
-    /**
      * The per-row selection checkbox.
      *
      * @param stdClass $row Row data.
@@ -422,28 +539,6 @@ class applications extends \table_sql implements dynamic_table {
             'label' => get_string('selectapplicant', 'enrol_apply', fullname($row)),
             'labelclasses' => 'visually-hidden',
         ]));
-    }
-
-    /**
-     * Render an identity column.
-     *
-     * **This is the escaping boundary and it is easy to miss.** flexible_table writes
-     * `$row->$column` into the cell with no escaping of its own, so an identity field - which is
-     * user-controlled text - reaches the markup raw unless something escapes it here. Core's own
-     * participants table closes exactly this, with exactly this method, returning s() of the value;
-     * this is that shape. The queue's other columns each have a col_*() method doing their own
-     * escaping, which is why only the identity ones need this.
-     *
-     * @param string $colname Column being rendered.
-     * @param stdClass $row Row data.
-     * @return string Rendered cell, or the empty string for a column this method does not own.
-     */
-    public function other_cols($colname, $row) {
-        if (!in_array($colname, $this->extrafields, true)) {
-            return '';
-        }
-
-        return s($row->{$colname});
     }
 
     /**
@@ -496,17 +591,106 @@ class applications extends \table_sql implements dynamic_table {
     }
 
     /**
-     * The applicant name column, with the user picture.
+     * The applicant: their picture, their name, what is unusual about them, and who they are.
+     *
+     * Four things in one cell, and the reason they are in one cell rather than four columns is
+     * that only one of them has a fixed width. The identity list is whatever the site named in
+     * showuseridentity and this reader may see, so as columns it is a table whose shape changes
+     * per site and per reader; as a second line it is a paragraph that wraps.
+     *
+     * **This is now the escaping boundary, and it moved here from other_cols().** flexible_table
+     * writes a cell's value into the markup with no escaping of its own, and an identity field is
+     * user-controlled text. Everything below that is not already a link or a lang string goes
+     * through s() or format_string(). Gate AM is the one that reddens if an identity value stops
+     * being escaped.
+     *
+     * The name is a plain profile link and deliberately not a details modal: the decision needs
+     * the profile, and a modal that summarises it is a second thing to keep in step with the
+     * first.
      *
      * @param stdClass $row Row data carrying the aliased user picture fields.
      * @return string Rendered cell.
      */
     public function col_fullname($row) {
-        global $OUTPUT;
+        global $CFG, $OUTPUT;
+
+        /* ENROL_APPLY_USER_WAIT lives in the plugin's lib.php, which is not autoloaded while this
+           class is, and an undefined constant is a fatal on PHP 8. It is the FOURTH place in this
+           plugin needing the same line, and the first where the page path hid the omission: this
+           method is reached from manage.php, which requires lib.php itself, AND from core's
+           dynamic-table service, which requires nothing of the sort. So it worked for every page
+           load and died on the first AJAX refresh - measured, and only because a Behat scenario
+           provoked a sort. Anything else this class reaches for from lib.php has the same shape. */
+        require_once($CFG->dirroot . '/enrol/apply/lib.php');
 
         $user = user_picture::unalias($row, ['username'], 'userid');
 
-        return $OUTPUT->user_picture($user, ['popup' => true]) . fullname($user);
+        $name = html_writer::link(
+            new moodle_url('/user/view.php', ['id' => $user->id, 'course' => $row->courseid]),
+            fullname($user),
+            ['class' => 'enrol_apply-applicantname']
+        );
+
+        $badges = '';
+        if ($row->enrolstatus == ENROL_APPLY_USER_WAIT) {
+            /* text-dark beside bg-warning is not decoration. Bootstrap 5's .badge defaults its
+               colour to WHITE, so a light fill renders white on near-white - measured at 1.95:1
+               against the 4.5:1 floor. Every bg-* on a badge in this plugin carries an explicit
+               text utility for that reason. */
+            $badges .= html_writer::span(
+                get_string('queuewaitinglist', 'enrol_apply'),
+                'badge bg-warning text-dark me-1'
+            );
+        }
+        if (!empty($row->appliedbefore)) {
+            $badges .= html_writer::span(
+                get_string('queueappliedbefore', 'enrol_apply'),
+                'badge bg-secondary text-dark me-1'
+            );
+        }
+
+        $identity = [];
+        foreach ($this->extrafields as $field) {
+            $value = (string) ($row->{$field} ?? '');
+            if ($value !== '') {
+                $identity[] = html_writer::span(s($value), 'enrol_apply-identityvalue');
+            }
+        }
+
+        $lines = html_writer::div($name . ($badges !== '' ? ' ' . $badges : ''), 'enrol_apply-applicantline');
+        if ($identity) {
+            $lines .= html_writer::div(
+                implode('', $identity),
+                'enrol_apply-identityline small text-muted'
+            );
+        }
+
+        return html_writer::div(
+            $OUTPUT->user_picture($user, ['popup' => true]) . html_writer::div($lines, 'enrol_apply-applicanttext'),
+            'enrol_apply-applicant'
+        );
+    }
+
+    /**
+     * The door to this one application.
+     *
+     * @param stdClass $row Row data.
+     * @return string Rendered cell.
+     */
+    public function col_review($row) {
+        $user = user_picture::unalias($row, ['username'], 'userid');
+
+        /* The label names the applicant and is hidden, because the visible word is "Review" on
+           every row and a screen reader reading a column of them learns nothing. aria-label and
+           not a title: a title is not announced reliably and is invisible to a keyboard user. */
+        return html_writer::link(
+            new moodle_url('/enrol/apply/manage.php', ['userenrol' => $row->userenrolmentid]),
+            get_string('queuereview', 'enrol_apply'),
+            [
+                'class' => 'btn btn-secondary btn-sm',
+                'aria-label' => get_string('queuereviewapplicant', 'enrol_apply', fullname($user)),
+            ]
+        );
     }
 
     /**
@@ -518,7 +702,8 @@ class applications extends \table_sql implements dynamic_table {
     public function col_course($row) {
         $url = new moodle_url('/course/view.php', ['id' => $row->courseid]);
 
-        return html_writer::link($url, format_string($row->course), ['target' => '_blank']);
+        return $this->card_label(s(get_string('course')))
+            . html_writer::link($url, format_string($row->course), ['target' => '_blank']);
     }
 
     /**
@@ -528,7 +713,16 @@ class applications extends \table_sql implements dynamic_table {
      * @return string Rendered cell.
      */
     public function col_applydate($row) {
-        return userdate($row->applydate, get_string('strftimedatetimeshort', 'langconfig'));
+        /* How long ago, over the date itself. An operator triaging a queue is asking "how long
+           has this person been waiting", and a column of timestamps makes them do the subtraction
+           on every row. The exact date stays underneath, because the answer to "when exactly" has
+           to be on the page somewhere and this is where a reader looks for it. */
+        return $this->card_label(s(get_string('applydate', 'enrol_apply')))
+            . html_writer::div(format_time(time() - $row->applydate), 'enrol_apply-applyago')
+            . html_writer::div(
+                userdate($row->applydate, get_string('strftimedatetimeshort', 'langconfig')),
+                'enrol_apply-applyon small text-muted'
+            );
     }
 
     /**
@@ -538,6 +732,13 @@ class applications extends \table_sql implements dynamic_table {
      * @return string Rendered cell.
      */
     public function col_applycomment($row) {
-        return format_text($row->applycomment, FORMAT_PLAIN);
+        /* The instance's own wording, in the ESCAPED spelling, which is the same value and the
+           same spelling the column header carries - so the card and the desktop cannot disagree
+           about what the applicant was asked. commentlabel::custom() defaults to that spelling. */
+        $label = $this->scope->instance === null
+            ? s(get_string('applycomment', 'enrol_apply'))
+            : commentlabel::custom($this->scope->instance);
+
+        return $this->card_label($label) . format_text($row->applycomment, FORMAT_PLAIN);
     }
 }

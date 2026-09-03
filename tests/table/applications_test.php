@@ -26,6 +26,7 @@
 namespace enrol_apply\table;
 
 use core_table\local\filter\integer_filter;
+use enrol_apply\local\submission;
 use PHPUnit\Framework\Attributes\CoversClass;
 
 defined('MOODLE_INTERNAL') || die();
@@ -92,8 +93,36 @@ final class applications_test extends \advanced_testcase {
      * @return \stdClass The applicant.
      */
     protected function applicant(?\stdClass $instance = null): \stdClass {
+        global $DB;
+
+        $instance = $instance ?? $this->instance;
         $user = $this->getDataGenerator()->create_user();
-        $this->plugin->enrol_user($instance ?? $this->instance, $user->id, null, 0, 0, ENROL_USER_SUSPENDED);
+        $this->plugin->enrol_user($instance, $user->id, null, 0, 0, ENROL_USER_SUSPENDED);
+
+        /* **The row gets its OWN durable record, and that is not decoration.** Enrolling through
+           enrol_user() alone leaves the queue's `s` join NULL, which makes
+           `(s.id IS NULL OR prior.id <> s.id)` - the clause excluding this application from
+           counting as an earlier one - true whatever it says. Gate CK deletes that clause, and
+           against a fixture with no submission of its own it reddened NOTHING: the guard was held
+           by a test that could not see it. Found by an adversarial pass, and it is the failure
+           this repository's own rule names, arrived at from the fixture end rather than the
+           assertion end. */
+        $DB->insert_record('enrol_apply_submission', (object) [
+            'courseid' => $instance->courseid,
+            'userid' => $user->id,
+            'enrolid' => (int) $instance->id,
+            'userenrolmentid' => (int) $DB->get_field('user_enrolments', 'id', [
+                'userid' => $user->id,
+                'enrolid' => (int) $instance->id,
+            ], MUST_EXIST),
+            'comment' => 'Please let me in',
+            'userinfodata' => '',
+            'status' => submission::STATUS_PENDING,
+            'outcomemessage' => '',
+            'timecreated' => time(),
+            'timedecided' => 0,
+            'decidedby' => 0,
+        ]);
 
         return $user;
     }
@@ -128,6 +157,203 @@ final class applications_test extends \advanced_testcase {
         ob_end_clean();
 
         return array_map(static fn($row) => (int) $row->userenrolmentid, array_values($table->rawdata));
+    }
+
+    /**
+     * The queue rendered for a scope.
+     *
+     * @param int $enrolid Enrol instance to list, 0 for the scope with no instance.
+     * @return string The rendered table.
+     */
+    protected function rendered(int $enrolid): string {
+        $table = applications::for_scope($enrolid);
+
+        ob_start();
+        $table->out(50, true);
+
+        return ob_get_clean();
+    }
+
+    /**
+     * A queue scoped to one method does not repeat that method's course down the page.
+     *
+     * Every row of an instance-scoped queue belongs to the same course, so the column would say
+     * one thing over and over and charge the applicant's own cell the width to do it. The scopes
+     * that span courses cannot do without it, which is the control below.
+     *
+     * @return void
+     */
+    public function test_the_course_column_is_absent_when_the_url_already_names_the_course(): void {
+        $this->setAdminUser();
+        $this->applicant();
+
+        $scoped = $this->rendered((int) $this->instance->id);
+        $this->assertStringNotContainsString(format_string($this->course->fullname), $scoped);
+
+        /* The control, and it is what makes the assertion above about the COLUMN rather than
+           about a course name that was never going to appear: the site-wide scope lists the same
+           application and does name its course. */
+        $this->assertStringContainsString(
+            format_string($this->course->fullname),
+            $this->rendered(0)
+        );
+    }
+
+    /**
+     * Every row offers a way into the one application it is about.
+     *
+     * The queue had no such door. Its only routes to a single application were the
+     * participants-page icon, the notification e-mail and the previous/next chain, so an operator
+     * reading a row could not open it.
+     *
+     * @return void
+     */
+    public function test_every_row_offers_a_review_link(): void {
+        global $DB;
+
+        $this->setAdminUser();
+        $applicant = $this->applicant();
+        $ueid = (int) $DB->get_field('user_enrolments', 'id', [
+            'userid' => $applicant->id,
+            'enrolid' => $this->instance->id,
+        ], MUST_EXIST);
+
+        $html = $this->rendered((int) $this->instance->id);
+
+        $this->assertStringContainsString('userenrol=' . $ueid, $html);
+        // Named for the applicant, because "Review" on every row tells a screen reader nothing.
+        $this->assertStringContainsString(
+            s(get_string('queuereviewapplicant', 'enrol_apply', fullname($applicant))),
+            $html
+        );
+    }
+
+    /**
+     * A deferred application says so on its own row.
+     *
+     * It used to be a three-pixel rule down the left edge, which the help text described and
+     * nothing else did. A badge is readable, is announced, and survives the row becoming a card.
+     *
+     * @return void
+     */
+    public function test_a_deferred_application_is_badged(): void {
+        global $DB;
+
+        $this->setAdminUser();
+        $applicant = $this->applicant();
+        $DB->set_field('user_enrolments', 'status', ENROL_APPLY_USER_WAIT, [
+            'userid' => $applicant->id,
+            'enrolid' => $this->instance->id,
+        ]);
+
+        $html = $this->rendered((int) $this->instance->id);
+
+        $this->assertStringContainsString(get_string('queuewaitinglist', 'enrol_apply'), $html);
+        /* The control: an ordinary pending application does NOT carry it, so the badge is a
+           statement about this row rather than markup every row gets. */
+        $DB->set_field('user_enrolments', 'status', ENROL_USER_SUSPENDED, [
+            'userid' => $applicant->id,
+            'enrolid' => $this->instance->id,
+        ]);
+        $this->assertStringNotContainsString(
+            get_string('queuewaitinglist', 'enrol_apply'),
+            $this->rendered((int) $this->instance->id)
+        );
+    }
+
+    /**
+     * An applicant with a record of applying here before is marked as such.
+     *
+     * "They were cancelled here in June" is what turns a thirty-second decision into a three
+     * minute one, and the queue is where that choice is made. The durable record already holds
+     * it: its natural key is (courseid, userid) and is deliberately not unique.
+     *
+     * **The applicant already has a record of THIS application**, which is what makes the control
+     * below load bearing: without it the row's own submission would be evidence of itself and
+     * every row would be badged. That is what gate CK deletes, and against a fixture whose row had
+     * no record of its own the gate reddened nothing at all.
+     *
+     * @return void
+     */
+    public function test_an_applicant_who_applied_before_is_marked(): void {
+        global $DB;
+
+        $this->setAdminUser();
+        $applicant = $this->applicant();
+
+        /* The control comes FIRST, and it is the half that matters: without it a badge rendered
+           on every row would satisfy the assertion below just as well. */
+        $this->assertStringNotContainsString(
+            get_string('queueappliedbefore', 'enrol_apply'),
+            $this->rendered((int) $this->instance->id)
+        );
+
+        // An earlier, already decided application to the same course.
+        $DB->insert_record('enrol_apply_submission', (object) [
+            'courseid' => $this->course->id,
+            'userid' => $applicant->id,
+            'enrolid' => $this->instance->id,
+            'userenrolmentid' => 0,
+            'comment' => 'Cancelled in June by mistake',
+            'userinfodata' => '',
+            'status' => submission::STATUS_CANCELLED,
+            'outcomemessage' => '',
+            'timecreated' => time() - DAYSECS,
+            'timedecided' => time() - DAYSECS,
+            'decidedby' => 0,
+        ]);
+
+        $this->assertStringContainsString(
+            get_string('queueappliedbefore', 'enrol_apply'),
+            $this->rendered((int) $this->instance->id)
+        );
+    }
+
+    /**
+     * The refresh path renders the queue, and until now nothing exercised it at all.
+     *
+     * Every other test here builds the table directly. That is the PAGE's route, and it hides
+     * whatever the page did first - manage.php requires the plugin's lib.php, so a class reaching
+     * for a constant defined there works on every page load and dies on the first AJAX refresh.
+     * Measured: it did, and only a Behat scenario provoking a sort found it.
+     *
+     * This goes through core_table\external\dynamic\get::execute() instead, which is the request
+     * a refresh makes. It holds the handler name core resolves, the filterset round trip, the
+     * capability check and the rendering of every cell.
+     *
+     * **Know what it still cannot see, because two real defects hid from it.** Both were about
+     * state a REQUEST has and a test process does not. It cannot see a missing require of the
+     * plugin's lib.php, because PHPUnit runs one process and some other test has already required
+     * that file. And it cannot see work done before validate_context() establishes a page
+     * context, because $PAGE already carries one from whatever ran before - which is how column
+     * definition came to render a renderable with no context on the refresh path and pass here.
+     * A CLI reproduction of this same call misses both, for the same reason. The @javascript
+     * scenario is what holds them: a real browser, a real request, a page that starts empty.
+     *
+     * @return void
+     */
+    public function test_the_refresh_path_renders_the_same_queue(): void {
+        $this->setAdminUser();
+        $applicant = $this->applicant();
+
+        $result = \core_table\external\dynamic\get::execute(
+            'enrol_apply',
+            'applications',
+            applications::UNIQUEID,
+            [],
+            [['name' => 'enrolid', 'jointype' => 1, 'values' => [(int) $this->instance->id]]],
+            (string) \core_table\local\filter\filter::JOINTYPE_ALL,
+            '',
+            '',
+            1,
+            20,
+            [],
+            false
+        );
+
+        $this->assertStringContainsString(fullname($applicant), $result['html']);
+        // The scope really was applied on this route too, not just on the page's.
+        $this->assertStringContainsString('userenrol=', $result['html']);
     }
 
     /**

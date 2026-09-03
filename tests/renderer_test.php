@@ -225,6 +225,258 @@ final class renderer_test extends \advanced_testcase {
     }
 
     /**
+     * Render the queue for the scope that spans enrolment methods.
+     *
+     * @return string The rendered form.
+     */
+    private function render_sitewide_queue(): string {
+        global $PAGE;
+
+        $this->setAdminUser();
+        $url = new \moodle_url('/enrol/apply/manage.php');
+        $PAGE->set_url($url);
+        $PAGE->set_context(\context_system::instance());
+
+        $table = \enrol_apply\table\applications::for_scope(0);
+
+        return $PAGE->get_renderer('enrol_apply')->manage_form($table, $url, null);
+    }
+
+    /**
+     * The decision context renders on an EMPTY queue, which is when it explains the most.
+     *
+     * The whole reason the header sits outside the hasrows section of the template. A method
+     * whose applicant limit is reached holds an empty queue - every application it is counting
+     * may be deferred, and a deferred one is freed by nothing - so the state whose only symptom
+     * is "there is nothing here" is exactly the state the numbers are for. Inside that section
+     * they would vanish at that moment.
+     *
+     * @return void
+     */
+    public function test_the_capacity_header_renders_on_an_empty_queue(): void {
+        global $PAGE;
+
+        $this->setAdminUser();
+        $url = new \moodle_url('/enrol/apply/manage.php', ['id' => $this->instance->id]);
+        $PAGE->set_url($url);
+        $PAGE->set_context(\context_course::instance($this->course->id));
+
+        $table = \enrol_apply\table\applications::for_scope((int) $this->instance->id);
+        $html = $PAGE->get_renderer('enrol_apply')->manage_form($table, $url, $this->instance);
+
+        // The precondition: the queue really is empty, so this is about the empty case.
+        $this->assertSame(0, (int) $table->totalrows);
+        $this->assertStringContainsString(get_string('queueawaiting', 'enrol_apply'), $html);
+        $this->assertStringContainsString(get_string('queuedeferred', 'enrol_apply'), $html);
+        /* The control: the section that DOES depend on rows really is gone, so the assertions
+           above are not being satisfied by a template that renders everything unconditionally. */
+        $this->assertStringNotContainsString(get_string('withselectedusers'), $html);
+    }
+
+    /**
+     * No lang string reaches the queue with its placeholder still in it.
+     *
+     * **A test asserting that get_string(X) appears in the markup cannot see this**, because both
+     * sides of the comparison read the same broken string and agree. Measured: five strings were
+     * written with an escaped placeholder - `{\$a}` rather than `{$a}`, which PHP single quotes
+     * keep verbatim - and every unit test over them passed while the page rendered the literal
+     * text "{\$a} selected on this page". A Behat scenario spelling the expected words out is what
+     * caught it, and this is the cheap general form of that: one assertion for the whole class,
+     * over a page that renders the header, the rows and the bulk bar.
+     *
+     * @return void
+     */
+    public function test_no_placeholder_survives_into_the_queue(): void {
+        $html = $this->render_queue();
+
+        // The control: the page really did render, so this is not passing over an empty string.
+        $this->assertStringContainsString(get_string('queueawaiting', 'enrol_apply'), $html);
+        $this->assertStringNotContainsString('{$a', $html);
+    }
+
+    /**
+     * The status block renders for a queue scoped to one enrolment method.
+     *
+     * It did not, and the reason is the trap this repository documented earlier the same day and
+     * gated as `BW` earlier the same day: the context was returned with `$context + [...]`, and `+` keeps the LEFT
+     * side on a duplicate key - so the `hasstatus => false` set for the scopes that span methods
+     * silently won over the `true` set here, and the block never appeared on any instance-scoped
+     * queue. Every test passed, because none of them asserted the block existed.
+     *
+     * @return void
+     */
+    public function test_the_status_block_renders_for_one_method(): void {
+        $html = $this->render_queue();
+
+        $this->assertStringContainsString(get_string('queuestatus', 'enrol_apply'), $html);
+        $this->assertStringContainsString(get_string('queueapplicationsopen', 'enrol_apply'), $html);
+        /* The control: the scope that spans methods really does go without it, so this is about
+           the merge rather than about a block that renders unconditionally. */
+        $this->assertStringNotContainsString(
+            get_string('queuestatus', 'enrol_apply'),
+            $this->render_sitewide_queue()
+        );
+    }
+
+    /**
+     * The card view labels every cell it shows, with the wording that column actually carries.
+     *
+     * Below the breakpoint each labelled cell carries its own heading as REAL TEXT, hidden by
+     * the stylesheet above that width. It used to be a data-* attribute drawn with
+     * content: attr(), which is announced inconsistently by screen readers and - worse - leans on
+     * a thead association that turning rows into blocks has already destroyed. Nothing else in
+     * the suite reads these headings, which is exactly the kind of markup that rots unnoticed.
+     *
+     * The comment column is the one worth naming: its heading is the question the teacher
+     * configured, and the card said "Comment" while the desktop header said what was asked.
+     *
+     * @return void
+     */
+    public function test_the_card_view_labels_the_comment_column_with_its_own_wording(): void {
+        global $DB;
+
+        $DB->set_field('enrol', 'customtext2', 'Why you want in', ['id' => $this->instance->id]);
+
+        /* Through the helper that seeds a row, because the attributes live on CELLS: an empty
+           queue renders "Nothing to display" and no data-label at all, so a test without an
+           applicant would pass or fail for the wrong reason. The helper re-reads the instance
+           through listing_scope(), so the field set above is the one the table sees. */
+        $html = $this->render_queue();
+
+        $this->assertMatchesRegularExpression(
+            '/class="enrol_apply-cardlabel"[^>]*>Why you want in</',
+            $html,
+            $html
+        );
+        // The control: the columns that keep the shipped wording still carry a heading at all.
+        $this->assertMatchesRegularExpression(
+            '/class="enrol_apply-cardlabel"[^>]*>' . preg_quote(get_string('applydate', 'enrol_apply'), '/') . '</',
+            $html,
+            $html
+        );
+    }
+
+    /**
+     * A method that is closed says so, and one near its limit says how much room is left.
+     *
+     * Three branches of the status block that no other test reaches, and their two strings carry
+     * placeholders - so test_no_placeholder_survives_into_the_queue cannot see them either: a
+     * string that is never rendered cannot render a placeholder.
+     *
+     * @return void
+     */
+    public function test_the_status_block_reports_a_closed_method_and_the_room_left(): void {
+        global $DB, $PAGE;
+
+        $this->setAdminUser();
+
+        // Near the limit: four of five held, so one more will be accepted.
+        $DB->set_field('enrol', 'customint3', 5, ['id' => $this->instance->id]);
+        foreach (range(1, 4) as $ignored) {
+            $user = $this->getDataGenerator()->create_user();
+            $this->plugin->enrol_user($this->instance, $user->id, null, 0, 0, ENROL_USER_SUSPENDED);
+        }
+        $this->instance = $DB->get_record('enrol', ['id' => $this->instance->id], '*', MUST_EXIST);
+
+        $url = new \moodle_url('/enrol/apply/manage.php', ['id' => $this->instance->id]);
+        $PAGE->set_url($url);
+        $PAGE->set_context(\context_course::instance($this->course->id));
+        $renderer = $PAGE->get_renderer('enrol_apply');
+        $open = $renderer->manage_form(
+            \enrol_apply\table\applications::for_scope((int) $this->instance->id),
+            $url,
+            $this->instance
+        );
+
+        $this->assertStringContainsString(get_string('queueapplicationsopen', 'enrol_apply'), $open);
+        $this->assertStringContainsString(get_string('queueremaining', 'enrol_apply', 1), $open);
+        $this->assertStringNotContainsString('{$a', $open);
+
+        // And at the limit it is closed, with the room-left sentence gone rather than reading zero.
+        $user = $this->getDataGenerator()->create_user();
+        $this->plugin->enrol_user($this->instance, $user->id, null, 0, 0, ENROL_USER_SUSPENDED);
+        $closed = $renderer->manage_form(
+            \enrol_apply\table\applications::for_scope((int) $this->instance->id),
+            $url,
+            $this->instance
+        );
+
+        $this->assertStringContainsString(get_string('queueapplicationsclosed', 'enrol_apply'), $closed);
+        $this->assertStringNotContainsString(get_string('queueremaining', 'enrol_apply', 0), $closed);
+    }
+
+    /**
+     * A closing date is named while the method is still open.
+     *
+     * The remaining branch, and the second placeholder string the page can render.
+     *
+     * @return void
+     */
+    public function test_the_status_block_names_the_closing_date(): void {
+        global $DB, $PAGE;
+
+        $this->setAdminUser();
+        $when = time() + (30 * DAYSECS);
+        $DB->set_field('enrol', 'enrolenddate', $when, ['id' => $this->instance->id]);
+        $this->instance = $DB->get_record('enrol', ['id' => $this->instance->id], '*', MUST_EXIST);
+
+        $url = new \moodle_url('/enrol/apply/manage.php', ['id' => $this->instance->id]);
+        $PAGE->set_url($url);
+        $PAGE->set_context(\context_course::instance($this->course->id));
+        $html = $PAGE->get_renderer('enrol_apply')->manage_form(
+            \enrol_apply\table\applications::for_scope((int) $this->instance->id),
+            $url,
+            $this->instance
+        );
+
+        $this->assertStringContainsString(
+            get_string('queuecloseson', 'enrol_apply', userdate($when, get_string('strftimedate', 'langconfig'))),
+            $html
+        );
+        $this->assertStringNotContainsString('{$a', $html);
+    }
+
+    /**
+     * A meter never draws past the end of its bar.
+     *
+     * Both numbers can legitimately exceed their own limit: an administrator can enrol past the
+     * places cap by hand, and the applicant limit can be lowered under applications already held.
+     * An unclamped width would render as a bar overflowing its track, which reads as a rendering
+     * fault rather than as the over-capacity state it is.
+     *
+     * @return void
+     */
+    public function test_a_meter_never_overflows_its_bar(): void {
+        global $DB, $PAGE;
+
+        $this->setAdminUser();
+
+        // One PLACE (customint4), and two applicants already approved into it.
+        $this->instance->customint4 = 1;
+        $DB->update_record('enrol', $this->instance);
+        foreach (range(1, 2) as $ignored) {
+            $user = $this->getDataGenerator()->create_user();
+            $this->plugin->enrol_user($this->instance, $user->id, null, 0, 0, ENROL_USER_ACTIVE);
+        }
+
+        $url = new \moodle_url('/enrol/apply/manage.php', ['id' => $this->instance->id]);
+        $PAGE->set_url($url);
+        $PAGE->set_context(\context_course::instance($this->course->id));
+        $table = \enrol_apply\table\applications::for_scope((int) $this->instance->id);
+        $html = $PAGE->get_renderer('enrol_apply')->manage_form($table, $url, $this->instance);
+
+        // The precondition: the meter is really over capacity, so a clamp is what is under test.
+        $this->assertStringContainsString(
+            get_string('reviewofmany', 'enrol_apply', (object) ['taken' => 2, 'total' => 1]),
+            $html
+        );
+        $this->assertMatchesRegularExpression('/enrol_apply-meterfill[^"]*"\s+style="width: 100%"/', $html, $html);
+        /* The value the arithmetic produces without the clamp, named exactly. A pattern for "any
+           width over 100" is the shape that goes wrong here: 100 itself matches most of them. */
+        $this->assertStringNotContainsString('width: 200%', $html);
+    }
+
+    /**
      * Every checkbox in the queue speaks core/checkbox-toggleall's vocabulary, in one group.
      *
      * The three data attributes are what core's module matches on; the plugin's own markup

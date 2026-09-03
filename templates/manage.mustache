@@ -25,8 +25,12 @@
     Context variables required for this template:
     * formurl string - url the decision form posts back to
     * sesskey string - session key guarding the state change
+    * capacityhtml string - the decision context above the table, already rendered. OUTSIDE the
+      hasrows section for the same reason the two notices are: a method whose applicant limit is
+      reached has an EMPTY queue, and its numbers are what explain that
     * tablehtml string - pre-rendered applications table
     * hasrows boolean - whether the table has at least one application
+    * showingtext string - which rows of how many are on screen, shown only where there are rows
     * hasplacesnotice boolean - whether every place on the method is taken
     * placesnotice string - the sentence saying so
     * hasclosednotice boolean - whether the method has reached its applicant limit and is
@@ -52,8 +56,10 @@
         "placesnotice": "All 20 places on this enrolment method are taken.",
         "hasclosednotice": true,
         "closednotice": "This enrolment method holds 40 of a maximum 40 applications and is accepting no more. 12 of them are deferred; cancelling the ones no longer needed makes room.",
+        "capacityhtml": "<div class=\"card\"><div class=\"card-body\">12 awaiting decision</div></div>",
         "tablehtml": "<table class=\"generaltable\"><tbody><tr><td>Student 1</td></tr></tbody></table>",
         "hasrows": true,
+        "showingtext": "Showing 1-4 of 4",
         "stickyfooter": "<div id=\"sticky-footer\"><button type=\"submit\">Go</button></div>",
         "messagelabel": "Message to the applicant",
         "messagehelp": "Included in the message they receive. Optional.",
@@ -86,10 +92,12 @@
     {{#hasclosednotice}}
         <div class="alert alert-warning" role="status">{{closednotice}}</div>
     {{/hasclosednotice}}
+    {{{capacityhtml}}}
     <div class="enrol_apply-table">
         {{{tablehtml}}}
     </div>
     {{#hasrows}}
+        <div class="enrol_apply-showing small text-muted mb-3">{{showingtext}}</div>
         {{> enrol_apply/decision_controls }}
         {{{stickyfooter}}}
     {{/hasrows}}
