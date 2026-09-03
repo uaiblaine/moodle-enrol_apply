@@ -166,31 +166,67 @@ class applications extends \table_sql implements dynamic_table {
     }
 
     /**
-     * Define the columns, then let core set the table up.
+     * Render the table, having defined its columns first.
      *
-     * **The columns are defined HERE and not in set_filterset(), and the ordering is the whole
-     * reason.** select_all_header() renders a core renderable through $OUTPUT, and get.php calls
-     * set_filterset() BEFORE validate_context() (:229-230) - so on the refresh path there is no
-     * page context yet, $OUTPUT is still the bootstrap placeholder, and the first render throws
-     * "$PAGE->context was not set". setup() is reached from out(), which get.php calls after
-     * validate_context(), so by then the context exists on both paths.
+     * **The columns cannot be defined in set_filterset(), and they cannot be left to setup()
+     * either. This is the one place that satisfies both constraints.**
      *
-     * It worked on every page load regardless, because manage.php sets the context long before
-     * it builds the table. Only a real AJAX refresh in a real browser could show it, which is
-     * what did.
+     * Not set_filterset(), because select_all_header() renders a core renderable through $OUTPUT
+     * and get.php calls set_filterset() BEFORE validate_context() - so on the refresh path there
+     * is no page context yet, $OUTPUT is still the bootstrap placeholder, and the first render
+     * throws "$PAGE->context was not set". That worked on every page load, because manage.php
+     * sets the context long before it builds the table, and only a real AJAX refresh in a real
+     * browser ever showed it.
      *
-     * Guarded because core's own setup() is safe to call twice - it returns early on an empty
-     * column list - while define_columns() is not: a second call would append a duplicate set.
+     * Not setup() alone, because sql_table::out() PROBES for columns before it calls setup():
+     * `if (!$this->columns)` runs an unpaginated `SELECT <fields> FROM <from> WHERE <where>` and
+     * names the columns after that row's keys (lib/table/classes/sql_table.php:213-222). With the
+     * definition deferred to setup() that branch fired on every single render - a second full
+     * query, joins and the EXISTS subquery included, thrown away moments later. Defining them
+     * here, before core's own out() is entered, is what keeps the branch cold.
+     *
+     * @param int $pagesize Rows per page.
+     * @param bool $useinitialsbar Ignored downstream; see initialbars().
+     * @param string $downloadhelpbutton Passed through to core.
+     * @return void
+     */
+    public function out($pagesize, $useinitialsbar, $downloadhelpbutton = '') {
+        $this->define_columns_once();
+
+        parent::out($pagesize, $useinitialsbar, $downloadhelpbutton);
+    }
+
+    /**
+     * Define the columns before core sets the table up.
+     *
+     * The other entry point, for a caller that reaches setup() without going through out().
      *
      * @return bool False when the table cannot be set up, as core's own does.
      */
     public function setup() {
-        if (!$this->columnsdefined) {
-            $this->define_table_columns();
-            $this->columnsdefined = true;
-        }
+        $this->define_columns_once();
 
         return parent::setup();
+    }
+
+    /**
+     * Define the columns, once, however many of the entry points above are reached.
+     *
+     * Idempotent by a flag rather than by define_columns() being idempotent - it is: core's
+     * define_columns() rebuilds $this->columns from scratch and resets the per-column styles and
+     * classes with it (lib/table/classes/flexible_table.php:460-476). So a second call would not
+     * duplicate anything; it would redo the identity lookup and the comment-label resolution for
+     * no reason. The flag says once and means it.
+     *
+     * @return void
+     */
+    protected function define_columns_once(): void {
+        if ($this->columnsdefined) {
+            return;
+        }
+
+        $this->define_table_columns();
+        $this->columnsdefined = true;
     }
 
     /**
@@ -417,18 +453,6 @@ class applications extends \table_sql implements dynamic_table {
         $this->define_columns($columns);
         $this->define_headers($headers);
 
-        /* What each cell is called, put on the cell itself, so that below the breakpoint the CSS
-           can turn a row into a card and draw the label beside the value. Keyed by COLUMN NAME:
-           the docblock's 'c0_firstname' example is misleading, and format_row() resolves the key
-           through $colbyindex[$index] (lib/table/classes/flexible_table.php:1149-1153). The
-           checkbox and the review button get none - a card labels neither. */
-        $labels = [];
-        if ($this->scope->instance === null) {
-            $labels['course'] = ['data-label' => get_string('course')];
-        }
-        $labels['applydate'] = ['data-label' => get_string('applydate', 'enrol_apply')];
-        $labels['applycomment'] = ['data-label' => get_string('applycomment', 'enrol_apply')];
-        $this->set_columnsattributes($labels);
         /* Names the cell that identifies each row, so table_sql emits it as a
            <th scope="row"> and a screen reader announces every other cell of the row
            against the applicant's name rather than reading a wall of bare values. */
@@ -437,6 +461,33 @@ class applications extends \table_sql implements dynamic_table {
         $this->no_sorting('applycomment');
         $this->no_sorting('review');
         $this->sortable(true, 'applydate', SORT_ASC);
+    }
+
+    /**
+     * A cell's own heading, for the card the row becomes below the breakpoint.
+     *
+     * **Real text in the markup, and NOT `content: attr(data-label)`.** The first cut of the card
+     * view put the wording in a data-* attribute and drew it from the stylesheet, which reads as
+     * the tidier answer and is the weaker one: CSS-generated content is announced inconsistently
+     * across screen readers, and - worse - turning the rows and cells into blocks costs the table
+     * its own semantics in the accessibility tree, so the association between a value and its
+     * column heading in the thead goes with it. Text inside the cell needs neither: it is
+     * announced everywhere, and it is beside the value it names whatever the display is.
+     *
+     * `role="cell"` and friends were the other candidate and were rejected: flexible_table
+     * offers no hook for ROW attributes, so the cells could have been given a role and the rows
+     * could not, and an orphan role="cell" with no role="row" ancestor is worse than none.
+     *
+     * Hidden above the breakpoint by styles.css, where the thead already says all this.
+     *
+     * The caller passes the ESCAPED spelling: html_writer::span() concatenates its content
+     * without escaping it, exactly as html_writer::tag() does for the headers.
+     *
+     * @param string $label Heading for this cell, already escaped.
+     * @return string The heading markup, to prefix the cell's own content with.
+     */
+    protected function card_label(string $label): string {
+        return html_writer::span($label, 'enrol_apply-cardlabel');
     }
 
     /**
@@ -651,7 +702,8 @@ class applications extends \table_sql implements dynamic_table {
     public function col_course($row) {
         $url = new moodle_url('/course/view.php', ['id' => $row->courseid]);
 
-        return html_writer::link($url, format_string($row->course), ['target' => '_blank']);
+        return $this->card_label(s(get_string('course')))
+            . html_writer::link($url, format_string($row->course), ['target' => '_blank']);
     }
 
     /**
@@ -665,7 +717,8 @@ class applications extends \table_sql implements dynamic_table {
            has this person been waiting", and a column of timestamps makes them do the subtraction
            on every row. The exact date stays underneath, because the answer to "when exactly" has
            to be on the page somewhere and this is where a reader looks for it. */
-        return html_writer::div(format_time(time() - $row->applydate), 'enrol_apply-applyago')
+        return $this->card_label(s(get_string('applydate', 'enrol_apply')))
+            . html_writer::div(format_time(time() - $row->applydate), 'enrol_apply-applyago')
             . html_writer::div(
                 userdate($row->applydate, get_string('strftimedatetimeshort', 'langconfig')),
                 'enrol_apply-applyon small text-muted'
@@ -679,6 +732,13 @@ class applications extends \table_sql implements dynamic_table {
      * @return string Rendered cell.
      */
     public function col_applycomment($row) {
-        return format_text($row->applycomment, FORMAT_PLAIN);
+        /* The instance's own wording, in the ESCAPED spelling, which is the same value and the
+           same spelling the column header carries - so the card and the desktop cannot disagree
+           about what the applicant was asked. commentlabel::custom() defaults to that spelling. */
+        $label = $this->scope->instance === null
+            ? s(get_string('applycomment', 'enrol_apply'))
+            : commentlabel::custom($this->scope->instance);
+
+        return $this->card_label($label) . format_text($row->applycomment, FORMAT_PLAIN);
     }
 }

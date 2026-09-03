@@ -125,8 +125,10 @@ final class sort_order_test extends \advanced_testcase {
         );
 
         /* The control, because a derived list can be derived from nothing: an empty or truncated
-           set would make the loop below assert on air. Admin on a default site sees email as an
-           identity column, so the three are course, fullname and applydate. */
+           set would make the loop below assert on air. The identity fields stopped being columns
+           in U5a PR 2 - they ride inside the applicant's cell now - so the sortable set for the
+           site-wide scope is course, fullname and applydate, and only a column added later would
+           push it higher. */
         $this->assertGreaterThanOrEqual(3, count($sortable), implode(', ', $sortable));
 
         foreach ($sortable as $column) {

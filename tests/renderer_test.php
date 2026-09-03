@@ -297,8 +297,8 @@ final class renderer_test extends \advanced_testcase {
     /**
      * The status block renders for a queue scoped to one enrolment method.
      *
-     * It did not, and the reason is the trap this repository documented four hours earlier and
-     * gated as `BW`: the context was returned with `$context + [...]`, and `+` keeps the LEFT
+     * It did not, and the reason is the trap this repository documented earlier the same day and
+     * gated as `BW` earlier the same day: the context was returned with `$context + [...]`, and `+` keeps the LEFT
      * side on a duplicate key - so the `hasstatus => false` set for the scopes that span methods
      * silently won over the `true` set here, and the block never appeared on any instance-scoped
      * queue. Every test passed, because none of them asserted the block existed.
@@ -316,6 +316,124 @@ final class renderer_test extends \advanced_testcase {
             get_string('queuestatus', 'enrol_apply'),
             $this->render_sitewide_queue()
         );
+    }
+
+    /**
+     * The card view labels every cell it shows, with the wording that column actually carries.
+     *
+     * Below the breakpoint each labelled cell carries its own heading as REAL TEXT, hidden by
+     * the stylesheet above that width. It used to be a data-* attribute drawn with
+     * content: attr(), which is announced inconsistently by screen readers and - worse - leans on
+     * a thead association that turning rows into blocks has already destroyed. Nothing else in
+     * the suite reads these headings, which is exactly the kind of markup that rots unnoticed.
+     *
+     * The comment column is the one worth naming: its heading is the question the teacher
+     * configured, and the card said "Comment" while the desktop header said what was asked.
+     *
+     * @return void
+     */
+    public function test_the_card_view_labels_the_comment_column_with_its_own_wording(): void {
+        global $DB;
+
+        $DB->set_field('enrol', 'customtext2', 'Why you want in', ['id' => $this->instance->id]);
+
+        /* Through the helper that seeds a row, because the attributes live on CELLS: an empty
+           queue renders "Nothing to display" and no data-label at all, so a test without an
+           applicant would pass or fail for the wrong reason. The helper re-reads the instance
+           through listing_scope(), so the field set above is the one the table sees. */
+        $html = $this->render_queue();
+
+        $this->assertMatchesRegularExpression(
+            '/class="enrol_apply-cardlabel"[^>]*>Why you want in</',
+            $html,
+            $html
+        );
+        // The control: the columns that keep the shipped wording still carry a heading at all.
+        $this->assertMatchesRegularExpression(
+            '/class="enrol_apply-cardlabel"[^>]*>' . preg_quote(get_string('applydate', 'enrol_apply'), '/') . '</',
+            $html,
+            $html
+        );
+    }
+
+    /**
+     * A method that is closed says so, and one near its limit says how much room is left.
+     *
+     * Three branches of the status block that no other test reaches, and their two strings carry
+     * placeholders - so test_no_placeholder_survives_into_the_queue cannot see them either: a
+     * string that is never rendered cannot render a placeholder.
+     *
+     * @return void
+     */
+    public function test_the_status_block_reports_a_closed_method_and_the_room_left(): void {
+        global $DB, $PAGE;
+
+        $this->setAdminUser();
+
+        // Near the limit: four of five held, so one more will be accepted.
+        $DB->set_field('enrol', 'customint3', 5, ['id' => $this->instance->id]);
+        foreach (range(1, 4) as $ignored) {
+            $user = $this->getDataGenerator()->create_user();
+            $this->plugin->enrol_user($this->instance, $user->id, null, 0, 0, ENROL_USER_SUSPENDED);
+        }
+        $this->instance = $DB->get_record('enrol', ['id' => $this->instance->id], '*', MUST_EXIST);
+
+        $url = new \moodle_url('/enrol/apply/manage.php', ['id' => $this->instance->id]);
+        $PAGE->set_url($url);
+        $PAGE->set_context(\context_course::instance($this->course->id));
+        $renderer = $PAGE->get_renderer('enrol_apply');
+        $open = $renderer->manage_form(
+            \enrol_apply\table\applications::for_scope((int) $this->instance->id),
+            $url,
+            $this->instance
+        );
+
+        $this->assertStringContainsString(get_string('queueapplicationsopen', 'enrol_apply'), $open);
+        $this->assertStringContainsString(get_string('queueremaining', 'enrol_apply', 1), $open);
+        $this->assertStringNotContainsString('{$a', $open);
+
+        // And at the limit it is closed, with the room-left sentence gone rather than reading zero.
+        $user = $this->getDataGenerator()->create_user();
+        $this->plugin->enrol_user($this->instance, $user->id, null, 0, 0, ENROL_USER_SUSPENDED);
+        $closed = $renderer->manage_form(
+            \enrol_apply\table\applications::for_scope((int) $this->instance->id),
+            $url,
+            $this->instance
+        );
+
+        $this->assertStringContainsString(get_string('queueapplicationsclosed', 'enrol_apply'), $closed);
+        $this->assertStringNotContainsString(get_string('queueremaining', 'enrol_apply', 0), $closed);
+    }
+
+    /**
+     * A closing date is named while the method is still open.
+     *
+     * The remaining branch, and the second placeholder string the page can render.
+     *
+     * @return void
+     */
+    public function test_the_status_block_names_the_closing_date(): void {
+        global $DB, $PAGE;
+
+        $this->setAdminUser();
+        $when = time() + (30 * DAYSECS);
+        $DB->set_field('enrol', 'enrolenddate', $when, ['id' => $this->instance->id]);
+        $this->instance = $DB->get_record('enrol', ['id' => $this->instance->id], '*', MUST_EXIST);
+
+        $url = new \moodle_url('/enrol/apply/manage.php', ['id' => $this->instance->id]);
+        $PAGE->set_url($url);
+        $PAGE->set_context(\context_course::instance($this->course->id));
+        $html = $PAGE->get_renderer('enrol_apply')->manage_form(
+            \enrol_apply\table\applications::for_scope((int) $this->instance->id),
+            $url,
+            $this->instance
+        );
+
+        $this->assertStringContainsString(
+            get_string('queuecloseson', 'enrol_apply', userdate($when, get_string('strftimedate', 'langconfig'))),
+            $html
+        );
+        $this->assertStringNotContainsString('{$a', $html);
     }
 
     /**

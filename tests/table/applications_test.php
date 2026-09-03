@@ -93,8 +93,36 @@ final class applications_test extends \advanced_testcase {
      * @return \stdClass The applicant.
      */
     protected function applicant(?\stdClass $instance = null): \stdClass {
+        global $DB;
+
+        $instance = $instance ?? $this->instance;
         $user = $this->getDataGenerator()->create_user();
-        $this->plugin->enrol_user($instance ?? $this->instance, $user->id, null, 0, 0, ENROL_USER_SUSPENDED);
+        $this->plugin->enrol_user($instance, $user->id, null, 0, 0, ENROL_USER_SUSPENDED);
+
+        /* **The row gets its OWN durable record, and that is not decoration.** Enrolling through
+           enrol_user() alone leaves the queue's `s` join NULL, which makes
+           `(s.id IS NULL OR prior.id <> s.id)` - the clause excluding this application from
+           counting as an earlier one - true whatever it says. Gate CK deletes that clause, and
+           against a fixture with no submission of its own it reddened NOTHING: the guard was held
+           by a test that could not see it. Found by an adversarial pass, and it is the failure
+           this repository's own rule names, arrived at from the fixture end rather than the
+           assertion end. */
+        $DB->insert_record('enrol_apply_submission', (object) [
+            'courseid' => $instance->courseid,
+            'userid' => $user->id,
+            'enrolid' => (int) $instance->id,
+            'userenrolmentid' => (int) $DB->get_field('user_enrolments', 'id', [
+                'userid' => $user->id,
+                'enrolid' => (int) $instance->id,
+            ], MUST_EXIST),
+            'comment' => 'Please let me in',
+            'userinfodata' => '',
+            'status' => submission::STATUS_PENDING,
+            'outcomemessage' => '',
+            'timecreated' => time(),
+            'timedecided' => 0,
+            'decidedby' => 0,
+        ]);
 
         return $user;
     }
@@ -239,6 +267,11 @@ final class applications_test extends \advanced_testcase {
      * "They were cancelled here in June" is what turns a thirty-second decision into a three
      * minute one, and the queue is where that choice is made. The durable record already holds
      * it: its natural key is (courseid, userid) and is deliberately not unique.
+     *
+     * **The applicant already has a record of THIS application**, which is what makes the control
+     * below load bearing: without it the row's own submission would be evidence of itself and
+     * every row would be badged. That is what gate CK deletes, and against a fixture whose row had
+     * no record of its own the gate reddened nothing at all.
      *
      * @return void
      */

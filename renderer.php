@@ -229,8 +229,9 @@ class enrol_apply_renderer extends plugin_renderer_base {
         }
 
         $limit = $capacity::applicant_limit($instance);
+        // Counted ONCE. The meter, the open/closed test and the room-left sentence all want it.
+        $held = $limit > 0 ? $capacity::applicants($instance) : 0;
         if ($limit > 0) {
-            $held = $capacity::applicants($instance);
             $context['meters'][] = [
                 'value' => get_string('reviewofmany', 'enrol_apply', (object) [
                     'taken' => $held,
@@ -252,15 +253,20 @@ class enrol_apply_renderer extends plugin_renderer_base {
             && !empty($instance->customint6)
             && !($startdate > 0 && $startdate > $now)
             && !($enddate > 0 && $enddate < $now)
-            && !$capacity::applications_closed($instance);
+            /* capacity::applications_closed() inlined, and it must keep agreeing with it: that
+               method is `$limit !== 0 && applicants() >= $limit`, and applicant_limit() clamps a
+               negative to 0, so `$limit > 0` and its `$limit !== 0` are the same test. Inlined
+               only to stop a third identical COUNT over {user_enrolments} in one render - $held
+               is that count, taken once above. If that method grows a clause, this grows it. */
+            && !($limit > 0 && $held >= $limit);
 
-        $remaining = $limit > 0 ? $limit - $capacity::applicants($instance) : 0;
+        $remaining = $limit > 0 ? $limit - $held : 0;
 
         /* array_merge and never the + operator. `+` keeps the LEFT side on a duplicate key, and
            $context already carries 'hasstatus' => false from the site-wide default above - so the
            + form silently kept the false and the whole status block never rendered, on every
            instance-scoped queue. Found by looking at the page; no test asserted the block, and
-           the slice that documented this exact trap (U6, gate BW) is four hours old. */
+           the slice that documented this exact trap (U6, gate BW) landed earlier the same day. */
         return array_merge($context, [
             'hasstatus' => true,
             'statuslabel' => get_string('queuestatus', 'enrol_apply'),

@@ -7,73 +7,58 @@ saying so rather than an entry that reads like the others.
 
 ## IN FLIGHT — U5a PR 2, on `feature/the-queue-shows-the-decision`
 
-**This is the one entry in this file written about work that is NOT merged.** Read it before
-anything else; the section below it describes the same slice as though it were finished, which is
-this file's convention and is why this header exists.
+**The one entry in this file about work that is NOT merged.** The section below it describes the
+same slice as though it were finished, which is this file's convention and is why this header
+exists. `version.php` is `2026090300`.
 
-`version.php` is `2026090300`. Branch pushed, no pull request opened yet.
-
-### Verified so far
+### Verified
 
 | | |
 |---|---|
-| PHPUnit m501 | `OK (471 tests)` |
-| Behat m501 | **9 scenarios, 218 steps, all passing** — including the new `@javascript` one, which provokes a real AJAX refresh |
-| Templates | all three render against their own example contexts |
-| eslint / stylelint | clean at CI strictness, run offline from the node:22 image |
-| Mutation pre-flight | the four new scripts (`CG`, `CH`, `CJ`, `CK`) and the repointed `AM` each simulated outside the tree and `php -l`ed |
+| PHPUnit | m502 and m501, both green |
+| Behat | **9 scenarios, 218 steps**, green on both stacks, including the `@javascript` one that provokes a real AJAX refresh |
+| Mutation gates | seven touched by this slice (`AM`, `CG`, `CH`, `CJ`, `CK`, `CM`, `CN`), each reddening the test it names |
+| eslint / stylelint | clean at CI strictness |
+| Adversarial pass | six Sonnet lenses, thirteen findings, **six real and fixed** |
 
-### Still owed, in this order
+### Still owed
 
-1. `mdl phpunit m502 enrol_apply` and `mdl behat m502 @enrol_apply` — the 5.02 half. **Blocked at the
-   time of writing**: a sibling session held the m502 lock for a 20-gate sweep of
-   `local_unlistedcourses` from 16:40. `MDL_LOCK_WAIT=3600` queues behind it.
-2. `mdl mutate moodle-enrol_apply mutations/gates.conf --keep-logs --only AM_identity_not_escaped,CG_course_column_always_shown,CH_capacity_header_inside_hasrows,CJ_meter_unclamped,CK_applied_before_counts_itself`
-3. `mdl ci moodle-enrol_apply --matrix --behat --keep-logs`. Expect the four 5.02 legs to die in
-   `moodle-plugin-ci install` on core 5.2's esm.sh fetch through a proxy Node ignores; that is
-   environmental and GitHub is unaffected.
-4. An adversarial pass over the slice — six lenses on Sonnet, adjudicated inline. The script from
-   PR 1 is a good starting point.
-5. Commit, push, PR, check the rollup COUNT is positive, merge.
+1. `mdl ci moodle-enrol_apply --matrix --behat --keep-logs`. **On the home network this should be
+   the first time all seven legs run**: the four 5.02 legs used to die in `moodle-plugin-ci
+   install` on core 5.2's esm.sh fetch through a proxy Node ignores, and there is no proxy here.
+2. Commit, push, PR, check the rollup COUNT is positive, merge.
 
-### Logging into m502 by hand needs `?nocpf=1`
+### What the adversarial pass found, and why none of it was caught earlier
 
-`http://localhost:8502/login/index.php?nocpf=1`. The plain url refuses admin/moodle while
-`auth_loginsteps` is enabled there, and every check aimed at the ACCOUNT comes back clean -
-`password_verify('moodle', ...)` true, `auth=manual`, unsuspended - so nothing about the failure
-points at the cause. It cost most of an afternoon here, and the cost was not the login: with the
-browser locked out the fallback was CLI reproductions of the web service, and those are exactly
-the instrument that cannot see the two defects below.
+Two were regressions from THIS slice's own earlier fixes, which is the part worth reading:
 
-### Three defects, and what did NOT catch them
+- **Deferring column definition to `setup()` made `sql_table::out()` probe.** Core runs
+  `if (!$this->columns) { SELECT <fields> FROM <from> WHERE <where>; }` BEFORE calling `setup()`,
+  purely to name columns from a row's keys - so every render, page and refresh alike, ran a
+  second unpaginated query with all the joins and the EXISTS subquery. The columns are defined in
+  an `out()` override now, which sits after `validate_context()` and before core's probe.
+- **Gate `CK` reddened nothing.** The fixture enrolled applicants without giving them the durable
+  record the plugin writes, so the queue's own `s` join was always NULL and the clause the gate
+  deletes was always true. **A gate can be vacuous from the FIXTURE end, not just the assertion
+  end** - and this one had been written the same day by someone who knew the rule.
 
-- **Column definition ran before there was a page context.** See the section on the slice below.
-- **A missing `require_once` of the plugin's `lib.php`**, so an undefined constant - fatal on PHP 8
-  - on the refresh path and on nothing else.
-- **The status block never rendered.** `return $context + [...]` where the context already carried
-  `'hasstatus' => false`: `+` keeps the LEFT side on a duplicate key. **This repository documented
-  that exact trap in U6 and gated it as `BW` four hours earlier.** Gate `CM` now holds this one.
+The rest: the card's heading ignored the instance's custom wording while the desktop header used
+it; `capacity::applicants()` ran three times per render; and two false claims in my own prose (the
+`columnsdefined` guard's justification - core's `define_columns()` REPLACES, it does not append -
+and a "four hours" that was most of a day).
 
-The first two hid from the whole PHPUnit suite, from a test written specifically for the refresh
-path, and from a CLI reproduction of the same call - all three share one blind spot, which is that
-a test process already has what a request starts without. The third hid from every test because no
-test asserted the block existed. **All three were found by looking at the page in a browser.**
+One reviewer finding was wrong: Behat's pending-JS timeout was reported as ten seconds, and the
+message in the logs says twenty.
 
-### The one defect worth reading before touching this again
+### The card headings are real text, deliberately
 
-Column definition used to happen in `set_filterset()`. `get.php` calls that BEFORE
-`validate_context()`, and `select_all_header()` renders a core renderable through `$OUTPUT` - so on
-the refresh path there was no page context yet and the first render threw. It is in `setup()` now.
-
-**Three things passed green over it**: the whole PHPUnit suite, the test written specifically for
-the refresh path calling `get::execute()`, and a CLI reproduction of the same web service call.
-All three share one blind spot - `$PAGE` already carries a context from whatever ran before. A test
-process is not a request. Only the `@javascript` scenario saw it.
-
-The same blind spot hid a second defect in the same hour: the table reaches for
-`ENROL_APPLY_USER_WAIT`, which lives in `lib.php` and is not autoloaded. `manage.php` requires that
-file; the web service requires nothing of the sort. Fourth site in this plugin needing the same
-`require_once`, and the first where the page path hid the omission.
+They were `data-label` attributes drawn with `content: attr()`. That reads as tidier and is
+weaker: generated content is announced inconsistently, and turning rows and cells into blocks
+costs the table its semantics in the accessibility tree, so a value's association with its `thead`
+heading is gone anyway. `role="cell"` was the other candidate and was rejected - `flexible_table`
+offers no hook for ROW attributes, so cells could have been given a role and rows could not, and
+an orphan `role="cell"` is worse than none. Gate `CN` holds the headings, which is needed because
+nothing a desktop reader sees would change if they vanished.
 
 ## 2026-09-02 — U5a PR 2, the queue shows what the decision needs
 

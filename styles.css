@@ -160,8 +160,16 @@ body.path-enrol-apply:not(.jsenabled) #page.drawers {
     overflow-x: auto;
 }
 
-/* Below the breakpoint each row becomes a card and every labelled cell draws its own heading,
-   read from the data-label flexible_table::set_columnsattributes() put on it.
+/* The per-cell heading the card view shows. It is real text in the markup rather than
+   content: attr(...) drawn from a data attribute, because generated content is announced
+   inconsistently and because turning rows and cells into blocks costs the table its semantics -
+   so the heading has to sit inside the cell rather than depend on a thead association that is
+   gone. Above the breakpoint the thead already says all of this, so it is hidden. */
+.enrol_apply-cardlabel {
+    display: none;
+}
+
+/* Below the breakpoint each row becomes a card and every labelled cell shows its own heading.
 
    A media query and not a container query: the gate's csstree validator rejects container-type
    and @container outright ("Unknown property", "Unknown at-rule"), so the viewport is the only
@@ -195,9 +203,8 @@ body.path-enrol-apply:not(.jsenabled) #page.drawers {
         padding: 0.25rem 0;
     }
 
-    .enrol_apply-table table td[data-label]::before {
+    .enrol_apply-cardlabel {
         color: var(--enrol-apply-muted);
-        content: attr(data-label);
         display: block;
         font-size: 0.75rem;
         text-transform: uppercase;
