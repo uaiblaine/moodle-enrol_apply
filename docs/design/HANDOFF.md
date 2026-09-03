@@ -1,14 +1,16 @@
 # Handoff — read this before touching anything
 
-State at the end of 2026-09-03. **U5a PR 2b is IN FLIGHT** — see the header immediately below.
-Everything before it is merged. This file cannot name the commit that merges the change carrying
-it, which is the caution the entries below have paid for four times, so an unmerged slice gets an
-`IN FLIGHT` header and the change that merges it deletes that header.
+State at the end of 2026-09-03. **Everything is merged; nothing is in flight** — this file cannot
+name the commit that merges it, which is the caution the entries below have paid for five times.
+When a slice IS unmerged it gets an `IN FLIGHT` header saying so, and that header is deleted by the
+change that merges it, which is what happened here.
 
-## IN FLIGHT — U5a PR 2b, the evidence column
+## 2026-09-03 — U5a PR 2b, the evidence column
 
-Branch `feature/the-queue-shows-the-evidence`. `version.php` is `2026090301`; the plugin carries
-93 mutation gates. Everything below this section is merged and describes the state before it.
+Merged as [#69](https://github.com/uaiblaine/moodle-enrol_apply/pull/69); `version.php` is
+`2026090301` and the plugin carries 94 mutation gates. All seven local legs and all eleven GitHub
+checks passed — 482 tests and 9 Behat scenarios per leg. **U5a PR 3 and 4 remain**; the split is in
+the plan under `## U5a`.
 
 The queue now carries a **Submitted with the application** column: one pill per answer the
 applicant gave, read from the frozen record and masked by the report's own `visible_keys()` rule.
