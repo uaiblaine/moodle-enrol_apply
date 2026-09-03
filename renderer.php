@@ -94,7 +94,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
            manager receiving applications they have nowhere to put. Only where an instance is in
            scope - the site-wide and mentee queues span instances and have no single number.
 
-           Rendered OUTSIDE the hasrows section by the template, deliberately. An instance whose
+           Rendered OUTSIDE the decision form by the template, deliberately. An instance whose
            applicant limit is reached has an EMPTY queue, which is exactly the moment the
            manager most needs to be told why; inside the section the notice would vanish in the
            state it exists for. */
@@ -114,7 +114,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
            freed by nothing (see capacity::deferred()), so the number is named here and
            cancelling those rows is the way out.
 
-           Rendered outside the hasrows section by the template, deliberately and for the same
+           Rendered outside the decision form by the template, deliberately and for the same
            reason the places notice is: this is the state whose whole symptom is an empty queue,
            so a notice inside that section would vanish exactly when it is needed. */
         $closednotice = '';
@@ -143,10 +143,18 @@ class enrol_apply_renderer extends plugin_renderer_base {
             'sesskey' => sesskey(),
             'capacityhtml' => $this->render_from_template(
                 'enrol_apply/queue_capacity',
-                $this->queue_capacity_context($instance, (int) $table->totalrows)
+                /* The SCOPE's total, never the filtered one. The tile beside it reports deferrals
+                   read straight from \enrol_apply\local\capacity and is instance-wide whatever
+                   the operator has typed, so a filtered count here renders "4 awaiting decision"
+                   next to "12 deferred" - arithmetically impossible, and it reads as a fault in
+                   the capacity figures rather than in this line. */
+                $this->queue_capacity_context($instance, $table->scope_total())
+            ),
+            'filtershtml' => $this->render_from_template(
+                'enrol_apply/queue_filters',
+                $this->queue_filters_context($table, $manageurl)
             ),
             'tablehtml' => $tablehtml,
-            'hasrows' => $table->totalrows > 0,
             'showingtext' => $showing,
             'stickyfooter' => $stickyfooter,
             'hasplacesnotice' => $placesnotice !== '',
@@ -155,19 +163,143 @@ class enrol_apply_renderer extends plugin_renderer_base {
             'closednotice' => $closednotice,
         ];
 
-        if ($context['hasrows']) {
-            /* core/checkbox-toggleall boots itself: the toggler template carries its own js
-               block, and js_amd_inline goes through $PAGE->requires rather than the output
-               buffer, so capture_table()'s ob_start() does not swallow it. This module is only
-               the two gaps core leaves; see its docblock. */
-            $this->page->requires->js_call_amd(
-                'enrol_apply/manage',
-                'init',
-                [\enrol_apply\table\applications::TOGGLE_GROUP]
+        /* Unconditional, and it used to be gated on the queue having rows. Core's own
+           core_table/dynamic init is unconditional - get_dynamic_table_html_end() runs from
+           print_nothing_to_display() too - so a queue that loads with nothing in it had a live,
+           refreshable table and a dead plugin module beside it: a bookmarked url whose filter
+           matches nothing came back with a search box that could not be cleared.
+
+           core/checkbox-toggleall boots itself: the toggler template carries its own js block, and
+           js_amd_inline goes through $PAGE->requires rather than the output buffer, so
+           capture_table()'s ob_start() does not swallow it. This module is only the gaps core
+           leaves; see its docblock. */
+        $this->page->requires->js_call_amd(
+            'enrol_apply/manage',
+            'init',
+            [\enrol_apply\table\applications::TOGGLE_GROUP]
+        );
+
+        return $this->render_from_template('enrol_apply/manage', $context);
+    }
+
+    /**
+     * The controls that narrow the queue, and what they currently say.
+     *
+     * Rendered from the TABLE's own state rather than from the request, so the page and an AJAX
+     * refresh cannot disagree about which filters are applied: applications::set_filterset() is
+     * the one place a filter value is read, whichever route brought it in.
+     *
+     * Every url here is built from url_params() minus one entry, which is what makes each chip
+     * removable on a page with a single GET form - a form cannot express "submit without this one
+     * field", and a link can.
+     *
+     * @param \enrol_apply\table\applications $table The queue, after capture_table().
+     * @param moodle_url $manageurl The page's own url, carrying the filters already applied.
+     * @return array Template context.
+     */
+    protected function queue_filters_context(\enrol_apply\table\applications $table, moodle_url $manageurl): array {
+        global $CFG;
+
+        /* ENROL_APPLY_USER_WAIT lives in the plugin's lib.php, which is not autoloaded. This
+           renderer is reached from manage.php, which requires it - and from the tests, which do
+           not. The fourth site in this plugin needing the same line. */
+        require_once($CFG->dirroot . '/enrol/apply/lib.php');
+
+        $params = $table->url_params();
+        $scoped = array_key_exists('id', $params);
+        $base = static function (array $keep) use ($params): string {
+            return (new moodle_url('/enrol/apply/manage.php', array_intersect_key($params, array_flip($keep))))
+                ->out(false);
+        };
+
+        $search = $table->get_search();
+        $status = $table->get_status();
+
+        /* The vocabulary comes from the table, so the select can only offer what manage.php will
+           accept back and what the predicate can match - one list, three readers. The label is a
+           match over literals rather than get_string('submissionstatus' . $x): the fleet bans a
+           dynamic string id, and these two are the wording the operator already reads on the
+           review page, so the queue does not invent a third spelling of a state that already has
+           one on the row badge and one on the capacity tile. */
+        $statuses = [];
+        foreach (\enrol_apply\table\applications::filterable_statuses() as $value) {
+            $statuses[$value] = match ($value) {
+                ENROL_APPLY_USER_WAIT => get_string('submissionstatuswaiting', 'enrol_apply'),
+                default => get_string('submissionstatuspending', 'enrol_apply'),
+            };
+        }
+
+        $options = [[
+            'value' => '',
+            'label' => get_string('queuestatusany', 'enrol_apply'),
+            'selected' => $status === null,
+        ]];
+        foreach ($statuses as $value => $label) {
+            $options[] = [
+                'value' => (string) $value,
+                'label' => $label,
+                'selected' => $status === $value,
+            ];
+        }
+
+        $chips = [];
+        if ($search !== '') {
+            $chips[] = $this->queue_filter_chip(
+                get_string('queuesearch', 'enrol_apply'),
+                $search,
+                $base($scoped ? ['id', 'status'] : ['status'])
+            );
+        }
+        if ($status !== null) {
+            $chips[] = $this->queue_filter_chip(
+                get_string('queuefilterstatus', 'enrol_apply'),
+                $statuses[$status] ?? (string) $status,
+                $base($scoped ? ['id', 'search'] : ['search'])
             );
         }
 
-        return $this->render_from_template('enrol_apply/manage', $context);
+        return [
+            'formaction' => (new moodle_url('/enrol/apply/manage.php'))->out(false),
+            'hasscope' => $scoped,
+            'scopeid' => $params['id'] ?? 0,
+            'searchlabel' => get_string('queuesearch', 'enrol_apply'),
+            'searchvalue' => $search,
+            'searchhelp' => $this->output->help_icon('queuesearch', 'enrol_apply'),
+            'statuslabel' => get_string('queuefilterstatus', 'enrol_apply'),
+            'statusoptions' => $options,
+            'haschips' => (bool) $chips,
+            'chips' => $chips,
+            'clearurl' => $base($scoped ? ['id'] : []),
+            'clearlabel' => get_string('queueclearfilters', 'enrol_apply'),
+            'counttext' => get_string('queuefiltercount', 'enrol_apply', (object) [
+                'matched' => (int) $table->totalrows,
+                'total' => $table->scope_total(),
+            ]),
+        ];
+    }
+
+    /**
+     * One removable chip.
+     *
+     * The PLAIN spelling of both halves: the template double stashes them, and the remove label is
+     * a lang-string parameter, which the string helper escapes exactly once on its own. Escaping
+     * here would show an operator who searched for "A & B" a chip reading "A &amp;amp; B".
+     *
+     * @param string $name What the filter is called.
+     * @param string $value What it is set to.
+     * @param string $removeurl Url of the same listing without this filter.
+     * @return array Template context for one chip.
+     */
+    protected function queue_filter_chip(string $name, string $value, string $removeurl): array {
+        return [
+            'name' => $name,
+            'value' => $value,
+            'removeurl' => $removeurl,
+            'removelabel' => get_string('queueremovefilter', 'enrol_apply', (object) [
+                'name' => $name,
+                'value' => $value,
+            ]),
+        ];
     }
 
     /**

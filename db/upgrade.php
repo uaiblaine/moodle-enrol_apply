@@ -461,5 +461,21 @@ function xmldb_enrol_apply_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026083107, 'enrol', 'apply');
     }
 
+    if ($oldversion < 2026090302) {
+        /* The queue gained a search box, and on PostgreSQL matching "goncalves" against
+           "Gonçalves" needs the unaccent extension - core's own pgsql driver documents that its
+           sql_like() cannot do it. MariaDB and MySQL fold accents through the site collation and
+           need nothing.
+
+           Not a schema change, so db/install.xml's VERSION attribute is unchanged. Failure is
+           swallowed inside the helper: a least-privilege database account cannot create an
+           extension, and such a site keeps an accent-sensitive search rather than an upgrade that
+           refuses to finish. Idempotent by CREATE EXTENSION IF NOT EXISTS, and by the helper
+           asking the catalogue first. */
+        \enrol_apply\local\search::ensure_unaccent();
+
+        upgrade_plugin_savepoint(true, 2026090302, 'enrol', 'apply');
+    }
+
     return true;
 }

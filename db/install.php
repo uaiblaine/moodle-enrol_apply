@@ -15,19 +15,28 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Version details for the enrolment upon approval plugin.
+ * Install-time work for the applications queue.
+ *
+ * No MOODLE_INTERNAL guard: the file's only top-level construct is a function definition, so the
+ * sniff moodle.Files.MoodleInternal.MoodleInternalNotNeeded fires on one, and a single warning
+ * fails the build under --max-warnings 0.
  *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine
- * @copyright  emeneo.com (http://emeneo.com/)
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-defined('MOODLE_INTERNAL') || die();
+/**
+ * Give the queue's search the best matching the database will allow.
+ *
+ * DDL, so it runs here and in the upgrade step rather than on any request path. Failure is not an
+ * error: a least-privilege database account cannot create an extension, and such a site keeps an
+ * accent-sensitive search, which the search field's help string describes.
+ *
+ * @return bool Always true; the plugin installs either way.
+ */
+function xmldb_enrol_apply_install() {
+    \enrol_apply\local\search::ensure_unaccent();
 
-$plugin->component = 'enrol_apply';
-$plugin->version = 2026090302;
-$plugin->requires = 2025100600;
-$plugin->supported = [501, 502];
-$plugin->maturity = MATURITY_STABLE;
-$plugin->release = 'v2.0';
+    return true;
+}

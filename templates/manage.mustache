@@ -26,18 +26,24 @@
     * formurl string - url the decision form posts back to
     * sesskey string - session key guarding the state change
     * capacityhtml string - the decision context above the table, already rendered. OUTSIDE the
-      hasrows section for the same reason the two notices are: a method whose applicant limit is
+      decision form, because it is not a control and because a method whose applicant limit is
       reached has an EMPTY queue, and its numbers are what explain that
+    * filtershtml string - the controls narrowing the queue, already rendered. It is a GET form,
+      so it CANNOT sit inside the decision form below - HTML forbids nested forms, and nesting it
+      would make the search box submit a decision
     * tablehtml string - pre-rendered applications table
-    * hasrows boolean - whether the table has at least one application
-    * showingtext string - which rows of how many are on screen, shown only where there are rows
+    * showingtext string - which rows of how many are on screen
     * hasplacesnotice boolean - whether every place on the method is taken
     * placesnotice string - the sentence saying so
     * hasclosednotice boolean - whether the method has reached its applicant limit and is
-      refusing new applications. Rendered outside the hasrows section on purpose: the state it
+      refusing new applications. Rendered outside the decision form on purpose: the state it
       names can legitimately hold an EMPTY queue, which is exactly when nothing else explains it
     * closednotice string - the sentence saying so, naming how many of the held applications are
       deferred, because a deferred row is freed by nothing and cancelling those is the way out
+      Nothing below is gated on the queue having rows any more. It used to be, and an AJAX refresh
+      replaces only the table's own region without re-rendering this template - so a queue that
+      loaded empty and was then filled by clearing a filter had rows, checkboxes and no bulk bar
+      to act on them, with no way back short of reloading the page
     * stickyfooter string - the bulk action bar, already rendered into a core sticky footer by
       the renderer and interpolated INSIDE this form, because the POST carries the row checkboxes
       from the table and the action from the bar. Core does the same in grade/templates/edit_tree
@@ -58,7 +64,7 @@
         "closednotice": "This enrolment method holds 40 of a maximum 40 applications and is accepting no more. 12 of them are deferred; cancelling the ones no longer needed makes room.",
         "capacityhtml": "<div class=\"card\"><div class=\"card-body\">12 awaiting decision</div></div>",
         "tablehtml": "<table class=\"generaltable\"><tbody><tr><td>Student 1</td></tr></tbody></table>",
-        "hasrows": true,
+        "filtershtml": "<form method=\"get\"><input type=\"text\" name=\"search\" value=\"\"></form>",
         "showingtext": "Showing 1-4 of 4",
         "stickyfooter": "<div id=\"sticky-footer\"><button type=\"submit\">Go</button></div>",
         "messagelabel": "Message to the applicant",
@@ -84,8 +90,7 @@
         ]
     }
 }}
-<form id="enrol_apply_manage_form" class="enrol_apply-manage" method="post" action="{{formurl}}">
-    <input type="hidden" name="sesskey" value="{{sesskey}}">
+<div class="enrol_apply-queue">
     {{#hasplacesnotice}}
         <div class="alert alert-warning" role="status">{{placesnotice}}</div>
     {{/hasplacesnotice}}
@@ -93,12 +98,14 @@
         <div class="alert alert-warning" role="status">{{closednotice}}</div>
     {{/hasclosednotice}}
     {{{capacityhtml}}}
-    <div class="enrol_apply-table">
-        {{{tablehtml}}}
-    </div>
-    {{#hasrows}}
+    {{{filtershtml}}}
+    <form id="enrol_apply_manage_form" class="enrol_apply-manage" method="post" action="{{formurl}}">
+        <input type="hidden" name="sesskey" value="{{sesskey}}">
+        <div class="enrol_apply-table">
+            {{{tablehtml}}}
+        </div>
         <div class="enrol_apply-showing small text-muted mb-3">{{showingtext}}</div>
         {{> enrol_apply/decision_controls }}
         {{{stickyfooter}}}
-    {{/hasrows}}
-</form>
+    </form>
+</div>

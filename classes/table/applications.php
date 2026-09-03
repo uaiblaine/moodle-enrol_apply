@@ -21,9 +21,11 @@ use context_course;
 use core_table\dynamic as dynamic_table;
 use core_table\local\filter\filterset;
 use core_table\local\filter\integer_filter;
+use core_table\local\filter\string_filter;
 use enrol_apply\local\commentlabel;
 use enrol_apply\local\identity;
 use enrol_apply\local\queue;
+use enrol_apply\local\search;
 use enrol_apply\local\submission as submissionrecord;
 use enrol_apply\reportbuilder\local\formatters\submission as submissionformatter;
 use html_writer;
@@ -84,6 +86,22 @@ class applications extends \table_sql implements dynamic_table {
     /** @var array Snapshot keys this reader may see, memoised by course id; see visible_keys(). */
     protected $visiblekeys = [];
 
+    /** @var string What the listing is narrowed to match, empty for no search. */
+    protected $search = '';
+
+    /** @var int|null The {user_enrolments}.status the listing is narrowed to, null for none. */
+    protected $status = null;
+
+    /**
+     * @var array Identity field name => the SQL EXPRESSION producing it, from core's get_sql().
+     *
+     * Not the SELECT aliases in $extrafields, and the difference is the whole reason this exists:
+     * WHERE is evaluated before SELECT on both database families, so a predicate naming an alias
+     * is an error on PostgreSQL and silently reads a different column on MySQL. A custom profile
+     * field's expression is a joined table's column, which no alias could stand in for.
+     */
+    protected $identitymappings = [];
+
     /** @var bool Whether define_table_columns() has run; see setup() for why it is deferred. */
     protected $columnsdefined = false;
 
@@ -114,12 +132,31 @@ class applications extends \table_sql implements dynamic_table {
      * TypeError on anything else (lib/table/classes/local/filter/integer_filter.php:47), and a
      * later slice will read this id out of a data attribute, where everything is a string.
      *
+     * The two optional filters ride the same door for the same reason: manage.php reads them from
+     * the query string and the module sends them over the service, and a listing narrowed by one
+     * route has to be the same listing narrowed by the other.
+     *
+     * An empty search adds NO filter rather than an empty one. string_filter::add_filter_value()
+     * is a complete override gating only on is_string(), so it never reaches the base class's
+     * rejection of '' - a filter carrying the empty string is live, and set_filterset() below has
+     * to disarm it a second time for the requests this constructor never sees.
+     *
      * @param int $enrolid Enrol instance to list, 0 for every one this operator may decide in.
+     * @param string $search Text to narrow the listing to, empty for none.
+     * @param int|null $status {user_enrolments}.status to narrow to, null for none.
      * @return self The table, scoped.
      */
-    public static function for_scope(int $enrolid): self {
+    public static function for_scope(int $enrolid, string $search = '', ?int $status = null): self {
         $filterset = new applications_filterset();
         $filterset->add_filter(new integer_filter('enrolid', null, [$enrolid]));
+
+        if (trim($search) !== '') {
+            $filterset->add_filter(new string_filter('search', null, [trim($search)]));
+        }
+
+        if ($status !== null) {
+            $filterset->add_filter(new integer_filter('status', null, [$status]));
+        }
 
         $table = new self();
         $table->set_filterset($filterset);
@@ -165,6 +202,24 @@ class applications extends \table_sql implements dynamic_table {
         }
 
         $this->scope = queue::listing_scope((int) $enrolid);
+
+        /* Read BEFORE parent::set_filterset(), which calls guess_base_url() - the base url has to
+           carry these or the no-JavaScript path loses them on the first page turn. */
+        $this->search = '';
+        if ($filterset->has_filter('search')) {
+            /* Trimmed and tested for emptiness, because a live filter carrying '' reaches here.
+               Treating it as a narrowing filter would empty the queue the moment somebody cleared
+               the search box, and would make the count line say "0 of 312". */
+            $this->search = trim((string) $filterset->get_filter('search')->current());
+        }
+
+        $this->status = null;
+        if ($filterset->has_filter('status')) {
+            $status = $filterset->get_filter('status')->current();
+            if ($status !== null) {
+                $this->status = (int) $status;
+            }
+        }
 
         parent::set_filterset($filterset);
 
@@ -271,20 +326,31 @@ class applications extends \table_sql implements dynamic_table {
      * not override it - and called by set_filterset(), which is why the scope is resolved first.
      *
      * Every filter that can be GET-encoded has to be carried here, or the no-JavaScript path
-     * silently loses it on the first page turn. Today that is the scope alone.
+     * silently loses it on the first page turn: the scope, the search term and the status.
+     *
+     * It does NOT cover everything. get_dynamic_table_html_end() builds the "Show all / Show per
+     * page" link from `new moodle_url($PAGE->url)` rather than from this base url
+     * (lib/table/classes/flexible_table.php:1815), so manage.php has to put the same parameters
+     * into $PAGE->set_url() as well - see url_params(), which is the one definition both read.
      *
      * @return void
      */
     public function guess_base_url(): void {
-        $this->baseurl = $this->scope->url;
+        $this->baseurl = new moodle_url('/enrol/apply/manage.php', $this->url_params());
     }
 
     /**
-     * Build the query for the resolved scope.
+     * Everything the listing is narrowed by BEFORE any filter the operator applied.
      *
-     * @return void
+     * Extracted from build_sql() so that scope_total() can count the same set without the
+     * filters. The two must not drift: the count line reads "N of M", and an M computed from a
+     * different predicate than the N would be a number nobody can reconcile with the page.
+     *
+     * Only ue and e are referenced, so a caller may join as little as those two tables.
+     *
+     * @return array [where fragments, parameters].
      */
-    protected function build_sql(): void {
+    protected function scope_where(): array {
         global $DB;
 
         // The one definition of "awaiting a decision"; see the method for both its clauses.
@@ -309,11 +375,213 @@ class applications extends \table_sql implements dynamic_table {
             }
         }
 
+        return [$wheres, $params];
+    }
+
+    /**
+     * How many applications this operator's queue holds before any filter narrows it.
+     *
+     * The "of 312" in the count line, and the number the capacity header's first tile reports.
+     * They are the same number by construction rather than by two call sites agreeing: a filtered
+     * table_sql totalrows in that tile would render "4 awaiting decision" beside a deferred count
+     * read straight from \enrol_apply\local\capacity, which is arithmetically impossible and
+     * reads as a bug in the capacity figures rather than in the header.
+     *
+     * One COUNT over two tables, and only when something is actually narrowing - otherwise it
+     * equals totalrows, which the table has already paid for.
+     *
+     * @return int Applications in scope, unfiltered.
+     */
+    public function scope_total(): int {
+        global $DB;
+
+        if (!$this->is_narrowed()) {
+            return (int) $this->totalrows;
+        }
+
+        [$wheres, $params] = $this->scope_where();
+
+        return (int) $DB->count_records_sql(
+            'SELECT COUNT(1)
+               FROM {user_enrolments} ue
+               JOIN {enrol} e ON e.id = ue.enrolid
+              WHERE ' . implode(' AND ', $wheres),
+            $params
+        );
+    }
+
+    /**
+     * Whether the operator has narrowed this listing at all.
+     *
+     * @return bool True when a search term or a status is applied.
+     */
+    public function is_narrowed(): bool {
+        return $this->search !== '' || $this->status !== null;
+    }
+
+    /**
+     * The enrolment statuses this queue may be narrowed to.
+     *
+     * The vocabulary in one place, because three readers need it and a fourth spelling is how it
+     * goes wrong: the renderer builds the select from it, manage.php validates the query string
+     * against it, and the predicate in build_sql() compares to it. It is exactly the two states
+     * queue::awaiting_decision_where() can leave a row in - ACTIVE is excluded by that predicate
+     * and a cancelled application has no row at all - so no other value could ever match.
+     *
+     * That is not academic. The select's "any status" option carries the EMPTY string, so the GET
+     * form submits `status=` whenever no status is chosen; read with
+     * optional_param(..., PARAM_INT) that cleans to 0, which is ENROL_USER_ACTIVE, and every
+     * search made through the form silently applied a status no row can hold. Validating against
+     * this list is what makes an unrecognised value mean "no filter" rather than "filter by
+     * something impossible".
+     *
+     * @return array The statuses, as ints.
+     */
+    public static function filterable_statuses(): array {
+        global $CFG;
+
+        // ENROL_APPLY_USER_WAIT lives in the plugin's lib.php, which is not autoloaded.
+        require_once($CFG->dirroot . '/enrol/apply/lib.php');
+
+        return [ENROL_USER_SUSPENDED, ENROL_APPLY_USER_WAIT];
+    }
+
+    /**
+     * The search term this listing is narrowed by.
+     *
+     * @return string The term, empty when none is applied.
+     */
+    public function get_search(): string {
+        return $this->search;
+    }
+
+    /**
+     * The enrolment status this listing is narrowed to.
+     *
+     * @return int|null The status, null when none is applied.
+     */
+    public function get_status(): ?int {
+        return $this->status;
+    }
+
+    /**
+     * The filters this listing carries, as query-string parameters.
+     *
+     * One definition, read by guess_base_url() here and by manage.php for the page url and the
+     * decision form's action. They have to agree: a bulk decision taken on a filtered queue posts
+     * to whatever the form's action says and is redirected back to whatever the page url says, so
+     * a disagreement drops the operator into the unfiltered queue after every decision.
+     *
+     * @return array Parameters for /enrol/apply/manage.php.
+     */
+    public function url_params(): array {
+        $params = [];
+
+        if ($this->scope->enrolid) {
+            $params['id'] = (int) $this->scope->enrolid;
+        }
+        if ($this->search !== '') {
+            $params['search'] = $this->search;
+        }
+        if ($this->status !== null) {
+            $params['status'] = $this->status;
+        }
+
+        return $params;
+    }
+
+    /**
+     * The columns a search term is matched against.
+     *
+     * **Derived from what this reader can already SEE, never from a fixed list.** Every entry here
+     * is rendered on the row for this reader in this scope: the name by col_fullname(), the
+     * identity fields by the same loop that draws the identity line, the comment by
+     * col_applycomment(), and the course only where the course column exists. A column that is
+     * merely present in the SELECT is not eligible - \core_user\fields::for_userpic() pulls
+     * u.email into the projection of every scope including the mentee scope, where
+     * identity::fields(null) returns nothing, so matching it would answer "does this applicant's
+     * address contain <guess>?" to a reader who may not see the address. A hit count is an answer.
+     *
+     * The identity fields come from the mappings and not from $extrafields, which hold the SELECT
+     * aliases: WHERE is evaluated before SELECT on both families, and a custom profile field's
+     * value lives in a joined table that no alias can stand in for.
+     *
+     * The snapshot column is deliberately absent. It is masked PER ROW by visible_keys(), and a
+     * searchable surface cannot honour a per-row mask - a reader denied a field on some rows would
+     * recover it by searching for it.
+     *
+     * @return array SQL expressions to match.
+     */
+    protected function search_columns(): array {
+        global $DB;
+
+        $columns = [$DB->sql_fullname('u.firstname', 'u.lastname')];
+
+        foreach ($this->identitymappings as $expression) {
+            $columns[] = $expression;
+        }
+
+        // The same expression col_applycomment() renders, not its SELECT alias.
+        $columns[] = 'COALESCE(s.comment, ai.comment)';
+
+        if ($this->scope->instance === null) {
+            $columns[] = 'c.fullname';
+        }
+
+        return $columns;
+    }
+
+    /**
+     * The predicate matching the operator's search term.
+     *
+     * One placeholder NAME per column, every one bound to the same value: fix_sql_params() counts
+     * placeholder OCCURRENCES and throws duplicateparaminsql when the total differs from the
+     * parameter array, so a single name reused across four columns is a fatal rather than a
+     * convenience.
+     *
+     * has_unaccent() is resolved once here rather than inside like_ai(), so four searched columns
+     * cost one catalogue lookup instead of four - on every keystroke, once the module is wired.
+     *
+     * sql_like_escape() is not optional. Core's own participants search omits it, which makes a
+     * percent sign an applicant typed into a live wildcard; that is a defect to leave behind.
+     *
+     * @return array [where fragment, parameters].
+     */
+    protected function search_where(): array {
+        global $DB;
+
+        $unaccent = search::has_unaccent();
+        $value = '%' . $DB->sql_like_escape($this->search) . '%';
+
+        $likes = [];
+        $params = [];
+        $index = 0;
+        foreach ($this->search_columns() as $column) {
+            $name = 'searchterm' . (++$index);
+            $likes[] = search::like_ai($column, ':' . $name, $unaccent);
+            $params[$name] = $value;
+        }
+
+        return ['(' . implode(' OR ', $likes) . ')', $params];
+    }
+
+    /**
+     * Build the query for the resolved scope.
+     *
+     * @return void
+     */
+    protected function build_sql(): void {
+        global $DB;
+
+        [$wheres, $params] = $this->scope_where();
+
         /* The identity fields this reader may see, and the SQL for them. Everything about which
            fields those are is core's decision - see \enrol_apply\local\identity - so that the
            queue and the participants page beside it cannot answer differently. */
         $this->extrafields = identity::fields($this->scope->identitycontext);
         $identitysql = identity::sql($this->scope->identitycontext, 'u');
+        // Field name => the expression producing it, which is what a WHERE clause can name.
+        $this->identitymappings = $identitysql->mappings ?? [];
 
         $userfieldsapi = \core_user\fields::for_userpic()->including('username');
         $userfields = $userfieldsapi->get_sql('u', false, '', 'userid', false)->selects;
@@ -368,6 +636,26 @@ class applications extends \table_sql implements dynamic_table {
                  JOIN {enrol} e ON e.id = ue.enrolid
                  JOIN {course} c ON c.id = e.courseid
                  {$identitysql->joins}";
+
+        /* The operator's own filters, last, so that everything above is the SCOPE and everything
+           here is the narrowing - which is the split scope_total() counts across. */
+        if ($this->search !== '') {
+            [$searchwhere, $searchparams] = $this->search_where();
+            $wheres[] = $searchwhere;
+            $params += $searchparams;
+        }
+
+        /* The ENROLMENT's status, not the durable record's, and the two measurably disagree: the
+           record is only moved to APPROVED on a transition to ENROL_USER_ACTIVE, so an approved
+           participant later suspended from the participants page re-enters this queue carrying
+           status APPROVED on the record and SUSPENDED on the enrolment. The queue lists what is
+           awaiting a decision NOW, which is the enrolment's question. The option LABELS are the
+           record's vocabulary because that is the wording the operator already reads on the review
+           page; the predicate is the enrolment's. */
+        if ($this->status !== null) {
+            $wheres[] = 'ue.status = :statusfilter';
+            $params['statusfilter'] = $this->status;
+        }
 
         $this->set_sql($fields, $from, implode(' AND ', $wheres), $params + $identitysql->params);
     }
@@ -492,6 +780,37 @@ class applications extends \table_sql implements dynamic_table {
         $this->no_sorting('applycomment');
         $this->no_sorting('review');
         $this->sortable(true, 'applydate', SORT_ASC);
+    }
+
+    /**
+     * What an empty result says, which depends on why it is empty.
+     *
+     * Core's "Nothing to display" is right for a queue with no applications and wrong for a filter
+     * that matched none: the operator has just typed something, and a message that does not
+     * mention the filter reads as "this queue is empty" - which sends them looking for a fault in
+     * the enrolment method rather than at the box they just typed in.
+     *
+     * The unfiltered branch delegates verbatim rather than reproducing core's markup, so the
+     * dynamic header, the reset button and the initials bar keep whatever core does with them. A
+     * Behat scenario in this plugin asserts core's own string on the unfiltered empty queue
+     * (tests/behat/enrol_apply.feature), and that is the control on this override: change it to
+     * fire unconditionally and that scenario goes red.
+     *
+     * @return void
+     */
+    public function print_nothing_to_display() {
+        global $OUTPUT;
+
+        if (!$this->is_narrowed()) {
+            parent::print_nothing_to_display();
+
+            return;
+        }
+
+        echo $this->get_dynamic_table_html_start();
+        echo $this->render_reset_button();
+        echo $OUTPUT->notification(get_string('queuefilterempty', 'enrol_apply'), 'info', false);
+        echo $this->get_dynamic_table_html_end();
     }
 
     /**

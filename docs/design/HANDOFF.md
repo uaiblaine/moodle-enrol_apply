@@ -1,9 +1,60 @@
 # Handoff — read this before touching anything
 
-State at the end of 2026-09-03. **Everything is merged; nothing is in flight** — this file cannot
-name the commit that merges it, which is the caution the entries below have paid for five times.
-When a slice IS unmerged it gets an `IN FLIGHT` header saying so, and that header is deleted by the
-change that merges it, which is what happened here.
+State at the end of 2026-09-03. **U5a PR 3a is IN FLIGHT** — see the header immediately below.
+Everything before it is merged. This file cannot name the commit that merges the change carrying
+it, so an unmerged slice gets an `IN FLIGHT` header and the change that merges it deletes it.
+
+## IN FLIGHT — U5a PR 3a, narrowing the queue
+
+Branch `feature/the-queue-can-be-narrowed`. `version.php` is `2026090302`; 101 mutation gates.
+**PR 3 was split**: 3a is everything server-side, 3b is the as-you-type half and the rebuilt AMD
+bundle — the same seam U5a/U5b were split on, so `amd/build/**` and the grunt gate enter alone.
+
+**GitHub Actions credit is exhausted**, so this slice was verified entirely locally and pushed with
+`[skip ci]`; see the fleet rule at uaiblaine/moodle-dev#19, which also suspends the "zero checks is
+a finding" merge rule while that holds. `mdl ci --matrix --behat`: all 7 legs, 495 tests and 10
+Behat scenarios each, every leg log audited for `: FAILED`.
+
+### The defect only Behat could find, and the lesson has a new half
+
+The status select's "any status" option carries the **empty string**, so the GET form submits
+`status=` on every search. Read with `optional_param('status', -1, PARAM_INT)` that cleans to **0**,
+which is `ENROL_USER_ACTIVE` — a status `queue::awaiting_decision_where()` excludes by construction.
+So every search made through the form also applied a filter no row could satisfy, and the queue came
+back empty.
+
+The whole suite was green. **A browser pass was green too**, because it navigated hand-built urls
+carrying no `status` parameter at all. This repository already records that a test process is not a
+request; the new half is that **a browser driven by url is not a form submission either**. Only
+pressing the button found it.
+
+Fixed by making the vocabulary one thing — `applications::filterable_statuses()`, read by the
+select, by `manage.php`'s validation and compared by the predicate — and by reading the parameter as
+text validated against that list, so an unrecognised value means "no filter" rather than "filter by
+something impossible". Gate `DA` and
+`test_every_filterable_status_can_actually_be_listed` hold the vocabulary half; the Behat scenario
+holds the reading half, which no unit can (a page script's parameter handling has nothing to
+redden).
+
+### Two gates that were vacuous, both found by the sweep
+
+- **`CY`** (drop `sql_like_escape`) reddened nothing. The decoy row was `Sure`, which fails the
+  wildcard reading too, so both versions returned one row. It is `100 Super` now — a row only an
+  unescaped `%` reaches.
+- **`CW`** (read the record's status instead of the enrolment's) reddened the wrong test. The
+  trajectory chosen, approved-then-suspended, has `STATUS_APPROVED = 1` and
+  `ENROL_USER_SUSPENDED = 1`: both columns hold the same number, so no assertion on that row can
+  tell them apart. That is the "equal by coincidence rather than by contract" the table's own
+  docblock warns about, reached from the fixture end. Re-fixtured on a deferral later
+  hand-suspended, where the record says 2 and the enrolment says 1.
+
+### `mdl mutate` cannot survive a parallel session
+
+The PHPUnit versions hash covers **every** plugin on the mount, so another session bumping any
+`version.php` invalidates the test site instantly. A sweep runs the whole suite per gate, so a bump
+anywhere in that window kills it — it happened on m502 and again on m502b at the same phase, which
+is what ruled out coincidence. Verify by hand in that case: apply the `.pl`, run the named test,
+restore, and check the restore.
 
 ## 2026-09-03 — U5a PR 2b, the evidence column
 
