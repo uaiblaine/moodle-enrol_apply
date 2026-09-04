@@ -339,6 +339,80 @@ class enrol_apply_renderer extends plugin_renderer_base {
             }
         }
 
+        /* The course and the category, on the site-wide queue alone. Both are drawn from the
+           table's own answer about whether this scope offers them, so the control and the
+           predicate cannot disagree about which queue has them. */
+        [$categoryid, $courseid] = $table->get_course_scope();
+        $hascourse = $table->offers_course_filters();
+        $categoryoptions = [];
+        $courseoptions = [];
+        if ($hascourse) {
+            $categories = \enrol_apply\local\coursefilter::categories();
+            $courses = \enrol_apply\local\coursefilter::courses();
+
+            $categoryoptions = [[
+                'value' => '',
+                'label' => get_string('queuefilteranycategory', 'enrol_apply'),
+                'selected' => $categoryid === null,
+            ]];
+            foreach ($categories as $id => $name) {
+                $categoryoptions[] = [
+                    'value' => (string) $id,
+                    'label' => $name,
+                    'selected' => $categoryid === (int) $id,
+                ];
+            }
+
+            $courseoptions = [[
+                'value' => '',
+                'label' => get_string('queuefilteranycourse', 'enrol_apply'),
+                'selected' => $courseid === null,
+            ]];
+            foreach ($courses as $id => $name) {
+                $courseoptions[] = [
+                    'value' => (string) $id,
+                    'label' => $name,
+                    'selected' => $courseid === (int) $id,
+                ];
+            }
+
+            if ($categoryid !== null) {
+                $chips[] = $this->queue_filter_chip(
+                    'category',
+                    get_string('queuefiltercategory', 'enrol_apply'),
+                    $categories[$categoryid] ?? (string) $categoryid,
+                    $without('category')
+                );
+            }
+            if ($courseid !== null) {
+                $chips[] = $this->queue_filter_chip(
+                    'course',
+                    get_string('queuefiltercourse', 'enrol_apply'),
+                    $courses[$courseid] ?? (string) $courseid,
+                    $without('course')
+                );
+            }
+
+            /* Type-to-filter over a list rendered in full, with ajax OFF. A site puts an apply
+               method on the courses that need one, so this list is bounded by that rather than by
+               the size of the site - and a static list costs no web service, no db/services.php
+               and no second place where "which courses may this reader see" is decided. The day a
+               site has thousands of apply-enabled courses is the day to add one; it is written up
+               in the handoff so that day is recognised rather than discovered. */
+            foreach (['enrol_apply_category', 'enrol_apply_course'] as $id) {
+                $this->page->requires->js_call_amd('core/form-autocomplete', 'enhance', [
+                    '#' . $id,
+                    false,
+                    false,
+                    get_string('search'),
+                    false,
+                    true,
+                    '',
+                    true,
+                ]);
+            }
+        }
+
         return [
             'formaction' => (new moodle_url('/enrol/apply/manage.php'))->out(false),
             'hasscope' => $scoped,
@@ -351,6 +425,11 @@ class enrol_apply_renderer extends plugin_renderer_base {
             'groupheading' => get_string('queuefiltersgroup', 'enrol_apply'),
             'hasfields' => (bool) $fields,
             'fields' => $fields,
+            'hascoursefilters' => $hascourse,
+            'categorylabel' => get_string('queuefiltercategory', 'enrol_apply'),
+            'categoryoptions' => $categoryoptions,
+            'courselabel' => get_string('queuefiltercourse', 'enrol_apply'),
+            'courseoptions' => $courseoptions,
             'fromlabel' => get_string('queuefilterfrom', 'enrol_apply'),
             'fromvalue' => $appliedfrom ?? '',
             'tolabel' => get_string('queuefilterto', 'enrol_apply'),

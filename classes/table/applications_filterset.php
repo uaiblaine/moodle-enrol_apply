@@ -123,11 +123,20 @@ class applications_filterset extends filterset {
      * @return array Filter name => filter class.
      */
     public function get_optional_filters(): array {
+        /* course and category are string filters rather than integer ones although their values
+           are integers, and deliberately: the AMD module sends every control in the filter bar the
+           same way, and a second shape there is a second thing to keep in step. The filterset's
+           job is transport; \enrol_apply\table\applications is what decides whether a course has
+           an apply method and whether a category exists. Declared unconditionally, for the reason
+           the paragraph above gives about not making this the security boundary - the scope test
+           lives in coursefilter::offered(), which the table applies. */
         $filters = [
             'search' => string_filter::class,
             'status' => integer_filter::class,
             'appliedfrom' => string_filter::class,
             'appliedto' => string_filter::class,
+            'category' => string_filter::class,
+            'course' => string_filter::class,
         ];
 
         $names = array_unique(array_merge(\core_user\fields::get_identity_fields(null), queuefilter::pool()));
