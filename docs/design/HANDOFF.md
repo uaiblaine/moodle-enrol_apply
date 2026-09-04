@@ -1,10 +1,11 @@
 # Handoff — read this before touching anything
 
-State at 2026-09-04. **U7 is IN FLIGHT**; everything before it is merged.
+State at 2026-09-04. **Everything is merged; nothing is in flight.**
 
-## IN FLIGHT — 2026-09-04 — U7, narrowing the site-wide queue by category and course
+## 2026-09-04 — U7, narrowing the site-wide queue by category and course
 
-`version.php` is `2026090401` and the plugin carries **119 gates**. Two controls on the site-wide
+Merged as [#80](https://github.com/uaiblaine/moodle-enrol_apply/pull/80); `version.php` is
+`2026090401` and the plugin carries **119 gates**. Two controls on the site-wide
 queue and no other, both with type-to-filter, chosen by the owner on 2026-09-04 after the search's
 cost was measured rather than assumed.
 
@@ -66,11 +67,8 @@ it and the versions hash changes, which invalidates the PHPUnit site continuousl
 session here, killing a gate sweep mid-run. `mdl up m502` and `mdl up m502b` fix it. This slice was
 verified on **m501**, which is clean.
 
-## Previously — everything below is merged
-
-The entry above cannot name the commit that merges it, which is the caution these entries have paid
-for eight times. An unmerged slice gets an `IN FLIGHT` header, and that header is deleted by the
-change that merges it.
+An unmerged slice gets an `IN FLIGHT` header, and that header is deleted by the change that merges
+it — which is what happened here, and which is the caution these entries have paid for eight times.
 
 ## 2026-09-04 — U5a PR 4, filters the administrator chooses
 
