@@ -1111,15 +1111,15 @@ API capability no screen reaches. Left open deliberately, twice now.
 
 ### 3. Housekeeping
 
-- **Re-measure coverage and re-run `mdl ci --strict`.** Neither was run this session and eight
-  changes have landed. The 56.1% in the old handoff is not a number any more.
-- **`~/dev/CLAUDE.md`'s phpmd table** still records a count for this plugin that predates #50.
-  Check it against a fresh run rather than against this line.
-- **The fleet command table has no `mdl mutate` row.** Measured: zero occurrences in
-  `~/dev/CLAUDE.md`. It was blocked all day behind another session's edit to
-  `CLAUDE.fleet.md`, which has since landed, so it is now a one-line change in `moodle-dev`.
-- **A `tests/coverage.php` ratchet** is possible now that a number exists, but do not set one
-  from the 56.1% above without re-measuring: three changes have landed since it was taken.
+- **Re-measure coverage and re-run `mdl ci --strict`.** Still the live item, and more so:
+  the 56.1% dates from 2026-08-29 and `--strict` from 2026-08-30, with the whole UI rebuild
+  (U6 and U5a's six pull requests) landed since. Neither is evidence of anything today.
+- **A `tests/coverage.php` ratchet** is possible — the file exists — but take a fresh number
+  first. Do not set one from the 56.1% above.
+- ~~**`~/dev/CLAUDE.md`'s phpmd table** records a stale count for this plugin.~~ Done: that table
+  now records `enrol_apply` at **0**, with `mdl ci --strict` passing on it end to end.
+- ~~**The fleet command table has no `mdl mutate` row.**~~ Done: it has one. Verified 2026-09-04
+  by grep rather than by trusting this line, which is how the two above turned out to be stale.
 
 ### 4. Facts about this plugin that are not going to change
 

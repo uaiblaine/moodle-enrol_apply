@@ -49,14 +49,20 @@ identical either way, so a dropdown stays an additive change on the same web ser
 | ~~**U2**~~ | ~~Rebuild the review page as Mockup C~~ — **done**, [#60](https://github.com/uaiblaine/moodle-enrol_apply/pull/60) | — | yes | no |
 | ~~**U3**~~ | ~~Deferral as a first-class triage state~~ — **done 2026-08-31** | — | yes | yes (new column) |
 | ~~**U4**~~ | ~~The participants-page bulk menu~~ — **done 2026-09-01** | — | yes | no |
-| **U5a** | Rebuild the queue as Mockup A on `core_table\dynamic`, without the search | U1, U1b, U3 | yes | no |
-| **U5b** | The as-you-type search | U5a | yes | no |
+| ~~**U5a**~~ | ~~Rebuild the queue as Mockup A on `core_table\dynamic`~~ — **done 2026-09-04**, in six pull requests: [#66](https://github.com/uaiblaine/moodle-enrol_apply/pull/66), [#67](https://github.com/uaiblaine/moodle-enrol_apply/pull/67), [#69](https://github.com/uaiblaine/moodle-enrol_apply/pull/69), [#71](https://github.com/uaiblaine/moodle-enrol_apply/pull/71), [#73](https://github.com/uaiblaine/moodle-enrol_apply/pull/73), [#75](https://github.com/uaiblaine/moodle-enrol_apply/pull/75) | U1, U1b, U3 | yes | no |
+| ~~**U5b**~~ | ~~The as-you-type search~~ — **dissolved**, absorbed by U5a's PRs 3a and 3b | U5a | — | — |
+| ~~**U6**~~ | ~~The audit report is scoped to a method, not to a course~~ — **done 2026-09-02**, [#65](https://github.com/uaiblaine/moodle-enrol_apply/pull/65) | — | yes | no |
 
 **Superseded 2026-09-02 — see the decision recorded under U5a.** The scope was widened to the
-whole of Mockup A, the filter controls included, and the work was split across four pull requests
-of which the last two absorb U5b.
+whole of Mockup A, the filter controls included, and the work was split across pull requests of
+which the last two absorb U5b. Six in the end rather than the four that note first predicted:
+PR 2b was added when a column turned out to be missing from both task lists, and PR 3 split into
+3a and 3b so the AMD bundle entered on its own slice.
 
-**Order:** ~~U0 → U1 → U1b → U2~~ (done 2026-09-01) → ~~U3~~ (2026-08-31) → ~~**U4**~~ (2026-09-01) → **U5a** → U5b.
+**Order:** ~~U0 → U1 → U1b → U2~~ (done 2026-09-01) → ~~U3~~ (2026-08-31) → ~~**U4**~~ (2026-09-01)
+→ ~~**U6**~~ (2026-09-02) → ~~**U5a**~~ (2026-09-04). **The plan is complete; nothing here is
+outstanding.** What remains for this plugin is in
+[`HANDOFF.md`](HANDOFF.md) under "What is left", and none of it belongs to this rebuild.
 
 **Why that order.**
 
@@ -692,14 +698,16 @@ widest reading is the one taken.
 
 **That makes U5a five pull requests rather than one, and U5b disappears into the last two.**
 
+**Six in the end** — PR 2b was added mid-slice, for the reason recorded under the table.
+
 | PR | What | Why the boundary is there |
 |---|---|---|
-| **1** | `queue::listing_scope()`, `\enrol_apply\table\applications` and its filterset, the death of `manage_table.php`, the four gates that named it, the eight test files that built it | Structural, with **no visible change**. The diff is large and the behaviour is not, so a regression in it is legible |
-| **2** | The capacity header, the per-row Review link, the applicant cell (picture, name, badges, identity as a second line), the footer counts, responsive cards, a bulk bar that does not lie | Mockup A's surface, on a structure that already holds |
-| ~~**2b**~~ | ~~The "Submitted with the application" column~~ — **done 2026-09-03** | See below — it is in the mockup and in neither task list, and it is not a cell like the others |
-| **3a** | The search (GET), the status filter, the chip row, "clear all", the counts — everything server-side | The two filters that narrow columns the query already has |
-| ~~**3b**~~ | ~~The as-you-type half: the debounce, chip removal without a reload, the rebuilt AMD bundle~~ — **done 2026-09-03** | Split from 3a for the reason U5a/U5b were split in the first place — `amd/build/**` and the `grunt --max-lint-warnings 0` gate enter on their own slice, so a red leg is attributable to one mechanism rather than three |
-| ~~**4**~~ | ~~The identity filters and the date filter~~ — **done 2026-09-04** | Both depend on site configuration — the identity field list varies — and a date range is a different filter class. The scope grew during the slice: which fields are offered is now an administrator's setting rather than a fixed pair, because a site's own custom profile fields are exactly what it would want to filter by and no fixed list can name them |
+| ~~**1**~~ | ~~`queue::listing_scope()`, `\enrol_apply\table\applications` and its filterset, the death of `manage_table.php`, the four gates that named it, the eight test files that built it~~ — **done 2026-09-02**, [#66](https://github.com/uaiblaine/moodle-enrol_apply/pull/66) | Structural, with **no visible change**. The diff is large and the behaviour is not, so a regression in it is legible |
+| ~~**2**~~ | ~~The capacity header, the per-row Review link, the applicant cell (picture, name, badges, identity as a second line), the footer counts, responsive cards, a bulk bar that does not lie~~ — **done 2026-09-02**, [#67](https://github.com/uaiblaine/moodle-enrol_apply/pull/67) | Mockup A's surface, on a structure that already holds |
+| ~~**2b**~~ | ~~The "Submitted with the application" column~~ — **done 2026-09-03**, [#69](https://github.com/uaiblaine/moodle-enrol_apply/pull/69) | See below — it is in the mockup and in neither task list, and it is not a cell like the others |
+| ~~**3a**~~ | ~~The search (GET), the status filter, the chip row, "clear all", the counts — everything server-side~~ — **done 2026-09-03**, [#71](https://github.com/uaiblaine/moodle-enrol_apply/pull/71) | The two filters that narrow columns the query already has |
+| ~~**3b**~~ | ~~The as-you-type half: the debounce, chip removal without a reload, the rebuilt AMD bundle~~ — **done 2026-09-03**, [#73](https://github.com/uaiblaine/moodle-enrol_apply/pull/73) | Split from 3a for the reason U5a/U5b were split in the first place — `amd/build/**` and the `grunt --max-lint-warnings 0` gate enter on their own slice, so a red leg is attributable to one mechanism rather than three |
+| ~~**4**~~ | ~~The identity filters and the date filter~~ — **done 2026-09-04**, [#75](https://github.com/uaiblaine/moodle-enrol_apply/pull/75) | Both depend on site configuration — the identity field list varies — and a date range is a different filter class. The scope grew during the slice: which fields are offered is now an administrator's setting rather than a fixed pair, because a site's own custom profile fields are exactly what it would want to filter by and no fixed list can name them |
 
 **PR 2b exists because a column went missing from both task lists.** Mockup A carries a
 *"Submitted with the application"* column, and its own caption calls those answers "the evidence" —

@@ -123,12 +123,18 @@ first of them actually needs.
    something is selected" — it only ever RE-enables; `init()` binds two click handlers and
    nothing else, which is why every core caller hardcodes `disabled` server-side.
 
-5. **Previous/next navigation** — decided, not built. The owner chose to turn the `userenrol=`
-   scope into a real single-application review page and navigate between neighbours on the
-   `gradereport_singleview` shape (the neighbour's id in the href, resolved server side). It is
-   its own PR because that surface does not exist yet: `manage.php?userenrol=N` is the same
+5. ~~**Previous/next navigation** — decided, not built.~~ **BUILT** — see U2 in
+   [`ui-rebuild-plan.md`](ui-rebuild-plan.md); the surface is
+   `classes/output/application_navigation.php` with its own template, and the queue has carried a
+   per-row *Review* link into it since U5a PR 2. The four questions below were settled there; they
+   are kept because each is measured and the reasoning still applies to that page.
+
+   The original entry, and what it was waiting for: the owner chose to turn the `userenrol=` scope
+   into a real single-application review page and navigate between neighbours on the
+   `gradereport_singleview` shape (the neighbour's id in the href, resolved server side). It was
+   its own PR because that surface did not exist yet: `manage.php?userenrol=N` was the same
    `enrol_apply_manage_table` filtered to one row, still carrying the whole bulk bar. Four things
-   have to be settled inside that PR, each measured:
+   had to be settled inside that PR, each measured:
 
    - the group and role choosers are built only when `$instance !== null`, so the `userenrol=`
      scope offers neither — the review page has to close that gap or it is a decision surface
@@ -280,14 +286,25 @@ Every fix is mutation-checked and reddens exactly its own named test.
 
 ## Next
 
-**Slice I is complete** (message #18, groups and period #19, role #23, modern queue #24), and the
-audit work that followed it is merged (#27 the analysis, #28 the report, #29 the two write-side
-defects). What remains is **slice J**, **previous/next navigation**, and the audit recommendations
-the owner accepted. All three are written up in [`HANDOFF.md`](HANDOFF.md), which is the file to
-read first.
+**This section describes the ELEVEN-SLICE plan, which is finished.** Slices 1-9 plus I and J are
+all merged, and so is the plan that followed them: the UI rebuild in
+[`ui-rebuild-plan.md`](ui-rebuild-plan.md), U0 through U6, closed on 2026-09-04 with U5a's sixth
+pull request. **Nothing in either plan is outstanding.**
 
-**Slice I** (decision-time enrolment parameters, the outcome message and the modern queue), then
-**slice J** (bulk actions on the participants page). Those were the last two.
+Read [`HANDOFF.md`](HANDOFF.md) first, and specifically its "What is left" section, which is the
+only list of open work that is maintained. What is there now is two product decisions the owner
+deferred deliberately — whether places should ever BLOCK an approval, and whether to finish or
+delete the unreachable enrolment-period branches of `confirm_enrolment()` — plus housekeeping.
+
+**The three items this section used to name are done.** Slice J is U4 (the participants-page bulk
+menu, 2026-09-01); previous/next navigation is built, see item 5 above; and the audit
+recommendations were taken in #27, #28 and #29. An earlier version of this paragraph still listed
+all three as remaining, months after they landed, which is the failure mode a "Next" section in a
+narrative document has: it is written once and read many times.
+
+For the record, what those two slices were: **slice I** (decision-time enrolment parameters, the
+outcome message and the modern queue - message #18, groups and period #19, role #23, queue #24),
+then **slice J** (bulk actions on the participants page). They were the last two of the eleven.
 
 There is **no slice 10 and no slice 11**, and an earlier version of this section said there were.
 The plan is eleven slices — 1 to 9, then I and J (`implementation-plan.md:8`) — and slice 10, the
