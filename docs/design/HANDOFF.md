@@ -1081,10 +1081,11 @@ harder. Each was a sentence I would have shipped.
 
 ## What is left, in the order I would take it
 
-### 1. Should places ever BLOCK an approval? — a product decision, deliberately deferred
+### 1. ~~Should places ever BLOCK an approval?~~ — SETTLED 2026-09-04: **no**
 
-Places currently **warn and nothing else**. The owner chose that on 2026-08-31, and the reasons
-are worth keeping because the cheap-looking alternative is not cheap:
+Places **warn and nothing else**, permanently. The owner chose that on 2026-08-31 and confirmed it
+on 2026-09-04, so this is a decision rather than a deferral and the reasons below are now the
+rationale for the shipped behaviour rather than an argument for delay:
 
 - The plugin's whole premise is that a human judges each application. A number that refuses one
   contradicts it.
@@ -1093,23 +1094,66 @@ are worth keeping because the cheap-looking alternative is not cheap:
 - `complete_approval()`, the one place that looks like a natural home for the check, runs
   **twice** for a queue approval, and the earlier pass has no operator to tell anything to.
 
-Revisit with real usage data, not from first principles. If it is ever done, the bulk
-confirmation form is the only surface that can speak *before* the decision, which makes it the
-place to explain a refusal rather than merely announce one.
+Reopen only with real usage data showing a course that needs it, never from first principles. If
+it ever is, the bulk confirmation form is the only surface that can speak *before* the decision,
+which makes it the place to explain a refusal rather than merely announce one.
 
-### 2. The enrolment-period branches of `confirm_enrolment()` — a product decision
+### 2. ~~The enrolment-period branches of `confirm_enrolment()`~~ — SETTLED 2026-09-04: **deleted**
 
-**The only item left that needs a person rather than a session.** Still unreachable from the UI:
-neither `manage.php`, nor the bulk decision form, nor the review page supplies `timestart` or
-`timeend`. Re-measured 2026-08-30 by grep — the only caller passing a period is
-`tests/outcome_message_test.php`, whose green makes the branch look exercised. Find it with
-`grep -rn "'timestart' =>" tests/` rather than by a line number; the last handoff's line number
-for it was wrong within a minute of being written.
+The owner's answer: **the period belongs to the enrolment method, not to the decision.** Access
+starts when the application is approved, and runs for however long the method's own `enrolperiod`
+says — which is on the method's edit form, so a course already controls it. There is nothing for a
+decider to choose per applicant, so there were never any date controls to build.
 
-**Finishing it** means date controls on the review page and the queue. **Deleting it** removes an
-API capability no screen reaches. Left open deliberately, twice now.
+`$decision['timestart']` and `$decision['timeend']` are gone rather than left unreachable: an
+untested API capability no caller uses is a liability, not a feature. Nothing supplied them — no
+screen, no form, no web service — and the only thing that ever did was the test written to cover
+them, whose green made the branch look exercised.
 
-### 3. Housekeeping
+That test is now two, and they are better than the one they replace because they cover the path
+that actually ships: `test_the_methods_period_is_stamped_on_approval_only` (a method with no
+period: `timestart` is the approval moment, `timeend` is 0, and the control proves nothing is
+stamped while the row is still pending) and `test_a_method_with_a_period_ends_the_enrolment_after_it`.
+
+**The fact the old test's docblock carried is still load-bearing and is kept in both places:** a
+`timeend` on a still-pending row is swept by `process_expirations()`'s `ENROL_EXT_REMOVED_UNENROL`
+branch, which selects on `timeend` with **no status filter at all** — so the applicant would be
+unenrolled instead of decided. That is why the period is stamped on approval and never before it.
+
+### 3. ~~A release tag~~ — SETTLED 2026-09-04: **not for now**
+
+Nothing is tagged and nothing is due to be. The last tag is upstream's `v.4.1-a` from 2023 with 187
+commits behind it, and `$plugin->release` still reads `v2.0`, which agrees with none of them. The
+owner's answer on 2026-09-04 was to leave all of it alone rather than tidy it into a version nobody
+asked for. Revisit when there is a reason to publish, and fix the release string in that same change.
+
+### 4. The pt_br language pack overrides 39 of this plugin's own strings
+
+**Not fixable from `lang/pt_br/`, and worth knowing before anyone tries.** Moodle loads a plugin's
+own `lang/<lang>/` FIRST — core's comment on that line calls it *"Legacy location - used by contrib
+only"* — and the installed language pack SECOND, as *"The main lang string location"*
+(`lib/classes/string_manager_standard.php:186-192`). They are plain includes assigning into
+`$string`, so the pack wins.
+
+This plugin keeps the component name of the upstream plugin published on moodle.org, so the official
+pt_br pack carries a translation for it. Measured on m502, 2026-09-04: the pack holds **55** keys,
+**46** of which this fork also defines, and **39** of those differ in wording. The fork says
+*solicitação*; the pack says *pedido de inscrição*. So a pt_br site shows both vocabularies at once —
+which is how it was found, from `applydate` rendering as "Data de inscrição" where the plugin's own
+file says "Data da solicitação".
+
+Of the 39, **30 are plugin-internal keys** that could be renamed so nothing collides, and **9 cannot
+be**: `apply:config`, `apply:manage`, `apply:unenrol`, `apply:unenrolself`, the four
+`messageprovider:*` and `pluginname`, all of which core names. The options are therefore: rename the
+30 (the fork's wording then wins on every site, no site-level file); ship a
+`moodledata/lang/pt_br_local/enrol_apply.php`, which core loads last and which covers all 39 but
+travels with the site rather than the plugin; or both. Undecided.
+
+Renaming is defensible rather than a dodge for at least some of them: this fork changed what several
+of those keys MEAN. `applydate` is now the date of an *application* on a queue that distinguishes
+applying from being enrolled, which is exactly the distinction the pack's wording erases.
+
+### 5. Housekeeping
 
 - ~~**Re-measure coverage and re-run `mdl ci --strict`.**~~ Done 2026-09-04, on
   MOODLE_501_STABLE / PHP 8.3 / pgsql, with the whole UI rebuild landed:
@@ -1138,7 +1182,7 @@ API capability no screen reaches. Left open deliberately, twice now.
 - ~~**The fleet command table has no `mdl mutate` row.**~~ Done: it has one. Verified 2026-09-04
   by grep rather than by trusting this line, which is how the two above turned out to be stale.
 
-### 4. Facts about this plugin that are not going to change
+### 6. Facts about this plugin that are not going to change
 
 - **A core defect, not fixable from here:** the participants page renders a waiting-list row
   (`ENROL_APPLY_USER_WAIT = 2`) as a green **"Active"** badge. Note the framing, which the
@@ -1151,7 +1195,7 @@ API capability no screen reaches. Left open deliberately, twice now.
   announced as a button and Space does not activate it. Core's markup, not fixable here.
 - **If the full history is ever wanted**, the shape is a decision-log table, not more status values.
 
-### 5. Notes kept from 2026-08-29
+### 7. Notes kept from 2026-08-29
 
 - ~~**`mdl ci --strict` is red: four `UnusedLocalVariable`.**~~ Cleared by #50 on 2026-08-30;
   kept for the attribution method it describes.

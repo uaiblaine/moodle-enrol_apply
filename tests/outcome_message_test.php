@@ -572,32 +572,71 @@ final class outcome_message_test extends \advanced_testcase {
     }
 
     /**
-     * The decider's enrolment period is stamped on approval, and never before it.
+     * The enrolment period is the METHOD's, and it is stamped on approval and never before it.
      *
-     * A timeend on a pending row is swept by the ENROL_EXT_REMOVED_UNENROL branch of
-     * process_expirations(), which selects on timeend with no status filter - so the applicant
-     * would be unenrolled instead of decided.
+     * Two facts in one test because they are the same line of code. The period comes from the
+     * enrolment method's own `enrolperiod` - a decision is a yes or a no about one applicant, not
+     * a place to give that applicant different dates - and it lands only when the application is
+     * approved. The second half is a correctness requirement rather than tidiness: a timeend on a
+     * still-pending row is swept by the ENROL_EXT_REMOVED_UNENROL branch of process_expirations(),
+     * which selects on timeend with NO status filter at all, so the applicant would be unenrolled
+     * instead of decided.
+     *
+     * The first assertions are the control: nothing is stamped while the application is pending,
+     * so the ones after approval cannot pass by the fixture having carried dates all along.
      *
      * @return void
      */
-    public function test_the_chosen_period_is_stamped_on_approval_only(): void {
+    public function test_the_methods_period_is_stamped_on_approval_only(): void {
         global $DB;
 
         [, $ueid] = $this->apply();
 
-        // The control: nothing is stamped while the application is still pending.
         $pending = $DB->get_record('user_enrolments', ['id' => $ueid], '*', MUST_EXIST);
         $this->assertEquals(0, (int) $pending->timestart);
         $this->assertEquals(0, (int) $pending->timeend);
 
         $this->setAdminUser();
-        $start = time() + 86400;
-        $end = $start + (7 * 86400);
-        $this->plugin->confirm_enrolment([$ueid], '', ['timestart' => $start, 'timeend' => $end]);
+        $before = time();
+        $this->plugin->confirm_enrolment([$ueid], '');
+        $after = time();
+
+        // A method with no period of its own: access starts now and does not end.
+        $approved = $DB->get_record('user_enrolments', ['id' => $ueid], '*', MUST_EXIST);
+        $this->assertGreaterThanOrEqual($before, (int) $approved->timestart);
+        $this->assertLessThanOrEqual($after, (int) $approved->timestart);
+        $this->assertEquals(0, (int) $approved->timeend);
+    }
+
+    /**
+     * A method that declares a period ends the enrolment that far after the approval.
+     *
+     * The other half of the rule above, and the reachable half: `enrolperiod` is on the method's
+     * own form, so this is how a course actually sets how long its enrolments last. Separated
+     * from the test above because the two need different instances and a shared fixture would
+     * have to be rebuilt anyway.
+     *
+     * @return void
+     */
+    public function test_a_method_with_a_period_ends_the_enrolment_after_it(): void {
+        global $DB;
+
+        $this->plugin->update_instance($this->instance, (object) [
+            'id' => $this->instance->id,
+            'enrolperiod' => WEEKSECS,
+        ]);
+        $this->instance = $DB->get_record('enrol', ['id' => $this->instance->id], '*', MUST_EXIST);
+
+        [, $ueid] = $this->apply();
+        $this->setAdminUser();
+        $this->plugin->confirm_enrolment([$ueid], '');
 
         $approved = $DB->get_record('user_enrolments', ['id' => $ueid], '*', MUST_EXIST);
-        $this->assertEquals($start, (int) $approved->timestart);
-        $this->assertEquals($end, (int) $approved->timeend);
+        $this->assertEquals(
+            (int) $approved->timestart + WEEKSECS,
+            (int) $approved->timeend,
+            'the enrolment must end one method period after it started'
+        );
     }
 
     /**

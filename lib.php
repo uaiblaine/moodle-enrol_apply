@@ -1137,8 +1137,9 @@ class enrol_apply_plugin extends enrol_plugin {
      *
      * @param array $enrols User enrolment ids to confirm.
      * @param string $message Message the decider wrote to the applicant, empty for none.
-     * @param array|null $decision Chosen groups, role, enrolment period and decision note; null
-     *        for the instance defaults and no note.
+     * @param array|null $decision Chosen groups, role and decision note; null for the instance
+     *        defaults and no note. The enrolment PERIOD is deliberately not among them - it comes
+     *        from the method's own enrolperiod; see where it is stamped below.
      * @return int How many of the given applications this call actually decided.
      */
     public function confirm_enrolment($enrols, string $message = '', ?array $decision = null) {
@@ -1221,20 +1222,30 @@ class enrol_apply_plugin extends enrol_plugin {
                 \enrol_apply\local\submission::record_decided_groups((int) $userenrolment->id, $chosen);
             }
 
-            /* The decider's period, falling back to the instance's. Recorded on the enrolment
-               and not on the record: core already holds an enrolment's dates, and duplicating
-               them would give the report two sources that can disagree. */
+            /* The enrolment's period, and it is NOT the decider's to choose. Access starts when
+               the application is approved and runs for however long the enrolment method says -
+               its `enrolperiod`, set on the method's own form, which is where a course decides
+               how long its enrolments last. A decision is a yes or a no about one applicant, not
+               a place to give that applicant different dates from everyone else's.
+
+               Stamped on the enrolment and not on the submission record: core already holds an
+               enrolment's dates, and duplicating them would give the report two sources that can
+               disagree.
+
+               Stamped on approval and never before it, which is a correctness requirement rather
+               than tidiness: process_expirations()'s ENROL_EXT_REMOVED_UNENROL branch selects on
+               timeend with no status filter at all, so a timeend on a still-pending row gets the
+               applicant UNENROLLED instead of decided.
+
+               An earlier version also honoured $decision['timestart'] and $decision['timeend'].
+               Nothing ever supplied them - no screen, no form, no web service - and the owner
+               settled the question on 2026-09-04: the period belongs to the method. The branches
+               are gone rather than left unreachable, because an untested API capability no caller
+               uses is a liability, not a feature. */
             $userenrolment->timestart = time();
-            $userenrolment->timeend = 0;
-            if ($instance->enrolperiod) {
-                $userenrolment->timeend = $userenrolment->timestart + $instance->enrolperiod;
-            }
-            if ($decision !== null && !empty($decision['timestart'])) {
-                $userenrolment->timestart = (int) $decision['timestart'];
-            }
-            if ($decision !== null && array_key_exists('timeend', $decision)) {
-                $userenrolment->timeend = (int) $decision['timeend'];
-            }
+            $userenrolment->timeend = $instance->enrolperiod
+                ? $userenrolment->timestart + $instance->enrolperiod
+                : 0;
 
             /* update_user_enrol() dispatches before_user_enrolment_updated, so the
                observer in classes/hook_callbacks.php has usually already run
