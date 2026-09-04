@@ -1111,11 +1111,28 @@ API capability no screen reaches. Left open deliberately, twice now.
 
 ### 3. Housekeeping
 
-- **Re-measure coverage and re-run `mdl ci --strict`.** Still the live item, and more so:
-  the 56.1% dates from 2026-08-29 and `--strict` from 2026-08-30, with the whole UI rebuild
-  (U6 and U5a's six pull requests) landed since. Neither is evidence of anything today.
-- **A `tests/coverage.php` ratchet** is possible — the file exists — but take a fresh number
-  first. Do not set one from the 56.1% above.
+- ~~**Re-measure coverage and re-run `mdl ci --strict`.**~~ Done 2026-09-04, on
+  MOODLE_501_STABLE / PHP 8.3 / pgsql, with the whole UI rebuild landed:
+
+  **62.9% lines (2711/4307) · 64.9% methods (198/305)**, against 56.1% on 2026-08-29 — and over a
+  denominator that grew with the rebuild, so the rise is not the same base measured twice.
+  **`mdl ci --strict` passes end to end, `phpmd: OK`** — zero findings on the curated ruleset.
+
+  The number is honest and, if anything, pessimistic: this plugin's `tests/coverage.php` pulls in
+  the page scripts, `settings.php`, `db/upgrade.php` and `backup/`, which core's default include
+  list leaves out — and what is left out inflates a percentage rather than depressing it.
+
+  Five files are at **zero** and account for 818 lines, 19% of the whole denominator:
+  `settings.php` (0/227), `db/upgrade.php` (0/199), `edit_form.php` (0/170), `manage.php` (0/159)
+  and `classes/form/bulk_decision_form.php` (0/63). Without them the figure would be ~77.7%.
+
+- **A `tests/coverage.php` ratchet is possible now — but read the two zeros before setting one.**
+  `manage.php` at 0/159 is not untested: fourteen Behat scenarios drive it, and coverage counts
+  only the PHPUnit run under pcov. Much of `edit_form.php` is the same. A ratchet pinned to this
+  number would book as debt something that already has tests of another kind.
+  `settings.php` at 0/227 is structural rather than owed: core includes it with `$ADMIN` and
+  `$settings` already built, so no unit test constructs it — which is exactly why `gates.conf`
+  records that it gets no mutation gate either. Neither zero is paid off by writing a test.
 - ~~**`~/dev/CLAUDE.md`'s phpmd table** records a stale count for this plugin.~~ Done: that table
   now records `enrol_apply` at **0**, with `mdl ci --strict` passing on it end to end.
 - ~~**The fleet command table has no `mdl mutate` row.**~~ Done: it has one. Verified 2026-09-04
