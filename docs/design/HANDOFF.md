@@ -1,9 +1,76 @@
 # Handoff — read this before touching anything
 
-State at 2026-09-04. **Everything is merged; nothing is in flight** — this file cannot name the
-commit that merges it, which is the caution the entries below have paid for eight times. When a
-slice IS unmerged it gets an `IN FLIGHT` header, and that header is deleted by the change that
-merges it, which is what happened here.
+State at 2026-09-04. **U7 is IN FLIGHT**; everything before it is merged.
+
+## IN FLIGHT — 2026-09-04 — U7, narrowing the site-wide queue by category and course
+
+`version.php` is `2026090401` and the plugin carries **119 gates**. Two controls on the site-wide
+queue and no other, both with type-to-filter, chosen by the owner on 2026-09-04 after the search's
+cost was measured rather than assumed.
+
+**Offered on one scope, decided by `coursefilter::offered()`:** `instance === null && mentees ===
+null`. With `?id=` the queue names one course already; on the mentee queue a mentor sees a handful
+and the control is noise. A value arriving on either from a stale url narrows nothing.
+
+**No per-course capability check, and that is the scope's property rather than an omission.**
+`queue::listing_scope()` only returns the site-wide scope to a holder of
+`enrol/apply:manageapplications` at the SYSTEM context, so that reader can manage applications in
+every course the queue could list. The offered set is therefore exactly "courses with an apply
+method" — the same set the unfiltered queue draws from. Wider makes the control an oracle over
+course names; narrower hides rows the queue is already showing.
+
+**The category reaches its subtree** by prefix-matching the materialised path core keeps on
+`{course_categories}`, not by walking the tree. `sql_like_escape()` is applied to the path even
+though a category path cannot hold a percent sign today.
+
+### What the measurement actually said, and what it did not
+
+The slice began as a performance question and the honest answer was that the database is not the
+constraint. At **5,000 pending applications**: **17 queries** for one page, and the bare scope and
+count queries about **1 ms each**. Wall-clock numbers taken the same evening are worthless and are
+deliberately not recorded — two runs of the identical instrumented benchmark gave 63 ms and 8,071 ms
+because six of another session's CI containers were on the machine, one at 185% CPU. **The query
+count and the bare query times were identical across those runs, which is why only they are quoted.**
+
+So these controls are not a speed fix. They are indexable where the search can only scan, which
+matters as the queue grows, and they are how an operator finds the right page at all.
+
+### The autocomplete needs no web service, and the threshold is worth knowing
+
+Both selects are enhanced with `core/form-autocomplete` and **ajax off**: the list is rendered whole
+and the typing filters it in the browser. A site puts an apply method on the courses that need one,
+so the list is bounded by that rather than by the size of the site, and a static list costs no web
+service, no `db/services.php` and no second place where "which courses may this reader see" is
+decided. **The day a site has thousands of apply-enabled courses is the day to add one** — recorded
+here so it is recognised rather than rediscovered.
+
+The AMD module needed no change at all: both selects carry `data-region="filterfield"`, which the
+existing `change` listener already covers. Core's own `form-autocomplete` notifies the original
+select with `dispatchEvent(new Event('change', {bubbles: true}))` and carries the comment *"jQuery
+.change() was not working here"* — so a native listener is reached, which was worth checking before
+relying on it.
+
+### A gate this change broke, for the third time this week
+
+`DE_narrowing_ignores_the_field_filters` named `is_narrowed()`'s five-clause body and stopped
+matching the moment a sixth arrived. Repointed. That is now **four** gates — CD, CH, AD and DE —
+found dead or dying by the full `mdl mutate --dry-run`, which costs seconds and needs no test site.
+Run it after every edit, not before every push.
+
+### The m502 and m502b test sites are poisoned by an unrelated mount
+
+`moodle-502/public/blocks/compass` and the m502b equivalent are **empty directories**: `block_compass`
+is in `plugins.conf` and its repo has a `version.php`, but the bind mount is not live, so inside the
+container it is a plugin with no version file. `core\component::get_all_versions()` fails to include
+it and the versions hash changes, which invalidates the PHPUnit site continuously — four times in one
+session here, killing a gate sweep mid-run. `mdl up m502` and `mdl up m502b` fix it. This slice was
+verified on **m501**, which is clean.
+
+## Previously — everything below is merged
+
+The entry above cannot name the commit that merges it, which is the caution these entries have paid
+for eight times. An unmerged slice gets an `IN FLIGHT` header, and that header is deleted by the
+change that merges it.
 
 ## 2026-09-04 — U5a PR 4, filters the administrator chooses
 

@@ -1276,6 +1276,123 @@ final class applications_test extends \advanced_testcase {
     }
 
     /**
+     * The site-wide queue narrows to one course, and to a category with its subtree.
+     *
+     * **The only filter on this queue a database can use an index for.** {course}.category and
+     * {course}.id both carry one, so this cuts the row set before the search's LIKE has anything
+     * to scan - which the search itself can never do, whatever it is given.
+     *
+     * The two applications in other places are the control: they prove the queue holds more than
+     * the match, so a narrowing result cannot come from an empty fixture.
+     *
+     * @return void
+     */
+    public function test_the_site_wide_queue_narrows_by_course_and_by_category(): void {
+        $this->setAdminUser();
+
+        $parent = $this->getDataGenerator()->create_category();
+        $child = $this->getDataGenerator()->create_category(['parent' => $parent->id]);
+        $wantedcourse = $this->getDataGenerator()->create_course(['category' => $child->id]);
+        $othercourse = $this->getDataGenerator()->create_course();
+
+        $wantedinstance = $this->apply_instance($wantedcourse);
+        $otherinstance = $this->apply_instance($othercourse);
+
+        $wanted = $this->applicant($wantedinstance);
+        $other = $this->applicant($otherinstance);
+
+        $all = $this->sitewide([]);
+        $this->assertContains((int) $this->userenrolment($wanted, $wantedinstance), $all);
+        $this->assertContains((int) $this->userenrolment($other, $otherinstance), $all);
+
+        $this->assertSame(
+            [(int) $this->userenrolment($wanted, $wantedinstance)],
+            $this->sitewide(['course' => (string) $wantedcourse->id])
+        );
+
+        // The PARENT category, so this passes only if the subtree is included.
+        $this->assertSame(
+            [(int) $this->userenrolment($wanted, $wantedinstance)],
+            $this->sitewide(['category' => (string) $parent->id])
+        );
+    }
+
+    /**
+     * A queue scoped to one enrolment method ignores a course filter entirely.
+     *
+     * The control would filter a set of one, so it is not offered - and a value arriving anyway,
+     * from a stale url or a forged request, must narrow nothing rather than narrow something. The
+     * assertion is that the queue is unchanged AND does not call itself narrowed, because the
+     * second is what draws the chips and the "nothing matches" wording.
+     *
+     * @return void
+     */
+    public function test_a_scoped_queue_ignores_a_course_filter(): void {
+        $this->setAdminUser();
+        $applicant = $this->applicant();
+
+        $table = applications::for_scope(
+            (int) $this->instance->id,
+            '',
+            null,
+            ['course' => (string) $this->course->id]
+        );
+
+        $this->assertSame([null, null], $table->get_course_scope());
+        $this->assertFalse($table->offers_course_filters());
+        $this->assertFalse($table->is_narrowed());
+    }
+
+    /**
+     * The base url carries the course and category filters.
+     *
+     * Paging and sorting emit real anchors from it, so a filter the base url drops is a filter the
+     * operator loses on the first page turn - silently, and only for the operator who turned one.
+     *
+     * @return void
+     */
+    public function test_the_base_url_carries_the_course_filters(): void {
+        $this->setAdminUser();
+        $course = $this->getDataGenerator()->create_course();
+        $instance = $this->apply_instance($course);
+        $this->applicant($instance);
+
+        $table = applications::for_scope(0, '', null, ['course' => (string) $course->id]);
+
+        $this->assertStringContainsString('course=' . $course->id, $table->baseurl->out(false));
+    }
+
+    /**
+     * An apply enrolment method on a given course.
+     *
+     * @param \stdClass $course The course.
+     * @return \stdClass The enrol instance.
+     */
+    protected function apply_instance(\stdClass $course): \stdClass {
+        global $DB;
+
+        $id = $this->plugin->add_instance($course, $this->plugin->get_instance_defaults());
+
+        return $DB->get_record('enrol', ['id' => $id], '*', MUST_EXIST);
+    }
+
+    /**
+     * The site-wide listing, narrowed by the given filters.
+     *
+     * @param array $filters Filter name => raw value.
+     * @return array User enrolment ids.
+     */
+    protected function sitewide(array $filters): array {
+        $table = applications::for_scope(0, '', null, $filters);
+
+        ob_start();
+        $table->out(50, false);
+        ob_end_clean();
+
+        return array_map(static fn($row) => (int) $row->userenrolmentid, array_values($table->rawdata));
+    }
+
+    /**
      * Give one user a value for a custom profile field.
      *
      * @param \stdClass $user The user.

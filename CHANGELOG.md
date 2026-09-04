@@ -121,6 +121,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   because that chip is redrawn in the browser on every refresh and no server-side formatting is
   reproducible there.
 
+- **The site-wide queue can be narrowed to a category and a course.** Two controls, on that queue
+  and no other: with `?id=<enrolid>` the queue already names one course, so the control would
+  filter a set of one, and on the mentee queue a mentor sees a handful of courses and it would be
+  noise. Both offer type-to-filter over the list rather than a plain menu.
+
+  **The category reaches its whole subtree.** Filtering by *Engineering* finds the courses filed
+  under *Engineering / Civil*, which is what an operator means by it — matched as a prefix on the
+  materialised path core already keeps, rather than by walking the tree.
+
+  **The course list is exactly the set that queue can show:** courses with an apply enrolment
+  method. It needs no per-course permission check, and that is a property of the scope rather than
+  an omission — the site-wide queue is only ever offered to somebody holding
+  `enrol/apply:manageapplications` at the system context, so they can manage applications in every
+  course it could list. A wider list would make the control an oracle over course names; a narrower
+  one would hide rows the queue is showing.
+
+  **These are the only filters on this queue a database can narrow with an index.** `{course}.id`
+  and `{course}.category` both carry one, so they cut the row set before the search's `LIKE` has
+  anything to scan — which the search itself can never do, whatever it is given. Measured at 5,000
+  pending applications: the queue issues 17 queries for a page and the scope and count queries take
+  about a millisecond each, so the database was never the constraint at that size; what these
+  controls buy is the operator finding the right page, not the page arriving faster.
+
+
 ### Fixed
 
 - **The queue's status filter listed the wrong things, and that is what broke the search.** The

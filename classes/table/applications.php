@@ -25,6 +25,7 @@ use core_table\local\filter\string_filter;
 use enrol_apply\local\commentlabel;
 use enrol_apply\local\identity;
 use enrol_apply\local\queue;
+use enrol_apply\local\coursefilter;
 use enrol_apply\local\queuefilter;
 use enrol_apply\local\search;
 use enrol_apply\local\submission as submissionrecord;
@@ -95,6 +96,12 @@ class applications extends \table_sql implements dynamic_table {
 
     /** @var array Token => cleaned value, for the identity fields this listing is narrowed by. */
     protected $fieldfilters = [];
+
+    /** @var int|null Course category the listing is narrowed to, with its subtree. */
+    protected $categoryfilter = null;
+
+    /** @var int|null Course the listing is narrowed to. */
+    protected $coursefilter = null;
 
     /** @var string|null Lower bound of the applied-date range as YYYY-MM-DD, null for none. */
     protected $appliedfrom = null;
@@ -261,6 +268,26 @@ class applications extends \table_sql implements dynamic_table {
             $status = $filterset->get_filter('status')->current();
             if ($status !== null) {
                 $this->status = (int) $status;
+            }
+        }
+
+        /* The course and the category, on the site-wide queue alone - see coursefilter::offered().
+           They travel as string filters like the dates rather than as integer ones like the
+           status, because the AMD module sends every control in the filter bar the same way and a
+           second shape there is a second thing to keep in step. The table is what validates them:
+           a course with no apply method, or a category that does not exist, is no filter. */
+        $this->categoryfilter = null;
+        $this->coursefilter = null;
+        if (coursefilter::offered($this->scope)) {
+            if ($filterset->has_filter('course')) {
+                $this->coursefilter = coursefilter::clean_course(
+                    (int) $filterset->get_filter('course')->current()
+                );
+            }
+            if ($filterset->has_filter('category')) {
+                $this->categoryfilter = coursefilter::clean_category(
+                    (int) $filterset->get_filter('category')->current()
+                );
             }
         }
 
@@ -482,7 +509,9 @@ class applications extends \table_sql implements dynamic_table {
             || $this->status !== null
             || $this->fieldfilters !== []
             || $this->appliedfrom !== null
-            || $this->appliedto !== null;
+            || $this->appliedto !== null
+            || $this->categoryfilter !== null
+            || $this->coursefilter !== null;
     }
 
     /**
@@ -583,6 +612,12 @@ class applications extends \table_sql implements dynamic_table {
         if ($this->appliedto !== null) {
             $params['appliedto'] = $this->appliedto;
         }
+        if ($this->categoryfilter !== null) {
+            $params['category'] = $this->categoryfilter;
+        }
+        if ($this->coursefilter !== null) {
+            $params['course'] = $this->coursefilter;
+        }
 
         return $params;
     }
@@ -615,6 +650,24 @@ class applications extends \table_sql implements dynamic_table {
     }
 
     /**
+     * The course and category this listing is narrowed to, for the renderer to draw and chip.
+     *
+     * @return array [categoryid, courseid], each an int or null.
+     */
+    public function get_course_scope(): array {
+        return [$this->categoryfilter, $this->coursefilter];
+    }
+
+    /**
+     * Whether this scope offers the course and category controls at all.
+     *
+     * @return bool True on the site-wide queue and nowhere else.
+     */
+    public function offers_course_filters(): bool {
+        return coursefilter::offered($this->scope);
+    }
+
+    /**
      * Which parameters the queue reads off a url, and how each one is read.
      *
      * The ONE definition, called by manage.php and used to build both the table and the page url,
@@ -641,6 +694,17 @@ class applications extends \table_sql implements dynamic_table {
             $value = queuefilter::clean($offered, optional_param($token, '', PARAM_NOTAGS));
             if ($value !== null) {
                 $filters[$token] = $value;
+            }
+        }
+
+        if (coursefilter::offered($listing)) {
+            $course = coursefilter::clean_course(optional_param('course', 0, PARAM_INT));
+            if ($course !== null) {
+                $filters['course'] = $course;
+            }
+            $category = coursefilter::clean_category(optional_param('category', 0, PARAM_INT));
+            if ($category !== null) {
+                $filters['category'] = $category;
             }
         }
 
@@ -859,6 +923,16 @@ class applications extends \table_sql implements dynamic_table {
             $wheres[] = search::like_ai($offered->expression, ':' . $name, $unaccent);
             $params[$name] = '%' . $DB->sql_like_escape($value) . '%';
         }
+
+        /* The course and the category, FIRST among the operator's filters because they are the
+           only ones a database can narrow with an index: {course}.category and {course}.id both
+           carry one, so these cut the row set before the search's LIKE has anything to scan. The
+           search can only ever scan, whatever it is given. */
+        [$coursewheres, $courseparams] = coursefilter::where($this->categoryfilter, $this->coursefilter);
+        foreach ($coursewheres as $coursewhere) {
+            $wheres[] = $coursewhere;
+        }
+        $params += $courseparams;
 
         /* The applied-date range, as whole days in the reader's own timezone. The upper bound is
            the midnight that STARTS the following day compared with a strict less-than, so the "to"

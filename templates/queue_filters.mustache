@@ -58,6 +58,12 @@
     * searchhelp string - rendered help icon for the search field
     * statuslabel string - visible label for the status select
     * statusoptions array - value, label and selected for each option
+    * hascoursefilters bool - true on the site-wide queue, which is the only scope offering the
+      course and category controls; see enrol_apply\local\coursefilter
+    * categorylabel, courselabel string - the two labels
+    * categoryoptions, courseoptions array - value, label and selected for each option. Both
+      selects are enhanced by core/form-autocomplete with ajax off, so the list is rendered whole
+      and the typing filters it in the browser.
     * haschips boolean - whether any filter is applied
     * chips array - name, value, removeurl and removelabel for each applied filter
     * clearurl string - url that removes every filter
@@ -77,6 +83,17 @@
         "searchvalue": "goncalves",
         "searchhelp": "",
         "statuslabel": "Application status",
+        "hascoursefilters": true,
+        "categorylabel": "Course category",
+        "categoryoptions": [
+            {"value": "", "label": "Any category", "selected": true},
+            {"value": "3", "label": "Engineering", "selected": false}
+        ],
+        "courselabel": "Course",
+        "courseoptions": [
+            {"value": "", "label": "Any course", "selected": true},
+            {"value": "7", "label": "Structural mechanics", "selected": false}
+        ],
         "statusoptions": [
             {"value": "", "label": "Any status", "selected": false},
             {"value": "1", "label": "Pending", "selected": true},
@@ -142,6 +159,26 @@
                 {{/statusoptions}}
             </select>
         </div>
+        {{#hascoursefilters}}
+            <div class="enrol_apply-filterfield">
+                <label class="form-label" for="enrol_apply_category">{{categorylabel}}</label>
+                <select class="form-select" id="enrol_apply_category" name="category"
+                        data-region="filterfield" data-filter="category" data-filterlabel="{{categorylabel}}">
+                    {{#categoryoptions}}
+                        <option value="{{value}}" {{#selected}}selected{{/selected}}>{{label}}</option>
+                    {{/categoryoptions}}
+                </select>
+            </div>
+            <div class="enrol_apply-filterfield">
+                <label class="form-label" for="enrol_apply_course">{{courselabel}}</label>
+                <select class="form-select" id="enrol_apply_course" name="course"
+                        data-region="filterfield" data-filter="course" data-filterlabel="{{courselabel}}">
+                    {{#courseoptions}}
+                        <option value="{{value}}" {{#selected}}selected{{/selected}}>{{label}}</option>
+                    {{/courseoptions}}
+                </select>
+            </div>
+        {{/hascoursefilters}}
         {{#fields}}
             <div class="enrol_apply-filterfield">
                 <label class="form-label" for="{{inputid}}">{{label}}</label>
