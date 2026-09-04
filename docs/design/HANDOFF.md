@@ -1,13 +1,15 @@
 # Handoff — read this before touching anything
 
-State at 2026-09-04. **U5a PR 4 is IN FLIGHT** — written, verified locally and not yet merged; this
-file cannot name the commit that merges it, which is the caution the entries below have paid for
-seven times. The `IN FLIGHT` header below is deleted by the change that merges it.
+State at 2026-09-04. **Everything is merged; nothing is in flight** — this file cannot name the
+commit that merges it, which is the caution the entries below have paid for eight times. When a
+slice IS unmerged it gets an `IN FLIGHT` header, and that header is deleted by the change that
+merges it, which is what happened here.
 
-## IN FLIGHT — 2026-09-04 — U5a PR 4, filters the administrator chooses
+## 2026-09-04 — U5a PR 4, filters the administrator chooses
 
-`version.php` is `2026090304` and the plugin carries **115 gates** (109 before, and two of those
-109 were dead — see below). This closes U5a: the queue rebuild has no further slice.
+Merged as [#75](https://github.com/uaiblaine/moodle-enrol_apply/pull/75); `version.php` is
+`2026090304` and the plugin carries **115 gates** (109 before, and two of those 109 were dead — see
+below). **This closes U5a**: the queue rebuild has no further slice.
 
 Which fields the queue may be filtered by is a site setting, `enrol_apply/queuefilterfields`, in the
 shape of core's `userfiltersdefault`: a multicheckbox offering exactly what the site names in
