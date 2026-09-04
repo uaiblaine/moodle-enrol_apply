@@ -150,12 +150,20 @@ if ($userenrol) {
 
    Only on the listing path: on the review path the parameters name nothing, and carrying them
    would put a stale search into the url of a page that has no queue on it. */
+$queuefilters = [];
 if (!$userenrol) {
     if ($search !== '') {
         $manageurlparams['search'] = $search;
     }
     if ($status !== null) {
         $manageurlparams['status'] = $status;
+    }
+    /* The per-field and date filters, read through the table's own definition of which parameters
+       exist - so the listing and the address it is reached at cannot disagree about what is
+       applied, and a parameter naming a field this reader may not see is not read at all. */
+    $queuefilters = \enrol_apply\table\applications::request_filters($listing);
+    foreach ($queuefilters as $name => $value) {
+        $manageurlparams[$name] = $value;
     }
 }
 
@@ -390,5 +398,5 @@ if ($userenrol) {
    judges the identity fields, the wording of the comment heading - resolved from it inside. Those
    three used to be computed here and passed in, which meant this page and the web service that
    refreshes its rows each decided them separately. */
-$table = \enrol_apply\table\applications::for_scope((int) $id, $search, $status);
+$table = \enrol_apply\table\applications::for_scope((int) $id, $search, $status, $queuefilters);
 $renderer->manage_page($table, $manageurl, $instance);

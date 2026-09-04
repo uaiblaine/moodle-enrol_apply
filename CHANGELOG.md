@@ -76,6 +76,51 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   and a stale enabled state. Paging and sorting now refresh the table in place; both still work
   with JavaScript off, as real links.
 
+- **Which fields the applications queue may be filtered by is now an administrator's decision.** A
+  new site setting — *Profile fields the applications queue may be filtered by* — lists exactly the
+  fields this site names in *Show user identity*, standard columns and custom profile fields alike,
+  and each one ticked adds a control to the queue. It is the shape core's `userfiltersdefault` has,
+  and for the same reason: a site that filters applicants by rank, unit or document number cannot
+  be served by a fixed list, because the field it needs does not exist anywhere in this plugin's
+  vocabulary.
+
+  The setting ships **empty**, so an existing site upgrades with the two date filters and no field
+  filters at all until somebody ticks a box. A seeded default would arrive as a wider filter row
+  than the administrator asked for; a *static* seeded default would be worse than either, because
+  `admin_setting_configmulticheckbox` silently drops a value that is not in its own choice list, so
+  a site naming neither `city` nor `institution` would store the empty string and show a setting
+  that looks configured and is not.
+
+  **Ticking a box grants nobody anything.** The setting decides what the queue MAY offer; what it
+  DOES offer any particular reader is the intersection with `\core_user\fields`' own identity
+  resolution, which has already applied the capability gate, the `hiddenuserfields` gate and the
+  drop of a custom field that has since been deleted. So the filter row is narrower for a teacher
+  than for a manager, on the same site with the same setting, and a field an operator may not read
+  is not a field they may filter by — which matters more than it sounds: a filter is an oracle, and
+  narrowing a list by a value confirms that value as surely as printing it. On a site that names no
+  identity fields at all, the setting is replaced by a line saying so and where to fix it.
+
+  A field with a closed vocabulary — the country, a menu, a checkbox — becomes a **select over its
+  own options**, taken from the field's definition and never from a query over the values applicants
+  happen to hold. A list of the values PRESENT would enumerate rather than confirm, and the query
+  behind it would be a third consumer of the queue's scope predicate: bounded by the enrolment
+  method alone it would list the ranks of applicants already approved or cancelled. A free-text
+  field becomes a text box, matched the same accent- and case-insensitive way the search box is. A
+  date or a textarea is offered as neither, because this control set cannot ask that question.
+
+  Beside them, **the applied-date range**: two dates bounding whole local days, the upper one
+  including its own day. The bound is the midnight that starts the following day compared with a
+  strict less-than, so an application made at any hour of the "to" date is inside the range with no
+  second-level arithmetic — and neither bound is computed by adding 86400, which is not a day twice
+  a year.
+
+  Everything else about them is what the search and status filters already do: a chip each,
+  removable on its own, counted in the same line, carried through paging and sorting, applied
+  without a page load when there is JavaScript and by a plain GET form when there is not. The date
+  chips are deliberately shown as the control holds them rather than in the site's date format,
+  because that chip is redrawn in the browser on every refresh and no server-side formatting is
+  reproducible there.
+
 ### Changed
 
 - **The approval queue is a dynamic table.** Its rows now refresh over

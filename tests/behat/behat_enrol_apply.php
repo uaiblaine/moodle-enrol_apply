@@ -99,6 +99,42 @@ class behat_enrol_apply extends behat_base {
     }
 
     /**
+     * The applied-date chip reads exactly what its own control holds.
+     *
+     * **The literal date cannot be named here, and that is a property of the driver rather than a
+     * looseness in the assertion.** For an `input[type=date]` mink-phpwebdriver does not type the
+     * string it was given: it runs `date(DATE_ATOM, strtotime($value))` in the Behat process and
+     * then, in the browser, `element.valueAsDate = new Date("<that string>")`. `valueAsDate` is
+     * defined in terms of the Date's UTC components, so the value that lands in the control has
+     * been through a timezone-bearing round trip and is not always the day the step named -
+     * measured on this suite, where "2020-01-01" arrived as 2019-12-31.
+     *
+     * None of that is what this scenario is about. The guard is that the chip the SERVER renders
+     * and the chip the AMD module redraws spell the same date, because they are produced by
+     * different code in different languages from the same control - so the assertion is against
+     * the control's own value, whatever the driver put there. Naming a literal would have made the
+     * test fail for a reason that has nothing to do with the plugin, which is exactly what it did.
+     *
+     * @Then the applied-date chip should read what its control holds
+     * @throws \Behat\Mink\Exception\ExpectationException When the control holds no date.
+     * @return void
+     */
+    public function the_applied_date_chip_should_read_what_its_control_holds(): void {
+        $value = (string) $this->getSession()->evaluateScript(
+            "(document.querySelector('#enrol_apply_appliedfrom') || {}).value || ''"
+        );
+
+        if ($value === '') {
+            throw new \Behat\Mink\Exception\ExpectationException(
+                'the "Applied from" control holds no date, so there is nothing for a chip to agree with',
+                $this->getSession()
+            );
+        }
+
+        $this->execute('behat_general::assert_page_contains_text', ['Applied from ' . $value]);
+    }
+
+    /**
      * Return the apply enrolment instance id of the given course.
      *
      * @param string $shortname Course short name.

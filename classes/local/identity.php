@@ -42,6 +42,16 @@ use core_user\fields;
  *   per-row mask is unsound for a column that can be sorted: a reader could recover a value they
  *   may not see by sorting on it. So that scope is offered no identity columns at all.
  *
+ * **This resolution is per scope, not per row, and the queue's FILTERS inherit it.** On the
+ * site-wide queue every row is judged against the system context, so a reader holding
+ * enrol/apply:manageapplications there is offered the same fields on every row whatever each row's
+ * own course would say - a course-level override narrowing identity is not consulted, because
+ * `has_capability_in_accessdata()` walks upward only. The field filters resolve from the same
+ * single mapping, which does not widen what is offered but does make the existing gap cheaper to
+ * act on: what was reachable by paging through a list is now reachable by asking one question. The
+ * per-row alternative is the one the submitted-application snapshot uses, and it is only sound
+ * there because that column can be neither sorted nor filtered.
+ *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later

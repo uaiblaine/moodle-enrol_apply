@@ -25,6 +25,7 @@ use core_table\local\filter\string_filter;
 use enrol_apply\local\commentlabel;
 use enrol_apply\local\identity;
 use enrol_apply\local\queue;
+use enrol_apply\local\queuefilter;
 use enrol_apply\local\search;
 use enrol_apply\local\submission as submissionrecord;
 use enrol_apply\reportbuilder\local\formatters\submission as submissionformatter;
@@ -92,6 +93,21 @@ class applications extends \table_sql implements dynamic_table {
     /** @var int|null The {user_enrolments}.status the listing is narrowed to, null for none. */
     protected $status = null;
 
+    /** @var array Token => cleaned value, for the identity fields this listing is narrowed by. */
+    protected $fieldfilters = [];
+
+    /** @var string|null Lower bound of the applied-date range as YYYY-MM-DD, null for none. */
+    protected $appliedfrom = null;
+
+    /** @var string|null Upper bound of the applied-date range as YYYY-MM-DD, null for none. */
+    protected $appliedto = null;
+
+    /** @var array Token => field object, the filters THIS reader is offered; see queuefilter. */
+    protected $offeredfilters = [];
+
+    /** @var \stdClass|null The identity SELECT/JOIN, resolved once in set_filterset(). */
+    protected $identitysql = null;
+
     /**
      * @var array Identity field name => the SQL EXPRESSION producing it, from core's get_sql().
      *
@@ -144,9 +160,15 @@ class applications extends \table_sql implements dynamic_table {
      * @param int $enrolid Enrol instance to list, 0 for every one this operator may decide in.
      * @param string $search Text to narrow the listing to, empty for none.
      * @param int|null $status {user_enrolments}.status to narrow to, null for none.
+     * @param array $filters Field-filter token or date-bound name => raw value.
      * @return self The table, scoped.
      */
-    public static function for_scope(int $enrolid, string $search = '', ?int $status = null): self {
+    public static function for_scope(
+        int $enrolid,
+        string $search = '',
+        ?int $status = null,
+        array $filters = []
+    ): self {
         $filterset = new applications_filterset();
         $filterset->add_filter(new integer_filter('enrolid', null, [$enrolid]));
 
@@ -156,6 +178,15 @@ class applications extends \table_sql implements dynamic_table {
 
         if ($status !== null) {
             $filterset->add_filter(new integer_filter('status', null, [$status]));
+        }
+
+        /* The field and date filters, added by NAME rather than positionally, so this door and the
+           web service's door hand the table the same shape. A name the filterset does not declare
+           throws in core, which is why request_filters() only ever produces declared ones. */
+        foreach ($filters as $name => $value) {
+            if (trim((string) $value) !== '') {
+                $filterset->add_filter(new string_filter($name, null, [trim((string) $value)]));
+            }
         }
 
         $table = new self();
@@ -203,6 +234,18 @@ class applications extends \table_sql implements dynamic_table {
 
         $this->scope = queue::listing_scope((int) $enrolid);
 
+        /* The identity fields, resolved HERE rather than in build_sql(), and the ordering is a
+           correctness requirement rather than tidiness. parent::set_filterset() below calls
+           guess_base_url(), which reads url_params(), which has to know which field filters are
+           applied - and build_sql() does not run until afterwards. Resolve them late and the base
+           url carries filters nothing validated, so page two of a filtered queue is a different
+           queue. */
+        $this->extrafields = identity::fields($this->scope->identitycontext);
+        $this->identitysql = identity::sql($this->scope->identitycontext, 'u');
+        // Field name => the expression producing it, which is what a WHERE clause can name.
+        $this->identitymappings = $this->identitysql->mappings ?? [];
+        $this->offeredfilters = queuefilter::resolve($this->identitymappings);
+
         /* Read BEFORE parent::set_filterset(), which calls guess_base_url() - the base url has to
            carry these or the no-JavaScript path loses them on the first page turn. */
         $this->search = '';
@@ -220,6 +263,25 @@ class applications extends \table_sql implements dynamic_table {
                 $this->status = (int) $status;
             }
         }
+
+        /* One entry per field this reader is OFFERED, never per filter the request carried: a
+           filter naming a field the administrator enabled but this reader may not see in this
+           scope is simply not read. The filterset declares the site's whole list so that a forged
+           name is refused by core before it reaches here; this loop is what refuses a name that is
+           real but not this reader's. */
+        $this->fieldfilters = [];
+        foreach ($this->offeredfilters as $token => $offered) {
+            if (!$filterset->has_filter($token)) {
+                continue;
+            }
+            $value = queuefilter::clean($offered, (string) $filterset->get_filter($token)->current());
+            if ($value !== null) {
+                $this->fieldfilters[$token] = $value;
+            }
+        }
+
+        $this->appliedfrom = $this->date_filter($filterset, 'appliedfrom');
+        $this->appliedto = $this->date_filter($filterset, 'appliedto');
 
         parent::set_filterset($filterset);
 
@@ -416,7 +478,33 @@ class applications extends \table_sql implements dynamic_table {
      * @return bool True when a search term or a status is applied.
      */
     public function is_narrowed(): bool {
-        return $this->search !== '' || $this->status !== null;
+        return $this->search !== ''
+            || $this->status !== null
+            || $this->fieldfilters !== []
+            || $this->appliedfrom !== null
+            || $this->appliedto !== null;
+    }
+
+    /**
+     * One date bound off the filterset, kept as the operator typed it.
+     *
+     * Stored as the YYYY-MM-DD string rather than as a timestamp, because it has to go back into
+     * the url and into the control the operator is looking at; the timestamps are computed where
+     * the predicate is built.
+     *
+     * @param filterset $filterset The client's filters.
+     * @param string $name appliedfrom or appliedto.
+     * @return string|null The date, or null when absent or malformed.
+     */
+    protected function date_filter(filterset $filterset, string $name): ?string {
+        if (!$filterset->has_filter($name)) {
+            return null;
+        }
+
+        $value = trim((string) $filterset->get_filter($name)->current());
+
+        // Validated by the same helper that turns it into a boundary, so the two cannot disagree.
+        return queuefilter::day_bounds($value, null)[0] === null ? null : $value;
     }
 
     /**
@@ -486,8 +574,88 @@ class applications extends \table_sql implements dynamic_table {
         if ($this->status !== null) {
             $params['status'] = $this->status;
         }
+        foreach ($this->fieldfilters as $token => $value) {
+            $params[$token] = $value;
+        }
+        if ($this->appliedfrom !== null) {
+            $params['appliedfrom'] = $this->appliedfrom;
+        }
+        if ($this->appliedto !== null) {
+            $params['appliedto'] = $this->appliedto;
+        }
 
         return $params;
+    }
+
+    /**
+     * The filters the operator has applied, for the renderer to draw and to build chips from.
+     *
+     * @return array Token => cleaned value.
+     */
+    public function get_field_filters(): array {
+        return $this->fieldfilters;
+    }
+
+    /**
+     * The filters this reader is offered at all.
+     *
+     * @return array Token => field object, from \enrol_apply\local\queuefilter::resolve().
+     */
+    public function get_offered_filters(): array {
+        return $this->offeredfilters;
+    }
+
+    /**
+     * The applied-date bounds as the operator typed them.
+     *
+     * @return array [from, to], each YYYY-MM-DD or null.
+     */
+    public function get_applied_dates(): array {
+        return [$this->appliedfrom, $this->appliedto];
+    }
+
+    /**
+     * Which parameters the queue reads off a url, and how each one is read.
+     *
+     * The ONE definition, called by manage.php and used to build both the table and the page url,
+     * so the listing and the address it is reached at cannot disagree about what is applied. It
+     * resolves the offered set from the scope for the same reason set_filterset() does: a
+     * parameter naming a field this reader may not see is not read at all.
+     *
+     * **It returns the CLEANED set, which is what makes that claim true.** An earlier version
+     * returned whatever survived optional_param(), while url_params() reports what survived
+     * queuefilter::clean() and date_filter() - so a select value outside its own vocabulary, or a
+     * malformed date, landed in the page url and the decision form's action while the table
+     * ignored it. Inert, because neither side narrowed anything by it, but it was precisely the
+     * disagreement the paragraph above says cannot happen, and the next filter to be added would
+     * not have been inert.
+     *
+     * @param \stdClass $listing The scope, from \enrol_apply\local\queue::listing_scope().
+     * @return array Parameter name => cleaned value, for the ones that narrow anything.
+     */
+    public static function request_filters(\stdClass $listing): array {
+        $filters = [];
+
+        foreach (queuefilter::resolve(identity::sql($listing->identitycontext, 'u')->mappings ?? []) as $token => $offered) {
+            // Passed untrimmed: a select's vocabulary may hold a leading or trailing space.
+            $value = queuefilter::clean($offered, optional_param($token, '', PARAM_NOTAGS));
+            if ($value !== null) {
+                $filters[$token] = $value;
+            }
+        }
+
+        foreach (['appliedfrom', 'appliedto'] as $bound) {
+            /* PARAM_ALPHANUMEXT keeps [A-Za-z0-9_-] and drops the rest, which is a safe transport
+               charset rather than a date-shape check - `not-a-date` survives it whole. The shape
+               is checked by queuefilter::day_bounds(), the same helper date_filter() validates
+               through, so the url and the table agree about what a date is. */
+            $value = trim(optional_param($bound, '', PARAM_ALPHANUMEXT));
+            if ($value !== '' && queuefilter::day_bounds($value, null)[0] !== null) {
+                $filters[$bound] = $value;
+            }
+        }
+
+        return $filters;
     }
 
     /**
@@ -578,10 +746,6 @@ class applications extends \table_sql implements dynamic_table {
         /* The identity fields this reader may see, and the SQL for them. Everything about which
            fields those are is core's decision - see \enrol_apply\local\identity - so that the
            queue and the participants page beside it cannot answer differently. */
-        $this->extrafields = identity::fields($this->scope->identitycontext);
-        $identitysql = identity::sql($this->scope->identitycontext, 'u');
-        // Field name => the expression producing it, which is what a WHERE clause can name.
-        $this->identitymappings = $identitysql->mappings ?? [];
 
         $userfieldsapi = \core_user\fields::for_userpic()->including('username');
         $userfields = $userfieldsapi->get_sql('u', false, '', 'userid', false)->selects;
@@ -628,14 +792,14 @@ class applications extends \table_sql implements dynamic_table {
         $fields = "ue.id AS userenrolmentid, ue.status AS enrolstatus, ue.timecreated AS applydate,
                    COALESCE(s.comment, ai.comment) AS applycomment, s.userinfodata AS snapshot,
                    c.fullname AS course,
-                   c.id AS courseid, {$priorsql}, {$userfields}{$identitysql->selects}";
+                   c.id AS courseid, {$priorsql}, {$userfields}{$this->identitysql->selects}";
         $from = "{user_enrolments} ue
             LEFT JOIN {enrol_apply_applicationinfo} ai ON ai.userenrolmentid = ue.id
             LEFT JOIN {enrol_apply_submission} s ON s.userenrolmentid = ue.id
                  JOIN {user} u ON u.id = ue.userid
                  JOIN {enrol} e ON e.id = ue.enrolid
                  JOIN {course} c ON c.id = e.courseid
-                 {$identitysql->joins}";
+                 {$this->identitysql->joins}";
 
         /* The operator's own filters, last, so that everything above is the SCOPE and everything
            here is the narrowing - which is the split scope_total() counts across. */
@@ -657,7 +821,60 @@ class applications extends \table_sql implements dynamic_table {
             $params['statusfilter'] = $this->status;
         }
 
-        $this->set_sql($fields, $from, implode(' AND ', $wheres), $params + $identitysql->params);
+        /* One predicate per applied field filter, over the EXPRESSION core's identity mapping
+           produced - never over a column name this plugin composed, and never over the SELECT
+           alias, since WHERE is evaluated first and a custom field's value lives in a joined table.
+
+           The placeholder names are prefixed because this statement already binds `now` and
+           `active` from awaiting_decision_where(), `enrolid` or `enrol`, `mentee<N>` from the
+           mentee clause, `searchterm<N>` from the search and `statusfilter` above.
+           fix_sql_params() counts placeholder occurrences and throws duplicateparaminsql when the
+           total differs from the parameter array, so a collision is a fatal rather than a subtly
+           wrong answer. */
+        $unaccent = null;
+        $index = 0;
+        foreach ($this->fieldfilters as $token => $value) {
+            $offered = $this->offeredfilters[$token];
+            $name = 'queuefilter' . (++$index);
+
+            if ($offered->control === 'select') {
+                /* A closed vocabulary is compared for equality rather than matched loosely - but
+                   through core's helper, because a bare `=` is not the same operator on the two
+                   database families this plugin is tested on. moodle_database::sql_equal() emits
+                   `=` unchanged, which on PostgreSQL is case sensitive, while
+                   mysqli_native_moodle_database::sql_equal() has to force COLLATE <family>_bin to
+                   reach that same behaviour - so a bare `=` on MariaDB takes the column's own,
+                   normally case-insensitive collation instead. Nothing in the expression
+                   neutralises it: sql_compare_text() delegates to sql_order_by_text(), which
+                   returns the field name unchanged on both drivers.
+                   Case matters here because stored data drifts out of case with the vocabulary
+                   naming it - an administrator may re-case a menu option at any time and
+                   {user_info_data} keeps whatever spelling it was written with. */
+                $wheres[] = $DB->sql_equal($offered->expression, ':' . $name, false, false);
+                $params[$name] = $value;
+                continue;
+            }
+
+            $unaccent = $unaccent ?? search::has_unaccent();
+            $wheres[] = search::like_ai($offered->expression, ':' . $name, $unaccent);
+            $params[$name] = '%' . $DB->sql_like_escape($value) . '%';
+        }
+
+        /* The applied-date range, as whole days in the reader's own timezone. The upper bound is
+           the midnight that STARTS the following day compared with a strict less-than, so the "to"
+           date is inclusive without any second-level arithmetic and without assuming a day is
+           86400 seconds - which it is not, twice a year. */
+        [$fromstamp, $tostamp] = queuefilter::day_bounds($this->appliedfrom, $this->appliedto);
+        if ($fromstamp !== null) {
+            $wheres[] = 'ue.timecreated >= :appliedfromstamp';
+            $params['appliedfromstamp'] = $fromstamp;
+        }
+        if ($tostamp !== null) {
+            $wheres[] = 'ue.timecreated < :appliedtostamp';
+            $params['appliedtostamp'] = $tostamp;
+        }
+
+        $this->set_sql($fields, $from, implode(' AND ', $wheres), $params + $this->identitysql->params);
     }
 
     /**

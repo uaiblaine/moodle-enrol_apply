@@ -207,6 +207,16 @@ class enrol_apply_renderer extends plugin_renderer_base {
 
         $params = $table->url_params();
         $scoped = array_key_exists('id', $params);
+        /* The url of this same listing WITHOUT one filter, expressed as a complement rather than
+           as a keep-list. The keep-list shape does not survive an arbitrary number of filters:
+           each chip would need its own list of every other filter, so an N+1th filter added later
+           is silently dropped by every stale complement, and nothing on the page says so. */
+        $without = static function (string $drop) use ($params): string {
+            $keep = $params;
+            unset($keep[$drop]);
+
+            return (new moodle_url('/enrol/apply/manage.php', $keep))->out(false);
+        };
         $base = static function (array $keep) use ($params): string {
             return (new moodle_url('/enrol/apply/manage.php', array_intersect_key($params, array_flip($keep))))
                 ->out(false);
@@ -248,7 +258,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
                 'search',
                 get_string('queuesearch', 'enrol_apply'),
                 $search,
-                $base($scoped ? ['id', 'status'] : ['status'])
+                $without('search')
             );
         }
         if ($status !== null) {
@@ -256,8 +266,71 @@ class enrol_apply_renderer extends plugin_renderer_base {
                 'status',
                 get_string('queuefilterstatus', 'enrol_apply'),
                 $statuses[$status] ?? (string) $status,
-                $base($scoped ? ['id', 'search'] : ['search'])
+                $without('status')
             );
+        }
+
+        /* One control and, where applied, one chip per field this reader is OFFERED. The offered
+           set is the administrator's list intersected with core's identity mapping for this
+           scope, so a field somebody ticked in the site settings simply does not appear for a
+           reader who may not already see it - which is the same rule that keeps the e-mail
+           address out of the search. */
+        $applied = $table->get_field_filters();
+        $fields = [];
+        foreach ($table->get_offered_filters() as $token => $offered) {
+            $value = $applied[$token] ?? '';
+
+            $options = [];
+            foreach ($offered->options as $optvalue => $optlabel) {
+                $options[] = [
+                    'value' => (string) $optvalue,
+                    'label' => $optlabel,
+                    'selected' => (string) $optvalue === $value,
+                ];
+            }
+
+            /* The label is resolved HERE and not in resolve(), which runs before the dynamic
+               table's own validate_context() and so cannot reach format_string(). */
+            $label = \enrol_apply\local\queuefilter::label($offered->name, false);
+
+            $fields[] = [
+                'token' => $token,
+                'label' => $label,
+                'inputid' => 'enrol_apply_filter_' . $token,
+                'isselect' => $offered->control === 'select',
+                'value' => $value,
+                'options' => $options,
+            ];
+
+            if ($value !== '') {
+                $chips[] = $this->queue_filter_chip(
+                    $token,
+                    $label,
+                    $offered->control === 'select' ? ($offered->options[$value] ?? $value) : $value,
+                    $without($token)
+                );
+            }
+        }
+
+        [$appliedfrom, $appliedto] = $table->get_applied_dates();
+        foreach (['appliedfrom' => 'queuefilterfrom', 'appliedto' => 'queuefilterto'] as $bound => $stringid) {
+            $value = $bound === 'appliedfrom' ? $appliedfrom : $appliedto;
+            if ($value !== null) {
+                /* The date is shown as it was typed, which is also as the input holds it. It is
+                   deliberately NOT run through userdate(): the same chip is redrawn client-side on
+                   every refresh from the input's own value, and no formatting this side can do is
+                   reproducible there - Moodle's date format is a language-pack string and the
+                   browser's is the reader's operating system. A first cut formatted here only, so
+                   a chip that read "3/09/26" on page load became "2026-09-03" the moment anything
+                   else on the bar was touched. One spelling, produced identically on both paths,
+                   and an unambiguous one. */
+                $chips[] = $this->queue_filter_chip(
+                    $bound,
+                    get_string($stringid, 'enrol_apply'),
+                    $value,
+                    $without($bound)
+                );
+            }
         }
 
         return [
@@ -269,6 +342,13 @@ class enrol_apply_renderer extends plugin_renderer_base {
             'searchhelp' => $this->output->help_icon('queuesearch', 'enrol_apply'),
             'statuslabel' => get_string('queuefilterstatus', 'enrol_apply'),
             'statusoptions' => $options,
+            'groupheading' => get_string('queuefiltersgroup', 'enrol_apply'),
+            'hasfields' => (bool) $fields,
+            'fields' => $fields,
+            'fromlabel' => get_string('queuefilterfrom', 'enrol_apply'),
+            'fromvalue' => $appliedfrom ?? '',
+            'tolabel' => get_string('queuefilterto', 'enrol_apply'),
+            'tovalue' => $appliedto ?? '',
             'haschips' => (bool) $chips,
             'chips' => $chips,
             'clearurl' => $base($scoped ? ['id'] : []),

@@ -1127,4 +1127,444 @@ final class applications_test extends \advanced_testcase {
             'enrolid' => (int) ($instance ?? $this->instance)->id,
         ], MUST_EXIST);
     }
+
+    /**
+     * A custom profile field.
+     *
+     * @param string $shortname Field shortname.
+     * @param string $datatype text or menu.
+     * @param string $param1 Option list for a menu.
+     * @return \stdClass The field.
+     */
+    protected function profile_field(string $shortname, string $datatype = 'text', string $param1 = ''): \stdClass {
+        return $this->getDataGenerator()->create_custom_profile_field([
+            'datatype' => $datatype,
+            'shortname' => $shortname,
+            'name' => ucfirst($shortname),
+            'param1' => $param1,
+        ]);
+    }
+
+    /**
+     * A select filter finds a value whose case has drifted from the vocabulary naming it.
+     *
+     * **The one predicate in this slice that a bare `=` would have made non-portable.**
+     * moodle_database::sql_equal() emits `=` unchanged, which on PostgreSQL is a case-sensitive
+     * text comparison, while mysqli_native_moodle_database::sql_equal() has to force
+     * COLLATE <family>_bin to reach the same behaviour - so the same filter over the same data
+     * answered differently on the two database families this plugin is tested on.
+     *
+     * The drift is ordinary rather than contrived: profile_field_menu keeps its vocabulary in
+     * param1 and its values in {user_info_data}, with no validation between them, so re-casing an
+     * option leaves every row already stored spelled the old way.
+     *
+     * Note this test can only go red on PostgreSQL. On MariaDB the site's own collation makes the
+     * broken version pass, which is the whole point of the finding.
+     *
+     * @return void
+     */
+    public function test_a_select_filter_matches_a_value_whose_case_has_drifted(): void {
+        $this->setAdminUser();
+        $field = $this->profile_field('rank', 'menu', "Alpha\nBeta");
+        $wanted = $this->applicant();
+        $decoy = $this->applicant();
+        // Stored before the option was re-cased; the column keeps what it was given.
+        $this->set_profile_value($wanted, $field, 'alpha');
+        $this->set_profile_value($decoy, $field, 'Beta');
+
+        set_config('showuseridentity', 'profile_field_rank');
+        set_config('queuefilterfields', 'profile_field_rank', 'enrol_apply');
+
+        $listed = $this->narrowed_by(['pf' . $field->id => 'Alpha']);
+
+        $this->assertSame([(int) $this->userenrolment($wanted)], $listed);
+        $this->assertNotContains((int) $this->userenrolment($decoy), $listed);
+    }
+
+    /**
+     * A malformed applied date is no filter, and says so on every surface.
+     *
+     * The same answer the status filter gives a value outside its vocabulary. What makes it worth
+     * a test of its own is that three things have to agree about it: the bounds are null, the
+     * queue does not claim to be narrowed - which is what draws the "no application matches"
+     * wording and the chips - and the rows are all still there.
+     *
+     * The control is the second half: a real date does read, so none of the assertions above can
+     * pass by the reader being dead.
+     *
+     * @return void
+     */
+    public function test_a_malformed_applied_date_narrows_nothing(): void {
+        $this->setAdminUser();
+        $one = $this->applicant();
+
+        $table = applications::for_scope((int) $this->instance->id, '', null, ['appliedfrom' => '2026-13-40']);
+
+        $this->assertSame([null, null], $table->get_applied_dates());
+        $this->assertFalse($table->is_narrowed());
+        $this->assertSame([(int) $this->userenrolment($one)], $this->narrowed_by(['appliedfrom' => '2026-13-40']));
+
+        $real = applications::for_scope((int) $this->instance->id, '', null, ['appliedfrom' => '2026-01-01']);
+        $this->assertSame(['2026-01-01', null], $real->get_applied_dates());
+        $this->assertTrue($real->is_narrowed());
+    }
+
+    /**
+     * The page url carries only the filters the table actually applied.
+     *
+     * request_filters() is what manage.php builds the page url and the decision form's action
+     * from, and url_params() is what the table builds its own base url from. Both docblocks call
+     * themselves the one definition, and they are only one definition if request_filters() returns
+     * the CLEANED set: an earlier version returned whatever survived optional_param(), so a select
+     * value outside its vocabulary and a malformed date reached the url while the table ignored
+     * them. Inert as it stood, and exactly the disagreement both docblocks say cannot happen.
+     *
+     * @return void
+     */
+    public function test_the_page_url_carries_only_what_the_table_applied(): void {
+        $this->setAdminUser();
+        $this->applicant();
+        $field = $this->profile_field('rank', 'menu', "Alpha\nBeta");
+        set_config('showuseridentity', 'profile_field_rank');
+        set_config('queuefilterfields', 'profile_field_rank', 'enrol_apply');
+
+        $listing = \enrol_apply\local\queue::listing_scope((int) $this->instance->id);
+        $token = 'pf' . $field->id;
+
+        $_GET['appliedfrom'] = '2026-13-40';
+        $_GET[$token] = 'Gamma';
+        $this->assertSame([], applications::request_filters($listing));
+
+        // The control: what the table WOULD apply is carried, so this is not a dead reader.
+        $_GET['appliedfrom'] = '2026-01-01';
+        $_GET[$token] = 'Alpha';
+        $this->assertSame(
+            [$token => 'Alpha', 'appliedfrom' => '2026-01-01'],
+            applications::request_filters($listing)
+        );
+
+        unset($_GET['appliedfrom'], $_GET[$token]);
+    }
+
+    /**
+     * A field the administrator has not ticked is still a name the filterset recognises.
+     *
+     * **The declaration is observable before any authorisation runs.** Core registers
+     * core_table_get_dynamic_table_content with no capability of its own, and get.php calls
+     * add_filter_from_params() for every submitted name before it constructs the table, before
+     * set_filterset(), and before validate_context() and has_capability(). So if the declared set
+     * were the administrator's tick-list, any logged-in user with no capability here at all could
+     * read that list back one name at a time from which exception came out - a setting otherwise
+     * behind moodle/site:config. Declaring the whole vocabulary the site already publishes through
+     * showuseridentity breaks the correlation, and narrows nothing: set_filterset() reads only the
+     * offered set.
+     *
+     * The control is the third assertion: a name the site does not publish at all is still not a
+     * filter, so this cannot pass by everything being declared.
+     *
+     * @return void
+     */
+    public function test_a_field_the_administrator_has_not_ticked_is_still_a_recognised_filter_name(): void {
+        set_config('showuseridentity', 'institution,department');
+        set_config('queuefilterfields', 'institution', 'enrol_apply');
+
+        $declared = (new applications_filterset())->get_optional_filters();
+
+        $this->assertArrayHasKey('institution', $declared);
+        $this->assertArrayHasKey('department', $declared);
+        $this->assertArrayNotHasKey('city', $declared);
+    }
+
+    /**
+     * Give one user a value for a custom profile field.
+     *
+     * @param \stdClass $user The user.
+     * @param \stdClass $field The field.
+     * @param string $value The value.
+     * @return void
+     */
+    protected function set_profile_value(\stdClass $user, \stdClass $field, string $value): void {
+        global $DB;
+
+        $DB->insert_record('user_info_data', (object) [
+            'userid' => $user->id,
+            'fieldid' => $field->id,
+            'data' => $value,
+            'dataformat' => 0,
+        ]);
+    }
+
+    /**
+     * The listing narrowed by the field and date filters.
+     *
+     * @param array $filters Token or date-bound name => raw value.
+     * @return array User enrolment ids.
+     */
+    protected function narrowed_by(array $filters): array {
+        $table = applications::for_scope((int) $this->instance->id, '', null, $filters);
+
+        ob_start();
+        $table->out(50, false);
+        ob_end_clean();
+
+        return array_map(static fn($row) => (int) $row->userenrolmentid, array_values($table->rawdata));
+    }
+
+    /**
+     * A field the reader may not see is not offered, whatever the administrator ticked.
+     *
+     * **This is the disclosure boundary of the whole slice.** The administrator's setting says
+     * which fields the queue MAY offer; what this reader may already see decides which it does.
+     * Without the intersection, ticking a box would hand every operator a control over a field
+     * their own site withholds from them - and a filter is an oracle even when the value is never
+     * printed: apply it, read the count.
+     *
+     * The control is the second half: naming the field in the site's identity list makes it appear
+     * for the same reader with the same setting, so an empty offered set cannot pass this test.
+     *
+     * @return void
+     */
+    public function test_a_field_the_reader_may_not_see_is_not_offered(): void {
+        $this->setAdminUser();
+        $this->applicant();
+        set_config('showuseridentity', 'institution');
+        set_config('queuefilterfields', 'city,institution', 'enrol_apply');
+
+        $offered = applications::for_scope((int) $this->instance->id)->get_offered_filters();
+        $this->assertSame(['institution'], array_values(array_column($offered, 'name')));
+
+        // The control: the site now names it, so the same setting offers it.
+        set_config('showuseridentity', 'city,institution');
+        $widened = applications::for_scope((int) $this->instance->id)->get_offered_filters();
+        $this->assertEqualsCanonicalizing(['city', 'institution'], array_values(array_column($widened, 'name')));
+    }
+
+    /**
+     * A filter naming a field this reader is not offered narrows nothing.
+     *
+     * Not merely hidden from the controls: refused where the query is built. The filterset declares
+     * the SITE's whole list so a forged name is refused by core before it arrives, but a name that
+     * is real and simply not this reader's reaches set_filterset() - and must be ignored there.
+     *
+     * @return void
+     */
+    public function test_a_filter_for_an_unoffered_field_is_ignored(): void {
+        global $DB;
+
+        $this->setAdminUser();
+        $wanted = $this->applicant();
+        $other = $this->applicant();
+        $DB->set_field('user', 'city', 'Ouropretoville', ['id' => $wanted->id]);
+        $DB->set_field('user', 'city', 'Elsewhereville', ['id' => $other->id]);
+        $DB->set_field('user', 'institution', 'Ouropretoville', ['id' => $wanted->id]);
+
+        // The site does not name city, so a city filter is nobody's.
+        set_config('showuseridentity', 'institution');
+        set_config('queuefilterfields', 'city,institution', 'enrol_apply');
+
+        $this->assertCount(2, $this->narrowed_by(['city' => 'Ouropretoville']), 'an unoffered filter must not narrow');
+
+        // The control: the offered one narrows on the same fixture.
+        $this->assertSame(
+            [(int) $this->userenrolment($wanted)],
+            $this->narrowed_by(['institution' => 'Ouropretoville'])
+        );
+    }
+
+    /**
+     * A custom profile field filters through the join core builds for it.
+     *
+     * Mandatory rather than thorough: identity::sql()'s named-parameter path exists only for CUSTOM
+     * fields, so a fixture naming standard fields alone never reaches it and would pass against a
+     * build that cannot filter a custom field at all.
+     *
+     * @return void
+     */
+    public function test_a_custom_profile_field_filters_through_its_join(): void {
+        $this->setAdminUser();
+        $field = $this->profile_field('unit');
+        $wanted = $this->applicant();
+        $other = $this->applicant();
+        $this->set_profile_value($wanted, $field, 'Ouropretoville');
+        $this->set_profile_value($other, $field, 'Elsewhereville');
+
+        set_config('showuseridentity', 'profile_field_unit');
+        set_config('queuefilterfields', 'profile_field_unit', 'enrol_apply');
+
+        $this->assertSame(
+            [(int) $this->userenrolment($wanted)],
+            $this->narrowed_by(['pf' . $field->id => 'Ouropretoville'])
+        );
+    }
+
+    /**
+     * A percent sign in a field filter is a character, not a wildcard.
+     *
+     * The decoy is the row only the BROKEN version reaches: unescaped, the term becomes
+     * LIKE '%100%S%' and "100 Super" matches through the middle wildcard.
+     *
+     * @return void
+     */
+    public function test_a_percent_sign_in_a_field_filter_is_matched_literally(): void {
+        global $DB;
+
+        $this->setAdminUser();
+        $wanted = $this->applicant();
+        $decoy = $this->applicant();
+        $DB->set_field('user', 'institution', '100%Sure', ['id' => $wanted->id]);
+        $DB->set_field('user', 'institution', '100 Super', ['id' => $decoy->id]);
+
+        set_config('showuseridentity', 'institution');
+        set_config('queuefilterfields', 'institution', 'enrol_apply');
+
+        $listed = $this->narrowed_by(['institution' => '100%S']);
+        $this->assertSame([(int) $this->userenrolment($wanted)], $listed);
+        $this->assertNotContains((int) $this->userenrolment($decoy), $listed);
+    }
+
+    /**
+     * An application made on the "to" date is inside the range.
+     *
+     * The upper bound is the midnight that STARTS the following day, compared with a strict
+     * less-than, so every hour of the named day is included. The control is the application made
+     * the next day, which must be outside - without it a bound that included everything would pass.
+     *
+     * @return void
+     */
+    public function test_an_application_made_on_the_to_date_is_included(): void {
+        global $DB;
+
+        $this->setAdminUser();
+        $inside = $this->applicant();
+        $outside = $this->applicant();
+
+        // Late on the "to" day, and just after midnight on the day after it.
+        $today = make_timestamp(2026, 5, 20, 23, 30, 0, 99);
+        $tomorrow = make_timestamp(2026, 5, 21, 0, 30, 0, 99);
+        $DB->set_field('user_enrolments', 'timecreated', $today, ['id' => $this->userenrolment($inside)]);
+        $DB->set_field('user_enrolments', 'timecreated', $tomorrow, ['id' => $this->userenrolment($outside)]);
+
+        $listed = $this->narrowed_by(['appliedfrom' => '2026-05-20', 'appliedto' => '2026-05-20']);
+
+        $this->assertSame([(int) $this->userenrolment($inside)], $listed);
+    }
+
+    /**
+     * Country is a chosen code, not typed text, and the difference is what the operator gets back.
+     *
+     * {user}.country holds a two-letter code while the reader reads a name, so the control has to
+     * be a select over the country list: it offers "Brazil" and sends "BR". Made a text box
+     * instead, an operator would type the only thing on screen - the name - and the queue would
+     * answer with nothing at all, because no row holds the string "Brazil".
+     *
+     * **Matching the code is not what separates the two shapes**, and a test asserting only that
+     * passes either way: a LIKE over a two-letter column returns the same row as an equality, no
+     * country code being a substring of another. What separates them is that a select REFUSES a
+     * value it never offered - so the name comes back as no filter rather than as an empty queue.
+     * Found by gate DH reddening nothing.
+     *
+     * @return void
+     */
+    public function test_the_country_filter_takes_a_code_and_refuses_a_name(): void {
+        global $DB;
+
+        $this->setAdminUser();
+        $wanted = $this->applicant();
+        $other = $this->applicant();
+        $DB->set_field('user', 'country', 'BR', ['id' => $wanted->id]);
+        $DB->set_field('user', 'country', 'PT', ['id' => $other->id]);
+
+        set_config('showuseridentity', 'country');
+        set_config('queuefilterfields', 'country', 'enrol_apply');
+
+        // The code the select sends narrows to the one applicant holding it.
+        $this->assertSame([(int) $this->userenrolment($wanted)], $this->narrowed_by(['country' => 'BR']));
+
+        /* The name is not a value this control offers, so it is refused and the queue is not
+           narrowed at all. As a text box it would be accepted, match nothing, and answer with an
+           empty queue for a country that does have an applicant. */
+        $this->assertCount(2, $this->narrowed_by(['country' => 'Brazil']));
+    }
+
+    /**
+     * Every filter the queue accepts rides the base url.
+     *
+     * No row-level assertion can see this: the rows on page one are right whatever the base url
+     * says, and the defect is that page two, and every sort, is a different queue.
+     *
+     * @return void
+     */
+    public function test_the_base_url_carries_every_filter(): void {
+        global $DB;
+
+        $this->setAdminUser();
+        $applicant = $this->applicant();
+        $DB->set_field('user', 'institution', 'UFOP', ['id' => $applicant->id]);
+        set_config('showuseridentity', 'institution');
+        set_config('queuefilterfields', 'institution', 'enrol_apply');
+
+        $table = applications::for_scope((int) $this->instance->id, 'zephyrina', ENROL_APPLY_USER_WAIT, [
+            'institution' => 'UFOP',
+            'appliedfrom' => '2026-01-01',
+            'appliedto' => '2026-12-31',
+        ]);
+
+        $this->assertSame('zephyrina', $table->baseurl->param('search'));
+        $this->assertSame('UFOP', $table->baseurl->param('institution'));
+        $this->assertSame('2026-01-01', $table->baseurl->param('appliedfrom'));
+        $this->assertSame('2026-12-31', $table->baseurl->param('appliedto'));
+    }
+
+    /**
+     * The scope total is measured against the scope, whichever filter is applied.
+     *
+     * is_narrowed() is the silent-failure point: scope_total() short-circuits on it, so a filter
+     * missing from it makes the count line read "N of N" - and print_nothing_to_display() then
+     * falls through to core's generic message instead of the plugin's filtered-empty one. Neither
+     * is visible to a row-level assertion.
+     *
+     * @return void
+     */
+    public function test_the_scope_total_ignores_every_filter(): void {
+        global $DB;
+
+        $this->setAdminUser();
+        $wanted = $this->applicant();
+        $this->applicant();
+        $this->applicant();
+        $DB->set_field('user', 'institution', 'Ouropretoville', ['id' => $wanted->id]);
+        set_config('showuseridentity', 'institution');
+        set_config('queuefilterfields', 'institution', 'enrol_apply');
+
+        $table = applications::for_scope((int) $this->instance->id, '', null, ['institution' => 'Ouropretoville']);
+        ob_start();
+        $table->out(50, false);
+        ob_end_clean();
+
+        $this->assertCount(1, $table->rawdata);
+        $this->assertTrue($table->is_narrowed());
+        $this->assertSame(3, $table->scope_total());
+    }
+
+    /**
+     * The mentee scope is offered no field filters at all.
+     *
+     * It resolves no identity context - one statement spans courses there - so core's mapping is
+     * empty and the intersection is empty whatever the administrator ticked. The control is the
+     * same setting on the instance scope, which does offer one.
+     *
+     * @return void
+     */
+    public function test_the_mentee_scope_offers_no_field_filters(): void {
+        set_config('showuseridentity', 'institution');
+        set_config('queuefilterfields', 'institution', 'enrol_apply');
+
+        $mentee = $this->applicant();
+        $this->setUser($this->mentor($mentee));
+        $this->assertSame([], applications::for_scope(0)->get_offered_filters());
+
+        // The control, on a scope that does resolve an identity context.
+        $this->setAdminUser();
+        $this->assertNotSame([], applications::for_scope((int) $this->instance->id)->get_offered_filters());
+    }
 }

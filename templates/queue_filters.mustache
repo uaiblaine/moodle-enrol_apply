@@ -39,6 +39,9 @@
     * data-region="queuefilters" on the form, the module's root.
     * data-region="searchinput" on the search field.
     * data-region="statusselect" on the status field.
+    * data-region="filterfield" on every per-field and date control, each carrying data-filter
+      (the token the query string and the filterset both use) and data-filterlabel (the wording a
+      chip repeats), so the module needs no second copy of either.
     * data-region="chiprow" on the chip row, which the module empties and refills.
     * data-region="clearall" on the clear-all link, hidden with d-none when nothing is applied
       rather than omitted, so the module has a node to unhide instead of one to invent.
@@ -61,6 +64,10 @@
     * clearlabel string - wording of the clear-all control
     * counttext string - how many applications match, of how many
     * scopetotal int - how many the queue holds before any filter, for the module to recount with
+    * groupheading string - visually-hidden legend naming what the control group does
+    * hasfields boolean - whether any per-field filter is offered to this reader
+    * fields array - token, label, inputid, isselect, value and options for each offered field
+    * fromlabel, fromvalue, tolabel, tovalue - the applied-date bounds and their labels
 
     Example context (json): {
         "formaction": "https://example.com/enrol/apply/manage.php",
@@ -88,12 +95,40 @@
         "clearurl": "https://example.com/enrol/apply/manage.php?id=140",
         "clearlabel": "Clear all",
         "counttext": "4 of 312 applications",
-        "scopetotal": 312
+        "scopetotal": 312,
+        "groupheading": "Narrow the queue",
+        "hasfields": true,
+        "fields": [
+            {
+                "token": "city",
+                "label": "City/town",
+                "inputid": "enrol_apply_filter_city",
+                "isselect": false,
+                "value": "Ouro Preto",
+                "options": []
+            },
+            {
+                "token": "country",
+                "label": "Country",
+                "inputid": "enrol_apply_filter_country",
+                "isselect": true,
+                "value": "BR",
+                "options": [
+                    {"value": "BR", "label": "Brazil", "selected": true},
+                    {"value": "PT", "label": "Portugal", "selected": false}
+                ]
+            }
+        ],
+        "fromlabel": "Applied from",
+        "fromvalue": "2026-08-01",
+        "tolabel": "Applied to",
+        "tovalue": ""
     }
 }}
 <form method="get" action="{{formaction}}" class="enrol_apply-filters mb-3" data-region="queuefilters">
     {{#hasscope}}<input type="hidden" name="id" value="{{scopeid}}">{{/hasscope}}
-    <div class="enrol_apply-filterrow">
+    <fieldset class="enrol_apply-filterrow">
+        <legend class="visually-hidden">{{groupheading}}</legend>
         <div class="enrol_apply-filterfield">
             <label class="form-label" for="enrol_apply_search">{{searchlabel}}{{{searchhelp}}}</label>
             <input type="text" class="form-control" id="enrol_apply_search" name="search"
@@ -107,10 +142,41 @@
                 {{/statusoptions}}
             </select>
         </div>
+        {{#fields}}
+            <div class="enrol_apply-filterfield">
+                <label class="form-label" for="{{inputid}}">{{label}}</label>
+                {{#isselect}}
+                    <select class="form-select" id="{{inputid}}" name="{{token}}"
+                            data-region="filterfield" data-filter="{{token}}" data-filterlabel="{{label}}">
+                        <option value="">{{#str}}choosedots, core{{/str}}</option>
+                        {{#options}}
+                            <option value="{{value}}" {{#selected}}selected{{/selected}}>{{label}}</option>
+                        {{/options}}
+                    </select>
+                {{/isselect}}
+                {{^isselect}}
+                    <input type="text" class="form-control" id="{{inputid}}" name="{{token}}"
+                           value="{{value}}" autocomplete="off"
+                           data-region="filterfield" data-filter="{{token}}" data-filterlabel="{{label}}">
+                {{/isselect}}
+            </div>
+        {{/fields}}
+        <div class="enrol_apply-filterfield">
+            <label class="form-label" for="enrol_apply_appliedfrom">{{fromlabel}}</label>
+            <input type="date" class="form-control" id="enrol_apply_appliedfrom" name="appliedfrom"
+                   value="{{fromvalue}}" data-region="filterfield" data-filter="appliedfrom"
+                   data-filterlabel="{{fromlabel}}">
+        </div>
+        <div class="enrol_apply-filterfield">
+            <label class="form-label" for="enrol_apply_appliedto">{{tolabel}}</label>
+            <input type="date" class="form-control" id="enrol_apply_appliedto" name="appliedto"
+                   value="{{tovalue}}" data-region="filterfield" data-filter="appliedto"
+                   data-filterlabel="{{tolabel}}">
+        </div>
         <div class="enrol_apply-filterfield enrol_apply-filtersubmit">
             <button type="submit" class="btn btn-secondary">{{#str}}applyfilters, core{{/str}}</button>
         </div>
-    </div>
+    </fieldset>
     <div class="enrol_apply-chiprow" data-region="chiprow">
         {{#chips}}
             {{> enrol_apply/queue_chip }}
