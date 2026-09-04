@@ -70,6 +70,7 @@ const SELECTORS = {
     FILTERS: '[data-region="queuefilters"]',
     SEARCH: '[data-region="searchinput"]',
     STATUS: '[data-region="statusselect"]',
+    FIELD: '[data-region="filterfield"]',
     CHIPROW: '[data-region="chiprow"]',
     CLEARALL: '[data-region="clearall"]',
     FILTERCOUNT: '[data-region="filtercount"]',
@@ -91,6 +92,22 @@ const DEBOUNCE = 250;
  * The names are flexible_table's own (lib/table/classes/flexible_table.php:168-175).
  */
 const TABLE_PARAMS = ['page', 'tsort', 'tdir', 'thide', 'tshow', 'tifirst', 'tilast', 'treset'];
+
+/**
+ * Every filter token on the page, read from the controls rather than from a list here.
+ *
+ * The queue's filters are configurable per site, so their number and their names are not knowable
+ * when this module is written. A hardcoded list would be a second statement of what the
+ * administrator chose, and the one that drifts is always the copy.
+ *
+ * @return {Array} Token strings, search and status included.
+ */
+const filterTokens = () => {
+    const tokens = ['search', 'status'];
+    document.querySelectorAll(SELECTORS.FIELD).forEach((el) => tokens.push(el.dataset.filter));
+
+    return tokens;
+};
 
 /** @var {Number} Timer id of the pending debounce, or null. */
 let pending = null;
@@ -145,10 +162,27 @@ const currentFilters = () => {
     const search = document.querySelector(SELECTORS.SEARCH);
     const status = document.querySelector(SELECTORS.STATUS);
 
+    /* One entry per control that exists, so an administrator adding a field to the setting needs
+       no change here. The label rides along on the control itself, which is what lets a chip name
+       a filter without this module holding a second copy of the wording. */
+    const fields = [];
+    document.querySelectorAll(SELECTORS.FIELD).forEach((el) => {
+        const value = el.value.trim();
+        if (value !== '') {
+            fields.push({
+                token: el.dataset.filter,
+                value,
+                label: el.dataset.filterlabel,
+                text: el.tagName === 'SELECT' && el.selectedIndex >= 0 ? el.options[el.selectedIndex].text : value,
+            });
+        }
+    });
+
     return {
         search: search ? search.value.trim() : '',
         status: status ? status.value : '',
         statuslabel: status && status.selectedIndex >= 0 ? status.options[status.selectedIndex].text : '',
+        fields,
     };
 };
 
@@ -189,13 +223,17 @@ const applyFilters = (tableRoot) => {
         return Promise.resolve(tableRoot);
     }
 
-    const {search, status} = currentFilters();
+    const {search, status, fields} = currentFilters();
     const filterset = getFilters(tableRoot);
     const filters = {};
+    const ours = filterTokens();
 
-    // The scope's own filter survives untouched; only the operator's two are rewritten.
+    /* The scope's own filter survives untouched; only the operator's are rewritten. Tested
+       against the tokens the PAGE carries rather than against two literals, so a site that
+       offers six field filters does not have four of them silently preserved from the previous
+       request and never cleared. */
     Object.keys(filterset.filters).forEach((name) => {
-        if (name !== 'search' && name !== 'status') {
+        if (ours.indexOf(name) === -1) {
             filters[name] = filterset.filters[name];
         }
     });
@@ -208,6 +246,10 @@ const applyFilters = (tableRoot) => {
         // add_filter_value() tests is_int() and throws a TypeError rather than refusing softly.
         filters.status = {name: 'status', jointype: 1, values: [Number(status)]};
     }
+    fields.forEach((field) => {
+        // Every one of these is a string_filter server-side, dates included.
+        filters[field.token] = {name: field.token, jointype: 1, values: [field.value]};
+    });
 
     refreshing = true;
 
@@ -246,7 +288,7 @@ const scheduleRefresh = () => {
  */
 const urlWithout = (drop) => {
     const url = new URL(window.location.href);
-    ['search', 'status'].forEach((name) => {
+    filterTokens().forEach((name) => {
         if (drop === null || drop === name) {
             url.searchParams.delete(name);
         }
@@ -266,7 +308,7 @@ const urlWithout = (drop) => {
  * @return {void}
  */
 const syncAddressBar = () => {
-    const {search, status} = currentFilters();
+    const {search, status, fields} = currentFilters();
     const url = new URL(window.location.href);
 
     if (search === '') {
@@ -279,6 +321,10 @@ const syncAddressBar = () => {
     } else {
         url.searchParams.set('status', status);
     }
+    /* Every offered token is cleared first and then re-set from the controls, so a field the
+       operator has just emptied leaves the url rather than lingering in it. */
+    document.querySelectorAll(SELECTORS.FIELD).forEach((el) => url.searchParams.delete(el.dataset.filter));
+    fields.forEach((field) => url.searchParams.set(field.token, field.value));
 
     // The table is back on page one and unsorted-by-request; the url must not claim otherwise.
     TABLE_PARAMS.forEach((name) => url.searchParams.delete(name));
@@ -318,7 +364,7 @@ const redrawChips = () => {
         return Promise.resolve();
     }
 
-    const {search, status, statuslabel} = currentFilters();
+    const {search, status, statuslabel, fields} = currentFilters();
 
     return Promise.all([
         getString('queuesearch', 'enrol_apply'),
@@ -331,6 +377,18 @@ const redrawChips = () => {
         if (status !== '') {
             wanted.push({filter: 'status', name: statusname, value: statuslabel, removeurl: urlWithout('status')});
         }
+        /* The label comes off the control's own data attribute rather than from a string this
+           module resolves: the fields are configurable per site, so there is no fixed list of
+           lang keys to resolve, and the wording the chip repeats has to be the wording on the
+           control beside it. */
+        fields.forEach((field) => {
+            wanted.push({
+                filter: field.token,
+                name: field.label,
+                value: field.text,
+                removeurl: urlWithout(field.token),
+            });
+        });
 
         if (clearall) {
             clearall.href = urlWithout(null);
@@ -386,6 +444,11 @@ const removeFilter = (drop) => {
     if ((drop === null || drop === 'status') && status) {
         status.value = '';
     }
+    document.querySelectorAll(SELECTORS.FIELD).forEach((el) => {
+        if (drop === null || drop === el.dataset.filter) {
+            el.value = '';
+        }
+    });
 
     /* Focus moves deliberately, because the control that was just activated has been removed from
        the document - a keyboard operator would otherwise be returned to the top of the page with
@@ -463,6 +526,22 @@ export const init = (group) => {
     if (search) {
         search.addEventListener('input', scheduleRefresh);
     }
+
+    /* A text box narrows as you type; a select and a date picker commit in one action and have
+       no second keystroke coming, so they refresh on change. Both routes reach applyFilters(),
+       which carries the busy check. */
+    filters.querySelectorAll(SELECTORS.FIELD).forEach((el) => {
+        if (el.tagName === 'SELECT' || el.type === 'date') {
+            el.addEventListener('change', () => {
+                const tableRoot = document.querySelector(SELECTORS.TABLE);
+                if (tableRoot) {
+                    applyFilters(tableRoot);
+                }
+            });
+        } else {
+            el.addEventListener('input', scheduleRefresh);
+        }
+    });
 
     const status = filters.querySelector(SELECTORS.STATUS);
     if (status) {

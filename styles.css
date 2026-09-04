@@ -113,8 +113,12 @@
     gap: 0.5rem 1rem;
 }
 
+/* flex-grow 0, and that is the whole point of the change. With grow 1 a fourth control wraps to a
+   line of its own and then STRETCHES to the width of #region-main - a single full-width box under
+   a tidy three-up row, which reads as a layout fault rather than as a wrapped control. The queue
+   can now carry an arbitrary number of these, so wrapping has to look deliberate. */
 .enrol_apply-filterfield {
-    flex: 1 1 30%;
+    flex: 0 1 30%;
     min-width: 12rem;
 }
 

@@ -19,6 +19,7 @@ namespace enrol_apply\table;
 use core_table\local\filter\filterset;
 use core_table\local\filter\integer_filter;
 use core_table\local\filter\string_filter;
+use enrol_apply\local\queuefilter;
 
 /**
  * What the applications table may be filtered by.
@@ -77,15 +78,66 @@ class applications_filterset extends filterset {
      * treats that as no filter, because the alternative is a queue that empties itself the moment
      * somebody clears the box.
      *
-     * The identity-field and date filters of the mockup are not here: they arrive in their own
-     * slice, and both depend on site configuration this one does not read.
+     * **The identity-field filters are declared from the site's whole identity vocabulary, not from
+     * this plugin's setting and not from what the reader may see.** Two separate reasons, and the
+     * second was found by review rather than by design.
+     *
+     * Not per reader, because filterset::add_filter() throws InvalidArgumentException for a name
+     * this method does not declare - a free first barrier against a forged request - and declaring
+     * only what the reader may see would make that barrier the security boundary. It is the wrong
+     * one to lean on: a filterset knows nothing about contexts. The per-reader refusal belongs to
+     * applications::set_filterset(), which intersects the offered set with core's own identity
+     * mapping and ignores a filter for a field this reader is not offered.
+     *
+     * And not from enrol_apply/queuefilterfields ALONE, because that refusal is OBSERVABLE BEFORE
+     * ANY AUTHORISATION RUNS. core_table_get_dynamic_table_content is registered with no capability
+     * of its own, and get.php calls add_filter_from_params() for every submitted name before it
+     * constructs the table, before set_filterset(), and before validate_context() and
+     * has_capability(). So with the tick-list as the declared set, any logged-in user with no
+     * capability here at all could send `pf7` and read from which of the two exceptions came back
+     * whether the administrator had ticked custom profile field 7 - a setting otherwise behind
+     * moodle/site:config.
+     *
+     * The declared set is therefore the UNION of the site's published identity vocabulary and the
+     * plugin's own list. Everything the site publishes is recognised whether ticked or not, so for
+     * every field that could ever be offered to anybody the answer no longer depends on the
+     * setting. **What remains, stated rather than papered over: for a field the site does NOT
+     * publish, "recognised" still means "once ticked".** That is a fact about a setting entry with
+     * no effect on anything - the queue cannot offer such a field to any reader - and closing it
+     * completely would mean refusing names this table has always ignored, which is the behaviour
+     * the union preserves: a filter whose field is withheld is dropped by set_filterset() rather
+     * than throwing at a stale browser tab whose administrator changed the site under it.
+     *
+     * queuefilter::token() is safe to call here and queuefilter::choices() is NOT: token() reads
+     * the field record, while choices() resolves labels through format_string(), which asks $PAGE
+     * for a context this early in the request and does not get one.
+     *
+     * The dates are two filters and not one, because core's table filter classes express no range:
+     * there is integer_filter, string_filter and their siblings, and nothing that carries a pair.
+     *
+     * **The submitted-profile snapshot is not here and cannot be.** It is masked per row, and no
+     * filterable surface can honour a per-row mask - an operator would recover a withheld value by
+     * filtering for it and reading the count. Only enrol_apply/queuefilterfields decides what is
+     * offered, and it offers live identity fields.
      *
      * @return array Filter name => filter class.
      */
     public function get_optional_filters(): array {
-        return [
+        $filters = [
             'search' => string_filter::class,
             'status' => integer_filter::class,
+            'appliedfrom' => string_filter::class,
+            'appliedto' => string_filter::class,
         ];
+
+        $names = array_unique(array_merge(\core_user\fields::get_identity_fields(null), queuefilter::pool()));
+        foreach ($names as $name) {
+            $token = queuefilter::token($name);
+            if ($token !== '') {
+                $filters[$token] = string_filter::class;
+            }
+        }
+
+        return $filters;
     }
 }

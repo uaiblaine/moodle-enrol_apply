@@ -320,6 +320,108 @@ Feature: Enrolment upon approval
     And I should see "2 of 2 applications"
     And I should not see "Search quillsworth"
 
+  # The configurable per-field filters, driven through the GET form with no JavaScript. This
+  # scenario is the ONLY guard on manage.php's parameter reading: mdl mutate runs PHPUnit and a
+  # page script has no unit test to redden, which is exactly how the status/PARAM_INT defect of an
+  # earlier slice got in - every hand-built url in testing carried no status parameter at all. So
+  # it PRESSES THE BUTTON rather than navigating to a url, and it applies a field filter and a date
+  # together, because the two are read by different code paths.
+  Scenario: An administrator chooses which fields the queue may be filtered by
+    Given the following config values are set as admin:
+      | showuseridentity | institution |
+    And the following "users" exist:
+      | username | firstname | lastname    | email                | institution |
+      | student2 | Zephyrina | Quillsworth | student2@example.com | Ouropretoville |
+    And the following config values are set as admin:
+      | queuefilterfields | institution | enrol_apply |
+    And I log in as "student1"
+    And I am on "Course 1" course homepage
+    And I press "Start application"
+    And I press "Submit application"
+    And I log out
+    And I log in as "student2"
+    And I am on "Course 1" course homepage
+    And I press "Start application"
+    And I press "Submit application"
+    And I log out
+    When I log in as "teacher1"
+    And I am on the "C1" "enrol_apply > manage applications" page
+    Then I should see "2 of 2 applications"
+    # The control the administrator enabled is on the page, named as the site names the field.
+    And I should see "Institution"
+    # Narrowing through the form, which is what carries the parameter into manage.php.
+    When I set the field "Institution" to "Ouropretoville"
+    And I press "Apply filters"
+    Then I should see "Zephyrina Quillsworth"
+    And I should not see "Student 1"
+    And I should see "1 of 2 applications"
+    # A date bound too, read by a different path from the field filter.
+    When I set the field "Applied from" to "2020-01-01"
+    And I press "Apply filters"
+    Then I should see "Zephyrina Quillsworth"
+    And I should see "1 of 2 applications"
+    # And the whole thing comes back, which is what proves the narrowing was the filters.
+    When I follow "Clear all"
+    Then I should see "Student 1"
+    And I should see "2 of 2 applications"
+
+  # The two halves of the applied-date chip have to spell the date the same way. The server renders
+  # it from PHP and the module redraws it from the input's own value, and there is no formatting the
+  # two could agree on - Moodle's date format is a language-pack string and the browser's is the
+  # reader's operating system - so neither side formats it at all. Formatted on one side only, a
+  # chip that read "31/01/26" on page load became "2026-01-31" the moment anything else on the bar
+  # was touched. @javascript is the whole point of this one: without it only the server's half ever
+  # renders, and a divergence between the two is invisible.
+  @javascript
+  Scenario: The applied-date chip reads the same after a refresh as it did on load
+    Given the following "users" exist:
+      | username | firstname | lastname    | email                |
+      | student2 | Zephyrina | Quillsworth | student2@example.com |
+    And I log in as "student1"
+    And I am on "Course 1" course homepage
+    And I press "Start application"
+    And I press "Submit application"
+    And I log out
+    And I log in as "student2"
+    And I am on "Course 1" course homepage
+    And I press "Start application"
+    And I press "Submit application"
+    And I log out
+    When I log in as "teacher1"
+    And I am on the "C1" "enrol_apply > manage applications" page
+    And I set the field "Applied from" to "2020-01-01"
+    And I press "Apply filters"
+    # The server's spelling, from a real page load. Asserted against the control's own value
+    # rather than a literal - see the step's own docblock for why the driver makes that necessary.
+    Then the applied-date chip should read what its control holds
+    And I should see "2 of 2 applications"
+    # And the module's, from a refresh driven by a different control entirely.
+    When I set the field "Search" to "quillsworth"
+    Then I should see "Zephyrina Quillsworth"
+    And I should see "1 of 2 applications"
+    And the applied-date chip should read what its control holds
+
+  # A field the site does not name in showuseridentity is offered to nobody, whatever the plugin
+  # setting says. The administrator's tick decides what the queue MAY offer; what the reader can
+  # already see decides what it does - and this is the half that no amount of admin configuration
+  # can widen.
+  Scenario: A field the site withholds is offered to nobody
+    Given the following config values are set as admin:
+      | showuseridentity | institution |
+    And the following config values are set as admin:
+      | queuefilterfields | institution,city | enrol_apply |
+    And I log in as "student1"
+    And I am on "Course 1" course homepage
+    And I press "Start application"
+    And I press "Submit application"
+    And I log out
+    When I log in as "teacher1"
+    And I am on the "C1" "enrol_apply > manage applications" page
+    # The control: the field the site DOES name is offered, so an absent control below is about
+    # the withheld field and not about a filter row that failed to render.
+    Then I should see "Institution"
+    And I should not see "City/town"
+
   # The audit report belongs to the method whose icon opened it. No @javascript: the icons on
   # the enrolment methods page are ordinary links and the report renders server side.
   #

@@ -1,9 +1,136 @@
 # Handoff — read this before touching anything
 
-State at the end of 2026-09-03. **Everything is merged; nothing is in flight** — this file cannot
-name the commit that merges it, which is the caution the entries below have paid for seven times.
-When a slice IS unmerged it gets an `IN FLIGHT` header, and that header is deleted by the change
-that merges it, which is what happened here.
+State at 2026-09-04. **U5a PR 4 is IN FLIGHT** — written, verified locally and not yet merged; this
+file cannot name the commit that merges it, which is the caution the entries below have paid for
+seven times. The `IN FLIGHT` header below is deleted by the change that merges it.
+
+## IN FLIGHT — 2026-09-04 — U5a PR 4, filters the administrator chooses
+
+`version.php` is `2026090304` and the plugin carries **115 gates** (109 before, and two of those
+109 were dead — see below). This closes U5a: the queue rebuild has no further slice.
+
+Which fields the queue may be filtered by is a site setting, `enrol_apply/queuefilterfields`, in the
+shape of core's `userfiltersdefault`: a multicheckbox offering exactly what the site names in
+`showuseridentity`, standard columns and custom profile fields alike. It ships **empty**, so every
+existing site upgrades with the date filters alone until somebody ticks a box.
+
+**The rule the whole slice is arranged around:** the administrator decides what the queue MAY
+offer; what it DOES offer a given reader is the intersection with `\core_user\fields`' identity
+resolution, which has already applied the capability gate, the `hiddenuserfields` gate and the drop
+of a deleted custom field. Ticking a box grants nobody anything. That matters more than it sounds,
+because a filter is an oracle: narrowing a list by a value confirms the value as surely as printing
+it would.
+
+### The defect only a browser could find
+
+Field labels were resolved inside `queuefilter::resolve()`, which runs from
+`applications::set_filterset()` — and core's `get.php` calls that **before** `validate_context()`.
+So `format_string()` on a custom field's name asked `$PAGE` for a context that did not exist yet.
+On a developer-debug site `moodle_page::magic_get_context()` throws inside an AJAX script, so the
+queue simply stopped refreshing: HTTP 200 carrying an exception, nothing on screen. Below that debug
+level it does not throw at all — it emits a `debugging()` notice and substitutes the system context,
+so the label resolves against the wrong context instead. Quieter, and worse. Labels are the
+renderer's job now, where there is a page to render onto.
+
+### Two of the 109 gates applied nothing, and `--only` is why
+
+`CD_base_url_drops_the_scope` still named `$this->baseurl = $this->scope->url;`, a line
+`guess_base_url()` stopped having when it was rebuilt around `url_params()`.
+`CH_capacity_header_inside_hasrows` named markup PR 3b deleted outright — the `{{#hasrows}}` section
+is gone, and what holds that behaviour now is the renderer building `capacityhtml` unconditionally,
+so the gate moved to `renderer.php` with it.
+
+`mdl mutate` does hard-error on a pattern that matches nothing (`bin/mdl-mutate:297`), exactly as
+`gates.conf` promises. **It never ran on these, because every sweep of the last three slices used
+`--only`** — which applies the gates it names and no others. A full `--dry-run` costs seconds, needs
+no test site, and is the only thing that finds a gate that has quietly stopped guarding. Run it
+before every push, not just the slice's own gates.
+
+### What the adversarial pass found, and what it cost to fix
+
+Six lenses, three refuters per finding, unanimity for behaviour and majority for prose. Every
+non-advisory finding came back 3/3, which is itself worth noting: a panel that refutes nothing is
+either well-aimed or asleep, and the two dead gates above — found by the critic running all 109
+patterns by hand rather than by any lens — say it was the first.
+
+- **A bare `=` is not one operator.** `moodle_database::sql_equal()` emits `=` unchanged, which is
+  case sensitive on PostgreSQL, while `mysqli_native_moodle_database::sql_equal()` has to force
+  `COLLATE <family>_bin` to reach the same behaviour — so on MariaDB a bare `=` takes the column's
+  own, normally case-insensitive collation. The select-control predicate was the one place in the
+  slice that departed from the discipline the text predicates already followed. Gate DM reddens on
+  PostgreSQL only, and that IS the finding.
+- **Core does not trim a menu's options.** `profile_field_menu` builds them from a bare
+  `explode("\n", param1)` and stores the chosen key verbatim; only `\r` is stripped. A vocabulary
+  trimmed on the way out offers a value the column can never hold, so the filter matches nothing,
+  on every database, silently. `clean()` had to stop trimming a select value for the same reason.
+- **The filterset's declared vocabulary is readable before any authorisation.**
+  `core_table_get_dynamic_table_content` carries no capability of its own, and `get.php` calls
+  `add_filter_from_params()` before it constructs the table, before `set_filterset()`, and before
+  `validate_context()`/`has_capability()`. Declaring the administrator's tick-list therefore let any
+  logged-in user read that list back one name at a time, from which exception came out — a setting
+  otherwise behind `moodle/site:config`. It declares the UNION of the site's published identity
+  vocabulary and the plugin's own list now, which narrows nothing — `set_filterset()` reads only the
+  offered set. **The union rather than the identity list alone, and the residual is worth stating
+  rather than papering over:** for a field the site does not publish, "recognised" still means "once
+  ticked". Closing that too would mean *refusing* names this table has always ignored, and the case
+  it would refuse is a stale browser tab whose administrator changed `showuseridentity` under it —
+  a visible exception where there used to be a silently dropped filter. The first attempt did
+  exactly that and was caught by an existing test, `test_a_filter_for_an_unoffered_field_is_ignored`,
+  which is the test that had named the behaviour all along.
+- **`admin_setting_configmulticheckbox` renders nothing when its choice list is empty.**
+  `output_html()` opens with `if (!$this->load_choices() or empty($this->choices)) { return ''; }`,
+  before the description is touched, and `is_related()` has the same guard. So the guidance written
+  for "this site names no identity fields" was in the one place that state could never show it. The
+  whole row is branched now — an `admin_setting_description` in that state.
+- **Two "the ONE definition" docblocks that could disagree.** `request_filters()` returned what
+  survived `optional_param()` while `url_params()` reports what survived `clean()`, so a select value
+  outside its vocabulary or a malformed date reached the page url and the decision form's action
+  while the table ignored them. Inert as it stood — neither side narrowed by it — and exactly the
+  disagreement both docblocks say cannot happen.
+- **The applied-date chip changed spelling on refresh.** The server rendered it through
+  `userdate(strftimedateshort)` and the module redraws it from the input's own value. Neither side
+  can reproduce the other: Moodle's date format is a language-pack string, the browser's is the
+  reader's operating system. So neither formats it — one unambiguous spelling, and an `@javascript`
+  scenario that applies a date by page load and then forces a refresh through the search box pins
+  the two paths to agree.
+
+Two prose findings were errors of the same shape and are recorded because the shape recurs: a
+comment claiming `PARAM_ALPHANUMEXT` "permits exactly the digits and hyphens a date holds" (it keeps
+every ASCII letter and the underscore — `not-a-date` survives it whole), and a docblock attributing
+the `$PAGE->context was not set` throw to `format_string()` unconditionally. Both read as mechanism
+and were decoration; the conclusions built on them happened to be right, which is what makes them
+survive review.
+
+### A sweep killed with SIGKILL leaves the tree MUTATED
+
+`mdl mutate` restores through a shell trap, and a trap does not run on SIGKILL. It happened here:
+the log stopped mid-mutation, the process was gone, and `renderer.php` still carried the
+`userdate()` call gate DP injects. The next thing to read the tree would have been the CI matrix,
+which would have tested mutated code and said so nowhere; the commit after it would have carried the
+mutation into `master`.
+
+**After any sweep that does not end with its own summary line, the tree is suspect until a full
+`mdl mutate <repo> mutations/gates.conf --dry-run` says otherwise.** That is not a workaround, it is
+the strongest check available: the run applies and reverts every pattern and hard-errors on one that
+does not match, so a file left in a mutated state makes its own gate fail. It costs seconds and
+needs no test site. The sweep also keeps a pristine copy of each file it touched under
+`$TMPDIR/mdl-mutate-<repo>/pristine/`, which is what to diff against, and it leaves its lock
+directory behind — clear that before restarting.
+
+Launch a sweep detached (`nohup sh -c '...' &`) rather than as a plain background command that
+something else can reap. The eight-gate sweep launched that way survived; the one-gate re-run
+launched without it did not.
+
+### Still open
+
+- The per-scope identity gap is now noted in `identity.php`'s own docblock: on the site-wide queue
+  every row is judged against the system context, so a course-level override narrowing identity is
+  not consulted. Field filtering inherits it. Pre-existing, not widened by this slice — but cheaper
+  to act on, which is a change in kind worth someone deciding about deliberately.
+- `.theme-dark` and `[data-bs-theme="dark"]` remain two different dark mechanisms and only the
+  second moves the `--bs-*` tokens. Everything in `styles.css` reading a token has that exposure;
+  the filter bar's new rules were written token-first for it, and the capacity meters were not
+  re-measured.
 
 ## 2026-09-03 — U5a PR 3b, narrowing the queue as you type
 

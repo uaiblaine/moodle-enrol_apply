@@ -320,6 +320,64 @@ final class renderer_test extends \advanced_testcase {
     }
 
     /**
+     * The applied-date chip reads as the control holds it, on both paths.
+     *
+     * **Not a formatting preference - the two paths have to agree.** The same chip is redrawn
+     * client-side from the date input's own value on every refresh, and no formatting the server
+     * can do is reproducible there: Moodle's date format is a language-pack string and the
+     * browser's is the reader's operating system. A first cut ran this through
+     * userdate(strftimedateshort), so a chip that read "31/01/26" on page load became
+     * "2026-01-31" the moment anything else on the filter bar was touched.
+     *
+     * @return void
+     */
+    public function test_the_applied_date_chip_reads_as_the_control_holds_it(): void {
+        $rendered = $this->render_date_filtered_queue('2026-01-31');
+
+        $this->assertStringContainsString(
+            get_string('queueremovefilter', 'enrol_apply', (object) [
+                'name' => get_string('queuefilterfrom', 'enrol_apply'),
+                'value' => '2026-01-31',
+            ]),
+            $rendered
+        );
+    }
+
+    /**
+     * Render the queue narrowed to applications made on or after one date.
+     *
+     * @param string $from The date, as the control holds it.
+     * @return string The rendered form.
+     */
+    private function render_date_filtered_queue(string $from): string {
+        global $DB, $PAGE;
+
+        $this->setAdminUser();
+        $applicant = $this->getDataGenerator()->create_user();
+        $this->plugin->enrol_user($this->instance, $applicant->id, null, 0, 0, ENROL_USER_SUSPENDED);
+        $ueid = (int) $DB->get_field(
+            'user_enrolments',
+            'id',
+            ['userid' => $applicant->id, 'enrolid' => $this->instance->id],
+            MUST_EXIST
+        );
+        $DB->insert_record('enrol_apply_applicationinfo', (object) ['userenrolmentid' => $ueid, 'comment' => '']);
+
+        $url = new \moodle_url('/enrol/apply/manage.php', ['id' => $this->instance->id, 'appliedfrom' => $from]);
+        $PAGE->set_url($url);
+        $PAGE->set_context(\context_course::instance($this->course->id));
+
+        $table = \enrol_apply\table\applications::for_scope(
+            (int) $this->instance->id,
+            '',
+            null,
+            ['appliedfrom' => $from]
+        );
+
+        return $PAGE->get_renderer('enrol_apply')->manage_form($table, $url, $this->instance);
+    }
+
+    /**
      * Render the queue for one instance, with one pending application in it.
      *
      * @return string The rendered form.

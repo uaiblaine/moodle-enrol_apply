@@ -699,7 +699,7 @@ widest reading is the one taken.
 | ~~**2b**~~ | ~~The "Submitted with the application" column~~ — **done 2026-09-03** | See below — it is in the mockup and in neither task list, and it is not a cell like the others |
 | **3a** | The search (GET), the status filter, the chip row, "clear all", the counts — everything server-side | The two filters that narrow columns the query already has |
 | ~~**3b**~~ | ~~The as-you-type half: the debounce, chip removal without a reload, the rebuilt AMD bundle~~ — **done 2026-09-03** | Split from 3a for the reason U5a/U5b were split in the first place — `amd/build/**` and the `grunt --max-lint-warnings 0` gate enter on their own slice, so a red leg is attributable to one mechanism rather than three |
-| **4** | The identity filters (city, institution) and the date filter | Both depend on site configuration — the identity field list varies — and a date range is a different filter class |
+| ~~**4**~~ | ~~The identity filters and the date filter~~ — **done 2026-09-04** | Both depend on site configuration — the identity field list varies — and a date range is a different filter class. The scope grew during the slice: which fields are offered is now an administrator's setting rather than a fixed pair, because a site's own custom profile fields are exactly what it would want to filter by and no fixed list can name them |
 
 **PR 2b exists because a column went missing from both task lists.** Mockup A carries a
 *"Submitted with the application"* column, and its own caption calls those answers "the evidence" —

@@ -45,8 +45,13 @@ if ($ADMIN->fulltree) {
        fields::resolve() zero everything and every migrated instance would silently stop
        collecting what it collected before the upgrade. */
     $allowedchoices = [];
+    $queuefilterchoices = [];
     if (!during_initial_install()) {
         $allowedchoices = \enrol_apply\local\fields::offerable();
+        /* Same guard, same reason: the choices resolve custom profile fields out of
+           {user_info_field}, which does not exist yet during a fresh install, and
+           admin_apply_default_settings() reaches this file then. */
+        $queuefilterchoices = \enrol_apply\local\queuefilter::choices();
     }
     /* Whether a course may offer to save an applicant's answers to their own profile. Off by
        default, and deliberately a site setting rather than anything an instance carries alone:
@@ -65,6 +70,42 @@ if ($ADMIN->fulltree) {
         array_fill_keys(\enrol_apply\local\fields::DEFAULT_SET, 1),
         $allowedchoices
     ));
+
+    /* Which profile fields the QUEUE may be filtered by, which is a different question from the
+       one above: that setting decides what an applicant is ASKED, this one decides what an
+       operator may narrow the list by. The two vocabularies are different on purpose - the fields
+       an application collects are frozen into a per-application snapshot that is masked per row
+       and cannot be filtered at all, while these are the live identity fields the queue already
+       shows under each applicant's name.
+
+       The default is EMPTY, so an existing site upgrades with the date filters and no field
+       filters until somebody ticks a box. A seeded default would arrive as a wider filter row than
+       the administrator asked for, and a STATIC one would be worse than either:
+       admin_setting_configmulticheckbox::write_setting() silently drops a value that is not in the
+       choice list, so `city,institution` on a site naming neither is stored as the empty string -
+       a setting that looks configured and is not. */
+    /* The whole row is branched rather than only its description, because
+       admin_setting_configmulticheckbox::output_html() opens with
+       `if (!$this->load_choices() or empty($this->choices)) { return ''; }` - so on a site that
+       names no identity fields the setting would not render at all, and the very guidance written
+       for that state would be the half nobody could read. is_related() has the same guard, so it
+       would not be findable through admin search either. A first cut put the guidance in the
+       description and shipped exactly that. */
+    if ($queuefilterchoices) {
+        $settings->add(new admin_setting_configmulticheckbox(
+            'enrol_apply/queuefilterfields',
+            get_string('queuefilterfields', 'enrol_apply'),
+            get_string('queuefilterfields_desc', 'enrol_apply'),
+            [],
+            $queuefilterchoices
+        ));
+    } else {
+        $settings->add(new admin_setting_description(
+            'enrol_apply/queuefilterfieldsnone',
+            get_string('queuefilterfields', 'enrol_apply'),
+            get_string('queuefilternoidentity', 'enrol_apply')
+        ));
+    }
 
     // Confirmation mail settings.
     $settings->add(new admin_setting_heading(
