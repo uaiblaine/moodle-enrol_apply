@@ -48,6 +48,9 @@ require_once($CFG->dirroot . '/enrol/apply/lib.php');
  */
 #[CoversClass(\enrol_apply_renderer::class)]
 final class renderer_test extends \advanced_testcase {
+    /** @var \stdClass|null The menu profile field the filter-bar fixture creates. */
+    protected $menufield = null;
+
     /**
      * A name carrying both characters format_string() rewrites.
      *
@@ -317,6 +320,97 @@ final class renderer_test extends \advanced_testcase {
             $rendered
         );
         $this->assertStringContainsString(get_string('queueclearfilters', 'enrol_apply'), $rendered);
+    }
+
+    /**
+     * The status select keeps its own vocabulary when a field filter is offered beside it.
+     *
+     * **This shipped.** The context builder filled a variable named `$options` for the status
+     * select and the per-field loop below reassigned the same name, so `statusoptions` published
+     * whatever the LAST field left there: a site whose administrator ticked a "menu" profile field
+     * got a status control listing that field's options - Cabo, Sargento, Tenente - and one who
+     * ticked a text field got an empty control. The status filter then posted a value no status
+     * can hold, which `integer_filter` refuses, so the as-you-type refresh threw and the search
+     * appeared broken.
+     *
+     * Nothing caught it because no test rendered the queue with a field filter offered AND then
+     * looked at the status select; the setting ships empty, so every other test had no field at
+     * all. The assertions are scoped to each `<select>` element rather than run over the whole
+     * page, because both vocabularies are present somewhere in it - a page-wide regex would pass
+     * against the very defect this test exists for.
+     *
+     * @return void
+     */
+    public function test_the_status_select_is_not_overwritten_by_a_field_filter(): void {
+        $rendered = $this->render_queue_with_a_menu_field();
+
+        $status = $this->select_named($rendered, 'status');
+        $this->assertStringContainsString(get_string('submissionstatuspending', 'enrol_apply'), $status);
+        $this->assertStringContainsString(get_string('submissionstatuswaiting', 'enrol_apply'), $status);
+        $this->assertStringNotContainsString('Sargento', $status, 'the status select must not carry a field vocabulary');
+
+        // The control: the field's own select DOES carry it, so this is not about a missing field.
+        $field = $this->select_named($rendered, 'pf' . $this->menufield->id);
+        $this->assertStringContainsString('Sargento', $field);
+        $this->assertStringNotContainsString(get_string('submissionstatuspending', 'enrol_apply'), $field);
+    }
+
+    /**
+     * One `<select>` element of the rendered page, by its name attribute.
+     *
+     * @param string $html The rendered page.
+     * @param string $name The select's name attribute.
+     * @return string The element, opening tag to closing tag.
+     */
+    private function select_named(string $html, string $name): string {
+        $found = preg_match('#<select[^>]*name="' . preg_quote($name, '#') . '"[^>]*>.*?</select>#s', $html, $m);
+        $this->assertSame(1, $found, "no select named {$name} in the rendered page");
+
+        return $m[0];
+    }
+
+    /**
+     * Render the queue on a site offering one menu profile field as a filter.
+     *
+     * @return string The rendered form.
+     */
+    private function render_queue_with_a_menu_field(): string {
+        global $DB, $PAGE;
+
+        /* A shortname nothing else would pick. Not fussiness: core's identity join matches
+           {user_info_field} BY SHORTNAME - `JOIN {user_info_field} f ON f.shortname = :x` in
+           \core_user\fields::get_sql() - and that table carries no unique index on it, so a
+           second field of the same name multiplies every row of this query. A first draft used
+           'patente' and found two of them already in the test database, which is how the
+           duplicate surfaced: as a debugging() notice about a duplicate userenrolmentid, not as
+           a failure. */
+        $this->menufield = $this->getDataGenerator()->create_custom_profile_field([
+            'datatype' => 'menu',
+            'shortname' => 'enrolapplyqueuerank',
+            'name' => 'Rank',
+            'param1' => "Cabo\nSargento",
+        ]);
+        set_config('showuseridentity', 'profile_field_enrolapplyqueuerank');
+        set_config('queuefilterfields', 'profile_field_enrolapplyqueuerank', 'enrol_apply');
+
+        $this->setAdminUser();
+        $applicant = $this->getDataGenerator()->create_user();
+        $this->plugin->enrol_user($this->instance, $applicant->id, null, 0, 0, ENROL_USER_SUSPENDED);
+        $ueid = (int) $DB->get_field(
+            'user_enrolments',
+            'id',
+            ['userid' => $applicant->id, 'enrolid' => $this->instance->id],
+            MUST_EXIST
+        );
+        $DB->insert_record('enrol_apply_applicationinfo', (object) ['userenrolmentid' => $ueid, 'comment' => '']);
+
+        $url = new \moodle_url('/enrol/apply/manage.php', ['id' => $this->instance->id]);
+        $PAGE->set_url($url);
+        $PAGE->set_context(\context_course::instance($this->course->id));
+
+        $table = \enrol_apply\table\applications::for_scope((int) $this->instance->id);
+
+        return $PAGE->get_renderer('enrol_apply')->manage_form($table, $url, $this->instance);
     }
 
     /**

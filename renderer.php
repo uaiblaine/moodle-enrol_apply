@@ -239,13 +239,19 @@ class enrol_apply_renderer extends plugin_renderer_base {
             };
         }
 
-        $options = [[
+        /* Named for what it holds. A bare $options here was reassigned by the per-field loop
+           below and the status select then published the LAST field's vocabulary - so a site whose
+           administrator ticked a "menu" profile field got a status control listing that field's
+           options, and one who ticked a text field got an empty control. Shipped, and found on the
+           screen rather than by any test: nothing rendered the queue with a field filter offered
+           AND looked at the status select. */
+        $statusoptions = [[
             'value' => '',
             'label' => get_string('queuestatusany', 'enrol_apply'),
             'selected' => $status === null,
         ]];
         foreach ($statuses as $value => $label) {
-            $options[] = [
+            $statusoptions[] = [
                 'value' => (string) $value,
                 'label' => $label,
                 'selected' => $status === $value,
@@ -280,9 +286,9 @@ class enrol_apply_renderer extends plugin_renderer_base {
         foreach ($table->get_offered_filters() as $token => $offered) {
             $value = $applied[$token] ?? '';
 
-            $options = [];
+            $fieldoptions = [];
             foreach ($offered->options as $optvalue => $optlabel) {
-                $options[] = [
+                $fieldoptions[] = [
                     'value' => (string) $optvalue,
                     'label' => $optlabel,
                     'selected' => (string) $optvalue === $value,
@@ -299,7 +305,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
                 'inputid' => 'enrol_apply_filter_' . $token,
                 'isselect' => $offered->control === 'select',
                 'value' => $value,
-                'options' => $options,
+                'options' => $fieldoptions,
             ];
 
             if ($value !== '') {
@@ -341,7 +347,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
             'searchvalue' => $search,
             'searchhelp' => $this->output->help_icon('queuesearch', 'enrol_apply'),
             'statuslabel' => get_string('queuefilterstatus', 'enrol_apply'),
-            'statusoptions' => $options,
+            'statusoptions' => $statusoptions,
             'groupheading' => get_string('queuefiltersgroup', 'enrol_apply'),
             'hasfields' => (bool) $fields,
             'fields' => $fields,

@@ -121,6 +121,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   because that chip is redrawn in the browser on every refresh and no server-side formatting is
   reproducible there.
 
+### Fixed
+
+- **The queue's status filter listed the wrong things, and that is what broke the search.** The
+  filter bar built its status options and its per-field options into the same local variable a few
+  lines apart, so the status control published whatever the last configured profile field left
+  there: a site that had ticked a *menu* field got a status select offering that field's values —
+  ranks, in the case it was found on — and one that had ticked a text field got an empty control.
+
+  The search broke for the same reason and looked unrelated. The status select then posted a value
+  no status can hold, `integer_filter` refuses anything that is not an integer, and the as-you-type
+  refresh threw before it reached the queue — so typing did nothing, with nothing on screen to say
+  why.
+
+  Invisible until an administrator ticks a box, which is why a green suite and seven green CI legs
+  said nothing: no test rendered the queue with a field filter offered *and* then looked at the
+  status select. The regression test now does, asserting inside each `<select>` element rather than
+  over the page, because both vocabularies appear somewhere in it and a page-wide match would pass
+  against the very defect.
+
+### Removed
+
+- **The decision-time enrolment period.** `confirm_enrolment()` accepted `timestart` and `timeend`
+  in its decision array and nothing ever supplied them — no screen, no form, no web service. The
+  period belongs to the enrolment method: access starts when the application is approved and runs
+  for however long the method's own `enrolperiod` says, which is on the method's edit form. There
+  was never a per-applicant date for a decider to choose, so there were no controls to build.
+
+  Removed rather than left unreachable, an untested API capability with no caller being a liability
+  rather than a feature. The two tests that replace the one written for those branches cover the
+  path that actually ships, including the fact the old one carried: a `timeend` on a still-pending
+  row is swept by `process_expirations()`'s `ENROL_EXT_REMOVED_UNENROL` branch, which selects on
+  `timeend` with no status filter at all — so the applicant would be unenrolled instead of decided.
+
 ### Changed
 
 - **The approval queue is a dynamic table.** Its rows now refresh over
