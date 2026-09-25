@@ -132,7 +132,7 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
     }
 
     /**
-     * The provider declares the application info table.
+     * The provider declares both tables and their personal-data fields.
      *
      * @return void
      */
@@ -140,9 +140,7 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         $collection = new \core_privacy\local\metadata\collection('enrol_apply');
         $items = provider::get_metadata($collection)->get_collection();
 
-        /* Order independent on purpose: the previous form indexed $items[0] by hand, so
-           adding any table to the collection failed on every CI leg for a reason that had
-           nothing to do with what the test was checking. */
+        // Items are looked up by name, not by their position in the collection.
         $names = array_map(static function ($item): string {
             return $item->get_name();
         }, $items);
@@ -155,16 +153,13 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         $byname = array_combine($names, $items);
         $this->assertArrayHasKey('comment', $byname['enrol_apply_applicationinfo']->get_privacy_fields());
 
-        /* Both personal-data roles are declared. decidedby is the one core's table coverage
-           test cannot see for itself - it reads a column literally named userid or a
-           single-field foreign key to user.id, and nothing else. */
+        /* Both personal-data roles are declared. Core's table coverage test sees decidedby
+           only through its foreign key to user.id, since it is not named userid. */
         $submissionfields = $byname['enrol_apply_submission']->get_privacy_fields();
         $this->assertArrayHasKey('userid', $submissionfields);
         $this->assertArrayHasKey('decidedby', $submissionfields);
         $this->assertArrayHasKey('userinfodata', $submissionfields);
-        /* The decider's note. Declared here because the site holds it, exported below to both
-           subjects: metadata promising a column no export delivers is the worse of the two
-           failures available, because the promise is what a subject reads first. */
+        // The decider's note, which the export delivers to both subjects.
         $this->assertArrayHasKey('decisionnote', $submissionfields);
     }
 
@@ -290,9 +285,8 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
     /**
      * A user who only ever decided applications still has data to export and erase.
      *
-     * The second personal-data role. Nothing in the applicationinfo table names a decider, so
-     * this whole path arrived with the durable record and is the reason the provider takes
-     * two roles rather than one.
+     * The second personal-data role. Nothing in the applicationinfo table names a decider; only
+     * the durable record does.
      *
      * @return void
      */
@@ -317,10 +311,9 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
     }
 
     /**
-     * The applicant's own durable record is exported, with its comment and snapshot.
+     * The applicant's own durable record is exported, with its comment.
      *
-     * The decider half of this was covered from the start and the applicant half was not, so
-     * removing the applicant export call reddened nothing at all.
+     * Changes that must make it fail: dropping the applicant half of the durable-record export.
      *
      * @return void
      */
@@ -345,8 +338,7 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
      * Record a decision on an applicant's durable record.
      *
      * Written straight to the row rather than through the state machine: what is under test is
-     * the EXPORT of these three columns, and driving a real approval would make the fixture
-     * depend on the whole decision path to prove something about reading it back.
+     * the export of these columns, not the decision path that writes them.
      *
      * @param \stdClass $applicant The applicant whose record to stamp.
      * @param array $groupids Group ids the decider chose.
@@ -376,13 +368,9 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
     /**
      * The decision reaches both subjects' exports.
      *
-     * These three columns were declared in get_metadata() from the start and exported nowhere,
-     * which is the worse half of the two failures available here: metadata that promises more
-     * than the export delivers is what a subject reads before they read the export.
-     *
-     * Both roles get them, and that is the deliberate part. The split this provider already
-     * makes is between the applicant's own words - their comment and profile snapshot, which a
-     * decider never receives - and the decision taken on them. These three ARE the decision.
+     * The provider splits the applicant's own words - their comment and profile snapshot, which
+     * a decider never receives - from the decision taken on them: the message, groups, role and
+     * note, which both roles get.
      *
      * @return void
      */
@@ -414,24 +402,22 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
             $this->assertSame('Welcome aboard.', $exported->outcomemessage, $rolekey);
             $this->assertSame(['Cohort A'], $exported->decidedgroups, $rolekey);
             $this->assertSame('Site mentor', $exported->decidedrole, $rolekey);
-            /* The note goes to BOTH, and the applicant's half is the one worth arguing for.
-               Nothing shows this note to the applicant in the ordinary course of things - it is
-               written for the next member of staff - and that is precisely why a subject access
-               request has to reach it: it is a member of staff's assessment of them, held by the
-               site, which they have no other way of seeing. */
+            /* The note reaches the applicant too: no page shows it to them, but it is a member
+               of staff's assessment of them held by the site. */
             $this->assertSame('Transcript verified with the registrar.', $exported->decisionnote, $rolekey);
         }
     }
 
     /**
-     * A group and a custom role are exported in their PLAIN spelling.
+     * A group and a custom role are exported in their plain spelling.
      *
      * format_string()'s escape flag defaults to true, and an export file is data rather than
      * HTML, so the default would deliver the literal "R&amp;D" to the person reading their own
      * export. The assertion is on the ampersand rather than only on the whole string, because
      * that is the character that moves between the two spellings.
      *
-     * Mutation check: drop 'escape' => false from either helper and exactly this test reddens.
+     * Changes that must make it fail: dropping 'escape' => false from group_names() or
+     * role_name().
      *
      * @return void
      */
@@ -464,10 +450,10 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
     /**
      * A role a stock site ships is exported by its localised name.
      *
-     * The other branch of role_name(), and the reason it exists. Every role Moodle installs has
-     * an EMPTY role.name, so role_get_name() falls through to a bare get_string() for these and
-     * to format_string() for a site's own - one escaped spelling and one not, from one call.
-     * This test holds the unescaped branch; the one above holds the other.
+     * The other branch of role_name(). Every role Moodle installs has an empty role.name, so
+     * role_get_name() falls through to a bare get_string() for these and to format_string() for
+     * a site's own - one escaped spelling and one not, from one call. This test holds the
+     * empty-name branch; the one above holds the named one.
      *
      * @return void
      */
@@ -533,9 +519,8 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
      * A decider's export carries the decision and NOT the applicant's own content.
      *
      * The comment and the profile snapshot are the applicant's data. A subject access request
-     * from the person who decided is about the decision they took, not about the person they
-     * took it on; returning somebody else's free text under it is a disclosure nobody asked
-     * for and the applicant never consented to.
+     * from the person who decided is about the decision they took; returning the applicant's
+     * free text under it would disclose a third party's data.
      *
      * @return void
      */
@@ -565,9 +550,8 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
      * A user's several records in one course each get their own place in the export.
      *
      * Cancelling and re-applying is the ordinary way to end up with more than one record for
-     * the same course, user and enrolment method, so a path keyed on the method alone exports
-     * the last one over all the others - the same defect this slice fixed for the pending
-     * comments, arriving again by a different route.
+     * the same course, user and enrolment method, so a path keyed on the method alone would
+     * export the last one over all the others. The path is keyed on the record id.
      *
      * @return void
      */
@@ -644,11 +628,9 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
     /**
      * Erasing a decider clears their name from a record without destroying it.
      *
-     * The two roles are erased differently on purpose. A record belongs to its APPLICANT and
-     * carries that person's comment and profile snapshot, so erasing the person who merely
-     * decided it must not take the record with it - that would destroy a third party's data
-     * under a request the third party never made. All the decider can ask for is their own
-     * name, which is exactly what course deletion does to the same column.
+     * The two roles are erased differently on purpose. A record belongs to its applicant and
+     * carries that person's comment and profile snapshot, so erasing the person who decided it
+     * must not delete a third party's data. Only decidedby is zeroed, as course deletion does.
      *
      * @return void
      */
@@ -699,9 +681,6 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
     /**
      * Erasing a list of users takes their own records and spares everybody else's.
      *
-     * delete_data_for_users() had no assertion over the durable record at all, so the whole
-     * of its behaviour there was unheld: deleting the call reddened nothing.
-     *
      * @return void
      */
     public function test_delete_for_users_erases_the_durable_records_too(): void {
@@ -718,8 +697,8 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
 
         $this->assertEquals(0, $DB->count_records('enrol_apply_submission', ['userid' => $erased->id]));
 
-        // The control, and the whole point: the record of somebody NOT in the list survives,
-        // with the decider's name still on it, because they were not in the list either.
+        // The control: the record of somebody not in the list survives, still naming the
+        // decider, who was not in the list either.
         $survivor = $DB->get_record('enrol_apply_submission', ['userid' => $kept->id], '*', MUST_EXIST);
         $this->assertEquals($decider->id, (int) $survivor->decidedby);
     }
@@ -727,9 +706,8 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
     /**
      * Two apply methods in one course export to paths that do not overwrite each other.
      *
-     * A pre-existing defect: every application in a context was exported to the same path, so
-     * a course carrying two apply methods exported the first and then replaced it with the
-     * second, and the subject received half their data with nothing to say so.
+     * The path carries the method's id; one path per context would let the second method's
+     * application overwrite the first in the export, silently.
      *
      * @return void
      */
@@ -773,10 +751,9 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
     /**
      * An applicant known only through the durable record is still listed.
      *
-     * Every other fixture writes both tables, so the applicationinfo query alone satisfied
-     * every assertion and the submission query was held by nothing: deleting it reddened no
-     * test. This is the state that separates them - a record whose pending comment is gone,
-     * which is what every approved, cancelled or unenrolled application looks like.
+     * Every other fixture writes both tables, so only this one separates the submission query
+     * from the applicationinfo one: a record whose pending comment is gone, which is what every
+     * approved, cancelled or unenrolled application looks like.
      *
      * @return void
      */
@@ -798,12 +775,10 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
     /**
      * An undecided application does not report user zero as one of its people.
      *
-     * decidedby is 0 on every application nobody has looked at yet, so a user list built from
-     * that column names a user that does not exist unless something filters it. Nothing in
-     * the provider does: userlist::add_from_sql() wraps the query in a JOIN against {user},
-     * which is what keeps 0 out. This pins the consequence rather than the mechanism, so it
-     * holds whoever is doing the filtering - and it goes red if the provider ever switches to
-     * add_userids(), which does none.
+     * decidedby is 0 on every undecided application. The provider does not filter it:
+     * userlist::add_from_sql() joins the query to {user}, which keeps 0 out. This pins the
+     * consequence rather than the mechanism, so it fails if the provider switches to
+     * add_userids(), which does no such filtering.
      *
      * @return void
      */

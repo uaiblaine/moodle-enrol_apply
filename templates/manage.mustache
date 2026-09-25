@@ -19,8 +19,9 @@
 
     Decision form wrapping the table of pending enrolment applications.
 
-    The table markup is produced by table_sql and passed in already rendered, so it is
-    output with a triple stash. Everything else is escaped normally.
+    The table, the capacity panel, the filters and the sticky footer are passed in already
+    rendered and output with triple stashes. Everything else is escaped normally, except the
+    role names inside the decision_controls partial; see it.
 
     Context variables required for this template:
     * formurl string - url the decision form posts back to

@@ -65,10 +65,9 @@ final class lib_test extends \advanced_testcase {
         $this->course = $this->getDataGenerator()->create_course();
         $instanceid = $this->plugin->add_instance($this->course, $this->plugin->get_instance_defaults());
         $this->instance = $DB->get_record('enrol', ['id' => $instanceid], '*', MUST_EXIST);
-        /* The queue's table is dynamic, and get_dynamic_table_html_end() builds its
-           "show all" link from $PAGE->url - so rendering one without a page url makes core
-           emit a debugging() call, which advanced_testcase turns into a notice. manage.php
-           always sets it; a test that renders the table is standing in for that page. */
+        /* The queue's dynamic table builds its "show all" link from $PAGE->url, and reading an
+           unset page url calls debugging(), which advanced_testcase reports as a notice.
+           manage.php always sets it. */
         $PAGE->set_url(new \moodle_url('/enrol/apply/manage.php'));
     }
 
@@ -127,10 +126,9 @@ final class lib_test extends \advanced_testcase {
         global $DB;
 
         $this->setAdminUser();
-        /* The plugin caches its own config on the instance (enrol_plugin::get_config
-           reads $this->config), so the global set_config() would leave this object
-           believing the action is still "keep" and the sweep would do nothing at all —
-           a test that passes without exercising anything. */
+        /* Set on the plugin object, not through the global set_config():
+           enrol_plugin::get_config() reads the memoised $this->config, so a global write
+           would leave the sweep on "keep" and the test would exercise nothing. */
         $this->plugin->set_config('expiredaction', ENROL_EXT_REMOVED_UNENROL);
 
         // The control: an approved enrolment whose period has run out. The sweep must eat it.
@@ -351,10 +349,11 @@ final class lib_test extends \advanced_testcase {
     }
 
     /**
-     * Submit an application through the plugin itself, exercising the real code path.
+     * Submit an application through apply(), so every row the real path writes is written.
      *
-     * enrol_page_hook() cannot be driven from a unit test because it needs a submitted
-     * moodleform, so the protected worker it delegates to is invoked directly.
+     * apply() is the protected worker submit_application() delegates to once its lock,
+     * duplicate, cap and eligibility checks pass. Unlike create_application(), this leaves an
+     * enrol_apply_submission row.
      *
      * @param \stdClass $applicant User submitting the application.
      * @return void
@@ -430,15 +429,9 @@ final class lib_test extends \advanced_testcase {
     /**
      * The plugin object answers the capacity question, and answers it the same way.
      *
-     * This method is the API three plugins outside this repo depend on - local_dimensions,
-     * local_unlistedcourses and theme_boost_union_fundaseg - and they reach it through
-     * is_callable() on the plugin object, because for each of them enrol_apply is an OPTIONAL
-     * dependency and a reference into its namespace is one the autoloader would have to
-     * resolve on a site without it. local_dimensions enforces that with a test over its own
-     * source. So this is not a redundant wrapper over capacity::applications_closed(): it is the only
-     * spelling those callers are allowed to use, and deleting it breaks them silently, since
-     * is_callable() would simply start returning false and each would fall back to the
-     * unfiltered count this change exists to stop.
+     * is_full() is how plugins that treat enrol_apply as an optional dependency reach the count,
+     * through is_callable() on the plugin object; renaming or removing it makes them fall back to
+     * their own count silently. See {@see \enrol_apply_plugin::is_full()}.
      *
      * @return void
      */
@@ -454,7 +447,7 @@ final class lib_test extends \advanced_testcase {
         $this->create_application();
         $this->assertTrue($this->plugin->is_full($this->reload_instance()));
 
-        // And it agrees with the class it fronts, on both answers.
+        // It agrees with the class it fronts with an expired enrolment present, which the cap does not count.
         $expired = $this->getDataGenerator()->create_user();
         $this->plugin->enrol_user($this->instance, $expired->id, null, 0, time() - DAYSECS, ENROL_USER_ACTIVE);
         $instance = $this->reload_instance();
@@ -467,18 +460,14 @@ final class lib_test extends \advanced_testcase {
     /**
      * Deferring clears an expiry the row was carrying.
      *
-     * A once-approved application can be deferred, and update_user_enrol() writes a date only
-     * when it is given one - so before this the row landed on the waiting list still carrying
-     * its old timeend. That state is stranded: core's suspend arms of process_expirations()
-     * filter on status = active, which a waiting-list row fails, so no sweep touches it; the
-     * queue's own predicate excludes it by that very timeend, so no listing offers it. It
-     * waited for a decision nobody could take.
+     * update_user_enrol() writes a date only when given one, and a waiting-list row keeping a
+     * past timeend is stranded: core's suspend arms of process_expirations() filter on
+     * status = active, which it fails, and the queue's predicate excludes it by that timeend, so
+     * nobody can decide it.
      *
-     * Three things make this test non-vacuous, and it needs all three. The row must really
-     * have carried an expiry, or zero was true before the call. The deferral must be shown to
-     * have run, because wait_enrolment() silently skips a row that is not ENROL_USER_SUSPENDED
-     * and one that fails can_manage_application(). And only then does the cleared value mean
-     * anything.
+     * The test asserts both that the row carried an expiry beforehand and that the deferral ran:
+     * wait_enrolment() silently skips a row that is neither suspended nor deferred, and one that
+     * fails can_manage_application(). Without both, the cleared value proves nothing.
      *
      * @return void
      */
@@ -511,18 +500,11 @@ final class lib_test extends \advanced_testcase {
     /**
      * Approving resets an expiry the row was carrying, rather than inheriting it.
      *
-     * Found by a mis-anchored mutation, which is worth recording: the pattern for AB matched
-     * this line instead of the one in wait_enrolment(), reddened nothing, and so reported a
-     * guard nobody was holding. The guard turned out to be real.
-     *
-     * confirm_enrolment() works on the {user_enrolments} row, so timeend arrives carrying
-     * whatever is stored. With no enrolperiod on the instance, dropping the reset would let a
-     * PAST expiry survive the approval - and under the shipped expiredaction of KEEP nothing
-     * ever corrects it. The applicant would be approved, ACTIVE, and hold no access at all,
-     * which is the least visible way this plugin can fail somebody.
-     *
-     * Reachable rather than theoretical: a restore writes an archived timeend verbatim, and a
-     * once-approved application can be re-suspended and decided again.
+     * confirm_enrolment() starts from the stored {user_enrolments} row. On an instance with no
+     * enrolperiod, dropping the reset would let a past timeend survive the approval, and under
+     * the default expiredaction (keep) nothing corrects it: the applicant is ACTIVE with no
+     * access. Reachable: a restore writes an archived timeend verbatim, and a once-approved
+     * application can be re-suspended and decided again.
      *
      * @return void
      */
@@ -632,8 +614,8 @@ final class lib_test extends \advanced_testcase {
     /**
      * A user without the manage capability cannot approve an application.
      *
-     * Mutation check: removing the check_privileges() gate in confirm_enrolment()
-     * must turn exactly this test red.
+     * Changes that must make it fail: removing the can_manage_application() check from
+     * confirm_enrolment(), which also fails test_confirm_enrolment_is_scoped_to_the_course.
      *
      * @return void
      */
@@ -740,13 +722,11 @@ final class lib_test extends \advanced_testcase {
     }
 
     /**
-     * A window that is currently open admits, which no other test proves.
+     * A window that is currently open admits.
      *
-     * The two refusal tests above use "no window configured" as their control, and that is
-     * not the same statement: it leaves the comparison against the current time unpinned.
-     * Measured on 2026-08-21, a mutant reading "if ($startdate > 0)" - refusing every
-     * instance that carries an opening date, whether or not it has arrived - passed the
-     * whole suite green.
+     * The two refusal tests above use "no window configured" as their control, which leaves the
+     * comparison against the current time unpinned. Changes that must make it fail: refusing
+     * every instance that carries an opening date, whether or not it has arrived.
      *
      * @return void
      */
@@ -804,16 +784,11 @@ final class lib_test extends \advanced_testcase {
         $this->assertIsString($refusal);
         $this->assertSame(get_string('cohortnonmemberinfo', 'enrol_apply'), $refusal);
 
-        /* The refusal must not NAME the cohort. It is rendered to any authenticated
-           non-member by enrol_page_hook(), so naming it would tell a stranger which
-           group the course belongs to - on this platform, which security force. The
-           assertion is on the cohort's own name rather than on the message, so it
-           keeps holding if the wording is ever rewritten.
-
-           Both halves are needed and neither is redundant: the language string carries
-           no {$a} placeholder, and allow_apply() passes no argument. Restoring either
-           one alone leaves the name unreachable - this assertion is what fails if both
-           come back. */
+        /* The refusal must not name the cohort: enrol_page_hook() renders it to any
+           authenticated non-member, so the name would tell a stranger which group the course
+           is for. The assertion is on the cohort's own name rather than on the message, so it
+           keeps holding if the wording is rewritten. The name can only leak if the string
+           regains a placeholder and allow_apply() passes the name again. */
         $this->assertStringNotContainsString('Servidores 2026', $refusal);
         $this->assertStringNotContainsString(
             '{$a}',
@@ -827,7 +802,7 @@ final class lib_test extends \advanced_testcase {
      *
      * enrol_self returns null in this situation and its enrolment method then vanishes
      * from the page; here the return value is rendered straight into a notification, so a
-     * null would paint an empty red box.
+     * null would render an empty one.
      *
      * @return void
      */
@@ -968,10 +943,10 @@ final class lib_test extends \advanced_testcase {
      * @return \stdClass The data the form exports.
      */
     protected function submit_edit_form(\context_course $context, int $cohortid): \stdClass {
-        /* _process_submission() reads the sesskey through optional_param() rather than from
-           the data it is handed, and Moodle's PHPUnit harness does not reset $_POST between
-           tests — so this is put back afterwards, or a later test inherits a live sesskey it
-           never set and can pass without exercising its own guard. */
+        /* _process_submission() checks the sesskey through confirm_sesskey(), which reads the
+           request rather than the data it is handed, and Moodle's PHPUnit harness does not
+           reset $_POST between tests. So this is put back afterwards, or a later test inherits
+           a live sesskey it never set. */
         $hadsesskey = array_key_exists('sesskey', $_POST);
         $previoussesskey = $_POST['sesskey'] ?? null;
         $_POST['sesskey'] = sesskey();
@@ -992,7 +967,7 @@ final class lib_test extends \advanced_testcase {
 
         try {
             /* The constructor is where the sesskey is checked: _process_submission() runs
-               from it, and discards the whole submission when confirm_sesskey() fails. */
+               from it, and throws invalidsesskey when confirm_sesskey() fails. */
             $form = new \enrol_apply_edit_form(
                 null,
                 [$this->instance, $this->plugin, $context],
@@ -1050,10 +1025,8 @@ final class lib_test extends \advanced_testcase {
     /**
      * The approver reads what the applicant typed, not what was already on their account.
      *
-     * The custom half of the notification used to be read back out of {user_info_data}
-     * through profile_load_custom_fields(), while the standard half came from the submitted
-     * form - so the two halves of the same message disagreed, and the half that mattered
-     * most showed the approver a value the applicant had not entered.
+     * Standard and custom fields alike come from the submitted data; reading custom fields back
+     * from {user_info_data} would show the approver a value the applicant did not enter.
      *
      * @return void
      */
@@ -1105,10 +1078,9 @@ final class lib_test extends \advanced_testcase {
     /**
      * A raw angle bracket in a submitted value does not break the notification.
      *
-     * A custom field of the textarea datatype is PARAM_RAW, and core's own comment on it is
-     * "We MUST clean this before display!". A value holding a bare "<" followed by a
-     * non-space renders as markup in an HTML mail body and kills clean_returnvalue() on any
-     * web service hop.
+     * The application form cleans its fields as PARAM_TEXT, but apply() takes whatever data its
+     * caller hands it. The notification escapes each value at the sink rather than stripping it,
+     * so a bare "<" reaches the approver whole; see fields::submitted_values().
      *
      * @return void
      */
@@ -1143,8 +1115,7 @@ final class lib_test extends \advanced_testcase {
         $body = $messages[0]->fullmessagehtml;
 
         /* The whole answer arrives, escaped exactly once. Asserting only that "A<B" is
-           absent would pass against a body that had silently truncated the value to "A",
-           which is precisely the defect this test exists to catch. */
+           absent would pass against a body that had silently truncated the value to "A". */
         $this->assertStringContainsString('A&lt;B and R&amp;D', $body);
         $this->assertStringNotContainsString('A&lt;B and R&amp;amp;D', $body);
         // And the bare bracket is not sitting in the body as the start of a tag.
@@ -1152,11 +1123,10 @@ final class lib_test extends \advanced_testcase {
     }
 
     /**
-     * Submit an application the way enrol_page_hook() does.
+     * Call the protected apply() directly, with the given instance and form data.
      *
-     * apply() is protected, and it is called through reflection rather than by widening it:
-     * the production API should not grow a public method because a test found it convenient,
-     * and the form class that will call it from outside arrives with a later slice.
+     * Through reflection rather than by widening apply(): the public entry point is
+     * submit_application(), which adds the lock and the eligibility checks.
      *
      * @param \stdClass $instance Enrol instance applied to.
      * @param int $userid Applicant.
@@ -1223,8 +1193,7 @@ final class lib_test extends \advanced_testcase {
     /**
      * Render the enrolment page's own panel for the current user.
      *
-     * $PAGE needs a url before anything may be added to its requirements, which enrol_page_hook()
-     * does on the one branch that offers the application button.
+     * The page url is set as enrol/index.php sets it before the hook runs.
      *
      * @param \stdClass|null $instance Instance to render, the fixture's own by default.
      * @return string The rendered markup.
@@ -1240,15 +1209,9 @@ final class lib_test extends \advanced_testcase {
     /**
      * Somebody who has applied reads about their OWN application, in each of its four states.
      *
-     * One test rather than four, because what is being pinned is that they DIFFER: the page used
-     * to branch on nothing but "does a row exist", so every state read the pending wording and a
-     * deferred applicant was told a decision nobody had taken was still pending. Four separate
-     * tests would each pass against that.
-     *
      * The last two are the pair worth the setup. An ACTIVE enrolment that grants access is
      * approved and working; one whose period has run out is approved and shut out, and only the
-     * second may say so - telling the first that their enrolment is not active sends a working
-     * participant to bother their teacher.
+     * second may be told its enrolment is not active.
      *
      * @return void
      */
@@ -1280,9 +1243,8 @@ final class lib_test extends \advanced_testcase {
         $DB->set_field('user_enrolments', 'timeend', time() - DAYSECS, ['id' => $ueid]);
         /* is_enrolled() memoises "enrolled until" on the session user and this fixture writes the
            row behind its back, so $USER is rebuilt rather than left holding the previous answer.
-           Production does not need it - update_user_enrol() resets those caches - but a test that
-           edits {user_enrolments} directly does, and without this the assertion below reads the
-           memo and the whole case is silently skipped. */
+           Production does not need it: update_user_enrol() marks the user dirty, which drops the
+           memo. */
         $this->setUser($applicant);
         $this->assertFalse(is_enrolled(\context_course::instance($this->course->id), $applicant, '', true));
         $this->assertStringContainsString(
@@ -1294,14 +1256,10 @@ final class lib_test extends \advanced_testcase {
     /**
      * A method that has stopped taking applications still tells its applicants about theirs.
      *
-     * The ordering fix, and the reason the applicant's own row is now the FIRST test. Before it,
-     * the moment a method stopped accepting applications - the window closing, the instance
-     * being disabled, the cohort restriction changing - everybody who had already applied was
-     * shown "Enrolment is disabled or inactive", which is a message about somebody else's
-     * problem and says nothing about what they are waiting on.
-     *
-     * The control is in the same run: somebody who has NOT applied still gets the refusal, so
-     * this cannot pass against a hook that had simply stopped calling allow_apply().
+     * Pins that enrol_page_hook() tests the applicant's own row before allow_apply(), so an
+     * applicant is not shown "Enrolment is disabled or inactive". The control is in the same run:
+     * somebody who has not applied still gets the refusal, so the test fails if the hook stops
+     * calling allow_apply().
      *
      * @return void
      */
@@ -1328,14 +1286,12 @@ final class lib_test extends \advanced_testcase {
     /**
      * With the notification settings empty, the applicant still gets a subject and a body.
      *
-     * All six ship as the empty string and e-mail is on by default for every provider, so a
-     * stock site sent its applicants a notification with neither. A default in settings.php
-     * could not have fixed it: admin_apply_default_settings() runs from install_core() only, and
-     * skips any setting already stored - which every site that has opened the page has.
+     * All six settings ship empty, so notify_applicant() falls back at read time; see there for
+     * why a settings.php default cannot do it.
      *
-     * The subject is asserted in its PLAIN spelling against a course name carrying an ampersand,
-     * which is the half that is easy to get backwards: the body is HTML and wants the escaped
-     * name, the subject is not and is escaped again by the message sink.
+     * The subject is asserted in its PLAIN spelling against a course name carrying an ampersand:
+     * the body is HTML and wants the escaped name, while the subject is not HTML and is escaped
+     * again by the message sink.
      *
      * @return void
      */
@@ -1367,9 +1323,8 @@ final class lib_test extends \advanced_testcase {
      * An administrator who has written their own wording keeps it, and the two halves are
      * independent.
      *
-     * The control for the fallback above, and the sharper half is the independence: a site that
-     * filled in one of the pair and not the other is the commonest state there is, so a fallback
-     * that switched on "either is empty" would throw away a configured subject.
+     * The control for the fallback above. The subject and the body fall back independently, so
+     * a fallback that switched on "either is empty" would throw away a configured subject.
      *
      * @return void
      */
@@ -1560,9 +1515,9 @@ final class lib_test extends \advanced_testcase {
     /**
      * Deleting the enrolment method keeps the durable records, and only those.
      *
-     * This inverts what delete_instance() used to do to the plugin's data as a whole, so the
-     * controls matter more than the subject: the two tables that ARE instance configuration
-     * must still be cleaned up, or "the trail survived" would just mean "nothing is deleted".
+     * The controls matter as much as the subject: enrol_apply_groups and the pending comment in
+     * enrol_apply_applicationinfo must still be cleaned up, or "the record survived" would only
+     * mean "nothing is deleted".
      *
      * @return void
      */
@@ -1600,11 +1555,10 @@ final class lib_test extends \advanced_testcase {
     /**
      * A decision already recorded is not restamped, so the record keeps the first one.
      *
-     * complete_approval() runs TWICE for every approval made through the plugin's own queue -
-     * once from the before_user_enrolment_updated hook, once from confirm_enrolment() - and
-     * decide() is called each time. Without the already-at-this-status check, timedecided
-     * would record the last write rather than the moment of the decision, and a record could
-     * be re-attributed to whoever happened to touch the enrolment next.
+     * decide() skips a row already at the target status unless the caller passes
+     * $isfreshdecision, which the decision methods in lib.php do when they know the enrolment
+     * moved. Without the skip, a bare call like the one below would move timedecided and
+     * re-attribute the decision to whoever touched the enrolment next.
      *
      * @return void
      */
@@ -1669,15 +1623,13 @@ final class lib_test extends \advanced_testcase {
     }
 
     /**
-     * A second application through the same enrolment method is refused before it reaches apply().
+     * A second application through the same enrolment method creates nothing, and is not a refusal.
      *
-     * The plan for this slice specified a UNIQUE (courseid, userid) key. That key is
-     * incompatible with pseudonymising a deleted course by zeroing userid - and what replaces
-     * it is narrower than the key would have been, which is worth being precise about. The
-     * lock in submit_application() is keyed on the INSTANCE and the user, and the check behind
-     * it looks up user_enrolments by enrolid, so what is enforced is one live application per
-     * enrolment method. A course carrying two apply instances lets the same person hold two,
-     * which is a further reason the key could never have been unique.
+     * What is enforced is one live application per enrolment method, not per course:
+     * submit_application()'s lock is keyed on the instance and the user, and its duplicate check
+     * looks up user_enrolments by enrolid. So (courseid, userid) cannot be a unique key on the
+     * durable record: a course carrying two apply instances lets the same person hold two
+     * applications, and pseudonymising a deleted course zeroes userid.
      *
      * @return void
      */
@@ -1696,10 +1648,8 @@ final class lib_test extends \advanced_testcase {
         $this->assertFalse($second->was_created());
         $this->assertCount(1, $DB->get_records('enrol_apply_submission', ['userid' => $applicant->id]));
 
-        /* And the second is NOT a refusal, which is the distinction the result type exists to
-           carry. The applicant does have an application, so the acknowledgement page is
-           telling them the truth; routing this outcome to an error would break the ordinary
-           double submission, which is the commonest way to reach it. */
+        /* And the second is NOT a refusal: the applicant does have an application. See
+           application_result::already_applied(). */
         $this->assertFalse($second->is_refusal());
         $this->assertSame('', $second->reason());
     }
@@ -1707,15 +1657,12 @@ final class lib_test extends \advanced_testcase {
     /**
      * The write door refuses an applicant the cohort restriction excludes.
      *
-     * submit_application() is called directly here, which is the whole point: allow_apply()
-     * used to be reached only from enrol_page_hook() and from the form's access check, so
-     * every restriction it carries lived in the presentation layer and any other route into
-     * the write path walked past all of it.
+     * submit_application() is called directly: it re-checks allow_apply() itself, so callers
+     * other than the form are held to the same restrictions.
      *
-     * The operator is a cohort MEMBER and the applicant is not, which is what makes this
-     * test read the user id the method was passed rather than the $USER global. With the
-     * one-argument allow_apply() the admin's own membership would admit the outsider, so
-     * this pins the threading of $userid and not merely the presence of a call.
+     * The operator is a cohort MEMBER and the applicant is not. With the one-argument
+     * allow_apply(), judged against $USER, the admin's own membership would admit the outsider,
+     * so this pins that the applicant's user id is passed and not merely that the call exists.
      *
      * @return void
      */
@@ -1760,9 +1707,8 @@ final class lib_test extends \advanced_testcase {
     /**
      * The write door refuses an instance that has stopped taking new applications.
      *
-     * The second of the four restrictions that escaped the write path, and the one that is
-     * furthest from the cohort clause: it asks nothing about the applicant at all, so it
-     * holds the guard rather than the user id threaded through it.
+     * Unlike the cohort restriction, this one asks nothing about the applicant, so it pins the
+     * guard itself rather than the user id passed to it.
      *
      * @return void
      */
@@ -1806,8 +1752,8 @@ final class lib_test extends \advanced_testcase {
     /**
      * Applying again after a cancellation is allowed, and produces a second record.
      *
-     * The other half of the reason the natural key is not unique: the first record is a
-     * cancelled application that must not be overwritten by the second attempt.
+     * Another reason the natural key is not unique: the first record is a cancelled application
+     * that must not be overwritten by the second attempt.
      *
      * @return void
      */
@@ -1873,11 +1819,10 @@ final class lib_test extends \advanced_testcase {
     /**
      * Editing an already-approved enrolment does not run the approval work a second time.
      *
-     * This is the guard the untouched enrol_apply_applicationinfo row provides, and the
-     * reason that table is not repurposed to hold the durable record: hook_callbacks uses its
-     * EXISTENCE as proof that a status change to active was an approval. Were the row to stop
-     * being deleted, every later status edit of an approved user would re-add their groups
-     * and queue another confirmation message.
+     * hook_callbacks treats the existence of an enrol_apply_applicationinfo row as proof that a
+     * move to active is an approval, and complete_approval() deletes that row. That is why the
+     * table cannot hold the durable record: were the row kept, every later status edit of an
+     * approved user would re-add their groups and queue another notification.
      *
      * @return void
      */

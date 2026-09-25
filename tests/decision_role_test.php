@@ -36,8 +36,8 @@ require_once($CFG->dirroot . '/enrol/apply/lib.php');
 /**
  * Tests for the role an approval assigns.
  *
- * The role used to be assigned by apply(), the moment somebody asked to join. It is now assigned
- * by complete_approval(), from a choice the decider makes and the durable record carries.
+ * The role is assigned by complete_approval(), never by apply(): the decider's choice as stored on
+ * the durable record, falling back to the instance's own role.
  *
  * @package    enrol_apply
  * @category   test
@@ -86,18 +86,16 @@ final class decision_role_test extends \advanced_testcase {
         $fields['roleid'] = $this->studentroleid;
         $instanceid = $this->plugin->add_instance($this->course, $fields);
         $this->instance = $DB->get_record('enrol', ['id' => $instanceid], '*', MUST_EXIST);
-        /* The queue's table is dynamic, and get_dynamic_table_html_end() builds its
-           "show all" link from $PAGE->url - so rendering one without a page url makes core
-           emit a debugging() call, which advanced_testcase turns into a notice. manage.php
-           always sets it; a test that renders the table is standing in for that page. */
+        /* The queue's dynamic table builds its "show all" link from $PAGE->url, and reading an
+           unset page url calls debugging(), which advanced_testcase reports as a notice.
+           manage.php always sets it. */
         $PAGE->set_url(new \moodle_url('/enrol/apply/manage.php'));
     }
 
     /**
      * Submit an application through the real path, so it leaves a durable record.
      *
-     * lib_test's create_application() bypasses apply() and writes no enrol_apply_submission row,
-     * so a test using it would read an empty table and pass on nothing.
+     * lib_test's create_application() bypasses apply() and writes no enrol_apply_submission row.
      *
      * @return array The applicant and their user enrolment id.
      */
@@ -148,15 +146,11 @@ final class decision_role_test extends \advanced_testcase {
     /**
      * A pending applicant holds no role at all until somebody approves them.
      *
-     * Mutation check: put $instance->roleid back into apply()'s enrol_user() call and TWO tests
-     * go red - this one and test_a_chosen_role_replaces_the_instance_role. The second is the
-     * informative one and the reason this change is a swap rather than a fill-in: with the role
-     * assigned at application time, approving with a different one leaves the applicant holding
-     * BOTH, one of them bare and unattributable. Measured, not predicted.
+     * Changes that must make it fail: passing $instance->roleid to apply()'s enrol_user() call.
+     * That also fails test_a_chosen_role_replaces_the_instance_role, because approving with a
+     * different role would leave the applicant holding both, one of them bare and unattributable.
      *
-     * The control here is the approval below the assertion, which proves the role really is
-     * assigned by this plugin on this path and that an empty assertion is not passing by
-     * accident.
+     * The approval after the assertion is the control: it proves this path does assign a role.
      *
      * @return void
      */
@@ -230,11 +224,9 @@ final class decision_role_test extends \advanced_testcase {
     /**
      * A chosen role replaces the instance default, and only that role is assigned.
      *
-     * The second assertion is the one that matters. complete_approval() runs twice for a queue
-     * approval and the first pass carries no operator input; a role threaded through an argument
-     * rather than read off the record would leave the applicant holding BOTH roles, with nothing
-     * in the assignment to say which pass wrote it. Measured before the record existed: two
-     * role_assignments rows.
+     * complete_approval() runs twice for a queue approval and the first pass, from the hook,
+     * carries no operator input. A role passed as an argument instead of read off the record
+     * would leave both roles assigned, which the exact match on the assignments catches.
      *
      * @return void
      */
@@ -255,10 +247,10 @@ final class decision_role_test extends \advanced_testcase {
     /**
      * A role the decider may not assign is refused, and the instance default is used instead.
      *
-     * Mutation check: delete the get_assignable_roles() allowlist from confirm_enrolment() and
-     * exactly this test goes red. It asserts on BOTH halves, because either one alone can pass
-     * against the unfixed code: role_assign() performs no assignability check whatsoever, so the
-     * assignment is the live half, and the record is what the reports and an export would show.
+     * role_assign() performs no assignability check, so the get_assignable_roles() allowlist in
+     * confirm_enrolment() is the only barrier; removing it must make this test fail. Both the
+     * live assignment and the recorded decidedrole are asserted, since the report and the privacy
+     * export read the latter.
      *
      * @return void
      */
@@ -290,17 +282,12 @@ final class decision_role_test extends \advanced_testcase {
     /**
      * An approval taken outside the queue falls back to the instance role.
      *
-     * Core's participants page "Edit enrolment" screen drives update_user_enrol() directly. That
-     * route reaches complete_approval() through the before_user_enrolment_updated hook and can
-     * never carry a role, because the hook has no operator input at all - so the fallback is the
-     * only role it will ever produce. Until this change the role came from apply() and this path
-     * needed nothing; it now needs the fallback or an out-of-band approval leaves a participant
-     * with no role.
+     * Core's "Edit enrolment" screen drives update_user_enrol() directly. That route reaches
+     * complete_approval() through the before_user_enrolment_updated hook, which carries no
+     * operator input, so the instance role is the only role it can produce.
      *
-     * Mutation check: make assign_decided_role() return early when nothing was recorded, instead
-     * of falling back to $instance->roleid. Four tests go red - every one that expects a role
-     * where the decider chose none, this one included. That breadth is the point: the fallback
-     * is not a corner case, it is what the majority of approvals will use.
+     * Changes that must make it fail: assign_decided_role() returning early when no role was
+     * recorded instead of falling back to $instance->roleid.
      *
      * @return void
      */
@@ -320,11 +307,7 @@ final class decision_role_test extends \advanced_testcase {
     /**
      * The assignment carries this plugin's component stamp, so core can clean it up.
      *
-     * Mutation check: drop the fourth and fifth arguments from role_assign() in
-     * assign_decided_role(). Five tests go red: this one, the three that assert the whole
-     * assignment tuple, and the expiry test below - which is the only one of the five that says
-     * why the stamp matters rather than merely that it is there. It reddens only because that
-     * test's fixture was corrected; see its docblock.
+     * test_the_expiry_sweep_removes_a_chosen_role() shows why the stamp matters.
      *
      * @return void
      */
@@ -343,26 +326,21 @@ final class decision_role_test extends \advanced_testcase {
     /**
      * The expiry sweep removes a chosen role, which without the stamp it cannot.
      *
-     * This is why the assignment is stamped. process_expirations() guesses $instance->roleid
-     * when the assignment carries no component, and once a decider can choose a different role
-     * that guess is wrong by construction: measured on m502, a Teacher chosen against an
-     * instance defaulting to Student survived the sweep under both expiredaction settings.
-     * Stamped, core removes it by component in its "remove all roles that belong to this
-     * instance" line.
+     * Under ENROL_EXT_REMOVED_SUSPENDNOROLES, process_expirations() removes a stamped assignment
+     * in its "remove all roles that belong to this instance and user" step. For an unstamped one
+     * it guesses $instance->roleid, which is wrong once the decider chose a different role.
      *
-     * TWO things in the fixture are load bearing, and the first draft of this test had only one
-     * of them, which made it vacuous - the stamp mutation left it green. The applicant needs a
-     * second enrolment, so theirs is not the last one in the course and unenrol_user()'s blanket
-     * sweep does not run; and that second enrolment must carry a DIFFERENT role, so the
-     * applicant holds two assignments. With only one, process_expirations() takes its
-     * "count == 1" branch and calls role_unassign_all() over every component-less row, which
-     * removes an unstamped chosen role just as thoroughly as a stamped one. With two it takes
-     * the "count > 1" branch instead, whose whole content is a guess at $instance->roleid - and
-     * that guess is what the stamp exists to make unnecessary.
+     * The fixture gives the applicant a second enrolment carrying a DIFFERENT role, so they hold
+     * two assignments and core takes its "count > 1" branch, the guess. With a single assignment
+     * core takes the "count == 1" branch, role_unassign_all() over every component-less row,
+     * which removes an unstamped role too and would let the test pass without the stamp.
      *
-     * Core also removes the manual plugin's Student assignment here, by that same guess. That is
-     * core's pre-existing heuristic for a plugin whose roles are not protected, not something
-     * this change introduces, and it happens identically with and without the stamp.
+     * Core's guess also removes the manual enrolment's Student assignment. That is core's
+     * heuristic for a plugin whose roles are not protected, and it happens with or without the
+     * stamp.
+     *
+     * Changes that must make it fail: dropping the component and itemid arguments from
+     * role_assign() in assign_decided_role().
      *
      * @return void
      */
@@ -372,8 +350,8 @@ final class decision_role_test extends \advanced_testcase {
         [$applicant, $ueid] = $this->apply_for_real();
         $this->setAdminUser();
 
-        /* A second, unrelated enrolment carrying a second role. See the docblock: both halves
-           are needed, and the role must differ from the one the approval will choose. */
+        /* A second, unrelated enrolment carrying a role different from the one the approval
+           will choose; see the docblock. */
         $manual = enrol_get_plugin('manual');
         $manualinstance = $DB->get_record(
             'enrol',
@@ -405,13 +383,9 @@ final class decision_role_test extends \advanced_testcase {
     /**
      * An instance carrying no role approves cleanly and assigns nothing.
      *
-     * roleid 0 is reachable: the column is nullable with a default of 0 and a restore writes 0
-     * whenever the archived role maps to nothing the restoring user may assign. role_assign(0)
-     * THROWS rather than doing nothing, and until this change enrol_user()'s own truthiness
-     * guard was what swallowed it.
-     *
-     * Mutation check: delete the "$roleid <= 0" guard from assign_decided_role() and exactly
-     * this test goes red, with a coding_exception rather than a failed assertion.
+     * roleid 0 is reachable: the column defaults to 0, and a restore writes 0 when the archived
+     * role cannot be mapped. role_assign() throws a coding_exception for roleid 0, so removing the
+     * "$roleid <= 0" guard from assign_decided_role() must make this test fail.
      *
      * @return void
      */
@@ -437,14 +411,11 @@ final class decision_role_test extends \advanced_testcase {
     /**
      * A later approval replaces the role an earlier one recorded.
      *
-     * record_decided_role() writes a zero rather than returning early on one, which is where it
-     * departs from record_decided_groups(). Without that, a stored role is sticky: a row that
-     * comes back to the queue - core's "Edit enrolment" screen re-suspends one, and so does an
-     * expiredaction of "suspend" - would be approved a second time with the superseded role and
-     * nothing on screen to say so.
-     *
-     * Mutation check: make record_decided_role() return early when the role is 0 and exactly
-     * this test goes red.
+     * record_decided_role() writes a zero rather than returning early on one. Otherwise a stored
+     * role is sticky: a row that comes back to the queue (core's "Edit enrolment" screen
+     * re-suspends one, and so does an expiredaction of "suspend") would be approved again with
+     * the superseded role. Changes that must make it fail: record_decided_role() returning early
+     * when the role is 0.
      *
      * @return void
      */
@@ -472,11 +443,9 @@ final class decision_role_test extends \advanced_testcase {
     /**
      * A decision carrying no role key at all leaves an earlier choice alone.
      *
-     * The two are different: an approval submitted with the select left on its default posts
-     * roleid 0 and MEANS "use the instance role", while a programmatic call passing no decision
-     * at all - the out-of-band route, and every caller that predates this change - means "I have
-     * nothing to say about the role". Erasing a recorded decision on the second would let the
-     * hook route silently overwrite what the queue recorded.
+     * A posted roleid of 0, the chooser left on its default, means "use the instance role" and
+     * clears a stored choice. An absent key means the caller has nothing to say about the role,
+     * and must not erase what was recorded.
      *
      * @return void
      */
@@ -495,9 +464,8 @@ final class decision_role_test extends \advanced_testcase {
     /**
      * The role chooser offers only roles the decider may assign in this course.
      *
-     * The control is the manager role, which an editing teacher may not assign and which the
-     * server would refuse: the list the page renders and the list the server allowlists against
-     * are the same call, and this is what keeps them from drifting apart.
+     * The manager role, which an editing teacher may not assign and confirm_enrolment() would
+     * refuse, is the control: the chooser must offer the list the server allowlists against.
      *
      * @return void
      */

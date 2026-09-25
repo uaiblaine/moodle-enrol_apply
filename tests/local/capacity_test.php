@@ -87,7 +87,7 @@ final class capacity_test extends \advanced_testcase {
     }
 
     /**
-     * Set the instance's places limit and return the reloaded record.
+     * Set the instance's applicant limit and return the reloaded record.
      *
      * @param int $limit Value for customint3.
      * @return \stdClass The instance as the plugin will now read it.
@@ -115,16 +115,11 @@ final class capacity_test extends \advanced_testcase {
     }
 
     /**
-     * An enrolment whose period has run out stops holding its place.
+     * An enrolment whose period has run out stops counting against the applicant limit.
      *
-     * This is the whole reason the class exists. The plugin ships
-     * expiredaction = ENROL_EXT_REMOVED_KEEP, whose arm of process_expirations() changes
-     * nothing, so the row survives forever - and while it was counted, a course whose places
-     * filled and then expired had applications closed permanently, with an empty approval
-     * queue and nothing anywhere able to explain it.
-     *
-     * The control is in the same run and is not optional: "seat an expired occupant, assert
-     * not full" passes just as happily against a build with no cap at all.
+     * The plugin ships expiredaction = ENROL_EXT_REMOVED_KEEP, under which
+     * process_expirations() never removes the row, so counting it would close applications for
+     * good while the approval queue stayed empty.
      *
      * @return void
      */
@@ -135,19 +130,18 @@ final class capacity_test extends \advanced_testcase {
         $this->assertFalse(capacity::applications_closed($instance));
         $this->assertSame(0, capacity::applicants($instance));
 
-        /* The control: a second occupant whose period has NOT run out fills the same single
-           place. If this passed too, the cap would not be running at all. */
+        /* The control: an unexpired occupant fills the same single slot. Without it the
+           assertions above also pass against a build with no cap at all. */
         $this->seat(ENROL_USER_ACTIVE, 0);
         $this->assertTrue(capacity::applications_closed($instance));
         $this->assertSame(1, capacity::applicants($instance));
     }
 
     /**
-     * An enrolment that has not started yet still holds its place.
+     * An enrolment that has not started yet still counts against the applicant limit.
      *
-     * The line is "will this row ever grant access again?", not "does it grant access now".
-     * Core's access predicate pairs the timeend test with `timestart < :now`, and copying
-     * that half would free the place of somebody who is going to turn up.
+     * The rule is "will this row ever grant access again?", so core's `timestart < :now` access
+     * clause is deliberately not copied. See {@see capacity}.
      *
      * @return void
      */
@@ -167,13 +161,12 @@ final class capacity_test extends \advanced_testcase {
     }
 
     /**
-     * Every state of an application holds a place, approved ones included.
+     * Every state of an application counts against the applicant limit, approved ones included.
      *
-     * The sharpest test in this file. queue::awaiting_decision_where() excludes ACTIVE
-     * enrolments, because it answers "what is still waiting for a decision" - and borrowing it
-     * here, which is the tempting reuse, would stop every approved learner consuming a place
-     * and make the cap exceedable by the number of approvals. The pending and waiting-list
-     * rows below would pass either way; the ACTIVE one is what tells the two predicates apart.
+     * queue::awaiting_decision_where() excludes ACTIVE enrolments; borrowing it here would stop
+     * approved learners counting and let the cap be exceeded by the number of approvals. The
+     * pending and waiting-list rows pass either way; only the ACTIVE one tells the two
+     * predicates apart.
      *
      * @return void
      */
@@ -207,8 +200,8 @@ final class capacity_test extends \advanced_testcase {
     /**
      * Zero and negative both mean "no limit".
      *
-     * Negative is reachable rather than theoretical: db/upgrade.php writes customint3 = null
-     * on one path, and reading a negative as a limit would turn an uncapped instance into a
+     * Negative is reachable: the instance form accepts any PARAM_INT and a restore carries any
+     * value, and reading a negative as a limit would turn an uncapped instance into a
      * permanently full one.
      *
      * @return void
@@ -227,9 +220,8 @@ final class capacity_test extends \advanced_testcase {
     /**
      * An uncapped instance is answered without going to the database.
      *
-     * Not a micro-optimisation: all three call sites already guarded their count behind
-     * `$cap > 0`, and an uncapped instance is the overwhelmingly common case, so losing the
-     * short circuit would add a query to every enrolment page render on every site.
+     * Uncapped is the common case and the enrolment page asks for every prospective applicant,
+     * so losing the short circuit would add a query to that page on every site.
      *
      * @return void
      */
@@ -280,16 +272,12 @@ final class capacity_test extends \advanced_testcase {
     /**
      * A place is held by an APPROVED enrolment and by nothing else.
      *
-     * The sharpest test for the second number, and the one that keeps the two apart. An
-     * application that is pending, and one that has been deferred to the waiting list, are both
-     * in the pipeline and hold no place - which is precisely the gap the places number exists
-     * to express: accept more applications than there are places, because approval is
-     * discretionary.
+     * A pending application and a deferred one are in the pipeline but hold no place; that gap
+     * is what lets a method accept more applications than it has places.
      *
-     * The assertion that the two counts DIFFER on this fixture is the load-bearing one. Without
-     * it, a places_taken() that had quietly become a second spelling of applicants() - by
-     * losing its status clause, or by being refactored to share a predicate - would pass every
-     * other assertion here.
+     * Changes that must make it fail: places_taken() losing its status clause or sharing a
+     * predicate with applicants(). The final assertion that the two counts differ is the one
+     * that catches both.
      *
      * @return void
      */
@@ -306,8 +294,7 @@ final class capacity_test extends \advanced_testcase {
         $this->assertSame(1, capacity::places_taken($instance));
         $this->assertTrue(capacity::places_full($instance));
 
-        /* Three applications, one place taken. The two numbers must disagree here, or the
-           second one is not measuring what it claims to. */
+        // Three applications, one place taken: the two counts must differ.
         $this->assertSame(3, capacity::applicants($instance));
         $this->assertNotSame(capacity::applicants($instance), capacity::places_taken($instance));
     }
@@ -315,9 +302,9 @@ final class capacity_test extends \advanced_testcase {
     /**
      * An approval whose period has run out releases its place.
      *
-     * The same ratchet as the applicant count, and it bites harder: under the shipped
-     * expiredaction of KEEP an expired enrolment stays ACTIVE for ever, so without the clause a
-     * course whose places filled once could never approve anybody again.
+     * Under the shipped expiredaction of KEEP an expired enrolment stays ACTIVE indefinitely, so
+     * without the expiry clause a course whose places filled once would report itself full, and
+     * warn after every decision, from then on.
      *
      * The control is in the same run: a second, unexpired approval fills the same single place.
      *
@@ -425,10 +412,9 @@ final class capacity_test extends \advanced_testcase {
     /**
      * Deferred applications are counted, and nothing else is.
      *
-     * The third number, and the sharpest assertion is the one that keeps it a strict SUBSET of
-     * applicants(): three applications in three different states, all counting against the
-     * applicant cap, and exactly one of them deferred. A predicate that had lost its status
-     * clause - which is how this becomes a second spelling of applicants() - would report three.
+     * Three applications in three states, all counting against the applicant limit, exactly one
+     * of them deferred. Changes that must make it fail: deferred() losing its status clause,
+     * which would report three.
      *
      * @return void
      */
@@ -445,9 +431,8 @@ final class capacity_test extends \advanced_testcase {
     /**
      * An expired deferred row is excluded, exactly as the other two counts exclude theirs.
      *
-     * Not consistency for its own sake: this number is reported to a manager as part of the
-     * applicant total, so a predicate that counted a row applicants() does not would produce
-     * "4 held, 5 of them deferred" on a live screen.
+     * The number is shown beside the applicant total, so counting a row applicants() excludes
+     * could report more deferred applications than applications held.
      *
      * @return void
      */
@@ -463,12 +448,8 @@ final class capacity_test extends \advanced_testcase {
     /**
      * Nothing deferred is zero rather than an error.
      *
-     * The method reaches ENROL_APPLY_USER_WAIT, which lives in a file the class under test is
-     * not loaded with, so without its own require the method is a fatal on first call rather
-     * than a wrong answer. **No test in this file can provoke that fatal**, and saying so is
-     * worth more than implying otherwise: this file requires lib.php at file scope, as every
-     * test file naming the constant must. What holds the require is the production caller -
-     * a report render or a queue page where \enrol_apply\local\capacity is autoloaded alone.
+     * This file requires lib.php at file scope, so no test here can detect deferred() losing
+     * its own require_once of lib.php, which defines ENROL_APPLY_USER_WAIT.
      *
      * @return void
      */

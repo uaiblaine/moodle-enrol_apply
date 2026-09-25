@@ -19,11 +19,10 @@
 
     HTML body of the notification sent when a user applies for a course enrolment.
 
-    Every label and value arrives in its PLAIN spelling and is output through a double stash,
-    so Mustache escapes it exactly once. The renderer strips markup from a submitted value
-    with format_string() before it gets here, which is what makes that safe: a custom profile
-    field of the textarea datatype is PARAM_RAW, so a value can otherwise carry a bare "<".
-    Do not convert any of these to a triple stash.
+    Every label and value arrives in its plain spelling and is output through a double stash,
+    so Mustache escapes it exactly once. That escaping is the only protection: the submitted
+    values are deliberately not put through format_string(), whose strip_tags() would delete a
+    value from the first "<" onwards. Do not convert any of these to a triple stash.
 
     Context variables required for this template:
     * coursenamelabel string - label of the course row

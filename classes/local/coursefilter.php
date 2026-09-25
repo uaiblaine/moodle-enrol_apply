@@ -21,20 +21,14 @@ use stdClass;
 /**
  * Which course, and which category, the site-wide applications queue is narrowed to.
  *
- * **Offered on one scope only, and the reason is not tidiness.** With `?id=<enrolid>` the queue
- * already names one course, so the control would be a filter over a set of one. The mentee queue
- * does span courses, but a mentor sees a handful of them and the control would be noise on a list
- * short enough to read. That leaves the site-wide queue, which is the one that can hold every
- * application on the site at once and the only one where narrowing by course is the difference
- * between a page and a search.
+ * Offered on the site-wide queue only ({@see offered()}): the `?id=<enrolid>` queue already names
+ * one course, and the mentee queue spans only the few courses a mentor's mentees applied to.
  *
- * **Nothing here needs a per-course capability check, and that is a property of the scope rather
- * than an omission.** queue::listing_scope() only returns the site-wide scope to a holder of
- * enrol/apply:manageapplications at the SYSTEM context, so a reader who reaches this filter can
- * manage applications in every course the queue could list. The offered set is therefore exactly
- * "courses with an apply enrolment method", which is the same set the unfiltered queue draws from.
- * Offer a wider list and the control becomes an oracle over course names; offer a narrower one and
- * it hides rows the queue is showing.
+ * No per-course capability check is needed. queue::listing_scope() returns the site-wide scope only
+ * to a holder of enrol/apply:manageapplications at the SYSTEM context, who may manage applications
+ * in every course the queue can list. The offered set is therefore exactly the courses with an apply
+ * enrolment method, the set the unfiltered queue draws from: a wider list would disclose course
+ * names, a narrower one would hide rows the queue shows.
  *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine
@@ -54,12 +48,11 @@ final class coursefilter {
     /**
      * Every course that has an apply enrolment method, as the operator reads it.
      *
-     * **Formatted, so this is for the RENDERER and not for validation.** format_string() asks
-     * $PAGE for a context, and the dynamic table's service calls set_filterset() before
-     * validate_context() - the same trap queuefilter::resolve() carries a warning about. Use
-     * clean_course() to decide whether a value is real; use this to draw the control.
+     * For drawing the control, never for validation: format_string() asks $PAGE for a context,
+     * and the dynamic table's service calls set_filterset() before validate_context() (see
+     * queuefilter::resolve()). Use clean_course() to decide whether a value is real.
      *
-     * @return array Course id => full name, ordered by name.
+     * @return array Course id => full name in the plain spelling, ordered by name.
      */
     public static function courses(): array {
         global $DB;
@@ -79,14 +72,14 @@ final class coursefilter {
     }
 
     /**
-     * Every category the site has, indented by depth.
+     * Every category this reader may see, named by its full path.
      *
-     * Core's own helper, which is request-cached and already skips the categories this reader may
-     * not see. Not narrowed to categories that hold an apply course: that query would have to walk
-     * the tree upwards for every match, and a category with no applications simply produces an
-     * empty queue, which is an honest answer rather than a broken one.
+     * Core's make_categories_list(), which caches the list per session and skips the categories
+     * this reader may not view. Not narrowed to categories that hold an apply course: that query
+     * would have to walk the tree upwards for every match, and a category with no applications
+     * simply produces an empty queue.
      *
-     * @return array Category id => indented name.
+     * @return array Category id => path name such as 'Engineering / Civil', escaped by format_string().
      */
     public static function categories(): array {
         return \core_course_category::make_categories_list();
@@ -133,17 +126,14 @@ final class coursefilter {
     /**
      * The predicates narrowing the queue to a category and a course.
      *
-     * **The category includes its whole subtree**, which is what an operator filtering by
+     * The category includes its whole subtree, which is what an operator filtering by
      * "Engineering" means when the courses live under "Engineering / Civil". Core stores the
      * ancestry as a materialised path on {course_categories} - `/1/7/12` - so the descendants are
-     * a prefix match on it rather than a recursive walk. The path is read here and bound as a
-     * value, so the LIKE is anchored at the left and its wildcard is the only one: a category
-     * whose own path holds a percent sign cannot exist, but sql_like_escape() is applied anyway
-     * because the day it can is not the day to find out.
+     * a left-anchored prefix match on it rather than a recursive walk. A path holds only ids and
+     * slashes; sql_like_escape() is applied anyway so the bound value can only ever be a prefix.
      *
-     * Both predicates are indexable, which is the point of the whole control: {course}.category
-     * and {enrol}.courseid carry indexes, so this narrows the row set BEFORE the search's LIKE
-     * ever runs. That is a different kind of filter from the search, which can only scan.
+     * Unlike the search, which can only scan, both predicates are on indexed columns
+     * ({course}.category, {enrol}.courseid).
      *
      * @param int|null $categoryid The category, or null.
      * @param int|null $courseid The course, or null.

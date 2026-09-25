@@ -37,11 +37,10 @@ require_once($CFG->dirroot . '/enrol/apply/lib.php');
 /**
  * Tests for the contract the applications queue has with core's dynamic table service.
  *
- * **What this file is for, and it is not the queue's rows.** Those are covered by queue_test and
- * identity_test, which read the listing. This one holds the four things core calls on the way in
- * - get_filterset_class(), set_filterset(), get_context() and has_capability() - because between
- * them they decide who sees which applications, on a path the client addresses directly and that
- * no page script runs.
+ * The queue's rows are covered by queue_test and identity_test. This file holds the four things
+ * core calls on the way in - get_filterset_class(), set_filterset(), get_context() and
+ * has_capability() - because between them they decide who sees which applications, on a path
+ * the client addresses directly and no page script runs.
  *
  * @package    enrol_apply
  * @category   test
@@ -79,10 +78,9 @@ final class applications_test extends \advanced_testcase {
         $this->course = $this->getDataGenerator()->create_course();
         $instanceid = $this->plugin->add_instance($this->course, $this->plugin->get_instance_defaults());
         $this->instance = $DB->get_record('enrol', ['id' => $instanceid], '*', MUST_EXIST);
-        /* The queue's table is dynamic, and get_dynamic_table_html_end() builds its
-           "show all" link from $PAGE->url - so rendering one without a page url makes core
-           emit a debugging() call, which advanced_testcase turns into a notice. manage.php
-           always sets it; a test that renders the table is standing in for that page. */
+        /* The dynamic table builds its "show all" link from $PAGE->url, and reading an unset page
+           url raises a debugging() call, which advanced_testcase reports as a notice. manage.php
+           always sets it. */
         $PAGE->set_url(new \moodle_url('/enrol/apply/manage.php'));
     }
 
@@ -108,14 +106,10 @@ final class applications_test extends \advanced_testcase {
         $user = $this->getDataGenerator()->create_user($userfields);
         $this->plugin->enrol_user($instance, $user->id, null, 0, 0, $enrolstatus);
 
-        /* **The row gets its OWN durable record, and that is not decoration.** Enrolling through
-           enrol_user() alone leaves the queue's `s` join NULL, which makes
-           `(s.id IS NULL OR prior.id <> s.id)` - the clause excluding this application from
-           counting as an earlier one - true whatever it says. Gate CK deletes that clause, and
-           against a fixture with no submission of its own it reddened NOTHING: the guard was held
-           by a test that could not see it. Found by an adversarial pass, and it is the failure
-           this repository's own rule names, arrived at from the fixture end rather than the
-           assertion end. */
+        /* The row gets its own durable record. With enrol_user() alone the queue's `s` join is
+           NULL, so `(s.id IS NULL OR prior.id <> s.id)` - the clause that stops this application
+           counting as an earlier one of its own - would be true whatever it says, and no test
+           could see it removed. */
         $DB->insert_record('enrol_apply_submission', (object) [
             'courseid' => $instance->courseid,
             'userid' => $user->id,
@@ -211,10 +205,6 @@ final class applications_test extends \advanced_testcase {
     /**
      * Every row offers a way into the one application it is about.
      *
-     * The queue had no such door. Its only routes to a single application were the
-     * participants-page icon, the notification e-mail and the previous/next chain, so an operator
-     * reading a row could not open it.
-     *
      * @return void
      */
     public function test_every_row_offers_a_review_link(): void {
@@ -240,8 +230,8 @@ final class applications_test extends \advanced_testcase {
     /**
      * A deferred application says so on its own row.
      *
-     * It used to be a three-pixel rule down the left edge, which the help text described and
-     * nothing else did. A badge is readable, is announced, and survives the row becoming a card.
+     * A badge rather than a purely visual cue: it is readable, announced, and survives the row
+     * becoming a card.
      *
      * @return void
      */
@@ -273,14 +263,12 @@ final class applications_test extends \advanced_testcase {
     /**
      * An applicant with a record of applying here before is marked as such.
      *
-     * "They were cancelled here in June" is what turns a thirty-second decision into a three
-     * minute one, and the queue is where that choice is made. The durable record already holds
-     * it: its natural key is (courseid, userid) and is deliberately not unique.
+     * The durable record keeps earlier applications: its natural key (courseid, userid) is
+     * deliberately not unique.
      *
-     * **The applicant already has a record of THIS application**, which is what makes the control
-     * below load bearing: without it the row's own submission would be evidence of itself and
-     * every row would be badged. That is what gate CK deletes, and against a fixture whose row had
-     * no record of its own the gate reddened nothing at all.
+     * The applicant also has a record of this application (see applicant()), which is what makes
+     * the control load bearing: the row's own submission must not count as evidence of an
+     * earlier one, or every row would be badged.
      *
      * @return void
      */
@@ -290,8 +278,7 @@ final class applications_test extends \advanced_testcase {
         $this->setAdminUser();
         $applicant = $this->applicant();
 
-        /* The control comes FIRST, and it is the half that matters: without it a badge rendered
-           on every row would satisfy the assertion below just as well. */
+        // Control first: without it, a badge drawn on every row would satisfy the assertion below.
         $this->assertStringNotContainsString(
             get_string('queueappliedbefore', 'enrol_apply'),
             $this->rendered((int) $this->instance->id)
@@ -319,25 +306,17 @@ final class applications_test extends \advanced_testcase {
     }
 
     /**
-     * The refresh path renders the queue, and until now nothing exercised it at all.
+     * The refresh path renders the queue.
      *
-     * Every other test here builds the table directly. That is the PAGE's route, and it hides
-     * whatever the page did first - manage.php requires the plugin's lib.php, so a class reaching
-     * for a constant defined there works on every page load and dies on the first AJAX refresh.
-     * Measured: it did, and only a Behat scenario provoking a sort found it.
+     * Every other test here builds the table directly, which is the page's route. This goes
+     * through core_table\external\dynamic\get::execute(), the request a refresh makes, covering
+     * the handler name core resolves, the filterset round trip, the capability check and the
+     * rendering of every cell.
      *
-     * This goes through core_table\external\dynamic\get::execute() instead, which is the request
-     * a refresh makes. It holds the handler name core resolves, the filterset round trip, the
-     * capability check and the rendering of every cell.
-     *
-     * **Know what it still cannot see, because two real defects hid from it.** Both were about
-     * state a REQUEST has and a test process does not. It cannot see a missing require of the
-     * plugin's lib.php, because PHPUnit runs one process and some other test has already required
-     * that file. And it cannot see work done before validate_context() establishes a page
-     * context, because $PAGE already carries one from whatever ran before - which is how column
-     * definition came to render a renderable with no context on the refresh path and pass here.
-     * A CLI reproduction of this same call misses both, for the same reason. The @javascript
-     * scenario is what holds them: a real browser, a real request, a page that starts empty.
+     * It cannot see state a real request lacks and a test process has: a missing require of the
+     * plugin's lib.php (manage.php requires it, and so has some earlier test), or work done
+     * before validate_context() sets a page context ($PAGE already carries one). A CLI call
+     * misses both too; the @javascript Behat scenarios cover them.
      *
      * @return void
      */
@@ -369,9 +348,8 @@ final class applications_test extends \advanced_testcase {
      * Core finds the filterset by deriving its name, so the two names must agree.
      *
      * flexible_table::get_filterset_class() returns `static::class . '_filterset'` and get.php
-     * refuses a name that does not resolve. Nothing else notices: the page path builds the
-     * filterset by hand, so renaming either half leaves the page working and breaks only the
-     * refreshes, which is the asymmetry worth a test of its own.
+     * refuses a name that does not resolve. The page path builds the filterset by hand, so
+     * renaming either class leaves the page working and breaks only the refreshes.
      *
      * @return void
      */
@@ -385,10 +363,9 @@ final class applications_test extends \advanced_testcase {
     /**
      * A filterset that names no scope is refused rather than silently taken as the widest one.
      *
-     * The whole reason set_filterset() calls check_validity() itself: get.php never does, so
-     * "required" in applications_filterset is a claim only that line enforces. Zero is a
-     * meaningful scope here - every application this operator may decide on - so a request that
-     * forgot to say which one it meant would otherwise get the widest one and look correct.
+     * get.php never calls check_validity(), so set_filterset() does. Zero is a meaningful scope
+     * here - every application this operator may decide on - so a request naming none must not
+     * fall back to it. {@see applications::set_filterset()}
      *
      * @return void
      */
@@ -402,14 +379,11 @@ final class applications_test extends \advanced_testcase {
     }
 
     /**
-     * A scope filter that is PRESENT but empty is refused too.
+     * A scope filter that is present but empty is refused too.
      *
-     * check_validity() does not reach this: it tests array_key_exists() against the filterset's
-     * map and stops, so a filter carrying no values satisfies it. That is a well-formed request
-     * to core's own service - `values` is a multiple structure and an empty array validates - and
-     * filter::current() answers null for one, because rewind() only takes a position when there
-     * is at least one value. `(int) null` is 0, and 0 is not a refusal here: it is the widest
-     * scope this queue has.
+     * check_validity() only tests that the filter is present, core's service accepts an empty
+     * `values` list, and filter::current() then answers null. `(int) null` is 0, the widest scope
+     * this queue has, so set_filterset() must refuse it.
      *
      * @return void
      */
@@ -419,9 +393,8 @@ final class applications_test extends \advanced_testcase {
         $filterset = new applications_filterset();
         $filterset->add_filter(new integer_filter('enrolid'));
 
-        /* The precondition, and it is the whole reason this test is separate from the one above:
-           the filterset really does satisfy check_validity(), so what follows is about the gap
-           that leaves rather than about a missing filter. */
+        /* Precondition: the filterset passes check_validity(), so the refusal below comes from
+           the empty value and not from a missing filter. */
         $filterset->check_validity();
 
         $table = new applications();
@@ -530,11 +503,9 @@ final class applications_test extends \advanced_testcase {
     /**
      * A mentor sees their mentees' applications and nobody else's, whatever the request says.
      *
-     * **This is the reason the scope is recomputed rather than carried.** The client names one
-     * integer and the mentee restriction is derived from the logged-in user, so there is no
-     * request a mentor can make that widens their own listing - the filterset has nowhere to put
-     * a user id, and the enrolid it does carry is answered by the capability check on that
-     * instance's course.
+     * The scope is recomputed from the logged-in user rather than carried in the request: the
+     * filterset has nowhere to put a user id, and the enrolid it does carry is answered by the
+     * capability check on that instance's course.
      *
      * @return void
      */
@@ -557,9 +528,8 @@ final class applications_test extends \advanced_testcase {
         ], MUST_EXIST);
 
         $this->assertSame([$menteeueid], $listed);
-        /* The control that makes the assertion above non-vacuous: the stranger's application is
-           really on the queue, so "not listed" is a decision this scope took rather than a row
-           that was never there. An administrator sees both. */
+        /* Control: the stranger's application is on the queue, so its absence above is this
+           scope's decision. An administrator sees both. */
         $this->setAdminUser();
         $this->assertEqualsCanonicalizing([$menteeueid, $strangerueid], $this->listed(0));
     }
@@ -585,9 +555,8 @@ final class applications_test extends \advanced_testcase {
     /**
      * A stored envelope holding one name field and one identity field.
      *
-     * Two fields on purpose, and the second is what makes every masking assertion in this file
-     * non-vacuous: a reader without the identity capability keeps the name and loses the city,
-     * so an empty cell fails the test instead of passing it.
+     * A reader without the identity capability loses the city and keeps the name, so the name is
+     * what makes an empty cell fail a masking assertion.
      *
      * @param string $city Value for the identity half, so a test can vary it.
      * @return string The JSON envelope, as the submission would have written it.
@@ -643,11 +612,8 @@ final class applications_test extends \advanced_testcase {
     /**
      * The queue shows the answers the decision is actually made on.
      *
-     * The complaint the whole rebuild answers: the page this replaces showed the applicant, the
-     * date and a comment, and the submitted profile answers - the evidence - nowhere at all.
-     *
-     * Label and value are both asserted. A cell printing values with no labels is a list of
-     * strings nobody can read, and one printing labels with no values is a presence oracle.
+     * Label and value are both asserted: values with no labels cannot be read, and labels with no
+     * values are a presence oracle.
      *
      * @return void
      */
@@ -657,10 +623,8 @@ final class applications_test extends \advanced_testcase {
 
         $rendered = $this->rendered((int) $this->instance->id);
 
-        /* The CELL's own heading, not the string on its own: the column header carries the same
-           wording and would satisfy a bare assertion whatever col_snapshot() did. Found by an
-           adversarial pass, and it is the same shape as this repository's regex trap - matching
-           the wanted text anywhere downstream rather than inside the thing under test. */
+        /* The cell's own heading, not the bare string: the column header carries the same wording
+           and would satisfy a bare assertion whatever col_snapshot() did. */
         $this->assertStringContainsString(
             'enrol_apply-cardlabel">' . get_string('queuesubmitted', 'enrol_apply'),
             $rendered
@@ -704,8 +668,8 @@ final class applications_test extends \advanced_testcase {
      * flexible_table::format_row() writes a cell's value into the markup with no escaping of its
      * own, and this cell carries two user-controlled strings: what the applicant typed, and what
      * an administrator named a custom field. The fixture is a bare ampersand and a "<" followed
-     * by a letter, because tag-shaped text proves nothing here - format_string() would strip it
-     * and s() would escape it, and the two are indistinguishable in the output.
+     * by a letter, because tag-shaped text proves nothing: stripping it (format_string()) and
+     * escaping it (s()) both keep the raw tag out of the output.
      *
      * @return void
      */
@@ -752,18 +716,12 @@ final class applications_test extends \advanced_testcase {
     /**
      * A course-level prohibit withholds that course's evidence on the site-wide queue.
      *
-     * **The test the first cut of this column did not have, and it is why the first cut was
-     * wrong.** That version resolved the mask once from the scope's context, on a docblock claim
-     * that a capability held at system level is held in every course below it. Core disagrees:
-     * has_capability_in_accessdata() walks UPWARD from the context it is given
-     * (lib/accesslib.php:792-800) and can never see a CAP_PROHIBIT recorded below it. So an
-     * operator holding moodle/site:viewuseridentity site-wide, with it prohibited in one course -
-     * which is exactly what the Permissions page is for - passed the system check and was shown
-     * every pill of that course's applicants.
+     * The mask must be judged in each row's own course: has_capability_in_accessdata() walks
+     * upward from the context it is given, so a check at the system context cannot see a
+     * CAP_PROHIBIT recorded in a course below it.
      *
-     * The second course is the control, and it carries the whole weight of the test: the same
-     * reader, the same site-wide render, the same field. Without it a mask that withheld
-     * everything would pass, and so would a column that had stopped rendering.
+     * The second course is the control: the same reader, render and field, so a mask that
+     * withheld everything, or a column that stopped rendering, fails.
      *
      * @return void
      */
@@ -827,9 +785,9 @@ final class applications_test extends \advanced_testcase {
     /**
      * The mentee scope carries no evidence column, exactly as it carries no identity line.
      *
-     * A mentor holds nothing in the course, so the mask that scope would apply is the names-only
-     * one and the column would be empty on every row. The site-wide scope is the control: the
-     * same application, the same reader capability level, and the column is there.
+     * Identity data is not shown on the mentee scope, and the submitted answers are identity data
+     * of the same kind; see applications::define_table_columns(). Admin on the same scope, reached
+     * through the site-wide capability instead, is the control.
      *
      * @return void
      */
@@ -842,9 +800,8 @@ final class applications_test extends \advanced_testcase {
             $this->rendered(0)
         );
 
-        /* The control. Admin reaches the same scope with the site-wide capability rather than
-           through mentees, and there the column is drawn - so the assertion above is about the
-           mentee scope and not about a heading that never renders anywhere. */
+        /* Control: admin reaches scope 0 through the site-wide capability rather than through
+           mentees, and there the column is drawn. */
         $this->setAdminUser();
         $this->assertStringContainsString(
             get_string('queuesubmitted', 'enrol_apply'),
@@ -895,10 +852,9 @@ final class applications_test extends \advanced_testcase {
     /**
      * A search filter carrying the empty string lists the whole queue.
      *
-     * Not a hypothetical request. string_filter::add_filter_value() is a complete override gating
-     * only on is_string(), so it never reaches the base class's rejection of '' - a client can
-     * install a live search filter carrying nothing, and treating that as a narrowing filter
-     * empties the queue the moment somebody clears the box.
+     * string_filter::add_filter_value() is a complete override gating only on is_string(), so it
+     * never reaches the base class's rejection of '': a client can send a live search filter
+     * carrying the empty string, and it must not narrow the queue or count as narrowing.
      *
      * Driven through a filterset rather than through for_scope(), because for_scope() refuses an
      * empty term itself and would hide the case this pins.
@@ -927,15 +883,10 @@ final class applications_test extends \advanced_testcase {
     /**
      * A percent sign is a character to match, not a wildcard.
      *
-     * **The control has to be a row only the BROKEN version reaches**, and the first version of
-     * this test had one that both versions rejected: against "100%Sure" and "Sure", searching
-     * "100%S" returns exactly one row either way, because "Sure" contains no "100" and so misses
-     * the wildcard reading too. Gate CY reddened nothing, which is how that was found.
-     *
-     * "100 Super" is the row that separates them. Escaped, the term is the literal "100%S" and
-     * only "100%Sure" holds it. Unescaped it becomes LIKE '%100%S%', where the middle percent is
-     * a wildcard - so "100 Super" matches as well, and an operator hunting one application is
-     * handed a queue with no indication why.
+     * The decoy has to be a row only the broken version reaches. Escaped, the term is the literal
+     * "100%S" and only "100%Sure" holds it; unescaped it becomes LIKE '%100%S%', whose middle
+     * percent is a wildcard, so "100 Super" matches too. A decoy such as "Sure" would be rejected
+     * by both versions.
      *
      * @return void
      */
@@ -953,16 +904,13 @@ final class applications_test extends \advanced_testcase {
     /**
      * The search reaches only what this reader can already see.
      *
-     * A mentor gets no identity fields at all - identity::fields(null) returns nothing on the
-     * mentee scope - so their e-mail address must not be matchable either. It is in the SELECT
-     * regardless, because core's for_userpic() pulls it in, which is exactly why the search
-     * columns are derived from the identity mappings rather than from the projection.
+     * A mentor gets no identity fields (identity::fields(null) is empty on the mentee scope), so
+     * the applicant's e-mail address must not be searchable either, although core's for_userpic()
+     * puts it in the SELECT: the search columns come from the identity mappings, not the
+     * projection. A search is an oracle even when the value is never printed.
      *
-     * Searching is an oracle even when the value is never printed: submit a guess, read the count.
-     *
-     * The control is the same address searched on the instance scope as a reader who DOES hold the
-     * identity capability - it matches there, so an empty result above is about the mask and not
-     * about a search that never worked.
+     * The control is the same address searched on the instance scope by a reader who does hold
+     * the identity capability.
      *
      * @return void
      */
@@ -1001,22 +949,13 @@ final class applications_test extends \advanced_testcase {
     }
 
     /**
-     * The status filter reads the ENROLMENT's status, not the durable record's.
+     * The status filter reads the enrolment's status, not the durable record's.
      *
-     * **The obvious trajectory cannot be tested, and choosing it made the first version of this
-     * test vacuous.** An approved participant later suspended from the participants page carries
-     * APPROVED on the record and SUSPENDED on the enrolment - and `submission::STATUS_APPROVED`
-     * is 1 while `ENROL_USER_SUSPENDED` is also 1, so both columns hold the same number and NO
-     * assertion on that row can tell the two apart. Gate CW is what found it: the mutation
-     * swapping the columns left that test green. It is the same "equal by coincidence rather
-     * than by contract" the table's own docblock warns about, arrived at from the fixture end.
-     *
-     * This trajectory separates them. An application is deferred, so the record says WAITING (2);
-     * an administrator then suspends the enrolment by hand from core's "Edit enrolment" screen,
-     * which touches no record of this plugin's, so the enrolment says SUSPENDED (1). The queue
-     * lists what is awaiting a decision NOW, which is the enrolment's question, so this row must
-     * answer to Pending. Read from the record it answers to Deferred instead - and an operator
-     * working the pending queue never sees it again.
+     * The fixture is a deferral (record WAITING, 2) whose enrolment was then suspended by a route
+     * that writes no record, such as core's "Edit enrolment" screen (enrolment SUSPENDED, 1). The
+     * queue lists what awaits a decision now, which is the enrolment's question, so the row must
+     * answer to Pending. An approved participant later suspended would not separate the two:
+     * `submission::STATUS_APPROVED` and `ENROL_USER_SUSPENDED` are both 1.
      *
      * @return void
      */
@@ -1038,16 +977,11 @@ final class applications_test extends \advanced_testcase {
     /**
      * Every status the queue offers to filter by is one it can actually list.
      *
-     * The list is the select's options, the values manage.php will accept back, and the values the
-     * predicate compares against - so a member that matches nothing is an option that empties the
-     * queue for no stated reason. ENROL_USER_ACTIVE is the one that must never be in it:
-     * queue::awaiting_decision_where() excludes it by construction, so it would be an option that
-     * can only ever return zero rows.
-     *
-     * This is the vocabulary half of a defect Behat caught and no unit test could: the select's
-     * "any status" option carries the empty string, the GET form submits `status=` regardless, and
-     * PARAM_INT cleans that to 0 - which IS ENROL_USER_ACTIVE. Reading it with a `>= 0` sentinel
-     * turned every search made through the form into a filter on a status no row can hold.
+     * The list is the select's options, the values manage.php accepts back and the values the
+     * predicate compares against, so a member that matches nothing is an option that empties the
+     * queue for no stated reason. ENROL_USER_ACTIVE must never be in it:
+     * queue::awaiting_decision_where() excludes it by construction.
+     * {@see applications::filterable_statuses()}
      *
      * @return void
      */
@@ -1073,9 +1007,8 @@ final class applications_test extends \advanced_testcase {
     /**
      * The scope total is what the filters are measured against, so no filter moves it.
      *
-     * It is the "of 312" in the count line and the number the capacity header reports, and those
-     * two being one method is the point: a filtered total in the header renders "4 awaiting
-     * decision" beside a deferred count that is instance-wide.
+     * It feeds both the "of N" in the count line and the capacity header;
+     * see applications::scope_total().
      *
      * @return void
      */
@@ -1097,8 +1030,8 @@ final class applications_test extends \advanced_testcase {
     /**
      * Paging and sorting carry the filters, which no row-level assertion can see.
      *
-     * Every test above stays green if guess_base_url() drops them - the rows are right, and the
-     * defect is that the SECOND page of them is not. So this asserts the emitted url.
+     * If guess_base_url() dropped them, page one would still be right and the second page would
+     * not, so this asserts the emitted url.
      *
      * @return void
      */
@@ -1148,18 +1081,14 @@ final class applications_test extends \advanced_testcase {
     /**
      * A select filter finds a value whose case has drifted from the vocabulary naming it.
      *
-     * **The one predicate in this slice that a bare `=` would have made non-portable.**
-     * moodle_database::sql_equal() emits `=` unchanged, which on PostgreSQL is a case-sensitive
-     * text comparison, while mysqli_native_moodle_database::sql_equal() has to force
-     * COLLATE <family>_bin to reach the same behaviour - so the same filter over the same data
-     * answered differently on the two database families this plugin is tested on.
+     * A bare `=` is case-sensitive on PostgreSQL and follows the site collation on MariaDB, so the
+     * predicate uses a case-insensitive sql_equal() to answer the same on both.
      *
-     * The drift is ordinary rather than contrived: profile_field_menu keeps its vocabulary in
-     * param1 and its values in {user_info_data}, with no validation between them, so re-casing an
-     * option leaves every row already stored spelled the old way.
+     * The drift is ordinary: profile_field_menu keeps its vocabulary in param1 and its values in
+     * {user_info_data}, with no validation between them, so re-casing an option leaves every row
+     * already stored spelled the old way.
      *
-     * Note this test can only go red on PostgreSQL. On MariaDB the site's own collation makes the
-     * broken version pass, which is the whole point of the finding.
+     * Only PostgreSQL can make this fail; on MariaDB the default collation hides a bare `=`.
      *
      * @return void
      */
@@ -1184,13 +1113,12 @@ final class applications_test extends \advanced_testcase {
     /**
      * A malformed applied date is no filter, and says so on every surface.
      *
-     * The same answer the status filter gives a value outside its vocabulary. What makes it worth
-     * a test of its own is that three things have to agree about it: the bounds are null, the
-     * queue does not claim to be narrowed - which is what draws the "no application matches"
-     * wording and the chips - and the rows are all still there.
+     * The same answer the status filter gives a value outside its vocabulary. Three things must
+     * agree: the bounds are null (so no chip is drawn), the queue does not call itself narrowed
+     * (which draws the "no application matches" wording), and the rows are all still there.
      *
-     * The control is the second half: a real date does read, so none of the assertions above can
-     * pass by the reader being dead.
+     * The control is the second half: a real date is read, so the first half cannot pass through
+     * a date reader that never works.
      *
      * @return void
      */
@@ -1212,12 +1140,10 @@ final class applications_test extends \advanced_testcase {
     /**
      * The page url carries only the filters the table actually applied.
      *
-     * request_filters() is what manage.php builds the page url and the decision form's action
-     * from, and url_params() is what the table builds its own base url from. Both docblocks call
-     * themselves the one definition, and they are only one definition if request_filters() returns
-     * the CLEANED set: an earlier version returned whatever survived optional_param(), so a select
-     * value outside its vocabulary and a malformed date reached the url while the table ignored
-     * them. Inert as it stood, and exactly the disagreement both docblocks say cannot happen.
+     * manage.php builds the page url and the decision form's action from request_filters(), and
+     * the table builds its base url from url_params(). The two agree only if request_filters()
+     * returns the cleaned set, so a select value outside its vocabulary or a malformed date must
+     * not reach the url.
      *
      * @return void
      */
@@ -1249,18 +1175,16 @@ final class applications_test extends \advanced_testcase {
     /**
      * A field the administrator has not ticked is still a name the filterset recognises.
      *
-     * **The declaration is observable before any authorisation runs.** Core registers
-     * core_table_get_dynamic_table_content with no capability of its own, and get.php calls
-     * add_filter_from_params() for every submitted name before it constructs the table, before
-     * set_filterset(), and before validate_context() and has_capability(). So if the declared set
-     * were the administrator's tick-list, any logged-in user with no capability here at all could
-     * read that list back one name at a time from which exception came out - a setting otherwise
-     * behind moodle/site:config. Declaring the whole vocabulary the site already publishes through
-     * showuseridentity breaks the correlation, and narrows nothing: set_filterset() reads only the
-     * offered set.
+     * The declaration is observable before any authorisation runs: get.php calls
+     * add_filter_from_params() for every submitted name before it constructs the table and before
+     * validate_context() and has_capability(). If the declared set were the administrator's
+     * tick-list, any logged-in user could read that setting back one name at a time from which
+     * exception came out. Declaring the whole vocabulary the site already publishes through
+     * showuseridentity avoids that, and narrows nothing: set_filterset() reads only the offered set.
+     * {@see applications_filterset::get_optional_filters()}
      *
      * The control is the third assertion: a name the site does not publish at all is still not a
-     * filter, so this cannot pass by everything being declared.
+     * filter.
      *
      * @return void
      */
@@ -1278,12 +1202,8 @@ final class applications_test extends \advanced_testcase {
     /**
      * The site-wide queue narrows to one course, and to a category with its subtree.
      *
-     * **The only filter on this queue a database can use an index for.** {course}.category and
-     * {course}.id both carry one, so this cuts the row set before the search's LIKE has anything
-     * to scan - which the search itself can never do, whatever it is given.
-     *
-     * The two applications in other places are the control: they prove the queue holds more than
-     * the match, so a narrowing result cannot come from an empty fixture.
+     * The application in the other course is the control: the unfiltered queue holds more than
+     * the match, so a narrowed result cannot come from a sparse fixture.
      *
      * @return void
      */
@@ -1320,10 +1240,9 @@ final class applications_test extends \advanced_testcase {
     /**
      * A queue scoped to one enrolment method ignores a course filter entirely.
      *
-     * The control would filter a set of one, so it is not offered - and a value arriving anyway,
-     * from a stale url or a forged request, must narrow nothing rather than narrow something. The
-     * assertion is that the queue is unchanged AND does not call itself narrowed, because the
-     * second is what draws the chips and the "nothing matches" wording.
+     * The control would filter a set of one, so it is not offered, and a value arriving anyway,
+     * from a stale url or a forged request, must narrow nothing. The course scope stays empty (no
+     * chip) and the queue does not call itself narrowed (no "nothing matches" wording).
      *
      * @return void
      */
@@ -1346,8 +1265,8 @@ final class applications_test extends \advanced_testcase {
     /**
      * The base url carries the course and category filters.
      *
-     * Paging and sorting emit real anchors from it, so a filter the base url drops is a filter the
-     * operator loses on the first page turn - silently, and only for the operator who turned one.
+     * Paging and sorting build their links from it, so a filter the base url drops is lost on the
+     * first page turn.
      *
      * @return void
      */
@@ -1430,14 +1349,12 @@ final class applications_test extends \advanced_testcase {
     /**
      * A field the reader may not see is not offered, whatever the administrator ticked.
      *
-     * **This is the disclosure boundary of the whole slice.** The administrator's setting says
-     * which fields the queue MAY offer; what this reader may already see decides which it does.
-     * Without the intersection, ticking a box would hand every operator a control over a field
-     * their own site withholds from them - and a filter is an oracle even when the value is never
-     * printed: apply it, read the count.
+     * The administrator's setting says which fields the queue may offer; what this reader may
+     * already see decides which it does. Without that intersection, a filter would let an
+     * operator probe a field the site withholds from them: apply it, read the count.
      *
-     * The control is the second half: naming the field in the site's identity list makes it appear
-     * for the same reader with the same setting, so an empty offered set cannot pass this test.
+     * The control is the second half: once the site's identity list names the field, the same
+     * reader is offered it under the same setting.
      *
      * @return void
      */
@@ -1569,16 +1486,13 @@ final class applications_test extends \advanced_testcase {
     /**
      * Country is a chosen code, not typed text, and the difference is what the operator gets back.
      *
-     * {user}.country holds a two-letter code while the reader reads a name, so the control has to
-     * be a select over the country list: it offers "Brazil" and sends "BR". Made a text box
-     * instead, an operator would type the only thing on screen - the name - and the queue would
-     * answer with nothing at all, because no row holds the string "Brazil".
+     * {user}.country holds a two-letter code while the reader reads a name, so the control is a
+     * select over the country list: it offers "Brazil" and sends "BR". As a text box, an operator
+     * would type the name and get an empty queue, because no row holds "Brazil".
      *
-     * **Matching the code is not what separates the two shapes**, and a test asserting only that
-     * passes either way: a LIKE over a two-letter column returns the same row as an equality, no
-     * country code being a substring of another. What separates them is that a select REFUSES a
-     * value it never offered - so the name comes back as no filter rather than as an empty queue.
-     * Found by gate DH reddening nothing.
+     * Matching the code does not separate the two shapes: a LIKE over a two-letter column returns
+     * the same row as an equality. What does is that a select refuses a value it never offered,
+     * so the name comes back as no filter rather than as an empty queue.
      *
      * @return void
      */
@@ -1597,9 +1511,7 @@ final class applications_test extends \advanced_testcase {
         // The code the select sends narrows to the one applicant holding it.
         $this->assertSame([(int) $this->userenrolment($wanted)], $this->narrowed_by(['country' => 'BR']));
 
-        /* The name is not a value this control offers, so it is refused and the queue is not
-           narrowed at all. As a text box it would be accepted, match nothing, and answer with an
-           empty queue for a country that does have an applicant. */
+        // The name is not a value this control offers, so it is refused and narrows nothing.
         $this->assertCount(2, $this->narrowed_by(['country' => 'Brazil']));
     }
 

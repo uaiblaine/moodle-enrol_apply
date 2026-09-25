@@ -34,9 +34,8 @@ class completeness {
      * Values are read one field at a time through {@see fields::current_value()} rather than
      * from profile_user_record(). That function defaults $onlyinuserobject to true, and
      * profile_field_textarea::is_user_object_data() returns false, so a textarea custom field
-     * is simply absent from what it returns - it would read as permanently empty, and an
-     * applicant would be told to fill in a field they had already filled in, forever, with no
-     * way to satisfy the gate. enrol_gapply has exactly that defect.
+     * is absent from what it returns - it would read as permanently empty, and the applicant
+     * would be told to fill in a field they had already filled in.
      *
      * @param \stdClass $instance Enrol instance.
      * @param \stdClass $user The applicant.
@@ -54,7 +53,7 @@ class completeness {
             }
             $missing[] = [
                 'key' => $key,
-                // A field name wants format_string(), not format_text(); it is a name, not content.
+                // The plain spelling: the caller escapes it for its own sink.
                 'label' => fields::label($key, false),
             ];
         }

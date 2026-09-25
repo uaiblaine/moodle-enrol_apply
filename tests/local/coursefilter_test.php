@@ -52,9 +52,8 @@ final class coursefilter_test extends \advanced_testcase {
     /**
      * Only the site-wide queue offers these controls.
      *
-     * With ?id=<enrolid> the queue names one course already, so the control would filter a set of
-     * one. The mentee queue does span courses, but a mentor sees a handful and the control would
-     * be noise. The scope shapes come from queue::listing_scope(), which is what this mirrors.
+     * The scope shapes mirror queue::listing_scope(); {@see coursefilter} says why the instance and
+     * mentee queues get no controls.
      *
      * @return void
      */

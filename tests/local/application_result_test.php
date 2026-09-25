@@ -53,12 +53,10 @@ final class application_result_test extends \basic_testcase {
     }
 
     /**
-     * An application that was already there is not a refusal, and that is the whole point.
+     * An application that was already there is neither created nor refused.
      *
-     * The bool this class replaced could not tell these two apart, so the caller treated both
-     * as failure and sent both to a page that then refused the second one. A duplicate
-     * submission is the commonest way to reach this outcome and it is not an error: the
-     * applicant does have an application.
+     * A duplicate submission is the commonest way to reach this outcome, and it is not an error:
+     * the applicant does have an application, so the caller routes it to the acknowledgement.
      *
      * @return void
      */
@@ -86,8 +84,7 @@ final class application_result_test extends \basic_testcase {
     /**
      * A refusal with nothing to say is a coding error, not a silent generic message.
      *
-     * Falling back to a generic string here would put back exactly the defect this class was
-     * written to remove - an unexplained refusal - while hiding the caller that produced it.
+     * See application_result::refused() for why there is no fallback.
      *
      * @return void
      */
@@ -100,9 +97,8 @@ final class application_result_test extends \basic_testcase {
     /**
      * Whitespace is not a reason either.
      *
-     * The control for the test above: without the trim, an empty-looking reason passes the
-     * guard and renders as a blank error box, which is worse than the generic message because
-     * it looks like a rendering fault rather than a refusal.
+     * Pins the trim() in the guard: without it a whitespace-only reason passes and renders as a
+     * blank error box.
      *
      * @return void
      */

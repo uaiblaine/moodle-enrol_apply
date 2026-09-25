@@ -27,14 +27,13 @@ use stdClass;
  * customtext2; this class is the one place that reads it, so the three surfaces that show it
  * cannot drift apart.
  *
- * **The escape flag is not optional, and the sinks disagree.** Two of the three render raw and
- * want the ESCAPED spelling: the queue's column header, which flexible_table::print_headers()
- * emits through html_writer::tag() (that helper concatenates its content and never escapes it),
- * and the applicant form's element label, which core renders through a triple stash in
- * element-template.mustache. The third, the review page's comment label, is a DOUBLE stash and
- * wants the PLAIN spelling - handing it the escaped one shows the reader the entities. The
- * switch is a parameter for the same reason core's own field_controller::get_formatted_name()
- * takes one: the caller knows its sink and the helper cannot.
+ * The sinks disagree about escaping. Two of the three render raw and want the escaped
+ * spelling: the queue's column header, which flexible_table::print_headers() emits through
+ * html_writer::tag() without escaping, and the applicant form's element label, which core
+ * renders through a triple stash in element-template.mustache. The third, the review page's
+ * comment label, is a double stash and wants the plain spelling - the escaped one would show
+ * the reader the entities. The switch is a parameter, as in core's
+ * field_controller::get_formatted_name(), because only the caller knows its sink.
  *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine
@@ -42,14 +41,13 @@ use stdClass;
  */
 final class commentlabel {
     /**
-     * @var string What a pre-2016 upstream build stored in customtext2 instead of a label.
+     * @var string What older upstream builds stored in customtext2 instead of a label.
      *
-     * Upstream made customtext2 the notification recipient list in 2016 while still reading the
-     * custom label from it, and the 2022 fix that moved the list to customtext3 retro-edited the
-     * upgrade step, so a site already past that savepoint kept the value. db/upgrade.php clears
-     * the stored ones; this constant exists because a RESTORE can bring one back - customtext2
-     * is the one custom field restore_instance() does not sanitise, so it arrives verbatim from
-     * an archive this site did not produce.
+     * Upstream once kept the notification recipient list in customtext2, the column that also
+     * holds the custom label. The upgrade clears the stored markers (see
+     * enrol_apply_clear_legacy_comment_labels()), but a restore can bring one back:
+     * restore_instance() does not sanitise customtext2, so it arrives verbatim from an archive
+     * this site did not produce.
      *
      * Only this literal is recognised. The comma-separated user-id list the same column could
      * also hold is deliberately not, because it cannot be told apart from a label somebody might

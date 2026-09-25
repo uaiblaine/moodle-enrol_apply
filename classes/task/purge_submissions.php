@@ -54,30 +54,24 @@ class purge_submissions extends \core\task\scheduled_task {
     /**
      * Delete every application record older than the retention period.
      *
-     * Four things about how this is written are load bearing.
+     * Age is measured from timecreated, the submission date the retention setting is defined
+     * against and the one date every record carries; timedecided stays 0 on a record that was
+     * never decided, so it cannot date those.
      *
-     * It sweeps on timecreated, not timedecided. An application nobody ever got round to
-     * deciding carries timedecided = 0, so a sweep on that column would retain exactly the
-     * abandoned applications forever - the opposite of what a retention period is for.
+     * It never deletes a record whose application is still awaiting a decision, pending or
+     * deferred, whatever its age. Nothing expires such an application (apply() and
+     * wait_enrolment() both leave timeend at 0), so an old one is still live, and its record
+     * holds the profile details the review page shows, which no other table keeps. The
+     * plugin's own decision methods would rebuild a missing record through
+     * submission::ensure(), but without those details, and an approval from core's "Edit
+     * enrolment" screen, which reaches only complete_approval() and submission::decide(), would
+     * be recorded nowhere. The record becomes sweepable as soon as the application leaves the
+     * queue, by any route.
      *
-     * It nevertheless spares a record whose application is STILL IN THE QUEUE. Nothing ever
-     * expires a pending application - apply() enrols with timeend = 0 precisely so that
-     * process_expirations() cannot reach it - so an application older than the retention is
-     * a live one a manager can still act on, not an old one. Deleting its record while
-     * leaving it on screen produces the one state the design must not reach: the decision
-     * taken tomorrow would find no row to stamp and would be recorded nowhere at all. The
-     * record becomes sweepable the moment the application leaves the queue, by any route.
-     *
-     * It walks forward on the primary key rather than re-running the same query. A row that
-     * refuses to go would otherwise be selected again on the next iteration, and the loop
-     * would never end.
-     *
-     * It bounds itself. Core's cron only checks its own wall-clock ceiling BETWEEN tasks
-     * (lib/classes/cron.php), so an unbounded sweep does not get interrupted - it consumes
-     * the whole scheduled-task window and starves everything queued behind it.
-     *
-     * And it never throws. One malformed row must cost that row, not the retention of every
-     * other row on the site.
+     * It walks forward on the primary key, so a row that cannot be deleted is not selected
+     * again, and it stops after TIME_BUDGET seconds because core's cron checks
+     * task_scheduled_max_runtime only between tasks ({@see \core\cron::run_scheduled_tasks()}).
+     * A row that fails to delete is skipped and reported rather than aborting the sweep.
      *
      * @param progress_trace $trace Where progress is reported.
      * @return int Number of rows deleted.
@@ -97,9 +91,8 @@ class purge_submissions extends \core\task\scheduled_task {
         $deleted = 0;
         $skipped = 0;
 
-        /* The queue's own predicate, not a copy of it: this sweep must spare a record whose
-           application is still awaiting a decision, and "still awaiting a decision" has to
-           mean here exactly what it means on the screen a manager is looking at. */
+        /* The queue's own predicate, not a copy of it, so "still awaiting a decision" means
+           here exactly what it means on the approval queue. */
         [$awaitingwheres, $awaitingparams] = \enrol_apply\local\queue::awaiting_decision_where();
         $awaiting = implode(' AND ', $awaitingwheres);
 
@@ -135,17 +128,15 @@ class purge_submissions extends \core\task\scheduled_task {
                     $deleted++;
                 } catch (\Throwable $e) {
                     $skipped++;
-                    /* Reported through the trace rather than through mtrace_exception(), so
-                       that the task has exactly one output channel: a caller passing a
-                       null_progress_trace gets silence, and the scheduled run still writes
-                       to the task log because text_progress_trace goes to mtrace anyway. */
+                    /* Reported through the trace rather than mtrace_exception(), so a caller
+                       passing a null_progress_trace gets silence while the scheduled run's
+                       text_progress_trace still reaches the task log. */
                     $trace->output(
                         'enrol_apply: skipping submission ' . $row->id . ', it could not be purged: '
                             . $e->getMessage()
                     );
-                    /* An exception raised inside a transaction poisons it on PostgreSQL:
-                       every later statement fails until it is rolled back, so without this
-                       one bad row would take the rest of the sweep with it. */
+                    /* An exception inside a transaction poisons it on PostgreSQL: every later
+                       statement fails until it is rolled back. */
                     if ($DB->is_transaction_started()) {
                         $DB->force_transaction_rollback();
                     }
@@ -164,9 +155,8 @@ class purge_submissions extends \core\task\scheduled_task {
     /**
      * Delete one application record.
      *
-     * Its own method so that a test can make a single row fail and prove that the sweep
-     * carries on. The isolation it demonstrates is not test-only: any dml_exception raised
-     * here reaches the same handler.
+     * A separate method so a test can make a single row fail and check that the sweep
+     * carries on; any exception raised here reaches the same per-row handler in purge().
      *
      * @param int $id Row id to delete.
      * @return void

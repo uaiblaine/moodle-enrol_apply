@@ -38,8 +38,8 @@ class application_form extends dynamic_form {
      * Above this many editable fields, one confirmation replaces the per-field ones.
      *
      * A checkbox against each field reads well for two or three and turns into a wall of
-     * ticking for nine, which is the size of the default field set. Past the threshold the
-     * applicant confirms the block once instead.
+     * ticking for a set the size of fields::DEFAULT_SET. Past the threshold the applicant
+     * confirms the block once instead.
      *
      * @var int
      */
@@ -66,10 +66,8 @@ class application_form extends dynamic_form {
 
             $instanceid = $this->optional_param('instance', 0, PARAM_INT);
 
-            /* The course id is derived from the instance rather than required alongside it.
-               The card's button links to apply.php with the instance alone - it is the only
-               id that identifies anything - and demanding a second, redundant parameter made
-               every real entry point throw while a hand-built url with both worked fine. */
+            /* The course id is derived from the instance rather than required alongside it:
+               the enrolment page's button links to apply.php with the instance id alone. */
             $courseid = (int) $DB->get_field('enrol', 'courseid', ['id' => $instanceid, 'enrol' => 'apply']);
             if (!$courseid) {
                 throw new \moodle_exception('invalidenrolinstance', 'enrol');
@@ -102,10 +100,7 @@ class application_form extends dynamic_form {
      * How each picked field should be treated for the current user.
      *
      * Decided once, before any element is created, and reused by both definition() and
-     * validation(). It has to be decided up front: a required rule is attached when an
-     * element is created and HTML_QuickForm::validate() walks its rule list by element name
-     * without checking that the element still exists, so any add-then-remove technique
-     * leaves the form permanently unsubmittable with no visible field to explain why.
+     * validation(), so the two agree on which fields are shown and which are checked.
      *
      * @return array Field key => one of the fields::STATE_ constants.
      */
@@ -159,10 +154,8 @@ class application_form extends dynamic_form {
 
         /* An instance can legitimately ask for nothing at all: no profile fields, no comment
            and no introduction. Both section builders above return early when their list is
-           empty, so without this the form is two hidden inputs and the applicant opens a modal
-           with nothing in it and a Save button that says only "Save" - measured, the rendered
-           body was empty of text entirely. There is still an action to confirm, so the form
-           says what it is. */
+           empty, so without this the form would be two hidden inputs. There is still an action
+           to confirm, so the form says what it is. */
         if (!$editable && !$locked && empty($instance->customint7) && empty($instance->customtext1)) {
             $mform->addElement(
                 'static',
@@ -174,9 +167,7 @@ class application_form extends dynamic_form {
 
         if ($instance->customint7) {
             /* The escaped spelling: a moodleform element label renders through a triple stash
-               in element-template.mustache. The fallback moved from 'comment' to 'applycomment'
-               with the read: the two keys are the identical word in both packs, and keeping one
-               definition of this label is what stops the question and the answers drifting. */
+               in element-template.mustache. */
             $label = \enrol_apply\local\commentlabel::custom($instance);
             $mform->addElement('textarea', 'applydescription', $label, ['cols' => 80, 'rows' => 5]);
             $mform->setType('applydescription', PARAM_TEXT);
@@ -184,9 +175,8 @@ class application_form extends dynamic_form {
 
         if (!empty($this->_customdata['showbuttons'])) {
             /* A dynamic_form carries no action buttons of its own, because the modal supplies
-               its own Save and Cancel. Rendered on a page instead, that leaves a form nobody
-               can submit — which looks entirely normal in review and shows up only in a
-               browser. The page transport asks for them explicitly. */
+               its own Save and Cancel. Rendered on a page, it needs them, so the page transport
+               asks for them explicitly. */
             $this->add_action_buttons(true, get_string('submitapplication', 'enrol_apply'));
         }
     }
@@ -260,10 +250,9 @@ class application_form extends dynamic_form {
     /**
      * Add one editable field and the checkbox confirming it is up to date.
      *
-     * The checkbox carries the field's own name rather than a shared label. An advcheckbox
-     * with an empty element label gets no accessible name at all - element-advcheckbox.mustache
-     * emits only an aria-describedby, which is a description, not a name - so six fields would
-     * otherwise announce as six identical controls.
+     * The checkbox text names the field rather than being shared. With an empty element label,
+     * element-advcheckbox.mustache exposes the text only through aria-describedby, so a shared
+     * text would make every confirmation announce identically.
      *
      * @param string $key Field key.
      * @param bool $required Whether an application cannot be submitted without it.
@@ -358,10 +347,8 @@ class application_form extends dynamic_form {
     /**
      * Everything that decides whether this user may apply, on both transports.
      *
-     * Widened from protected to public on purpose. The parent runs this only when the form
-     * was built by the AJAX web service ($isajaxsubmission), so the page transport in
-     * apply.php has to call it itself - and a guard the second transport cannot reach is
-     * not a guard.
+     * Public rather than protected: the parent runs this only when the form was built by the
+     * AJAX web service ($isajaxsubmission), so the page transport in apply.php calls it itself.
      *
      * @return void
      */
@@ -372,11 +359,9 @@ class application_form extends dynamic_form {
         $course = get_course($instance->courseid);
         $context = context_course::instance($instance->courseid);
 
-        /* Stricter than core's own guard on enrol/index.php, deliberately. That one fires
-           only when the log-in-as context is a COURSE, so an administrator who used "Log in
-           as" from a profile page - the ordinary way - walks straight past it. Submitting an
-           application in somebody else's name is impersonation whichever screen it started
-           from, so every log-in-as session is refused here. */
+        /* Stricter than core's guard on enrol/index.php, which fires only when the log-in-as
+           context is a course, so a "Log in as" started from a profile page passes it.
+           Submitting an application in somebody else's name is refused whatever the context. */
         if (\core\session\manager::is_loggedinas()) {
             throw new \moodle_exception('loginasnoenrol', '', $CFG->wwwroot . '/course/view.php?id=' . $instance->courseid);
         }
@@ -390,17 +375,14 @@ class application_form extends dynamic_form {
             throw new \moodle_exception('coursehidden', '', $CFG->wwwroot . '/');
         }
 
-        /* The applicant's OWN row is read, and read BEFORE allow_apply(), which is the same
-           ordering the enrolment page's panel takes and for the same reason. Two defects sat
-           here. The refusal threw one fixed wording - the PENDING one - at everybody who already
-           had a row, so reopening this form told a deferred applicant their application had been
-           "successfully sent". And asking allow_apply() first meant that the moment the method
-           stopped accepting applications - the window closing, the instance being disabled, the
-           cohort changing - an applicant reopening the form was refused with "Enrolment is
-           disabled or inactive", which is a fact about somebody else's problem.
+        /* The applicant's own row is tested before allow_apply(), as on the enrolment page, so
+           somebody reopening the form is told the state of their own application rather than
+           that the method has stopped accepting applications (new applications switched off,
+           window closed, cohort changed).
+           The refusal is worded by that row's state; see applicantstate::message_key().
 
-           The access fact is passed rather than derived: an ACTIVE row that really does grant
-           access means "you are enrolled", not "your enrolment is broken". */
+           The access fact is passed rather than derived: an ACTIVE row that grants access means
+           "you are enrolled", not "your enrolment is broken". */
         $ownrow = $DB->get_record(
             'user_enrolments',
             ['userid' => $USER->id, 'enrolid' => $instance->id],
@@ -493,21 +475,20 @@ class application_form extends dynamic_form {
         $result = $this->get_plugin()->submit_application($instance, $USER->id, $data);
 
         if ($result->is_refusal()) {
-            /* Nothing was written, so applied.php is the wrong destination: its own access
-               gate finds no enrolment row and throws a bare "Invalid access detected", which
-               is how losing the race for the last place used to be reported. The reason goes
-               out as a session notification and is rendered by whichever page comes next,
-               which is what makes one branch serve BOTH transports - apply.php redirect()s to
-               this url, and the modal assigns it to window.location. */
+            /* Nothing was written, so applied.php is the wrong destination: its access gate
+               finds no enrolment row and throws 'invalidaccess'. The reason goes out as a
+               session notification rendered by whichever page comes next, which serves both
+               transports: apply.php redirect()s to this url, and the modal assigns it to
+               window.location. */
             \core\notification::error($result->reason());
 
             return (string) new moodle_url('/enrol/index.php', ['id' => $instance->courseid]);
         }
 
         /* What the applicant typed is carried to the acknowledgement page so it can offer to
-           save it. Nothing is written here: the offer is theirs to accept. Deliberately not
-           reached on the refused path above, which used to leave an offer sitting in the
-           session to update a profile for an application that does not exist. */
+           save it. Nothing is written here: the offer is theirs to accept. Not reached on the
+           refused path above, so no offer is left in the session for an application that does
+           not exist. */
         \enrol_apply\local\offer::stash($instance, $USER, (array) $data);
 
         return (string) new moodle_url('/enrol/apply/applied.php', ['instance' => $instance->id]);

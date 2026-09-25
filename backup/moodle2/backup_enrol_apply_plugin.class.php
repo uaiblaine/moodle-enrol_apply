@@ -29,13 +29,11 @@
  *
  * Three things travel. The groups an approved applicant is added to are instance
  * configuration and always go. The comments submitted with applications, and the durable
- * application trail, are user data and follow exactly the users core itself backs up - not
- * the logs block, where both settings also default to 0: the users setting LOCKS logs, so
- * gating on logs would be strictly narrower and would restore the comments while dropping the
- * record of the decisions taken on them.
- *
- * "Exactly the users core backs up" is not the same as "the users setting", and the difference
- * is what {@see define_enrol_plugin_structure()} reproduces below.
+ * application trail, are user data and follow exactly the users core itself backs up, which
+ * is not always the same as the users setting; see {@see define_enrol_plugin_structure()}.
+ * The trail is not gated on the logs setting: logs depends on users, so that gate would be
+ * narrower and would restore the comments while dropping the record of the decisions taken on
+ * them.
  *
  * The comments are keyed by user_enrolments.id, for which core registers no mapping; the
  * plugin registers its own from restore_user_enrolment(), see
@@ -92,30 +90,20 @@ class backup_enrol_apply_plugin extends backup_enrol_plugin {
 
         $applygroup->set_source_table('enrol_apply_groups', ['enrolid' => backup::VAR_PARENTID]);
 
-        /* WHOSE data travels is core's decision, not this plugin's, and the obvious reading -
-           "the users setting" - is wrong.
+        /* Whose data travels mirrors core's own <user_enrolments> element in
+           backup_enrolments_structure_step, not the users setting alone. A course copy can keep
+           only the users holding chosen roles: core then writes their enrolments through a
+           second branch joining {role_assignments}, and \core\task\asynchronous_copy_task sets
+           users to '1' whenever roles are kept and user data is wanted. Reading the setting
+           alone would put every applicant's comment and profile snapshot into an archive meant
+           to exclude them.
 
-           A course copy can keep the enrolments of users holding chosen roles. Core gates its
-           own <user_enrolments> on "empty($keptroles) && $users" and has a SECOND branch that
-           joins {role_assignments} when roles are kept (backup/moodle2/backup_stepslib.php,
-           byte-identical on 5.1 and 5.2). The copy task sets the users setting to '1' whenever
-           roles are kept AND user data is wanted (lib/classes/task/asynchronous_copy_task.php).
-
-           So "users is 1" does NOT mean "every user's data may travel". In a kept-roles copy
-           it means "the kept-role users' data may travel", and reading the setting alone put
-           every applicant's comment and profile snapshot into the archive - free text
-           belonging to the people the copy exists to exclude.
-
-           WHETHER any of it travels is still the users setting, which is why the role check
-           is nested inside it rather than beside it. With user data off, the copy task sets
-           the setting to '0' and core forces the restore's own users setting off and its
-           enrolments setting to ENROL_NEVER: no apply instance and no user enrolment reaches
-           the destination, so nothing this plugin writes could ever be restored there. Core
-           still writes its <enrolment> rows in that cell - it re-enrols the kept-role users
-           through the MANUAL plugin after the restore instead - but for this plugin the same
-           write would be personal data in an archive with nowhere to go, which is the exact
-           exposure the rest of this method exists to prevent. Measured on 5.2: destination
-           enrol instances [manual, guest, self], zero user enrolments, zero submission rows. */
+           Whether anything travels is still the users setting, so the role branch is nested
+           inside it. With user data off, the copy task sets users to '0' and the restore then
+           defaults to no users and no enrolment methods, so nothing this plugin writes could be
+           restored. Core still writes its kept-role enrolments in that case (it re-enrols those
+           users through enrol_manual after the restore), but for this plugin the same rows
+           would be personal data in an archive with nowhere to go. */
         $keptroles = $this->task->get_kept_roles();
         $users = $this->task->get_setting_value('users');
 
@@ -130,16 +118,13 @@ class backup_enrol_apply_plugin extends backup_enrol_plugin {
 
             /* courseid and enrolid are deliberately not in the element: both are rebuilt on
                restore from the course being restored into and the instance the row lands
-               under, and carrying the originals would only invite somebody to trust them.
+               under.
 
-               A known limitation, stated here because it is invisible otherwise: the source
-               is keyed on the enrol instance, because that is the element this structure
-               hangs off. A record whose instance has since been deleted - which the trail
-               survives on purpose, see enrol_apply_plugin::delete_instance() - therefore has
-               nothing to attach to and does not travel. Backup structures for an enrol plugin
-               are addressed per instance by core, so there is no correct place to put an
-               instance-less record without inventing one; it is recorded in README.md rather
-               than papered over. */
+               Known limitation, documented in README.md: the source is keyed on the enrol
+               instance, because core addresses an enrol plugin's backup structure per
+               instance. A record whose instance has since been deleted (the trail survives
+               that on purpose, see enrol_apply_plugin::delete_instance()) has nothing to attach
+               to and does not travel. */
             $submission->set_source_table('enrol_apply_submission', ['enrolid' => backup::VAR_PARENTID]);
         } else if ($users) {
             [$insql, $inparams] = $DB->get_in_or_equal($keptroles);
@@ -148,15 +133,12 @@ class backup_enrol_apply_plugin extends backup_enrol_plugin {
                 $roleparams[] = backup_helper::is_sqlparam($inparam);
             }
 
-            /* Both halves of core's predicate matter and only one of them is obvious. The
-               role must be one of the kept ones, AND the assignment must be in THIS COURSE's
-               context - somebody who is a student here and a teacher elsewhere holds the kept
-               role, but not here, and core writes no enrolment for them.
+            /* Both halves of core's predicate: the role must be one of the kept ones, and the
+               assignment must be in this course's context - somebody who holds a kept role only
+               elsewhere gets no enrolment from core either.
 
-               EXISTS rather than core's INNER JOIN, and not as a stylistic preference: a user
-               holding two of the kept roles matches the join twice, which would write the same
-               application into the archive twice. Core tolerates that for its own enrolments;
-               here it is free to avoid, and avoiding it keeps the element's ids unique. */
+               EXISTS rather than core's INNER JOIN: a user holding two of the kept roles would
+               match the join twice and write the same application into the archive twice. */
             $application->set_source_sql(
                 "SELECT ai.id, ai.userenrolmentid, ai.comment
                    FROM {enrol_apply_applicationinfo} ai
@@ -183,37 +165,31 @@ class backup_enrol_apply_plugin extends backup_enrol_plugin {
             );
         }
 
-        /* Outside the gate, and safe there: an annotation fires per row actually written
-           (backup_structure_processor::process_final_element only annotates a final element
-           that is_set()), so an element with no source annotates nobody. Core annotates the
-           applicant already through its own user_enrolments element, but only for the
-           enrolments IT writes, and the decider is somebody core has no reason to have
-           annotated at all - without these a restored trail would name users who never
-           reached users.xml.
+        /* Outside the gate, and safe there: backup_structure_processor::process_final_element()
+           annotates only a final element that is_set(), so an element with no source annotates
+           nobody. Core annotates the applicant only for the enrolments it writes, and never the
+           decider; without these a restored trail would name users who never reached users.xml.
 
            A decidedby of 0 on an undecided row is annotated too and is inert: users.xml is
            built by joining the annotated ids against {user}, where no row has id 0. */
         $submission->annotate_ids('user', 'userid');
         $submission->annotate_ids('user', 'decidedby');
 
-        /* The ROLE a decider chose is annotated; the GROUPS are deliberately not, and the
-           asymmetry is measured rather than stylistic.
+        /* The role a decider chose is annotated; the groups deliberately are not.
 
-           Groups need nothing: backup_annotate_course_groups_and_groupings annotates every
-           group of the course unconditionally, so each one is promoted to 'groupfinal' and
-           written to groups.xml whenever the groups setting is on, whether or not anything
-           refers to it. decidedgroups is a comma-separated column in any case, which
-           annotate_ids() - one id per row - could not walk.
+           Groups need nothing: when the groups setting is on,
+           backup_annotate_course_groups_and_groupings annotates every group of the course, so
+           each one reaches groups.xml whether or not anything refers to it. decidedgroups is a
+           comma-separated column in any case, which annotate_ids() - one id per row - could
+           not walk.
 
-           The role does need it. roles.xml selects on 'rolefinal', so a role reaches the
-           archive only through an annotation, and the obvious source of one is a
-           role_assignment the applicant holds. That is exactly what a cancelled application
-           does not have: the decision is recorded, the assignment is gone, and without this
-           line the role would be absent from the archive and unmappable on restore.
+           The role does need it: roles.xml selects on 'rolefinal', so a role reaches the
+           archive only through an annotation, usually from a role_assignment the applicant
+           holds. A cancelled application has none, and without this line its role would be
+           absent from the archive and unmappable on restore.
 
-           A decidedrole of 0 is annotated too and is inert for the same reason the decidedby
-           of an undecided row is: roles.xml joins the annotated ids against {role}, where no
-           row has id 0. */
+           A decidedrole of 0 is annotated too and is inert: roles.xml joins the annotated ids
+           against {role}, where no row has id 0. */
         $submission->annotate_ids('role', 'decidedrole');
 
         $applygroup->annotate_ids('group', 'groupid');

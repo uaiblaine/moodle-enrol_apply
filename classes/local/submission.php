@@ -22,31 +22,27 @@ use stdClass;
  * The durable record of one enrolment application.
  *
  * Everything else the plugin owns is deleted at the moment it acquires audit value:
- * enrol_apply_applicationinfo is dropped on approval (lib.php), on cancellation and in
- * unenrol_user(), and the user_enrolments row it hangs off goes with the enrolment. This
- * table is the one that stays, so it is keyed by courseid and userid rather than by any of
- * those - userenrolmentid rides along as a reference and is never the key to a deletion.
+ * enrol_apply_applicationinfo is dropped on approval, on cancellation and in unenrol_user(),
+ * and the user_enrolments row it hangs off goes with the enrolment. This table is the one that
+ * stays, so it is keyed by courseid and userid rather than by any of those - userenrolmentid
+ * rides along as a reference and is never the key to a deletion.
  *
- * Two properties of that key are worth stating, because both look like defects:
+ * Two properties of that key look like defects and are not:
  *
- *  - It is NOT unique. The design pseudonymises on course deletion by zeroing userid, so a
- *    deleted course with two applicants produces two rows with the same courseid and
- *    userid = 0. A unique key raises dml_write_exception on the second one - measured, not
- *    reasoned. Cancelling and re-applying legitimately produces a second row too, so does
+ *  - It is NOT unique. Course deletion pseudonymises by zeroing userid, so a deleted course
+ *    with two applicants produces two rows with the same courseid and userid = 0, which a
+ *    unique key would refuse. Cancelling and re-applying produces a second row too, so does
  *    restoring a course into one that already holds the trail, and so does a course carrying
- *    two apply instances - which the plugin supports on purpose. The invariant that IS
- *    enforced is narrower than the key would have been: "one live application per enrol
- *    INSTANCE and user", by the lock in enrol_apply_plugin::submit_application(), which is
- *    keyed on the instance id and the user and guards a user_enrolments lookup by enrolid.
- *    Nothing anywhere enforces one per course and user, so even without pseudonymisation the
- *    key could not have been unique.
- *  - Only userid and decidedby carry a foreign key, and neither courseid, enrolid nor
- *    userenrolmentid does. A foreign key here is documentation and an index - Moodle's
- *    generators emit no database-level constraint (lib/ddl/sql_generator.php,
- *    $foreign_keys = false) - so declaring one for a reference the design deliberately
- *    outlives would document an integrity claim that is false by construction. The two
- *    user columns are different: they are never left dangling, because they are zeroed on
- *    course deletion and the whole row goes on erasure.
+ *    two apply instances - which the plugin supports on purpose. What IS enforced is narrower:
+ *    one live application per enrol INSTANCE and user, by the lock in
+ *    enrol_apply_plugin::submit_application(), which is keyed on the instance id and the user
+ *    and guards a user_enrolments lookup by enrolid.
+ *  - Only userid and decidedby carry a foreign key. A foreign key here is documentation and an
+ *    index - Moodle's generators emit no database-level constraint (lib/ddl/sql_generator.php,
+ *    $foreign_keys = false) - so declaring one for courseid, enrolid or userenrolmentid, which
+ *    the row deliberately outlives, would document a false integrity claim. The two user
+ *    columns are never left dangling: they are zeroed on course deletion, and an erasure
+ *    request deletes the applicant's row or zeroes the decider.
  *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine
@@ -109,9 +105,7 @@ class submission {
             'comment' => isset($data->applydescription) ? (string) $data->applydescription : '',
             'userinfodata' => self::snapshot($instance, $data),
             'status' => self::STATUS_PENDING,
-            /* Written empty on purpose and never read in this slice. The column ships now
-               because schema churn is the expensive part; the screen that lets a decider
-               write a message to the applicant arrives later and is its only writer. */
+            /* Empty until a decision: record_outcome_message() is its only writer. */
             'outcomemessage' => '',
             /* Empty for the same reason, and it stays empty on a new application by
                construction: the note belongs to a decision, and no decision has been taken. */
@@ -125,32 +119,25 @@ class submission {
     /**
      * Make sure the application named by a user enrolment has a durable record.
      *
-     * Written for the three decision methods, and it closes a live defect rather than
-     * hardening against an imagined one. record_outcome_message() loops over the rows it
-     * finds and, when there are none, writes nothing and says nothing - so a decider deciding
-     * an application that predates this table types a message that is stored nowhere and sent
-     * nowhere. Measured on m502: an enrolment created before the record existed accepts a
-     * message on the review page, reports "Applications updated", and the applicant's mail
-     * arrives without it. The same silence would swallow every decision note.
+     * For the three decision methods. record_outcome_message() and record_decision_note()
+     * write to the rows they find and silently write nothing when there are none, so without
+     * this a decision on an application that predates this table would store the decider's
+     * message and note nowhere, and the applicant's mail would arrive without the message.
      *
-     * What it reconstructs is only what a pending application can honestly claim. The comment
-     * is recovered from enrol_apply_applicationinfo, which is the row this table was extracted
-     * from and is still written beside it; the profile snapshot is NOT, because the values the
-     * applicant typed were never stored anywhere else and an empty envelope is the truthful
-     * answer rather than a reconstructed one. The status is PENDING whatever the enrolment is
-     * doing, because the caller stamps the real decision immediately afterwards through
-     * decide() - writing a guess here would be the record claiming a decision nobody took.
+     * It reconstructs only what a pending application can honestly claim. The comment is
+     * recovered from enrol_apply_applicationinfo, which is still written beside this table; the
+     * profile snapshot is not, because the values the applicant typed were never stored anywhere
+     * else, so an empty envelope is the truthful answer. The status is PENDING whatever the
+     * enrolment is doing, because the caller stamps the real decision through decide()
+     * immediately afterwards.
      *
      * A user enrolment that is not this plugin's, or that is already gone, writes nothing. The
-     * enrol-type predicate is NOT reachable from the three decision methods, and saying so is
-     * the point: each of them resolves the instance with a MUST_EXIST lookup keyed on
-     * enrol = 'apply' and refuses a foreign id there, several lines before this runs. The
-     * predicate is here because this is a public method on a public class - the tests call it
-     * directly, and so may anything else - and writing an enrol_apply trail against another
-     * plugin's enrolment would be a row no reader of this table could interpret.
+     * three decision methods never pass a foreign id - each resolves the instance with a
+     * MUST_EXIST lookup keyed on enrol = 'apply' first - but this method is public, and an
+     * enrol_apply trail row against another plugin's enrolment would be uninterpretable.
      *
-     * It is NOT a substitute for create(), which is the writer for a real application and is
-     * the only one that can hold the snapshot. This one exists for rows create() never saw.
+     * Not a substitute for create(), the writer for a real application and the only one that
+     * can hold the snapshot.
      *
      * @param int $userenrolmentid User enrolment the decision is about.
      * @return void
@@ -210,27 +197,22 @@ class submission {
      * rather than guessed at - applications that predate this table, and the ones tests
      * create by calling enrol_user() directly, have none.
      *
-     * A row already at the target status is not restamped by default, and that guard is not
-     * merely an optimisation: it is what stops a later no-op touch of an already-decided
-     * enrolment re-attributing the decision to whoever did the touching. The decision belongs
-     * to whoever took it. test_a_recorded_decision_is_not_restamped pins exactly that.
+     * A row already at the target status is not restamped by default, so a later no-op touch of
+     * an already-decided enrolment does not re-attribute the decision to whoever did the
+     * touching. test_a_recorded_decision_is_not_restamped pins that.
      *
-     * $isfreshdecision is the narrow exception, and it exists because the guard was ALSO
-     * swallowing genuine second decisions. Approve, suspend from the participants page, approve
-     * again: the record never leaves STATUS_APPROVED, so the guard skipped the write and the
-     * trail went on naming the first decider and the first date - while the applicant was told
-     * about the second approval, because complete_approval() queues its notification either way.
-     * The trail denied a decision the applicant had already been notified of.
+     * $isfreshdecision is the narrow exception for a genuine second decision at the same status.
+     * Approve, suspend from the participants page, approve again: the record never leaves
+     * STATUS_APPROVED, so without it the trail would go on naming the first decider and date
+     * while complete_approval() notifies the applicant of the second approval.
      *
-     * What tells the two cases apart is knowledge the CALLER has and the record does not.
-     * confirm_enrolment() only ever processes rows get_pending_user_enrolment() returned, which
-     * admits suspended and waiting-list rows only; the hook callback only fires on a status
-     * change to active. Both therefore know the enrolment genuinely moved. A bare decide() call
+     * Only the caller knows the enrolment genuinely moved: confirm_enrolment() processes only
+     * rows get_pending_user_enrolment() returned, which admits suspended and waiting-list rows
+     * only, and the hook callback fires only on a status change to active. A bare decide() call
      * knows nothing, so the default stays conservative.
      *
      * Passing it is safe for the double pass complete_approval() makes on every queue approval:
-     * both passes run in one request with one $USER, so the second restamps the same decider a
-     * few milliseconds later.
+     * both passes run in one request with one $USER, so the second restamps the same decider.
      *
      * @param int $userenrolmentid User enrolment the decision applies to.
      * @param int $status One of the STATUS_ constants.
@@ -268,23 +250,20 @@ class submission {
     /**
      * Discard everything personal in the applications of one course, keeping the shape.
      *
-     * Runs from \core_course\hook\before_course_deleted and nowhere else. It has to be that
-     * hook rather than the course_deleted event, and the reason is not a preference:
-     * contextlist::add_from_sql() wraps every provider query in a JOIN against {context}
-     * (privacy/classes/local/request/contextlist.php), and delete_course() destroys the
-     * course context before the event fires (lib/moodlelib.php, context_helper::delete_instance
-     * then the trigger). A row that kept a real userid past that point would be personal data
-     * that no subject access request can reach and no erasure request can delete - silently.
+     * Runs from \core_course\hook\before_course_deleted and nowhere else, never from the
+     * course_deleted event: contextlist::add_from_sql() wraps every provider query in a JOIN
+     * against {context} (privacy/classes/local/request/contextlist.php), and delete_course()
+     * deletes the course context before it triggers the event (lib/moodlelib.php). A row that
+     * kept a real userid past that point would be personal data that no subject access request
+     * can reach and no erasure request can delete.
      *
      * What survives is what an audit needs, with both user columns zeroed: the dates, the
      * status, and the course, enrol and user enrolment ids.
      *
-     * That is pseudonymisation and not anonymisation, and the distinction is not pedantry.
-     * userenrolmentid is retained, and logstore_standard records enrolment events with
-     * objecttable = 'user_enrolments', objectid = that same id and the userid alongside - so
-     * on a site keeping its standard log, a retained row can still be re-attached to a person
-     * by joining it. The row is stripped of everything that identifies somebody directly; it
-     * is not beyond re-identification by an administrator with the logs.
+     * That is pseudonymisation, not anonymisation. userenrolmentid is retained, and
+     * logstore_standard records enrolment events with objecttable 'user_enrolments', objectid
+     * set to that same id and the enrolled user as relateduserid - so on a site keeping its
+     * standard log, an administrator can still re-attach a retained row to a person.
      *
      * @param int $courseid Course being deleted.
      * @return void
@@ -368,13 +347,10 @@ class submission {
                 continue;
             }
 
-            /* Every part is checked for being scalar BEFORE it is cast, and that is not
-               belt-and-braces. This envelope is JSON that another site wrote and a restore
-               copied in verbatim, so a 'value' holding an array or a nested object is
-               reachable - and (string) on one emits "Array to string conversion", a PHP
-               warning, which --fail-on-warning turns into a failed run. Measured on m502: the
-               cast yields the literal string "Array", so the reader is shown a word the
-               applicant never typed and nothing anywhere says so.
+            /* Every part is checked for being scalar before it is cast. The envelope may be JSON
+               another site wrote and a restore copied in verbatim, so a 'value' holding an array
+               is reachable, and (string) on one emits an "Array to string conversion" warning
+               and shows the reader the word "Array".
                The whole entry is dropped rather than repaired. A key that is not a string
                cannot be matched against the visible-key list the snapshot formatter masks with,
                and an entry that cannot be masked correctly must not be rendered at all. */
@@ -397,14 +373,12 @@ class submission {
     /**
      * Record the message the decider wrote to the applicant.
      *
-     * Kept apart from decide() rather than folded into it, and that separation is the whole
-     * point rather than tidiness. complete_approval() runs TWICE for an approval taken through
-     * the queue: enrol_plugin::update_user_enrol() dispatches
+     * Kept apart from decide(), which takes no message. complete_approval() runs twice for an
+     * approval taken through the queue: enrol_plugin::update_user_enrol() dispatches
      * \core_enrol\hook\before_user_enrolment_updated before it writes the row, so
-     * hook_callbacks reaches complete_approval() first - and that call has no message, because
-     * the hook carries none. decide() then skips any row already at the target status, so a
-     * message threaded through it on the SECOND call would be dropped in silence, with the
-     * status looking perfectly correct.
+     * hook_callbacks reaches complete_approval() first, with no operator input because the
+     * hook carries none. The message is therefore stored before the status changes, and the
+     * notify_approval task reads it back through outcome_message().
      *
      * Written before the decision for the same reason the decision is written before the
      * unenrolment: unenrol_user() deletes the user_enrolments row, and the id it carried is how
@@ -417,19 +391,16 @@ class submission {
     public static function record_outcome_message(int $userenrolmentid, string $message): void {
         global $DB;
 
-        /* An empty message is WRITTEN, not skipped, and that is the fix for a defect rather than
-           a style choice. Returning early made a stored message sticky: no path could clear one,
-           so a decider who approved a re-suspended application with the box left empty silently
-           re-sent the message somebody had typed for the earlier decision. The message belongs to
-           the decision being taken, so "nothing typed" has to be able to mean nothing. Callers
-           that have nothing to say about the message do not call this at all - the out-of-band
-           approval route passes no operator input and reaches no writer.
+        /* An empty message is written, not skipped: the message belongs to the decision being
+           taken, so approving a re-suspended application with the box left empty must not
+           re-send the message typed for the earlier decision. Callers that have nothing to say
+           about the message do not call this at all - the out-of-band approval route passes no
+           operator input and reaches no writer.
 
            Trimmed rather than merely tested for blankness, which keeps the two properties apart:
            whitespace alone is still not a message (it is stored as the empty string, which
            test_a_blank_message_is_not_recorded pins), and an empty decision still clears an
-           earlier one. Before this, the same trim() decided whether to write at all, so the
-           second property was impossible. */
+           earlier one. */
         $clean = trim($message);
 
         $rows = $DB->get_records('enrol_apply_submission', ['userenrolmentid' => $userenrolmentid], '', 'id');
@@ -446,26 +417,22 @@ class submission {
      *
      * The twin of record_outcome_message() in shape and the opposite of it in audience. That
      * one is the APPLICANT's: notify_applicant() appends it to the mail body and the privacy
-     * export hands it to the person it was written to. This one never leaves the site - it is
-     * the answer to "why was this deferred", which the owner's two scenarios (waiting for a
-     * place, waiting for something to be validated) both need and neither of which belongs in
-     * a message to the person waiting.
+     * export hands it to the person it was written to. This one never leaves the site - it
+     * answers "why was this deferred" (waiting for a place, waiting for something to be
+     * validated), which does not belong in a message to the person waiting.
      *
-     * Free text rather than a coded vocabulary, decided in docs/design/ui-rebuild-plan.md:
-     * the distinction is real but thin, and a coded reason offered as a queue filter would
-     * under-report - measured, the queue's row set and the record's diverge in both directions.
-     * A filterable column can be added later beside a note that already exists.
+     * Free text rather than a coded vocabulary: the distinction is thin, and a coded reason
+     * offered as a queue filter would under-report, because the queue's row set and the
+     * records diverge in both directions.
      *
      * Written for all three decisions rather than for deferral alone, so the two decision
      * surfaces cannot offer different things and a re-queued application cannot inherit an
      * explanation written for a decision that was superseded.
      *
-     * **The empty value is WRITTEN, not skipped**, exactly as it is for the outcome message
-     * and for the same defect: returning early makes a stored note sticky, so an application
-     * that comes back to the queue - which core's "Edit enrolment" screen and an expiredaction
-     * of suspend both do - is decided a second time carrying the first decision's reason, with
-     * nothing on screen to say so. The note belongs to the decision being taken, so "nothing
-     * typed" has to be able to mean nothing.
+     * The empty value is written, not skipped, as for the outcome message: otherwise an
+     * application that comes back to the queue - which core's "Edit enrolment" screen and an
+     * expiredaction of suspend both do - is decided a second time carrying the first decision's
+     * reason, with nothing on screen to say so.
      *
      * @param int $userenrolmentid User enrolment the decision applies to.
      * @param string $note What the decider typed, empty for none.
@@ -498,9 +465,9 @@ class submission {
      * joined anyway and nothing would remove it. Both calls read this column instead, so both
      * see the same answer.
      *
-     * An empty list is stored as an empty string and means "the decider chose nothing", which
-     * chosen_groups() reports as null so the caller can fall back to the instance's own list.
-     * That is why this is not simply a comma-joined implode of whatever arrived.
+     * Zero and duplicate ids are dropped before the list is joined. An empty list is stored as
+     * the empty string and means "the decider chose nothing", which chosen_groups() reports as
+     * null so the caller falls back to the instance's own list.
      *
      * @param int $userenrolmentid User enrolment the decision applies to.
      * @param array $groupids Group ids the decider chose, already validated by the caller.
@@ -509,11 +476,10 @@ class submission {
     public static function record_decided_groups(int $userenrolmentid, array $groupids): void {
         global $DB;
 
-        /* An empty choice is WRITTEN, not skipped, for the same reason the outcome message is:
-           returning early made a stored list sticky, so a second approval with the chooser left
-           alone silently re-joined the groups picked for the earlier decision. An empty value is
-           what chosen_groups() reads back as "no choice recorded", which puts the instance's own
-           list back in charge - so clearing means what an operator would expect it to mean. */
+        /* An empty choice is written, not skipped, as for the outcome message: otherwise a
+           second approval with the chooser left alone would re-join the groups picked for the
+           earlier decision. chosen_groups() reads the empty value back as "no choice recorded",
+           which puts the instance's own list back in charge. */
         $clean = array_values(array_unique(array_filter(array_map('intval', $groupids))));
 
         $rows = $DB->get_records('enrol_apply_submission', ['userenrolmentid' => $userenrolmentid], '', 'id');
@@ -529,19 +495,13 @@ class submission {
      * The groups the decider chose, or null when no choice is recorded.
      *
      * Null means "use the instance's own list", and it is the ONLY way of saying nothing here:
-     * a stored value that parses to no ids at all reads as no choice rather than as an empty
-     * one. An earlier docblock argued the opposite - that null and an empty array should mean
-     * different things, so an explicit "the decider chose no groups" stayed possible to add
-     * later - and that reading was worse than unreachable, it was a latent crash. The sole
-     * caller branches on `=== null` and hands anything else to get_in_or_equal(), which
-     * refuses an empty array outright: measured, `does not accept empty arrays`. So the
-     * affordance the comment was protecting could not have been used without changing the
-     * caller too, while the value it let through would have thrown on the way.
+     * a stored value that parses to no ids reads as no choice, never as an empty array. The
+     * sole caller branches on `=== null` and hands anything else to get_in_or_equal(), which
+     * throws on an empty array.
      *
-     * Unreachable today by the WRITER - record_decided_groups() filters zeroes and stores
-     * nothing when the result is empty - but the row is not only written by that method. A
-     * restore writes this column from a foreign archive, so "0", a lone comma, or a list whose
-     * ids all fail to map are all shapes the parse has to survive.
+     * record_decided_groups() stores only non-zero ids or the empty string, but a restore writes
+     * this column from a foreign archive, so "0", a lone comma, or a list whose ids all fail to
+     * map are all shapes the parse has to survive.
      *
      * @param int $userenrolmentid User enrolment the decision applies to.
      * @return array|null Group ids, never empty; null when nothing usable was recorded.
@@ -576,15 +536,12 @@ class submission {
      * both, and a role assignment records nothing about which pass made it. Both calls read this
      * column instead, so both compute the same role and role_assign() collapses them into one row.
      *
-     * Unlike record_decided_groups(), this writer stores a zero rather than returning early on
-     * one, and the difference is deliberate. A zero here means "no role was chosen, use the
-     * instance's own", which is exactly what an approval submitted with the select left alone
-     * means - so writing it lets a later decision REPLACE an earlier one. Returning early would
-     * make a stored role sticky: a row that comes back to the queue, which core's "Edit enrolment"
-     * screen and an expiredaction of "suspend" both do, would be approved a second time with the
-     * superseded role and nothing on screen to say so. (record_decided_groups() has that
-     * stickiness today; it is recorded in PROGRESS.md rather than changed here, because changing
-     * it is a behaviour change to a shipped feature and belongs in its own review.)
+     * A zero is written rather than skipped. It means "no role was chosen, use the instance's
+     * own", which is exactly what an approval submitted with the select left alone means - so
+     * writing it lets a later decision REPLACE an earlier one. Skipping it would make a stored
+     * role sticky: a row that comes back to the queue, which core's "Edit enrolment" screen and
+     * an expiredaction of "suspend" both do, would be approved a second time with the superseded
+     * role and nothing on screen to say so.
      *
      * @param int $userenrolmentid User enrolment the decision applies to.
      * @param int $roleid Role the decider chose, already allowlisted by the caller; 0 for none.
@@ -607,11 +564,9 @@ class submission {
     /**
      * The role the decider chose, or null when they chose none.
      *
-     * There is no third state to represent, which is why this returns a plain int or null where
-     * chosen_groups() has to distinguish an empty array from null: the form offers a role or
-     * nothing, and "nothing" means the instance's own role. An explicit "no role at all" is not
-     * something the queue can express, and inventing a representation for it here would be a
-     * guard no test could hold.
+     * The form offers a role or nothing, and "nothing" means the instance's own role, so a plain
+     * int or null covers every case. An explicit "no role at all" is not something the queue can
+     * express.
      *
      * @param int $userenrolmentid User enrolment the decision applies to.
      * @return int|null Role id, or null when nothing was recorded.
@@ -664,8 +619,8 @@ class submission {
     /**
      * The language string naming a status.
      *
-     * A literal per branch, never get_string('status_' . $status): a dynamic string id is
-     * banned by the fleet coding standard and invisible to the lang file checker.
+     * A literal per branch, never get_string('status_' . $status): a dynamic string id cannot be
+     * checked against the lang file.
      *
      * @param int $status One of the STATUS_ constants.
      * @return string Localised label.

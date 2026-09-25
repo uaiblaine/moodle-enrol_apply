@@ -77,8 +77,8 @@ final class applications_test extends \advanced_testcase {
     /**
      * Sharing a cohort is not by itself enough to mentor somebody.
      *
-     * The previous implementation enumerated cohort peers, which both scanned the whole
-     * cohort on every request and hid mentees who happened not to share one.
+     * Mentees come from role assignments in user contexts, the relation can_manage_application()
+     * authorises on, and never from cohort membership.
      *
      * @return void
      */

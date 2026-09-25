@@ -44,9 +44,9 @@ class fields {
     /**
      * The standard fields offered by default, as field keys.
      *
-     * This is \core_user::AUTHSYNCFIELDS (17 names, byte-identical on 5.1 and 5.2) minus four,
-     * written out rather than derived so that the configuration and the renderer cannot drift
-     * apart when core edits the constant. Excluded and why:
+     * This is \core_user::AUTHSYNCFIELDS (17 names) minus four, written out rather than derived
+     * so that the configuration and the renderer cannot drift apart when core edits the
+     * constant. Excluded and why:
      *
      *  - email: a login identifier whenever $CFG->authloginviaemail is on, so collecting it
      *    through an enrolment form is an account-takeover surface.
@@ -192,11 +192,10 @@ class fields {
     /**
      * The keys the administrator allows courses to ask for.
      *
-     * An unset setting means "the site has never been configured", which resolves to the
-     * default set rather than to nothing. That distinction is load-bearing:
-     * admin_setting_configmulticheckbox stores only the ticked keys, so an empty stored value
-     * and an absent one look alike, and reading either as "allow nothing" would silently stop
-     * every migrated instance collecting what it collected before the upgrade.
+     * An absent setting means "the site has never saved it" and resolves to the default set, so
+     * an upgraded site keeps collecting what it collected before. A saved setting with nothing
+     * ticked is stored by admin_setting_configmulticheckbox as the empty string and means
+     * "allow nothing".
      *
      * @return array List of allowed field keys.
      */
@@ -223,10 +222,8 @@ class fields {
      * rather than an attack, and a hard failure would take out the enrolment page rather than
      * the one field.
      *
-     * The deny list is NOT re-checked here, and that is deliberate rather than an oversight.
-     * pool() strips it, and pool() is the only way a key reaches the loop below, so a second
-     * check is unreachable - which means no test can hold it, and an unreachable guard that
-     * nothing pins is worse than no guard: it reads as protection while proving nothing. The
+     * The deny list is not re-checked here: pool() strips it and is the only way a key reaches
+     * the loop below, so a second check would be unreachable and no test could hold it. The
      * barrier lives in pool(), where test_pool_drops_a_denied_key holds it.
      *
      * @param \stdClass $instance Enrol instance record.
@@ -273,10 +270,11 @@ class fields {
     /**
      * How a field should be treated for one user, decided before any element is created.
      *
-     * Consumed from the form in a later slice. It is decided up front because a required rule
-     * is attached when an element is created and HTML_QuickForm::validate() walks its rule
-     * list by name without checking that the element still exists - so any add-then-remove
-     * technique leaves the form permanently unsubmittable with no visible field to explain why.
+     * The application form calls this before creating each element. It is decided up front
+     * because a required rule is attached when an element is created and
+     * HTML_QuickForm::validate() walks its rule list by name without checking that the element
+     * still exists - so any add-then-remove technique leaves the form permanently unsubmittable
+     * with no visible field to explain why.
      *
      * @param string $key Field key.
      * @param \stdClass $user User the form is being built for.
@@ -337,18 +335,15 @@ class fields {
     /**
      * Whether an auth plugin locks the named field for a user who currently holds a value.
      *
-     * The lock is read through the auth plugin object rather than through get_config(), which
-     * is not a stylistic preference. auth_manual builds its config as
-     * array_merge((array) legacy, (array) modern), so on a normally installed site - where
-     * every field_lock_* already exists under auth_manual as 'unlocked' - the modern value
-     * wins and the two reads agree. They diverge exactly where the modern key is ABSENT: then
-     * the legacy auth/manual value decides, the core user edit form honours it, and a direct
-     * get_config('auth_manual', ...) sees nothing at all. Every other auth plugin builds its
-     * config its own way, so the object is the only reliable source in general.
+     * The lock is read through the auth plugin object, as core's user/edit_form.php reads it,
+     * and not through get_config(): each auth plugin builds its config its own way. auth_manual
+     * merges the legacy auth/manual values under the auth_manual ones, so where an auth_manual
+     * key is absent the legacy value decides - which the core edit form honours and a direct
+     * get_config('auth_manual', ...) does not see.
      *
-     * Note also that unlockedifempty tests emptiness with a loose comparison against the
-     * empty string, so a stored '0' counts as FILLED and therefore locked - the opposite of
-     * what !empty() would decide.
+     * unlockedifempty tests emptiness with a loose comparison against the empty string, as core
+     * does, so a stored '0' counts as filled and therefore locked - the opposite of what
+     * !empty() would decide.
      *
      * @param \auth_plugin_base $authplugin Auth plugin the user authenticates through.
      * @param string $configkey Lock config key, for example field_lock_city.
@@ -385,8 +380,8 @@ class fields {
 
         if (self::is_standard($key)) {
             $column = self::key_target($key);
-            /* A literal per key, never get_string('...' . $column): the fleet standard bans a
-               dynamic string id, and every one of these is a core string. */
+            /* A literal per key, never get_string('...' . $column): a dynamic string id cannot be
+               checked against the lang files, and every one of these is a core string. */
             $stringid = self::standard_label_id($column);
 
             return $stringid === '' ? $key : get_string($stringid);
@@ -428,40 +423,21 @@ class fields {
     /**
      * What the applicant actually typed, as label and value pairs ready for the notification.
      *
-     * Both standard and custom values are taken from the SUBMITTED data. Reading a custom
-     * field back out of {user_info_data} instead - which is what this plugin used to do -
-     * shows the approver whatever was already on the account rather than the answer in front
-     * of them, and since the standard fields came from the form, the two halves of the same
-     * message disagreed with each other.
+     * Standard and custom values alike are taken from the SUBMITTED data. Reading a custom field
+     * back out of {user_info_data} would show the approver what was already on the account
+     * rather than the answer in front of them, and would disagree with the standard fields
+     * beside it.
      *
-     * The value is returned exactly as the form delivered it, and is deliberately not put
-     * through format_string(). That is a considered departure from the plugin's usual rule for
-     * user-supplied profile values, and the reason is measurable: format_string() runs
-     * strip_tags(), which treats a bare "<" as the start of a tag and deletes everything after
-     * it, so "A<B and R&D" would become "A" with nothing on either side to show that anything
-     * was lost.
+     * The value is returned as the form delivered it, not put through format_string(), whose
+     * strip_tags() deletes everything after a bare "<". Escaping belongs at the sink, and the
+     * sinks escape for themselves: the notification template renders every value through a
+     * double stash, and a Report Builder cell is raw HTML where escaping is lossless. Only a
+     * boundary that requires PARAM_TEXT, such as a web service return, has to strip. The form's
+     * fields are PARAM_TEXT ({@see \enrol_apply\form\application_form}), so formslib has already
+     * removed anything after a bare "<" before this runs.
      *
-     * An earlier version of this docblock illustrated that with "an applicant who types
-     * A<B and R&D", and this note exists because that was wrong and travelled: it was repeated
-     * almost verbatim in the report's formatter. An applicant cannot type it. Every editable
-     * field on the form is PARAM_TEXT ({@see application_form}, and the comment likewise), and
-     * formslib cleans the whole submission through clean_param() before get_data() - measured,
-     * clean_param('A<B and R&D', PARAM_TEXT) is 'A'. The tail is already gone by the time this
-     * method runs.
-     *
-     * The rule still holds, for two reasons that do not depend on the illustration. A second
-     * strip is still lossy for anything PARAM_TEXT lets through, and stripping is the wrong
-     * treatment at the wrong place regardless: escaping belongs at the sink, and the sink here
-     * escapes for itself - the notification template renders every value through a double
-     * stash. Note that a REPORT COLUMN is such a sink too and does not have to satisfy
-     * PARAM_TEXT; a Report Builder cell is raw HTML, where escaping is both safe and lossless.
-     * Only a boundary that genuinely requires PARAM_TEXT - a web service return - has to strip,
-     * and there losing the tail is a deliberate cost rather than an accident.
-     *
-     * The field key travels beside the label because the durable snapshot in
-     * {@see submission::snapshot()} stores both: a label is a fact about this site today and
-     * a custom field can be renamed, so an audit row that kept only the label would show a
-     * question that was never asked.
+     * The field key travels beside the label because the durable snapshot stores both; see
+     * {@see submission::snapshot()}.
      *
      * @param \stdClass $instance Enrol instance the application was submitted to.
      * @param \stdClass $data Submitted form data.

@@ -126,37 +126,26 @@ class enrol_apply_edit_form extends moodleform {
         $mform->setDefault('customint7', 0);
         $mform->addHelpButton('customint7', 'opt_commentaryzone', 'enrol_apply');
 
-        /* No setDefault. The one that stood here was dead - set_data() overrides it for any
-           non-NULL scalar and get_instance_defaults() seeds '' - and reviving it would be worse
-           than leaving it dead: the value it pre-filled was a get_string() call, so saving the
-           form would freeze the CREATING teacher's own language into {enrol}.customtext2, after
-           which the label would never follow the language pack again. Empty is the correct
-           default, and both readers fall back to the shipped wording when it is empty.
+        /* No setDefault: empty is the correct default, and the readers fall back to the shipped
+           wording. Pre-filling a get_string() here would freeze the creating teacher's language
+           into customtext2, so the label would stop following the language pack.
 
-           hideIf, because the element labels a field that only exists when the commentary zone
-           is on, and a live editable text box for a control that is switched off is what made
-           this setting read as a mystery. It costs nothing stored: hideIf sets the hidden
-           attribute and display:none on the wrapper and does NOT disable the input
-           (lib/form/form.js, the _updateDependentElement hide branch), so a label survives its
-           zone being switched off and comes back with it. disabledIf would not - a disabled
-           field posts nothing. */
+           hideIf rather than disabledIf, because the label only matters while the commentary
+           zone is on. hideIf hides the wrapper without disabling the input (_hideElement() in
+           lib/form/form.js), so a label survives the zone being switched off; a disabled field
+           would post nothing. */
         $mform->addElement('text', 'customtext2', get_string('custom_label', 'enrol_apply'));
         $mform->setType('customtext2', PARAM_TEXT);
         $mform->addHelpButton('customtext2', 'custom_label', 'enrol_apply');
         $mform->hideIf('customtext2', 'customint7', 'eq', 0);
 
-        /* The two capacity numbers, and they answer different questions. customint3 is how
-           many people may APPLY; customint4 is how many may be APPROVED at once. The gap
-           between them is overbooking, which is the point in a plugin where approval is
-           discretionary.
+        /* The two capacity numbers: customint3 is how many people may apply, customint4 how
+           many may be approved at once. The gap between them is overbooking, which is
+           legitimate where approval is discretionary.
 
-           They sit here, in the main section, and not where the first of them used to. The
-           header opened for the profile fields below is never closed - renderHeader() closes a
-           fieldset only when opening another, and the only other closer is the one
-           add_action_buttons() emits - so everything after it rendered under a legend reading
-           "Profile fields requested". Worse, it moved: with no offerable fields that header is
-           not opened at all and the same element landed in the main section instead. Section
-           membership was decided by configuration. */
+           Added before the profile-field header below, which stays open until the next header
+           or the action buttons: anything added after it would render inside that section, or
+           in the main one when no field is offerable and the header is not opened. */
         $mform->addElement('text', 'customint3', get_string('maxapplicants', 'enrol_apply'));
         $mform->setType('customint3', PARAM_INT);
         $mform->setDefault('customint3', $plugin->get_config('maxenrolled', 0));
@@ -167,10 +156,8 @@ class enrol_apply_edit_form extends moodleform {
         $mform->setDefault('customint4', $plugin->get_config('places', 0));
         $mform->addHelpButton('customint4', 'places', 'enrol_apply');
 
-        /* What the two numbers currently hold, for the person setting them - who otherwise has
-           the least context about what the instance is carrying. Only for an instance that
-           exists: a new one has nothing to count, and counting would query for a guaranteed
-           zero. */
+        /* How many places are currently taken, for the person setting the limits. Only for an
+           existing instance: a new one has nothing to count. */
         if (!empty($instance->id)) {
             $mform->addElement(
                 'static',
@@ -278,7 +265,7 @@ class enrol_apply_edit_form extends moodleform {
 
         /* Every read below defaults rather than indexing: a select whose submitted value is
            not one of its options exports as null, so a key present on screen can be missing
-           here, and reaching for it directly would raise a warning that fails the build. */
+           here. */
         if (($data['status'] ?? ENROL_INSTANCE_ENABLED) == ENROL_INSTANCE_ENABLED) {
             $opens = (int) ($data['enrolstartdate'] ?? 0);
             $closes = (int) ($data['enrolenddate'] ?? 0);
@@ -287,14 +274,12 @@ class enrol_apply_edit_form extends moodleform {
             }
         }
 
-        /* The second barrier, not the first. HTML_QuickForm_select::exportValue() already
-           intersects the submitted value with the options registered on the element, so a
-           forged cohort id reaches this method as null and never becomes a restriction. The
-           check below is what keeps that true if the element is ever changed to the ajax
-           `cohort` autocomplete, whose exportValue() short-circuits and filters nothing —
-           the reason enrol_cohort carries the same array_diff. The offered list is rebuilt
-           here rather than read from a property stashed at definition() time, because a
-           stashed list is whatever the last render happened to hold. */
+        /* The second barrier. HTML_QuickForm_select::exportValue() already drops a submitted
+           value that is not among the element's options, so a forged cohort id arrives as
+           null; this check keeps that true if the element becomes the ajax `cohort`
+           autocomplete, whose exportValue() filters nothing (enrol_cohort carries the same
+           array_diff for that reason). The offered list is rebuilt rather than stashed at
+           definition() time, so it reflects the current cohorts. */
         $submitted = (int) ($data['customint5'] ?? 0);
         if ($submitted !== 0) {
             $offered = array_map('intval', array_keys($this->get_cohort_options($instance, $context)));

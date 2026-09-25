@@ -186,10 +186,8 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
     protected function report(int $enrolid = 0): \core_reportbuilder\system_report {
         $context = context_course::instance($this->course->id);
 
-        /* With an enrolid, through the same named constructor report.php uses - so a test that
-           scopes is walking the production door rather than a copy of it. Without one, the bare
-           course-level report the older tests were written against, which has no itemid and is
-           therefore a different persistent. */
+        /* With an enrolid, through for_method() exactly as report.php builds it. Without one, the
+           bare course-level report, which has no itemid and is therefore a different persistent. */
         return $enrolid
             ? course_applications::for_method($context, $enrolid)
             : system_report_factory::create(course_applications::class, $context);
@@ -222,11 +220,9 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
     /**
      * The rendered rows of the report.
      *
-     * There is no core helper for this. The two the plan named -
-     * datasource_stress_test_columns() and datasource_stress_test_columns_aggregation() - are
-     * datasource-only: both hand their argument to the generator's create_report(), which
-     * forces TYPE_CUSTOM_REPORT and instantiates the class as a datasource. Neither can build a
-     * system report at all.
+     * There is no core helper for a system report: the datasource_stress_test_*() helpers build
+     * through the generator's create_report(), which forces TYPE_CUSTOM_REPORT and instantiates
+     * the class as a datasource.
      *
      * @param \core_reportbuilder\system_report|null $report Report to read, null for the plain one.
      * @return array List of row objects carrying the formatted cell values.
@@ -275,9 +271,8 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
     /**
      * An applicant with a real enrolment, driven through the plugin's own path.
      *
-     * seed() writes a record with userenrolmentid = 0, which is the shape a restore leaves and
-     * is exactly what the outcome column must call "unknown". Every scenario below needs the
-     * opposite: a record wired to a live user_enrolments row, so the join has something to find.
+     * Unlike seed(), whose userenrolmentid = 0 is the shape an unmappable restore leaves, the
+     * record points at a real user_enrolments row, so the report's live-enrolment join finds it.
      *
      * @param int $status Enrolment status to leave the row at, or -1 to unenrol afterwards.
      * @param int $recordstatus Status to stamp on the durable record.
@@ -336,8 +331,8 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
     /**
      * An approved applicant who is still enrolled reads as approved and enrolled.
      *
-     * The control for every scenario below it: if this one did not pass, the column would be
-     * saying "something went wrong" about every row rather than distinguishing them.
+     * The control for the scenarios below: the column reports a healthy approval as such rather
+     * than flagging every row.
      *
      * @return void
      */
@@ -351,10 +346,10 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
     /**
      * An approved applicant who was later unenrolled no longer reads as merely approved.
      *
-     * One of the two symptoms this column was built for. Before it, this row and the one above
-     * were literally identical on screen: the stored status is APPROVED in both cases, because
-     * nothing outside the plugin's own queue writes to the record, and a record deliberately
-     * outlives its enrolment (test_a_submission_row_survives_unenrolment pins that).
+     * The stored status is APPROVED here as in the test above, because nothing outside the
+     * plugin's own decisions writes to the record and a record deliberately outlives its
+     * enrolment (lib_test::test_a_submission_row_survives_unenrolment); only the live enrolment
+     * tells the two apart.
      *
      * @return void
      */
@@ -368,10 +363,8 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
     /**
      * A pending application whose enrolment was removed reads as never decided.
      *
-     * This is the narrow defect underneath the reported symptom. Such a record has no
-     * user_enrolments row, so it is in no queue and nobody can ever decide it, while the report
-     * showed "Pending" - a decision that reads as owed and is in fact impossible. The retention
-     * sweep then deletes it without ever correcting it.
+     * Such a record has no user_enrolments row, so no queue lists it and nobody can decide it;
+     * "Pending" would announce a decision that can never be taken.
      *
      * @return void
      */
@@ -385,10 +378,9 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
     /**
      * A manually suspended approval says so, which is what puts it back in the queue.
      *
-     * The second reported symptom. The queue's predicate is
-     * "status != active AND (timeend = 0 OR timeend > now)", so a suspension with no period
-     * re-queues the application - and the report went on saying "Approved" while the queue
-     * showed the same person awaiting a decision, with neither screen mentioning the other.
+     * The queue's predicate is "status != active AND (timeend = 0 OR timeend > now)", so a
+     * suspension with no period puts the application back in the queue, and the report must not
+     * go on saying "Approved".
      *
      * @return void
      */
@@ -402,14 +394,12 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
     /**
      * An expired approval is told apart from a manually suspended one.
      *
-     * Both are status = suspended; only timeend separates them, and they mean opposite things to
-     * the operator. A manual suspension comes back to the approval queue and an expiry does not,
-     * because the queue's predicate excludes a row whose period has run out. Reporting the two
-     * with one word would put half of them in the wrong place.
+     * Both are status = suspended and only timeend separates them: a manual suspension returns
+     * to the approval queue, while an expiry does not, because the queue's predicate excludes a
+     * row whose period has run out.
      *
-     * Mutation check: delete the timeend arm from the outcome formatter and exactly this test
-     * goes red - test_an_approved_then_suspended_application_says_so keeps passing, because the
-     * arm it falls through to is the one it already wanted.
+     * Changes that must make it fail: deleting the timeend arm of the outcome formatter, which
+     * test_an_approved_then_suspended_application_says_so cannot detect.
      *
      * @return void
      */
@@ -423,13 +413,12 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
     /**
      * A record with no mappable enrolment reads "unknown", never "no longer enrolled".
      *
-     * A restore writes userenrolmentid = 0 whenever it cannot map the enrolment, and zero finds
-     * nothing in the join for the same reason a deleted enrolment does. Reporting the two alike
-     * would be a fresh falsehood of exactly the kind this column exists to remove: one means
-     * "they were removed", the other means "this archive did not say".
+     * A restore writes userenrolmentid = 0 when it cannot map the enrolment, and zero finds
+     * nothing in the join, just as a deleted enrolment does. The two must not be reported alike:
+     * one means the applicant was removed, the other that the archive did not say.
      *
-     * Mutation check: drop the userenrolmentid check from the formatter and exactly this test
-     * goes red, because every other fixture here carries a real id.
+     * Changes that must make it fail: dropping the userenrolmentid = 0 check from either the
+     * enrolment or the outcome formatter.
      *
      * @return void
      */
@@ -452,15 +441,11 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
     }
 
     /**
-     * The outcome column is not sortable and carries no filter, and that is load bearing.
+     * The outcome column is not sortable and carries no filter.
      *
-     * Its value is computed in a display callback. Filtering and sorting are SQL and never reach
-     * a callback, so a sort would order by whichever field happened to be selected first and a
-     * filter would match the raw status - either would be a control that lies. The sortable,
-     * filterable primitives are the status column and the enrolment column beside it.
-     *
-     * The same precondition is what makes the snapshot column's masking sound, and
-     * test_the_snapshot_column_has_no_filter_and_is_not_sortable states it there.
+     * Its value is computed in a display callback, which SQL filtering and sorting never reach:
+     * a sort would order by a selected field and a filter would match the raw status, so either
+     * would misreport. The sortable, filterable primitives are the status and enrolment columns.
      *
      * @return void
      */
@@ -477,7 +462,6 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
     }
 
     /**
-     * The capability is what admits a reader, and nothing else is.    /**
      * The capability is what admits a reader, and nothing else is.
      *
      * @return void
@@ -540,11 +524,9 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
     /**
      * A pseudonymised record belongs to nobody and is not listed.
      *
-     * The mechanism is the report's INNER join onto {user}, not a base condition: no user
-     * holds id 0. An explicit "userid <> 0" condition used to sit beside it and was removed
-     * because deleting it reddened nothing at all. This test still holds the behaviour end to
-     * end - it goes red if that join is ever widened to a LEFT one without a condition put
-     * back - which is the property worth pinning, and the only one that was ever really pinned.
+     * The mechanism is the report's INNER join onto {user}, not a base condition: no user holds
+     * id 0. Changes that must make it fail: widening that join to a LEFT one without adding a
+     * "userid <> 0" base condition.
      *
      * @return void
      */
@@ -575,16 +557,10 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
         $DB->set_field('enrol', 'name', $name, ['id' => $id]);
         $instance = $DB->get_record('enrol', ['id' => $id], '*', MUST_EXIST);
 
-        /* Named explicitly, and it is not decoration: create_user() picks a name at RANDOM
-           (lib/testing/generator/data_generator.php calls rand() four times over its $firstnames
-           and $lastnames pools), and those pools repeat within a band - one first name appears
-           four times among ten, another three. Two generated applicants therefore collide on
-           fullname() every few hundred runs, and the assertions below that this row does NOT
-           carry the other applicant's name then contradict the ones above them saying it carries
-           this one's: same needle, both directions, guaranteed red. Measured on m502 on
-           2026-09-02, when a mutation sweep's baseline failed on two applicants who had drawn
-           the same name, forty minutes after the identical suite had passed. A name from outside
-           the pool cannot collide with one drawn from it. */
+        /* Named explicitly: create_user() draws names at random from small pools, so two
+           generated applicants occasionally share a fullname, and the assertions that a row does
+           NOT carry the other applicant's name then fail. A name outside the pools cannot
+           collide with one drawn from them. */
         $user = $this->getDataGenerator()->create_user([
             'firstname' => 'Second',
             'lastname' => 'Applicant',
@@ -607,16 +583,10 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
     }
 
     /**
-     * Arriving from a method's icon scopes the report to THAT method.
+     * Arriving from a method's icon scopes the report to that method.
      *
-     * The defect this closes: report.php takes an enrol instance id and used it only to choose
-     * the course and authorise the request, so two apply methods produced byte-identical reports
-     * under two different urls. Measured on the development site, one of them held no
-     * applications at all and its report rendered the other's - an audit report of a method's
-     * applications, under that method's url, containing none of them.
-     *
-     * Both directions are asserted, which is the half that matters: scoping to A and finding A's
-     * row proves nothing on a fixture where A's row is the only one the report would show anyway.
+     * Both directions are asserted: on a fixture where A's row is the only one the report would
+     * show anyway, scoping to A and finding A's row proves nothing.
      *
      * @return void
      */
@@ -646,9 +616,8 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
     /**
      * Each method gets a report persistent of its own, which is what makes the scope stick.
      *
-     * The mechanism behind the test below, asserted directly because it is the half that lives
-     * in production and that no page-load test can see: the stored scope is keyed on the report
-     * id, so two methods sharing one id share one scope however carefully either is applied.
+     * The stored scope is keyed on the report id, so two methods sharing one persistent would
+     * share one scope; see course_applications::for_method().
      *
      * @return void
      */
@@ -675,23 +644,13 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
     /**
      * Two methods keep independent scopes, so one report cannot answer the other's requests.
      *
-     * The defect this closes, and it survived the first implementation of the whole slice. The
-     * scope is stored by set_filter_values() in reportbuilder_user_filter, keyed on
-     * (reportid, usercreated) and nothing else, and the report persistent used to be keyed on
-     * the COURSE - so both methods shared one stored scope. Every request after the initial page
-     * load reads that store and nothing else: sorting and paging go through
-     * core_table_get_dynamic_table_content, whose filterset carries the reportid and the
-     * report's own parameters and nothing that names a method, and the Download button posts the
-     * same id. Opening the second method's report therefore answered the first method's next
-     * click with the second method's rows - the very thing this slice exists to remove,
-     * reinstated for every request but the first.
+     * Sorting, paging and download rebuild the report from its id alone and read the scope back
+     * from that persistent's stored filter values; see course_applications::for_method().
      *
-     * rows() builds system_report_table::create($reportid, []) - the same entry point the AJAX
-     * request uses, handed the same input: a report id and nothing else. Not literally the AJAX
-     * branch, because the constructor defers loading only when optional_param('info') is
-     * core_table_get_dynamic_table_content and no PHPUnit request sets that. What both branches
-     * share is the whole of what the defect exploited: the report is rebuilt from the persistent
-     * the id names, and its scope read back from that persistent's stored filter values.
+     * rows() calls system_report_table::create($reportid, []), the entry point and input the AJAX
+     * request uses. It is not literally the AJAX branch, since the constructor defers loading
+     * only when optional_param('info') is core_table_get_dynamic_table_content, but both rebuild
+     * the report from the persistent the id names.
      *
      * @return void
      */
@@ -702,7 +661,7 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
 
         $firstid = (int) $this->instance->id;
         $this->report($firstid)->scope_to_method($firstid);
-        // The second report is opened afterwards, which is what used to overwrite the first.
+        // Opening the second report afterwards must not overwrite the first one's scope.
         $this->report((int) $second->id)->scope_to_method((int) $second->id);
 
         // The first method's report must still answer with its own row.
@@ -726,8 +685,7 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
     /**
      * Clearing the filter widens the report back to the course.
      *
-     * The view this page showed before the scoping, and the reason the scope is a FILTER value
-     * rather than a base condition: a base condition could not be cleared by the reader at all.
+     * The scope is a filter value rather than a base condition so that the reader can clear it.
      *
      * @return void
      */
@@ -751,10 +709,8 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
     /**
      * The url's method wins over one the reader had already chosen.
      *
-     * The direction is the whole test. `array_merge` puts the caller's value on top; the `+`
-     * operator would keep the LEFT side on a duplicate key, so the stored value would silently
-     * win and scoping would do nothing for anybody who had ever touched this filter - which is
-     * every reader who has used the report twice. It was written with `+` first.
+     * Pins the merge direction: with the + operator instead of array_merge the stored value would
+     * win; see course_applications::scope_to_method().
      *
      * @return void
      */
@@ -780,10 +736,8 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
     /**
      * Scoping keeps the reader's other filters.
      *
-     * set_filter_values() overwrites everything it is given, so a scope that replaced rather than
-     * merged would silently reset a status or date filter every time the page loaded - the report
-     * would look like it had forgotten what the reader asked for, on a page they arrived at by
-     * clicking an icon.
+     * set_filter_values() replaces the whole stored set, so a scope that did not merge would
+     * reset the reader's status or date filters on every page load.
      *
      * @return void
      */
@@ -806,9 +760,8 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
     /**
      * A course with a single apply method has nothing to scope, and says so.
      *
-     * The filter is only added where it can narrow, so on the commonest course of all there is
-     * none - and scope_to_method() must report that rather than writing a value for a filter the
-     * report does not have, which would sit in the reader's preferences unread for ever.
+     * The filter exists only on a course with more than one apply method, so scope_to_method()
+     * must return false rather than store a value for a filter the report does not have.
      *
      * @return void
      */
@@ -825,9 +778,8 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
     /**
      * The identifier report.php scopes by is the one the filter actually carries.
      *
-     * The constant repeats what core builds from the entity name and the filter name, and nothing
-     * else would notice either half being renamed: the scope would simply stop applying, on a
-     * page that would go on rendering perfectly.
+     * METHOD_FILTER repeats the identifier core builds from the entity and filter names; if
+     * either is renamed, the scope silently stops applying.
      *
      * @return void
      */
@@ -842,15 +794,13 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
     /**
      * The default columns and filters, in order.
      *
-     * The order is the guard: 5.1 and 5.2 build entity columns differently, and a divergence
-     * shows up here rather than in a rendering difference nobody notices.
+     * Pinned in order, so any change in how either branch assembles them shows up here.
      *
      * @return void
      */
     public function test_default_columns_and_filters(): void {
-        /* Pinned rather than inherited: the site default for showuseridentity is a single
-           field, which would leave the ordering WITHIN the identity block unasserted. Two
-           fields make the block's own order part of the guard. */
+        /* Two identity fields rather than the site default's single one, so the order within
+           the identity block is asserted too. */
         set_config('showuseridentity', 'email,idnumber');
         $this->seed();
         $this->setUser($this->reader());
@@ -887,9 +837,9 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
     /**
      * Without the identity capability there is no identity column and no identity filter.
      *
-     * Absence, not masking. A display callback would leave the column, its filter and its sort
-     * in place, and all three are SQL: a reader recovers a hidden value by filtering on it and
-     * reading the row count, or by sorting on it.
+     * Absence, not masking: a display callback would leave the filter and the sort in place,
+     * and a reader could recover a hidden value through either; see
+     * course_applications::add_report_columns().
      *
      * @return void
      */
@@ -951,19 +901,12 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
     /**
      * The snapshot shows the fields this reader may see, and omits the ones they may not.
      *
-     * The formatter half of the masking, and the only masking in this report a display callback
-     * is allowed to do - licensed by the test above, which holds that the column offers no
-     * filter and no sort, so there is no SQL path around the callback.
+     * Masking in a display callback is sound here only because the column has no filter and no
+     * sort (the test above).
      *
-     * The name part is the control and is not decoration. Without it every assertion here would
-     * pass just as well against a formatter that returned an empty cell, against one that
-     * dropped every field, and against a report that had stopped rendering the snapshot at all.
-     * With it, the claim is the one that matters: this reader sees exactly one of the two
-     * fields, and it is the right one.
-     *
-     * The label is asserted absent alongside the value. A withheld field that still prints its
-     * label tells the reader which applicants filled that field in, which is the presence
-     * oracle the identity columns beside this one are shaped to avoid.
+     * The name part is the control: without it, the absence assertions would also pass against
+     * an empty cell or a column that stopped rendering. The label is asserted absent as well,
+     * because a withheld field that still prints its label reveals which applicants filled it in.
      *
      * @return void
      */
@@ -995,22 +938,15 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
     /**
      * An entity column used without the report shows the names and nothing else.
      *
-     * This is the path slice 8's site-level datasource takes. A datasource adds the entity's
-     * columns directly and never calls set_callback(), so whatever the entity's own bare
-     * registration does IS the masking for every custom report ever built on this entity.
+     * The entity's own bare registration is what any datasource reusing it gets, unless the
+     * datasource registers an argument itself as applications::restrict_snapshot_column() does.
      *
-     * It is driven through core's column::format_value() rather than by calling the formatter,
-     * because the defect this pins lived in core's calling convention and not in the
-     * formatter's body. format_value() passes the registered argument ALWAYS, defaulting it to
-     * null (reportbuilder/classes/local/report/column.php:733, and :508 / :520 for the
-     * defaults - the same line numbers on 5.1 and 5.2), so a parameter default in the callback
-     * is unreachable. A test that called the formatter with two arguments would exercise a
-     * signature core never uses, and would have passed against the fail-open version this
-     * replaced.
+     * Driven through core's column::format_value(), which always passes the registered argument
+     * (null when none was registered), rather than by calling the formatter with two arguments,
+     * a signature core never uses; see submissionformatter::snapshot().
      *
-     * Admin is deliberate. The point is not that this reader lacks a capability - they hold
-     * every one there is. It is that nobody asked a context, and a masking decision nobody
-     * made has to come out restrictive.
+     * As admin, so the restriction cannot come from a missing capability: with no context
+     * supplied, the column must default to the names only.
      *
      * @return void
      */
@@ -1045,8 +981,8 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
     /**
      * The waiting list gets the plugin's own label, never core's enrolment vocabulary.
      *
-     * Core's enrolment status map would render this table's 2 as "Not current" and its 1 as
-     * "Suspended" - legitimate core labels that are wrong here, and invisible in review.
+     * Core's enrolment status labels would call this table's 2 (waiting) "Not current" and its 1
+     * (approved) "Suspended".
      *
      * @return void
      */
@@ -1066,14 +1002,11 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
     /**
      * The snapshot's pairs survive the download with their separator intact.
      *
-     * Run through core's own export transform rather than through strip_tags(). They are not
-     * the same function and the difference is the whole finding: format_text() runs
-     * html_entity_decode() BEFORE removing tag-shaped runs, so an escaped "&lt;" becomes a
-     * real "<" that then eats up to the next ">" on its line. A strip_tags() proxy models
-     * none of that and passes against a formatter that emits "<br />", which measurably loses
-     * data in a real CSV.
+     * Run through core's export transform, base_export_format::format_text(), rather than a
+     * strip_tags() proxy: it decodes entities before removing tag-shaped runs, so an escaped
+     * "&lt;" becomes a real "<" that eats up to the next ">" on its line.
      *
-     * Two fields, not one, because a single pair has no separator to lose.
+     * Two fields, because a single pair has no separator to lose.
      *
      * @return void
      */
@@ -1099,19 +1032,14 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
     /**
      * A snapshot value holding a raw angle bracket reaches the reader whole.
      *
-     * An applicant cannot in fact type this. Every editable field on the form is PARAM_TEXT and
-     * formslib cleans the whole submission before get_data(), so the form itself deletes the
-     * tail - measured, clean_param('A<B and R&D', PARAM_TEXT) is 'A'. The route that reaches
-     * this column is a RESTORE, which writes userinfodata verbatim out of an archive this site
-     * did not produce. That is why the cell has to escape rather than trust, and why the
-     * fixture is inserted directly rather than submitted.
+     * The form cannot produce this value: its editable fields are PARAM_TEXT, and
+     * clean_param('A<B and R&D', PARAM_TEXT) is 'A'. A restore can, because it writes
+     * userinfodata verbatim from the archive, so the cell must escape rather than trust, and the
+     * fixture is inserted directly.
      *
-     * This test used to assert assertNotEmpty(), and it passed while the cell rendered a bare
-     * "A" - the whole tail deleted by format_string()'s strip_tags(). It was written for this
-     * exact defect and could not see it, which is the failure mode this repo keeps paying for:
-     * an assertion weak enough to be satisfied by the bug. It now names the string it wants,
-     * and asserts the same value again after the download transform, because escaping that
-     * looks right on screen can still be lossy on the way out.
+     * The exact string is asserted, on screen and again after the download transform: a weaker
+     * assertion passes against format_string(), whose strip_tags() renders only "A", and escaping
+     * that looks right on screen can still lose data on export.
      *
      * @return void
      */
@@ -1139,10 +1067,8 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
     /**
      * Every column renders for every stored status without raising anything.
      *
-     * This replaces the core stress helpers, which cannot be used here: both are datasource-only
-     * and force TYPE_CUSTOM_REPORT. Without something in their place, a column whose callback
-     * mishandles a null or an unexpected type fails first for a user, on a page that passed
-     * every static gate.
+     * Stands in for core's stress helpers, which cannot build a system report (see rows()), to
+     * catch a column callback that mishandles a null or an unexpected value.
      *
      * @return void
      */
@@ -1167,13 +1093,11 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
     /**
      * The status filter reaches the waiting list.
      *
-     * ENROL_APPLY_USER_WAIT is the value core knows nothing about, so it is the one a filter
-     * silently drops. A boolean_select here - the obvious-looking choice for a status that
-     * mostly reads pending-or-approved - would make every deferred application unfindable,
-     * which is a defect this fleet's CLAUDE.md already records once.
+     * A two-state filter (a boolean_select, say), the obvious shape for a status that mostly reads
+     * pending or approved, would leave waiting-list records unfindable.
      *
-     * The pending record is the control: without it the assertion would pass against a filter
-     * that returned nothing at all, and against one that was never applied.
+     * The pending record is the control: without it, the assertion would also pass if the filter
+     * were never applied.
      *
      * @return void
      */
@@ -1199,10 +1123,8 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
     /**
      * Every name part survives for a reader without the identity capability.
      *
-     * The masked case is pinned elsewhere; this pins the other side of the same list. Only
-     * s_firstname appeared in any fixture before, so dropping s_lastname - or any of the four
-     * phonetic and alternate parts - withheld surnames from every non-identity reader with
-     * nothing at all going red.
+     * The masked case is pinned elsewhere; this pins the other side of the same list, so
+     * dropping any of the six name parts from the formatter's name list fails here.
      *
      * @return void
      */
@@ -1237,11 +1159,10 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
     /**
      * A forged itemid and forged parameters cannot widen the report.
      *
-     * Both arrive from the client on the path the browser actually uses. The filterset
-     * declares parameters as PARAM_RAW and set_filterset() json_decodes them straight into the
-     * report, and the itemid is settable through the mobile web services - so the base
-     * condition reads get_context()->instanceid and nothing else. This drives the report built
-     * exactly as a forger would build it and asserts the row set did not move.
+     * Both come from the client: set_filterset() json_decodes the parameters straight into the
+     * report, and the itemid is settable through the mobile web services. So the base condition
+     * reads get_context()->instanceid and nothing else; this builds the report as a forger would
+     * and asserts the row set did not move.
      *
      * @return void
      */
@@ -1272,15 +1193,11 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
     /**
      * Both entry points to the report are gated on the report's own capability.
      *
-     * The icon on Enrolment methods and the node on the course settings navigation are the
-     * only two ways anybody reaches this report, and neither is exercised by any other test:
-     * deleting either capability check left the whole suite green while publishing a link to
-     * the frozen profile snapshot of every applicant the course has ever had.
+     * The icon on Enrolment methods and the node on the course settings navigation are the only
+     * two ways to reach this report, and no other test exercises them.
      *
-     * The decider is the control that matters. Somebody with no capabilities at all would
-     * prove only that the icons are gated on something; this actor holds the capability the
-     * NEIGHBOURING icons are gated on, so it is the report's own gate being asserted and not
-     * enrolment management in general.
+     * The decider holds the capability the manage icon beside it is gated on, so this asserts the
+     * report's own gate rather than a gate on enrolment management in general.
      *
      * @return void
      */
@@ -1296,26 +1213,21 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
         $this->assertStringNotContainsString($reporturl, $icons);
         $this->assertNotContains($reporturl, $this->navigation_urls());
 
-        /* The control for the control: this actor really does get the icons their own
-           capability earns, so an empty icon list cannot be what passed the assertion above. */
+        // Control: the decider does get the manage icon, so an empty icon list is not what passed above.
         $this->assertStringContainsString('/enrol/apply/manage.php', $icons);
     }
 
     /**
      * The report capability keeps its risk flag and stays off the editing teacher.
      *
-     * The one guard in this slice that no behaviour can hold. Adding
-     * 'editingteacher' => CAP_ALLOW to db/access.php - a one-line edit that reads as tidying an
-     * inconsistency, since the other five capabilities in that file all have it - hands the
-     * frozen profile snapshot of every applicant to every editing teacher on the site, and
-     * every other test in this suite stays green because they all assign the capability to a
-     * role of their own.
+     * Adding 'editingteacher' => CAP_ALLOW to db/access.php looks like tidying, since four of the
+     * five other capabilities there have it, but hands every applicant's profile snapshot to
+     * every editing teacher. Every other test here assigns the capability to a role of its own,
+     * so none would notice.
      *
-     * Read through load_capability_def(), which parses db/access.php on each call. A test
-     * phrased as "an editing teacher cannot open the report" would be the better shape and is
-     * not available: archetype defaults are written into the test database at phpunit-init
-     * time, so an edit to db/access.php would not be visible to it until the database was
-     * rebuilt - and a mutation check that needs a rebuild to fail is one nobody runs.
+     * Read through load_capability_def(), which parses db/access.php on each call: a behavioural
+     * test would read the archetype defaults installed when the test database was initialised,
+     * and would not see an edit to db/access.php until it was rebuilt.
      *
      * @return void
      */
@@ -1328,24 +1240,20 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
         $this->assertSame(RISK_PERSONAL, $definition['riskbitmask'] & RISK_PERSONAL);
         $this->assertSame(CONTEXT_COURSE, $definition['contextlevel']);
 
-        /* The control: the file really was read and really does carry the neighbours this
-           declaration is deliberately unlike. If this ever fails the assertions above are
-           reading something other than db/access.php. */
+        /* Control: the definitions really come from db/access.php, where a neighbouring
+           capability does grant editingteacher. */
         $this->assertArrayHasKey('editingteacher', $definitions['enrol/apply:manageapplications']['archetypes']);
     }
 
     /**
      * The comment column reaches the reader, and the download, whole.
      *
-     * The obvious implementation of this column is format_text(FORMAT_PLAIN), and it is the
-     * wrong one: that branch is s() then nl2br() and strips nothing, so it gives this column
-     * both defects the snapshot column is shaped to avoid - s() writes "&#039;" for an
-     * apostrophe and ENT_COMPAT does not decode it back on the way out, and the injected
+     * format_text(FORMAT_PLAIN) would be wrong here: it is s() then nl2br(), so an apostrophe
+     * becomes "&#039;", which the export's ENT_COMPAT decoding leaves in place, and the added
      * "<br />" supplies the ">" that lets a decoded "<" swallow the rest of its line.
      *
-     * Both halves are asserted, because they fail on different inputs: the apostrophe fails
-     * with no angle bracket present, and the angle bracket fails only when something later on
-     * the line closes the run.
+     * Both are asserted, because they fail on different inputs: the apostrophe with no angle
+     * bracket present, the angle bracket only when something later on the line closes the run.
      *
      * @return void
      */
@@ -1368,10 +1276,8 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
     /**
      * The decision note reaches the reader, and the download, whole.
      *
-     * The same formatter and therefore the same pair of defects as the comment column beside it,
-     * and asserted the same way: format_text(FORMAT_PLAIN) would write "&#039;" for an apostrophe
-     * that nothing decodes back, and would inject a "<br />" whose ">" lets a decoded "<" swallow
-     * the rest of the line. Both halves, because they fail on different inputs.
+     * Same formatter and same two failure modes as the comment column; see
+     * test_the_comment_column_reaches_the_reader_and_the_download_whole().
      *
      * @return void
      */
@@ -1396,7 +1302,8 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
     /**
      * The method filter appears only where a course has more than one apply instance.
      *
-     * A filter with one option cannot narrow anything and reads as a control that is broken.
+     * A filter offering a single option reads as a broken control; see
+     * course_applications::add_report_filters().
      *
      * @return void
      */

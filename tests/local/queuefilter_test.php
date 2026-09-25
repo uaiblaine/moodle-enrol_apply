@@ -70,11 +70,10 @@ final class queuefilter_test extends \advanced_testcase {
     /**
      * Nothing configured means nothing offered, whichever way "nothing" is spelled.
      *
-     * Three spellings reach this: the setting absent because nobody has visited the page, the
-     * empty string that admin_setting_configmulticheckbox writes when everything is unticked, and
-     * the empty string it also writes on a site whose choice list was empty. Read with a `?:`
-     * falling back to a default, all three would silently offer filters nobody asked for - which
-     * on this queue means offering a control over a profile field an administrator declined.
+     * The setting is absent until it is first saved (and stays absent on a site with no identity
+     * fields, where admin_setting_configmulticheckbox::write_setting() writes nothing), and it is
+     * the empty string once every box is unticked. A `?:` falling back to a default would offer a
+     * filter over a profile field the administrator declined.
      *
      * @return void
      */
@@ -115,9 +114,9 @@ final class queuefilter_test extends \advanced_testcase {
      * A field whose name would collide with a parameter the page already uses is never offered.
      *
      * The queue's GET form carries one parameter per filter, so a token spelled like the scope or
-     * the paging would overwrite it - and the symptom is a page that silently loses its scope
-     * rather than an error. No standard identity field collides; the guard is for the custom
-     * field an administrator could create tomorrow.
+     * the paging would overwrite it and the page would silently lose its scope. No standard
+     * identity field collides, and a custom field's token is always pf<id>, so the guard only
+     * applies to a standard name.
      *
      * @return void
      */
@@ -156,10 +155,8 @@ final class queuefilter_test extends \advanced_testcase {
     /**
      * A menu field becomes a select over its own options, and refuses anything else.
      *
-     * The options come from the field's definition and never from a query over the values users
-     * happen to hold. A list of the values PRESENT would enumerate rather than confirm, and the
-     * query behind it would be a third consumer of the queue's scope predicate - one that, bounded
-     * by the instance alone, would list the ranks of applicants already approved or cancelled.
+     * The options come from the field's definition, never from the values users hold; see
+     * {@see queuefilter::shape()} for why.
      *
      * @return void
      */
@@ -182,10 +179,10 @@ final class queuefilter_test extends \advanced_testcase {
      * Core builds a menu's options from a bare explode("\n", param1) and stores the chosen key
      * verbatim (user/profile/field/menu/field.class.php); only "\r" is stripped, by
      * define_save_preprocess(). So an option written with a leading or trailing space really is
-     * what lands in {user_info_data}, and a vocabulary trimmed on the way out would offer a value
-     * the column can never hold - the filter would match nothing, on every database, for ever.
+     * what lands in {user_info_data}, and a trimmed vocabulary would offer a value the column
+     * never holds.
      *
-     * The last assertion is the control from the other side: the trimmed spelling is NOT the
+     * The last assertion is the control from the other side: the trimmed spelling is not in the
      * site's vocabulary, so it is refused like any other value outside it.
      *
      * @return void
@@ -205,11 +202,9 @@ final class queuefilter_test extends \advanced_testcase {
     /**
      * A field's label has one spelling here and each sink asks for what it needs.
      *
-     * Core's get_display_name() cannot be used directly: it runs format_string(), which escapes by
-     * default, for a custom field and a bare get_string() for a standard one, so the list it
-     * returns is half escaped and half not. The settings page renders its labels through a triple
-     * stash and needs the escaped spelling; the filter's own label and the chip beside it are
-     * double stashes and need the plain one.
+     * The settings page renders its labels through a triple stash and needs the escaped spelling;
+     * the filter's own label and its chip are double stashes and need the plain one. See
+     * {@see queuefilter::label()} for why core's get_display_name() is not used.
      *
      * @return void
      */
@@ -223,10 +218,9 @@ final class queuefilter_test extends \advanced_testcase {
     /**
      * The applied-date bounds are whole local days, and the upper one includes its own day.
      *
-     * The upper bound is the midnight that STARTS the following day, compared with a strict
-     * less-than, so an application made at any hour of the "to" date is inside the range without
-     * any second-level arithmetic. Adding 86400 to the lower bound would be wrong twice a year:
-     * a day is not 86400 seconds across a daylight-saving change.
+     * The upper bound is the midnight that starts the day after the "to" date, compared with a
+     * strict less-than. The fixture spans the 2026 British Summer Time change, when a day is not
+     * 86400 seconds; see {@see queuefilter::day_bounds()}.
      *
      * @return void
      */

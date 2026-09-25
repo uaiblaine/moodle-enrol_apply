@@ -26,19 +26,14 @@ use stdClass;
 /**
  * What counts as an application awaiting a decision, and who may decide it.
  *
- * The predicate below is the only SQL definition of "awaiting a decision" in the plugin - the
- * approval queue, the submitted-comments listing, the review lookup and the retention sweep
- * all read it. It used to be written out in each of them, which is how the participants-page
- * bulk decisions came to act on rows the queue deliberately excludes: two copies of a filter
- * that is also a correctness boundary drift, and the one that drifted was the newer.
+ * awaiting_decision_where() is the only SQL definition of "awaiting a decision" in the plugin:
+ * the approval queue, the submitted-comments listing, the review lookup and the retention sweep
+ * all read it, so a filter that is also a correctness boundary cannot drift between copies.
  *
- * There is one deliberate second expression of the same rule, and it is not SQL:
- * is_awaiting_decision() below applies it to a {user_enrolments} row that core has already
- * loaded and that never reaches a query - the objects the participants-page driver hands to
- * a bulk decision, and the one row behind each of that page's action icons. It lives here,
- * next to the SQL, because it used to live in classes/bulk/ and the icon would have made a
- * third copy of a filter that is also a correctness boundary. Keep the two in step by hand;
- * there is no third.
+ * is_awaiting_decision() is the one deliberate second expression of the rule, for
+ * {user_enrolments} rows core's participants page has already loaded and that never reach a
+ * query of this plugin's: the selection handed to a bulk decision, and the row behind each of
+ * that page's action icons. Keep the two in step by hand; there is no third.
  *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine
@@ -51,19 +46,17 @@ final class queue {
     /**
      * The SQL predicate for an application still awaiting a decision.
      *
-     * Two clauses, and the second is the one that is easy to leave out. An undecided
-     * application is "not active AND has not expired": process_expirations() re-suspends an
-     * ACTIVE enrolment whose period ran out when expiredaction is "suspend", and a re-suspended
-     * row would otherwise surface as a fresh application from somebody who was in fact approved
-     * long ago.
+     * An undecided application is "not active AND has not expired", and the second clause is the
+     * easy one to leave out: process_expirations() re-suspends an ACTIVE enrolment whose period
+     * ran out when expiredaction is "suspend", and that row would otherwise surface as a fresh
+     * application from somebody approved long ago.
      *
-     * Nothing this plugin WRITES puts a period on a pending or waiting-list row - apply()
-     * stamps none, and wait_enrolment() clears any the row was carrying - but that is a
-     * property of the writers, not an invariant of the table, and it must not be read as one.
-     * restore_enrol_apply_plugin passes an archived timeend through verbatim, so a foreign
-     * archive can produce any value at all. The clause stays because the data can.
+     * Nothing this plugin writes puts a period on a pending or waiting-list row - apply() stamps
+     * none, and wait_enrolment() clears any the row was carrying - but that is a property of the
+     * writers, not of the table: enrol_apply_plugin::restore_user_enrolment() passes an archived
+     * timeend through verbatim, so a foreign archive can produce any value.
      *
-     * The user enrolment must be aliased "ue" by the caller, which every caller already does.
+     * The caller must alias the user enrolment "ue".
      *
      * @return array Two-element array of the where clauses and their named parameters.
      */
@@ -77,28 +70,18 @@ final class queue {
     /**
      * The same predicate, applied to a user enrolment row core has already loaded.
      *
-     * The twin of awaiting_decision_where() above, and the only other place the rule is
-     * written out. Both callers are on core's participants page, which hands over
-     * {user_enrolments} rows rather than running a query of this plugin's: the bulk
-     * decisions, which get the selection, and get_user_enrolment_actions(), which gets one
-     * row per action icon it is asked to build.
+     * The twin of {@see awaiting_decision_where()}; keep the two in step. Both callers are on
+     * core's participants page, which hands over {user_enrolments} rows rather than running a
+     * query of this plugin's: the bulk decisions, which get the selection, and
+     * get_user_enrolment_actions(), which gets one row per action icon it is asked to build.
      *
-     * The second clause is the one that is easy to leave out and the reason this is not
-     * simply "not active". Under an expiredaction of suspend, process_expirations()
-     * re-suspends an ACTIVE enrolment whose period ran out, so somebody approved and enrolled
-     * long ago comes back reading exactly like a fresh application - and the participants
-     * page is where that row is most visible, since core paints its own status badge from the
-     * same status value with none of this context. Under the shipped default of
-     * ENROL_EXT_REMOVED_KEEP the row stays active and the first clause is what excludes it.
+     * The timeend clause matters most there, because core paints its own status badge from the
+     * same status value: under an expiredaction of suspend, somebody approved long ago comes back
+     * reading exactly like a fresh application. Under the shipped default of
+     * ENROL_EXT_REMOVED_KEEP the row stays active and the first clause excludes it.
      *
-     * It is written as "= 0", matching the SQL, rather than the "> 0 && <= now" the bulk copy
-     * used, and the two disagree on exactly one input: a NEGATIVE timeend, which the old
-     * object form reported as awaiting a decision and which the SQL has always excluded.
-     * Measured over {0, -1, -86400, now, now +/- 10}; -1 and -86400 are the only rows that
-     * move, and they move onto the side the queue was already on. Nothing this plugin writes
-     * produces one - the column is NOT NULL and core stamps 0 or a real timestamp - so it is
-     * a correction rather than a behaviour change, but it is a correction and is recorded
-     * here rather than left for somebody to rediscover from a diff.
+     * Written as the SQL is - timeend 0 or in the future - so a negative timeend counts as
+     * expired here too.
      *
      * @param stdClass $userenrolment A {user_enrolments} row, carrying at least status and timeend.
      * @return bool True when this enrolment is an application still awaiting a decision.
@@ -116,23 +99,15 @@ final class queue {
     /**
      * One application, if it is still awaiting a decision.
      *
-     * Deliberately one lookup for three different outcomes - never applied, already decided,
-     * enrolment gone - because they are the same thing to somebody who followed a link that has
-     * gone stale, which is who reaches this. It is worth being precise about what that does and
-     * does not buy, because an earlier draft of this docblock claimed more.
+     * One lookup for three outcomes - never applied, already decided, enrolment gone - because
+     * they are the same thing to somebody following a stale link, which is who reaches this.
      *
-     * It does NOT make the page silent about whether an id names a live application. Measured
-     * on 5.2 as a logged-in user with no claim on the course: an id with nothing behind it
-     * renders the "no application" page with HTTP 200, while a pending one is refused by
-     * require_review_access() below and comes back 500. So the page still answers "is user
-     * enrolment N a pending application?" - as every Moodle page that refuses by capability
-     * answers the same question about its own object, and the refusal names neither the
-     * applicant nor the course.
-     *
-     * What it does buy is that a reader who IS entitled to the answer cannot tell a decided
-     * application from a deleted one, and neither can anybody else. The caller has not been
-     * authorised at this point and cannot be: the context to authorise against is derived from
-     * this row.
+     * That stops anybody telling a decided application from a deleted one. It does not hide
+     * whether an id names a pending application: the page refuses a pending one through
+     * require_review_access() and renders "no application" for the rest, as any Moodle page
+     * that refuses by capability answers about its own object, and the refusal names neither
+     * the applicant nor the course. The caller cannot be authorised before this runs: the
+     * context to authorise against is derived from this row.
      *
      * The profile snapshot comes from the durable record only, with no fallback: the
      * applicationinfo row has never held one, so an application that predates that record shows
@@ -149,12 +124,9 @@ final class queue {
         $params['ueid'] = $userenrolmentid;
         $params['enrol'] = 'apply';
 
-        /* The decision columns come from a table this query ALREADY left joins and simply did
-           not select, so they cost nothing. They are what lets the review page say who deferred
-           an application, when, and what they wrote to the applicant - which is the one case
-           where the reader is looking at something a colleague already decided and the page used
-           to say only "On the waiting list". s.id is here for the same reason: without the
-           record's own key nothing can link the two surfaces onto it. */
+        /* The decision columns come from a table this query already left joins, so they cost
+           nothing. They let the review page say who deferred an application, when, and what
+           they wrote to the applicant; s.id is what links the page to the durable record. */
         $sql = "SELECT ue.id, ue.userid, ue.enrolid, ue.status, ue.timecreated AS applydate,
                        COALESCE(s.comment, ai.comment) AS applycomment, s.userinfodata AS snapshot,
                        s.id AS submissionid, s.status AS recordstatus, s.timedecided,
@@ -173,44 +145,31 @@ final class queue {
     /**
      * Which queue this operator is working in, and where that queue lives.
      *
-     * The review page is reachable by three audiences and each of them has a different queue
-     * behind it, so "the next application" has no meaning until this is settled. It is settled
-     * from what the operator may OPEN, never from the request: manage.php tests userenrol
-     * before id, so on the review path the id parameter is read into a variable and then never
-     * authorised and never used. A walk built on it would let a request parameter choose which
-     * applications are enumerated - and an earlier plan for this navigation said to carry the
-     * scope that way, on the belief that manage.php had already authorised it.
+     * The review page serves three audiences with a different queue behind each, so "the next
+     * application" means nothing until this is settled. It is derived from what the operator may
+     * OPEN, never from the request: manage.php tests userenrol before id, so on the review path
+     * the id parameter is never authorised, and a walk built on it would let a request parameter
+     * choose which applications are enumerated.
      *
-     * Deriving it instead buys a property worth more than the parameter: every application the
-     * walk can reach is one this operator may decide, by construction rather than by a
-     * per-candidate check. The three scopes below are the three levels can_manage_application()
-     * accepts, in the same order:
+     * The three scopes are the three levels can_manage_application() accepts, so every
+     * application the walk can reach is one this operator may decide, by construction rather
+     * than by a per-candidate check:
      *  - the instance queue, when the operator may open it, where every row is in that one
      *    course and the course-context check passes for all of them;
      *  - the site-wide queue, where the system-context check passes for all of them;
      *  - the operator's own mentees, which get_mentees() enumerates by confirming the
      *    capability in each candidate's user context - the same check, one candidate at a time.
+     * mod_book's skip-the-candidates-that-fail loop is therefore not needed; a test per scope
+     * holds the property instead.
      *
-     * So mod_book's skip-the-candidates-that-fail loop, which is the shape a per-row gate
-     * usually needs, is not needed here and is deliberately absent: an unreachable guard no
-     * test can hold reads as protection while proving nothing. What holds the property instead
-     * is a test per scope.
+     * Every scope must also CONTAIN the application it was derived for. neighbours() compares the
+     * anchor's (timecreated, ue.id) against the scoped set; anchored outside it, it returns
+     * insertion-point neighbours, so "next" leads somewhere with no link back to the application
+     * on screen. The first two branches contain the anchor by construction; the mentee branch
+     * tests membership.
      *
-     * Every scope also CONTAINS the application it was derived for, which is a second property
-     * and not the same one. neighbours() compares the anchor's (timecreated, ue.id) against the
-     * scoped set; anchored outside that set it returns insertion-point neighbours instead of
-     * neighbours, so the application on screen is reachable from neither of its own links and
-     * "next" leads somewhere the operator cannot get back from. That is exactly the dead end
-     * this navigation exists to remove, and it was reachable: the mentee branch was taken
-     * whenever the first two failed and the operator mentored ANYBODY, including for an
-     * application belonging to none of their mentees. The first two branches contain the anchor
-     * by construction; the third has to test for it.
-     *
-     * This is also the one answer to "where does a decision send the operator back to", which
-     * manage.php used to work out separately with can_access_course() alone. That was measurably
-     * wrong for a mentor who is enrolled in the course as anything else: can_access_course()
-     * was true, so the decision redirected to manage.php?id=, whose require_capability() then
-     * threw at them - a successful decision reported as an exception.
+     * The same answer decides where a decision sends the operator back to, so that redirect never
+     * lands on a queue that would refuse them.
      *
      * @param stdClass $application Application as application() returns it.
      * @param stdClass $instance Enrol instance the application under review belongs to.
@@ -222,16 +181,12 @@ final class queue {
     public static function scope(stdClass $application, stdClass $instance): stdClass {
         $course = get_course($instance->courseid);
 
-        /* The FOURTH argument is the whole test, and an earlier draft of this comment claimed
-           the three-argument form was "the pair manage.php?id= itself demands". It is not.
-           can_access_course() defaults $onlyactive to false and reaches is_enrolled() with it,
-           so a SUSPENDED or EXPIRED enrolment counts as access - while require_login($course),
-           which manage.php?id= calls before require_capability(), refuses both. Measured on 5.1
-           and 5.2 over five operators: with $onlyactive true the two agree on every one of them
-           (active teacher and category manager allowed, suspended, expired and unenrolled
-           category teacher refused); with it false they disagree on the suspended and the
-           expired one, who kept the capability and were sent to a queue that bounced them to
-           the course enrolment page after their decision had already been applied. */
+        /* All four arguments matter. The capability keeps out a mentor who is merely enrolled
+           in the course, whom manage.php?id= would refuse after their decision was applied.
+           $onlyactive set to true makes this agree with require_login($course), which manage.php?id=
+           calls before require_capability(): with the default false, is_enrolled() counts a
+           suspended or expired enrolment as access, and such a teacher would be sent to a queue
+           that bounces them to the course enrolment page. */
         if (can_access_course($course, null, 'enrol/apply:manageapplications', true)) {
             return (object) [
                 'enrolid' => (int) $instance->id,
@@ -263,19 +218,16 @@ final class queue {
             ];
         }
 
-        /* No queue at all, and this is reachable rather than defensive. The plainest route is
-           the capability held at a course context through a category role, by somebody who is
-           not enrolled: that passes can_manage_application() and fails every test above, on a
-           VISIBLE course - measured, and worth stating because an earlier draft of this comment
-           said the course had to be hidden. Hiding it is one sufficient condition among several,
-           not a necessary one. A teacher whose own enrolment has been suspended lands here too,
-           and so does a mentor looking at an application none of their mentees made.
+        /* No queue at all, which is reachable rather than defensive: the capability held at a
+           course context through a category role by somebody not enrolled (on a visible course
+           as much as a hidden one) passes can_manage_application() and fails every test above.
+           A teacher whose own enrolment is suspended lands here too, and so does a mentor
+           looking at an application none of their mentees made.
 
            The parameterless queue would refuse the first of those, so sending them there after
-           a decision would report a success as an exception - the same defect this method exists
-           to remove, arrived at from the other end. An empty mentee list is the marker; nothing
-           can be walked from it. hasqueue is false for the same reason: the review page must
-           not offer a way back to a queue that would refuse this operator. */
+           a decision would report a success as an exception. An empty mentee list means nothing
+           can be walked, and hasqueue false keeps the review page from offering a way back to a
+           queue that would refuse this operator. */
         return (object) [
             'enrolid' => 0,
             'mentees' => [],
@@ -287,36 +239,31 @@ final class queue {
     /**
      * Everything the applications LISTING is scoped by, derived from one enrol instance id.
      *
-     * The counterpart of scope() above, and the two answer different questions. scope() asks
-     * "which queue does this operator work in", from an application they are already reviewing.
-     * This asks "what does the queue at this url show", from the id in that url.
+     * The counterpart of scope() above: scope() asks which queue an operator reviewing an
+     * application works in; this asks what the queue at this url shows, from the id in that url.
      *
-     * **It exists because the listing became a dynamic table, and that moved where the scope
-     * arrives from.** core_table\external\dynamic\get builds the table, calls set_filterset()
-     * with whatever the client sent, then validate_context() and has_capability() - once, against
-     * one context (lib/table/classes/external/dynamic/get.php:228-231, byte-identical on 5.1 and
-     * 5.2). It never calls filterset::check_validity(). So the client names the scope on every
-     * request after the first, while this queue has three scopes across two context levels, and
-     * the mentee restriction is not something a client may be trusted to state.
+     * The listing is a dynamic table. core_table\external\dynamic\get builds it, calls
+     * set_filterset() with whatever the client sent, then validate_context() and
+     * has_capability() once against one context, and never calls filterset::check_validity()
+     * (lib/table/classes/external/dynamic/get.php). So the client names the scope on every
+     * refresh, while this queue has three scopes across two context levels and the mentee
+     * restriction is not something a client may be trusted to state.
      *
-     * The resolution is that ONE integer travels - the enrol instance id - and everything the
-     * listing is narrowed by is recomputed here from it: the course, the context, the mentee id
-     * list and whether this operator may see any of it. A forged id is answered by the
-     * capability check against ITS course, which is the same refusal manage.php?id= gives today.
-     * The mentee list never travels at all, so no request can widen it.
+     * ONE integer therefore travels - the enrol instance id - and everything the listing is
+     * narrowed by is recomputed here from it: the course, the context, the mentee id list and
+     * whether this operator may see any of it. A forged id is answered by the capability check
+     * against its own course, the same refusal manage.php?id= gives. The mentee list never
+     * travels, so no request can widen it.
      *
-     * **Total by construction: it never throws and never returns false.** Both are load bearing.
-     * get_context() is called before has_capability() and its return type is a context, so a
-     * resolver that answered false for a refusal would produce a TypeError rather than a refusal
-     * - and one that threw on an unknown id would answer a forged request with a database
-     * exception instead of "no permission". An id that resolves to nothing therefore comes back
-     * with the system context and allowed false.
+     * Never returns false, and an unknown id does not throw: get_context() must return a context
+     * and is called before has_capability(), and a forged request must get "no permission"
+     * rather than a database exception. An id that resolves to nothing comes back with the
+     * system context and allowed false.
      *
-     * `allowed` is the capability half only. The course-ACCESS half is applied by each caller in
-     * the way its own path applies it: manage.php calls require_login($course) itself, and on the
-     * web service path external_api::validate_context() calls require_login($course, false, $cm,
-     * false, true) from the context this returns (lib/external/classes/external_api.php:520-521).
-     * Folding that in here would duplicate a check one caller has already made and the other
+     * `allowed` is the capability half only. Course access is applied by each caller on its own
+     * path: manage.php calls require_login($course) itself, and on the web service path
+     * external_api::validate_context() calls require_login() from the context this returns.
+     * Folding it in here would duplicate a check one caller has already made and the other
      * cannot skip.
      *
      * @param int $enrolid Enrol instance to list, 0 for every instance this operator may decide in.
@@ -364,13 +311,13 @@ final class queue {
             ];
         }
 
-        /* No site-wide capability, so the mentees. A null restriction means "every application"
-           and an empty list would widen the query the same way, which is why the capability test
-           has to come first and why an empty list refuses rather than lists.
+        /* No site-wide capability, so the mentees. A null restriction means "every application",
+           which is why the capability test has to come first; an empty list is refused rather
+           than listed.
 
-           The identity context is null here and nowhere else: this scope spans courses in a
-           single statement, so no one context is the right question for it, and a per-row mask
-           would be unsound for a sortable column. */
+           The identity context is null: this scope spans courses in a single statement, so no
+           one context is the right question for it, and a per-row mask would be unsound for a
+           sortable column. */
         $mentees = applications::get_mentees();
 
         return (object) [
@@ -407,21 +354,15 @@ final class queue {
     /**
      * This applicant's OTHER applications to the same course, newest first.
      *
-     * "They were cancelled here before" is the kind of fact that makes a decision easier, and the
-     * durable record already holds it: its natural key is (courseid, userid) and is deliberately
-     * NOT unique, precisely because cancelling and re-applying is the ordinary route. The
-     * `courseuser` index is the one this reads.
+     * The durable record holds them: its natural key (courseid, userid) is deliberately not
+     * unique, because cancelling and re-applying is the ordinary route. This reads the
+     * `courseuser` index.
      *
-     * The live enrolment is joined because the record alone cannot say what happened. The stored
-     * status is the last decision this plugin's state machine took; the participants page, course
-     * reset, user deletion and the expiry sweep all change an enrolment without touching it, so
-     * an approved-and-enrolled row and an approved-then-unenrolled row are otherwise literally
-     * the same row. The three aliases below are exactly what the report's own outcome formatter
-     * reads, so both surfaces describe a record the same way rather than inventing two
-     * vocabularies for one fact.
-     *
-     * LEFT JOIN and not INNER: a record outlives its enrolment on purpose, which is the whole
-     * reason this table exists.
+     * The live enrolment is joined because the stored status is only the last decision this
+     * plugin's state machine took: the participants page, course reset, user deletion and the
+     * expiry sweep all change an enrolment without touching the record. The three outcome
+     * aliases below are what the report's outcome formatter reads, so both surfaces describe a
+     * record the same way. LEFT JOIN, because a record outlives its enrolment on purpose.
      *
      * @param int $courseid Course the application under review was made to.
      * @param int $userid The applicant.
@@ -432,15 +373,10 @@ final class queue {
         global $DB;
 
         if ($userid <= 0) {
-            /* A pseudonymised record carries userid 0 and no longer describes anybody, so this
-               would gather the leftovers of every applicant to this ONE course rather than one
-               person's history - scoped by the courseid clause below, not unbounded, which an
-               earlier version of this comment overstated.
-
-               Not reachable from the review page: its argument comes from ue.userid, and no
-               user_enrolments row carries 0. It is here because the method is public and its
-               natural key is a pair the pseudonymisation deliberately collapses, so a later
-               caller reading straight from enrol_apply_submission would hit it. */
+            /* A pseudonymised record carries userid 0, so this would gather every pseudonymised
+               applicant to this course rather than one person's history. The review page never
+               passes 0 (its argument comes from ue.userid); this guards a later caller reading
+               the userid straight from enrol_apply_submission. */
             return [];
         }
 
@@ -452,11 +388,9 @@ final class queue {
                  WHERE s.courseid = :courseid AND s.userid = :userid AND s.id <> :excludeid
               ORDER BY s.timecreated DESC, s.id DESC";
 
-        /* Bounded, because nothing else bounds it. The natural key is deliberately not unique and
-           a determined re-applicant can accumulate rows without limit - measured on the live site,
-           one person holds eight records in one course - and this renders as a list on a page
-           whose purpose is one decision. The newest few are what a decision turns on; the rest is
-           the report's job. */
+        /* Bounded, because nothing else bounds it: a determined re-applicant can accumulate
+           records without limit, and this renders on a page whose purpose is one decision. The
+           newest few are what a decision turns on; the rest is the report's job. */
         return $DB->get_records_sql($sql, [
             'courseid' => $courseid,
             'userid' => $userid,
@@ -468,44 +402,23 @@ final class queue {
      * The applications either side of this one, in the queue this operator is working in.
      *
      * Resolved in SQL, one statement per direction with a single row taken, rather than by
-     * materialising the queue and looking for the current row in it - which is what both
-     * gradebook reports do. The comparison is not close: materialising runs this same predicate
-     * with no LIMIT, hands every row to PHP and hydrates a user record for each, and the
-     * site-wide scope spans every course. This runs it twice and hands over two rows.
+     * materialising the queue and looking for the current row in it, which would run this same
+     * predicate with no LIMIT and hydrate a user record per row across every course on the
+     * site-wide scope. {user_enrolments} is indexed on enrolid and userid but not on status or
+     * timecreated, so the instance scope (e.id) and the mentee scope (ue.userid) each reach their
+     * rows through an index, while the site-wide scope relies on e.enrol = 'apply'. Whatever the
+     * planner decides, the sort and the LIMIT stay in the database.
      *
-     * What the plan actually depends on, measured with EXPLAIN ANALYZE on m502 rather than
-     * assumed: {user_enrolments} carries indexes on enrolid and userid and NONE on status or
-     * timecreated, so the instance scope (e.id) and the mentee scope (ue.userid) each reach
-     * their rows through one, while the site-wide scope has only e.enrol = 'apply' to be
-     * selective with - few instances, joined into {user_enrolments} on the enrolid index. On a
-     * small site the planner ignores all of that and sequentially scans the 313-row table in
-     * 0.1ms with a top-N heapsort, which is the right answer at that size; the point of the
-     * shape is that the sort and the LIMIT stay in the database whatever it decides.
+     * The walk is pinned to (timecreated ASC, ue.id ASC): the table's default sort plus the
+     * unique final key {@see \enrol_apply\table\applications::get_sort_columns()} appends, which
+     * keeps a tied group from trading places. It ignores the operator's own sort, which
+     * flexible_table keeps in the session under \enrol_apply\table\applications::UNIQUEID (this
+     * table is not persistent), because a server-resolved neighbour cannot depend on state this
+     * page does not render. The walk can therefore disagree with a re-sorted queue; each link
+     * names the applicant it leads to, so the operator reads where they are going first.
      *
-     * The walk is pinned to (timecreated ASC, ue.id ASC) - the table's own default sort, with
-     * the unique final key that keeps a tied group from trading places. It is pinned because a
-     * server-resolved neighbour has no meaning otherwise: the table is user-sortable and
-     * flexible_table keeps that choice in the session, under
-     * \enrol_apply\table\applications::UNIQUEID (a user preference only when is_persistent(true)
-     * is called, which this table does not do), so "next" would otherwise depend on state this
-     * page cannot see. It follows that the walk can disagree with a re-sorted queue. That
-     * divergence is documented rather than silent,
-     * and the link names the applicant it leads to, so the operator reads where they are going
-     * before they go there.
-     *
-     * The walk does NOT honour the initials bar, and this is a decision rather than an
-     * oversight. The queue is rendered with out(50, true), and query_db() appends
-     * get_sql_where() - firstname LIKE 'x%' - so an operator who has picked a letter is looking
-     * at a narrower set than the predicate below describes. Three things settle it. Turning the
-     * bar off would not close the gap: set_initials_preferences() runs from setup() whatever
-     * the bar argument says, so the filter still applies from a stale preference or a crafted
-     * request parameter, and only the CONTROL disappears. Honouring it would make the page
-     * depend on session state it does not render, so a bookmarked or emailed review link would
-     * silently lose its neighbours because of a letter clicked days earlier - invisible, which
-     * is the failure mode this repository treats as the defect. Not honouring it fails visibly
-     * instead: the next link names an applicant outside the filtered letter, before the click.
-     * And it keeps one rule for the whole preference blob, rather than pinning the sort half
-     * and obeying the filter half.
+     * The queue has no initials filter ({@see \enrol_apply\table\applications::get_sql_where()}),
+     * so there is none for the walk to honour.
      *
      * @param stdClass $application Application as application() returns it.
      * @param stdClass $scope Scope as scope() returns it.
@@ -524,34 +437,25 @@ final class queue {
      * A participants-page bulk decision reaches exactly ONE enrolment method, and nothing in
      * this plugin can widen it: user/action_redir.php resolves the plugin to the FIRST {enrol}
      * row of that type in the course - enrol_get_instances($courseid, false), break on the
-     * first match, so a DISABLED method sorting first captures the whole dispatch - and filters
+     * first match, so a disabled method sorting first captures the whole dispatch - and filters
      * the manager to it, while the menu's url carries only the plugin name and the operation.
-     * There is nowhere to say which method was meant.
      *
-     * Core warns about this only when the people are different: get_users_enrolments() returns
-     * no row for somebody with no enrolment on that instance, and action_redir.php reports the
-     * difference. **One person holding two applications in one course is the silent case** -
-     * they come back carrying the filtered instance's row, nothing is "removed", core says
-     * nothing, and the plugin reports a clean success. That case is reachable rather than
-     * exotic: two applications in one course is supported on purpose, because two apply
+     * Core warns only when a selected person has no enrolment on that instance. One person
+     * holding two applications in one course is the silent case: they come back carrying the
+     * filtered instance's row, core reports nothing removed, and the decision reports a clean
+     * success. Two applications in one course are supported on purpose, because two apply
      * instances are two intakes.
      *
-     * This method is what lets the operator be told. It deliberately does NOT let the other
-     * applications be decided, and the reasoning is recorded in docs/design/ui-rebuild-plan.md:
-     * the decision carries per-instance data - the role fallback is that instance's roleid, the
-     * groups come from its own enrol_apply_groups, the two caps are its own - so approving one
-     * intake is a statement about that intake and nothing else, a deferral note written about
-     * one is a falsehood attached to the other, and a warning is reversible by the operator
-     * where a decision is not.
+     * This method lets the operator be told; it deliberately does not let the other applications
+     * be decided. The decision carries per-instance data - the role fallback is that instance's
+     * roleid, the groups come from its own enrol_apply_groups, the two caps are its own - so
+     * approving one intake says nothing about the other, a deferral note written about one is
+     * false of the other, and a warning is reversible by the operator where a decision is not.
      *
-     * Built from awaiting_decision_where() rather than from a predicate of its own, so a change
-     * to the queue's own definition of "awaiting a decision" moves this with it. **That is the
-     * SQL form of the rule, and gates C and D hold its twin rather than this one** - both patch
-     * is_awaiting_decision(), the object form the participants page uses, and leave every query
-     * in this file byte-identical. An earlier version of this docblock claimed this method
-     * inherited them, which it does not; gate BV holds the SQL form. It does not join {course}:
-     * unlike neighbour(), which must reproduce the listing's FROM exactly, nothing here reads a
-     * course and the scope is expressed by e.courseid directly.
+     * Built from awaiting_decision_where(), so a change to the queue's definition of "awaiting a
+     * decision" moves this with it. It does not join {course}: unlike neighbour(), which must
+     * reproduce the listing's FROM exactly, nothing here reads a course and the scope is
+     * expressed by e.courseid directly.
      *
      * @param int $courseid Course the bulk decision was dispatched in.
      * @param array $userids Users the operator selected.
@@ -650,16 +554,13 @@ final class queue {
         $namefields = \core_user\fields::for_name()->get_sql('u')->selects;
 
         /* The listing's own INNER joins, including the one to {course}, which this query reads
-           nothing from. It is here so that the walk's FROM is the listing's FROM: neither can
-           drop a row on data this plugin can produce - {enrol}.courseid is declared foreign to
-           course.id, though XMLDB creates an index for it rather than a constraint - and where
-           that ever stopped being true, a walk that had dropped the join would offer a
-           neighbour the queue does not list. The listing's two comment joins are omitted
-           because nothing here reads a comment: a LEFT join cannot REMOVE a row, so leaving
-           them out cannot let anything through. It could in principle multiply one - measured,
-           applicationinfo.userenrolmentid is declared foreign-unique and cannot, while
-           submission.userenrolmentid is a plain index and could - but that is a property of
-           the listing, and taking one row per statement is not affected by it either way. */
+           nothing from, so that the walk's FROM is the listing's FROM. Neither drops a row on
+           data this plugin produces ({enrol}.courseid is declared foreign to course.id, though
+           XMLDB creates an index rather than a constraint), but if one ever did, a walk without
+           it would offer a neighbour the queue does not list. The listing's two comment LEFT
+           joins are omitted because nothing here reads a comment: a LEFT join cannot remove a
+           row, and although submission.userenrolmentid is not unique and could multiply one,
+           taking one row per statement is unaffected. */
         $sql = "SELECT ue.id, ue.userid {$namefields}
                   FROM {user_enrolments} ue
                   JOIN {user} u ON u.id = ue.userid
@@ -676,18 +577,13 @@ final class queue {
     /**
      * Refuse anybody who may not decide this application, and say which context let them in.
      *
-     * The review page used to require the capability in the applicant's own USER context and
-     * nowhere else, which made it a mentor's page by accident: measured on both branches, a
-     * course teacher holding enrol/apply:manageapplications in the course the application
-     * belongs to fails that check, so opening a single application threw at them. The gate is
-     * now the plugin's own can_manage_application(), which is the same predicate every
-     * decision applies to every row - so the people who may act on an application are exactly
-     * the people who may look at one. Nothing new is disclosed: a course teacher already sees
-     * every one of these applications, with the same fields, on the queue.
+     * The gate is the plugin's own can_manage_application(), the predicate every decision
+     * applies to every row, so the people who may act on an application are exactly the people
+     * who may look at one. Nothing new is disclosed: a course teacher already sees every one of
+     * these applications, with the same fields, on the queue.
      *
-     * require_login($course) is deliberately not called. A mentor holds no course access at
-     * all, which is the whole point of that delegation level, so it would refuse the one
-     * audience this page has always served.
+     * require_login($course) is deliberately not called: a mentor holds no course access at
+     * all, which is the point of that delegation level.
      *
      * @param stdClass $application Application as application() returns it.
      * @return context The context that granted access, for the page to sit in.
@@ -695,11 +591,8 @@ final class queue {
     public static function require_review_access(stdClass $application): context {
         $usercontext = context_user::instance($application->userid, MUST_EXIST);
 
-        /* The gate is can_manage_application() itself and not a second reading of the same
-           three levels. Written out again here it would be a copy of an authorisation
-           boundary, which is the shape this class exists to remove from the predicate above -
-           and the two would agree only until somebody added an override, a prohibit or a
-           fourth level to one of them. */
+        /* can_manage_application() itself, not a second copy of its three levels, which would
+           agree only until somebody added an override, a prohibit or a fourth level to one. */
         if (!enrol_get_plugin('apply')->can_manage_application((int) $application->courseid, (int) $application->userid)) {
             // Reported exactly as every other refusal in this plugin is.
             require_capability('enrol/apply:manageapplications', $usercontext);

@@ -1,12 +1,11 @@
-/* The queue's own tokens, and every root it paints. Custom properties inherit down the DOM, and
-   the sticky footer is moved by CSS rather than by script, so it stays inside the form - but a
-   token block scoped to one element still has to name every element the values are read from.
-   An unresolved var() is not "fall back to the literal": the whole declaration is invalid at
-   computed-value time, so a background would be NO background rather than the default one.
+/* The queue's own tokens, declared on every root that reads them. An unresolved var() does not
+   fall back to a literal: the whole declaration is invalid at computed-value time, so a background
+   would be no background at all. The sticky footer needs no root of its own, because core
+   positions it with CSS and it stays inside the form.
 
-   The chains read the theme's own tokens rather than inventing a palette. 5.1 and 5.2 both ship
-   dark mode, so a literal grey renders as a light slab inside a dark page; and a site with its own
-   institutional colour must not see this plugin's instead. */
+   The chains read the theme's own tokens rather than inventing a palette: 5.1 and 5.2 ship
+   Bootstrap's dark colour mode, where a literal grey renders as a light slab inside a dark page,
+   and a site with its own institutional colour must see it here too. */
 .enrol_apply-queue,
 .enrol_apply-manage,
 .enrol_apply-capacity,
@@ -32,9 +31,9 @@
 }
 
 .enrol_apply-tile-meter {
-    /* A percentage basis with a rem floor, and not repeat(auto-fit, minmax(...)): the gate rejects
-       minmax(max(...)) outright, and a plain auto-fit silently yields three columns on a wide
-       card where two were meant. */
+    /* A percentage basis with a rem floor, not repeat(auto-fit, minmax(...)): Moodle's stylelint
+       csstree validator rejects minmax(max(...)), and a plain auto-fit yields an extra column on
+       a wide card. */
     flex: 1 1 20%;
     min-width: 11rem;
 }
@@ -48,8 +47,7 @@
     font-size: 1.5rem;
     font-weight: 600;
     line-height: 1.2;
-    /* Digits that line up between tiles without changing the face. A monospace family here would
-       make the plugin look like a different product on the same page. */
+    /* Digits that line up between tiles without switching to a monospace face. */
     font-variant-numeric: tabular-nums;
 }
 
@@ -104,27 +102,24 @@
     white-space: nowrap;
 }
 
-/* The controls that narrow the queue. A percentage basis with a rem floor rather than
-   repeat(auto-fit, minmax(...)): the gate rejects minmax(max(...)) outright, and a plain auto-fit
-   yields a third column on a wide page where two were meant. */
+/* The controls that narrow the queue, sized by a percentage basis with a rem floor for the same
+   reason as .enrol_apply-tile-meter. */
 .enrol_apply-filterrow {
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem 1rem;
 }
 
-/* flex-grow 0, and that is the whole point of the change. With grow 1 a fourth control wraps to a
-   line of its own and then STRETCHES to the width of #region-main - a single full-width box under
-   a tidy three-up row, which reads as a layout fault rather than as a wrapped control. The queue
-   can now carry an arbitrary number of these, so wrapping has to look deliberate. */
+/* flex-grow 0: with grow 1 a control that wraps onto a line of its own stretches to the full
+   width of the row, which reads as a layout fault rather than as a wrapped control. The queue
+   can carry any number of field filters, so wrapping has to look deliberate. */
 .enrol_apply-filterfield {
     flex: 0 1 30%;
     min-width: 12rem;
 }
 
-/* Boost sizes a bare select to its content, so the status control ended a third of the way
-   across a field that had already claimed its share of the row - a gap that reads as a missing
-   control rather than as spare width. */
+/* Boost sizes a bare select to its content, which would leave a gap inside a field that has
+   already claimed its share of the row. */
 .enrol_apply-filterfield select {
     width: 100%;
 }
@@ -143,10 +138,7 @@
     margin-top: 0.5rem;
 }
 
-/* Both halves of the pair from the same token family, never an inherited foreground: Moodle 5.2
-   ships two dark mechanisms and only [data-bs-theme="dark"] moves the --bs-* tokens, so a fill
-   taken from a token beside text taken from inheritance is unreadable under the legacy
-   .theme-dark. The stylesheet test enforces this on every rule that paints a background. */
+/* Fill and text from the same token family; see .enrol_apply-fieldpill. */
 .enrol_apply-chip {
     background-color: var(--enrol-apply-track);
     border-radius: 3px;
@@ -178,15 +170,11 @@
 .enrol_apply-fieldpill {
     align-items: baseline;
     background-color: var(--enrol-apply-track);
-    /* The fill's own foreground, never the inherited one, and it is the badge rule of this
-       fleet applied one level up. Moodle 5.2 ships TWO dark mechanisms and only one of them
-       moves the Bootstrap tokens: [data-bs-theme="dark"] flips every --bs-* value, while the
-       legacy .theme-dark recolours text directly and leaves them at their light values.
-       Measured on m502 - under .theme-dark an inherited colour arrives as #dee2e6 while this
-       fill is still #e9ecef, which is 1.10:1 and simply invisible. Taking both halves from the
-       same token family gives 13.66:1 there (a light chip on a dark page - loud, but readable)
-       and 8.84:1 under the token mechanism, where the pair flips together as Bootstrap
-       intends. */
+    /* The fill's own foreground from the same token family, never the inherited colour: an
+       ancestor that recolours text directly without moving the --bs-* tokens would otherwise put
+       light text on this light fill. Read together, the pair gives 13.66:1 in the light colour
+       mode and 8.84:1 under [data-bs-theme="dark"], where both flip. bootstrap_compat_test
+       requires a colour beside every background this stylesheet paints. */
     color: var(--enrol-apply-ink);
     border-radius: 3px;
     display: inline-flex;
@@ -202,84 +190,67 @@
     font-weight: 600;
 }
 
-/* The bulk action bar lives in a core sticky footer, and core parks that footer OFF SCREEN
-   until JavaScript slides it in: theme/boost/scss/moodle/sticky-footer.scss gives .stickyfooter
-   "position: fixed" with "bottom: calc(<height> * -1)", and only ".hasstickyfooter .stickyfooter"
-   brings it to 0. That class is added by theme_boost/sticky-footer.js, so with JavaScript off the
-   queue's only submit control is painted where nobody can see it.
+/* The bulk action bar lives in a core sticky footer, which core parks off screen until
+   JavaScript slides it in: theme/boost/scss/moodle/sticky-footer.scss gives .stickyfooter
+   "position: fixed" with "bottom: calc(<height> * -1)", and only ".hasstickyfooter .stickyfooter",
+   a class theme_boost/sticky-footer.js adds, brings it to 0. Without JavaScript the queue's only
+   submit control would be painted where nobody can see it.
 
-   This plugin's queue is operable without JavaScript and was before the bar moved, so the two
-   rules below put the footer back on screen in exactly that case and give the page the bottom
-   margin core's own layout.scss adds alongside the class. body.jsenabled is written by
-   lib/classes/output/requirements/page_requirements_manager.php, so :not(.jsenabled) is true only
-   when no script ran; both selectors outrank core's single-class ones, and this stylesheet is
-   served after the theme's.
-
-   Verified by reading the cascade and the compiled theme CSS, NOT by an executing test - no gate
-   in this repository renders CSS. The non-JavaScript Behat driver applies no styles at all. */
+   The queue is operable without JavaScript, so the two rules below put the footer on screen in
+   exactly that case and give the page the bottom margin core's layout.scss adds alongside the
+   class. body.jsenabled is written by page_requirements_manager, so :not(.jsenabled) holds only
+   when no script ran; both selectors outrank core's, and this stylesheet is served after the
+   theme's. No test renders CSS, and the non-JavaScript Behat driver applies no styles. */
 body.path-enrol-apply:not(.jsenabled) .stickyfooter {
     bottom: 0;
 }
 
 body.path-enrol-apply:not(.jsenabled) #page.drawers {
-    /* Core's own compensation is max(80px, 3rem), which is 80px at every default font size and
-       is written with max() only so a very large base size still clears the bar. Stylelint's
-       csstree validator rejects max() in a length-valued property, so the floor is written
-       literally: the two agree unless the base font size passes about 26px. */
+    /* Core's own compensation is $stickyfooter-height, max(80px, 3 x $font-size-base), which is
+       80px unless the base font size passes about 26.7px. Stylelint's csstree validator rejects
+       max() in a length-valued property, so the floor is written literally. */
     margin-bottom: 80px;
 }
 
 .enrol_apply-linebreaks {
-    /* The report's two free-text cells separate their lines with a literal newline and carry no
-       markup at all, because the download path decodes entities before it strips tags - so a
-       line break written as markup would let an escaped "<" swallow the rest of its line. The
-       breaks are therefore drawn here, on the cell, where the export cannot see them. */
+    /* The report's free-text cells (comment, decision note and snapshot) separate their lines
+       with a literal newline and carry no markup, because the download path decodes entities
+       before it strips tags, so a line break written as markup would let an escaped "<" swallow
+       the rest of its line. The breaks are drawn here instead, where the export cannot see them;
+       the review page's snapshot values use the same class. */
     white-space: pre-line;
 }
 
 .dir-rtl .enrol_apply-applicationnav .icon {
-    /* The previous/next chevrons must point the other way in a right-to-left language, and
-       nothing upstream does it for them. core_rtlcss mirrors the LAYOUT of the compiled sheet,
-       so the "previous" link correctly moves to the right edge, but the icon itself is untouched:
-       icon_system_fontawesome::render_pix_icon() flips exactly one glyph, fa-question, and Boost
-       ships no .dir-rtl chevron rule at all. mod_book, whose navigation this one is shaped on,
-       carries the same rule in its own stylesheet under .path-mod-book - copying its markup
-       without this is how the arrows end up pointing at the opposite of what the links do.
-
-       Verified by reading the cascade and the compiled theme CSS, NOT by an executing test:
-       nothing in this repository renders CSS. */
+    /* The previous/next chevrons must point the other way in a right-to-left language, and core
+       does not do it: core_rtlcss mirrors the layout, so the "previous" link moves to the right
+       edge, but icon_system_fontawesome::render_pix_icon() flips only the question icon and Boost
+       has no .dir-rtl chevron rule. mod_book, whose navigation this is shaped on, carries the
+       same rule under .path-mod-book. */
     transform: scale(-1, -1);
 }
 
 .enrol_apply-reviewactions {
-    /* The bar is a fixed 80px box whose .sticky-footer-content clips with overflow hidden and no
-       scrollbar, so a row that WRAPS is painted where nobody can see it: measured below about
-       656px, the third decision ended up three-quarters hidden. The row is flex-nowrap for that
-       reason, and scrolls sideways here instead - which is visible, reachable and, unlike the
-       clip, tells the reader there is more.
-
-       Verified by reading the cascade and the compiled theme CSS, NOT by an executing test:
-       nothing in this repository renders CSS. */
+    /* The bar is a fixed 80px box whose .sticky-footer-content clips with overflow hidden, so a
+       wrapped row would be painted where nobody can see it. The row is flex-nowrap and scrolls
+       sideways here instead, which keeps every decision reachable on a narrow screen. */
     overflow-x: auto;
 }
 
 /* The per-cell heading the card view shows. It is real text in the markup rather than
-   content: attr(...) drawn from a data attribute, because generated content is announced
-   inconsistently and because turning rows and cells into blocks costs the table its semantics -
-   so the heading has to sit inside the cell rather than depend on a thead association that is
-   gone. Above the breakpoint the thead already says all of this, so it is hidden. */
+   content: attr(...), because generated content is announced inconsistently and turning rows
+   and cells into blocks costs the table its semantics, so the heading has to sit inside the
+   cell. Above the breakpoint the thead already says this, so it is hidden. */
 .enrol_apply-cardlabel {
     display: none;
 }
 
 /* Below the breakpoint each row becomes a card and every labelled cell shows its own heading.
 
-   A media query and not a container query: the gate's csstree validator rejects container-type
-   and @container outright ("Unknown property", "Unknown at-rule"), so the viewport is the only
-   thing this can ask about. That is a real limitation on an admin page - #region-main is narrower
-   than the window by however wide the block drawer happens to be - and it is the reason the
-   breakpoint is set low: at 768px the drawer is already closed on every layout this page uses, so
-   the two measurements agree there even though they do not agree at 1200px. */
+   A media query and not a container query: Moodle's stylelint csstree validator rejects
+   container-type and @container. #region-main is narrower than the window by the width of any
+   open drawer, which is why the breakpoint is set low: at 768px the drawers are closed on the
+   layouts this page uses, so the viewport and the content width agree there. */
 @media (max-width: 767.98px) {
     .enrol_apply-table table thead {
         /* Not display:none. The headings still name the columns for a screen reader reading the

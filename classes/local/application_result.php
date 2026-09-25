@@ -21,16 +21,13 @@ use coding_exception;
 /**
  * What submit_application() did, in a form the caller can route on.
  *
- * The method used to return a bool, and that bool fused two outcomes which need opposite
- * treatment: "there is already an application" is benign and the acknowledgement page is the
- * right destination for it, while "this was refused" needs to say so and go somewhere else.
- * Nothing could tell them apart, so the caller discarded the value entirely and sent every
- * outcome to the acknowledgement page - where a refusal, having written no enrolment row, met
- * that page's own access gate and became a bare "Invalid access detected".
+ * Two of the outcomes need opposite treatment: "there is already an application" is benign
+ * and the acknowledgement page is the right destination for it, while "this was refused" wrote
+ * no enrolment row, so it has to say why and go elsewhere - applied.php's access gate would
+ * refuse it.
  *
- * Three states rather than a nullable reason string, because the distinction between CREATED
- * and ALREADY is what the tests assert on: with a two-state return, a test proving that a
- * second submission created nothing would be indistinguishable from one proving it succeeded.
+ * Three states rather than a nullable reason string, so a second submission that created
+ * nothing can be told apart from one that created the application; the tests assert on that.
  *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine
@@ -88,9 +85,8 @@ final class application_result {
     /**
      * The application was refused, and this is what to tell the applicant.
      *
-     * The reason must not be empty. A refusal nobody can explain is the defect this class was
-     * introduced to remove, so producing one is a coding error rather than a silent fallback:
-     * a fallback would put the generic message back and hide the caller that forgot.
+     * The reason must not be empty. An unexplained refusal is a coding error rather than a case
+     * for a generic fallback message, which would hide the caller that forgot.
      *
      * @param string $reason Ready-to-render reason, already through get_string().
      * @return self

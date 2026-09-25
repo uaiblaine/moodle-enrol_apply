@@ -65,12 +65,11 @@ class confirm_operation extends decision_operation {
     /**
      * Confirm through the plugin, so the whole approval runs exactly as the queue's does.
      *
-     * Both keys of the decision are passed whenever the form offered the controls, and are
-     * passed even when nothing was picked: confirm_enrolment() gates on array_key_exists
-     * rather than on emptiness precisely so an empty choice CLEARS the one a previous
-     * decision on the same application left behind. Which of the posted ids are acceptable
-     * is decided there, per instance, against the course's own groups and the operator's
-     * assignable roles - never here, and never in the form.
+     * Both keys of the decision are passed even when nothing was picked: confirm_enrolment()
+     * gates on array_key_exists rather than on emptiness, so an empty choice clears the one a
+     * previous decision on the same application left behind. Which of the posted ids are
+     * acceptable is decided there, per instance, against the course's own groups and the
+     * operator's assignable roles, not here or in the form.
      *
      * @param array $userenrolmentids User enrolment ids of the whole selection.
      * @param string $message Message the decider wrote to the applicants, empty for none.

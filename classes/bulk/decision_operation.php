@@ -26,23 +26,19 @@ use stdClass;
 /**
  * What the three participants-page bulk decisions have in common.
  *
- * Core's driver for this extension point is user/action_redir.php, and the two things it
- * does NOT do decide almost everything below. It performs no require_login() and no
- * require_capability() of its own anywhere in the bulk branch - measured on 5.1 and 5.2,
- * where the file is byte-identical and its only gates are confirm_sesskey() and a check
- * that the plugin is enabled site wide. And it hands process() an array it makes no
- * promise about beyond "users of a course", so nothing upstream guarantees the rows
- * belong to this plugin.
+ * Core's driver for this extension point is user/action_redir.php. Its bulk branch performs
+ * no require_login() and no require_capability(); its only gates are confirm_sesskey() and a
+ * check that the plugin is enabled site wide. And it hands process() an array it makes no
+ * promise about beyond "users of a course", so nothing upstream guarantees the rows belong to
+ * this plugin.
  *
  * The decision itself is never taken here. Every operation delegates to the plugin's own
- * confirm_enrolment(), wait_enrolment() or cancel_enrolment(), which is the one rule this
- * class exists to enforce: both core precedents (enrol_manual and enrol_self, character
- * for character the same SQL) write {user_enrolments} with a raw UPDATE and build the
- * event by hand, so \core_enrol\hook\before_user_enrolment_updated is never dispatched.
- * That hook is what reaches this plugin's complete_approval() out of band, so a bulk
- * approval copied from either precedent would flip the status to active and skip the role
- * assignment, the group memberships, the durable record and the applicant's notification -
- * with nothing in the interface to say so.
+ * confirm_enrolment(), wait_enrolment() or cancel_enrolment(). Do not copy the core
+ * precedents (enrol_manual and enrol_self): they write {user_enrolments} with a raw UPDATE and
+ * build the event by hand, so \core_enrol\hook\before_user_enrolment_updated is never
+ * dispatched. That hook is what reaches this plugin's complete_approval() out of band, so such
+ * a bulk approval would flip the status to active and silently skip the role assignment, the
+ * group memberships, the durable record and the applicant's notification.
  *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine
@@ -53,12 +49,10 @@ abstract class decision_operation extends enrol_bulk_enrolment_operation {
      * The user enrolments in the selection that belong to this plugin.
      *
      * The base class is handed `array $users` and promises nothing about it, so this is
-     * where the operation decides what it owns. Through the live dispatch every row is an
-     * apply row already - course_enrolment_manager::get_users_enrolments() is built with
-     * the instance filter user/action_redir.php sets, and {user_enrolments} is unique on
-     * (enrolid, userid), so each user carries exactly one enrolment - but a foreign user
-     * enrolment id handed to confirm_enrolment() does not skip: get_pending_user_enrolment()
-     * has no enrol-type predicate and the MUST_EXIST lookup that follows it throws.
+     * where the operation decides what it owns. Through core's dispatch every row is an apply
+     * row already (the manager is filtered to one instance), but a foreign user enrolment id
+     * handed to confirm_enrolment() would not be skipped: get_pending_user_enrolment() has no
+     * enrol-type predicate and the MUST_EXIST lookup that follows it throws.
      *
      * @param array $users Users as course_enrolment_manager::get_users_enrolments() builds them.
      * @return array User enrolment id => the user_enrolments row, for this plugin's rows only.
@@ -81,31 +75,20 @@ abstract class decision_operation extends enrol_bulk_enrolment_operation {
     /**
      * The enrol instance core's dispatch will actually decide, for this course.
      *
-     * user/action_redir.php:176-183 reproduced literally, and the two details that look like
-     * carelessness are the whole point. It is enrol_get_instances($courseid, FALSE), which
-     * INCLUDES disabled instances, and it takes the first match in sortorder - so a disabled
-     * apply method sorting first captures the entire dispatch, the manager is filtered to it,
-     * get_users_enrolments() returns nothing, and core redirects with "No users selected".
-     * Measured on both branches, and far more reachable than two enabled instances: disabling
-     * rather than deleting an old method is ordinary practice, and sortorder is teacher-editable
-     * from enrol/instances.php.
+     * Reproduces the instance lookup in user/action_redir.php: enrol_get_instances($courseid,
+     * false), which includes disabled instances, and the first match in sortorder. So a
+     * disabled apply method sorting first captures the whole dispatch, the manager is filtered
+     * to it, get_users_enrolments() returns nothing, and core redirects with "No users
+     * selected". Not the manager's own instance, which would agree by construction, and not
+     * the enabled-only call, which is the difference being reproduced.
      *
-     * It is deliberately NOT the manager's own instance, which is already filtered and would
-     * therefore agree by construction and prove nothing, and not the enabled-only call, which is
-     * the very difference being reproduced.
+     * This names the method in the warning; it must not gate the menu. An enabled instance that
+     * is not the one the selection lives on breaks the dispatch identically, so a status gate
+     * would close one case and leave the other open.
      *
-     * **This does not gate the menu, and must not.** Refusing to render on a disabled dispatch
-     * instance is the intuitive fix and the wrong test: an ENABLED instance that simply is not
-     * the one the selection lives on breaks the dispatch identically, so a status gate closes one
-     * door and leaves its twin open. What this is for is NAMING the method in the warning.
-     *
-     * That naming is only as good as the names, and on a default site it is not good: an instance
-     * with no custom name comes back as the plugin's own "Course enrol confirmation", so a course
-     * whose two intakes were never named produces a warning quoting one wording for both.
-     * Measured. It is core's limitation rather than one introduced here - enrol/instances.php
-     * repeats the same name in the same case - and the warning is still true and still says how
-     * many applications were left alone, which is the part the operator acts on. Naming the
-     * instances is the fix, and it is the teacher's to make.
+     * An instance with no custom name comes back as the plugin's own name, so two unnamed
+     * instances are indistinguishable in the warning, as they are on enrol/instances.php. The
+     * warning still states how many applications were left alone.
      *
      * @param int $courseid Course the dispatch runs in.
      * @return stdClass|null The instance core will filter to, or null when the course has none.
@@ -123,17 +106,15 @@ abstract class decision_operation extends enrol_bulk_enrolment_operation {
     /**
      * The sentence naming what a bulk decision will not reach, or the empty string.
      *
-     * Said TWICE on purpose, and this is the half that comes first: the confirmation form is the
-     * only surface in this flow that can speak before anything is written, and a warning after
-     * the fact is a report rather than a chance to stop.
+     * Shown twice: on the confirmation form, the only point before anything is written, and
+     * again in the report after the decision.
      *
-     * The method name is normalised through format_string(), which hands back the ESCAPED
-     * spelling - the right one here, because both sinks render raw. A moodleform static element
+     * The method name is normalised through format_string(), which hands back the escaped
+     * spelling - the right one here, because both sinks render raw: a moodleform static element
      * is a triple stash in core's element-template.mustache, and \core\output\notification
      * exports its message through clean_text() into a template that does the same.
-     * get_instance_name() returns a MIXED list exactly as get_assignable_roles() does: a method
-     * carrying a custom name comes back through format_string() already escaped, while one
-     * without returns a bare language string that has never been escaped at all.
+     * get_instance_name() returns a custom name already through format_string(), but a bare,
+     * unescaped language string when the instance has none.
      *
      * @param course_enrolment_manager $manager Manager core built for the course.
      * @param array $users Selected users carrying their user enrolments.
@@ -162,8 +143,8 @@ abstract class decision_operation extends enrol_bulk_enrolment_operation {
                 'context' => $manager->get_context(),
             ]);
 
-        /* A literal per branch, never an id built from $stringid: the fleet standard bans a
-           computed string id and the language file checker cannot see one. */
+        /* A literal per branch, never an id built from $stringid, so tools that check string
+           usage can see both keys. */
         $data = (object) ['count' => count($others), 'method' => $method];
 
         return $stringid === 'form'
@@ -174,23 +155,11 @@ abstract class decision_operation extends enrol_bulk_enrolment_operation {
     /**
      * Which of those are actually applications awaiting a decision.
      *
-     * The predicate itself is queue::is_awaiting_decision(), which is where the plugin's
-     * object-form definition of "awaiting a decision" lives - next to the SQL one it has to
-     * agree with. It used to be written out here, and the participants page's own action
-     * icon would then have been a third copy of a filter that is also a correctness
-     * boundary: get_pending_user_enrolment() carries no timeend clause, so an approved
-     * enrolment that has since lapsed reads as suspended and comes back looking exactly like
-     * a fresh application unless the second half of the rule is applied.
-     *
-     * Of the three decisions, deferral USED to be the one that made a state nothing could undo:
-     * wait_enrolment() called update_user_enrol() with no dates, and update_user_enrol() writes a
-     * date only when one is passed, so an expired row kept its past timeend and became a deferred
-     * application carrying an expiry - which no queue will list, and which the
-     * ENROL_EXT_REMOVED_UNENROL branch of process_expirations() unenrols on sight, selecting on
-     * timeend alone with no status filter. It passes 0 explicitly now, so the expiry is cleared.
-     * The predicate still excludes expired rows, and for a reason that does not depend on that
-     * fix: a lapsed approval is not an application awaiting a decision, whichever decision would
-     * be taken on it.
+     * The predicate is queue::is_awaiting_decision(), the object-form definition of "awaiting a
+     * decision" kept next to the SQL one it has to agree with. Its expiry half matters here:
+     * get_pending_user_enrolment() carries no timeend clause, so an approved enrolment that has
+     * since lapsed reads as suspended and would otherwise be decided as if it were a fresh
+     * application.
      *
      * Rows excluded here stay in the selection for the counting, so the operator is told how
      * many people the decision did not apply to.
@@ -224,18 +193,10 @@ abstract class decision_operation extends enrol_bulk_enrolment_operation {
     public function get_form($defaultaction = null, $defaultcustomdata = null) {
         global $CFG;
 
-        /* moodleform is no more autoloadable than enrol_bulk_enrolment_operation is - measured,
-           class_exists('moodleform', true) is false in a plain request - and
-           user/action_redir.php does not pull it in either. Core's precedents reach it through
-           the chain that ends at enrol/bulkchange_forms.php; this one has to ask.
-
-           This line went missing once and the Behat scenario is what found it, because the
-           PHPUnit suite cannot: measured with tests/bulk/operations_test.php as the only file
-           in the run, lib/formslib.php is ALREADY included before the first test executes, so
-           deleting this require leaves all 258 tests green while fataling on a live page. What
-           includes it there is not pinned - it is not the bootstrap chain, not this plugin's
-           own requires, and none of the autoloaded core form classes that require it at file
-           scope was loaded. Do not read a green suite as evidence that this line is spare. */
+        /* moodleform is not autoloadable and user/action_redir.php does not include
+           lib/formslib.php; core's precedents get it through enrol/bulkchange_forms.php. Only
+           the Behat scenario catches a missing require here: formslib.php is already loaded
+           in a PHPUnit run, so the unit tests stay green without it. */
         require_once($CFG->libdir . '/formslib.php');
 
         $customdata = is_array($defaultcustomdata) ? $defaultcustomdata : [];
@@ -268,11 +229,10 @@ abstract class decision_operation extends enrol_bulk_enrolment_operation {
     public function process(course_enrolment_manager $manager, array $users, stdClass $properties) {
         global $DB;
 
-        /* Checked twice on purpose. get_bulk_operations() is the gate for core's own driver -
-           it looks the operation up in the array that method returns and throws when it is
-           absent, so a missing capability is refused there rather than here. This second
-           check is the gate for anything else, because process() is public, the base class
-           declares it abstract without a gate of its own, and core's driver adds none. */
+        /* Checked twice on purpose. For core's driver the gate is get_bulk_operations(): it
+           looks the operation up in the array that method returns and throws when it is
+           absent. This check is the gate for any other caller, because process() is public
+           and the base class declares it with no gate of its own. */
         if (!has_capability('enrol/apply:manageapplications', $manager->get_context())) {
             \core\notification::error(get_string('bulknotpermitted', 'enrol_apply'));
             return false;

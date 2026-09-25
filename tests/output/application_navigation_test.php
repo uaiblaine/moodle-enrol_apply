@@ -85,9 +85,8 @@ final class application_navigation_test extends \advanced_testcase {
     /**
      * Both links name the applicant they lead to and point at that application's review page.
      *
-     * Naming the destination is what makes the walk's pinned order legible: it follows the
-     * queue's own default sort rather than whatever the operator last sorted the queue into, so
-     * the operator has to be able to read where "next" goes before they follow it.
+     * The walk follows the queue's default order rather than the operator's current sort, so each
+     * link names where it goes; see {@see application_navigation::export_for_template()}.
      *
      * @return void
      */
@@ -130,10 +129,8 @@ final class application_navigation_test extends \advanced_testcase {
     /**
      * With no neighbours and no queue to go back to, nothing renders at all.
      *
-     * An empty nav element is not merely useless: a screen reader announces the region and
-     * lets its user step into it, so the application would advertise a way out of itself that
-     * does not exist. This is the operator who may open no queue - reachable rather than
-     * defensive, and the one case where there is genuinely nowhere to send them.
+     * A screen reader announces an empty nav region and lets its user step into it, advertising a
+     * way out that does not exist. This is the operator who may open no queue, a reachable case.
      *
      * @return void
      */
@@ -148,13 +145,12 @@ final class application_navigation_test extends \advanced_testcase {
     }
 
     /**
-     * A queue of ONE still offers the way back to that queue.
+     * A queue of one still offers the way back to that queue.
      *
-     * The counterpart, and the reason the wrapper is no longer gated on the neighbours: a lone
-     * application is exactly when a reader most needs the link out, and the old flag hid the
-     * whole landmark precisely then. Reviewed from the participants page or a notification
-     * e-mail, this link and the breadcrumb manage.php now builds are the only routes to the
-     * queue on the page - and the breadcrumb is the one a reader is least likely to look for.
+     * The counterpart, and the reason the wrapper is gated on hasnav rather than on the
+     * neighbours: a lone application is when a reader most needs the link out. Reached from the
+     * participants page or a notification e-mail, this link and the breadcrumb manage.php builds
+     * are the only routes to the queue on the page.
      *
      * @return void
      */
@@ -198,17 +194,12 @@ final class application_navigation_test extends \advanced_testcase {
     /**
      * The name reaches the reader escaped exactly once, through the template render() guesses.
      *
-     * Two claims, and they fail together. renderer_base::render() resolves a templatable with
-     * no render_ method of its own to "<component>/<class>", so this markup is evidence that
-     * enrol_apply/application_navigation was found under the name this class carries - rename
-     * either half and render_from_template() throws. An earlier draft of this docblock claimed
-     * something stronger and wrong: that the plugin renderer's own render_application_navigation()
-     * was what dispatched here, and that removing it would fall through to the core renderer
-     * "instead of erroring". Renaming that method under the whole suite reddened NOTHING, which
-     * is how the claim was caught; the method is gone and the fallback is the real path.
+     * renderer_base::render() resolves a templatable with no render_ method of its own to
+     * "<component>/<class>", so this markup also shows that enrol_apply/application_navigation is
+     * found under the class's name; renaming either makes render_from_template() throw.
      *
-     * And fullname() returns the PLAIN spelling, which the template double stashes: an ampersand
-     * reaching the reader as "&amp;amp;" would mean somebody had escaped it on the way in too.
+     * fullname() returns the plain spelling, which the template double stashes: an ampersand
+     * reaching the reader as "&amp;amp;" would mean it had been escaped on the way in too.
      *
      * @return void
      */

@@ -67,19 +67,15 @@ class enrol_apply_renderer extends plugin_renderer_base {
             ['value' => 'cancel', 'label' => get_string('btncancel', 'enrol_apply')],
         ];
 
-        /* The bar goes into a core sticky footer, rendered here and interpolated INSIDE the
-           form by the template. Only the action belongs in it: the footer is a fixed bar whose
-           .sticky-footer-content carries overflow hidden, so the message textarea and the two
-           choosers stay in the page body. Core's own precedent for the placement is
-           grade/templates/edit_tree.mustache, and the footer is never moved in the DOM - unlike
-           core/modal, its position is CSS, so the controls inside it post with the form.
+        /* The action bar goes into a core sticky footer that the template interpolates inside
+           the form: its position is CSS and it is never moved in the DOM, so its controls post
+           with the form, as in core's grade/templates/edit_tree.mustache. Only the action belongs
+           there: .sticky-footer-content has overflow hidden, so the message textarea and the two
+           choosers stay in the page body.
 
-           justify-content-end is passed rather than relied on. It is already the property's
-           default and the constructor only overwrites it when the argument is not null, so this
-           changes nothing today - it is written down because the alternative way to reach it is
-           a trap: sticky_footer::add_classes() looks like it appends and does not. It builds the
-           concatenation and then throws it away by assigning the argument over it, measured on
-           both branches, so a later "just add a class" would silently drop this one. */
+           justify-content-end is already the default; it is passed through the constructor
+           because sticky_footer::add_classes() replaces the classes rather than appending to
+           them, so any further class must be passed here too. */
         $bar = $this->render_from_template('enrol_apply/manage_actions', [
             'togglegroup' => \enrol_apply\table\applications::TOGGLE_GROUP,
             'selectedlabel' => get_string('queueselectedonpage', 'enrol_apply', 0),
@@ -90,14 +86,11 @@ class enrol_apply_renderer extends plugin_renderer_base {
         ]);
         $stickyfooter = $this->render(new \core\output\sticky_footer($bar, 'justify-content-end'));
 
-        /* The state worth surfacing is places exhausted while applications are still open: a
-           manager receiving applications they have nowhere to put. Only where an instance is in
-           scope - the site-wide and mentee queues span instances and have no single number.
-
-           Rendered OUTSIDE the decision form by the template, deliberately. An instance whose
-           applicant limit is reached has an EMPTY queue, which is exactly the moment the
-           manager most needs to be told why; inside the section the notice would vanish in the
-           state it exists for. */
+        /* Every place is taken. Shown whether or not applications are still open, and whether
+           or not the queue has rows: the state belongs to the method, not to the rows on
+           screen, and it warns without blocking (see capacity::places_full()). Only where an
+           instance is in scope: the site-wide and mentee queues span instances and have no
+           single number. */
         $placesnotice = '';
         if ($instance !== null && \enrol_apply\local\capacity::places_full($instance)) {
             $placesnotice = get_string(
@@ -107,16 +100,11 @@ class enrol_apply_renderer extends plugin_renderer_base {
             );
         }
 
-        /* The other exhausted state, and the one nothing on any screen could explain until now:
-           the APPLICANT limit is reached, so the method refuses new applications - and the rows
-           holding it against that limit may all be deferred, in which case the queue below is
-           empty and the course is closed to everybody with no visible cause. A deferred row is
-           freed by nothing (see capacity::deferred()), so the number is named here and
-           cancelling those rows is the way out.
-
-           Rendered outside the decision form by the template, deliberately and for the same
-           reason the places notice is: this is the state whose whole symptom is an empty queue,
-           so a notice inside that section would vanish exactly when it is needed. */
+        /* The applicant limit is reached, so the method refuses new applications. The rows
+           holding it may all be deferred, leaving the queue empty and the course closed with no
+           visible cause; a deferred row is freed by nothing (see capacity::deferred()), so the
+           deferred count is named and cancelling those rows is the way out. Rendered regardless
+           of rows for the same reason as the places notice. */
         $closednotice = '';
         if ($instance !== null && \enrol_apply\local\capacity::applications_closed($instance)) {
             $capacity = \enrol_apply\local\capacity::class;
@@ -127,10 +115,8 @@ class enrol_apply_renderer extends plugin_renderer_base {
             ]);
         }
 
-        /* Which rows of how many are on screen. table_sql prints a paging bar and never says
-           this, so on a queue of three pages an operator reading page two has nothing telling
-           them which three hundred they are looking at.
-           Read AFTER capture_table(), which is what populates totalrows and currpage. */
+        /* Which rows of how many are on screen, which table_sql's paging bar never says.
+           Read after capture_table(), which is what populates totalrows and currpage. */
         $from = (int) ($table->currpage * $table->pagesize) + 1;
         $showing = get_string('queueshowing', 'enrol_apply', (object) [
             'from' => $from,
@@ -143,11 +129,9 @@ class enrol_apply_renderer extends plugin_renderer_base {
             'sesskey' => sesskey(),
             'capacityhtml' => $this->render_from_template(
                 'enrol_apply/queue_capacity',
-                /* The SCOPE's total, never the filtered one. The tile beside it reports deferrals
-                   read straight from \enrol_apply\local\capacity and is instance-wide whatever
-                   the operator has typed, so a filtered count here renders "4 awaiting decision"
-                   next to "12 deferred" - arithmetically impossible, and it reads as a fault in
-                   the capacity figures rather than in this line. */
+                /* The scope's total, never the filtered one: the deferral tile beside it is read
+                   from \enrol_apply\local\capacity and ignores the filters, so a filtered count
+                   would render impossible pairs such as "4 awaiting decision" beside "12 deferred". */
                 $this->queue_capacity_context($instance, $table->scope_total())
             ),
             'filtershtml' => $this->render_from_template(
@@ -163,15 +147,13 @@ class enrol_apply_renderer extends plugin_renderer_base {
             'closednotice' => $closednotice,
         ];
 
-        /* Unconditional, and it used to be gated on the queue having rows. Core's own
-           core_table/dynamic init is unconditional - get_dynamic_table_html_end() runs from
-           print_nothing_to_display() too - so a queue that loads with nothing in it had a live,
-           refreshable table and a dead plugin module beside it: a bookmarked url whose filter
-           matches nothing came back with a search box that could not be cleared.
+        /* Unconditional, like core's own core_table/dynamic init, which
+           get_dynamic_table_html_end() emits even from print_nothing_to_display(): a queue that
+           loads empty still has a live, refreshable table, and its filters must still work.
 
            core/checkbox-toggleall boots itself: the toggler template carries its own js block, and
            js_amd_inline goes through $PAGE->requires rather than the output buffer, so
-           capture_table()'s ob_start() does not swallow it. This module is only the gaps core
+           capture_table()'s ob_start() does not swallow it. This module only fills the gaps core
            leaves; see its docblock. */
         $this->page->requires->js_call_amd(
             'enrol_apply/manage',
@@ -185,7 +167,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
     /**
      * The controls that narrow the queue, and what they currently say.
      *
-     * Rendered from the TABLE's own state rather than from the request, so the page and an AJAX
+     * Rendered from the table's own state rather than from the request, so the page and an AJAX
      * refresh cannot disagree about which filters are applied: applications::set_filterset() is
      * the one place a filter value is read, whichever route brought it in.
      *
@@ -200,17 +182,14 @@ class enrol_apply_renderer extends plugin_renderer_base {
     protected function queue_filters_context(\enrol_apply\table\applications $table, moodle_url $manageurl): array {
         global $CFG;
 
-        /* ENROL_APPLY_USER_WAIT lives in the plugin's lib.php, which is not autoloaded. This
-           renderer is reached from manage.php, which requires it - and from the tests, which do
-           not. The fourth site in this plugin needing the same line. */
+        /* ENROL_APPLY_USER_WAIT lives in the plugin's lib.php, which is not autoloaded; manage.php
+           requires it, but the tests reach this renderer without it. */
         require_once($CFG->dirroot . '/enrol/apply/lib.php');
 
         $params = $table->url_params();
         $scoped = array_key_exists('id', $params);
-        /* The url of this same listing WITHOUT one filter, expressed as a complement rather than
-           as a keep-list. The keep-list shape does not survive an arbitrary number of filters:
-           each chip would need its own list of every other filter, so an N+1th filter added later
-           is silently dropped by every stale complement, and nothing on the page says so. */
+        /* The url of this same listing without one filter, built as a complement of url_params()
+           rather than a per-chip keep-list, so a filter added later is kept by every other chip. */
         $without = static function (string $drop) use ($params): string {
             $keep = $params;
             unset($keep[$drop]);
@@ -226,11 +205,8 @@ class enrol_apply_renderer extends plugin_renderer_base {
         $status = $table->get_status();
 
         /* The vocabulary comes from the table, so the select can only offer what manage.php will
-           accept back and what the predicate can match - one list, three readers. The label is a
-           match over literals rather than get_string('submissionstatus' . $x): the fleet bans a
-           dynamic string id, and these two are the wording the operator already reads on the
-           review page, so the queue does not invent a third spelling of a state that already has
-           one on the row badge and one on the capacity tile. */
+           accept back and what the predicate can match. The labels are literal string ids, the
+           same wording as {@see \enrol_apply\local\submission::status_label()}. */
         $statuses = [];
         foreach (\enrol_apply\table\applications::filterable_statuses() as $value) {
             $statuses[$value] = match ($value) {
@@ -239,12 +215,8 @@ class enrol_apply_renderer extends plugin_renderer_base {
             };
         }
 
-        /* Named for what it holds. A bare $options here was reassigned by the per-field loop
-           below and the status select then published the LAST field's vocabulary - so a site whose
-           administrator ticked a "menu" profile field got a status control listing that field's
-           options, and one who ticked a text field got an empty control. Shipped, and found on the
-           screen rather than by any test: nothing rendered the queue with a field filter offered
-           AND looked at the status select. */
+        /* Kept apart from the per-field $fieldoptions below: a shared variable would make the
+           status select publish the last offered field's vocabulary. */
         $statusoptions = [[
             'value' => '',
             'label' => get_string('queuestatusany', 'enrol_apply'),
@@ -276,11 +248,9 @@ class enrol_apply_renderer extends plugin_renderer_base {
             );
         }
 
-        /* One control and, where applied, one chip per field this reader is OFFERED. The offered
-           set is the administrator's list intersected with core's identity mapping for this
-           scope, so a field somebody ticked in the site settings simply does not appear for a
-           reader who may not already see it - which is the same rule that keeps the e-mail
-           address out of the search. */
+        /* One control and, where applied, one chip per field this reader is offered: the
+           administrator's list intersected with core's identity mapping for this scope, so a
+           field ticked in the site settings does not appear for a reader who may not see it. */
         $applied = $table->get_field_filters();
         $fields = [];
         foreach ($table->get_offered_filters() as $token => $offered) {
@@ -295,7 +265,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
                 ];
             }
 
-            /* The label is resolved HERE and not in resolve(), which runs before the dynamic
+            /* The label is resolved here and not in resolve(), which runs before the dynamic
                table's own validate_context() and so cannot reach format_string(). */
             $label = \enrol_apply\local\queuefilter::label($offered->name, false);
 
@@ -322,14 +292,10 @@ class enrol_apply_renderer extends plugin_renderer_base {
         foreach (['appliedfrom' => 'queuefilterfrom', 'appliedto' => 'queuefilterto'] as $bound => $stringid) {
             $value = $bound === 'appliedfrom' ? $appliedfrom : $appliedto;
             if ($value !== null) {
-                /* The date is shown as it was typed, which is also as the input holds it. It is
-                   deliberately NOT run through userdate(): the same chip is redrawn client-side on
-                   every refresh from the input's own value, and no formatting this side can do is
-                   reproducible there - Moodle's date format is a language-pack string and the
-                   browser's is the reader's operating system. A first cut formatted here only, so
-                   a chip that read "3/09/26" on page load became "2026-09-03" the moment anything
-                   else on the bar was touched. One spelling, produced identically on both paths,
-                   and an unambiguous one. */
+                /* The date is shown as typed, which is how the input holds it, and deliberately
+                   not through userdate(): the chip is redrawn client-side from the input's value
+                   on every refresh, where Moodle's language-pack date format is not reproducible,
+                   so a formatted chip would change spelling on the first refresh. */
                 $chips[] = $this->queue_filter_chip(
                     $bound,
                     get_string($stringid, 'enrol_apply'),
@@ -393,12 +359,10 @@ class enrol_apply_renderer extends plugin_renderer_base {
                 );
             }
 
-            /* Type-to-filter over a list rendered in full, with ajax OFF. A site puts an apply
-               method on the courses that need one, so this list is bounded by that rather than by
-               the size of the site - and a static list costs no web service, no db/services.php
-               and no second place where "which courses may this reader see" is decided. The day a
-               site has thousands of apply-enabled courses is the day to add one; it is written up
-               in the handoff so that day is recognised rather than discovered. */
+            /* Type-to-filter over a list rendered in full, with ajax off. Only courses carrying an
+               apply method are listed, so the list is bounded by those rather than by the size of
+               the site, and a static list needs no web service of its own. A site with thousands
+               of apply-enabled courses would need an ajax source instead. */
             foreach (['enrol_apply_category', 'enrol_apply_course'] as $id) {
                 $this->page->requires->js_call_amd('core/form-autocomplete', 'enhance', [
                     '#' . $id,
@@ -443,9 +407,8 @@ class enrol_apply_renderer extends plugin_renderer_base {
                 'total' => $table->scope_total(),
             ]),
             /* The total on its own, for the module to recompose the line after an as-you-type
-               refresh. The refreshed table reports the MATCHED half in its own
-               data-table-total-rows and nothing else; the total is a property of the scope, which
-               no filter changes, so it is written once here rather than recounted per keystroke. */
+               refresh: the refreshed table reports only the matched count, in its
+               data-table-total-rows, and the scope's total does not change with the filters. */
             'scopetotal' => $table->scope_total(),
         ];
     }
@@ -479,16 +442,14 @@ class enrol_apply_renderer extends plugin_renderer_base {
     /**
      * The decision context above the queue: how many are waiting, and how full the method is.
      *
-     * **Not built from allow_apply().** That method is the applicant's gate and mixes a question
-     * about the METHOD with one about a PERSON - its cohort clause asks whether *this user* may
-     * apply - so a manager outside a restricted cohort would be told the method is closed when it
-     * is open to everybody it is meant for. What this reports is the instance's own state: whether
-     * it is enabled, whether it takes new enrolments, its dates, and its applicant limit. The two
-     * must agree about those four and deliberately part company on the fifth; if allow_apply()
-     * ever grows another instance-level reason, it belongs here as well.
+     * The open/closed status is not built from allow_apply(), whose cohort clause asks whether
+     * the current user may apply: a manager outside a restricted cohort would be told the method
+     * is closed. It mirrors allow_apply()'s instance-level clauses - status, customint6 and the
+     * enrolment dates - plus capacity::applications_closed(), which every caller of allow_apply()
+     * checks beside it. A new instance-level clause in allow_apply() belongs here as well.
      *
-     * The counts come from \enrol_apply\local\capacity, which is where every other surface reads
-     * them, so the queue header and the review page cannot report different numbers.
+     * The counts come from \enrol_apply\local\capacity, as on every other surface, so the queue
+     * header and the review page cannot report different numbers.
      *
      * @param stdClass|null $instance Enrol instance the queue is scoped to, null when it spans them.
      * @param int $awaiting How many applications the queue is listing.
@@ -506,11 +467,8 @@ class enrol_apply_renderer extends plugin_renderer_base {
             'hasstatus' => false,
         ];
 
-        /* Everything below this line is about ONE enrolment method. The site-wide and mentee
-           queues span methods, each with its own limits and its own dates, so there is no single
-           number to report - and reporting one course's would be worse than reporting none. They
-           get the count of what is waiting and nothing else, which is still the thing an operator
-           opened the page to see. */
+        /* Everything below is about one enrolment method. The site-wide and mentee queues span
+           methods, each with its own limits and dates, so they get the waiting count only. */
         if ($instance === null) {
             return $context;
         }
@@ -535,7 +493,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
         }
 
         $limit = $capacity::applicant_limit($instance);
-        // Counted ONCE. The meter, the open/closed test and the room-left sentence all want it.
+        // Counted once for the meter, the open/closed test and the room-left sentence.
         $held = $limit > 0 ? $capacity::applicants($instance) : 0;
         if ($limit > 0) {
             $context['meters'][] = [
@@ -545,9 +503,8 @@ class enrol_apply_renderer extends plugin_renderer_base {
                 ]),
                 'label' => get_string('reviewapplicants', 'enrol_apply'),
                 'percent' => self::meter_percent($held, $limit),
-                /* Warned at four fifths rather than at the limit, because the limit is the point
-                   at which the method stops accepting applications and nobody can do anything
-                   about it any more. The bar is there to be seen BEFORE that. */
+                /* Warned at four fifths, so it is seen before the limit stops the method
+                   accepting applications. */
                 'warn' => $held * 5 >= $limit * 4,
             ];
         }
@@ -559,20 +516,15 @@ class enrol_apply_renderer extends plugin_renderer_base {
             && !empty($instance->customint6)
             && !($startdate > 0 && $startdate > $now)
             && !($enddate > 0 && $enddate < $now)
-            /* capacity::applications_closed() inlined, and it must keep agreeing with it: that
-               method is `$limit !== 0 && applicants() >= $limit`, and applicant_limit() clamps a
-               negative to 0, so `$limit > 0` and its `$limit !== 0` are the same test. Inlined
-               only to stop a third identical COUNT over {user_enrolments} in one render - $held
-               is that count, taken once above. If that method grows a clause, this grows it. */
+            /* capacity::applications_closed() inlined to reuse $held rather than run the same
+               COUNT again; applicant_limit() clamps a negative to 0, so `$limit > 0` is that
+               method's `$limit !== 0`. Keep in step with it. */
             && !($limit > 0 && $held >= $limit);
 
         $remaining = $limit > 0 ? $limit - $held : 0;
 
-        /* array_merge and never the + operator. `+` keeps the LEFT side on a duplicate key, and
-           $context already carries 'hasstatus' => false from the site-wide default above - so the
-           + form silently kept the false and the whole status block never rendered, on every
-           instance-scoped queue. Found by looking at the page; no test asserted the block, and
-           the slice that documented this exact trap (U6, gate BW) landed earlier the same day. */
+        /* array_merge and never the + operator: + keeps the left side on a duplicate key, so the
+           'hasstatus' => false default above would win and the status block would never render. */
         return array_merge($context, [
             'hasstatus' => true,
             'statuslabel' => get_string('queuestatus', 'enrol_apply'),
@@ -616,14 +568,12 @@ class enrol_apply_renderer extends plugin_renderer_base {
      * list still applies when nothing is picked, so an empty chooser would also imply a choice
      * the operator never made.
      *
-     * Gated on the capability in the COURSE, which is stricter than the gate on the page that
-     * calls it. A mentor reaches the review page through the applicant's own user context and
-     * holds nothing in the course at all, so offering them the group chooser would list every
-     * group name in a course they cannot open - groups_get_all_groups() applies no capability
-     * check of its own, unlike get_assignable_roles(), which self-gates and would have come
-     * back empty for them anyway. The instance's own groups and role still apply to their
-     * decision; what they lose is the ability to override them, which is the level of trust
-     * that delegation carries.
+     * The choosers are gated on the capability in the course, which is stricter than the review
+     * page's own gate. A mentor reaches that page through the applicant's user context and holds
+     * nothing in the course, and groups_get_all_groups() applies no capability check (unlike
+     * get_assignable_roles()), so the group chooser would list every group name in a course they
+     * cannot open. The instance's own groups and role still apply to a mentor's decision; they
+     * only cannot override them.
      *
      * @param stdClass|null $instance Enrol instance the decision belongs to, null when unknown.
      * @param string $message What the operator had already typed, empty on the ordinary path.
@@ -636,13 +586,10 @@ class enrol_apply_renderer extends plugin_renderer_base {
 
         $coursecontext = $instance === null ? null : \context_course::instance($instance->courseid);
         if ($coursecontext && has_capability('enrol/apply:manageapplications', $coursecontext)) {
-            /* The name is the PLAIN spelling, because the template renders it through a double
-               stash and Mustache escapes it there. format_string()'s escape flag defaults to
-               true, so leaving it out hands the escaped spelling to a sink that escapes again:
-               measured on 5.1 and 5.2, a group named "R&D < Team" reached the reader as the
-               literal text "R&amp;D &lt; Team". This is not the same call as the one in
-               edit_form.php, which feeds a moodleform select - core renders those options with a
-               triple stash and wants the escaped spelling there. */
+            /* The plain spelling ('escape' => false), because the template renders the name
+               through a double stash; with format_string()'s default a group named "R&D < Team"
+               would read "R&amp;D &lt; Team". edit_form.php's call keeps the escaped spelling
+               because a moodleform select renders its options through a triple stash. */
             foreach (groups_get_all_groups($instance->courseid) as $group) {
                 $groups[] = [
                     'id' => $group->id,
@@ -651,25 +598,17 @@ class enrol_apply_renderer extends plugin_renderer_base {
             }
 
             /* The same list the server allowlists the posted role against, so the control cannot
-               offer anything the decision would refuse. It is empty for anybody without
-               moodle/role:assign in the course, which by default is nobody who can reach this
-               page - enrol/apply:manageapplications and moodle/role:assign declare the same two
-               archetypes - but a custom role can hold one without the other, and a chooser with
-               nothing in it is a control that cannot be used. Where it is empty the instance's
-               own role applies, exactly as it does when the decider leaves the select alone.
+               offer anything the decision would refuse. It is empty without moodle/role:assign in
+               the course - both capabilities share the editingteacher and manager archetypes, but
+               a custom role can hold one without the other - and then the instance's own role
+               applies, as when the decider leaves the select alone.
 
-               Unlike the group names, these go to the template in the ESCAPED spelling and are
-               rendered through a triple stash, as core's own element-select.mustache does. The
-               format_string() below is what makes that safe, and it is not belt and braces: core
-               hands back a MIXED list. role_get_name() escapes a role whose role.name column is
-               set, and returns a bare get_string() for one whose column is empty - which is every
-               role a stock site ships, measured on m502, where all eight return an empty name
-               while this site's own custom role returns "R&amp;D coordinator". A triple stash
-               over that list would emit the lang-string half raw.
-
-               The call is idempotent on the half that is already escaped, because the ampersand
-               rule skips an existing entity, so normalising costs nothing and removes the
-               asymmetry rather than documenting it. */
+               Unlike the group names, these go to the template in the escaped spelling for a
+               triple stash, as core's element-select.mustache does. The format_string() below is
+               what makes that safe: role_get_name() escapes a role with a role.name set but
+               returns a bare get_string() for one without, which covers every role a stock site
+               ships, so the list mixes both spellings. format_string() is idempotent on the
+               escaped half, because the ampersand rule skips an existing entity. */
             foreach (get_assignable_roles($coursecontext) as $roleid => $rolename) {
                 $roles[] = [
                     'id' => $roleid,
@@ -681,16 +620,12 @@ class enrol_apply_renderer extends plugin_renderer_base {
         return [
             'messagelabel' => get_string('outcomemessage', 'enrol_apply'),
             'messagehelp' => get_string('outcomemessage_help', 'enrol_apply'),
-            /* Non-empty only on the way back from the cancel confirmation, so the operator does
-               not lose what they wrote by hesitating. Plain spelling: the template double
-               stashes it, as it does everything else it renders itself. */
+            /* Non-empty only on the way back from the cancel confirmation. Plain spelling: the
+               template double stashes it. */
             'messagevalue' => $message,
-            /* The decider's own note. Offered on every decision rather than on deferral alone,
-               and NOT gated on the course capability the two choosers above are: the choosers
-               change what the approval DOES, while the note only records why it was taken - a
-               mentor deciding one application is as entitled to say why as anybody else, and a
-               trail with a hole in it wherever a mentor decided would be worth less than one
-               without the field. */
+            /* The decider's own note, offered on every decision and not gated on the course
+               capability like the choosers: they change what the approval does, while the note
+               only records why, and a mentor's decision deserves a reason as much as anyone's. */
             'notelabel' => get_string('decisionnote', 'enrol_apply'),
             'notehelp' => get_string('decisionnote_help', 'enrol_apply'),
             'notevalue' => $note,
@@ -709,24 +644,17 @@ class enrol_apply_renderer extends plugin_renderer_base {
     /**
      * The applicant's identifying details, as this reader may see them.
      *
-     * One gate serving the identity line AND, through visible_keys() below, the snapshot panel,
-     * because the two used to disagree on the same page to the same reader: the e-mail address
-     * had a row of its own and was printed unconditionally, while the snapshot beside it withheld
-     * identity fields from a mentor. One panel hid what the other showed.
+     * Judged in the course context through moodle/site:viewuseridentity, as the snapshot panel is
+     * through visible_keys(), so the two panels cannot disagree about the same reader. The e-mail
+     * address is one identity field among the rest: on a site whose `showuseridentity` does not
+     * name it, it does not appear here, as on core's participants page; the profile link beside
+     * the name is the route to contact details for a reader entitled to them.
      *
-     * The e-mail is now one identity field among the rest rather than a row of its own, which is
-     * a real behaviour change and the owner's decision: on a site whose `showuseridentity` does
-     * not name it, it no longer appears here at all. That is what core's own participants page
-     * does with the same configuration, and the profile link beside the name is the route to
-     * contact details for a reader entitled to them.
+     * The course context, not the page's: queue::require_review_access() can return the
+     * applicant's user context on the mentor path. That costs a mentor the identity fields, the
+     * same stricter reading the report takes.
      *
-     * The COURSE context, not the page's: queue::require_review_access() can return the
-     * applicant's own USER context on the mentor path, and identity resolved against that would
-     * be answering about the wrong thing. It costs a mentor the identity fields, which is the
-     * stricter reading of a genuine question and the one the report already took.
-     *
-     * Values go out PLAIN and the template double stashes them. s() is not used here for the
-     * same reason the snapshot does not: the sink escapes, and escaping twice shows the entities.
+     * Values go out plain, not through s(), because the template double stashes them.
      *
      * @param stdClass $applicant Applicant user record.
      * @param \context_course $coursecontext Course the application was made to.
@@ -737,9 +665,8 @@ class enrol_apply_renderer extends plugin_renderer_base {
         $values = \enrol_apply\local\identity::values($coursecontext, (int) $applicant->id);
         foreach ($values as $field => $value) {
             $rows[] = [
-                /* Labelled, because these run together on one line and several of them are
-                   opaque without one: a bare "2026-0042" beside a bare "jsa" tells a screen
-                   reader nothing, and tells a sighted reader little more. */
+                /* Labelled, because these run together on one line and several are opaque on
+                   their own, such as an id number beside a username. */
                 'label' => \core_user\fields::get_display_name($field),
                 'value' => $value,
             ];
@@ -754,18 +681,15 @@ class enrol_apply_renderer extends plugin_renderer_base {
     /**
      * The decision that produced the state this application is in, when a colleague took one.
      *
-     * A deferred application is the one case where the reader is looking at something somebody
-     * else already decided, and the page used to say only "On the waiting list" - not who, not
-     * when, and not the note they wrote to the applicant. All of it comes from columns
-     * queue::application() already selects off a table it already joins, so this costs nothing.
-     *
-     * Only for a DEFERRED application. A pending one has no decision to describe, and for the
-     * other two states the page is not reachable at all - queue::application() returns null once
-     * an application stops awaiting a decision.
+     * Only for a deferred application, the one case where the reader sees something a colleague
+     * already decided: a pending one has no decision to describe, and queue::application() returns
+     * null once an application stops awaiting a decision, so the page cannot show the other two
+     * states. Every value but the decider's record comes from columns queue::application() already
+     * selects.
      *
      * The decider's name is read live and is not masked: it is a member of staff acting in this
      * course, not the applicant, and the same name is already on the report. The message is the
-     * one written TO the applicant, so it is shown as written.
+     * one written to the applicant, so it is shown as written.
      *
      * @param stdClass $application Application as \enrol_apply\local\queue::application() returns it.
      * @return array Template context: hasdecision and the sentence describing it.
@@ -795,18 +719,14 @@ class enrol_apply_renderer extends plugin_renderer_base {
                     get_string('strftimedatetimeshort', 'langconfig')
                 )),
             'hasdecisionmessage' => $message !== '',
-            /* Already escaped, with the decider's own line breaks kept, exactly as the
-               applicant's comment is - and for the same reason. */
+            // Escaped with the decider's line breaks kept, as the applicant's comment is.
             'decisionmessage' => format_text($message, FORMAT_PLAIN),
-            /* The note the last decider left for whoever reads this next, and the reason the
-               column exists. It is shown here rather than pre-filled into the note box below:
-               the writer clears on empty on purpose, so a pre-filled box would carry one
-               decision's reason silently into the next - which is the defect that clearing was
-               introduced to fix for the outcome message.
+            /* The note the last decider left for whoever reads this next. Shown here rather than
+               pre-filled into the note box below: the writer clears on empty, so a pre-filled box
+               would carry one decision's reason silently into the next.
 
-               No capability of its own. This whole panel is already behind the gate that opens
-               the review page, and the note says less about the applicant than the comment
-               printed a few lines further down does. */
+               No capability of its own: the panel is already behind the review page's gate, and
+               the note says less about the applicant than the comment printed below it. */
             'hasdecisionnote' => $note !== '',
             'decisionnotelabel' => get_string('decisionnote', 'enrol_apply'),
             'decisionnote' => format_text($note, FORMAT_PLAIN),
@@ -820,13 +740,13 @@ class enrol_apply_renderer extends plugin_renderer_base {
      * opens this page: the prior applications are the same disclosure the report exists to
      * control - what somebody applied for and what was decided - and an editing teacher holding
      * only manageapplications is not granted it by archetype. A reader without it sees no panel
-     * at all rather than an empty one, because a heading that appears only when there IS history
+     * at all rather than an empty one, because a heading that appears only when there is history
      * is itself a disclosure.
      *
-     * Each row's wording comes from the REPORT's own outcome formatter rather than the record's
-     * bare status, so the two surfaces cannot describe the same record differently. That matters
-     * here specifically: a record says APPROVED for ever, while the enrolment it names may since
-     * have been suspended or removed by a route this plugin never sees.
+     * Each row's wording comes from the report's own outcome formatter rather than the record's
+     * bare status, so the two surfaces cannot describe the same record differently: a record says
+     * approved for ever, while the enrolment it names may since have been suspended or removed by
+     * a route this plugin never sees.
      *
      * @param stdClass $application Application as \enrol_apply\local\queue::application() returns it.
      * @param \context_course $coursecontext Course the application was made to.
@@ -862,23 +782,17 @@ class enrol_apply_renderer extends plugin_renderer_base {
     /**
      * How much room the enrolment method has left.
      *
-     * The four numbers answer two different questions and must never be mixed: applicants counts
-     * every non-expired row - pending, deferred and approved alike - because each of those people
-     * is in the pipeline, while places counts ACTIVE rows only. The gap between them is
-     * overbooking, which is the point in a plugin where approval is discretionary.
+     * The numbers answer two different questions and must never be mixed: applicants counts every
+     * non-expired row - pending, deferred and approved alike - while places counts active rows
+     * only. The gap between them is overbooking, which is legitimate where approval is
+     * discretionary. See \enrol_apply\local\capacity.
      *
-     * Shown as a neutral readout rather than the queue's warning: the queue warns only when the
-     * places are gone, which is the right shape for a listing somebody is sweeping, while a
-     * single decision wants the number whatever it is.
+     * Shown as a neutral readout rather than the queue's warning, because a single decision
+     * wants the number whatever it is.
      *
-     * **Gated on the COURSE capability, which is stricter than the page**, and for the same
-     * reason the group and role choosers a few lines above are: these are the enrolment method's
-     * own settings and its enrolment counts, and a mentor reaches this page through the
-     * applicant's user context holding nothing in the course at all. Telling them how many people
-     * are enrolled there, and what the method's configured limits are, is a disclosure their
-     * delegation does not carry - they are trusted with one applicant, not with the shape of the
-     * course. What they lose is context for their decision; the instance's own limits still apply
-     * to it either way, exactly as the groups and the role do.
+     * Gated on the course capability, which is stricter than the page, for the same reason as
+     * the group and role choosers ({@see self::decision_controls_context()}): a mentor, trusted
+     * with one applicant, is not told the method's limits or its enrolment counts.
      *
      * @param stdClass $instance Enrol instance the application belongs to.
      * @return array Template context for the capacity panel.
@@ -904,8 +818,8 @@ class enrol_apply_renderer extends plugin_renderer_base {
                     'total' => $places,
                 ])
                 : $nolimit,
-            /* Not the setting's own label. "Maximum applicants: 35 of 40" reads as though 35
-               were the maximum; this row reports how many the method is HOLDING against it. */
+            /* Not the setting's own label: "Maximum applicants: 35 of 40" reads as though 35
+               were the maximum, while this row reports how many the method holds against it. */
             'applicantslabel' => get_string('reviewapplicants', 'enrol_apply'),
             'applicants' => $limit > 0
                 ? get_string('reviewofmany', 'enrol_apply', (object) [
@@ -913,12 +827,10 @@ class enrol_apply_renderer extends plugin_renderer_base {
                     'total' => $limit,
                 ])
                 : $nolimit,
-            /* How many of those applications are deferred, which is a SUBSET of the applicants
-               row above and not a fourth limit. It is here because a deferred row counts
-               against the applicant cap for ever and nothing frees it - see capacity::deferred()
-               - so a method refusing new applications with an empty queue is otherwise
-               unexplainable from any screen. A bare count, not "n of m": there is no limit on
-               deferrals to report it against. */
+            /* How many of those applications are deferred: a subset of the applicants row, not
+               another limit, so a bare count. A deferred row holds its place against the
+               applicant limit until cancelled (see capacity::deferred()), which is what explains a
+               method refusing new applications with an empty queue. */
             'deferredlabel' => get_string('reviewdeferred', 'enrol_apply'),
             'deferred' => (string) $capacity::deferred($instance),
         ];
@@ -927,41 +839,28 @@ class enrol_apply_renderer extends plugin_renderer_base {
     /**
      * The details the applicant submitted with this application, as the reader may see them.
      *
-     * Read from the frozen snapshot the applicant's own submission wrote, NOT recomputed. In
-     * particular this must never go through \enrol_apply\local\diff::compute(): that re-resolves
-     * the field set from the LIVE enrol instance and re-classifies it against the current user,
-     * so a field the teacher has since stopped asking for, or one the applicant may no longer
-     * edit, silently vanishes from a record of what was actually submitted. The snapshot carries
-     * its own labels for the same reason - they are what the applicant saw when they typed.
+     * Read from the frozen snapshot the submission wrote, never recomputed through
+     * \enrol_apply\local\diff::compute(): that re-resolves the field set from the live instance
+     * and re-classifies it against the current user, so a field no longer asked for, or no longer
+     * editable, would vanish from the record of what was submitted. The stored labels are used
+     * for the same reason: they are what the applicant saw.
      *
-     * Nothing here reads the applicant's LIVE profile, and that is a security boundary rather
-     * than a scoping choice. An earlier version of this method showed "what the profile says
-     * now" beside each row, by passing the stored key to fields::current_value(). That key comes
-     * out of userinfodata, which restore_enrol_apply_plugin writes verbatim from an archive this
-     * site did not produce, and current_value() dereferences any {user} column an "s_" key names
-     * with no allowlist of its own - the DENY list that exists to keep s_password, s_secret,
-     * s_email and s_idnumber out of this plugin governs only the WRITE path. Measured on m502
-     * with a crafted envelope: the panel rendered the applicant's password hash. The reader for
-     * whom visible_keys() returns ALL_FIELDS - any teacher or manager - skipped the key filter
-     * entirely, so the row was not "already judged visible" in any sense. The custom-field
-     * branch was as bad: a c_<id> key reads {user_info_data} directly, past every
-     * PROFILE_VISIBLE_* gate core applies to its own profile page.
+     * Nothing here reads the applicant's live profile, and that is a security boundary. The
+     * stored keys come from userinfodata, which restore_enrol_apply_plugin writes verbatim from a
+     * foreign archive. fields::current_value() dereferences any {user} column an "s_" key names
+     * (fields::DENY governs only the write path) and reads a "c_<id>" key from {user_info_data}
+     * past core's PROFILE_VISIBLE_* gates, and a reader for whom visible_keys() returns
+     * ALL_FIELDS skips the key filter entirely - so a crafted archive could expose any column,
+     * the password hash included. The report does not read the live profile either.
      *
-     * The frozen record needs none of that, and the Report Builder surface it inherits its
-     * masking from does not read the live profile either. So the two surfaces onto this record
-     * now do the same thing, which was the point of sharing the rule.
+     * Masked with the report's own rule in the course context. A mentor holds nothing in the
+     * course, so they see the name fields only, even where their mentor role grants the identity
+     * capability in the applicant's user context: the stricter reading, as in the report.
      *
-     * Masked with the report's own rule, on the COURSE context. Note what that costs: a MENTOR
-     * holds nothing in the course, so they see the name fields only, even where their own mentor
-     * role grants the identity capability in the applicant's user context. That is the stricter
-     * reading of a genuine question rather than an obviously right answer, and it is the one the
-     * report already took.
-     *
-     * Every value is the PLAIN spelling and the template double stashes it, so each is escaped
-     * exactly once. Not format_string(), whose strip_tags() would delete a restored value from
-     * the first "<" onwards. A stored value CAN contain newlines - a textarea custom field is
-     * offerable - so the template carries the same white-space rule the report's own cell does
-     * rather than converting them to markup.
+     * Every value is the plain spelling and the template double stashes it. Not format_string(),
+     * whose strip_tags() would delete a restored value from the first "<" onwards. A value can
+     * hold newlines (a textarea custom field is offerable), so the template carries the report
+     * cell's white-space rule rather than converting them to markup.
      *
      * @param stdClass $application Application as \enrol_apply\local\queue::application() returns it.
      * @return array Template context: hassnapshot, its label, and one row per visible field.
@@ -975,8 +874,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
         foreach ($entries as $entry) {
             if ($visible !== $formatter::ALL_FIELDS && !in_array($entry['key'], $visible, true)) {
                 /* Withheld from every row rather than only from the rows holding a value: a
-                   marker that appears exactly where there is data is a presence oracle, which is
-                   the rule the report's own formatter states and this surface inherits. */
+                   marker that appears exactly where there is data is a presence oracle. */
                 continue;
             }
 
@@ -1001,12 +899,9 @@ class enrol_apply_renderer extends plugin_renderer_base {
      * @param stdClass $instance Enrol instance the application belongs to.
      * @param moodle_url $manageurl Url the decision form posts back to.
      * @param \enrol_apply\output\application_navigation $navigation Links to the neighbouring
-     *        applications. Required, and not defaulted to null: manage.php always resolves a
-     *        pair before it renders, so a "not being walked" mode would be a parameter claiming
-     *        a state the plugin never produces - the same claim the queue table's own removed
-     *        constructor parameter was making. It renders as nothing only when there is no
-     *        neighbour AND no queue to go back to; a queue of one still gets the way back, which
-     *        is exactly when a reader most needs it.
+     *        applications. Required: manage.php always resolves them before rendering. It renders
+     *        as nothing only when there is no neighbour and no queue to go back to; a queue of one
+     *        still gets the way back.
      * @param string $message What the operator had already typed, carried back from the cancel
      *        confirmation so that hesitating does not discard it.
      * @param string $note The decision note they had already typed, carried back the same way.
@@ -1022,27 +917,16 @@ class enrol_apply_renderer extends plugin_renderer_base {
         $note = ''
     ) {
         echo $this->header();
-        /* No heading here. Core already renders the applicant's name as the page's own <h1>
-           from $PAGE->set_heading(), and $this->heading() defaults to level 2 - so the page
-           opened with the same name twice, at the same visual size, with the whole secondary
-           navigation between them. The <h2>s now belong to the panels below. */
+        /* No heading here: core already renders the applicant's name as the page's <h1> from
+           $PAGE->set_heading(), so the <h2>s belong to the panels below. */
 
-        /* Above the form, where core puts a tertiary navigation bar, and not below it:
-           the last control an operator reads before a decision should be the decision.
+        /* Above the form, where core puts a tertiary navigation bar: the last control an
+           operator reads before a decision should be the decision.
 
-           render() resolves the template from the CLASS NAME - renderer_base::render()
-           falls back to "<component>/<class>" for any templatable with no render_ method,
-           so this reaches enrol_apply/application_navigation with nothing else declared.
-           A render_application_navigation() method here is deliberately not written: adding
-           it changed no byte of any page, measured by renaming it under the whole suite,
-           which stayed green - so it would be a method whose only claim was one no test in
-           this repository could hold. Nor does its absence cost a theme anything, which an
-           earlier draft of this comment got backwards: render() dispatches on
-           method_exists($this, ...) against the CONCRETE renderer, so a theme's own
-           enrol_apply renderer subclass can declare that method and have it called with
-           nothing declared here at all. The coupling that IS load bearing is the class name
-           to the template file name, and renaming either without the other throws, which
-           the two rendering tests hold. */
+           No render_application_navigation() is needed: render() falls back to the
+           "<component>/<class>" template for a templatable with no render_ method, and a
+           theme's renderer subclass can still declare one. What is load bearing is the class
+           name matching the template file name; renaming either alone throws. */
         echo $this->render($navigation);
         echo $this->review_form($application, $applicant, $instance, $manageurl, $message, $note);
         echo $this->footer();
@@ -1051,13 +935,10 @@ class enrol_apply_renderer extends plugin_renderer_base {
     /**
      * The single-application decision form.
      *
-     * The POST is byte for byte the one the queue makes - formaction, userenrolments[] and the
-     * session key - so every guard manage.php applies to a queue decision applies here unchanged.
-     *
-     * It is no longer true that the handler needs NO branch of its own: the destructive decision
-     * is intercepted on this path and asks before acting, which the queue's bulk equivalent does
-     * not. That is the one branch, and it is about confirmation rather than authorisation - the
-     * second request arrives on the same contract and passes the same guards.
+     * The POST carries the queue's own contract - formaction, userenrolments[] and the session
+     * key - so every guard manage.php applies to a queue decision applies here unchanged. The one
+     * branch manage.php adds for this page is the confirmation before a cancellation, and the
+     * confirmed request arrives on the same contract and passes the same guards.
      *
      * @param stdClass $application Application as \enrol_apply\local\queue::application() returns it.
      * @param stdClass $applicant Applicant user record.
@@ -1090,10 +971,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
                 'escape' => false,
             ]),
             'courseurl' => (new moodle_url('/course/view.php', ['id' => $application->courseid]))->out(false),
-            /* No e-mail row. It used to be printed here unconditionally while the snapshot panel
-               beside it masked identity fields from the same reader - one panel hiding what the
-               other showed. It is now one identity field among the rest, so on a site whose
-               showuseridentity does not name it, it does not appear. See identity_context(). */
+            // No e-mail row: the address is one identity field among the rest. See identity_context().
             'profileurl' => (new moodle_url('/user/view.php', [
                 'id' => (int) $applicant->id,
                 'course' => (int) $application->courseid,
@@ -1105,37 +983,27 @@ class enrol_apply_renderer extends plugin_renderer_base {
             'status' => $waiting
                 ? get_string('outcomewaiting', 'enrol_apply')
                 : get_string('outcomeawaiting', 'enrol_apply'),
-            /* Plain, not escaped: review.mustache renders this through a DOUBLE stash, so
-               Mustache escapes it there and the escaped spelling would show the entities. This
-               is the one of the three label sinks that differs, which is why the helper takes a
-               flag rather than deciding for everybody. */
+            /* Plain, not escaped: review.mustache renders this through a double stash. The
+               label's other two sinks render raw, which is why the helper takes a flag. */
             'commentlabel' => \enrol_apply\local\commentlabel::custom($instance, false),
             'hascomment' => trim((string) $application->applycomment) !== '',
-            /* Escaped exactly once, and with the line breaks the applicant typed. A double
-               stash alone would escape correctly and then render every paragraph as one run,
-               on the one page whose purpose is reading what they wrote; the queue's own cell
-               has always used format_text(FORMAT_PLAIN), which escapes and converts newlines
-               and nothing else. So this arrives ALREADY escaped and the template triple
-               stashes it, which is the opposite of every other value on that template and is
-               why it is the only one flagged there.
+            /* Escaped once with the applicant's line breaks kept, as in the queue's own cell:
+               format_text(FORMAT_PLAIN) escapes and converts newlines and nothing else, so the
+               template triple stashes it, as it does the decision message and note.
 
-               Not format_string(): that runs strip_tags(), which would delete an applicant's
-               answer from the first "<" onwards. A restore is the route by which such a value
-               reaches the column - it writes the comment verbatim out of a foreign archive. */
+               Not format_string(): its strip_tags() would delete the text from the first "<"
+               onwards, and a restore writes the comment verbatim out of a foreign archive. */
             'comment' => format_text((string) $application->applycomment, FORMAT_PLAIN),
             'nocomment' => get_string('nocomment', 'enrol_apply'),
-            /* Singular labels of their own, not the queue's. btnconfirm and its siblings read
-               "Confirm requests", which is right above a list and wrong above one application -
-               and on this page the button IS the decision, so its label is the last thing the
-               operator reads before an applicant is enrolled or unenrolled. */
-            /* Order is the layout: the bar spreads these with justify-content-between, so the
-               destructive decision sits at the far edge and cannot be mis-clicked for the one
-               beside it, and the approval sits where the eye finishes. Cancel also gets its own
-               style, because it is the only one of the three that destroys something -
-               cancel_enrolment() unenrols, taking the row and the applicant's comment with it -
-               and it used to look exactly like Defer, which is fully reversible.
-               btn-outline-danger is a button variant rather than a bare bg-* utility, which is
-               what keeps bootstrap_compat_test's contrast rule satisfied. */
+            /* Singular labels of their own: the queue's btnconfirm and its siblings read
+               "Confirm requests", which is wrong above one application.
+
+               Order is the layout: the bar spreads these with justify-content-between, so the
+               destructive decision sits at the far edge, away from the others, and the approval
+               where the eye finishes. Cancel gets its own style because it is the only
+               irreversible one: cancel_enrolment() unenrols, taking the row and the applicant's
+               comment with it. See enrol_apply/review_actions for why its being the default
+               submit is safe. */
             'actions' => [
                 ['value' => 'cancel', 'label' => get_string('reviewcancel', 'enrol_apply'), 'style' => 'btn-outline-danger'],
                 ['value' => 'wait', 'label' => get_string('reviewwait', 'enrol_apply'), 'style' => 'btn-secondary'],
@@ -1143,20 +1011,13 @@ class enrol_apply_renderer extends plugin_renderer_base {
             ],
         ];
 
-        /* The decisions go into a core sticky footer, rendered here and interpolated INSIDE the
-           form by the template - its placement is CSS and never a DOM move, so its submits post
-           with everything else. Only the buttons: the bar is a fixed box whose content area
-           clips with no scrollbar, so the message box and the two choosers stay in the page body,
-           exactly as they do on the queue.
+        /* The decisions go into a core sticky footer interpolated inside the form, as on the
+           queue (see manage_form()): only the buttons, because the footer's content area clips
+           with no scrollbar.
 
-           The spreading class goes on the PARTIAL's own row, not through the footer: the footer
-           applies its classes to a content area whose only child is that row, so
-           justify-content-between there had nothing to spread and the three buttons packed
-           together at the left - measured, 8px apart, with the destructive one nowhere near the
-           far edge it was supposed to be pushed to. Nothing is passed to the constructor now, and
-           add_classes() is still not called: it builds its concatenation and then assigns the
-           argument over it, so a later "just add a class" would silently drop whatever was
-           there. */
+           The spreading class is on the partial's own row, not passed to the footer: the footer
+           applies its classes to a content area whose only child is that row, so there it would
+           have nothing to spread. */
         $bar = $this->render_from_template('enrol_apply/review_actions', [
             'actions' => $context['actions'],
         ]);

@@ -23,18 +23,16 @@ use moodleform;
  * The confirmation step of a participants-page bulk decision.
  *
  * Core ships a base form for this extension point, enrol_bulk_enrolment_change_form, and both
- * precedents subclass it with an empty body. This one does not, for two measured reasons.
- * Its users table indexes an options array holding only -1, 0 and 1 by the row's status with
- * no isset() guard (enrol/bulkchange_forms.php:57-61 and :84), so every waiting-list row -
- * ENROL_APPLY_USER_WAIT is 2 - raises "Undefined array key 2"; and its labels are read out of
- * the enrol_manual language pack, which is not this plugin's to depend on.
+ * precedents subclass it with an empty body. This one does not, for two reasons. Its
+ * get_users_table() indexes the get_status_options() array, which holds only -1, 0 and 1, by
+ * the row's status with no isset() guard, so every waiting-list row (ENROL_APPLY_USER_WAIT is
+ * 2) raises "Undefined array key 2"; and its labels come from the enrol_manual language pack,
+ * which is not this plugin's to depend on.
  *
- * What it must still copy is the one line that is not decoration. The selected user ids reach
- * the driver from the participants table's own checkbox names, which exist only on the FIRST
- * post; on the second they survive purely because core's base form emits a hidden bulkuser[]
- * input per row (enrol/bulkchange_forms.php:81, read back at user/action_redir.php:67). A form
- * that omits them submits cleanly and then bounces the operator back to the participants page
- * with "No users selected", as though they had ticked nothing.
+ * What it must still copy is the hidden bulkuser[] input per row. The selected user ids reach
+ * the driver from the participants table's own checkbox names only on the first post; on the
+ * second, user/action_redir.php falls back to bulkuser[]. A form that omits them submits
+ * cleanly and sends the operator back to the participants page with "No users selected".
  *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine
@@ -50,25 +48,18 @@ class bulk_decision_form extends moodleform {
         $mform = $this->_form;
         $users = $this->_customdata['users'] ?? [];
 
-        /* No header element, deliberately. Core already prints the operation's title above
-           this form as the page heading (user/action_redir.php:271), so one would only repeat
-           it - and a collapsible header renders an <a role="button"> carrying that same title
-           in a visually-hidden span. Behat's "button" selector matches any element with
-           role="button" by its text, and that toggle sits before the submit input in document
-           order, so pressing the button whose label is the operation's title COLLAPSED the
-           form instead of submitting it. Measured: the scenario failed with the form still on
-           screen, no notification and no validation error. */
+        /* No header element, deliberately. user/action_redir.php already prints the operation's
+           title as the page heading, so one would only repeat it - and a collapsible header
+           renders an <a role="button"> carrying that same title in a visually-hidden span.
+           Behat's "button" selector matches any element with role="button" by its text, and
+           that toggle sits before the submit input, so pressing the button labelled with the
+           operation's title would collapse the form instead of submitting it. */
         $mform->addElement('static', 'bulkdescription', '', $this->_customdata['description']);
 
-        /* What this decision will NOT reach, said before anything is written. The dispatch core
-           hands the plugin is filtered to ONE enrolment method and cannot be widened from here,
-           and the case where that is silent - one person holding applications on two of them -
-           is reachable rather than exotic, because two apply methods are two intakes.
-
-           Rendered through the renderer's own notification rather than as bare text: it is a
-           warning and it has to read as one beside a submit button. A static element's content
-           is written into core's element-template.mustache through a TRIPLE stash, so the
-           sentence arrives already escaped, which is what other_applications_notice() produces. */
+        /* Applications this decision will not reach, said before anything is written; see
+           \enrol_apply\bulk\decision_operation::other_applications_notice(), which produces the
+           sentence already escaped because the notification and the static element both render
+           raw. Rendered as a notification so it reads as a warning beside the submit button. */
         if (!empty($this->_customdata['othernotice'])) {
             global $OUTPUT;
 
@@ -99,9 +90,9 @@ class bulk_decision_form extends moodleform {
             $mform->setType('bulkuser[' . $index . ']', PARAM_INT);
         }
 
-        /* PARAM_TEXT and not PARAM_RAW, exactly as the queue's own message box is: this
-           reaches the applicant's notification and the durable record, which outlives the
-           enrolment it belongs to. */
+        /* PARAM_TEXT and not PARAM_RAW, as in the queue's own message box: this reaches the
+           applicant's notification and the durable record, which outlives the enrolment it
+           belongs to. */
         $mform->addElement(
             'textarea',
             'outcomemessage',
@@ -111,11 +102,9 @@ class bulk_decision_form extends moodleform {
         $mform->setType('outcomemessage', PARAM_TEXT);
         $mform->addHelpButton('outcomemessage', 'outcomemessage', 'enrol_apply');
 
-        /* The decider's own note, offered here for the same reason the message is: this is a
-           third decision surface, and a field the queue and the review page both offer while
-           this one silently does not is exactly how two surfaces come to describe the same
-           record differently. Same PARAM_TEXT, same durable record, opposite audience - the
-           applicant never reads this one. */
+        /* The decider's own note, offered as on the queue and the review page so every decision
+           surface records the same fields. Same PARAM_TEXT and durable record, opposite
+           audience: the applicant never reads this one. */
         $mform->addElement(
             'textarea',
             'decisionnote',
@@ -135,14 +124,13 @@ class bulk_decision_form extends moodleform {
     /**
      * Add the group and role choosers, each only where it has something to offer.
      *
-     * Both lists carry the ESCAPED spelling of every name, which is the opposite of what the
-     * queue's own renderer hands its Mustache template. The sink is what decides: core renders
-     * a select's options through a triple stash in element-select.mustache, where the escaped
-     * spelling is correct, while a double stash escapes for itself and needs the plain one.
-     * The role list is normalised through format_string() for a second reason as well -
-     * get_assignable_roles() returns a mixed list, escaping a role that carries a name of its
-     * own and returning a bare language string for one that does not, which is every role a
-     * stock site ships. The call is idempotent on the half that is already escaped.
+     * Both lists carry the escaped spelling of every name, unlike what the queue's own renderer
+     * hands its Mustache template: core renders a select's options through a triple stash in
+     * element-select.mustache, while a double stash escapes for itself and needs the plain one.
+     * The role list is normalised through format_string() for a second reason:
+     * get_assignable_roles() escapes a role that carries a name of its own but returns a bare
+     * language string for one that does not, which is every role a stock site ships.
+     * format_string() is idempotent on the half that is already escaped.
      *
      * Nothing here is a security boundary. confirm_enrolment() allowlists the posted group ids
      * against the course's own groups and the posted role against get_assignable_roles(), per

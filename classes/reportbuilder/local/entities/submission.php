@@ -29,16 +29,11 @@ use enrol_apply\reportbuilder\local\formatters\submission as formatter;
 /**
  * The durable application record, as a Report Builder entity.
  *
- * initialise() is overridden and does the work of registering every column and filter itself.
- * That is not a style choice and it is not optional: on 5.1 base::initialise() is
- * `abstract public function initialise(): self` (reportbuilder/classes/local/entities/base.php),
- * while 5.2 makes it concrete and drives it from new get_available_columns(),
- * get_available_filters() and get_available_conditions() hooks. Those three hooks DO NOT EXIST
- * on 5.1, so an entity written in the 5.2 shape is a compile-time fatal there - not a catchable
- * exception, the whole request dies at autoload. Note which runner would miss it: `mdl ci` with
- * no flags defaults to MOODLE_501_STABLE, so it is the leg that CATCHES this. What is blind to
- * it is the m502-only local loop this repo works in day to day - `mdl phpunit m502`,
- * `mdl behat m502`. Overriding initialise() is the one shape both branches accept.
+ * initialise() is overridden to register every column and filter itself, which is the one
+ * shape both supported branches accept: on Moodle 5.1 base::initialise() is abstract, while 5.2
+ * makes it concrete and drives it from get_available_columns(), get_available_filters() and
+ * get_available_conditions(), which do not exist on 5.1. An entity written in the 5.2 shape is
+ * a fatal error on 5.1.
  *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine
@@ -57,16 +52,15 @@ class submission extends base {
     /**
      * The join onto the live enrolment the record was created for.
      *
-     * LEFT, and every consequence of that word is deliberate. The record outlives its user
-     * enrolment on purpose - approval, cancellation and unenrolment all destroy the enrolment
-     * while the trail is kept - so an INNER join would silently drop exactly the rows the
+     * LEFT, because the record outlives its user enrolment: cancellation and unenrolment delete
+     * the enrolment while the record is kept, and an INNER join would drop exactly the rows the
      * outcome column exists to explain.
      *
-     * Joined on userenrolmentid and not on the courseid + userid pair, which is the record's
-     * natural key but is deliberately not unique: an applicant who was cancelled and applied
-     * again has two records for one course, and joining on the pair would pair each of them
-     * with both enrolments. The id is never recycled by a sequence, so a stale one cannot
-     * false-match; it can only fail to match, which is the state the column reports.
+     * Joined on userenrolmentid rather than on courseid + userid, which is not unique: an
+     * applicant who was cancelled and applied again has two records for one course, and the
+     * pair would attach the current enrolment to the earlier record too. A sequence never
+     * recycles an id, so a stale one can only fail to match, which is the state the column
+     * reports.
      *
      * @return string The join.
      */
@@ -89,15 +83,10 @@ class submission extends base {
     /**
      * Register every column, filter and condition this entity offers.
      *
-     * Each filter is registered as a CONDITION as well, which is what lets a site-level custom
-     * report fix a question rather than merely offer a control - "every pending application on
-     * the site" is a condition, not a filter. Core's own course entity registers the same object
-     * as both, so sharing one instance is the supported shape.
-     *
-     * This is inert for the course report, and that was measured rather than assumed:
-     * reportbuilder/classes/system_report.php contains no reference to conditions at all on
-     * either 5.1 or 5.2, so a system report never reads them. Its base conditions are a separate
-     * mechanism entirely.
+     * Each filter is registered as a condition as well, so a custom report can fix a question
+     * ("every pending application on the site") rather than merely offer a control. Core's own
+     * course entity registers the same object as both. A system report never reads conditions,
+     * so this is inert for the course report.
      *
      * @return base This entity.
      */
@@ -122,17 +111,10 @@ class submission extends base {
         $alias = $this->get_table_alias('enrol_apply_submission');
         $columns = [];
 
-        /* Its own status column, never core's enrolment:status. The two look interchangeable
-           and are not: core derives its value in SQL and maps it through
-           status_field::STATUS_NOT_CURRENT, so this table's vocabulary comes out wrong for
-           EVERY one of its four values - 1 would read "Suspended" and 2 "Not current". Borrowing
-           core's formatter is worse still: core_course\reportbuilder\local\formatters\enrolment
-           is deprecated on 5.2 (MDL-87000) and emits a notice per call that 5.1 does not. Do
-           not lean on CI to catch that half - the notice arrives through debugging() at
-           DEBUG_DEVELOPER, which PHPUnit re-emits at teardown as E_USER_NOTICE, and Moodle's
-           phpunit.xml.dist sets failOnDeprecation and failOnWarning but not failOnNotice. The
-           wrong vocabulary above is the reason not to borrow it; the deprecation is a second
-           reason that would probably go unnoticed. */
+        /* The plugin's own status vocabulary, never core's enrolment status: core's labels
+           (core_user\output\status_field: 0 active, 1 suspended, 2 not current) would mislabel
+           every submission status, and core_course's enrolment formatter is deprecated from
+           Moodle 5.2. */
         $columns[] = (new column(
             'status',
             new lang_string('submissionstatus', 'enrol_apply'),
@@ -180,20 +162,12 @@ class submission extends base {
             ->add_attributes(['class' => 'enrol_apply-linebreaks'])
             ->add_callback([formatter::class, 'plaintext']);
 
-        /* The decider's own note, beside the applicant's comment and rendered identically -
-           same free-text formatter, same white-space rule, same "not sortable" - because a
-           reader scanning a report wants the two to read alike. What differs is who wrote it
-           and who it was written for, which the column's label says.
+        /* The decider's note, rendered exactly like the applicant's comment beside it.
 
-           No capability of its own, and the reason is NOT that a gate above already covers it -
-           an earlier version of this comment said so and was wrong. The COURSE report has a
-           can_view() on enrol/apply:viewreports; an entity is shared with the site-wide
-           datasource, which has no can_view() at all because core offers a plugin no hook to
-           gate one (see the datasource's own docblock). What governs a custom report is the
-           Report Builder capabilities and the report's audience. This column is therefore given
-           exactly the treatment the applicant's own comment beside it has, which is the value
-           with the stronger claim to protection of the two - the snapshot column, which is
-           different in kind, carries its own moodle/user:viewalldetails gate. */
+           No capability of its own: the site-wide datasource shares this entity and has no
+           per-reader gate (see its class docblock), so the note gets the same exposure as the
+           applicant's comment, which has the stronger claim to protection of the two. Only the
+           snapshot, different in kind, is gated separately by each report. */
         $columns[] = (new column(
             'decisionnote',
             new lang_string('decisionnote', 'enrol_apply'),
@@ -208,16 +182,12 @@ class submission extends base {
 
         $uealias = $this->get_table_alias('user_enrolments');
 
-        /* What the enrolment is doing NOW, which the stored status cannot say. The record holds
-           the last decision this plugin's own state machine took; everything else that can move
-           an enrolment - the participants page, course reset, user deletion, the expiry sweep -
-           changes the enrolment and leaves the record alone. Without this column a reader cannot
-           tell an approved participant from one who was approved and then unenrolled, because
-           the two are literally the same row.
+        /* What the enrolment is doing now, which the stored status cannot say: the record holds
+           the last decision this plugin took, while the participants page, course reset, user
+           deletion and the expiry sweep change the enrolment and leave the record alone.
 
-           Sortable, and that is the reason it exists beside the outcome column rather than being
-           folded into it: the outcome is a display callback, and filtering and sorting are SQL,
-           so they go straight past a callback. This column is the sortable primitive. */
+           It exists beside the outcome column because it is sortable: the outcome is computed in
+           a display callback, which SQL sorting and filtering never reach. */
         $columns[] = (new column(
             'enrolment',
             new lang_string('submissionenrolment', 'enrol_apply'),
@@ -231,17 +201,13 @@ class submission extends base {
             ->set_is_sortable(true)
             ->add_callback([formatter::class, 'enrolment']);
 
-        /* The question a reader actually has, answered from the two above with no new storage:
-           "what happened to this application". See docs/design/audit-trail-analysis.md for the
-           full matrix and for why this is a read-side fix - the record is not wrong, the report
-           was lying by omission, and a write-side fix would have to avoid both breaking
-           test_a_submission_row_survives_unenrolment and overwriting cancel_enrolment()'s own
-           CANCELLED.
+        /* "What happened to this application", derived from the stored decision and the live
+           enrolment with no new storage; see formatter::outcome() and
+           docs/design/audit-trail-analysis.md.
 
-           NOT sortable and carrying no filter, on purpose. The value is computed in a callback,
-           so a sort would order by whichever field happened to be first and a filter would never
-           reach it - either would be a control that lies. The sortable, filterable primitives are
-           the status column above and the enrolment column beside it. */
+           Not sortable and no filter: the value is computed in a callback, so a sort would order
+           by the first field and a filter would never reach it. The status and enrolment columns
+           are the sortable, filterable primitives. */
         $columns[] = (new column(
             'outcome',
             new lang_string('submissionoutcome', 'enrol_apply'),
@@ -257,19 +223,14 @@ class submission extends base {
             ->set_is_sortable(false)
             ->add_callback([formatter::class, 'outcome']);
 
-        /* The frozen snapshot, as ONE long-text column: not sortable, and with no filter
-           declared anywhere in this entity. That combination is what makes it the single place
-           in this plugin where a display callback may legitimately hide values from a reader.
-           Everywhere else, filtering and sorting are SQL and go straight past a callback, so a
-           reader recovers a hidden value by filtering on it and reading the row count. Here
-           there is no SQL path in, so there is nothing to go past.
-           test_the_snapshot_column_has_no_filter_and_is_not_sortable holds that precondition;
-           if it ever goes red, the masking below is unsound and must move.
-           The callback is registered here with NO argument, which core turns into a null third
-           argument, which the formatter reads as "nobody asked a context" and answers with the
-           name parts alone. That is the masking any datasource reusing this entity inherits -
-           slice 8's included - and it is meant to be the restrictive one: the report overrides
-           it through set_callback() once it has a context to judge the reader in.
+        /* The frozen snapshot, as one long-text column that is neither sortable nor filterable.
+           That is what makes a display callback a sound place to mask values here: there is no
+           SQL path by which a reader could recover a hidden one by filtering and counting rows.
+           test_the_snapshot_column_has_no_filter_and_is_not_sortable holds that precondition; if
+           it fails, the masking is unsound.
+           The callback is registered with no argument, which formatter::snapshot() answers with
+           the name parts alone - the restrictive default any report reusing this entity
+           inherits until it calls set_callback() with a context-based decision.
            test_an_entity_column_used_without_the_report_shows_names_only pins it. */
         $columns[] = (new column(
             'snapshot',
@@ -280,9 +241,8 @@ class submission extends base {
             ->set_type(column::TYPE_LONGTEXT)
             ->add_field("{$alias}.userinfodata")
             ->set_is_sortable(false)
-            /* The pairs are separated by a literal newline, which HTML collapses to a space.
-               The line breaks are CSS because they cannot be markup: see the formatter, where
-               the download path's decode-then-strip order is set out. */
+            /* The pairs are separated by a literal newline, which this class makes CSS draw;
+               markup would corrupt the download (see formatter::snapshot()). */
             ->add_attributes(['class' => 'enrol_apply-linebreaks'])
             ->add_callback([formatter::class, 'snapshot']);
 
@@ -300,13 +260,9 @@ class submission extends base {
         $alias = $this->get_table_alias('enrol_apply_submission');
         $filters = [];
 
-        /* Four options and not a boolean. Note the vocabulary: this column is
-           enrol_apply_submission.status, whose values are submission::STATUS_PENDING,
-           _APPROVED, _WAITING and _CANCELLED - NOT user_enrolments.status, which this repo's
-           CLAUDE.md warns shares the number 2 with it and nothing else. boolean_select compiles
-           to "= 1" or "= 0", so it would not merely lose the waiting list: PENDING and APPROVED
-           would be the only records any filter setting could reach, and WAITING and CANCELLED
-           would both become unfindable. */
+        /* Four options, not a boolean: this is enrol_apply_submission.status (the
+           submission::STATUS_* values), not user_enrolments.status. A boolean_select compiles to
+           "= 1" or "= 0" and would make waiting and cancelled records unfindable. */
         $filters[] = (new filter(
             select::class,
             'status',
@@ -363,11 +319,9 @@ class submission extends base {
         ))
             ->add_joins($this->get_joins());
 
-        /* A text filter and not a select, which is the whole reason the note is free text: the
-           two scenarios it records - waiting for a place, waiting for something to be validated
-           - are a real distinction but a thin one to freeze into a schema, and a coded reason
-           offered here would under-report. If it proves load bearing in use, a coded column can
-           be added beside a note that already exists. */
+        /* A text filter, not a select, because the note is free text: the reasons it records
+           (waiting for a place, waiting for something to be validated) are too thin a
+           distinction to freeze into a coded column. */
         $filters[] = (new filter(
             text::class,
             'decisionnote',

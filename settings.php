@@ -38,19 +38,15 @@ if ($ADMIN->fulltree) {
        list per instance and the picked set is intersected with it again on every read, so
        narrowing it here narrows every existing instance at once.
 
-       The choices read {user_info_field}, which is only safe once the install has finished -
-       hence the guard, without which admin_apply_default_settings() breaks a fresh install.
-       The default is deliberately the full standard set and not an empty array: the setting
-       stores only the ticked keys, so an empty default would make the intersection in
-       fields::resolve() zero everything and every migrated instance would silently stop
-       collecting what it collected before the upgrade. */
+       Both choice lists read {user_info_field}, which does not exist yet while
+       admin_apply_default_settings() runs this file during a fresh install - hence the guard.
+       The default is the full standard set rather than an empty array: the setting stores only
+       the ticked keys, so an empty default would make the intersection in fields::resolve()
+       drop every field an existing instance was collecting. */
     $allowedchoices = [];
     $queuefilterchoices = [];
     if (!during_initial_install()) {
         $allowedchoices = \enrol_apply\local\fields::offerable();
-        /* Same guard, same reason: the choices resolve custom profile fields out of
-           {user_info_field}, which does not exist yet during a fresh install, and
-           admin_apply_default_settings() reaches this file then. */
         $queuefilterchoices = \enrol_apply\local\queuefilter::choices();
     }
     /* Whether a course may offer to save an applicant's answers to their own profile. Off by
@@ -71,26 +67,19 @@ if ($ADMIN->fulltree) {
         $allowedchoices
     ));
 
-    /* Which profile fields the QUEUE may be filtered by, which is a different question from the
-       one above: that setting decides what an applicant is ASKED, this one decides what an
-       operator may narrow the list by. The two vocabularies are different on purpose - the fields
-       an application collects are frozen into a per-application snapshot that is masked per row
-       and cannot be filtered at all, while these are the live identity fields the queue already
-       shows under each applicant's name.
+    /* Which profile fields the queue may be filtered by. Unlike the setting above, which decides
+       what an applicant is asked, these are the live identity fields the queue already shows
+       under each applicant's name; the submitted fields live in a per-application snapshot that
+       cannot be filtered at all.
 
-       The default is EMPTY, so an existing site upgrades with the date filters and no field
-       filters until somebody ticks a box. A seeded default would arrive as a wider filter row than
-       the administrator asked for, and a STATIC one would be worse than either:
-       admin_setting_configmulticheckbox::write_setting() silently drops a value that is not in the
-       choice list, so `city,institution` on a site naming neither is stored as the empty string -
-       a setting that looks configured and is not. */
-    /* The whole row is branched rather than only its description, because
-       admin_setting_configmulticheckbox::output_html() opens with
-       `if (!$this->load_choices() or empty($this->choices)) { return ''; }` - so on a site that
-       names no identity fields the setting would not render at all, and the very guidance written
-       for that state would be the half nobody could read. is_related() has the same guard, so it
-       would not be findable through admin search either. A first cut put the guidance in the
-       description and shipped exactly that. */
+       The default is empty, so a site gets no field filters until somebody ticks a box. A static
+       default naming fields a site does not show would be stored as the empty string, because
+       admin_setting_configmulticheckbox::write_setting() silently drops values missing from the
+       choice list, and would look configured when it is not.
+
+       The whole row is branched rather than only its description: with no choices,
+       admin_setting_configmulticheckbox::output_html() renders nothing and is_related() matches
+       nothing, so guidance in its description would never be seen. */
     if ($queuefilterchoices) {
         $settings->add(new admin_setting_configmulticheckbox(
             'enrol_apply/queuefilterfields',
@@ -193,10 +182,8 @@ if ($ADMIN->fulltree) {
         get_string('retention_heading', 'enrol_apply'),
         get_string('retention_desc', 'enrol_apply')
     ));
-    /* A configduration, so the administrator picks the unit - but note it always STORES
-       seconds, whatever unit is chosen (lib/adminlib.php). Nothing reads this setting
-       directly for that reason: \enrol_apply\local\submission::retention_seconds() is its
-       only reader and states the unit in one place. */
+    /* A configduration always stores seconds, whatever unit the administrator picks, despite
+       the key's name. \enrol_apply\local\submission::retention_seconds() is its only reader. */
     $settings->add(new admin_setting_configduration(
         'enrol_apply/retentiondays',
         get_string('retentiondays', 'enrol_apply'),
@@ -278,6 +265,9 @@ if ($ADMIN->fulltree) {
         $yesno
     ));
 
+    /* The config key stays 'maxenrolled' while the strings are 'maxapplicants': the lang key
+       changed because its meaning did - it names one of two limits now - but a config key is
+       data, and renaming it would silently reset the limit every site has configured. */
     $settings->add(new admin_setting_configtext(
         'enrol_apply/maxenrolled',
         get_string('maxapplicants', 'enrol_apply'),
@@ -286,10 +276,6 @@ if ($ADMIN->fulltree) {
         PARAM_INT
     ));
 
-    /* The config key stays 'maxenrolled' while the strings become 'maxapplicants'. The lang key
-       had to change because its MEANING did - it now names one of two numbers rather than the
-       only one - but a config key is data: renaming it would silently reset the limit every site
-       has already configured. */
     $settings->add(new admin_setting_configtext(
         'enrol_apply/places',
         get_string('places', 'enrol_apply'),

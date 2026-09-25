@@ -180,6 +180,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- Internal: the code comments were rewritten to be accurate and objective, and notes about the
+  development environment were taken out of the shipped code. No behaviour changed.
 - **The approval queue is a dynamic table.** Its rows now refresh over
   `core_table_get_dynamic_table_content` instead of reloading the page, which is what the rebuilt
   queue is assembled on. Paging and sorting still emit real anchors, so both keep working with

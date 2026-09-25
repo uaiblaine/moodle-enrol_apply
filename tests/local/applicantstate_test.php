@@ -37,8 +37,7 @@ require_once($CFG->dirroot . '/enrol/apply/lib.php');
  * Tests for what an applicant is told about their own application.
  *
  * No database: the describer reads one status off a row and returns three strings, and the two
- * pages that call it are covered where they live. \basic_testcase is what the fleet standard
- * asks for a class with no $DB in it.
+ * pages that call it are covered where they live.
  *
  * @package    enrol_apply
  * @category   test
@@ -72,11 +71,7 @@ final class applicantstate_test extends \basic_testcase {
     }
 
     /**
-     * A deferred application says a decision WAS taken, which the pending wording denies.
-     *
-     * This is the defect the class exists for: both pages used to branch on nothing but "does a
-     * row exist", so a deferred applicant read that their application was waiting for a decision
-     * somebody had in fact already taken.
+     * A deferred application is described as deferred, not with the pending wording.
      *
      * @return void
      */
@@ -89,13 +84,11 @@ final class applicantstate_test extends \basic_testcase {
     }
 
     /**
-     * An ACTIVE row that really grants access says so, and says nothing alarming.
+     * An ACTIVE row that really grants access is described as approved.
      *
-     * The pair below is the whole reason access is a parameter rather than something read off
-     * the row. applied.php's gate asks for a row and nothing more, so a fully enrolled
-     * participant who keeps the link opens it perfectly legitimately - and a describer that read
-     * ACTIVE as "approved with no access" told a working participant their enrolment was broken
-     * and sent them to bother their teacher.
+     * applied.php only requires a row, so a fully enrolled participant who keeps the link opens it
+     * legitimately and must not be told their enrolment is broken. This test and the next are why
+     * access is a parameter rather than something read off the row.
      *
      * @return void
      */
@@ -110,10 +103,9 @@ final class applicantstate_test extends \basic_testcase {
     /**
      * An ACTIVE row granting NO access is the fourth state, and it is a warning.
      *
-     * Core renders the enrolment page for a user is_enrolled() rejects with the onlyactive flag,
-     * so an approval that has expired or has not started yet lands there - and this plugin has
-     * already shipped a defect producing exactly that row. It is a WARNING because it is
-     * something to act on rather than something to wait for.
+     * An approval that has expired or has not started yet fails is_enrolled() with the onlyactive
+     * flag, so core sends that user to the enrolment page. A warning, because it is something to
+     * act on rather than something to wait for.
      *
      * @return void
      */
@@ -126,11 +118,11 @@ final class applicantstate_test extends \basic_testcase {
     }
 
     /**
-     * Access is consulted for an ACTIVE row and for no other, which is what keeps it narrow.
+     * Access is consulted for an ACTIVE row and for no other.
      *
-     * Without this, a describer that simply forwarded the flag - "no access, so something is
-     * wrong" - would satisfy every assertion above while telling a pending applicant, who by
-     * construction has no access, that their approved enrolment is not active.
+     * The tests above pass the access flag only as false for pending and deferred rows. Changes
+     * that must make this one fail: consulting the flag outside the ACTIVE arm, for example
+     * describing every row that grants access as approved.
      *
      * @return void
      */
@@ -161,11 +153,10 @@ final class applicantstate_test extends \basic_testcase {
     }
 
     /**
-     * The body's string id is offered as an id, for the caller that cannot take a sentence.
+     * message_key() names the string describe() renders as the body.
      *
-     * The application form's refusal throws a moodle_exception, which takes a string identifier.
-     * Without this the form would need its own copy of the state-to-wording mapping, and a third
-     * copy is how the three surfaces came to disagree in the first place.
+     * The application form's refusal throws a moodle_exception, which takes a string identifier;
+     * message_key() lets it share the describer's mapping instead of keeping its own copy.
      *
      * @return void
      */
@@ -196,10 +187,9 @@ final class applicantstate_test extends \basic_testcase {
     /**
      * The four states really are four different messages.
      *
-     * The load-bearing assertion of the file. Every test above would pass against a describer
-     * that returned one wording for everything, if that wording happened to be the one each of
-     * them named - and against one whose branches had been collapsed by a refactor into a single
-     * string id.
+     * The tests above compare against get_string() of the key each one names, so they would still
+     * pass if two of those strings carried the same wording. This pins that the applicant can tell
+     * the four states apart.
      *
      * @return void
      */

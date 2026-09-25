@@ -72,8 +72,8 @@ final class outcome_message_test extends \advanced_testcase {
     /**
      * Submit an application through the real path, so it leaves a durable record.
      *
-     * create_application() in lib_test bypasses apply() and leaves no enrol_apply_submission
-     * row at all, which would make every assertion here read an empty table.
+     * create_application() in lib_test bypasses apply() and writes no enrol_apply_submission
+     * row, so the record would not exist before the decision.
      *
      * @return array The applicant and their user enrolment id.
      */
@@ -127,11 +127,9 @@ final class outcome_message_test extends \advanced_testcase {
         $sink = $this->redirectMessages();
         $decide();
 
-        /* Drain the queue rather than assuming the decision notified synchronously. Approval
-           does not: complete_approval() queues \enrol_apply\task\notify_approval, and the
-           message is only built when that runs. Deferral and cancellation notify inside the
-           decision loop, so for those this drains nothing - which is the point of using one
-           helper for all three. */
+        /* Approval notifies from \enrol_apply\task\notify_approval, queued by
+           complete_approval(), so the queue is drained here. Deferral and cancellation notify
+           inside the decision loop and leave nothing to drain. */
         while ($task = \core\task\manager::get_next_adhoc_task(time() + 1)) {
             ob_start();
             $task->execute();
@@ -155,11 +153,10 @@ final class outcome_message_test extends \advanced_testcase {
     /**
      * Approving with a message stores it and delivers it to the applicant.
      *
-     * The approval path is the one that can silently lose this. complete_approval() runs TWICE
-     * for a queue approval - update_user_enrol() dispatches its hook before writing the row, so
-     * hook_callbacks reaches it first, with no message - and submission::decide() skips a row
-     * already at the target status. A message carried through decide() would be dropped with
-     * the status still looking correct. It is recorded before the status changes instead.
+     * complete_approval() runs twice for a queue approval: update_user_enrol() dispatches its
+     * hook before writing the row, so hook_callbacks reaches it first, carrying no operator
+     * input. The message is therefore recorded before the status changes, and the adhoc task
+     * that notifies the applicant reads it back off the record.
      *
      * @return void
      */
@@ -183,8 +180,9 @@ final class outcome_message_test extends \advanced_testcase {
      * Deferring with a message delivers it too.
      *
      * A separate test rather than a data provider case: this path notifies synchronously inside
-     * the decision loop, while approval notifies from an adhoc task queued by the hook. They
-     * fail differently and the ordering that keeps them working is not the same.
+     * the decision loop, while approval notifies from an adhoc task queued by
+     * complete_approval(). They fail differently and the ordering that keeps them working is not
+     * the same.
      *
      * @return void
      */
@@ -203,9 +201,9 @@ final class outcome_message_test extends \advanced_testcase {
     /**
      * Cancelling with a message delivers it, and the record survives to hold it.
      *
-     * Cancellation unenrols, which deletes the user_enrolments row the message is keyed on, so
-     * the recording has to happen before that - the same reason the decision itself is stamped
-     * before the unenrolment.
+     * Cancellation unenrols, deleting the {user_enrolments} row. The durable record outlives it,
+     * still carrying that userenrolmentid, and the notification sent after the unenrolment reads
+     * the message from it.
      *
      * @return void
      */
@@ -246,20 +244,14 @@ final class outcome_message_test extends \advanced_testcase {
     /**
      * A second approval after a manual suspension is recorded as a new decision.
      *
-     * The trail used to deny it. decide() skips a row already at the target status, and a
-     * re-approved application never leaves STATUS_APPROVED - so timedecided and decidedby went
-     * on naming the FIRST decider while complete_approval() queued a second notification and the
-     * applicant was told, correctly, that they had been approved again. The record contradicted
-     * a message the plugin itself had sent.
+     * A re-approved application never leaves STATUS_APPROVED, so without $isfreshdecision
+     * decide()'s same-status skip would keep naming the first decider while the applicant is
+     * notified of the second approval. The skip itself stays for a bare decide() call, which
+     * test_a_recorded_decision_is_not_restamped pins; that test is the control showing the
+     * exception is narrow.
      *
-     * The skip is not the bug and is deliberately still there: it is what stops a later no-op
-     * touch of an already-decided enrolment re-attributing the decision, which
-     * test_a_recorded_decision_is_not_restamped pins. That test is the control for this one -
-     * both must pass, because together they say the new flag is narrow rather than a blanket
-     * removal.
-     *
-     * Mutation check: make decide() ignore $isfreshdecision and exactly this test goes red,
-     * with test_a_recorded_decision_is_not_restamped still green.
+     * Changes that must make it fail: decide() ignoring $isfreshdecision (the control stays
+     * green).
      *
      * @return void
      */
@@ -278,8 +270,8 @@ final class outcome_message_test extends \advanced_testcase {
         $before = $this->record($applicant);
         $this->assertEquals($first->id, (int) $before->decidedby);
 
-        /* Back into the queue the way core's participants page puts it there. The record is
-           untouched by this, which is the whole reason the second decision was invisible. */
+        /* Back into the queue the way core's participants page puts it there, which leaves the
+           record at STATUS_APPROVED. */
         $this->plugin->update_user_enrol($this->instance, (int) $applicant->id, ENROL_USER_SUSPENDED);
         $DB->set_field('enrol_apply_submission', 'timedecided', 111, ['id' => $before->id]);
 
@@ -298,14 +290,11 @@ final class outcome_message_test extends \advanced_testcase {
     /**
      * A later approval clears the group choice an earlier one recorded.
      *
-     * record_decided_groups() used to return early on an empty list, so no path could clear a
-     * stored one: a decider approving a re-suspended application with the chooser left alone
-     * silently re-joined the groups somebody picked for the earlier decision. An empty value
-     * reads back as "no choice recorded", which puts the instance's own list in charge - so
-     * clearing means what an operator would expect.
+     * An empty choice is written, and reads back as "no choice recorded", which puts the
+     * instance's own list in charge. Were it skipped, re-approving a re-suspended application
+     * would re-join the groups picked for the earlier decision.
      *
-     * Mutation check: restore the early return in record_decided_groups() and exactly this test
-     * goes red.
+     * Changes that must make it fail: record_decided_groups() returning early on an empty list.
      *
      * @return void
      */
@@ -335,25 +324,12 @@ final class outcome_message_test extends \advanced_testcase {
     /**
      * A stored group list that names no usable group falls back to the instance's own.
      *
-     * The writer cannot produce one: record_decided_groups() filters zeroes out and stores
-     * nothing when the result is empty. But the writer is not the only thing that fills this
-     * column - a restore writes it from an archive this site did not produce - so "0", a lone
-     * comma and a list whose ids all fail to map are shapes the read has to survive.
+     * Neither record_decided_groups() nor the restore writes a value such as "0" or a lone
+     * comma, but chosen_groups() must still read one as null: add_instance_groups() sends
+     * anything else to get_in_or_equal(), which throws a coding_exception on an empty array.
      *
-     * Before this, chosen_groups() returned an EMPTY ARRAY for such a value and the caller
-     * branched on `=== null`, so the empty array went to get_in_or_equal(), which refuses one
-     * outright ("does not accept empty arrays", measured). Approving that application threw a
-     * coding_exception instead of joining the instance's groups. The docblock there argued the
-     * empty array was worth keeping as a seam for an explicit "no groups at all"; the seam
-     * could not be used without changing the caller, and the value it let through crashed.
-     *
-     * Mutation check: return the parsed array rather than null when it is empty, and exactly
-     * this test goes red. It reddens on the PREMISE assertion below rather than on the
-     * approval - "Failed asserting that Array &0 [] is null" - because that assertion comes
-     * first and PHPUnit stops there. An earlier version of this line claimed it reddened with
-     * the exception, which is what the code would do rather than what the run reports; the
-     * crash itself is evidenced by reading the caller, whose `=== null` branch sends anything
-     * else to get_in_or_equal(), measured to refuse an empty array outright.
+     * Changes that must make it fail: chosen_groups() returning the empty array rather than null
+     * (the premise assertion fails first).
      *
      * @return void
      */
@@ -367,8 +343,7 @@ final class outcome_message_test extends \advanced_testcase {
             'groupid' => $group->id,
         ]);
 
-        /* Written past record_decided_groups() on purpose: this is the restore's shape, and
-           the writer is exactly what cannot produce it. */
+        // Written past record_decided_groups() on purpose: the writer cannot produce this value.
         $DB->set_field(
             'enrol_apply_submission',
             'decidedgroups',
@@ -394,12 +369,12 @@ final class outcome_message_test extends \advanced_testcase {
     /**
      * A later decision clears the message an earlier one recorded.
      *
-     * Same defect as the groups, and louder: the applicant received the earlier decision's
-     * wording again, attached to a decision nobody wrote it for.
+     * Otherwise the applicant is sent the earlier decision's wording again, attached to a
+     * decision nobody wrote it for.
      *
-     * Mutation check: restore the early return in record_outcome_message() and exactly this test
-     * goes red - test_a_blank_message_is_not_recorded stays green either way, because that one
-     * is about whitespace not being a message rather than about clearing.
+     * Changes that must make it fail: record_outcome_message() returning early on an empty
+     * message. test_a_blank_message_is_not_recorded stays green either way; it is about
+     * whitespace not being a message, not about clearing.
      *
      * @return void
      */
@@ -424,7 +399,6 @@ final class outcome_message_test extends \advanced_testcase {
     }
 
     /**
-     * Whitespace alone is not a message.    /**
      * Whitespace alone is not a message.
      *
      * @return void
@@ -439,19 +413,17 @@ final class outcome_message_test extends \advanced_testcase {
     }
 
     /**
-     * The groups the decider chooses REPLACE the instance's list, and do not add to it.
+     * The groups the decider chooses replace the instance's list, and do not add to it.
      *
-     * The defect this pins is silent and would look like a working feature. An approval taken
-     * through the queue completes twice: update_user_enrol() dispatches its hook before writing
-     * the row, so hook_callbacks finishes the approval first and confirm_enrolment() finishes it
-     * again. Had the chosen list been passed as an argument, the first pass would have joined
-     * the instance's groups and the second the chosen ones - a union, so a group the approver
-     * deselected is joined anyway and nothing removes it. The choice is stored and both passes
-     * read it.
+     * An approval taken through the queue completes twice: update_user_enrol() dispatches its
+     * hook before writing the row, so hook_callbacks finishes the approval first and
+     * confirm_enrolment() finishes it again. Had the chosen list been passed as an argument, the
+     * first pass would join the instance's groups and the second the chosen ones, so a group the
+     * approver deselected would be joined anyway. The choice is stored and both passes read it.
      *
-     * The instance group is the control. Without it this would pass against an implementation
-     * that simply ignored the instance list altogether, which is a different thing from
-     * replacing it.
+     * The instance group is what exposes such a union;
+     * test_no_chosen_group_leaves_the_instance_list_in_charge is the control that replacing has
+     * not become ignoring.
      *
      * @return void
      */
@@ -502,17 +474,15 @@ final class outcome_message_test extends \advanced_testcase {
     }
 
     /**
-     * A group from another course never reaches the membership OR the durable record.
+     * A group from another course never reaches the membership or the durable record.
      *
-     * Both halves are asserted because there are two guards and they defend different things.
-     * add_instance_groups() re-checks against the course before joining, so membership alone is
-     * already safe - and asserting only that made the allowlist in confirm_enrolment()
-     * unreachable, which was measured: removing it reddened nothing. Its job is the RECORD,
-     * which outlives the enrolment and is read by the reports and by a subject access request.
-     * A foreign id stored there is wrong even though it is never joined.
+     * Both halves are asserted because there are two guards. add_instance_groups() re-checks
+     * the course before joining, so the membership alone cannot show whether the allowlist in
+     * confirm_enrolment() works; that allowlist protects the record, which outlives the
+     * enrolment and is read by the privacy export.
      *
-     * groups_get_all_groups() is keyed by group id, so the allowlist compares KEYS. Comparing
-     * values would test the id against group names and let everything through.
+     * groups_get_all_groups() is keyed by group id and its values are group records, so the
+     * allowlist compares keys.
      *
      * @return void
      */
@@ -572,14 +542,11 @@ final class outcome_message_test extends \advanced_testcase {
     }
 
     /**
-     * The enrolment period is the METHOD's, and it is stamped on approval and never before it.
+     * The enrolment period is the method's, and it is stamped on approval and never before it.
      *
-     * Two facts in one test because they are the same line of code. The period comes from the
-     * enrolment method's own `enrolperiod` - a decision is a yes or a no about one applicant, not
-     * a place to give that applicant different dates - and it lands only when the application is
-     * approved. The second half is a correctness requirement rather than tidiness: a timeend on a
-     * still-pending row is swept by the ENROL_EXT_REMOVED_UNENROL branch of process_expirations(),
-     * which selects on timeend with NO status filter at all, so the applicant would be unenrolled
+     * The period comes from the instance's enrolperiod, not from the decision. A timeend on a
+     * still-pending row would be swept by the ENROL_EXT_REMOVED_UNENROL branch of
+     * process_expirations(), which has no status filter, so the applicant would be unenrolled
      * instead of decided.
      *
      * The first assertions are the control: nothing is stamped while the application is pending,
@@ -611,10 +578,8 @@ final class outcome_message_test extends \advanced_testcase {
     /**
      * A method that declares a period ends the enrolment that far after the approval.
      *
-     * The other half of the rule above, and the reachable half: `enrolperiod` is on the method's
-     * own form, so this is how a course actually sets how long its enrolments last. Separated
-     * from the test above because the two need different instances and a shared fixture would
-     * have to be rebuilt anyway.
+     * The other half of the rule above: enrolperiod is set on the method's own form, which is
+     * how a course sets how long its enrolments last.
      *
      * @return void
      */
@@ -644,8 +609,7 @@ final class outcome_message_test extends \advanced_testcase {
      *
      * The body is assembled as HTML from the administrator's own template, which is trusted;
      * this half is free text somebody typed into a form. It is escaped at that boundary rather
-     * than stripped, because stripping would silently delete from a bare "<" onwards - the
-     * defect this plugin has already fixed twice elsewhere.
+     * than stripped, because stripping would silently delete from a bare "<" onwards.
      *
      * @return void
      */

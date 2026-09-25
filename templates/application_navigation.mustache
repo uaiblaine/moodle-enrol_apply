@@ -19,24 +19,18 @@
 
     Links to the applications either side of the one being reviewed.
 
-    Both links carry the applicant's name as VISIBLE text, so neither needs a title or an
-    aria-label: the visible text is already the accessible name, and an aria-label repeating it
-    would only override the name with a copy of itself. The arrow beside each is decorative and
-    is hidden from a screen reader rather than merely unlabelled - pix_icon's constructor sets
-    aria-hidden on any icon whose alt is empty, which is what giving the pix helper no third
-    argument produces. Verified in the rendered markup on 5.2, not assumed.
+    Both links carry the applicant's name as visible text, which is already the accessible name,
+    so neither needs a title or an aria-label. The arrow beside each is decorative: with no third
+    argument to the pix helper the alt is empty, and pix_icon's constructor then sets aria-hidden.
 
-    The markup is shaped on mod_book's own navigation but deliberately does NOT copy its
-    btn-previous and btn-next class names. Measured: those two are defined nowhere in core - only
-    in mod/book/styles.css, under .path-mod-book - so on this page they would style nothing while
-    reading as though they carried mod_book's behaviour. What they DO carry there is a right-to-
-    left flip for the chevrons, which core does not apply to any icon but fa-question; this
-    plugin's own stylesheet carries that rule instead, keyed on the wrapper class below.
+    The markup is shaped on mod_book's navigation but does not copy its btn-previous and btn-next
+    class names, which are defined only in mod/book/styles.css under .path-mod-book and would
+    style nothing here. What they carry there is the right-to-left flip for the chevrons; this
+    plugin's stylesheet carries that rule instead, keyed on the wrapper class below.
 
-    The whole landmark is omitted when there is nothing to link to at all, so a lone application
-    reviewed by an operator with no queue does not leave an empty navigation region for a screen
-    reader to announce and step into. It is NOT gated on the neighbours alone: the queue link has
-    to survive a queue of one, which is exactly when a reader most needs the way back.
+    The whole landmark is omitted when there is nothing to link to, so a screen reader does not
+    announce an empty navigation region. It is not gated on the neighbours alone: the queue link
+    has to survive a queue of one, which is when a reader most needs the way back.
 
     Context variables required for this template:
     * navlabel string - accessible name of the navigation landmark

@@ -27,20 +27,13 @@ use enrol_apply\reportbuilder\local\formatters\submission as formatter;
 /**
  * Enrolment applications across every course, as a custom report source.
  *
- * Nothing registers this class. It is discovered from its path and namespace alone -
- * manager::get_report_datasources() asks core_component for every class in the
- * `<component>\reportbuilder\datasource` namespace - so there is no db/reportbuilder.php and
- * nothing to keep in step. The plan said a version.php bump is what makes it appear; that is
- * not so. The classmap cache is keyed on CORE's version, not a plugin's
- * (core_component::is_cache_valid()), and what rebuilds it is purge_caches(). On a developer
- * site it is not consulted at all.
+ * Discovered by namespace (manager::get_report_datasources()), so nothing registers it.
  *
- * How this differs from the course report, and why both exist: course_applications is a
- * system_report with a can_view() that re-runs on every request, scoped to one course. This is
- * a datasource, and a datasource has NO can_view() - core offers a plugin no hook to gate one.
- * Access to a custom report is governed by the Report Builder capabilities and by the report's
- * audience, neither of which this plugin controls. That difference is the whole reason for the
- * snapshot decision below.
+ * Unlike {@see \enrol_apply\reportbuilder\local\systemreports\course_applications}, a system
+ * report scoped to one course with a can_view() re-run on every request, a datasource has no
+ * per-reader access check: a custom report is governed by the Report Builder capabilities and
+ * the report's audience, neither of which this plugin controls. That is why the snapshot column
+ * is gated separately, in restrict_snapshot_column().
  *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine
@@ -71,15 +64,12 @@ class applications extends datasource {
         $this->set_main_table('enrol_apply_submission', $alias);
         $this->add_entity($entity);
 
-        /* Pseudonymised records - what a deleted course leaves behind - carry userid 0 and name
-           nobody. The course report excludes them through its INNER join onto {user}; here that
-           would not work, and the difference is worth spelling out because it looks like
-           duplication. A custom report emits an entity's joins only for the columns, filters and
-           conditions actually in use (custom_report_table merges them per active element), so a
-           report built from submission columns alone joins {user} not at all and would list the
-           row. A base condition is applied unconditionally, whatever the report selects.
-           Note the applicant entity below is LEFT joined for the same reason: with an INNER join
-           the row set would silently shrink the moment an author added a user column. */
+        /* Pseudonymised records (what a deleted course leaves behind) carry userid 0 and name
+           nobody. The course report excludes them through an INNER join onto {user}, but a custom
+           report joins an entity only for the columns, filters and conditions in use, so a report
+           built from submission columns alone would list them; a base condition always applies.
+           The applicant entity is LEFT joined for the same reason: the row set must not depend on
+           whether the author added a user column. */
         $param = database::generate_param_name();
         $this->add_base_condition_sql("{$alias}.userid <> :{$param}", [$param => 0]);
 
@@ -89,9 +79,8 @@ class applications extends datasource {
             "LEFT JOIN {user} {$applicantalias} ON {$applicantalias}.id = {$alias}.userid"
         ));
 
-        /* A second user entity for the decider, renamed so it does not collide with the first.
-           Without the rename report\base::annotate_entity() throws
-           coding_exception('Duplicate entity name') at construction. */
+        /* A second user entity for the decider, renamed so it does not collide with the first
+           (report\base::annotate_entity() throws 'Duplicate entity name'). */
         $decider = (new user())
             ->set_entity_name(self::DECIDER)
             ->set_entity_title(new lang_string('submissiondecidedby', 'enrol_apply'));
@@ -100,21 +89,17 @@ class applications extends datasource {
             "LEFT JOIN {user} {$decideralias} ON {$decideralias}.id = {$alias}.decidedby"
         ));
 
-        /* The course entity carries the course filter this surface needs, and the course name
-           column without which a site-wide list of applications cannot be read. The course
-           report deliberately does NOT add this entity: a course-scoped report offering a course
-           filter would let a manager page sideways into a course they were never authorised for.
-           The split is enforced by construction rather than by an exclude list. */
+        /* The course entity supplies the course name and the course filter a site-wide list
+           needs. The course report does not add it: every row there belongs to one course. */
         $courseentity = new course();
         $coursealias = $courseentity->get_table_alias('course');
         $this->add_entity($courseentity->add_join(
             "LEFT JOIN {course} {$coursealias} ON {$coursealias}.id = {$alias}.courseid"
         ));
 
-        /* One call per entity, each passed its NAME and never the object. add_all_from_entities()
-           takes an array, and the two branches disagree about what they do with it: 5.1 matches
-           the argument against the registered entity names, so an object matches nothing and is
-           silently skipped. Naming them one at a time is core's own shape and cannot diverge. */
+        /* One call per entity, passing its name, never the object: on Moodle 5.1
+           add_all_from_entity() accepts only a name, and add_all_from_entities() matches its
+           array against entity names, so an entity object there is silently skipped. */
         $this->add_all_from_entity($entity->get_entity_name());
         $this->add_all_from_entity($applicant->get_entity_name());
         $this->add_all_from_entity($decider->get_entity_name());
@@ -126,38 +111,23 @@ class applications extends datasource {
     /**
      * Withhold the frozen profile snapshot from a reader who may not see everyone's details.
      *
-     * The one decision in this source that is not mechanical, so the reasoning is recorded here
-     * rather than in a commit message.
+     * The course report gates this on a capability in the course, re-checked on every request.
+     * A custom report has neither: it lives in the system context, a datasource has no
+     * can_view(), and moodle/reportbuilder:view carries the `user` archetype, so any account in a
+     * report's audience can read it, download it, or receive it on a schedule (which by default
+     * renders with the schedule creator's permissions).
      *
-     * The course report can gate this on the reader's capability IN THE COURSE, because it has a
-     * course context and re-checks it on every request. Here there is neither. A custom report's
-     * context is always the system context, a datasource has no can_view(), and
-     * moodle/reportbuilder:view carries the `user` archetype - so the surface is reachable by any
-     * authenticated account a single manager adds to a report's audience, downloadable as CSV,
-     * and mailable on a schedule that renders once with the CREATOR's permissions.
+     * So the column is removed rather than blanked, gated on moodle/user:viewalldetails in the
+     * report's context. This is core's own approach: local\helpers\user_profile_fields masks
+     * profile field columns and filters with set_is_available($field->is_visible(...)), and
+     * profile_field_base::is_visible() resolves private and hidden fields on
+     * moodle/user:viewalldetails - values this snapshot can hold. moodle/site:viewuseridentity,
+     * which the course report uses, is a course-level capability (teacher archetypes) and would
+     * answer wrongly at site scale.
      *
-     * So the column is removed rather than blanked, and gated on moodle/user:viewalldetails at
-     * the system context. Three reasons, each measured:
-     *
-     * Absence is core's own move for exactly this problem. local\helpers\user_profile_fields
-     * masks custom profile field columns AND filters with
-     * set_is_available($field->is_visible(system::instance())), and profile_field_base::is_visible()
-     * resolves the private and hidden cases on moodle/user:viewalldetails. This snapshot can hold
-     * the value of any such field and would otherwise walk straight past that gate.
-     *
-     * The capability fits the question. moodle/user:viewalldetails is RISK_PERSONAL and manager
-     * only - the same shape as enrol/apply:viewreports. moodle/site:viewuseridentity, which the
-     * course report uses, is declared CONTEXT_MODULE with teacher, editingteacher and manager
-     * archetypes: a course-shaped question that would answer wrongly at site scale in both
-     * directions.
-     *
-     * Whole-column is the only sound granularity. Per-field visibility cannot be reconstructed
-     * from a snapshot whose custom field has since been deleted - fields::label() returns the
-     * bare key and there is no field object left to ask.
-     *
-     * State the limit honestly rather than implying a per-reader guarantee: on a custom report
-     * the effective control is the audience plus this one capability, and a scheduled report
-     * delivers the creator's answer to every recipient.
+     * The whole column goes because per-field visibility cannot be reconstructed for a snapshot
+     * field whose custom profile field has since been deleted. The effective control is therefore
+     * the report audience plus this one capability, not a per-reader guarantee.
      *
      * @return void
      */
@@ -172,20 +142,17 @@ class applications extends datasource {
             return;
         }
 
-        /* Past the gate, show the whole thing. The entity registers this callback bare, which
-           core turns into a null argument and the formatter reads as "nobody asked a context" -
-           the name parts alone, which user:fullname already shows. A column that can only ever
-           repeat another column is worse than either shipping it or removing it. */
+        /* Past the gate, show every field. The entity registers the callback with no argument,
+           which the formatter answers with the name parts alone - a repeat of user:fullname. */
         $column->set_callback([formatter::class, 'snapshot'], formatter::ALL_FIELDS);
     }
 
     /**
      * The columns a newly created report starts with.
      *
-     * submission:snapshot is deliberately absent and must stay absent. helpers\report's
-     * add_report_column() validates against get_columns(), which filters out unavailable
-     * columns, so a reader without moodle/user:viewalldetails creating a report from this source
-     * would get invalid_parameter_exception rather than a report.
+     * submission:snapshot must stay absent: helpers\report::add_report_column() rejects an
+     * unavailable column, so a reader without moodle/user:viewalldetails creating a report from
+     * this source would get invalid_parameter_exception rather than a report.
      *
      * @return array Column identifiers.
      */

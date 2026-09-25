@@ -153,9 +153,9 @@ final class fields_test extends \advanced_testcase {
     /**
      * A denied key written straight into the site setting never becomes part of the pool.
      *
-     * This is the barrier itself. Every other filter downstream reads the pool, so this one
-     * test is what stands between a hand-edited or restored configuration and a form that
-     * asks an applicant for their password hash.
+     * pool() is the only place the deny list filters the field set; resolve() relies on it
+     * rather than re-checking (see {@see fields::resolve()}). classify() refuses the same keys
+     * again when a form is built.
      *
      * @return void
      */
@@ -248,9 +248,7 @@ final class fields_test extends \advanced_testcase {
     public function test_the_upgrade_leaves_an_instance_that_collected_nothing_empty(): void {
         global $CFG, $DB;
 
-        /* The migration helpers, not the upgrade step itself: upgrade_plugin_savepoint()
-           refuses when the savepoint is not newer than the installed version, and in a test
-           environment the plugin is always already installed at the current version. */
+        // The migration helpers, not the upgrade step itself; see the test above.
         require_once($CFG->dirroot . '/enrol/apply/db/upgradelib.php');
 
         $DB->set_field('enrol', 'customint1', 0, ['id' => $this->instance->id]);
@@ -267,10 +265,8 @@ final class fields_test extends \advanced_testcase {
     /**
      * The migration never overwrites a field set that has already been configured.
      *
-     * It matters because the step is not guaranteed to run once: an upgrade can be re-run,
-     * and a site can be upgraded from an older version after a teacher has already picked a
-     * set on a newer one. Overwriting would silently replace a real choice with whatever the
-     * long-dead switches happened to say.
+     * The step is not guaranteed to run once (an upgrade that fails part way is re-run), and
+     * overwriting would silently replace a real choice with whatever the old switches said.
      *
      * @return void
      */

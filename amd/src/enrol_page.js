@@ -61,7 +61,8 @@ export function init(instanceId) {
         });
 
         modalForm.addEventListener(modalForm.events.FORM_SUBMITTED, (event) => {
-            // The form's process_dynamic_submission() returns the acknowledgement page's url.
+            // The form's process_dynamic_submission() returns the acknowledgement page's url, or the
+            // enrolment page's after a refusal.
             window.location.href = event.detail;
         });
 

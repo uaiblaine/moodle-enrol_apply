@@ -191,22 +191,19 @@ function xmldb_enrol_apply_upgrade($oldversion) {
         $table->add_field('timedecided', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0', 'timecreated');
         $table->add_field('decidedby', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0', 'timedecided');
 
-        /* Foreign keys on the two user columns and nowhere else. They create no database
-           constraint - Moodle's generators never emit one - but they are what core's privacy
-           table coverage test reads, and it sees only a single-field foreign key to user.id
-           or a column literally named userid. Without the decidedby key that role is
-           invisible to it. The course, enrol and user enrolment references get plain indexes
-           instead, because the row deliberately outlives all three and a foreign key would
-           document an integrity claim this design breaks on purpose.
+        /* Foreign keys on the two user columns only. Moodle's DDL generators create no
+           constraint for them, but core's privacy table coverage test detects personal data
+           only through a column named userid or a single-field foreign key to user.id, so
+           without the decidedby key that role is invisible to it. The course, enrol and user
+           enrolment references get plain indexes, because the row deliberately outlives all
+           three.
 
-           There is deliberately no UNIQUE (courseid, userid). Course deletion pseudonymises
-           by zeroing userid, so a deleted course with two applicants yields two rows sharing
-           courseid and userid = 0 - measured against the database, not reasoned: the second
-           insert raises dml_write_exception. Cancelling and re-applying, and restoring a
-           course into one that already holds the trail, are both legitimate duplicates too.
-           The invariant that IS enforced is narrower: one live application per enrol
-           INSTANCE and user, by the lock in enrol_apply_plugin::submit_application(). A course
-           may hold more than one apply instance, so even that does not make the pair unique. */
+           No UNIQUE (courseid, userid): course deletion pseudonymises by zeroing userid, so
+           two applicants of a deleted course share the pair, and cancelling and re-applying,
+           restoring into a course that already holds the trail, and a second apply instance
+           in the course all produce legitimate duplicates. The lock in
+           enrol_apply_plugin::submit_application() enforces only one live application per
+           enrol instance and user. */
         $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
         $table->add_key('user', XMLDB_KEY_FOREIGN, ['userid'], 'user', ['id']);
         $table->add_key('decidedby', XMLDB_KEY_FOREIGN, ['decidedby'], 'user', ['id']);
@@ -216,14 +213,10 @@ function xmldb_enrol_apply_upgrade($oldversion) {
         $table->add_index('userenrolmentid', XMLDB_INDEX_NOTUNIQUE, ['userenrolmentid']);
         $table->add_index('timecreated', XMLDB_INDEX_NOTUNIQUE, ['timecreated']);
 
-        /* A site can already carry this table in an earlier shape: it was declared in
-           install.xml one commit before this step existed, so a development checkout
-           installed from scratch at version 2026082200 has it without the two foreign keys
-           and with different column defaults. Nothing ever wrote to it at that version - the
-           code that inserts arrives with this same step - so an existing table is necessarily
-           empty, and recreating it costs nothing where leaving it would make a fresh install
-           and an upgraded site disagree about the schema permanently. The emptiness is
-           checked rather than assumed, so that a table holding anything is left alone. */
+        /* A site installed at version 2026082200 already has this table, declared in
+           install.xml without the two foreign keys and with different column defaults.
+           Nothing wrote to it at that version, so an empty existing table is recreated to
+           match install.xml; a table holding rows is left alone. */
         if ($dbman->table_exists($table) && $DB->count_records('enrol_apply_submission') === 0) {
             $dbman->drop_table($table);
         }
@@ -231,20 +224,16 @@ function xmldb_enrol_apply_upgrade($oldversion) {
             $dbman->create_table($table);
         }
 
-        /* Backfill one row per application still awaiting a decision. Only those: a decided
-           application left no trace anywhere before this table existed, so there is nothing
-           to reconstruct, and inventing rows for enrolments that merely look approved would
-           put fiction into an audit record. The comment is carried across where the
-           applicationinfo row is still there, and ue.timecreated is when the applicant
-           applied. Waiting-list rows come across as waiting, already decided once.
+        /* Backfill one row per application still awaiting a decision. A decided application
+           left no trace before this table existed, so there is nothing to reconstruct for it.
+           The comment is carried across where the applicationinfo row survives,
+           ue.timecreated is when the applicant applied, and waiting-list rows come across as
+           waiting.
 
-           The predicate is the queue's own definition of "awaiting a decision", timeend
-           clause included, and not merely "not active". They differ on exactly the rows that
-           would become fiction: process_expirations() re-suspends an ACTIVE enrolment whose
-           period has run out when expiredaction is "suspend", so somebody approved long ago
-           and since expired reads as status != active. Backfilling that as an application
-           nobody ever decided is a false audit record, which is the one thing this table must
-           never hold. Same predicate as the queue's, deliberately. */
+           The predicate is the queue's (\enrol_apply\local\queue::awaiting_decision_where()),
+           timeend clause included, not merely "not active": under an expiredaction of suspend,
+           process_expirations() re-suspends an approved enrolment whose period ran out, and
+           backfilling that as an undecided application would be a false audit record. */
         $sql = "SELECT ue.id AS userenrolmentid, ue.userid, ue.timecreated, ue.status,
                        e.id AS enrolid, e.courseid, ai.comment
                   FROM {user_enrolments} ue
@@ -257,12 +246,10 @@ function xmldb_enrol_apply_upgrade($oldversion) {
             'now' => time(),
         ]);
         foreach ($pending as $row) {
-            /* Idempotent, because the savepoint below is only reached once the whole loop
-               has run: a failure part way through leaves the rows already written committed
-               and the stored version unchanged, so re-running the upgrade - the standard
-               recovery - re-enters this step. Without the check the second pass duplicates
-               every row it had already written, and the approval queue's join on
-               userenrolmentid stops being one to one. */
+            /* Per-row check because the savepoint is reached only after the whole loop: a
+               failure part way through leaves the rows already written committed, and
+               re-running the upgrade re-enters this step. A duplicate would break the approval
+               queue's one-to-one join on userenrolmentid. */
             if ($DB->record_exists('enrol_apply_submission', ['userenrolmentid' => (int) $row->userenrolmentid])) {
                 continue;
             }
@@ -289,11 +276,9 @@ function xmldb_enrol_apply_upgrade($oldversion) {
     }
 
     if ($oldversion < 2026082400) {
-        /* The groups a decider chose, so the approval can join those instead of the instance's
-           own list. Stored on the record rather than passed along, because complete_approval()
-           runs twice for a queue approval and two calls carrying different lists would UNION
-           them - a group the approver deselected would be joined anyway, and nothing removes
-           it. Both calls read this column instead. */
+        /* The groups a decider chose, joined on approval instead of the instance's own list.
+           Stored rather than passed along because complete_approval() runs twice for a queue
+           approval; see enrol_apply_plugin::add_instance_groups(). */
         $table = new xmldb_table('enrol_apply_submission');
         $field = new xmldb_field(
             'decidedgroups',
@@ -313,17 +298,12 @@ function xmldb_enrol_apply_upgrade($oldversion) {
     }
 
     if ($oldversion < 2026082500) {
-        /* The role a decider chose, for the same reason the groups are stored: complete_approval()
-           runs twice for a queue approval and only the second call could carry an argument, so both
-           passes read this column instead. It matters more here than it does for the groups. Two
-           group lists union, which is wrong but at least attributable; two DIFFERENT roles would
-           leave the applicant holding both, and a role assignment is not something a later pass can
-           tell apart from one somebody made by hand.
+        /* The role a decider chose, stored for the same reason as the groups; see
+           enrol_apply_plugin::assign_decided_role().
 
-           0 means "the decider chose nothing", which is what every existing row means too - the
-           column is deliberately backfilled with nothing. An application already in the queue when
-           a site upgrades keeps the role apply() gave it, and approving it assigns the instance
-           default exactly as before. */
+           0 means "the decider chose nothing", which is what every existing row gets, so
+           approving an application already queued at upgrade time assigns the instance's
+           default role as before. */
         $table = new xmldb_table('enrol_apply_submission');
         $field = new xmldb_field(
             'decidedrole',
@@ -343,39 +323,23 @@ function xmldb_enrol_apply_upgrade($oldversion) {
     }
 
     if ($oldversion < 2026083002) {
-        /* Repair waiting-list rows that are carrying an expiry. wait_enrolment() now clears
-           the date when it defers, but that cannot reach a row already in the state, because
-           its own lookup demands ENROL_USER_SUSPENDED and these rows are status 2.
+        /* Repair waiting-list rows that carry an expiry. wait_enrolment() now clears the date
+           when it defers, but rows deferred earlier keep theirs, and such a row is stranded:
+           core's suspend arms of process_expirations() filter on status = active, the queue's
+           timeend clause hides it, and applicants() no longer counts it.
 
-           Such a row is stranded: core's suspend arms of process_expirations() filter on
-           status = active, which it fails, so no sweep touches it; the queue excludes it by
-           the timeend clause, so no listing offers it; and once the places cap stops counting
-           expired rows it no longer even holds a place. It waits for a decision nobody can
-           take, and nothing anywhere says so.
-
-           The predicate is ENROL_APPLY_USER_WAIT and nothing wider. "Not active" would also
-           match status 1, and a suspended row with a past timeend is the NORMAL resting state
-           of an approval whose period ran out under expiredaction = suspend. Zeroing those
-           would make them satisfy the queue's predicate and reappear as applications nobody
-           ever decided - the same false audit row the 2026082300 backfill above refuses to
-           create, arrived at from the other end.
-
-           "<> 0" rather than "< time()": a future expiry on a waiting-list row is the same
-           defect one tick early, and under an expiredaction of unenrol it is a time bomb
-           rather than an already-fired one.
-
-           Scoped to this plugin's instances even though status 2 is its own invention: the
-           value is only guaranteed to mean "waiting list" for enrol_apply, and another
-           plugin on the same site may spend it differently.
+           The predicate is ENROL_APPLY_USER_WAIT and nothing wider: a suspended row with a
+           past timeend is the normal state of an approval that expired under
+           expiredaction = suspend, and zeroing it would make it reappear in the queue as an
+           undecided application. "<> 0" rather than "< time()", because a future expiry is the
+           same defect not yet due, and under expiredaction = unenrol it would unenrol the
+           applicant. Scoped to this plugin's instances because status 2 means "waiting list"
+           only for enrol_apply.
 
            A direct write rather than update_user_enrol(), which would dispatch
-           before_user_enrolment_updated into every installed plugin mid-upgrade. Nothing
-           reads a non-active row's timeend for an access decision - every core reader pairs
-           it with ue.status = :active - and this plugin's own callback ignores a change that
-           does not touch the status.
-
-           Idempotent by construction rather than by a guard: the WHERE is the negation of the
-           step's own effect, so a second run matches nothing. */
+           before_user_enrolment_updated into every installed plugin mid-upgrade; core reads a
+           row's timeend for access only together with status = active. Idempotent: the WHERE
+           excludes the rows this step has already fixed. */
         require_once($CFG->dirroot . '/enrol/apply/lib.php');
 
         $DB->set_field_select(
@@ -391,26 +355,21 @@ function xmldb_enrol_apply_upgrade($oldversion) {
     }
 
     if ($oldversion < 2026083003) {
-        /* Places: a second, separate number. customint3 is how many people may APPLY;
-           customint4 is how many may be APPROVED at once. Both are opt-in at 0, and seeding
-           anything else here would switch a feature on for every existing site at a threshold
-           nobody chose.
+        /* Places: customint3 is how many people may apply, customint4 how many may be
+           approved at once. Both are opt-in at 0, so seeding anything else would switch the
+           feature on for every existing site.
 
-           The GLOBAL get_config(), deliberately, and not the plugin object's:
-           enrol_plugin::get_config() returns its $default - null - for an absent setting and
-           never false, so the `$plugin->get_config(...) === false` shape used by the
-           2026081000 step above can never be true and its seeds have never run. Measured on
-           5.1 and 5.2. That step is left as it is: it has already run everywhere, and editing
-           a past step changes nothing on a site that has passed it. */
+           The global get_config(), not the plugin object's: enrol_plugin::get_config()
+           returns its $default (null) for an absent setting, never false. The 2026081000 step
+           above uses the plugin-object form, so its seeds never ran; it is left as it is
+           because it has already run everywhere. */
         if (get_config('enrol_apply', 'places') === false) {
             set_config('places', 0, 'enrol_apply');
         }
 
-        /* Existing rows carry NULL, which every reader already treats as 0 - capacity::places()
-           coalesces and casts. This is for consistency rather than correctness: new instances
-           get a real 0 from get_instance_defaults(), and a column holding two spellings of the
-           same answer is how somebody later writes a reader that only handles one.
-           Idempotent by construction: the WHERE is the negation of the step's own effect. */
+        /* Existing rows carry NULL, which capacity::places() already reads as 0. Written as 0
+           anyway so the column holds one spelling, matching get_instance_defaults().
+           Idempotent: the WHERE excludes the rows this step has already written. */
         $DB->set_field_select(
             'enrol',
             'customint4',
@@ -423,35 +382,23 @@ function xmldb_enrol_apply_upgrade($oldversion) {
     }
 
     if ($oldversion < 2026083104) {
-        /* db/upgradelib.php is not autoloaded and nothing else in this request has required it,
-           so the step that uses it requires it - the shape the 2026080600 step above already
-           uses. Missing this is not a warning: the step dies with "Call to undefined function"
-           part way through the upgrade, and no gate in this repository can see it, because CI
-           installs the plugin fresh from install.xml and never executes this file. */
+        /* Required by each step that uses it, as in the 2026082102 step above: nothing else in
+           an upgrade request loads it, and a fresh install never executes this file, so a
+           missing require would surface only as a fatal part way through a real upgrade. */
         require_once($CFG->dirroot . '/enrol/apply/db/upgradelib.php');
 
-        /* Clear a Custom label that is really a leftover notification recipient list. See
-           enrol_apply_clear_legacy_comment_labels() for the provenance; the short version is
-           that upstream stored the list in this column until 2016 and the 2022 fix retro-edited
-           the step that wrote it, so a site past that savepoint kept the value.
-
-           One-way: a cleared label falls back to the shipped wording, and the recipient list it
-           held has lived in customtext3 since 2022, so nothing is lost that anything still reads. */
+        /* Clear a Custom label that is really a leftover notification recipient marker; see
+           enrol_apply_clear_legacy_comment_labels(). A cleared label falls back to the shipped
+           wording, and the recipients now live in customtext3, so nothing still read is lost. */
         enrol_apply_clear_legacy_comment_labels();
 
         upgrade_plugin_savepoint(true, 2026083104, 'enrol', 'apply');
     }
 
     if ($oldversion < 2026083107) {
-        /* The decider's own note, which is NOT the outcome message: that one is written to the
-           applicant and is mailed to them, while this one is the record of why the decision was
-           taken and never leaves the site. Nullable, because every row already in the table
-           predates it and no default could honestly say what any of them was decided for.
-
-           Idempotent by construction: field_exists() is the guard, and a re-run of a step that
-           has already added the column matches and does nothing. The DDL is the whole step -
-           there is no DML half here, so the trap this file has already paid for once (a guard
-           that made the DDL idempotent and left the DML to run twice) has nothing to bite. */
+        /* The decider's own note, which is not the outcome message: that one is mailed to the
+           applicant, while this one records why the decision was taken and never leaves the
+           site. Nullable, because no default could say why an existing row was decided. */
         $table = new xmldb_table('enrol_apply_submission');
         $field = new xmldb_field('decisionnote', XMLDB_TYPE_TEXT, null, null, null, null, null, 'decidedrole');
         if (!$dbman->field_exists($table, $field)) {
@@ -462,16 +409,10 @@ function xmldb_enrol_apply_upgrade($oldversion) {
     }
 
     if ($oldversion < 2026090302) {
-        /* The queue gained a search box, and on PostgreSQL matching "goncalves" against
-           "Gonçalves" needs the unaccent extension - core's own pgsql driver documents that its
-           sql_like() cannot do it. MariaDB and MySQL fold accents through the site collation and
-           need nothing.
-
-           Not a schema change, so db/install.xml's VERSION attribute is unchanged. Failure is
-           swallowed inside the helper: a least-privilege database account cannot create an
-           extension, and such a site keeps an accent-sensitive search rather than an upgrade that
-           refuses to finish. Idempotent by CREATE EXTENSION IF NOT EXISTS, and by the helper
-           asking the catalogue first. */
+        /* The queue's search needs the unaccent extension on PostgreSQL to match "goncalves"
+           against "Gonçalves"; MariaDB and MySQL fold accents through the collation. Not a
+           schema change, so install.xml's VERSION is unchanged. The helper is idempotent and
+           swallows a failure; see \enrol_apply\local\search::ensure_unaccent(). */
         \enrol_apply\local\search::ensure_unaccent();
 
         upgrade_plugin_savepoint(true, 2026090302, 'enrol', 'apply');

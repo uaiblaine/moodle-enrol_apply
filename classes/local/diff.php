@@ -19,10 +19,10 @@ namespace enrol_apply\local;
 /**
  * What an application would change about the applicant's profile, if they asked it to.
  *
- * The offer to save is only worth showing when there is something to save. The old form
- * pre-filled every field from the user record, so anybody who edited nothing posted their own
- * record straight back - an offer computed from "what was submitted" rather than "what
- * changed" would be shown to everybody and would write nothing for almost all of them.
+ * The offer to save is only worth showing when there is something to save. The form pre-fills
+ * every field from the user record, so anybody who edits nothing posts their own record
+ * straight back - an offer computed from "what was submitted" rather than "what changed" would
+ * be shown to everybody and would write nothing for almost all of them.
  *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine

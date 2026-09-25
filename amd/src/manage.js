@@ -14,39 +14,23 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * The four things core does not do for the applications queue.
+ * Fills the gaps core leaves in the applications queue's bulk bar and filter bar.
  *
- * ONE. The bulk action control's INITIAL state. checkbox-toggleall's init() binds two delegated
- * click handlers and nothing else, and setActionElementStates() is reached only from those
- * handlers, so a control is live until the first click. Every core caller closes that by
- * hardcoding the disabled attribute in its server markup. This plugin does not, and that is the
- * one place it departs from core on purpose: the queue is operable without JavaScript, so an
- * attribute only JavaScript can clear would take a working path away from a no-JS operator to buy
- * an affordance only a JavaScript one can see. Doing it from here gives each audience what it can
- * use. That only holds because styles.css puts the sticky footer back on screen when no script
- * ran; the two live together or not at all.
+ * The bulk action's initial state: core/checkbox-toggleall's init() only binds click handlers, so
+ * nothing disables the action until the first click. Core callers hardcode the disabled attribute
+ * in their markup instead; this queue must stay operable without JavaScript, so the action is
+ * disabled from here. That relies on the styles.css rule that puts the sticky footer back on
+ * screen when no script ran; the two go together.
  *
- * TWO. The bulk bar must not lie about what is selected. refreshTableContent() replaces the whole
- * table region on a page turn, a sort or a filter change, so every checkbox in it is destroyed -
- * while the bar lives in the sticky footer OUTSIDE that region and survives, with whatever
- * enabled state and whatever count it had. So the count is maintained here, worded "on this
- * page" because that is what a selection is, and both it and the action control are reset on
- * every refresh. Nothing in core does this: get.php returns {html, warnings} and, unlike
- * core_form\external\dynamic_form, never returns get_end_code(), so a refreshed table carries no
- * JavaScript of its own and anything it needs must be bound from a stable ancestor.
+ * Table refreshes: refreshTableContent() replaces the whole table region on a page turn, a sort or
+ * a filter change, while the bulk bar (in the sticky footer) and the filter bar's chips, clear-all
+ * control and count line all live outside that region. The refreshed html comes from
+ * core_table\external\dynamic\get, which returns no JavaScript, so everything outside the region
+ * is reset or redrawn here from the tableContentRefreshed event. The selection count is worded
+ * "on this page" because a refresh discards the selection.
  *
- * THREE. Nothing refreshes the table unless core_table/dynamic's own init() has run. It is not
- * automatic: the markup carries the data-region a refresh targets, and the module that acts on it
- * has to be asked for. Without this the queue's paging and sorting stay full page loads - which
- * still work, and are what a no-JavaScript operator gets either way.
- *
- * FOUR. The filter bar narrows the queue as the operator types, and everything it displays lives
- * OUTSIDE the region a refresh replaces - so the chip row, the clear-all control and the count
- * line would each go on describing the filters that were applied when the page loaded. They are
- * redrawn from tableContentRefreshed for that reason, the chips through the same Mustache partial
- * the server renders, so the markup exists once. The GET form underneath is untouched and still
- * works with scripting off; pressing Enter still submits it, which is how an operator gets a
- * permalink to what they are looking at.
+ * The filter bar narrows the queue as the operator types. The GET form underneath still works
+ * with scripting off, and pressing Enter still submits it, which gives the operator a permalink.
  *
  * @module     enrol_apply/manage
  * @copyright  2026 Anderson Blaine
@@ -83,22 +67,20 @@ const DEBOUNCE = 250;
 /**
  * @var {Array} Query parameters flexible_table owns, which a filter change invalidates.
  *
- * updateTable() resets the table to page one whenever the filter set changes, and says nothing
- * about the url. So an operator who arrived on a real paging link - they are ordinary anchors, by
- * design - and then typed would keep `page=3` in the address bar while looking at page one, and a
- * reload or a shared link would land somewhere the filtered result does not reach. The GET form
- * avoids this by emitting none of them; this is the AJAX path inheriting the same protection.
+ * updateTable() resets the table to page one when the filter set changes but leaves the url alone,
+ * so an operator who arrived on a paging link and then typed would keep `page=3` in the address
+ * bar, and a reload or a shared link would land on a page the filtered result may not reach. The
+ * GET form emits none of these; syncAddressBar() removes them on the AJAX path.
  *
- * The names are flexible_table's own (lib/table/classes/flexible_table.php:168-175).
+ * The names are the defaults of flexible_table::$request, set in its constructor.
  */
 const TABLE_PARAMS = ['page', 'tsort', 'tdir', 'thide', 'tshow', 'tifirst', 'tilast', 'treset'];
 
 /**
  * Every filter token on the page, read from the controls rather than from a list here.
  *
- * The queue's filters are configurable per site, so their number and their names are not knowable
- * when this module is written. A hardcoded list would be a second statement of what the
- * administrator chose, and the one that drifts is always the copy.
+ * The field filters are configurable per site (enrol_apply/queuefilterfields), so their tokens are
+ * read from each control's data-filter attribute rather than listed here.
  *
  * @return {Array} Token strings, search and status included.
  */
@@ -153,18 +135,19 @@ const setSelected = (group, count) => {
 /**
  * What the operator has narrowed the queue to, read off the controls themselves.
  *
- * The controls are the state. Keeping a copy in this module would give the page two answers to
- * one question, and the one that drifts is the copy - the controls are what the operator can see.
+ * The controls are the only state; this module keeps no copy that could drift from what the
+ * operator sees.
  *
- * @return {Object} search and status, each empty when not applied.
+ * @return {Object} search, status and statuslabel ('' when not applied), and fields: one entry
+ *     ({token, value, label, text}) per field filter that holds a value.
  */
 const currentFilters = () => {
     const search = document.querySelector(SELECTORS.SEARCH);
     const status = document.querySelector(SELECTORS.STATUS);
 
-    /* One entry per control that exists, so an administrator adding a field to the setting needs
-       no change here. The label rides along on the control itself, which is what lets a chip name
-       a filter without this module holding a second copy of the wording. */
+    /* One entry per control on the page, so a field added to the setting needs no change here.
+       The label comes from the control's data-filterlabel, so a chip repeats the control's own
+       wording. */
     const fields = [];
     document.querySelectorAll(SELECTORS.FIELD).forEach((el) => {
         const value = el.value.trim();
@@ -189,33 +172,25 @@ const currentFilters = () => {
 /**
  * Hand the table the filterset the controls describe.
  *
- * **The whole envelope, not a bare map of filters.** setFilters() stringifies what it is given
- * straight into dataset.tableFilters, which refreshTableContent() then reads back expecting
- * jointype alongside filters - so a bare map produces a request with no join type and the service
- * refuses it. Read the existing envelope and replace its filters, which also keeps the scope's own
- * required enrolid filter without this module having to know what it is.
+ * Passes the whole envelope, not a bare map of filters: setFilters() stores what it is given in
+ * dataset.tableFilters, which refreshTableContent() reads back expecting jointype beside filters,
+ * so a bare map produces a request with no join type that the service refuses. Replacing the
+ * filters of the existing envelope also keeps the scope's required enrolid filter.
  *
- * An empty search adds NO filter rather than one carrying the empty string. string_filter accepts
- * '' as a live value - its add_filter_value() is a complete override that never reaches the base
- * class's rejection - so sending one narrows the queue to nothing the moment the box is cleared.
+ * An empty search adds no filter rather than one carrying '', because string_filter accepts '' as
+ * a live value and would empty the queue. See applications_filterset::get_optional_filters().
  *
  * @param {HTMLElement} tableRoot The table region.
  * @return {Promise} Resolved when the refresh completes.
  */
 const applyFilters = (tableRoot) => {
-    /* **The serialisation guard lives HERE and not in the debounce**, because three things call
-       this and only one of them is the debounce: the status select changes immediately, and so do
-       chip removal and clear-all. An earlier version guarded only scheduleRefresh(), and this
-       comment claimed refreshes were serialised while typing a term and then clicking a chip put
-       two in flight - which is exactly the race described below, reachable by ordinary use.
+    /* Refreshes are serialised here rather than in the debounce, because the select and date
+       controls, chip removal and clear-all call this directly. refreshTableContent() has no abort
+       and no sequence number: it replaces the node it was given, and jQuery's replaceWith() does
+       nothing to a node that is already detached, so of two overlapping refreshes the second
+       response is silently dropped and the table shows an earlier filter.
 
-       It matters because refreshTableContent() has no abort and no sequence number: it captures
-       the node it was given, fetches, and replaces that node. jQuery's replaceWith only calls
-       replaceChild when the target still has a parent, so whichever response lands SECOND is
-       silently dropped if the first already detached the node - and the operator is left looking
-       at the result of an earlier keystroke, with no error anywhere.
-
-       Re-scheduling rather than dropping: the operator's latest intent must still be applied, and
+       A busy call is re-scheduled rather than dropped, so the latest filters are still applied:
        scheduleRefresh() re-reads the controls when it fires. */
     if (refreshing) {
         scheduleRefresh();
@@ -228,10 +203,8 @@ const applyFilters = (tableRoot) => {
     const filters = {};
     const ours = filterTokens();
 
-    /* The scope's own filter survives untouched; only the operator's are rewritten. Tested
-       against the tokens the PAGE carries rather than against two literals, so a site that
-       offers six field filters does not have four of them silently preserved from the previous
-       request and never cleared. */
+    /* Keep the scope's own filter and rewrite every token this page offers, so a field filter
+       the operator has emptied is dropped rather than carried over from the previous request. */
     Object.keys(filterset.filters).forEach((name) => {
         if (ours.indexOf(name) === -1) {
             filters[name] = filterset.filters[name];
@@ -300,10 +273,9 @@ const urlWithout = (drop) => {
 /**
  * Keep the address bar saying what the page is showing.
  *
- * replaceState rather than pushState: each keystroke is not a place in the operator's history, and
- * a back button that walked one letter at a time would be unusable. What it buys is that a reload,
- * a bookmark and a link copied out of the address bar all carry the filter the operator applied -
- * without it, an as-you-type search is invisible to every one of those.
+ * So a reload, a bookmark or a copied link carries the filters applied as the operator typed.
+ * replaceState rather than pushState, so the back button does not walk back one keystroke at a
+ * time.
  *
  * @return {void}
  */
@@ -326,7 +298,7 @@ const syncAddressBar = () => {
     document.querySelectorAll(SELECTORS.FIELD).forEach((el) => url.searchParams.delete(el.dataset.filter));
     fields.forEach((field) => url.searchParams.set(field.token, field.value));
 
-    // The table is back on page one and unsorted-by-request; the url must not claim otherwise.
+    // The table is back on page one; see TABLE_PARAMS.
     TABLE_PARAMS.forEach((name) => url.searchParams.delete(name));
 
     window.history.replaceState({}, '', url.toString());
@@ -335,9 +307,7 @@ const syncAddressBar = () => {
 /**
  * One chip's markup, from the partial the server renders too.
  *
- * A function of its own rather than a promise chained inside redrawChips()'s own chain: eslint's
- * promise/no-nesting rejects the inline form, and the rule is right here - the nested version
- * hides that the label has to resolve before the template can be given it.
+ * Kept out of redrawChips()'s chain because eslint's promise/no-nesting rejects the inline form.
  *
  * @param {Object} chip filter, name, value and removeurl for one applied filter.
  * @return {Promise} Resolved with the rendered html.
@@ -350,10 +320,9 @@ const renderChip = (chip) => getString('queueremovefilter', 'enrol_apply', {
 /**
  * Redraw the chip row and the count for the filters now applied.
  *
- * The chips are rendered from the SAME partial the server uses, through core/templates, so the
- * markup exists once. Only the context is assembled here - and the status chip takes its wording
- * from the selected option's own text rather than from a string of its own, so the chip and the
- * control it describes cannot word the same state differently.
+ * The chips are rendered from the same partial the server uses (enrol_apply/queue_chip), so the
+ * markup exists once. The status chip takes its wording from the selected option's text, so the
+ * chip and the control cannot word the same state differently.
  *
  * @return {Promise} Resolved once the row has been redrawn.
  */
@@ -377,10 +346,7 @@ const redrawChips = () => {
         if (status !== '') {
             wanted.push({filter: 'status', name: statusname, value: statuslabel, removeurl: urlWithout('status')});
         }
-        /* The label comes off the control's own data attribute rather than from a string this
-           module resolves: the fields are configurable per site, so there is no fixed list of
-           lang keys to resolve, and the wording the chip repeats has to be the wording on the
-           control beside it. */
+        // Field labels come from the controls themselves; see currentFilters().
         fields.forEach((field) => {
             wanted.push({
                 filter: field.token,
@@ -450,9 +416,9 @@ const removeFilter = (drop) => {
         }
     });
 
-    /* Focus moves deliberately, because the control that was just activated has been removed from
-       the document - a keyboard operator would otherwise be returned to the top of the page with
-       nothing to say where they were. The search box is the one control that is always there. */
+    /* Move focus, because the redraw removes the chip just activated (or hides clear-all) and a
+       keyboard operator would be returned to the top of the page. The search box is the one
+       control that is always there. */
     if (search) {
         search.focus();
     }
@@ -474,22 +440,13 @@ export const init = (group) => {
         return;
     }
 
+    // Core already calls this from flexible_table::get_dynamic_table_html_end(); init() is idempotent.
     initDynamicTable();
     setSelected(group, 0);
 
-    /* A NAMED import, and the distinction is not style: core/pubsub is an ES module exporting
-       subscribe, unsubscribe and publish and NOTHING as default, so `import PubSub from
-       'core/pubsub'` compiles to a default that is undefined and the first call is a TypeError.
-       core/notification, imported as a default just above, does declare one - "to maintain
-       backwards compatability", says core - and core/checkbox-toggleall is an old-style AMD
-       module, which the interop wrapper turns into a default. Three modules, three shapes; the
-       only way to know is to read each one.
-
-       Nothing in the pipeline catches getting this wrong. eslint resolves no Moodle module names,
-       and the built bundle is valid JavaScript either way. What it produces is a throw inside
-       init(), which means js_call_amd's js_complete() never runs, which Behat reports twenty
-       seconds later as "Javascript code and/or AJAX requests are not ready" naming the module -
-       a timeout, with no stack and no mention of the line. */
+    /* The subscribe import is named because core/pubsub has no default export: a default import
+       compiles to undefined and this call throws inside init(). Neither eslint nor grunt catches
+       that; Behat reports it only as a timeout waiting for JavaScript to be ready. */
     subscribe(CheckboxToggleAll.events.checkboxToggled, (data) => {
         if (data.toggleGroupName !== group) {
             return;
@@ -497,18 +454,12 @@ export const init = (group) => {
         setSelected(group, data.checkedTargets.length);
     });
 
-    /* The reset, and it has to be here rather than in the refreshed markup: the refreshed region
-       carries no JavaScript, and the bar being reset is not in that region anyway.
-
-       The chip row and the count are redrawn from the SAME event, and for the same reason: they
-       live outside the region a refresh replaces, so nothing else would ever tell them the filters
-       changed. The event carries the new region as its target, which is what redrawCount() reads -
-       a closure over the old node would read a count from markup already detached. */
+    // Everything outside the refreshed region is reset here; see the module docblock.
     document.addEventListener(DynamicTableEvents.tableContentRefreshed, (e) => {
         setSelected(group, 0);
         redrawChips();
-        /* The event's target IS the new table root: core dispatches on that node, and a target
-           does not change while an event bubbles. */
+        /* The event's target is the new table root (core dispatches on it), so the count is read
+           from the refreshed markup rather than from the detached node. */
         redrawCount(e.target);
         syncAddressBar();
     });
@@ -518,18 +469,14 @@ export const init = (group) => {
         return;
     }
 
-    /* The GET form stays a working form: with scripting off it is the whole mechanism, and with
-       scripting on pressing Enter still submits it, which reloads the page onto a url carrying the
-       filter. That is a feature rather than a duplicate path - it is how an operator gets a
-       permalink to what they are looking at. */
+    // Only typing is intercepted: Enter still submits the GET form (see the module docblock).
     const search = filters.querySelector(SELECTORS.SEARCH);
     if (search) {
         search.addEventListener('input', scheduleRefresh);
     }
 
-    /* A text box narrows as you type; a select and a date picker commit in one action and have
-       no second keystroke coming, so they refresh on change. Both routes reach applyFilters(),
-       which carries the busy check. */
+    /* A text box narrows as you type; a select or a date picker commits in one action, so it
+       refreshes on change. Both routes reach applyFilters(), which carries the busy check. */
     filters.querySelectorAll(SELECTORS.FIELD).forEach((el) => {
         if (el.tagName === 'SELECT' || el.type === 'date') {
             el.addEventListener('change', () => {

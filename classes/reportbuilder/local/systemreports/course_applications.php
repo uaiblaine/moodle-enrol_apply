@@ -42,12 +42,10 @@ class course_applications extends system_report {
     /**
      * Unique identifier of the filter that narrows the report to one enrolment method.
      *
-     * Built by core from the entity name and the filter name in add_report_filters() below, and
-     * repeated here because report.php needs to name it. The coupling is held by
-     * test_the_method_filter_identifier_is_the_one_the_page_scopes_by directly, and by every
-     * test that scopes and then counts rows - renaming either half makes scope_to_method()'s
-     * array_key_exists guard miss, so it returns false having written nothing at all and the row
-     * counts stop moving. The named test is the one that says WHY it went red.
+     * Core builds it from the entity name and filter name used in add_report_filters(); it is
+     * repeated here because report.php needs to name it. If the two drift apart,
+     * scope_to_method() silently returns false;
+     * test_the_method_filter_identifier_is_the_one_the_page_scopes_by holds the coupling.
      *
      * @var string
      */
@@ -56,30 +54,23 @@ class course_applications extends system_report {
     /**
      * Whether the current user may see this report at all.
      *
-     * This method is the whole gate, and it has to be self-sufficient rather than one layer of
-     * several. Every sort, every filter and every page turn re-runs it: the browser fetches
-     * pages through core_table_get_dynamic_table_content, whose execute() calls
-     * set_filterset() FIRST, and that constructs the report - so require_can_view() has already
-     * run by the time the service reaches its own validate_context() and has_capability() calls
-     * two lines later (lib/table/classes/external/dynamic/get.php, byte-identical on 5.1 and
-     * 5.2). Nothing here may assume report.php ran, or that require_login() was called against
-     * this course, because on that path neither did.
+     * This method is the whole gate and must be self-sufficient: every sort, filter and page turn
+     * goes through core_table_get_dynamic_table_content, which constructs the report (running
+     * this check) before its own validate_context(), so nothing here may assume report.php ran or
+     * that require_login() was called against this course.
      *
-     * The context is the report persistent's own, resolved server-side from the report id. A
-     * client swapping that id gets some other report's context, which this method then re-checks
-     * - which is why scoping on the context is safe where scoping on get_parameter() would not
-     * be. That one is demonstrably forgeable: the parameters arrive as PARAM_RAW in the
-     * filterset and are json_decoded straight into the report.
+     * The context is the report persistent's own, resolved server-side from the report id; a
+     * client swapping the id gets another report's context, which this method re-checks. That is
+     * why scoping on the context is safe, unlike get_parameter(), whose values the client sends
+     * in the filterset.
      *
      * @return bool True when the user may view the report.
      */
     protected function can_view(): bool {
         $context = $this->get_context();
 
-        /* Not defensive: system_report_factory::create() will happily build this report in any
-           context it is handed, and the persistent row is keyed on one. A report of one
-           course's applications has no meaning outside a course, and the capability check below
-           would be evaluated against the wrong thing. */
+        /* Reachable: system_report_factory::create() builds this report in any context it is
+           handed, and outside a course the capability check below would test the wrong thing. */
         if (!$context instanceof context_course) {
             return false;
         }
@@ -90,11 +81,6 @@ class course_applications extends system_report {
     /**
      * Build the report.
      *
-     * The order below is fixed by core and is not stylistic: add_entity() must precede any
-     * add_column() naming that entity - report\base::add_column() throws "Invalid entity name"
-     * otherwise - and set_main_table() must happen before validate() runs at the end of
-     * construction. None of that is visible to phpcs, phpdoc or the mustache lint.
-     *
      * @return void
      */
     protected function initialise(): void {
@@ -104,40 +90,28 @@ class course_applications extends system_report {
         $this->set_main_table('enrol_apply_submission', $alias);
         $this->add_entity($entity);
 
-        /* The only scoping there is. Not get_parameter(), which a client sets freely, and not
-           the persistent's itemid, which is client-settable through the mobile web services.
-
-           report.php now passes the enrol instance AS that itemid, and the two facts live
-           together rather than contradicting each other: the itemid decides which report
-           persistent is loaded, and therefore which of this reader's stored filter choices come
-           back, and it decides nothing about which rows may be read. Swapping it reaches another
-           method's stored choice inside the same course - a view the same capability already
-           allows - and never another course, because the condition below is built from the
-           CONTEXT. It is identity, not scope. */
+        /* The only scoping there is, built from the context. Not get_parameter(), which a client
+           sets freely, and not the persistent's itemid, which is client-settable through
+           core_reportbuilder_retrieve_system_report. The itemid (the enrol instance, see
+           for_method()) only selects which stored filter choices come back. */
         $courseid = database::generate_param_name();
         $this->add_base_condition_sql("{$alias}.courseid = :{$courseid}", [
             $courseid => $this->get_context()->instanceid,
         ]);
 
-        /* Pseudonymised records - what a deleted course leaves behind - carry userid 0 and no
-           longer describe anybody. They are not this report's subject and would render as a
-           row with no applicant at all.
-           What excludes them is the INNER join immediately below, because no user holds id 0.
-           There WAS an explicit "userid <> 0" base condition here as well, and it was removed
-           rather than kept: deleting it left the whole suite green, so it read as a protection
-           no test could hold. Anything that makes that join a LEFT one - showing rows for
-           deleted users, say - has to bring the explicit condition back with it.
-           test_a_pseudonymised_record_is_not_listed is what goes red if it does not. */
+        /* Pseudonymised records (what a deleted course leaves behind) carry userid 0 and
+           describe nobody. The INNER join below is what excludes them, as no user has id 0;
+           making it a LEFT join needs a "userid <> 0" base condition, as in the datasource.
+           test_a_pseudonymised_record_is_not_listed holds this. */
         $applicant = new user();
         $applicantalias = $applicant->get_table_alias('user');
         $this->add_entity($applicant->add_join(
             "JOIN {user} {$applicantalias} ON {$applicantalias}.id = {$alias}.userid"
         ));
 
-        /* A second user entity for the decider, with its own name and its own alias. Without
-           the rename both would answer to "user" and report\base::annotate_entity() would throw
-           coding_exception('Duplicate entity name') at construction - loudly, on every request,
-           not silently. LEFT JOIN, because an undecided record carries decidedby = 0. */
+        /* A second user entity for the decider, renamed so it does not collide with the first
+           (report\base::annotate_entity() throws 'Duplicate entity name'). LEFT JOIN, because an
+           undecided record carries decidedby = 0. */
         $decider = (new user())
             ->set_entity_name(self::DECIDER)
             ->set_entity_title(new lang_string('submissiondecidedby', 'enrol_apply'));
@@ -164,14 +138,10 @@ class course_applications extends system_report {
     protected function add_report_columns(): void {
         $this->add_column_from_entity('user:fullnamewithlink');
 
-        /* Identity fields come from core's own helper, and so does the decision about which of
-           them this reader may see: get_identity_fields() returns an empty array outside
-           moodle/site:viewuseridentity (user/classes/fields.php, identical on 5.1 and 5.2), so
-           a reader without it gets no column rather than a blank one.
-           That distinction is the whole point. A display callback would leave the column, the
-           filter and the sort in place, and filtering and sorting are SQL - they never reach a
-           callback - so a reader could recover a hidden value by filtering on it and reading
-           the row count, or simply by sorting on it. Absence is the only masking that holds. */
+        /* Identity fields from core's helper, which returns none outside
+           moodle/site:viewuseridentity, so a reader without it gets no column rather than a
+           blanked one: sorting and filtering are SQL and never reach a display callback, so only
+           absence keeps a hidden value from being recovered. */
         $applicant = $this->get_entity('user');
         foreach ($applicant->get_identity_columns($this->get_context()) as $column) {
             $this->add_column($column);
@@ -179,15 +149,9 @@ class course_applications extends system_report {
 
         $this->add_columns_from_entity('submission');
 
-        /* The snapshot's masking decision is made HERE, where the course context is in hand,
-           and handed to the formatter as an argument. The entity cannot make it: an entity has
-           no context, so deciding it there could only ask about the system context, and a
-           reader legitimately granted the capability in their course would see nothing. The
-           formatter's own default is the restrictive one, so an entity used without this line
-           shows less rather than more.
-           visible_keys() returns formatter::ALL_FIELDS and not null for the unrestricted
-           reader, and that is not a stylistic choice: null is precisely what core passes when
-           nobody registered an argument, so null has to keep meaning "nobody asked". */
+        /* The snapshot's masking is decided here, in the course context, and handed to the
+           formatter as its argument; the entity has no context to decide it in. Without this
+           line the formatter shows names only. */
         $this->get_column('submission:snapshot')->set_callback(
             [formatter::class, 'snapshot'],
             formatter::visible_keys($this->get_context())
@@ -199,25 +163,14 @@ class course_applications extends system_report {
     /**
      * This report, identified by the enrolment method it was opened from.
      *
-     * The identity matters and is not decoration. scope_to_method() below stores the reader's
-     * choice through set_filter_values(), which writes reportbuilder_user_filter keyed on
-     * (reportid, usercreated) and nothing else; the report persistent is keyed on the source,
-     * the context, and the component/area/itemid given here. With one report per COURSE both
-     * apply methods therefore shared a single stored scope, and every request after the initial
-     * page load reads that store and nothing else - sorting and paging go through
-     * core_table_get_dynamic_table_content, whose filterset carries the reportid and the
-     * report's own parameters and nothing that names a method, and the Download button posts the
-     * same id to /reportbuilder/download.php. Opening the second method's report answered the
-     * first method's next click with the second method's rows.
+     * scope_to_method() stores the reader's choice through set_filter_values(), which is keyed on
+     * the report id and the user only. Sorting, paging and downloading read that store and carry
+     * nothing that names a method, so each method needs its own report persistent (keyed here by
+     * the enrol instance as itemid) or two methods in one course would share one stored scope.
      *
-     * The itemid is IDENTITY and never scope, and can_view() says why the distinction holds: it
-     * selects which of this reader's stored choices come back, inside a course whose rows they
-     * already hold enrol/apply:viewreports for, and it decides nothing about which rows may be
-     * read - the base condition is built from the context.
-     *
-     * A named constructor rather than a call inlined in report.php, because report.php is a page
-     * script: nothing in the PHPUnit suite runs it, so an itemid dropped there would be invisible
-     * to every test. test_two_methods_keep_independent_scopes reaches this instead.
+     * The itemid is identity, never scope: rows are limited by the base condition, built from the
+     * context. A named constructor so that the PHPUnit suite can reach it
+     * (test_two_methods_keep_independent_scopes); report.php is a page script no test runs.
      *
      * @param context $context Course context the report belongs to.
      * @param int $enrolid Enrol instance the reader opened it from.
@@ -230,25 +183,15 @@ class course_applications extends system_report {
     /**
      * Narrow this reader's view to one enrolment method, leaving their other filters alone.
      *
-     * A FILTER value and never a base condition, which is what keeps this out of the security
-     * boundary: the base condition is `courseid = <context>->instanceid` and stays that way, so
-     * nothing a filter carries can reach outside the course.
+     * A filter value, never a base condition, so it stays outside the security boundary: the
+     * base condition limits rows to the course whatever a filter carries. A value that is not one
+     * of the filter's options is ignored by select::get_sql_filter(), so a forged enrolid widens
+     * the report to the whole course - a view the reader is already allowed - rather than
+     * narrowing it.
      *
-     * **That, and not an empty intersection, is where the safety comes from**, and an earlier
-     * version of this docblock had it the wrong way round. It said a forged value "shows fewer
-     * rows ... the intersection of one course and a foreign enrolid is empty", and that
-     * intersection is never computed: select::get_sql_filter() validates the submitted value
-     * against its own options list and returns ['', []] when it is absent, so a forged value
-     * produces NO filter at all and the report widens to the whole course. That is still safe -
-     * it is the view every reader of this report already holds enrol/apply:viewreports for - but
-     * it is the opposite of what the sentence claimed, and a reader trusting it would have
-     * concluded that a bad value fails closed. It fails open, into a view that is permitted.
-     *
-     * Merged rather than replacing: set_filter_values() overwrites everything, and the reader's
-     * status or date filters are not this page's to discard. array_merge and never the +
-     * operator - + keeps the LEFT side on a duplicate key, so the stored value would silently win
-     * over the caller's and this method would do nothing for anybody who had ever touched the
-     * filter. test_the_url_method_wins_over_a_stored_one is what holds that direction.
+     * Merged with the stored values, as set_filter_values() replaces them all and the reader's
+     * other filters are not this page's to discard. array_merge(), not +, which would let the
+     * stored method win (test_the_url_method_wins_over_a_stored_one).
      *
      * @param int $enrolid Enrol instance to narrow to.
      * @return bool False when this course has no method filter to set, which is every course
@@ -276,13 +219,10 @@ class course_applications extends system_report {
 
         $this->add_filter_from_entity('user:fullname');
 
-        /* The filters for the identity columns, from the same core helper and in the same
-           order as the columns themselves. Both sides of the pair have to move together: a
-           column a reader may see but not filter is merely awkward, while a filter for a
-           column they may NOT see is the oracle this report is shaped to avoid - filtering is
-           SQL, so a reader would recover the hidden value by narrowing on it and reading the
-           row count. get_identity_filters() answers the same capability question
-           get_identity_columns() does, which is what keeps the two in step. */
+        /* The identity filters must stay in step with the identity columns: a filter on a field
+           the reader may not see would let them recover its value by narrowing and counting
+           rows. get_identity_filters() answers the same capability question as
+           get_identity_columns(). */
         $applicant = $this->get_entity('user');
         foreach ($applicant->get_identity_filters($this->get_context()) as $filter) {
             $this->add_filter($filter);
@@ -291,14 +231,9 @@ class course_applications extends system_report {
         $this->add_filters_from_entity('submission');
         $this->add_filter_from_entity(self::DECIDER . ':fullname');
 
-        /* The method filter earns its place only where there is a choice to make. A course with
-           one apply instance would get a filter offering a single choice, which reads as a
-           control that does not work.
-           Not that it could never narrow: enrol_apply_submission rows outlive the instance they
-           name - delete_instance() leaves them deliberately - so a course reduced from two
-           methods to one holds rows whose enrolid names no live instance, and a one-option
-           filter would exclude exactly those. Those rows stay listed, which is the course-wide
-           view this report falls back to whenever it cannot scope. */
+        /* The method filter is added only where the course offers a choice of methods. With one
+           it would read as a control that does nothing, and selecting it would hide the records
+           of deleted methods, which delete_instance() keeps. */
         $instances = $DB->get_records(
             'enrol',
             ['courseid' => $this->get_context()->instanceid, 'enrol' => 'apply'],

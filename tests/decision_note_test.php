@@ -276,7 +276,7 @@ final class decision_note_test extends \advanced_testcase {
      * The note belongs to the decision being taken. Without this a re-queued application - which
      * core's "Edit enrolment" screen and an expiredaction of suspend both produce - would be
      * decided a second time carrying the first decision's reason, with nothing on screen saying
-     * so. It is the same defect the outcome message was fixed for.
+     * so. The outcome message follows the same rule.
      *
      * @return void
      */
@@ -341,7 +341,7 @@ final class decision_note_test extends \advanced_testcase {
         $this->plugin->wait_enrolment([$ueid], '', ['note' => 'Waiting for a place.']);
         $sink->close();
 
-        // No decision array at all, which is what every caller predating the note passes.
+        // No decision array at all, as a caller with nothing to say about the note passes.
         $sink = $this->redirectMessages();
         $this->plugin->confirm_enrolment([$ueid]);
         $sink->close();
@@ -352,10 +352,9 @@ final class decision_note_test extends \advanced_testcase {
     /**
      * An application already deferred can have its note edited.
      *
-     * wait_enrolment() used to look its row up with a strict status = suspended predicate, so a
-     * second deferral found nothing, did nothing, and reported success. That made the reason on
-     * a deferred application - the state this plugin's model spends the longest in - impossible
-     * to correct.
+     * wait_enrolment()'s lookup must admit an already-deferred row. With a status = suspended
+     * predicate a second deferral would find nothing, do nothing and report success, and the
+     * reason on a deferred application could never be corrected.
      *
      * @return void
      */
@@ -381,10 +380,9 @@ final class decision_note_test extends \advanced_testcase {
     /**
      * Correcting the reason on a deferred application does not re-mail the applicant.
      *
-     * Widening the lookup is what makes the correction possible, and it is also what made this
-     * defect possible: the row is now found, so everything the first deferral did runs again -
-     * including the "your application was deferred" notification, which is news the applicant
-     * already had. The control is the first deferral in the same run, which MUST notify.
+     * Because a deferred row is found again, everything the first deferral did would run a
+     * second time, including the "your application was deferred" notification the applicant
+     * already had. The control is the first deferral in the same run, which must notify.
      *
      * @return void
      */
@@ -410,9 +408,8 @@ final class decision_note_test extends \advanced_testcase {
     /**
      * A message typed for the applicant IS sent, even when the enrolment does not move.
      *
-     * The other half of the rule above, and the half that keeps it from becoming a silent loss:
-     * the message box exists to reach the applicant, so a message written and then not sent
-     * would be the defect class this plugin has already fixed twice.
+     * The other half of the rule above: the message box exists to reach the applicant, so a
+     * message typed on a second deferral is sent although the enrolment does not move.
      *
      * @return void
      */
@@ -437,10 +434,10 @@ final class decision_note_test extends \advanced_testcase {
     /**
      * Correcting the reason does not re-attribute the decision to whoever corrected it.
      *
-     * decide()'s guard already refuses to restamp a row at the target status; passing the fresh
-     * flag unconditionally overrode it, so the trail credited the deferral to the person who had
-     * only edited its note - the exact failure that flag was introduced to make possible in the
-     * one case where the enrolment really does move.
+     * decide()'s guard refuses to restamp a row already at the target status, and its
+     * fresh-decision flag overrides that guard. wait_enrolment() must pass the flag only when
+     * the enrolment moved; passing it unconditionally would credit the deferral to whoever only
+     * edited its note.
      *
      * @return void
      */
@@ -496,11 +493,10 @@ final class decision_note_test extends \advanced_testcase {
     /**
      * An application with no durable record gets one, and its message and note are kept.
      *
-     * The live defect submission::ensure() closes. record_outcome_message() loops over the rows
-     * it finds and, with none, writes nothing and says nothing - so an application older than
-     * this table took a decision whose message was stored nowhere AND mailed nowhere. Both halves
-     * are asserted, because a fix that wrote the record but still lost the message would pass
-     * against the first alone.
+     * record_outcome_message() writes only to the rows it finds, so without submission::ensure()
+     * an application older than this table would take a decision whose message was stored
+     * nowhere and mailed nowhere. Both halves are asserted, because a fix that wrote the record
+     * but still lost the message would pass against the first alone.
      *
      * @return void
      */
@@ -582,10 +578,10 @@ final class decision_note_test extends \advanced_testcase {
     /**
      * An enrolment this plugin does not own writes nothing, and neither does one that is gone.
      *
-     * get_pending_user_enrolment() carries no enrol-type predicate, so a foreign user enrolment
-     * id reaches the decision methods and therefore reaches here, ahead of the MUST_EXIST lookup
-     * that refuses it. Writing a record for it would put an enrol_apply trail on somebody else's
-     * enrolment.
+     * get_pending_user_enrolment() carries no enrol-type predicate. The decision methods refuse
+     * a foreign user enrolment id with their MUST_EXIST instance lookup before calling ensure(),
+     * and ensure() refuses it again itself, so any other caller is safe too. Writing a record for
+     * it would put an enrol_apply trail on somebody else's enrolment.
      *
      * @return void
      */
@@ -613,9 +609,8 @@ final class decision_note_test extends \advanced_testcase {
     /**
      * Each decision reports how many of the given applications it actually decided.
      *
-     * manage.php prints "Applications updated" from this number, and before it existed the
-     * message was printed for a post that had changed nothing at all - every decision method
-     * skips a row it will not act on, and skips it in silence.
+     * Every decision method skips a row it will not act on, silently, so manage.php reports
+     * from this number rather than assuming every posted application was decided.
      *
      * @return void
      */

@@ -58,8 +58,8 @@ $PAGE->add_body_class('limitedwidth');
 $form = new \enrol_apply\form\application_form($pageurl, ['showbuttons' => true]);
 
 /* The parent constructor runs this only for the AJAX transport, so the page transport calls
-   it here. It covers the log-in-as session, guests, category visibility, allow_apply(), an
-   application already submitted and the places cap. */
+   it here. It covers the log-in-as session, guests, course visibility, an application already
+   submitted, allow_apply() and the applicant cap. */
 $form->check_access_for_dynamic_submission();
 
 if ($form->is_cancelled()) {

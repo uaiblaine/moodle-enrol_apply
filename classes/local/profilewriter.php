@@ -37,7 +37,8 @@ class profilewriter {
      * Whether this instance may write to a profile at all.
      *
      * Two switches, and neither alone is enough: a site master switch that defaults off and
-     * has no restore surface, and a per-instance opt-in that a cross-site restore zeroes.
+     * has no restore surface, and a per-instance opt-in that every restore zeroes
+     * (enrol_apply_plugin::restore_instance()).
      * A course restored into a category the restorer controls must not be able to turn the
      * write on by itself.
      *
@@ -56,9 +57,9 @@ class profilewriter {
      * Write the applicant's answers to their own profile.
      *
      * The keys written are recomputed here from the instance and the user, never taken from
-     * the set of keys submitted. That is the difference between a guard and a decoration: a
-     * post carrying "auth" or a locked "city" reaches this method exactly as a legitimate one
-     * does, and the only thing standing between it and {user} is this recomputation.
+     * the set of keys submitted: a post carrying "auth" or a locked "city" reaches this method
+     * exactly as a legitimate one does, and this recomputation is the only thing between it
+     * and {user}.
      *
      * An enrolment form may add to a profile but never empty it. Core's own boundary would
      * erase - profile_field_base::edit_save_data() ignores a value only when the property is
@@ -106,10 +107,10 @@ class profilewriter {
         }
         $usernew->timemodified = time();
 
-        /* Core's order, and each step matters. The auth plugin is told first, or an external
-           directory goes stale; user_update_user() is called with $triggerevent = false so
-           the event is not born in the middle of the write; profile_save_data() writes the
-           custom fields; and one event is fired at the end. */
+        /* The order of core's user/edit.php, and each step matters. The auth plugin is told
+           first, or an external directory goes stale; user_update_user() is called with
+           $triggerevent = false so the event is not born in the middle of the write;
+           profile_save_data() writes the custom fields; and one event is fired at the end. */
         if ($wrotestandard && !$authplugin->user_update($DB->get_record('user', ['id' => $user->id]), $usernew)) {
             throw new \moodle_exception('cannotupdateprofile');
         }
@@ -118,9 +119,7 @@ class profilewriter {
         }
         profile_save_data($usernew);
 
-        /* Ids and counts, never values. The log store is covered by no privacy provider and
-           reached by no deletion request, so a value written into an event outlives every
-           erasure the plugin can honour. */
+        /* Ids only, as core's own profile edit fires it: no field value goes into the log. */
         \core\event\user_updated::create_from_userid($user->id)->trigger();
 
         return $changes;

@@ -19,9 +19,8 @@
 
     The controls that narrow the applications queue.
 
-    A GET form, and it sits OUTSIDE the decision form on purpose: manage.mustache wraps the whole
-    body in a single POST form and HTML forbids nesting one form inside another, so a search box
-    placed inside it would submit the decision instead.
+    A GET form, rendered outside the decision form in manage.mustache: HTML forbids nested
+    forms, so a search box inside the POST form would submit the decision instead.
 
     It carries the scope as a hidden field because a GET submit replaces the query string entirely
     rather than merging into it. It deliberately carries no paging or sorting parameters: core never
@@ -29,8 +28,7 @@
     would render an empty table.
 
     Every chip's remove control is a real link naming the filters that survive it, so the row works
-    with scripting off. Describe tags in prose here rather than writing them, because a Mustache
-    comment ends at the first closing pair of braces.
+    with scripting off.
 
     Classes required for JS:
     * none - the module attaches by data-region.

@@ -30,13 +30,9 @@ use PHPUnit\Framework\Attributes\CoversNothing;
 /**
  * Guards the plugin's markup contract: Bootstrap vocabulary, badge contrast and row headers.
  *
- * Nothing else in the pipeline can see any of the defects below. phpcs reads PHP, the mustache
- * lint reads structure, stylelint reads CSS, and none of them knows what a class name resolves
- * to or what colour it renders. In local_dimensions this exact defect class shipped three
- * times, was correctly root-caused and documented each time, and recurred anyway; a 2026-08-06
- * sweep still found 90 sites. The sibling rule about JS data attributes held at 100% over the
- * same period for one reason only - a Behat leg threw when a dropdown failed to open. The
- * difference is enforcement, not diligence, and this file is that missing observer.
+ * No other gate sees these defects: phpcs reads PHP, the mustache lint reads structure and
+ * stylelint reads CSS syntax, and none of them knows what a class name resolves to or what
+ * colour it renders.
  *
  * @package    enrol_apply
  * @category   test
@@ -48,12 +44,11 @@ final class bootstrap_compat_test extends \basic_testcase {
     /**
      * Class names that only resolve through Moodle 5.x's deprecated Bootstrap 4 compatibility layer.
      *
-     * This plugin supports 5.1 and 5.2 only, so the asymmetry runs the opposite way from a plugin
-     * that still supports 4.5. These names DO render today, but only because theme/boost's
-     * bs4-compat.scss back-ports them, wrapped in @include deprecated-styles() - a red outline
-     * under behat-site and themedesignermode - and Moodle 6.0 removes that file entirely
-     * (MDL-84465). Their Bootstrap 5 spellings resolve on every supported branch, so writing the
-     * BS4 name, or writing both side by side, buys nothing and costs a deprecation.
+     * These names still render, but only because theme/boost's bs4-compat.scss back-ports them,
+     * wrapped in @include deprecated-styles() (a red outline under behat-site and
+     * themedesignermode), and Moodle 6.0 removes that file (MDL-84465). Their Bootstrap 5
+     * spellings resolve on every supported branch, so writing the Bootstrap 4 name, alone or
+     * beside its replacement, buys nothing and costs a deprecation.
      *
      * Keyed by the offending token, valued by what to write instead.
      *
@@ -92,12 +87,10 @@ final class bootstrap_compat_test extends \basic_testcase {
     /**
      * Background utilities that must state their text colour, and the utility each one needs.
      *
-     * Bootstrap 4's .badge sets no colour at all, so a saturated background renders near-black
-     * text on a dark fill; Bootstrap 5's defaults to white, so a LIGHT background renders white
-     * on near-white. The branches fail on disjoint sets and the 5.x half ships on this plugin's
-     * current target. Measured against the 4.5:1 AA floor: bg-warning is 1.95:1 and bg-secondary
-     * 1.49:1 on 5.2 with the default colour. The only markup correct on both is markup that
-     * states its own.
+     * Bootstrap 5's .badge defaults to white text, so a light background fails the 4.5:1 AA
+     * floor: on Boost, bg-warning gives 1.95:1 and bg-secondary 1.49:1. Bootstrap 4's set no
+     * colour, which failed on the dark backgrounds instead, so markup that states its own text
+     * colour is the only kind that does not depend on the default.
      *
      * @return array Background utility => the text utility it requires.
      */
@@ -127,8 +120,8 @@ final class bootstrap_compat_test extends \basic_testcase {
      *
      * amd/build is skipped because it is generated from amd/src, and docs is skipped because
      * .gitattributes keeps it out of the release zip. The stylesheet is deliberately absent:
-     * border-left is a deprecated Bootstrap CLASS and a perfectly ordinary CSS PROPERTY, and a
-     * scan that could not tell them apart would fail on the plugin's own valid CSS.
+     * border-left is both a deprecated Bootstrap class and an ordinary CSS property, and a scan
+     * that could not tell them apart would fail on the plugin's own valid CSS.
      *
      * @return array List of absolute file paths.
      */
@@ -147,10 +140,9 @@ final class bootstrap_compat_test extends \basic_testcase {
                 $files[] = $file->getPathname();
             }
         }
-        /* The root-level files that render. The queue's table is NOT among them any more -
-           it moved to classes/table/, which the recursive scan above already covers. Note that
-           this list is guarded by is_file(), so a name that stops existing drops out silently:
-           it is a list of places to look, not a list of things that must be there. */
+        /* The root-level files that render markup. Each is guarded by is_file(), so a name
+           that stops existing drops out silently: this is a list of places to look, not a list
+           of files that must exist. */
         foreach (['renderer.php', 'edit_form.php'] as $name) {
             if (is_file($root . '/' . $name)) {
                 $files[] = $root . '/' . $name;
@@ -165,10 +157,12 @@ final class bootstrap_compat_test extends \basic_testcase {
      * Whether a line is prose rather than markup.
      *
      * These rules are about what reaches the browser. A comment naming a class in order to
-     * explain the rule - as this file's own neighbours do - is not a breach of it.
+     * explain the rule - as this file's own neighbours do - is not a breach of it. Only a line
+     * that itself starts with a comment marker is recognised, so a continuation line of a block
+     * comment that does not start with "*" is scanned as markup.
      *
      * @param string $line One raw source line.
-     * @return bool True when the line opens with a PHP, JS or Mustache comment marker.
+     * @return bool True when the line is blank or opens with a PHP, JS or Mustache comment marker.
      */
     private function is_comment_line(string $line): bool {
         $trimmed = ltrim($line);
@@ -213,12 +207,12 @@ final class bootstrap_compat_test extends \basic_testcase {
     }
 
     /**
-     * Every background utility must state its text colour, so it reads on both branches.
+     * Every background utility must state its text colour rather than rely on Bootstrap's default.
      *
-     * Checked on every line carrying a background utility, NOT only on lines that also say
-     * "badge". The first draft of the local_dimensions original filtered on that word and stayed
-     * green while a match arm returned a bare 'bg-success' with the word "badge" one line up in
-     * the method name.
+     * Checked on every line carrying a background utility, not only on lines that also say
+     * "badge": a match arm returning a bare 'bg-success' seldom has that word on its own line.
+     * Any of text-white, text-dark or text-body satisfies it; the pairing in
+     * badge_text_colours() is only named in the failure message.
      *
      * @return void
      */
@@ -253,9 +247,10 @@ final class bootstrap_compat_test extends \basic_testcase {
      * The stylesheet must read the theme's colour tokens rather than hardcoding a palette.
      *
      * A hardcoded colour means every site with its own institutional palette sees the plugin's
-     * instead, and - because 5.1 and 5.2 both ship dark mode - a light literal paints a light
-     * slab inside a dark page. A literal is allowed only as the final fallback of a var() chain,
-     * which is why the check ignores anything inside var(...).
+     * instead, and a light literal paints a light slab wherever the --bs-* tokens are switched to
+     * dark by [data-bs-theme="dark"] (set by some themes, and by Moodle 5.3's colour mode). A
+     * literal is allowed only as the final fallback of a var() chain, which is why the check
+     * ignores anything inside var(...).
      *
      * @return void
      */
@@ -265,9 +260,7 @@ final class bootstrap_compat_test extends \basic_testcase {
         foreach ($this->stylesheets() as $sheet) {
             $lines = explode("\n", $this->strip_css_comments((string) file_get_contents($sheet)));
             foreach ($lines as $number => $line) {
-                /* Only a real declaration is judged, and every var() call is removed first: the
-                   literal inside a var() chain is its fallback, which is exactly the spelling
-                   this test exists to require. */
+                // Only a real declaration is judged, with its var() calls removed first.
                 if (!preg_match('/^\s*[-a-z]+\s*:/i', $line)) {
                     continue;
                 }
@@ -294,18 +287,14 @@ final class bootstrap_compat_test extends \basic_testcase {
     /**
      * Every fill this stylesheet paints must state the text colour that goes on it.
      *
-     * The badge rule above, one level up, and it is a defect this plugin measured rather than
-     * imagined. Moodle 5.2 ships TWO dark mechanisms: [data-bs-theme="dark"] flips every --bs-*
-     * token, while the legacy .theme-dark recolours text directly and leaves the tokens at their
-     * light values. So a fill read from a token and a colour left to inheritance come from
-     * different mechanisms, and under .theme-dark the queue's evidence pills rendered #dee2e6 on
-     * #e9ecef - 1.10:1, invisible - while every automated gate stayed green. Nothing in the
-     * pipeline can see this: stylelint validates syntax, and no branch of CI renders a page in
-     * either dark mode.
+     * The badge rule above, applied to the stylesheet. Bootstrap's [data-bs-theme="dark"]
+     * redefines the --bs-* tokens under the element carrying it but sets no color, so inside that
+     * scope a fill read from a token turns dark while an inherited text colour keeps the value
+     * computed outside it, and the text lands on a fill of its own lightness. Declaring both in
+     * the same block keeps them from the same scope. No gate renders a page to notice this.
      *
-     * A block painting no text is exempt, and the exemption is by selector rather than by a
-     * heuristic: the meters are bars, and requiring a colour on them would teach the next reader
-     * to add one wherever the test complains rather than to think about it.
+     * A block painting no text is exempted by selector, each with its reason, rather than by a
+     * heuristic, so the exemption is a decision and not a way to silence the test.
      *
      * @return void
      */
@@ -354,8 +343,9 @@ final class bootstrap_compat_test extends \basic_testcase {
     /**
      * The plugin must not declare custom properties inside core's design-system namespace.
      *
-     * Moodle 5.2 ships theme/boost/scss/design-system/ with $mds-* tokens and 5.3 LTS brings MDS
-     * React, so an --mds-* declaration squats a namespace core is actively expanding.
+     * Moodle 5.2 ships $mds-* tokens in theme/boost/scss/design-system/, copied from core's
+     * design-system npm package, which later releases keep extending, so an --mds-*
+     * declaration squats a namespace core is expanding.
      *
      * @return void
      */
@@ -378,7 +368,7 @@ final class bootstrap_compat_test extends \basic_testcase {
     }
 
     /**
-     * Both table classes must name the column that identifies a row.
+     * The queue's table class must name the column that identifies a row.
      *
      * Deliberately a source scan rather than an assertion on rendered HTML: flexible_table's
      * define_header_column() has no observable return and no getter, and rendering a table_sql
@@ -406,8 +396,7 @@ final class bootstrap_compat_test extends \basic_testcase {
      * Remove CSS comments while keeping every line on the line number it started on.
      *
      * Stripping per line cannot work: a comment spanning several lines leaves its middle lines
-     * intact, and prose about colour then reads as a declaration of one. This test failed on its
-     * own explanatory comment the first time it ran, which is how that was found.
+     * intact, and prose about colour then reads as a declaration of one.
      *
      * @param string $css Raw stylesheet contents.
      * @return string The same text with comment bodies replaced by their own newlines.
