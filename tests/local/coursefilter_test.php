@@ -52,9 +52,8 @@ final class coursefilter_test extends \advanced_testcase {
     /**
      * Only the site-wide queue offers these controls.
      *
-     * With ?id=<enrolid> the queue names one course already, so the control would filter a set of
-     * one. The mentee queue does span courses, but a mentor sees a handful and the control would
-     * be noise. The scope shapes come from queue::listing_scope(), which is what this mirrors.
+     * The scope shapes mirror queue::listing_scope(); {@see coursefilter} says why the instance and
+     * mentee queues get no controls.
      *
      * @return void
      */
@@ -144,5 +143,50 @@ final class coursefilter_test extends \advanced_testcase {
 
         // The control: a real category IS read, so the assertions above are not about a dead reader.
         $this->assertSame((int) $real->id, coursefilter::clean_category((int) $real->id));
+    }
+
+    /**
+     * Category names come back in the plain spelling, with core's visibility rules.
+     *
+     * The renderer puts these into double stashes, so core's escaped spelling would be escaped a
+     * second time. Which categories are listed, in which order, and which ancestors a path names
+     * must still be make_categories_list()'s answer: a reader without
+     * moodle/category:viewhiddencategories sees neither a hidden category nor its name inside
+     * the path of a visible one beneath it.
+     *
+     * The control is an administrator, who does see the hidden category, so the reader was
+     * refused by the rule rather than by a category that failed to exist.
+     *
+     * @return void
+     */
+    public function test_categories_are_named_plainly_by_cores_visibility_rules(): void {
+        global $DB;
+
+        $parent = $this->getDataGenerator()->create_category(['name' => 'R&D < Team']);
+        $child = $this->getDataGenerator()->create_category(['name' => 'Civil & Structural', 'parent' => $parent->id]);
+        $hidden = $this->getDataGenerator()->create_category(['name' => 'Archive > 2020', 'visible' => 0]);
+        $beneath = $this->getDataGenerator()->create_category(['name' => 'Beneath', 'parent' => $hidden->id]);
+        // Visible under a hidden parent, so a path has an ancestor this reader may not see.
+        $DB->set_field('course_categories', 'visible', 1, ['id' => $beneath->id]);
+        \cache_helper::purge_by_event('changesincoursecat');
+
+        $this->setUser($this->getDataGenerator()->create_user());
+        $names = coursefilter::categories();
+
+        $this->assertSame('R&D < Team', $names[(int) $parent->id]);
+        $this->assertSame('R&D < Team / Civil & Structural', $names[(int) $child->id]);
+        $this->assertArrayNotHasKey((int) $hidden->id, $names);
+        $this->assertSame('Beneath', $names[(int) $beneath->id]);
+
+        // Core's list, decoded here to compare: the same keys, order and paths, only escaped.
+        $decode = static function (string $name): string {
+            return html_entity_decode($name, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        };
+        $this->assertSame(array_map($decode, \core_course_category::make_categories_list()), $names);
+
+        $this->setAdminUser();
+        $names = coursefilter::categories();
+        $this->assertSame('Archive > 2020', $names[(int) $hidden->id]);
+        $this->assertSame('Archive > 2020 / Beneath', $names[(int) $beneath->id]);
     }
 }

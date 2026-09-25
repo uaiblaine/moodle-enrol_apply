@@ -36,22 +36,11 @@ defined('MOODLE_INTERNAL') || die();
 
 global $CFG;
 
-/* The two classes this file declares as its coverage targets are NOT autoloadable: core loads
-   backup/moodle2/*.class.php by path, from the backup and restore machinery, only when a run
-   actually reaches an enrol_apply element. PHPUnit resolves a CoversClass target per test, so
-   before this require the target resolved only once some earlier test had happened to perform a
-   restore - and every test running before that one reported
-   "restore_enrol_apply_plugin" is not a valid target for code coverage.
-
-   Measured: exactly the four tests that never restore warned, because they are the four that run
-   before the first restoring test, so which tests warn was decided by execution order alone. Four
-   PHPUnit warnings are enough to fail the run under coverage, which is why this plugin had no
-   coverage number at all - and nothing in ordinary CI sees it, because the workflow passes
-   coverage: none and never resolves a target.
-
-   The includes have to come first and in this order: both plugin classes extend core backup
-   classes that these files are what load. setUp() already requires the same two includes, which
-   is why the classes resolve at all once a restore has run. */
+/* The two coverage targets are not autoloadable: core loads backup/moodle2/*.class.php by path,
+   only when a backup or restore reaches an enrol_apply element. PHPUnit resolves a CoversClass
+   target per test, so without these requires every test that runs before the first restoring one
+   warns that the target is not valid for code coverage, and those warnings fail a coverage run.
+   The core includes come first because both plugin classes extend core backup classes they load. */
 require_once($CFG->dirroot . '/backup/util/includes/backup_includes.php');
 require_once($CFG->dirroot . '/backup/util/includes/restore_includes.php');
 require_once($CFG->dirroot . '/enrol/apply/backup/moodle2/backup_enrol_apply_plugin.class.php');
@@ -97,6 +86,67 @@ final class backup_test extends \advanced_testcase {
     }
 
     /**
+     * Back a course up and extract the archive, ready to be read or restored.
+     *
+     * MODE_SAMESITE by default, not MODE_IMPORT: backup_course_task skips
+     * backup_enrolments_structure_step outside a real backup ("prevent it in any IMPORT/HUB
+     * operation"), so an import-mode copy carries no enrol data at all - not even a manual
+     * method - and there is nothing here to test. This mirrors
+     * backup/moodle2/tests/moodle2_test.php::prepare_for_enrolments_test().
+     *
+     * Kept roles need MODE_COPY: backup_controller::set_kept_roles() throws
+     * cannot_set_keep_roles_wrong_mode in any other mode, so roles passed with another mode fail
+     * the test rather than being ignored.
+     *
+     * @param \stdClass $course Course to back up.
+     * @param bool $userdata Value of the users setting.
+     * @param int $mode One of the backup::MODE_* constants.
+     * @param array $keptroles Role ids whose holders' enrolments a copy keeps, empty to keep no roles.
+     * @return array The backup id and the path of the extracted archive, in that order.
+     */
+    protected function backup_course(
+        $course,
+        bool $userdata,
+        int $mode = backup::MODE_SAMESITE,
+        array $keptroles = []
+    ): array {
+        global $CFG, $USER;
+
+        $CFG->backup_file_logger_level = backup::LOG_NONE;
+
+        $bc = new backup_controller(
+            backup::TYPE_1COURSE,
+            $course->id,
+            backup::FORMAT_MOODLE,
+            backup::INTERACTIVE_NO,
+            $mode,
+            $USER->id
+        );
+        if ($keptroles) {
+            $bc->set_kept_roles($keptroles);
+        }
+        $bc->get_plan()->get_setting('users')->set_status(backup_setting::NOT_LOCKED);
+        $bc->get_plan()->get_setting('users')->set_value($userdata);
+        $backupid = $bc->get_backupid();
+        $basepath = $bc->get_plan()->get_basepath();
+        $bc->execute_plan();
+        $results = $bc->get_results();
+        $bc->destroy();
+
+        /* Every mode but MODE_IMPORT zips the archive and deletes the directory it was written
+           in, so it is extracted back there: the XML cannot be read otherwise, and without it
+           the restore controller builds no plan and get_plan() returns null. */
+        if (!file_exists($basepath . '/moodle_backup.xml')) {
+            $results['backup_destination']->extract_to_pathname(
+                get_file_packer('application/vnd.moodle.backup'),
+                $basepath
+            );
+        }
+
+        return [$backupid, $basepath];
+    }
+
+    /**
      * Back a course up and restore it into a brand new one.
      *
      * @param \stdClass $course Course to copy.
@@ -105,7 +155,8 @@ final class backup_test extends \advanced_testcase {
      * @param bool|null $restoreusers Users setting on the RESTORE side, null to match the backup.
      * @param int $enrolments One of the backup::ENROL_* constants for the restore.
      * @param callable|null $tweakarchive Called with the extracted archive's basepath before the
-     *                                    restore, to alter the XML a fixture cannot produce.
+     *                                    restore, to check the XML or to alter it into something a
+     *                                    fixture cannot produce.
      * @return int Id of the restored course.
      */
     protected function backup_and_restore(
@@ -116,55 +167,23 @@ final class backup_test extends \advanced_testcase {
         int $enrolments = backup::ENROL_ALWAYS,
         ?callable $tweakarchive = null
     ): int {
-        global $CFG, $USER;
+        global $USER;
 
-        $CFG->backup_file_logger_level = backup::LOG_NONE;
+        [$backupid, $backupbasepath] = $this->backup_course($course, $userdata);
 
-        /* MODE_SAMESITE, not MODE_IMPORT: backup_course_task skips
-           backup_enrolments_structure_step outside a real backup ("prevent it in any
-           IMPORT/HUB operation"), so an import-mode copy carries no enrol data at all —
-           not even a manual method — and there is nothing here to test. This mirrors
-           backup/moodle2/tests/moodle2_test.php::prepare_for_enrolments_test(). */
-        $bc = new backup_controller(
-            backup::TYPE_1COURSE,
-            $course->id,
-            backup::FORMAT_MOODLE,
-            backup::INTERACTIVE_NO,
-            backup::MODE_SAMESITE,
-            $USER->id
-        );
-        $bc->get_plan()->get_setting('users')->set_status(backup_setting::NOT_LOCKED);
-        $bc->get_plan()->get_setting('users')->set_value($userdata);
-        $backupid = $bc->get_backupid();
-        $backupbasepath = $bc->get_plan()->get_basepath();
-        $bc->execute_plan();
-        $results = $bc->get_results();
-        $bc->destroy();
-
-        /* A real backup is zipped, and the restore controller can only build a plan from
-           an extracted one — without this it returns null from get_plan(). */
-        if (!file_exists($backupbasepath . '/moodle_backup.xml')) {
-            $results['backup_destination']->extract_to_pathname(
-                get_file_packer('application/vnd.moodle.backup'),
-                $backupbasepath
-            );
-        }
-
-        /* An archive written by an OLDER version of this plugin is not something a fixture
-           can produce, because the code that writes one no longer exists. Editing the
-           extracted XML is the only way to reach that path, and it is a real path: every
-           read in the restore handler is bare, so an element added later is an undefined
-           property - an E_WARNING, which --fail-on-warning turns into a failed build - on
-           the first archive that predates it. */
+        /* The callback sees the archive before the restore reads it, to check what it carries or
+           to edit it into what no fixture can produce, such as an archive written by an older
+           version of this plugin. A restore handler reading an element missing from such an
+           archive gets an undefined property, an E_WARNING that --fail-on-warning turns into a
+           failed run. */
         if ($tweakarchive !== null) {
             $tweakarchive($backupbasepath);
         }
 
-        /* restore_controller works out whether the backup came from this site by comparing
-           md5(get_site_identifier()) against the hash the backup recorded, and it does so
-           while loading the plan in its constructor. Moving the identifier here is
-           therefore the whole of "restore this into another site": nothing else about the
-           archive changes, which is exactly the situation restore_instance() degrades for. */
+        /* restore_controller decides whether the backup came from this site by comparing
+           md5(get_site_identifier()) with the hash the backup recorded, while loading the plan
+           in its constructor. Changing the identifier here is therefore the whole of "restore
+           into another site", which is the case restore_instance() degrades for. */
         if ($crosssite) {
             set_config('siteidentifier', 'another-site-entirely');
         }
@@ -182,10 +201,9 @@ final class backup_test extends \advanced_testcase {
             $USER->id,
             backup::TARGET_NEW_COURSE
         );
-        /* Without ENROL_ALWAYS a users-excluded restore does not merely degrade: restore_course_task
-           does not schedule the enrolments step at all (its default drops to ENROL_NEVER when users
-           cannot be restored), so no enrol instance of any kind would come across and the assertions
-           below would throw rather than fail. */
+        /* For a users-excluded restore, restore_course_task schedules the enrolments step only
+           under ENROL_ALWAYS; otherwise no enrol instance comes across and the callers' lookups
+           would throw rather than fail. */
         $rc->get_plan()->get_setting('enrolments')->set_value($enrolments);
         if ($restoreusers !== null) {
             $rc->get_plan()->get_setting('users')->set_value($restoreusers);
@@ -200,41 +218,16 @@ final class backup_test extends \advanced_testcase {
     /**
      * Back a course up and return the enrolments.xml it produced.
      *
-     * A restore cannot see the backup-side users gate at all: with users left out there is no
-     * user mapping either, so the plugin's restore handler drops the record whatever the
-     * backup did. The gate exists to keep personal data OUT OF THE ARCHIVE FILE, and the
-     * archive is therefore the only place it can be observed.
+     * A restore cannot see the backup-side users gate: with users left out there is no user
+     * mapping either, so the restore handler drops the record whatever the backup did. The gate
+     * keeps personal data out of the archive file, so the archive is where it is observed.
      *
      * @param \stdClass $course Course to back up.
      * @param bool $userdata Whether to include users.
      * @return string Contents of course/enrolments.xml.
      */
     protected function backup_enrolments_xml($course, bool $userdata): string {
-        global $CFG, $USER;
-
-        $CFG->backup_file_logger_level = backup::LOG_NONE;
-
-        $bc = new backup_controller(
-            backup::TYPE_1COURSE,
-            $course->id,
-            backup::FORMAT_MOODLE,
-            backup::INTERACTIVE_NO,
-            backup::MODE_SAMESITE,
-            $USER->id
-        );
-        $bc->get_plan()->get_setting('users')->set_status(backup_setting::NOT_LOCKED);
-        $bc->get_plan()->get_setting('users')->set_value($userdata);
-        $basepath = $bc->get_plan()->get_basepath();
-        $bc->execute_plan();
-        $results = $bc->get_results();
-        $bc->destroy();
-
-        if (!file_exists($basepath . '/moodle_backup.xml')) {
-            $results['backup_destination']->extract_to_pathname(
-                get_file_packer('application/vnd.moodle.backup'),
-                $basepath
-            );
-        }
+        [, $basepath] = $this->backup_course($course, $userdata);
 
         $xml = $basepath . '/course/enrolments.xml';
         $this->assertFileExists($xml, 'MODE_SAMESITE must produce an enrolments file');
@@ -245,18 +238,13 @@ final class backup_test extends \advanced_testcase {
     /**
      * The classes this file declares as coverage targets are loaded before any test runs.
      *
-     * Deliberately the FIRST test in the file, and deliberately `class_exists(..., false)`: the
-     * point is that the two classes are already in memory without anything having autoloaded or
-     * restored them, which is what PHPUnit needs in order to resolve a CoversClass target. They
-     * are not autoloadable - core loads backup/moodle2/*.class.php by path from the backup and
-     * restore machinery - so before the file-scope requires above, the target resolved only from
-     * whichever test first performed a restore, and every test before that one warned.
+     * Kept first in the file and checked with `class_exists(..., false)`, so it passes only when
+     * the file-scope requires above loaded the classes, not autoloading or an earlier restore. No
+     * other test file in this plugin loads either class, so nothing earlier in a full-suite run
+     * can satisfy it by accident. Under a randomised order a restoring test could run first, which
+     * is why the fix is the require rather than the ordering.
      *
-     * What this test can and cannot hold is worth stating. Deleting those requires reddens it,
-     * measured. It holds because no other test file in this plugin loads either class - also
-     * measured - so nothing earlier in a full-suite run can satisfy it by accident. It would stop
-     * holding under a randomised test order, which is why the fix is a require rather than a
-     * convention about ordering; this test guards the require, not the ordering.
+     * Changes that must make it fail: deleting the file-scope requires.
      *
      * @return void
      */
@@ -336,12 +324,10 @@ final class backup_test extends \advanced_testcase {
      * came from, and in the destination they name something else or nothing at all. The
      * assertion is therefore that the values CHANGED and now name the right things.
      *
-     * The role is deliberately NOT the one the enrolment method assigns by default. A first
-     * version used 'student', which is that default, and the mutation removing this plugin's
-     * role annotation then reddened nothing at all: core annotates every enrol instance's own
-     * roleid (backup_stepslib.php:737), so the role reached the archive whatever this plugin
-     * did. The fixture proved the mapping and not the annotation. Any role the instance does
-     * not already name is what makes the annotation load bearing.
+     * The role is deliberately not the instance's default. Core annotates every enrol instance's
+     * own roleid ({@see \backup_enrolments_structure_step}), so the default role reaches the
+     * archive whatever this plugin does; only a role the instance does not name makes this
+     * plugin's own role annotation necessary.
      *
      * @return void
      */
@@ -370,23 +356,52 @@ final class backup_test extends \advanced_testcase {
         $this->assertNotEquals((int) $chosen->id, $newgroupid, 'the premise: the group really was re-created');
         $this->assertSame((string) $newgroupid, (string) $restored->decidedgroups);
 
-        // A role is site-wide, so a same-site restore maps it to itself - the value is carried
-        // through the mapping rather than copied, which the cross-site test below separates.
+        // A role is site-wide, so a same-site restore maps it to itself; this assertion cannot
+        // tell the mapping from a verbatim copy, and the test below can.
         $this->assertSame($roleid, (int) $restored->decidedrole);
+    }
+
+    /**
+     * A decided role that no longer names a role is restored as none, not copied through.
+     *
+     * The test above cannot tell a mapping from a verbatim copy, because a same-site restore maps
+     * a role to itself. A role deleted after the decision can: its id is still in the archive,
+     * but roles.xml is built by joining the annotated ids against {role}, so the archive carries
+     * no such role and the restore has no mapping for it. A handler copying the value through
+     * would write an id that names nothing.
+     *
+     * @return void
+     */
+    public function test_a_decided_role_that_names_no_role_is_restored_as_none(): void {
+        [$course, , $applicant] = $this->create_course_with_application();
+        $roleid = create_role('Deleted after the decision', 'deletedafterdecision', '');
+        $this->record_decision($course, $applicant, [], $roleid);
+        delete_role($roleid);
+
+        $premise = function (string $basepath) use ($roleid): void {
+            $this->assertStringContainsString(
+                '<decidedrole>' . $roleid . '</decidedrole>',
+                file_get_contents($basepath . '/course/enrolments.xml'),
+                'the premise: the archive still carries the deleted role\'s id'
+            );
+        };
+        $newcourseid = $this->backup_and_restore($course, true, false, null, backup::ENROL_ALWAYS, $premise);
+        $restored = $this->restored_record($newcourseid);
+
+        // The control: the record itself travelled, so the 0 is the mapping and not a missing row.
+        $this->assertSame('I would like to join this course', $restored->comment);
+        $this->assertSame(0, (int) $restored->decidedrole);
     }
 
     /**
      * A group that did not travel is dropped rather than carried as a foreign id.
      *
-     * The id here names a group of ANOTHER course, which no backup of this one annotates, so
-     * it has no mapping. Writing it through unchanged would put the applicant into whatever
-     * that number means in the destination - or, before chosen_groups() learned to read an
-     * all-unmappable list as no choice at all, make the approval throw.
+     * The id names a group of another course, which no backup of this one annotates, so it has
+     * no mapping. Writing it through unchanged would put the applicant into whatever that number
+     * means in the destination.
      *
-     * A first version of this test excluded groups from the BACKUP instead, assuming nothing
-     * would then be annotated. It failed: the id came back mapped to itself. The property
-     * under test never needed that setting, and an unverified assumption about one is not
-     * worth carrying inside a test about something else.
+     * The group belongs to another course rather than being excluded from the backup: with
+     * groups excluded, the id still came back mapped to itself.
      *
      * @return void
      */
@@ -408,12 +423,10 @@ final class backup_test extends \advanced_testcase {
     /**
      * An archive written before these two elements existed restores without a warning.
      *
-     * This covers the ABSENT property. The commoner case is a present but empty one, which
-     * parses back as null rather than as the empty string it was written from, and which every
-     * undecided application produces - so the ?? in the handler is on the ordinary path and is
-     * exercised by every other restore test here. This one reaches the other half by stripping
-     * the elements from the extracted XML, because no fixture can produce an archive from a
-     * version of the plugin that no longer exists.
+     * This covers the absent property. The commoner case, a present but empty element, parses
+     * back as null and is produced by every undecided application, so every other restore test
+     * here exercises the handler's ?? on that path. This one strips the elements from the
+     * extracted XML, because no fixture can produce an archive from an older plugin version.
      *
      * @return void
      */
@@ -437,10 +450,8 @@ final class backup_test extends \advanced_testcase {
 
         $this->assertSame('', (string) $restored->decidedgroups);
         $this->assertSame(0, (int) $restored->decidedrole);
-        /* The note's own ?? is what this reaches. It differs from the two above in how it fails:
-           an absent property is a PHP warning rather than a TypeError, and Moodle's PHPUnit runs
-           with failOnWarning - so without the guard this is a failed run rather than a wrong
-           value, and nothing about the row would look wrong afterwards. */
+        /* Without the note's own ??, the absent property raises a warning rather than a
+           TypeError, which fails the run under failOnWarning while the row itself looks right. */
         $this->assertSame('', (string) $restored->decisionnote);
     }
 
@@ -504,33 +515,7 @@ final class backup_test extends \advanced_testcase {
      * @return string Contents of course/enrolments.xml.
      */
     protected function copy_enrolments_xml($course, array $keptroles, bool $userdata): string {
-        global $CFG, $USER;
-
-        $CFG->backup_file_logger_level = backup::LOG_NONE;
-
-        $bc = new backup_controller(
-            backup::TYPE_1COURSE,
-            $course->id,
-            backup::FORMAT_MOODLE,
-            backup::INTERACTIVE_NO,
-            backup::MODE_COPY,
-            $USER->id
-        );
-        $bc->set_kept_roles($keptroles);
-        $bc->get_plan()->get_setting('users')->set_status(backup_setting::NOT_LOCKED);
-        $bc->get_plan()->get_setting('users')->set_value($userdata);
-
-        $basepath = $bc->get_plan()->get_basepath();
-        $bc->execute_plan();
-        $results = $bc->get_results();
-        $bc->destroy();
-
-        if (!file_exists($basepath . '/moodle_backup.xml')) {
-            $results['backup_destination']->extract_to_pathname(
-                get_file_packer('application/vnd.moodle.backup'),
-                $basepath
-            );
-        }
+        [, $basepath] = $this->backup_course($course, $userdata, backup::MODE_COPY, $keptroles);
 
         $xml = $basepath . '/course/enrolments.xml';
         $this->assertFileExists($xml, 'a copy must still produce an enrolments file');
@@ -539,14 +524,15 @@ final class backup_test extends \advanced_testcase {
     }
 
     /**
-     * Seed a second applicant holding a role the copy will not keep.
+     * Seed one more applicant, holding the given role here or in another course.
+     *
+     * The pending comment and the durable record get different markers (the given marker
+     * suffixed PENDING and RECORD), so an assertion can tell which of the two elements it is
+     * looking at. Both are gated separately and a test that could not distinguish them would
+     * hold only one.
      *
      * @param \stdClass $course Course to apply to.
      * @param \stdClass $instance Apply instance to apply to.
-     * The pending comment and the durable record get DIFFERENT markers, suffixed rather than
-     * shared, so that an assertion can tell which of the two elements it is looking at. Both
-     * are gated separately and a test that could not distinguish them would hold only one.
-     *
      * @param string $comment Marker to submit, suffixed per table.
      * @param string $roleshortname Role to assign.
      * @param \stdClass|null $rolecourse Course to hold the role in, null for the applied-to course.
@@ -621,11 +607,10 @@ final class backup_test extends \advanced_testcase {
         $this->add_applicant($course, $instance, 'KEPTROLEAPPLICANT', 'editingteacher');
         $this->add_applicant($course, $instance, 'DROPPEDROLEAPPLICANT', 'student');
 
-        /* The third applicant separates the two halves of core's predicate. They hold the kept
-           role, but in a DIFFERENT course, and are only a student here - so core writes no
-           enrolment for them. Without this fixture the "ra.contextid = ?" conjunct is
-           unguarded: deleting it leaves every assertion green while the plugin starts writing
-           the data of anyone holding the kept role anywhere on the site. */
+        /* The third applicant separates the two halves of core's predicate: they hold the kept
+           role in a different course and are only a student here, so core writes no enrolment
+           for them. Changes that must make it fail: dropping the "ra.contextid = ?" conjunct,
+           which would write the data of anyone holding the kept role anywhere on the site. */
         $elsewhere = $this->getDataGenerator()->create_course();
         $this->add_applicant($course, $instance, 'OTHERCONTEXTAPPLICANT', 'editingteacher', $elsewhere);
 
@@ -647,15 +632,14 @@ final class backup_test extends \advanced_testcase {
     /**
      * A course copy that keeps roles WITHOUT user data carries no application data at all.
      *
-     * Core does write its own kept-role enrolments in this cell, and matching that was this
-     * fix's first instinct - wrongly. With user data off, core forces the restore's users
-     * setting off and its enrolments setting to ENROL_NEVER, so no apply instance and no user
-     * enrolment reaches the destination; core re-enrols the kept-role users through the manual
-     * plugin afterwards instead. Anything this plugin wrote there would be a comment and a
-     * profile snapshot in an archive with nowhere to go - the same exposure the gate exists to
-     * prevent, in the one cell where it buys nothing.
+     * Core does write its own kept-role enrolments in this cell, but this plugin must not. With
+     * user data off the copy's archive carries no users, so the restore's enrolments setting
+     * defaults to ENROL_NEVER and no apply instance or user enrolment reaches the destination;
+     * core re-enrols the kept-role users through the manual plugin afterwards instead. Anything
+     * this plugin wrote there would be a comment and a profile snapshot in an archive with
+     * nowhere to go.
      *
-     * The control is the cell above: with user data on, the same fixture DOES travel.
+     * The control is the test above: with user data on, the same fixture does travel.
      *
      * @return void
      */
@@ -708,18 +692,12 @@ final class backup_test extends \advanced_testcase {
     /**
      * The excluded applicant's record does not reach the copied course's database.
      *
-     * This test exists because the note that used to stand here was wrong, and wrong in the
-     * direction that discourages writing it. It said the leaked rows were "dropped on restore,
-     * because the user mapping misses, so the only place this is ever visible is the archive
-     * file". That holds for enrol_apply_applicationinfo, which is keyed on the user-enrolment
-     * mapping - and NOT for enrol_apply_submission, which is keyed on the user mapping. In a
-     * kept-roles copy core's roles step annotates every course-context role assignment, so the
-     * excluded applicant IS in users.xml and their user mapping DOES resolve. Measured against
-     * the pre-fix code: their comment and profile snapshot were inserted into the destination
-     * course's table, under a live user id, for somebody with no enrolment there at all.
-     *
-     * So the blast radius was a live database, not only an archive, and the assertion below -
-     * which the old note argued would be vacuous - goes red without the gate.
+     * Checking the archive alone is not enough. enrol_apply_applicationinfo is keyed on the
+     * user-enrolment mapping, which misses for an excluded user, but enrol_apply_submission is
+     * keyed on the user mapping. A kept-roles copy annotates every course-context role
+     * assignment into users.xml ({@see \backup_roles_structure_step}), so the excluded
+     * applicant's user mapping resolves and, without the backup-side gate, their comment and
+     * profile snapshot land in the copied course under a live user id.
      *
      * It drives copy_helper, not a hand-built controller pair, so the whole production path
      * runs including the manual re-enrolment core performs after a copy.
@@ -784,32 +762,9 @@ final class backup_test extends \advanced_testcase {
      * @return void
      */
     protected function restore_into_existing($course, int $targetid): void {
-        global $CFG, $USER;
+        global $USER;
 
-        $CFG->backup_file_logger_level = backup::LOG_NONE;
-
-        $bc = new backup_controller(
-            backup::TYPE_1COURSE,
-            $course->id,
-            backup::FORMAT_MOODLE,
-            backup::INTERACTIVE_NO,
-            backup::MODE_SAMESITE,
-            $USER->id
-        );
-        $bc->get_plan()->get_setting('users')->set_status(backup_setting::NOT_LOCKED);
-        $bc->get_plan()->get_setting('users')->set_value(true);
-        $backupid = $bc->get_backupid();
-        $basepath = $bc->get_plan()->get_basepath();
-        $bc->execute_plan();
-        $results = $bc->get_results();
-        $bc->destroy();
-
-        if (!file_exists($basepath . '/moodle_backup.xml')) {
-            $results['backup_destination']->extract_to_pathname(
-                get_file_packer('application/vnd.moodle.backup'),
-                $basepath
-            );
-        }
+        [$backupid] = $this->backup_course($course, true);
 
         $rc = new restore_controller(
             $backupid,
@@ -952,10 +907,10 @@ final class backup_test extends \advanced_testcase {
     /**
      * An approved applicant's group membership survives a restore with users.
      *
-     * It did not before. Group memberships are stamped with this plugin as their component so
-     * core's unenrol_user() can clean them up, and core routes any component starting with
-     * "enrol_" to enrol_plugin::restore_group_member() - whose base implementation is empty,
-     * with no fallback and no warning on that branch. The membership simply disappeared.
+     * Group memberships are stamped with this plugin as their component so core's
+     * unenrol_user() can clean them up, and core routes any component starting with "enrol_" to
+     * enrol_plugin::restore_group_member(), whose base implementation is empty, with no fallback
+     * and no warning on that branch. Without the plugin's override the membership is lost.
      *
      * @return void
      */
@@ -997,26 +952,21 @@ final class backup_test extends \advanced_testcase {
     /**
      * An approved applicant's ROLE survives a restore with users, and keeps its stamp.
      *
-     * It did not, between the commit that stamped the assignment and this one, and the loss was
-     * completely silent. Core routes any {role_assignments} row whose component starts with
-     * "enrol_" to enrol_plugin::restore_role_assignment() (restore_stepslib.php:2350, the same
-     * line on 5.1 and 5.2), whose base implementation is an empty stub. Unlike the neighbouring
-     * generic-component branch, that one has no role_assign() fallback and writes no
-     * backup::LOG_WARNING - so a restored applicant came back with an ACTIVE enrolment and no
-     * role at all, keeping their place in the course and losing every capability with it.
+     * Core routes any {role_assignments} row whose component starts with "enrol_" to
+     * enrol_plugin::restore_role_assignment() ({@see \restore_ras_and_caps_structure_step::process_assignment()}),
+     * whose base implementation is empty. Unlike the generic-component branch beside it, that
+     * branch has no role_assign() fallback and logs no warning, so without the plugin's override
+     * a restored applicant keeps an active enrolment and loses the role.
      *
-     * THE CONTROL IS THE POINT. A second user holds a bare assignment in the same course, and
-     * the assertion that theirs survives is what proves the restore processed roles.xml at all.
-     * Without it this test passes just as happily against a restore that assigned nothing to
-     * anybody, which is the vacuous shape the fleet rules warn about - and it is not
-     * hypothetical here, because the defect being pinned IS "the roles quietly do not arrive".
+     * The control is a second user's bare manual assignment in the same course: its survival
+     * proves the restore processed the role assignments at all, so the applicant's missing role
+     * cannot be a restore that assigned nothing to anybody.
      *
-     * The stamp is asserted, not merely the role's existence. Restoring bare would satisfy a
-     * role-exists assertion while losing the cleanup contract the stamp is written for:
-     * process_expirations() would be back to guessing $instance->roleid.
+     * The stamp is asserted, not merely the role: a bare restored assignment would leave
+     * process_expirations() guessing $instance->roleid.
      *
-     * Mutation check: delete the body of enrol_apply_plugin::restore_role_assignment() and
-     * exactly this test goes red, on the applicant half, with the control still green.
+     * Changes that must make it fail: emptying enrol_apply_plugin::restore_role_assignment()
+     * (the applicant half fails while the control stays green).
      *
      * @return void
      */
@@ -1081,13 +1031,10 @@ final class backup_test extends \advanced_testcase {
         $DB->set_field('enrol', 'customint5', $cohort->id, ['id' => $instance->id]);
         $DB->set_field('enrol', 'name', 'Restricted', ['id' => $instance->id]);
 
-        /* A second, unrestricted instance in the same course. Without it the "there was a
-           restriction" half of the guard is unpinned: dropping it would rewrite EVERY
-           cross-site restore to the sentinel, so every restored course would refuse every
-           application with "restricted to a cohort that does not exist on this site" having
-           never been restricted at all - a worse failure than the one the sentinel prevents,
-           and the whole suite would stay green. The restricted instance's -1 below is what
-           proves the cross-site path really ran, so neither assertion can pass vacuously. */
+        /* A second, unrestricted instance pins the "there was a restriction" half of the guard:
+           without that half every cross-site restore would get the sentinel, and every restored
+           course would refuse every application although it was never restricted. The
+           restricted instance's -1 proves the cross-site path ran. */
         $openid = $this->plugin->add_instance($course, $this->plugin->get_instance_defaults());
         $DB->set_field('enrol', 'name', 'Unrestricted', ['id' => $openid]);
 
@@ -1108,6 +1055,42 @@ final class backup_test extends \advanced_testcase {
             MUST_EXIST
         );
         $this->assertEquals(0, (int) $untouched->customint5);
+    }
+
+    /**
+     * A restore switches the instance's profile write off, on the same site as well as on another.
+     *
+     * customint8 is the per-instance half of the switch that lets an application write to
+     * {user} ({@see \enrol_apply\local\profilewriter::is_enabled()}), and restore_instance()
+     * zeroes it on every restore. A same-site restore is the one to test: a guard narrowed to
+     * cross-site restores would still pass a cross-site test, and is_samesite() can be satisfied
+     * by what the archive itself claims.
+     *
+     * Two things make the zero mean something. The archive is checked to carry the switch on, and
+     * customint3, which core backs up in the same element, arrives unchanged, so the restore did
+     * write the instance's custom fields and zeroed this one alone.
+     *
+     * @return void
+     */
+    public function test_a_restore_switches_the_profile_write_off(): void {
+        global $DB;
+
+        [$course, $instance] = $this->create_course_with_application();
+        $DB->set_field('enrol', 'customint8', 1, ['id' => $instance->id]);
+        $DB->set_field('enrol', 'customint3', 7, ['id' => $instance->id]);
+
+        $premise = function (string $basepath): void {
+            $this->assertStringContainsString(
+                '<customint8>1</customint8>',
+                file_get_contents($basepath . '/course/enrolments.xml'),
+                'the premise: the archive carries the switch on'
+            );
+        };
+        $newcourseid = $this->backup_and_restore($course, false, false, null, backup::ENROL_ALWAYS, $premise);
+
+        $restored = $DB->get_record('enrol', ['courseid' => $newcourseid, 'enrol' => 'apply'], '*', MUST_EXIST);
+        $this->assertEquals(7, (int) $restored->customint3, 'the control: the instance\'s custom fields were restored');
+        $this->assertEquals(0, (int) $restored->customint8);
     }
 
     /**
@@ -1265,8 +1248,8 @@ final class backup_test extends \advanced_testcase {
      * Core wires a plugin's restore handlers to every enrol element in the archive, and a
      * restore with enrolments set to "never" maps every old enrol id onto the course's MANUAL
      * instance - so get_new_parentid('enrol') returns a valid id that belongs to somebody
-     * else. Measured before the guard existed: this restore wrote an enrol_apply_groups row
-     * against the manual instance, which nothing owns and nothing ever cleans up.
+     * else. Without the guard this restore writes an enrol_apply_groups row against the manual
+     * instance, which nothing owns and nothing ever cleans up.
      *
      * @return void
      */

@@ -157,7 +157,7 @@ final class commentlabel_test extends \advanced_testcase {
     }
 
     /**
-     * A comma-separated user id list is NOT treated as legacy, and that is deliberate.
+     * A comma-separated user id list is deliberately not treated as legacy.
      *
      * It cannot be told apart from a label somebody typed, so recognising it would eat real
      * labels. The marker can be told apart, which is why only the marker is recognised.
@@ -171,14 +171,11 @@ final class commentlabel_test extends \advanced_testcase {
     }
 
     /**
-     * The queue's comment column header carries the label, in the ESCAPED spelling.
+     * The queue's comment column header carries the label, in the escaped spelling.
      *
      * The header sink is html_writer::tag(), which concatenates its content without escaping it,
-     * so the plain spelling here would put a raw ampersand into the markup.
-     *
-     * The label is no longer handed to the table - it derives it from the instance the scope
-     * resolves - so this now holds two things where it used to hold one: that the derivation
-     * happens at all, and that it comes out in the spelling the sink needs.
+     * so the plain spelling here would put a raw ampersand into the markup. The table derives the
+     * label from the instance its scope resolves, so this also pins that the derivation happens.
      *
      * @return void
      */
@@ -202,9 +199,6 @@ final class commentlabel_test extends \advanced_testcase {
 
     /**
      * With no label, the queue header falls back to the shipped wording.
-     *
-     * The control for the test above: without it, a header that rendered nothing at all would
-     * satisfy "does not contain the raw ampersand" just as well as a correct one.
      *
      * @return void
      */

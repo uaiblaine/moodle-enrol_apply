@@ -90,17 +90,14 @@ class enrol_apply_plugin extends enrol_plugin {
     /**
      * Check whether the given instance currently accepts applications from a user.
      *
-     * Every caller routes through this method, so each restriction is checked here rather
-     * than in enrol_page_hook(): the hook is only one of the callers and the return value
-     * is rendered raw by core's notification output, which is why every refusal below is a
-     * plain language string carrying no interpolated detail.
+     * The whole eligibility predicate lives here, not in enrol_page_hook(), because the hook
+     * is only one of its callers. enrol_page_hook() renders the refusal raw in a core
+     * notification, so every refusal is a language string with no user-controlled detail.
      *
-     * The applicant defaults to the current user, which is the contract every existing
-     * caller was written against - including plugins outside this repository, which reach
-     * this method through is_callable() and pass a single argument. submit_application()
-     * passes its own $userid instead: it is the write door, it may one day be reached for
-     * somebody other than the operator, and the cohort clause below is the only restriction
-     * here that asks about a person rather than about the instance.
+     * The applicant defaults to the current user, the contract plugins outside this
+     * repository rely on when they reach this method through is_callable() with one argument.
+     * submit_application() passes its own $userid, because the cohort clause is the one
+     * restriction that asks about a person rather than about the instance.
      *
      * @param stdClass $instance Course enrol instance.
      * @param int|null $userid Applicant to judge, or null for the current user.
@@ -139,25 +136,20 @@ class enrol_apply_plugin extends enrol_plugin {
         if ($cohortid > 0) {
             require_once($CFG->dirroot . '/cohort/lib.php');
 
-            /* Read the cohort with a plain get_record() rather than cohort_get_cohort():
-               the applicant holds moodle/cohort:view nowhere, so the visibility-aware
-               helper would refuse every cohort and turn each restriction into "unresolved".
-               Only the existence of the row is used - see the refusal below. */
+            /* Read the cohort with a plain get_record() rather than cohort_get_cohort(): that
+               helper refuses a hidden cohort to anybody without moodle/cohort:view, which an
+               applicant does not hold, and would turn the restriction into "unresolved". Only
+               the existence of the row is used - see the refusal below. */
             $cohort = $DB->get_record('cohort', ['id' => $cohortid], 'id');
             if (!$cohort) {
                 // The cohort was deleted. Fail closed, and with a string the caller can render.
                 return get_string('cohortunresolved', 'enrol_apply');
             }
             if (!cohort_is_member($cohortid, $userid)) {
-                /* The refusal does NOT name the cohort, and that is the point. enrol_self's
-                   equivalent does (public/enrol/self/lib.php, 'cohortnonmemberinfo'), and the
-                   string it builds travels further than the page: enrol_page_hook() renders it
-                   to any authenticated non-member, and get_enrol_info() puts it in the `status`
-                   field that core_enrol_get_course_enrolment_methods returns. On a platform
-                   whose cohorts are named after security forces, the cohort name is itself the
-                   sensitive fact - it tells a stranger which corporation a course belongs to.
-                   The applicant still learns that the course is restricted, which is what they
-                   can act on; which group it is restricted to is for the course staff to say. */
+                /* Unlike enrol_self's 'cohortnonmemberinfo', the refusal does not name the
+                   cohort: it is shown to any authenticated non-member, and a cohort's name can
+                   itself be sensitive. The applicant still learns that the course is
+                   restricted, which is what they can act on. */
                 return get_string('cohortnonmemberinfo', 'enrol_apply');
             }
         }
@@ -197,8 +189,8 @@ class enrol_apply_plugin extends enrol_plugin {
      *
      * One short card per enrolment method, and a button that opens the application form -
      * in a modal where JavaScript is available, and on a page of its own where it is not.
-     * The form itself is no longer rendered inline: two apply instances on one page emitted
-     * two copies of every profile element, so every id was duplicated.
+     * The form is not rendered inline because two apply instances on one page would emit
+     * every profile element twice, duplicating their ids.
      *
      * @param stdClass $instance Course enrol instance.
      * @return string|null Rendered markup, or null when the current user may not apply.
@@ -215,17 +207,11 @@ class enrol_apply_plugin extends enrol_plugin {
         $buttonurl = null;
         $buttonattrs = [];
 
-        /* The applicant's OWN row is tested first, and the order is the fix rather than a
-           tidy-up. allow_apply() used to be asked first, so the moment a method stopped
-           accepting applications - the window closing, the instance being disabled, the cohort
-           restriction changing - everybody who had already applied was told "Enrolment is
-           disabled or inactive", which is a message about somebody else's problem and says
-           nothing about the application they are waiting on. Their own row answers a question
-           none of the three tests below can.
-
-           IGNORE_MULTIPLE rather than MUST_EXIST semantics: {user_enrolments} is unique on
-           (enrolid, userid) so there is only ever one, but get_record() raises a debugging
-           notice on a duplicate and this is a page, not a query. */
+        /* The applicant's own row is tested before allow_apply(): once a method stops accepting
+           applications (window closed, instance disabled, cohort changed), somebody who already
+           applied must be told about their application, not "Enrolment is disabled or
+           inactive". IGNORE_MULTIPLE is defensive; {user_enrolments} is unique on
+           (enrolid, userid). */
         $ownrow = $DB->get_record(
             'user_enrolments',
             ['userid' => $USER->id, 'enrolid' => $instance->id],
@@ -237,13 +223,10 @@ class enrol_apply_plugin extends enrol_plugin {
         $allowapply = $ownrow ? true : $this->allow_apply($instance);
 
         if ($ownrow) {
-            /* Four ways to already have a row here, and they are not one message. See
-               \enrol_apply\local\applicantstate, which the acknowledgement page and the
-               application form both share so the three surfaces cannot describe one row
-               differently. The access fact is asked of core rather than assumed: this panel is
-               only rendered to somebody core has already refused, so the answer is false in
-               practice - but "in practice" is what makes a caller's assumption rot quietly, and
-               is_enrolled() costs one cached lookup. */
+            /* \enrol_apply\local\applicantstate describes the row, shared with applied.php and
+               the application form so the three surfaces agree. Access is asked of core rather
+               than assumed false, although enrol/index.php redirects an actively enrolled user
+               before this panel is shown. */
             $state = \enrol_apply\local\applicantstate::describe(
                 $ownrow,
                 is_enrolled(context_course::instance($instance->courseid), $USER, '', true)
@@ -293,13 +276,11 @@ class enrol_apply_plugin extends enrol_plugin {
      * The enrolment is created suspended: the applicant gains no course access until
      * a manager confirms it through confirm_enrolment().
      *
-     * The enrolment period deliberately does NOT start here. It is stamped on approval by
-     * confirm_enrolment(), for two reasons: the clock should not run while the applicant
-     * has no access, and a timeend on a pending row is actively dangerous — with
-     * expiredaction set to "unenrol", process_expirations() sweeps every row with
-     * timeend > 0 AND timeend < now with no status filter at all
-     * (lib/enrollib.php, the ENROL_EXT_REMOVED_UNENROL branch), so an application nobody
-     * got round to reviewing would be deleted instead of decided.
+     * The enrolment period does not start here; confirm_enrolment() stamps it on approval.
+     * The clock should not run while the applicant has no access, and a timeend on a pending
+     * row is dangerous: with expiredaction set to "unenrol", process_expirations() unenrols
+     * every row with timeend > 0 AND timeend < now whatever its status, so an application
+     * nobody reviewed in time would be deleted instead of decided.
      *
      * @param stdClass $instance Course enrol instance.
      * @param int $userid Applicant user id.
@@ -309,17 +290,12 @@ class enrol_apply_plugin extends enrol_plugin {
     protected function apply($instance, $userid, $data) {
         global $DB;
 
-        /* No role, on purpose. The role is assigned on approval by complete_approval(), which is
-           what the "Role assigned to a user when their enrolment application is approved" setting
-           has always said and what the code did not do. Somebody who may yet be refused should
-           not hold a role meanwhile - and until this changed they did, visibly: a pending
-           applicant satisfied has_capability() in the course and was returned by
-           get_users_by_capability(), measured on 5.1 and 5.2, so anything asking those questions
-           without also checking the enrolment treated an applicant as a participant.
+        /* No role: complete_approval() assigns it on approval. A role held while pending would
+           let the applicant pass has_capability() in the course and appear in
+           get_users_by_capability(), neither of which checks the enrolment status.
 
-           null rather than 0. The two are indistinguishable to enrol_user()'s own "if ($roleid)"
-           guard, but the after_user_enrolled hook publishes the value as a nullable int and null
-           is the honest one. It is also what restore_user_enrolment() below already passes. */
+           null rather than 0: enrol_user() treats both as "no role", but the
+           after_user_enrolled hook publishes the value as a nullable int. */
         $this->enrol_user($instance, $userid, null, 0, 0, ENROL_USER_SUSPENDED);
 
         $userenrolment = $DB->get_record(
@@ -344,23 +320,16 @@ class enrol_apply_plugin extends enrol_plugin {
     }
 
     /**
-     * Whether this instance has no place left.
+     * Whether this instance has reached its applicant limit (customint3).
      *
-     * The public face of \enrol_apply\local\capacity, and it exists for callers OUTSIDE this
-     * plugin. Three of them re-implemented the count instead - local_dimensions,
-     * local_unlistedcourses and theme_boost_union_fundaseg - and so went on treating a course
-     * as full after the cap stopped counting expired enrolments, while this plugin's own pages
-     * offered the button and accepted the application.
-     *
-     * They cannot reach the class directly and must not be asked to: for each of them
-     * enrol_apply is an OPTIONAL dependency, and naming a class in its namespace is a reference
-     * the autoloader has to resolve on a site that may not have the plugin at all.
-     * local_dimensions enforces exactly that with a test over its own source, which is what
-     * caught the first attempt here. A method on the plugin object is what they can guard with
-     * is_callable(), which is already how every one of them reaches allow_apply().
+     * Delegates to \enrol_apply\local\capacity::applications_closed() and exists for callers
+     * outside this plugin, such as local_dimensions, local_unlistedcourses and
+     * theme_boost_union_fundaseg. For them enrol_apply is an optional dependency, so they
+     * guard a method on the plugin object with is_callable() rather than naming a class in
+     * this plugin's namespace. Renaming it silently sends them back to their own counts.
      *
      * @param stdClass $instance Course enrol instance.
-     * @return bool True when the instance has no place left.
+     * @return bool True when no further application may be made.
      */
     public function is_full(stdClass $instance) {
         return \enrol_apply\local\capacity::applications_closed($instance);
@@ -369,15 +338,13 @@ class enrol_apply_plugin extends enrol_plugin {
     /**
      * Submit an application, serialised so that two tabs cannot both get through.
      *
-     * "One row per application" is an assertion, not a guarantee: two simultaneous
-     * submissions both pass the already-applied check in the form and both reach apply().
-     * Today the foreign-unique key on enrol_apply_applicationinfo makes the second insert
-     * blow up with a database error rather than a message anybody can act on, and the
-     * customint3 places cap has the same race with no key behind it at all.
+     * Without the lock, two simultaneous submissions would both pass the form's already-applied
+     * check and reach apply(): the second insert would fail on the foreign-unique key of
+     * enrol_apply_applicationinfo with a database error, and the customint3 applicant limit
+     * has the same race with no key behind it.
      *
      * The lock is per instance and per user, so two people applying at once never wait on
-     * each other. A failure to acquire is treated as "the other request is already doing
-     * it", which is the truth: the caller's own already-applied check will see the row.
+     * each other.
      *
      * The three outcomes are distinguished because two of them need opposite treatment: an
      * application that was already there is benign, while a refusal has to be explained. See
@@ -394,50 +361,31 @@ class enrol_apply_plugin extends enrol_plugin {
         $factory = \core\lock\lock_config::get_lock_factory('enrol_apply_submit');
         $lock = $factory->get_lock($instance->id . '_' . $userid, 10);
         if (!$lock) {
-            /* The other request is already doing it, which is what a failed acquisition has
-               always been taken to mean here. Reported as "already applied" rather than as a
-               refusal: the applicant almost certainly does end up with an application, and
-               applied.php's own gate covers the rare case where that other request wrote
-               nothing after all. Calling it a refusal would tell them to try again at the
-               moment it worked. */
+            /* Another request for the same applicant and instance holds the lock. Reported as
+               "already applied" rather than refused: that request almost certainly writes the
+               application, and applied.php's own gate covers the case where it did not. */
             return \enrol_apply\local\application_result::already_applied();
         }
 
         try {
-            /* The eligibility predicate, on the WRITE door. Until this was added it guarded
-               only the presentation layer - enrol_page_hook() and the form's access check -
-               so everything it covers (the instance status, the new-applications flag, the
-               enrolment window, and the cohort restriction with its -1 unresolved sentinel)
-               was bypassed by any other route into this method: a task, a web service, an
-               import.
+            /* The eligibility predicate on the write path, inside the lock beside the duplicate
+               and cap checks, so callers other than the form (a task, a web service, an
+               import) cannot bypass the instance status, the new-applications flag, the
+               enrolment window or the cohort restriction. The form already re-runs
+               check_access_for_dynamic_submission() on the submit request in both transports,
+               so for the form this only closes the gap between that check and the write.
 
-               Inside the lock, beside the duplicate and cap checks, so the decision cannot be
-               separated from the write. Do NOT restate this as closing the form's race: both
-               transports re-run check_access_for_dynamic_submission() on the SUBMIT request
-               itself - apply.php calls it on every request including the POST, and core builds
-               the modal's form with $isajaxsubmission = true, whose constructor runs the same
-               check before process_dynamic_submission() is reached - so somebody removed from
-               the cohort while filling the form in is already refused there, and refused
-               better, with a message naming a reason. What is left here is the intra-request
-               gap between that check and this write, and every caller that is not the form.
+               The applicant is passed explicitly: given no user, allow_apply() judges $USER,
+               and the cohort clause would then test the operator's membership
+               (test_the_write_door_refuses_an_applicant_outside_the_cohort).
 
-               The applicant is passed explicitly. allow_apply() reads $USER when given nothing,
-               which is right for the two screens and wrong here: judged against the operator,
-               the cohort clause admits whoever the OPERATOR's membership admits. See the R
-               mutation in mutations/gates.conf.
-
-               `!== true` because the return is bool|string, so anything that is not exactly
-               true fails closed. The cohort refusal is a generic string today and no longer
-               names the cohort, but the signature still permits detail and this comparison
-               does not care which it is. */
+               `!== true` because the return is bool|string: anything but exactly true fails
+               closed. */
             $allowapply = $this->allow_apply($instance, (int) $userid);
             if ($allowapply !== true) {
-                /* allow_apply() hands back the reason, so the applicant is told which rule
-                   refused them rather than a generic "you cannot enrol". Every one of those
-                   strings is already rendered to any authenticated non-member by
-                   enrol_page_hook(), so none of them discloses anything new. The declared
-                   return is bool|string, so a non-string refusal falls back rather than
-                   reaching refused() with nothing for it to show. */
+                /* The applicant is told the reason allow_apply() gave; enrol_page_hook() already
+                   shows those strings to any authenticated non-member. A non-string refusal
+                   falls back to a generic string, because refused() rejects an empty reason. */
                 return \enrol_apply\local\application_result::refused(
                     is_string($allowapply) ? $allowapply : get_string('cantenrol', 'enrol_apply')
                 );
@@ -447,9 +395,8 @@ class enrol_apply_plugin extends enrol_plugin {
                 return \enrol_apply\local\application_result::already_applied();
             }
             if (\enrol_apply\local\capacity::applications_closed($instance)) {
-                /* No placeholder. The count is not the maximum - it is only known to have
-                   reached it - and the ceiling is competitive information an applicant
-                   cannot act on anyway. */
+                /* No placeholder: the limit is competitive information an applicant cannot act
+                   on. */
                 return \enrol_apply\local\application_result::refused(
                     get_string('maxenrolledreached', 'enrol_apply')
                 );
@@ -465,11 +412,14 @@ class enrol_apply_plugin extends enrol_plugin {
     /**
      * Apply everything that must follow an application becoming active.
      *
-     * Called both by confirm_enrolment() and by the before_user_enrolment_updated
-     * observer, so an approval made from core's "Edit enrolment" screen leaves the same
-     * state behind as one made from the plugin's own queue. Idempotent by construction:
-     * groups_add_member() is a no-op for an existing membership and the delete matches
-     * nothing the second time.
+     * Called both by confirm_enrolment() and by the before_user_enrolment_updated hook
+     * callback, so an approval made from core's "Edit enrolment" screen leaves the same
+     * state behind as one made from the plugin's own queue. A queue approval runs it twice:
+     * update_user_enrol() dispatches the hook before writing the row, so the callback runs it
+     * first, with no operator input, and confirm_enrolment() runs it again. What the decider
+     * chose is therefore read from the durable record, never passed in, and every step is
+     * idempotent: role_assign() and groups_add_member() do not duplicate an existing row, the
+     * delete matches nothing the second time, and the notification task is deduplicated.
      *
      * @param stdClass $instance Course enrol instance.
      * @param int $userid Applicant user id.
@@ -498,12 +448,12 @@ class enrol_apply_plugin extends enrol_plugin {
 
         $DB->delete_records('enrol_apply_applicationinfo', ['userenrolmentid' => $userenrolmentid]);
 
-        /* The applicant is told by an ad-hoc task rather than from here. The hook route
-           runs before the enrolment row is written, so notifying inline would announce an
-           approval that a failed write could still undo; the task re-reads the enrolment
-           and stays silent unless it really is active. Queueing is deduplicated on
-           classname + component + customdata (\core\task\manager::get_queued_adhoc_task_record),
-           so the two callers of this method cannot produce two messages. */
+        /* The applicant is told by an adhoc task rather than from here. The hook route runs
+           before the enrolment row is written, so notifying inline could announce an approval
+           a failed write then undoes; the task re-reads the enrolment and stays silent unless it
+           is active. Queueing is deduplicated on classname, component and custom data
+           (\core\task\manager::get_queued_adhoc_task_record()), so the two passes send one
+           message. */
         $task = new \enrol_apply\task\notify_approval();
         $task->set_component('enrol_apply');
         $task->set_custom_data(['userenrolmentid' => (int) $userenrolmentid]);
@@ -551,33 +501,19 @@ class enrol_apply_plugin extends enrol_plugin {
     /**
      * Assign the applicant the role their approval carries.
      *
-     * The decider's choice is read from the stored record rather than received as an argument,
-     * and that is load bearing for the same reason it is for the groups: an approval taken
-     * through the queue completes TWICE over, and only the second pass could carry an argument.
-     * Two passes computing two different roles would assign both, and neither the UI nor a later
-     * sweep can tell which one this plugin meant. Reading one stored answer is what makes both
-     * passes agree, and role_assign() is idempotent on the whole tuple, so the second call
-     * returns the first call's id rather than writing a second row.
+     * The decider's choice is read from the stored record because complete_approval() runs
+     * twice for a queue approval (see there): two passes computing different roles would
+     * assign both, and nothing could later tell which one this plugin meant. role_assign() is
+     * idempotent on the whole tuple, so two passes reading the same answer write one row.
+     * Where nothing was recorded the instance's own role applies, which is all core's "Edit
+     * enrolment" route can produce.
      *
-     * Where nothing was recorded the instance's own role applies, which is the only role the
-     * out-of-band route can ever produce: core's "Edit enrolment" screen drives
-     * update_user_enrol(), which does nothing about roles at all and has no operator input to
-     * carry.
-     *
-     * The assignment is stamped with this plugin's component, and the plugin still returns false
-     * from roles_protected(). That pair is deliberate and each half was measured. The stamp is
-     * what lets core clean the assignment up exactly: unenrol_user() unassigns by component and
-     * itemid whether or not this was the user's last enrolment in the course, and
-     * process_expirations() does the same in its "remove all roles that belong to this instance"
-     * line. Without it core falls back to guessing $instance->roleid, and once a decider can
-     * choose a different role that guess is wrong by construction. Measured on m502, with an
-     * unrelated manual enrolment in the same course: an expired enrolment approved as Teacher
-     * against an instance defaulting to Student left the Teacher assignment behind under both
-     * expiredaction settings when it was bare, and was removed correctly under both when it was
-     * stamped. roles_protected() staying false is what keeps it removable by hand - the
-     * participants page refuses to remove a component-owned assignment only when the owning
-     * plugin protects its roles (user/classes/output/user_roles_editable.php, identical on 5.1
-     * and 5.2) - so the stamp and the false together give both.
+     * The assignment is stamped with component enrol_apply and the instance id, so
+     * unenrol_user() and process_expirations() remove exactly this assignment. Unstamped,
+     * process_expirations() would unassign $instance->roleid instead, which is wrong once a
+     * decider can choose another role, and unenrol_user() would remove it only with the
+     * user's last enrolment in the course. roles_protected() stays false so the participants
+     * page can still remove the assignment by hand (user/classes/output/user_roles_editable.php).
      *
      * @param stdClass $instance Course enrol instance.
      * @param int $userid Applicant user id.
@@ -587,10 +523,9 @@ class enrol_apply_plugin extends enrol_plugin {
     protected function assign_decided_role($instance, int $userid, int $userenrolmentid) {
         $roleid = \enrol_apply\local\submission::chosen_role($userenrolmentid) ?? (int) $instance->roleid;
 
-        /* An instance can carry roleid 0 - the column is nullable with a default of 0, and a
-           restore writes 0 whenever the archived role maps to nothing the restoring user may
-           assign. role_assign(0, ...) throws rather than doing nothing, so this skip is required
-           and not defensive: until this change enrol_user()'s own "if ($roleid)" swallowed it. */
+        /* An instance can carry roleid 0 (the column defaults to 0, and a restore writes 0 when
+           the archived role is not mapped to a role here), and role_assign(0, ...) throws, so
+           this skip is required. */
         if ($roleid <= 0) {
             return;
         }
@@ -601,18 +536,14 @@ class enrol_apply_plugin extends enrol_plugin {
     /**
      * Add the applicant to the groups the decider chose, or to the instance's own list.
      *
-     * Memberships are tagged with this plugin as their component so that core removes
-     * them again when the enrolment goes away (see unenrol_user() in lib/enrollib.php,
-     * which only cleans up memberships carrying component 'enrol_apply').
+     * Memberships are tagged with this plugin's component and the instance id, so core's
+     * unenrol_user() removes them with the enrolment; an untagged membership survives whenever
+     * the user has another enrolment in the course.
      *
-     * The decider's choice is read from the stored record rather than received as an argument,
-     * and that is load bearing. An approval taken through the queue completes TWICE over: the
-     * enrolment update dispatches its hook before writing the row, so the hook callback finishes
-     * the approval first and the queue finishes it again afterwards. Were the two given
-     * different lists, the memberships would accumulate rather than replace one another, and a
-     * group the approver had deselected would be joined anyway with nothing left to remove it.
-     * Reading one stored answer is what makes both passes agree. Where nothing was recorded,
-     * the instance's own list applies.
+     * The decider's choice is read from the stored record because complete_approval() runs
+     * twice for a queue approval (see there): memberships from two different lists would
+     * accumulate, joining a group the approver had deselected. Where nothing was recorded, the
+     * instance's own list applies.
      *
      * @param stdClass $instance Course enrol instance.
      * @param int $userid User to add to the groups.
@@ -624,7 +555,7 @@ class enrol_apply_plugin extends enrol_plugin {
 
         require_once($CFG->dirroot . '/group/lib.php');
 
-        // The decider's choice, read from the record and not received; see the docblock.
+        // The decider's choice, read from the record; see the docblock.
         $chosen = \enrol_apply\local\submission::chosen_groups($userenrolmentid);
 
         if ($chosen === null) {
@@ -655,17 +586,13 @@ class enrol_apply_plugin extends enrol_plugin {
     /**
      * Re-create a group membership this plugin owns, when a course is restored.
      *
-     * Without this override the membership is silently lost. Core routes any groups_members
-     * row whose component starts with "enrol_" to this method
-     * (backup/moodle2/restore_stepslib.php), and enrol_plugin's base implementation is empty
-     * - deliberately, because the plugins core had in mind re-derive their memberships from a
-     * cohort or a linked course and do not need the row. This plugin does not: the membership
-     * follows a one-off approval decision that nothing re-runs. Unlike the generic branch
-     * beside it, that path has no groups_add_member() fallback and logs no warning, so the
-     * loss is completely silent.
+     * Core hands every groups_members row whose component starts with "enrol_" to this method
+     * ({@see restore_groups_members_structure_step::process_member()}), with no
+     * groups_add_member() fallback and no log line, and the base implementation is empty
+     * because the plugins core had in mind re-derive their memberships. This plugin cannot: the
+     * membership follows a one-off approval. Without this override it is lost silently.
      *
-     * The stamp is re-applied rather than dropped, so core's unenrol_user() can still clean
-     * the membership up again by component and itemid.
+     * The stamp is re-applied so core's unenrol_user() can still remove the membership.
      *
      * @param stdClass $instance Enrol instance the membership belongs to.
      * @param int $groupid Group to join.
@@ -677,9 +604,8 @@ class enrol_apply_plugin extends enrol_plugin {
 
         require_once($CFG->dirroot . '/group/lib.php');
 
-        /* The group must still exist and still belong to this course. A restore can carry a
-           membership whose group did not survive, and groups_add_member() throws on an
-           unknown group id - which would abort the whole restore over one membership. */
+        /* The group must still exist in this course: groups_add_member() throws on an unknown
+           group id, which would abort the whole restore over one membership. */
         if (!$DB->record_exists('groups', ['id' => $groupid, 'courseid' => $instance->courseid])) {
             return;
         }
@@ -690,26 +616,15 @@ class enrol_apply_plugin extends enrol_plugin {
     /**
      * Re-create a role assignment this plugin owns, when a course is restored.
      *
-     * The exact shape as restore_group_member() above, and it was missed when the approval's
-     * role assignment gained its component stamp. Core routes any {role_assignments} row whose
-     * component starts with "enrol_" to this method (backup/moodle2/restore_stepslib.php:2350,
-     * the same line on 5.1 and 5.2), and enrol_plugin's base implementation is an empty stub.
-     * That branch has NO fallback and logs nothing - the neighbouring generic-component branch
-     * falls back to role_assign() and writes a backup::LOG_WARNING, and this one does neither -
-     * so without this override the assignment simply disappears.
+     * The counterpart of restore_group_member(). Core hands every {role_assignments} row whose
+     * component starts with "enrol_" to this method
+     * ({@see restore_ras_and_caps_structure_step::process_assignment()}), with no role_assign()
+     * fallback and no log line, and the base implementation is empty. Without this override a
+     * restored applicant keeps an active enrolment and silently loses the role.
      *
-     * Measured on 5.1 and 5.2, restoring one course with four assignments in it so the only
-     * variable was the stamp: an applicant approved through confirm_enrolment() came back with
-     * an ACTIVE enrolment and NO role, while a bare manual assignment, a bare assignment of the
-     * pre-stamp shape and an enrol_self one all survived. That is not a lock-out - is_enrolled()
-     * still passes - which is what makes it quiet: the person keeps their place in the course
-     * and loses every capability the role carried, and the participants page shows "No roles".
-     *
-     * The stamp is re-applied rather than dropped, for the same reason it is written in the
-     * first place: a bare assignment leaves process_expirations() guessing $instance->roleid,
-     * which is wrong by construction once a decider can choose a different role. enrol_flatfile
-     * is the precedent for this exact pairing - it stamps, its roles_protected() is false, and
-     * it overrides this method (enrol/flatfile/lib.php:693-695).
+     * The stamp is re-applied for the reason it is written at all; see assign_decided_role().
+     * enrol_flatfile has the same pairing: it stamps, returns false from roles_protected() and
+     * overrides this method.
      *
      * No guard is needed on the arguments: core has already mapped the role, confirmed the user
      * exists and derived the context, and it dispatches on $instance->enrol, so this is only
@@ -728,16 +643,14 @@ class enrol_apply_plugin extends enrol_plugin {
     /**
      * The decisions this plugin offers from core's participants page bulk menu.
      *
-     * This is the gate as well as the menu. Core's driver looks the chosen operation up in
-     * exactly this array and throws when it is absent (user/action_redir.php:199-201), and it
-     * performs no require_login() and no require_capability() of its own anywhere in that
-     * branch - measured, and byte-identical on 5.1 and 5.2 - so returning an empty array is
-     * what refuses an operator who may not decide here, not merely what hides the menu.
+     * This is the gate as well as the menu. user/action_redir.php looks the chosen operation
+     * up in this array and throws when it is absent, and performs no require_login() or
+     * require_capability() of its own in that branch, so returning an empty array is what
+     * refuses an operator who may not decide here.
      *
-     * The capability is checked at the course context, which is stricter than the plugin's own
+     * The capability is checked at the course context, which is stricter than
      * can_manage_application(): a mentor holding it only in an applicant's user context is
-     * offered nothing here. That is deliberate and it costs nothing - the participants page is
-     * a course page, and manage.php serves the mentor scope.
+     * offered nothing here, and manage.php serves that scope.
      *
      * @param course_enrolment_manager $manager Manager core built for the course.
      * @return array Operation identifier => enrol_bulk_enrolment_operation.
@@ -746,21 +659,14 @@ class enrol_apply_plugin extends enrol_plugin {
         global $CFG;
 
         /* enrol_bulk_enrolment_operation lives in a legacy file and is not autoloadable, so
-           the require has to happen before the autoloader is asked for a subclass of it.
-           Both core precedents reach it the same way, through their own locallib. */
+           it must be loaded before the autoloader is asked for a subclass of it. */
         require_once($CFG->dirroot . '/enrol/locallib.php');
 
-        /* Site-disabled plugins are OFFERED this menu and then refused when it is used. Core's
-           two sides disagree: user/index.php builds the participants menu from
-           get_enrolment_plugins(FALSE) - include disabled - while action_redir.php resolves the
-           dispatch through get_enrolment_plugins() with its default of enabled-only and throws
-           errorwithbulkoperation when the plugin is not in it. So without this gate a disabled
-           enrol_apply puts three entries in the menu whose only outcome is an exception page.
-
-           This is the opposite of what the per-row action icon does, deliberately: core's own
-           Edit and Unenrol icons render on a disabled plugin's rows, and manage.php has no
-           enabled check either, so hiding the icon would close the way in to a queue that still
-           works. Here the way in leads nowhere at all. */
+        /* user/index.php builds the menu from get_enrolment_plugins(false), disabled plugins
+           included, while action_redir.php dispatches through the enabled-only list and throws
+           errorwithbulkoperation, so a disabled plugin's entries could only lead to an error
+           page. The per-row icon deliberately skips this check; see
+           get_user_enrolment_actions(). */
         if (!enrol_is_enabled($this->get_name())) {
             return [];
         }
@@ -769,33 +675,20 @@ class enrol_apply_plugin extends enrol_plugin {
             return [];
         }
 
-        /* One optgroup per COURSE, not one per instance. user/index.php loops over the course's
-           enrolment instances and calls this method once for each of them, on the same plugin
-           object, with a manager carrying no instance filter and a url built from
-           ['plugin' => …, 'operation' => …] and nothing else - so N instances produce N
-           byte-identical optgroups. It reproduces in stock core: three added enrol_self
-           instances give FOUR "Self enrolment" groups, four because a disabled instance
-           produces one exactly like an enabled one. Worth a tracker issue upstream; the fix
-           belongs in user/index.php, and this is what can be done from here.
+        /* One optgroup per course, not per instance. user/index.php calls this once per
+           enrolment instance of the course, on the same plugin object, with an unfiltered
+           manager and a url naming only the plugin and the operation, so N instances would give
+           N identical optgroups. Core's own enrol_self duplicates the same way; the real fix
+           belongs in user/index.php.
 
-           The predicate is the manager's own filter, which is an exact discriminator across all
-           three callers: the participants menu is the only unfiltered one, while
-           action_redir.php's dispatch and enrol/renderer.php are always filtered and must never
-           be suppressed. It is tested with empty() and never with `=== null`, because
-           get_enrolment_filter() returns null, the integer 0, OR the id as a STRING.
-
-           An instance property and never a static: enrol_get_plugins() constructs a fresh
-           plugin object per call, so a static memo would outlive the manager it belongs to and
-           leak across PHPUnit tests.
-
-           The memo is set only once every gate above has passed, so a call refused for the
-           capability cannot silence the next one. That ordering is held by
-           test_a_menu_refused_for_the_capability_does_not_silence_the_next_one, which had to be
-           written for it: an earlier version of this comment named
-           test_the_bulk_menu_is_empty_without_the_capability, and that test asks with a FILTERED
-           manager and so never enters this branch at all. The ordering is not reachable in
-           production today - one request asks with one $USER and one context, so the capability
-           answer is constant across the loop - which is exactly why nothing would have noticed. */
+           An empty filter identifies that menu: action_redir.php's dispatch and
+           enrol/renderer.php always pass a filtered manager and must never be suppressed.
+           empty() rather than === null, because get_enrolment_filter() may return null, 0 or
+           the id as a string. An instance property rather than a static, because
+           enrol_get_plugins() builds a fresh plugin object per call and a static would leak
+           across managers and PHPUnit tests. The memo is set only after the gates above, so a
+           call refused for the capability cannot silence the next one
+           (test_a_menu_refused_for_the_capability_does_not_silence_the_next_one). */
         if (empty($manager->get_enrolment_filter())) {
             if ($this->bulkmenuoffered) {
                 return [];
@@ -810,8 +703,7 @@ class enrol_apply_plugin extends enrol_plugin {
         ];
 
         /* Keyed by each operation's own identifier so the two cannot drift: core dispatches on
-           the array key and hands it back as a url parameter, and never calls get_identifier()
-           at all - so nothing outside this plugin would notice them disagreeing. */
+           the array key and never calls get_identifier(). */
         $operations = [];
         foreach ($offered as $operation) {
             $operations[$operation->get_identifier()] = $operation;
@@ -823,85 +715,40 @@ class enrol_apply_plugin extends enrol_plugin {
     /**
      * The per-row action icons this plugin adds to core's participants page.
      *
-     * One icon, on an application still awaiting a decision, pointing at the page that
-     * decides it. No core enrol plugin overrides this method - measured on 5.1 and 5.2, zero
-     * overrides - so there is no precedent for the override itself, though eight core plugins
-     * do test it and tests/user_enrolment_actions_test.php follows their shape.
+     * One icon, on an application still awaiting a decision, linking to the review page
+     * (manage.php?userenrol=), which decides that one application; ?id= would open the whole
+     * queue. After deciding there, queue::scope() returns the operator to the queue rather than
+     * to the participants page.
      *
-     * This link carries NO data-action, and the reason is not the one an earlier draft of
-     * this docblock gave. That draft said core's JavaScript claims "exactly three action
-     * names - editenrolment, unenrol and showdetails" and that any other value is therefore
-     * inert. It is false: TWO modules claim names inside this markup, because the
-     * participants table is a core_table\dynamic table rendered inside
-     * [data-region="core_table/dynamic"]. core_user/status_field claims those three, and
-     * core_table/dynamic adds a document-level click handler that matches
-     * a[data-action="hide"], a[data-action="show"] and [data-action="showcount"] anywhere
-     * inside that region (lib/table/amd/src/local/dynamic/selectors.js:31-48 and
-     * dynamic.js's listener, identical on 5.1 and 5.2). Each of the three is dispatched with
-     * e.preventDefault(), showcount included, so SIX values would be hijacked rather than
-     * three, from two lists that grow independently. Carrying none is what
-     * makes this an ordinary link, and there is nothing an attribute would buy.
+     * The link carries no data-action. Inside [data-region="core_table/dynamic"],
+     * core_user/status_field claims editenrolment, unenrol and showdetails, and
+     * core_table/dynamic claims hide, show and showcount
+     * (lib/table/amd/src/local/dynamic/selectors.js), each with preventDefault(), so the
+     * attribute could only get the link hijacked.
      *
-     * The target is manage.php?userenrol=, the review page, and not manage.php?id=, the
-     * instance queue, for the plainest reason: this icon says "decide this application", and
-     * ?id= opens the whole queue instead. It is reachable at all only because that page's
-     * gate was rewritten - docs/design/audit-trail-analysis.md still instructs the opposite,
-     * from when it required the capability in the applicant's own user context and a course
-     * teacher failed it; queue::require_review_access() now applies can_manage_application(),
-     * which admits them. What is NOT a reason, though an earlier draft of this docblock
-     * offered it as one, is that a queue link "would have to pick an instance": $ue carries
-     * enrolid (enrol/locallib.php selects the whole {user_enrolments} row), so ?id= could
-     * always have named the right one.
+     * The status gate is queue::is_awaiting_decision(), so decided rows get no icon; its
+     * timeend clause matters only under a suspend expiredaction, since the shipped
+     * ENROL_EXT_REMOVED_KEEP leaves a lapsed enrolment active. Core's status column shows a
+     * waiting-list row (ENROL_APPLY_USER_WAIT, a value core does not know) as Active, so this
+     * icon is the only sign on that row that a decision is owed.
      *
-     * Deciding from there returns the operator to the queue rather than to the participants
-     * page, because queue::scope() derives that destination from what they may open and this
-     * page passes it nothing. A returnto parameter would be a new redirect target read out
-     * of the request, which is a larger thing than the icon is worth.
+     * The capability is read in the course, as get_bulk_operations() reads it, so a mentor
+     * holding it only in an applicant's user context is offered neither; manage.php with no
+     * parameter serves them. test_a_mentor_is_offered_no_icon_in_the_course holds this.
      *
-     * Two gates. The status gate is queue::is_awaiting_decision(), the plugin's one
-     * object-form definition of an undecided application, so an approved row is left alone;
-     * without it the icon would sit on every row this plugin enrolled, for ever. Its second
-     * clause only bites under a non-default expiredaction: the plugin ships
-     * ENROL_EXT_REMOVED_KEEP, under which process_expirations() changes nothing and a lapsed
-     * enrolment stays ACTIVE, excluded by the first clause - it is under the suspend actions
-     * that the row comes back suspended and needs the timeend half.
-     *
-     * The status gate also does something core's own column cannot: core pre-sets "Active"
-     * and switches on ENROL_USER_ACTIVE and ENROL_USER_SUSPENDED with no default arm, so a
-     * waiting-list row is painted with a green Active badge - the icon is then the only
-     * thing on that row saying a decision is still owed. Note whose value that is:
-     * ENROL_APPLY_USER_WAIT = 2 is this plugin's own extension of a column core defines two
-     * values for, so it is a collision this plugin created and core cannot be asked to
-     * render; it is simply not fixable from here.
-     *
-     * The capability is read in the course, which is stricter than can_manage_application()
-     * and deliberately the same reading get_bulk_operations() takes on this same page: a
-     * mentor holding it only in an applicant's own user context is offered nothing here, and
-     * manage.php with no parameter is what serves that scope.
-     * test_a_mentor_is_offered_no_icon_in_the_course is what holds that, because every other
-     * test in the file stays green when the gate is widened to can_manage_application().
-     * Reading it in the course also costs one context rather than one per row.
-     *
-     * One thing this deliberately does NOT check is whether the plugin is enabled site wide.
-     * Core's own Edit and Unenrol icons render on a disabled plugin's rows here - the
-     * manager resolves plugins through get_enrolment_plugins(false) - and manage.php has no
-     * enabled check either, so a check on the icon alone would hide the way in to a queue
-     * that still works. That differs from the bulk menu, which core's own driver refuses on
-     * the enabled-only list; the difference is core's, in both directions.
+     * The plugin's site-wide enabled state is deliberately not checked: core renders its own
+     * Edit and Unenrol icons on a disabled plugin's rows and manage.php still works, unlike
+     * the bulk menu, whose dispatch core refuses for a disabled plugin.
      *
      * @param course_enrolment_manager $manager Manager core built for the course.
      * @param stdClass $ue The user enrolment row, carrying its instance and plugin.
      * @return array Core's own actions, plus this plugin's where it applies.
      */
     public function get_user_enrolment_actions(course_enrolment_manager $manager, $ue) {
-        /* Core's edit and unenrol icons first, unchanged, and appending rather than
-           reordering keeps the icons an operator already knows where they were. What core
-           actually tests for those two is allow_manage($instance) and
-           allow_unenrol_user($instance, $ue) - not allow_unenrol(), which is only what the
-           base allow_unenrol_user() delegates to (lib/enrollib.php, identical on 5.1 and
-           5.2). This plugin overrides allow_unenrol() and returns true, so both are true
-           today; a later override of allow_unenrol_user() is what would change it, and it
-           is the method to look at. */
+        /* The standard Edit and Unenrol icons come first and stay as core builds them. The
+           parent method gates each on its capability, the first also on allow_manage() and the
+           second on allow_unenrol_user(), which simply asks allow_unenrol(), and this plugin
+           always answers that with true. */
         $actions = parent::get_user_enrolment_actions($manager, $ue);
 
         if (!\enrol_apply\local\queue::is_awaiting_decision($ue)) {
@@ -1004,18 +851,16 @@ class enrol_apply_plugin extends enrol_plugin {
      * Core removes the user_enrolments rows, which cascades nothing on its own, so the
      * application info and group mapping rows have to be dropped here.
      *
-     * The enrol_apply_submission rows are deliberately NOT dropped, which inverts what this
-     * method used to do to the plugin's data as a whole. Deleting an enrolment method is an
-     * administrative act on the course's configuration; the record of who applied, what they
-     * were asked, and what was decided is not part of that configuration and outlives it.
-     * The two ways it does go are the two that should end it: the course being deleted, which
-     * pseudonymises through \enrol_apply\hook_callbacks::before_course_deleted(), and an
-     * erasure request, which deletes it through the privacy provider.
+     * The enrol_apply_submission rows are deliberately kept: the record of who applied and
+     * what was decided is not part of the course's configuration and outlives the method. It
+     * ends only when the course is deleted, which pseudonymises it through
+     * \enrol_apply\hook_callbacks::before_course_deleted(), or on an erasure request, through
+     * the privacy provider.
      *
-     * This route also covers a case no course-deletion path sees: a restore into an existing
-     * course with "delete its contents first" reaches enrol_course_delete() through
-     * restore_dbops::delete_course_content(), where the course survives and neither the hook
-     * nor the course_deleted event ever fires.
+     * This method also runs where no course-deletion path does: a restore into an existing
+     * course that deletes its contents first reaches enrol_course_delete() through
+     * restore_dbops::delete_course_content(), and neither the hook nor the course_deleted
+     * event fires.
      *
      * @param stdClass $instance Course enrol instance.
      * @return void
@@ -1056,13 +901,10 @@ class enrol_apply_plugin extends enrol_plugin {
             $instancesnode->add($this->get_instance_name($instance), $managelink, navigation_node::TYPE_SETTING);
         }
 
-        /* This method is core's own per-instance extension point for an enrol plugin,
-           dispatched by enrol_add_course_navigation() (lib/enrollib.php) from the course
-           settings navigation. A file-scope enrol_apply_extend_navigation_course() would look
-           equivalent and is not: it fires for every course whether or not the course has an
-           apply instance, and would duplicate this node where one does.
-           (For the record, *_extend_settings_navigation() is not dispatched for enrol plugins
-           at all, so it would pass the whole of CI while doing nothing.) */
+        /* Added here, the per-instance hook enrol_add_course_navigation() calls, rather than
+           from a file-scope enrol_apply_extend_navigation_course(), which fires for every
+           course whether or not it has an apply instance. *_extend_settings_navigation() is
+           not dispatched for enrol plugins at all. */
         if (has_capability('enrol/apply:viewreports', $context)) {
             $reportlink = new moodle_url('/enrol/apply/report.php', ['id' => $instance->id]);
             $instancesnode->add(
@@ -1132,14 +974,15 @@ class enrol_apply_plugin extends enrol_plugin {
     /**
      * Confirm the given applications, activating the enrolments.
      *
-     * Every application is authorised individually: an id the current user may not act
-     * on is skipped rather than failing the whole batch.
+     * Every id is looked up and authorised individually: one that is not an application of
+     * this plugin's awaiting a decision (see get_pending_user_enrolment()), or that the current
+     * user may not act on, is skipped rather than failing the whole batch.
      *
      * @param array $enrols User enrolment ids to confirm.
      * @param string $message Message the decider wrote to the applicant, empty for none.
-     * @param array|null $decision Chosen groups, role and decision note; null for the instance
-     *        defaults and no note. The enrolment PERIOD is deliberately not among them - it comes
-     *        from the method's own enrolperiod; see where it is stamped below.
+     * @param array|null $decision Chosen groups, role and decision note under the keys 'groups',
+     *        'roleid' and 'note'; null for the instance defaults and no note. The enrolment period
+     *        is not among them: it comes from the method's own enrolperiod.
      * @return int How many of the given applications this call actually decided.
      */
     public function confirm_enrolment($enrols, string $message = '', ?array $decision = null) {
@@ -1161,38 +1004,28 @@ class enrol_apply_plugin extends enrol_plugin {
 
             $decided++;
 
-            /* A record to write to. Without it record_outcome_message() below loops over
-               nothing and returns in silence, so an application older than that table takes a
-               decision whose message is stored nowhere and mailed nowhere. See ensure(). */
+            /* A record to write to. Without it record_outcome_message() below writes nothing,
+               silently, for an application older than that table, and the message is stored
+               and mailed nowhere. See ensure(). */
             \enrol_apply\local\submission::ensure((int) $userenrolment->id);
 
-            /* Recorded before the status changes, never after and never through decide().
-               update_user_enrol() below dispatches the hook that reaches complete_approval()
-               first, and decide() skips a row already at the target status - so a message
-               carried any further than here is dropped in silence. */
+            /* Stored on the record rather than passed along, like the rest of the decision
+               below: update_user_enrol() dispatches the hook that reaches complete_approval()
+               with no operator input, and the notify_approval task it queues reads the message
+               back through submission::outcome_message(). */
             \enrol_apply\local\submission::record_outcome_message((int) $userenrolment->id, $message);
 
             $this->record_decision_note($userenrolment, $decision);
 
-            /* The role, allowlisted per instance for the same reason and by the same shape core
-               uses at enrol/manual/externallib.php:98-104. It is not optional politeness:
-               role_assign() performs no assignability check of any kind - measured on both
-               branches, its body holds only argument-shape checks and a lookup that the user
-               exists, and it will happily insert an assignment for a role id that does not exist
-               at all. This parameter arrives as a bare optional_param() with nothing between it
-               and that call, which is exactly the escalation shape enrol_gapply ships.
+            /* The chosen role is allowlisted per instance, as enrol/manual/externallib.php does:
+               role_assign() performs no assignability check, so this is the only thing between
+               a posted role id and a role assignment. get_assignable_roles() is keyed by role id
+               with localised names as values, hence array_key_exists and never in_array.
 
-               get_assignable_roles() is keyed by role id, so the comparison is array_key_exists
-               and never in_array: the values are LOCALISED NAMES, and testing an id against
-               those lets everything through.
-
-               A refused role records 0 rather than throwing, which matches what the rest of this
-               method does with input it will not act on - an approver working a queue is not
-               blocked by one bad id. The approval then proceeds with the instance's own role, and
-               the forged one is assigned nowhere. Note the fallback is deliberately NOT
-               allowlisted: it is what every application has been assigned since this plugin was
-               written, and filtering it would silently stop an instance configured with a role
-               its teacher may not assign from granting anything at all. */
+               A refused role records 0 rather than throwing, so one bad id does not block a
+               queue, and the approval proceeds with the instance's own role. That fallback is
+               deliberately not allowlisted: filtering it would stop an instance configured with a
+               role its teacher may not assign from granting any role at all. */
             if ($decision !== null && array_key_exists('roleid', $decision)) {
                 $assignable = get_assignable_roles(context_course::instance($instance->courseid));
                 $chosenrole = (int) $decision['roleid'];
@@ -1202,15 +1035,13 @@ class enrol_apply_plugin extends enrol_plugin {
                 );
             }
 
-            /* Allowlisted here, per instance, and not once for the batch: the ids arrive from a
-               posted form and the batch can span courses, so a group that is legitimate for one
-               application is not necessarily legitimate for the next. groups_get_all_groups()
-               is keyed by group id, so the comparison is array_key_exists and never in_array,
-               which would compare an id against group names.
+            /* Allowlisted per instance rather than once for the batch, because the posted batch
+               can span courses. groups_get_all_groups() is keyed by group id, hence
+               array_key_exists.
 
-               The gate is array_key_exists and not !empty, so an EMPTY posted list reaches the
-               writer and clears an earlier choice. A caller with nothing to say about the groups
-               omits the key entirely, which is what the out-of-band approval route does. */
+               The gate is array_key_exists and not !empty, so an empty posted list reaches the
+               writer and clears an earlier choice; a caller with nothing to say about the groups
+               omits the key. */
             if ($decision !== null && array_key_exists('groups', $decision)) {
                 $allowed = groups_get_all_groups($instance->courseid);
                 $chosen = array_values(array_filter(
@@ -1222,37 +1053,19 @@ class enrol_apply_plugin extends enrol_plugin {
                 \enrol_apply\local\submission::record_decided_groups((int) $userenrolment->id, $chosen);
             }
 
-            /* The enrolment's period, and it is NOT the decider's to choose. Access starts when
-               the application is approved and runs for however long the enrolment method says -
-               its `enrolperiod`, set on the method's own form, which is where a course decides
-               how long its enrolments last. A decision is a yes or a no about one applicant, not
-               a place to give that applicant different dates from everyone else's.
-
-               Stamped on the enrolment and not on the submission record: core already holds an
-               enrolment's dates, and duplicating them would give the report two sources that can
-               disagree.
-
-               Stamped on approval and never before it, which is a correctness requirement rather
-               than tidiness: process_expirations()'s ENROL_EXT_REMOVED_UNENROL branch selects on
-               timeend with no status filter at all, so a timeend on a still-pending row gets the
-               applicant UNENROLLED instead of decided.
-
-               An earlier version also honoured $decision['timestart'] and $decision['timeend'].
-               Nothing ever supplied them - no screen, no form, no web service - and the owner
-               settled the question on 2026-09-04: the period belongs to the method. The branches
-               are gone rather than left unreachable, because an untested API capability no caller
-               uses is a liability, not a feature. */
+            /* The period starts on approval and lasts the method's enrolperiod; it is not the
+               decider's to choose. It is stamped on the enrolment rather than on the record, so
+               the report has one source for the dates, and never before approval (see apply()). */
             $userenrolment->timestart = time();
             $userenrolment->timeend = $instance->enrolperiod
                 ? $userenrolment->timestart + $instance->enrolperiod
                 : 0;
 
-            /* update_user_enrol() dispatches before_user_enrolment_updated, so the
-               observer in classes/hook_callbacks.php has usually already run
-               complete_approval() by the time this returns. It is called again below on
-               purpose: complete_approval() is idempotent, and this method must leave the
-               right state behind even if the hook is not registered — after an upgrade
-               that has not yet had its caches rebuilt, for instance. */
+            /* update_user_enrol() dispatches before_user_enrolment_updated, so the callback in
+               classes/hook_callbacks.php has usually run complete_approval() already. It is
+               called again below on purpose: it is idempotent, and this method must leave the
+               right state even when the hook is not registered, for instance before the hook
+               cache is rebuilt after an upgrade. */
             $this->update_user_enrol(
                 $instance,
                 $userenrolment->userid,
@@ -1271,28 +1084,17 @@ class enrol_apply_plugin extends enrol_plugin {
     /**
      * Defer the given applications: they keep waiting, and nobody is enrolled or unenrolled.
      *
-     * The lookup is get_pending_user_enrolment(), which admits SUSPENDED and WAIT alike exactly
-     * as confirm and cancel already do. It used to demand SUSPENDED, and that was two defects
-     * rather than a narrower predicate. Deferring an application already deferred found no row,
-     * did nothing at all, and reported "Applications updated" - and, more to the point, an
-     * already-deferred application could never have its REASON edited, which is the state this
-     * plugin's own model spends the longest in.
-     *
-     * **Editing the reason is not a second decision, and the difference is load bearing.** An
-     * application already deferred does not move, so it is not restamped - decide()'s own guard
-     * keeps the ORIGINAL decider and date, which is the point of that guard - and the applicant
-     * is not told again, because "your application was deferred" is news they already had. The
-     * one exception is a message TYPED for them: the message box exists to reach the applicant,
-     * so a message written and then silently not sent would be the defect class this plugin has
-     * fixed twice already. Without both of these, correcting a two-word internal note re-mails
-     * the applicant and re-attributes somebody else's decision to whoever did the correcting.
+     * The lookup is get_pending_user_enrolment(), as for confirm and cancel, so an application
+     * already deferred is found again and its reason can be corrected. Such a correction is not
+     * a second decision: the enrolment does not move, so decide() keeps the original decider
+     * and date, and the applicant is notified again only if the decider typed a message for
+     * them.
      *
      * @param array $enrols User enrolment ids to defer.
      * @param string $message Message the decider wrote to the applicant, empty for none.
      * @param array|null $decision The decision note, under the 'note' key; null for none. The
-     *        same triple confirm_enrolment() takes, deliberately - a caller that passes the
-     *        note positionally to the wrong one of the three would be ignored in silence,
-     *        because PHP drops surplus arguments to a userland function without a word.
+     *        three decision methods share one signature because PHP silently drops surplus
+     *        arguments, so a mismatch would lose the note without an error.
      * @return int How many of the given applications this call actually decided.
      */
     public function wait_enrolment($enrols, string $message = '', ?array $decision = null) {
@@ -1314,9 +1116,8 @@ class enrol_apply_plugin extends enrol_plugin {
 
             $decided++;
 
-            /* Whether this call moves the enrolment at all. Read BEFORE the update below, which
-               is the only moment it can be read: afterwards every row is on the waiting list
-               whether it arrived there just now or last month. */
+            /* Whether this call moves the enrolment at all. Read before the update below, after
+               which every row is on the waiting list whenever it arrived there. */
             $moved = (int) $userenrolment->status !== ENROL_APPLY_USER_WAIT;
 
             // A record to write to; see confirm_enrolment() and submission::ensure().
@@ -1326,16 +1127,15 @@ class enrol_apply_plugin extends enrol_plugin {
 
             $this->record_decision_note($userenrolment, $decision);
 
-            /* Deferring CLEARS the expiry, and the literal 0 matters twice over.
-               update_user_enrol() gates on isset(), so null means "leave this date alone" and
-               there is no other spelling for it - passing nothing is what used to leave a
-               once-approved row on the waiting list carrying a past timeend. Such a row is
-               swept by nothing (core's suspend arms filter status = active, which it fails)
-               and listed by no queue, so it waited for a decision nobody could ever take.
-
-               And it must be the INTEGER, never '0': core's communication listener compares
-               timeend !== 0, and a string passes that test, which would drop the applicant
-               out of the course communication room on a site that has one. */
+            /* Deferring clears the expiry. update_user_enrol() writes only the dates that are
+               set, so passing null would keep any future timeend the row carries: core's "Edit
+               enrolment" screen can suspend an enrolment part way through its period, and a
+               restore copies an archived timeend. Once that date passed, the deferred row would
+               drop out of the queue, which lists only unexpired rows, with nothing left to
+               decide it: the suspend arms of process_expirations() filter status = active, and
+               the unenrol arm deletes it. It must be the integer 0: core's communication hook
+               listener compares timeend !== 0, and '0' would drop the applicant from the course
+               communication room. */
             $this->update_user_enrol($instance, $userenrolment->userid, ENROL_APPLY_USER_WAIT, null, 0);
 
             /* The row was read before the update, and notify_applicant() below substitutes
@@ -1343,12 +1143,9 @@ class enrol_apply_plugin extends enrol_plugin {
                print the expiry that was just cleared. */
             $userenrolment->timeend = 0;
 
-            /* $moved and not a bare true. The flag means "the caller knows the enrolment really
-               moved", and on a re-deferral it did not: passing true there would restamp
-               timedecided and decidedby onto whoever edited the note, so the trail would credit
-               the decision to somebody who only corrected its reason. With false, decide()'s
-               own guard sees a row already at the target status and leaves the original decider
-               and date alone, which is exactly what that guard exists for. */
+            /* $moved rather than true: on a re-deferral the enrolment did not move, so decide()'s
+               same-status guard must keep the original decider and date instead of crediting
+               whoever corrected the note. */
             \enrol_apply\local\submission::decide(
                 (int) $userenrolment->id,
                 \enrol_apply\local\submission::STATUS_WAITING,
@@ -1356,11 +1153,9 @@ class enrol_apply_plugin extends enrol_plugin {
                 $moved
             );
 
-            /* Notified when the enrolment moved, or when the decider typed something for the
-               applicant to read - and on neither count when they merely corrected the internal
-               note. The second half is not symmetry: the message box's whole purpose is to
-               reach the applicant, so a message typed and then not sent would be a silent loss
-               of exactly the kind this plugin has already fixed twice. */
+            /* Notified when the enrolment moved, or when the decider typed a message for the
+               applicant, which must never be dropped silently; not when only the internal note
+               was corrected. */
             if ($moved || trim($message) !== '') {
                 $this->notify_applicant(
                     $instance,
@@ -1403,7 +1198,7 @@ class enrol_apply_plugin extends enrol_plugin {
 
             $decided++;
 
-            /* A record to write to, and here it must also be written BEFORE the unenrolment:
+            /* A record to write to, and here it must also be written before the unenrolment:
                unenrol_user() deletes the {user_enrolments} row this reconstruction reads. */
             \enrol_apply\local\submission::ensure((int) $userenrolment->id);
 
@@ -1440,11 +1235,10 @@ class enrol_apply_plugin extends enrol_plugin {
     /**
      * Write the decision note, when the caller had one to write.
      *
-     * array_key_exists and never !empty, exactly as the group chooser's gate is: an EMPTY
-     * posted note has to reach the writer, because clearing is what stops a re-queued
-     * application inheriting the last decision's reason. A caller with nothing to say about
-     * the note - the out-of-band approval route, which carries no operator input at all -
-     * omits the key entirely and the stored note is left alone.
+     * array_key_exists and never !empty, as for the groups: an empty posted note must reach the
+     * writer, because clearing is what stops a re-queued application inheriting the last
+     * decision's reason. A caller with nothing to say about the note omits the key and the
+     * stored note is left alone.
      *
      * @param stdClass $userenrolment User enrolment the decision applies to.
      * @param array|null $decision The decision the operator submitted, null for none.
@@ -1462,23 +1256,38 @@ class enrol_apply_plugin extends enrol_plugin {
     }
 
     /**
-     * Fetch a user enrolment that is still awaiting a decision.
+     * Fetch an application of this plugin's that is still awaiting a decision.
+     *
+     * "Awaiting a decision" is {@see \enrol_apply\local\queue::awaiting_decision_where()}, the
+     * rule the approval queue and the review page list by, so a posted id can only reach a row
+     * those pages would offer. Everything else returns false, and the decision methods skip it
+     * as they skip a row the operator may not act on:
+     *  - a user enrolment of another enrolment method, which would otherwise reach the caller's
+     *    instance lookup and throw half way through a batch;
+     *  - an application already decided;
+     *  - an approval whose period has ended. Under an expiredaction of suspend,
+     *    process_expirations() puts it back to suspended with its past timeend, and deciding it
+     *    would unenrol the learner, put them back in the queue or approve them a second time.
+     *
+     * An application already deferred is still awaiting a decision, which is what lets
+     * wait_enrolment() correct its reason.
      *
      * @param int $userenrolmentid User enrolment id.
-     * @return stdClass|false The user enrolment record, or false when it is not pending.
+     * @return stdClass|false The {user_enrolments} row, or false when there is nothing to decide.
      */
     protected function get_pending_user_enrolment($userenrolmentid) {
         global $DB;
 
-        return $DB->get_record_select(
-            'user_enrolments',
-            'id = :id AND (status = :enrolusersuspended OR status = :enrolapplyuserwait)',
-            [
-                'id' => $userenrolmentid,
-                'enrolusersuspended' => ENROL_USER_SUSPENDED,
-                'enrolapplyuserwait' => ENROL_APPLY_USER_WAIT,
-            ],
-            '*',
+        [$wheres, $params] = \enrol_apply\local\queue::awaiting_decision_where();
+        $params['ueid'] = (int) $userenrolmentid;
+        $params['enrol'] = 'apply';
+
+        return $DB->get_record_sql(
+            "SELECT ue.*
+               FROM {user_enrolments} ue
+               JOIN {enrol} e ON e.id = ue.enrolid
+              WHERE ue.id = :ueid AND e.enrol = :enrol AND " . implode(' AND ', $wheres),
+            $params,
             IGNORE_MISSING
         );
     }
@@ -1506,23 +1315,15 @@ class enrol_apply_plugin extends enrol_plugin {
             return;
         }
 
-        /* The shipped defaults for all six of these settings are the EMPTY string, and e-mail is
-           on by default for every provider - so a stock site sends the applicant a notification
-           with no subject and no body. Measured on m502: 14 of 14 applicant-facing notifications
-           ever sent carry an empty subject and 10 of 14 an empty body, while all 34 sent to
-           MANAGERS carry both, because that one is built from this plugin's own template rather
-           than from an empty admin setting.
+        /* All six subject and body settings ship empty and e-mail is on by default, so without
+           this fallback a stock site mails the applicant a notification with no subject and no
+           body. It is applied at read time because a settings.php default cannot reach an
+           existing site: only a fresh install applies defaults unconditionally, and afterwards
+           admin_apply_default_settings() skips every setting already stored.
 
-           The fallback is at READ time and it has to be. A default declared in settings.php can
-           never reach an existing site: admin_apply_default_settings(NULL, true) runs only from
-           install_core(), and its recursive pass skips any setting whose get_setting() is not
-           null - and every site that has ever opened this settings page already stores these.
-
-           Resolved BEFORE update_mail_content(), so the default body goes through the same
-           placeholder substitution, and the same escaping, that an administrator's own body
-           does. An administrator who has written a subject or a body keeps it; the two halves
-           fall back independently, because a site that filled one in and not the other is the
-           commonest state of all. */
+           Resolved before update_mail_content(), so the default body gets the same placeholder
+           substitution and escaping as an administrator's own. Subject and body fall back
+           independently. */
         [$defaultsubject, $defaultcontent] = $this->default_notification($type, $course);
         if (trim((string) $subject) === '') {
             $subject = $defaultsubject;
@@ -1533,13 +1334,11 @@ class enrol_apply_plugin extends enrol_plugin {
 
         $content = $this->update_mail_content($content, $course, $user, $userenrolment);
 
-        /* Read from the durable record rather than passed in, which is what lets one lookup
-           serve all three decisions and the approval notification alike - that one is sent from
-           an adhoc task, long after any argument would have gone out of scope.
-           s() and not format_text(): the surrounding body is the administrator's own template
-           and is trusted, while this is free text a decider typed, and it lands in
-           fullmessagehtml. nl2br so the paragraphs the decider typed survive; the plain-text
-           half of the message is derived from this by html_to_text() in the notification. */
+        /* Read from the durable record rather than passed in, so the approval notification,
+           sent later from an adhoc task, gets it too. s() and not format_text(): the body
+           around it is the administrator's trusted template, while this is free text a decider
+           typed, landing in fullmessagehtml. nl2br keeps the decider's paragraphs; the
+           plain-text half is derived from this by html_to_text() in the notification. */
         $outcome = \enrol_apply\local\submission::outcome_message((int) $userenrolment->id);
         if (trim($outcome) !== '') {
             $content .= '<br><br>' . nl2br(s($outcome));
@@ -1560,26 +1359,18 @@ class enrol_apply_plugin extends enrol_plugin {
     /**
      * The wording to send when the administrator has configured none.
      *
-     * **The subject and the body want opposite spellings, and that is the whole reason this
-     * returns a pair rather than one string.** The body lands in fullmessagehtml and is put
-     * through update_mail_content(), which escapes every value it substitutes with s() and
-     * format_string() - so the body is HTML and the course name reaches it escaped. The subject
-     * is not HTML at all and the message sink escapes it again, so it takes the PLAIN spelling
-     * and a site whose course is called "R&D induction" would otherwise read "R&amp;D induction"
-     * in its own inbox.
+     * The subject and the body want different spellings of the course name. The body is HTML
+     * and goes through update_mail_content(), which escapes what it substitutes; the subject is
+     * plain text, so it takes the plain spelling, or a course called "R&D induction" would reach
+     * the inbox as "R&amp;D induction".
      *
-     * A literal string id per branch, never one built from $type: a computed id is banned by the
-     * fleet standard and is invisible to the language file checker. The default arm returns the
-     * empty pair rather than a guess - a type this method has no wording for keeps whatever the
-     * administrator's settings hold, and enrol_apply_notification's own constructor is the one
-     * place that refuses an unknown type.
+     * The default arm returns the empty pair, so a type without default wording keeps whatever
+     * the administrator's settings hold; enrol_apply_notification's constructor is the one place
+     * that refuses an unknown type.
      *
-     * **Recorded and deliberately not fixed here: every applicant notification is composed in
-     * the DECIDER's language**, including the smallmessage the Moodle app shows, because nothing
-     * on this path calls force_current_language(). These defaults inherit that, exactly as the
-     * administrator's own settings already do. The remedy is one wrapper and it changes every
-     * applicant-facing message at once, so it belongs in its own change rather than half-done
-     * inside this one. See docs/design/ui-rebuild-plan.md.
+     * Known limitation: nothing on this path calls force_current_language(), so every applicant
+     * notification, including these defaults and the smallmessage the Moodle app shows, is
+     * composed in the decider's language.
      *
      * @param string $type Notification type: confirmation, cancelation or waitinglist.
      * @param stdClass $course Course the application belongs to.
@@ -1630,12 +1421,9 @@ class enrol_apply_plugin extends enrol_plugin {
         $applicant = core_user::get_user($userid);
         $applydescription = isset($data->applydescription) ? $data->applydescription : '';
 
-        /* What the applicant typed, keyed by the fields this instance actually asks for.
-           Both halves come from the submitted data. They did not always: the custom fields
-           used to be read back out of {user_info_data} through profile_load_custom_fields(),
-           so an approver reviewing an application saw whatever was already on the account
-           rather than the answers in front of them - and because the standard fields DID
-           come from the form, the two halves of the same message disagreed. */
+        /* What the applicant submitted, keyed by the fields this instance asks for. Standard
+           and custom fields both come from the submitted data, not from the account, so the
+           approver sees the answers given in this application. */
         $submitted = \enrol_apply\local\fields::submitted_values($instance, $data);
 
         // Notify users holding the capability in the course context.
@@ -1722,7 +1510,11 @@ class enrol_apply_plugin extends enrol_plugin {
     }
 
     /**
-     * Returns enrolled users of a course who should be notified about new applications.
+     * Returns the actively enrolled users of a course who should be notified about new applications.
+     *
+     * Only active enrolments count: the message links to the course's approval queue, whose
+     * require_login() refuses a user whose own enrolment is suspended or outside its dates, even
+     * though their role, and with it the capability, survives.
      *
      * Note: mostly copied from the get_users_from_config() function in moodlelib.php.
      *
@@ -1740,7 +1532,7 @@ class enrol_apply_plugin extends enrol_plugin {
         /* We have to make sure that users still hold the necessary capability. It is
            faster to fetch them all first and then test whether they are present than
            to validate them one by one. */
-        $users = get_enrolled_users($context, 'enrol/apply:manageapplications');
+        $users = get_enrolled_users($context, 'enrol/apply:manageapplications', 0, 'u.*', null, 0, 0, true);
 
         if ($value === '$@ALL@$') {
             return $users;
@@ -1873,7 +1665,8 @@ class enrol_apply_plugin extends enrol_plugin {
            back to comparing a wwwroot string taken from the archive itself when the site
            identifier hash is absent, so it is forgeable - and the thing being switched off
            here writes to {user}. Somebody restoring a course they built elsewhere re-ticks
-           the box if they meant it. */
+           the box if they meant it. backup_test::test_a_restore_switches_the_profile_write_off
+           holds this. */
         $data->customint8 = 0;
 
         $instanceid = $this->add_instance($course, (array) $data);
@@ -1907,8 +1700,8 @@ class enrol_apply_plugin extends enrol_plugin {
            before add_plugin_structure() appends the plugin's own data
            (backup/moodle2/backup_stepslib.php), so this method has already run by the
            time restore_enrol_apply_plugin processes an application. Should that order
-           ever change, get_mappingid() simply returns false there and the comment is
-           dropped — the behaviour before comments were backed up at all. */
+           ever change, get_mappingid() returns false there and the comment is dropped
+           rather than mis-attached. */
         $newid = $DB->get_field('user_enrolments', 'id', ['enrolid' => $instance->id, 'userid' => $userid]);
         if ($newid) {
             $step->set_mapping('enrol_apply_userenrolment', $data->id, $newid);

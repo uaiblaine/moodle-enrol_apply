@@ -26,14 +26,12 @@ defined('MOODLE_INTERNAL') || die();
 
 $observers = [
     [
-        /* The safety net for a course deleted while this plugin is installed but disabled.
-           enrol_course_delete() only calls delete_instance() for plugins in
-           enrol_get_plugins(true), yet deletes the enrol and user_enrolments rows either
-           way, so the plugin's two enrolment-keyed tables are orphaned with nobody
-           consulted. Observers are registered whatever the plugin's state, which is what
-           makes this reachable at all. The durable trail is handled by the
-           before_course_deleted hook instead, because by the time this fires the course
-           context is already gone. */
+        /* Cleans up after a course deleted while this plugin is disabled.
+           enrol_course_delete() calls delete_instance() only for enabled plugins but deletes
+           the enrol and user_enrolments rows either way, orphaning the plugin's two
+           enrolment-keyed tables; observers run whatever the plugin's state. The durable
+           trail is handled by the before_course_deleted hook instead, because the course
+           context is already gone when this event fires. */
         'eventname' => '\core\event\course_deleted',
         'callback' => '\enrol_apply\observers::course_deleted',
     ],

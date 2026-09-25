@@ -178,13 +178,10 @@ final class profilewriter_test extends \advanced_testcase {
     /**
      * The lock is read through the auth plugin, so a legacy-only key still counts.
      *
-     * auth_manual builds its config as array_merge((array) legacy, (array) modern), so the
-     * modern component WINS. On a normally installed site every field_lock_* already exists
-     * under auth_manual as 'unlocked', which is why the legacy key looks dead - measured on
-     * 5.2, setting it alone changes nothing. It only decides the answer where the modern key
-     * is absent, which is the case this test constructs, and there a plugin reading
-     * get_config('auth_manual', ...) directly sees nothing while the core user edit form
-     * honours the lock. That is the difference this test exists to hold.
+     * auth_manual merges the legacy auth/manual config under the modern auth_manual one, so the
+     * legacy key decides only where the modern key is absent. This test builds that case, where
+     * a direct get_config('auth_manual', ...) sees nothing while core's user edit form, reading
+     * through the auth plugin, honours the lock. See {@see fields::is_locked()}.
      *
      * @return void
      */
@@ -331,7 +328,7 @@ final class profilewriter_test extends \advanced_testcase {
      * profile_user_record() defaults $onlyinuserobject to true and
      * profile_field_textarea::is_user_object_data() returns false, so reading through it
      * would report a filled-in textarea field as permanently missing and lock the applicant
-     * out of a gate they can never satisfy. enrol_gapply has exactly that defect.
+     * out of a gate they can never satisfy.
      *
      * @return void
      */
@@ -358,15 +355,28 @@ final class profilewriter_test extends \advanced_testcase {
     }
 
     /**
-     * A cross-site restore switches the instance opt-in off.
+     * A new instance starts with its half of the switch off.
+     *
+     * An instance built from get_instance_defaults() does not write, although the site half is
+     * on in this fixture; the instance from setUp(), which has its half switched on, is the
+     * control showing the site half really is. What a restore does to the same switch is
+     * backup_test::test_a_restore_switches_the_profile_write_off().
      *
      * @return void
      */
-    public function test_restore_zeroes_the_instance_switch(): void {
-        $defaults = $this->plugin->get_instance_defaults();
+    public function test_a_new_instance_starts_with_the_instance_switch_off(): void {
+        global $DB;
 
+        $defaults = $this->plugin->get_instance_defaults();
         $this->assertArrayHasKey('customint8', $defaults);
         $this->assertSame(0, $defaults['customint8']);
+
+        $course = $this->getDataGenerator()->create_course();
+        $instanceid = $this->plugin->add_instance($course, $defaults);
+        $instance = $DB->get_record('enrol', ['id' => $instanceid], '*', MUST_EXIST);
+
+        $this->assertTrue(profilewriter::is_enabled($this->instance), 'the control: the site half is on');
+        $this->assertFalse(profilewriter::is_enabled($instance));
     }
 
     /**

@@ -35,13 +35,10 @@ $context = context_course::instance($course->id, MUST_EXIST);
 
 require_login();
 
-/* The whole gate, and the false arm is unchanged on purpose: without it this page tells any
-   logged-in user that a given enrolment method exists on a course they may not be able to see at
-   all. What changed is that the row is now READ rather than merely counted, because this page
-   used to describe every applicant's application with the pending wording - the identical defect
-   the enrolment page's own panel had, and it takes the identical fix. Somebody who was deferred,
-   or approved onto an enrolment that is not active, read "waiting for a decision" here while the
-   decision had in fact been taken. */
+/* The whole gate: without an application on this instance, the page would tell any logged-in
+   user that the enrolment method exists on a course they may not be able to see. The row is
+   read rather than counted because its status decides what the page says; see
+   \enrol_apply\local\applicantstate. */
 $ownrow = $DB->get_record(
     'user_enrolments',
     ['userid' => $USER->id, 'enrolid' => $instance->id],
@@ -52,11 +49,9 @@ if (!$ownrow) {
     throw new moodle_exception('invalidaccess', 'error');
 }
 
-/* Heading, body and notification level together, so the three cannot fall out of step - and
-   the access fact alongside, because this page is NOT only reached by somebody who is shut out.
-   Its gate asks for a row and nothing more, so a fully enrolled participant who keeps the link
-   opens it perfectly legitimately; without this argument they were told their enrolment was not
-   active and sent to bother their teacher. */
+/* The access fact is passed because the gate above asks only for a row: a fully enrolled
+   participant who kept the link opens this page too, and must not be told their enrolment is
+   inactive. */
 $state = \enrol_apply\local\applicantstate::describe(
     $ownrow,
     is_enrolled($context, $USER, '', true)
@@ -92,18 +87,12 @@ if (\enrol_apply\local\profilewriter::is_enabled($instance)) {
         ]);
     }
 } else {
-    /* Writing is switched off, so the applicant is told exactly what is missing and sent to
-       their own profile page. Nothing is written by this plugin at all. Note that
-       /user/edit.php cannot be pre-filled - it accepts id, course, returnto and
-       cancelemailchange, and none of them carries a value - so the list below is the only
-       thing telling them what to go and fill in. */
+    /* Writing is switched off, so the applicant is told what is missing and sent to their own
+       profile page. /user/edit.php takes no field values (only id, course, returnto and
+       cancelemailchange), so this list is the only thing telling them what to fill in. */
     $missing = \enrol_apply\local\completeness::missing($instance, $USER);
     if ($missing) {
-        echo $OUTPUT->heading(get_string('profileincomplete', 'enrol_apply'), 3);
-        echo html_writer::tag('p', get_string('profileincomplete_desc', 'enrol_apply'));
-        echo html_writer::alist(array_map(static function (array $field): string {
-            return s($field['label']);
-        }, $missing));
+        echo $PAGE->get_renderer('enrol_apply')->profile_missing($missing);
         echo $OUTPUT->single_button(
             new moodle_url('/user/edit.php', ['id' => $USER->id, 'returnto' => 'profile']),
             get_string('gotoprofile', 'enrol_apply'),
@@ -112,9 +101,8 @@ if (\enrol_apply\local\profilewriter::is_enabled($instance)) {
     }
 }
 
-/* Never /course/view.php: the applicant is suspended on this course, so that destination
-   bounces them straight back here. get_home_page() is what core itself uses to decide where
-   a user belongs when there is nowhere specific to send them. */
+/* Never the course page: an applicant without access would be bounced back to the enrolment
+   page. See \enrol_apply\local\destination::home_page_url(). */
 echo $OUTPUT->single_button(
     \enrol_apply\local\destination::home_page_url(),
     get_string('continue'),

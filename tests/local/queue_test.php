@@ -281,11 +281,9 @@ final class queue_test extends \advanced_testcase {
     /**
      * The order the queue's own table lists a scope in.
      *
-     * The mentee restriction used to be a second argument here and is not one any more: the
-     * table resolves it from the CURRENT USER through queue::listing_scope(), so a test that
-     * wants the mentee scope sets up a mentor and asks for scope 0 rather than naming the ids.
-     * That is the point of the change - a caller can no longer state a restriction the server
-     * did not derive.
+     * The table resolves the mentee restriction from the current user through
+     * queue::listing_scope(), so a test that wants the mentee scope sets up a mentor and asks for
+     * scope 0; no caller can state a restriction the server did not derive.
      *
      * @param int $enrolid Enrol instance to list, 0 for every one this operator may decide in.
      * @return array User enrolment ids in the listing's order.
@@ -408,10 +406,8 @@ final class queue_test extends \advanced_testcase {
     /**
      * A teacher of the course may review an application made to it.
      *
-     * This is the widening. Until now the review page required the capability in the
-     * APPLICANT'S user context and nowhere else, which a course teacher does not hold -
-     * measured on both branches - so a page meant for reviewing one application threw at
-     * everybody except a mentor.
+     * A course teacher holds the capability in the course and not in the applicant's user
+     * context, so a gate on the user context alone would refuse them.
      *
      * @return void
      */
@@ -546,12 +542,10 @@ final class queue_test extends \advanced_testcase {
     /**
      * A mentor who happens to be enrolled in the course still walks their mentees.
      *
-     * The measured defect this replaced. Where a decision sends the operator used to be decided
-     * by can_access_course() with no capability argument, and a mentor enrolled in the course as
-     * anything at all - a learner on it, a teacher without this capability - satisfies that. They
-     * were redirected to manage.php?id=, whose require_capability() then threw at them: the
-     * decision had been taken and was reported as an exception. Both halves are the test, because
-     * the defect lived in the gap between them.
+     * can_access_course() without the capability argument is true for a mentor enrolled in the
+     * course as anything at all, which would send them to manage.php?id= after a decision, where
+     * require_capability() refuses them and a decision already taken reads as an exception. Both
+     * preconditions are asserted because the defect lies in the gap between them.
      *
      * @return void
      */
@@ -561,9 +555,8 @@ final class queue_test extends \advanced_testcase {
         $this->getDataGenerator()->enrol_user($mentor->id, $this->course->id, 'student');
         $this->setUser($mentor);
 
-        /* Both preconditions, because the defect lived in the gap between them: the course
-           really is open to them, which is all the old test asked, and they really do not hold
-           the capability there, which is what manage.php?id= requires before it will render. */
+        /* The course is open to them, and they do not hold the capability there, which
+           manage.php?id= requires before it will render. */
         $this->assertTrue(can_access_course($this->course));
         $this->assertFalse(has_capability(
             'enrol/apply:manageapplications',
@@ -583,8 +576,8 @@ final class queue_test extends \advanced_testcase {
     /**
      * A system-level grant with no way into the course walks the site-wide queue.
      *
-     * This is the case the old can_access_course() test got right and the reason the capability
-     * had to travel with it rather than replace it.
+     * The course is hidden and they are not enrolled, so can_access_course() refuses them and
+     * queue::scope() falls through to its system-context branch.
      *
      * @return void
      */
@@ -609,14 +602,13 @@ final class queue_test extends \advanced_testcase {
      * Reachable rather than defensive: the capability held in a course context puts them on the
      * review page through can_manage_application(), while not being enrolled and holding no
      * moodle/course:view refuses can_access_course(), and mentoring nobody empties the third
-     * scope. Sending them to either queue would report a successful decision as an exception -
-     * manage.php?id= throws on require_capability(), and the parameterless one throws on the
-     * same capability at system level once the mentee list is empty.
+     * scope. Sending them to either queue would report a successful decision as an exception:
+     * manage.php?id= refuses them at require_login($course), and the parameterless one at
+     * require_capability() in the system context once the mentee list is empty.
      *
      * The course is hidden here only because that is one more reason can_access_course() says
-     * no; it is NOT what makes this branch reachable, and the sibling test below builds the
-     * same outcome on a visible course. An earlier version of this docblock said the hidden
-     * flag was the mechanism.
+     * no; it is not what makes this branch reachable, and the sibling test below builds the
+     * same outcome on a visible course.
      *
      * @return void
      */
@@ -712,22 +704,20 @@ final class queue_test extends \advanced_testcase {
 
         $walked = $this->walk_from($ueids[2], $this->instance);
 
-        /* assertSame and NOT assertEqualsCanonicalizing, which was the first spelling here and
-           discarded the one property a tied group exists to test. Inside a tie the order is
-           fully determined - ascending ue.id, which is the order these were created in - so
-           there is nothing to be lenient about. */
+        /* The assertSame() is deliberate: inside a tie the order is fully determined by
+           ascending ue.id, the creation order here, and assertEqualsCanonicalizing() would
+           discard exactly that property. */
         $this->assertSame($ueids, $walked);
     }
 
     /**
-     * Inside a tied group, the neighbour is the ADJACENT row in both directions.
+     * Inside a tied group, the neighbour is the adjacent row in both directions.
      *
      * The tie-break has to carry the direction, and the walk alone cannot see whether it does:
      * a walk restarts from the true first row and steps forward, so it still enumerates every
-     * tied row even when "previous" is wrong. Writing the tie-break as
-     * "ORDER BY ue.timecreated DESC, ue.id ASC" is a plausible edit and a real defect - previous
-     * from the last of a tied group then jumps past the middle rows to the first - and it leaves
-     * the walk test green. This asserts the neighbours themselves.
+     * tied row even when "previous" is wrong. Changes that must make it fail: a tie-break that
+     * ignores the direction, such as "ORDER BY ue.timecreated DESC, ue.id ASC", under which
+     * previous from the last tied row jumps past the middle rows to the first.
      *
      * @return void
      */
@@ -759,11 +749,10 @@ final class queue_test extends \advanced_testcase {
     /**
      * A neighbour record carries enough of the applicant to be named.
      *
-     * The seam between the two test files: everything in this one reads a neighbour's id, and
-     * the renderable's own tests build their records by hand, so the SELECT list that feeds
-     * fullname() is asserted by neither. Drop the name fields and both files stay green while
-     * every link on the page renders as "Previous: " with no applicant after it - destroying
-     * the one property the walk's documented divergence from the on-screen list rests on.
+     * The other tests here read only a neighbour's id, and the renderable's tests build their
+     * records by hand, so this is the one test holding the SELECT list that feeds fullname().
+     * Without the name fields every link renders as "Previous: " with no applicant, and a link
+     * that names its applicant is what makes the walk's divergence from a re-sorted queue visible.
      *
      * @return void
      */
@@ -912,7 +901,7 @@ final class queue_test extends \advanced_testcase {
     }
 
     /**
-     * The same operator, on a VISIBLE course, still opens no queue.
+     * The same operator, on a visible course, still opens no queue.
      *
      * The control for the sibling above, and the reason its hidden course is incidental. What
      * refuses can_access_course() here is that a role granting only this plugin's capability
@@ -938,13 +927,10 @@ final class queue_test extends \advanced_testcase {
     /**
      * A teacher whose own enrolment is suspended is not sent to a queue that refuses them.
      *
-     * can_access_course() counts a suspended or expired enrolment as access, because its
-     * $onlyactive parameter defaults to false; require_login($course), which manage.php?id=
-     * calls before require_capability(), does not. Measured on 5.1 and 5.2: for this operator
-     * the three-argument form returns true and require_login() raises require_login_exception
-     * "Not enrolled", so the decision was applied and then reported as a bounce to the course
-     * enrolment page. The role assignment survives the suspension, which is what core does, so
-     * they still hold the capability and can still legitimately decide.
+     * can_access_course() counts a suspended or expired enrolment as access unless its
+     * $onlyactive argument is true, while require_login($course), which manage.php?id= calls
+     * before require_capability(), refuses both. Core keeps the role assignment through the
+     * suspension, so this operator still holds the capability and may legitimately decide.
      *
      * @return void
      */
@@ -1014,7 +1000,7 @@ final class queue_test extends \advanced_testcase {
             \context::class,
             queue::require_review_access(queue::application($strangerueid))
         );
-        // And they really do mentor somebody, which is what used to hand them the wrong walk.
+        // And they do mentor somebody, which without the membership test takes the mentee branch.
         $this->assertEquals([(int) $mentee->id], applications::get_mentees());
 
         $scope = $this->scope_for($strangerueid, $this->instance);
@@ -1078,13 +1064,52 @@ final class queue_test extends \advanced_testcase {
         $this->assertNull(queue::neighbours(queue::application($application), $scope)['next']);
         $this->assertSame([$application], $this->walk_from($application, $instance));
     }
+
+    /**
+     * An enrol row whose course is gone is refused like an unknown id, and without throwing.
+     *
+     * Core deletes the enrol rows with their course, so only a direct or interrupted deletion
+     * leaves one behind. Its id still names an apply instance, so the unknown-id branch does not
+     * answer it; the missing course context has to. The dynamic table's service calls
+     * get_context() before any capability check, so a throw there would answer a forged or stale
+     * filter value with a database exception rather than "no permission".
+     *
+     * The control is the first assertion: the same id is allowed to the same administrator while
+     * the course exists, so the refusal comes from the orphaning and not from the id or the reader.
+     *
+     * @return void
+     */
+    public function test_an_orphaned_enrol_row_is_refused_without_throwing(): void {
+        global $DB;
+
+        $this->setAdminUser();
+        $enrolid = (int) $this->instance->id;
+        $this->assertTrue(queue::listing_scope($enrolid)->allowed);
+
+        \context_helper::delete_instance(CONTEXT_COURSE, (int) $this->course->id);
+        $DB->delete_records('course', ['id' => $this->course->id]);
+        // The precondition: the enrol row is still there, so the unknown-id branch cannot answer.
+        $this->assertTrue($DB->record_exists('enrol', ['id' => $enrolid, 'enrol' => 'apply']));
+
+        $scope = queue::listing_scope($enrolid);
+        $this->assertFalse($scope->allowed);
+        $this->assertNull($scope->instance);
+        $this->assertSame(0, $scope->enrolid);
+        $this->assertEquals(\context_system::instance(), $scope->context);
+
+        // And through the table core's service builds, which is where a throw would surface.
+        $table = \enrol_apply\table\applications::for_scope($enrolid);
+        $this->assertEquals(\context_system::instance(), $table->get_context());
+        $this->assertFalse($table->has_capability());
+    }
+
     /**
      * The earlier-applications lookup returns this applicant's records and nobody else's.
      *
-     * Both scoping clauses are a disclosure boundary and neither was held by anything: the
-     * capability gate on the panel decides WHETHER it renders, and these decide WHOSE rows it
-     * renders. The failure would also be silent - fix_sql_params() tolerates surplus named
-     * parameters, so dropping a clause while keeping its parameter runs clean.
+     * Both scoping clauses are a disclosure boundary: the capability gate on the panel decides
+     * whether it renders, and these decide whose rows it renders. Dropping a clause while keeping
+     * its parameter would fail silently, because fix_sql_params() tolerates surplus named
+     * parameters.
      *
      * @return void
      */
@@ -1147,8 +1172,8 @@ final class queue_test extends \advanced_testcase {
     /**
      * The list is bounded, because nothing else bounds it.
      *
-     * The natural key is deliberately not unique and a determined re-applicant accumulates rows
-     * without limit - measured on the live site, one person holds eight records in one course.
+     * The natural key is deliberately not unique, so a re-applicant can accumulate records in one
+     * course without limit.
      *
      * @return void
      */
@@ -1224,13 +1249,12 @@ final class queue_test extends \advanced_testcase {
     /**
      * One person's application on a second method is reported, and the decided one is not.
      *
-     * The whole reason the method exists. A participants-page bulk decision is filtered to one
-     * enrolment method, and for one person holding an application on each of two, core says
-     * nothing at all - they come back carrying the filtered instance's row, nothing is "removed",
-     * and the plugin used to report a clean success.
+     * A participants-page bulk decision is filtered to one enrolment method, and for one person
+     * holding an application on each of two, core warns about nothing: they come back carrying
+     * the filtered instance's row. This is the case the method exists to report.
      *
      * The exclusion list is asserted rather than assumed, and it carries its own weight only for
-     * a DEFERRAL: approval and cancellation take their rows out of the awaiting-a-decision
+     * a deferral: approval and cancellation take their rows out of the awaiting-a-decision
      * predicate by themselves, so a test that only ever approved would pass with the exclusion
      * deleted.
      *
@@ -1274,9 +1298,9 @@ final class queue_test extends \advanced_testcase {
     /**
      * Only applications still awaiting a decision are reported, and only in this course.
      *
-     * The predicate is awaiting_decision_where(), shared with the queue and the action icon, so
-     * an approved enrolment and one whose period has run out are both out - and warning about
-     * either would be telling the operator to go and decide something already decided.
+     * The predicate is awaiting_decision_where(), the one the queue lists by, so an approved
+     * enrolment and one whose period has run out are both out - and warning about either would
+     * be telling the operator to go and decide something already decided.
      *
      * @return void
      */
@@ -1315,9 +1339,8 @@ final class queue_test extends \advanced_testcase {
     /**
      * An empty user list asks nothing rather than throwing.
      *
-     * get_in_or_equal() refuses an empty array, and the caller can legitimately reach here with
-     * one: a selection carrying none of this plugin's enrolments is handled by the operation
-     * above this, but the guard is what makes the method safe to call unconditionally.
+     * get_in_or_equal() throws on an empty array; the early return is what makes the method safe
+     * to call with an empty selection.
      *
      * @return void
      */

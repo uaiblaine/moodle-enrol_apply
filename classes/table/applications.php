@@ -38,18 +38,15 @@ use user_picture;
 /**
  * Table listing the enrolment applications awaiting a decision.
  *
- * Dynamic, so that paging, sorting and (in later slices) filtering refresh the table over
- * core_table_get_dynamic_table_content instead of reloading the page. Core resolves the handler
- * generically as \{component}\table\{handler} (lib/table/classes/external/dynamic/get.php:202), so
- * a plugin can implement the interface even though no plugin type in core does - the only
- * implementors are admin, ai, reportbuilder, sms and user.
+ * Dynamic, so that paging, sorting and filtering refresh the table over
+ * core_table_get_dynamic_table_content instead of reloading the page; core resolves the handler
+ * as \{component}\table\{handler}.
  *
- * **The scope is the whole of the risk, and it is why queue::listing_scope() exists.** get.php
- * builds the table, calls set_filterset() with the client's filters, and then applies exactly one
- * capability check against exactly one context. This queue has three scopes across two context
- * levels. So one integer arrives - the enrol instance id - and the course, the context, the mentee
- * id list and the capability are all recomputed from it server-side on every request. The mentee
- * restriction never travels, so nothing a client sends can widen it.
+ * The scope is the risk, and it is why queue::listing_scope() exists. The service builds the
+ * table, calls set_filterset() with the client's filters, and then applies one capability check
+ * against one context, while this queue has three scopes across two context levels. So only the
+ * enrol instance id arrives, and the course, context, mentee list and capability are recomputed
+ * from it server-side on every request; nothing a client sends can widen the scope.
  *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine
@@ -58,12 +55,11 @@ use user_picture;
  */
 class applications extends \table_sql implements dynamic_table {
     /**
-     * The table's unique id, and it is a compatibility contract rather than a name.
+     * The table's unique id, kept from the former enrol_apply_manage_table class.
      *
-     * flexible_table keys stored preferences on it - $SESSION->flextable[<uniqueid>] holds the
-     * sort, the collapsed columns and the initials - so renaming it silently discards every
-     * operator's saved sort. It is the id the old root-level enrol_apply_manage_table used, kept
-     * verbatim through the move to this class for exactly that reason.
+     * flexible_table keys stored preferences on it ($SESSION->flextable[<uniqueid>] holds the
+     * sort, the collapsed columns and the initials), so renaming it discards every operator's
+     * saved sort.
      *
      * @var string
      */
@@ -118,10 +114,8 @@ class applications extends \table_sql implements dynamic_table {
     /**
      * @var array Identity field name => the SQL EXPRESSION producing it, from core's get_sql().
      *
-     * Not the SELECT aliases in $extrafields, and the difference is the whole reason this exists:
-     * WHERE is evaluated before SELECT on both database families, so a predicate naming an alias
-     * is an error on PostgreSQL and silently reads a different column on MySQL. A custom profile
-     * field's expression is a joined table's column, which no alias could stand in for.
+     * Not the SELECT aliases in $extrafields: WHERE is evaluated before SELECT, so a predicate
+     * cannot name an alias, and a custom profile field's value is a joined table's column.
      */
     protected $identitymappings = [];
 
@@ -131,12 +125,10 @@ class applications extends \table_sql implements dynamic_table {
     /**
      * Build the table.
      *
-     * **No argument, deliberately, and core is what decides that.** get.php calls
-     * `new $tableclass($uniqueid)` and PHP silently ignores an argument a constructor does not
-     * declare, so the shape core's own dynamic tables use - core_sms\table\sms_gateway_table:45
-     * and core_admin\table\plugin_management_table:51 - is to take none and pin the id here. That
-     * also removes the last route by which a caller could name a scope: there is now exactly one,
-     * the filterset, and exactly one thing in it.
+     * No argument: the dynamic table service calls `new $tableclass($uniqueid)`, which PHP
+     * accepts and ignores, and core's own dynamic tables (core_sms\table\sms_gateway_table,
+     * core_admin\table\plugin_management_table) likewise take none and pin the id. The filterset
+     * is then the only route by which a caller names a scope.
      */
     public function __construct() {
         parent::__construct(self::UNIQUEID);
@@ -145,24 +137,14 @@ class applications extends \table_sql implements dynamic_table {
     /**
      * The table for one scope, built the way the web service builds it.
      *
-     * A named constructor so the page path and the refresh path go through the SAME door: a
-     * filterset carrying the enrol instance id, and set_filterset() resolving everything else from
-     * it. manage.php could assemble that itself, and an earlier shape had it do so - but then the
-     * page and its own AJAX refreshes would have had two independent statements of how a scope is
-     * established, which is the drift this whole slice exists to remove.
+     * A named constructor so that the page and its AJAX refreshes establish a scope the same way:
+     * a filterset carrying the enrol instance id and the filters, with set_filterset() resolving
+     * everything else. $enrolid must be an int, as integer_filter::add_filter_value() throws a
+     * TypeError on anything else.
      *
-     * The cast is not cosmetic. integer_filter::add_filter_value() tests is_int() and throws a
-     * TypeError on anything else (lib/table/classes/local/filter/integer_filter.php:47), and a
-     * later slice will read this id out of a data attribute, where everything is a string.
-     *
-     * The two optional filters ride the same door for the same reason: manage.php reads them from
-     * the query string and the module sends them over the service, and a listing narrowed by one
-     * route has to be the same listing narrowed by the other.
-     *
-     * An empty search adds NO filter rather than an empty one. string_filter::add_filter_value()
-     * is a complete override gating only on is_string(), so it never reaches the base class's
-     * rejection of '' - a filter carrying the empty string is live, and set_filterset() below has
-     * to disarm it a second time for the requests this constructor never sees.
+     * An empty search adds no filter: string_filter::add_filter_value() overrides the base class
+     * without its rejection of '', so a filter carrying the empty string is live, and
+     * set_filterset() has to disarm it again for requests that do not come through here.
      *
      * @param int $enrolid Enrol instance to list, 0 for every one this operator may decide in.
      * @param string $search Text to narrow the listing to, empty for none.
@@ -187,9 +169,8 @@ class applications extends \table_sql implements dynamic_table {
             $filterset->add_filter(new integer_filter('status', null, [$status]));
         }
 
-        /* The field and date filters, added by NAME rather than positionally, so this door and the
-           web service's door hand the table the same shape. A name the filterset does not declare
-           throws in core, which is why request_filters() only ever produces declared ones. */
+        /* The field and date filters, added by name as the web service adds them. Core throws on
+           a name the filterset does not declare, so request_filters() only produces declared ones. */
         foreach ($filters as $name => $value) {
             if (trim((string) $value) !== '') {
                 $filterset->add_filter(new string_filter($name, null, [trim((string) $value)]));
@@ -205,18 +186,11 @@ class applications extends \table_sql implements dynamic_table {
     /**
      * Take the client's filters, resolve the scope from them, and build the query.
      *
-     * **check_validity() is called here because nothing else calls it.** get.php goes
-     * set_filterset() then validate_context() then has_capability() and never asks the filterset
-     * whether its required filters are present (:228-231, byte-identical on 5.1 and 5.2), so
-     * "required" in applications_filterset is a claim only this line enforces. Without it a
-     * request omitting enrolid would reach get_filter() and die with a coding_exception naming
-     * an array key, which is the same outcome told worse - and core's own participants table
-     * relies on exactly that.
+     * check_validity() is called here because the dynamic table service never calls it, so the
+     * "required" filters of applications_filterset are enforced by this line alone.
      *
-     * Order matters twice. The scope is resolved BEFORE parent::set_filterset(), because that
-     * calls guess_base_url() and the url is built from the scope. And the columns are defined
-     * here rather than in the constructor, because which identity columns exist is a question
-     * about the scope's context and the constructor has no scope yet.
+     * The scope is resolved before parent::set_filterset(), which calls guess_base_url(), and
+     * the url is built from the scope. The columns are defined later still; see out().
      *
      * @param filterset $filterset Filters as the client sent them.
      * @return void
@@ -224,16 +198,10 @@ class applications extends \table_sql implements dynamic_table {
     public function set_filterset(filterset $filterset): void {
         $filterset->check_validity();
 
-        /* check_validity() proves the filter is THERE and proves nothing about what it holds: it
-           tests array_key_exists() against the filterset's own map and stops
-           (lib/table/classes/local/filter/filterset.php:231-248). A filter carrying an EMPTY
-           value list is a well-formed request to core's service - get.php declares `values` as a
-           multiple structure, which validates an empty array happily - and filter::current()
-           answers null for one, because rewind() only takes a position `if
-           (count($this->filtervalues))` (filter.php:137-145). `(int) null` is 0, which is not a
-           refusal here: it is the WIDEST scope this queue has. So the value is read and tested,
-           and the same exception raised, because "you named no scope" is one thing to a caller
-           however the request managed to say it. */
+        /* check_validity() proves the filter is present, not that it holds a value. A filter
+           with an empty value list is a valid request to the service, and current() answers null
+           for it; (int) null would be 0, the widest scope this queue has. So an empty filter is
+           refused with the same exception as a missing one. */
         $enrolid = $filterset->get_filter('enrolid')->current();
         if ($enrolid === null) {
             throw new \moodle_exception('missingrequiredfields', 'core_table', '', 'enrolid');
@@ -241,12 +209,9 @@ class applications extends \table_sql implements dynamic_table {
 
         $this->scope = queue::listing_scope((int) $enrolid);
 
-        /* The identity fields, resolved HERE rather than in build_sql(), and the ordering is a
-           correctness requirement rather than tidiness. parent::set_filterset() below calls
-           guess_base_url(), which reads url_params(), which has to know which field filters are
-           applied - and build_sql() does not run until afterwards. Resolve them late and the base
-           url carries filters nothing validated, so page two of a filtered queue is a different
-           queue. */
+        /* The identity fields are resolved here rather than in build_sql() because
+           parent::set_filterset() calls guess_base_url(), whose url_params() needs the validated
+           field filters; otherwise page two of a filtered queue would be a different queue. */
         $this->extrafields = identity::fields($this->scope->identitycontext);
         $this->identitysql = identity::sql($this->scope->identitycontext, 'u');
         // Field name => the expression producing it, which is what a WHERE clause can name.
@@ -257,9 +222,9 @@ class applications extends \table_sql implements dynamic_table {
            carry these or the no-JavaScript path loses them on the first page turn. */
         $this->search = '';
         if ($filterset->has_filter('search')) {
-            /* Trimmed and tested for emptiness, because a live filter carrying '' reaches here.
-               Treating it as a narrowing filter would empty the queue the moment somebody cleared
-               the search box, and would make the count line say "0 of 312". */
+            /* Trimmed, because string_filter accepts '' and a request to
+               core_table_get_dynamic_table_content that neither for_scope() nor manage.js built may
+               carry it; an empty term must mean no search rather than a narrowing one. */
             $this->search = trim((string) $filterset->get_filter('search')->current());
         }
 
@@ -271,11 +236,10 @@ class applications extends \table_sql implements dynamic_table {
             }
         }
 
-        /* The course and the category, on the site-wide queue alone - see coursefilter::offered().
-           They travel as string filters like the dates rather than as integer ones like the
-           status, because the AMD module sends every control in the filter bar the same way and a
-           second shape there is a second thing to keep in step. The table is what validates them:
-           a course with no apply method, or a category that does not exist, is no filter. */
+        /* The course and the category, on the site-wide queue only (see coursefilter::offered()).
+           String filters like the dates, because the AMD module sends every filter-bar control the
+           same way. Validated here: a course with no apply method, or a category that does not
+           exist, is no filter. */
         $this->categoryfilter = null;
         $this->coursefilter = null;
         if (coursefilter::offered($this->scope)) {
@@ -291,11 +255,9 @@ class applications extends \table_sql implements dynamic_table {
             }
         }
 
-        /* One entry per field this reader is OFFERED, never per filter the request carried: a
-           filter naming a field the administrator enabled but this reader may not see in this
-           scope is simply not read. The filterset declares the site's whole list so that a forged
-           name is refused by core before it reaches here; this loop is what refuses a name that is
-           real but not this reader's. */
+        /* One entry per field this reader is offered, never per filter the request carried. The
+           filterset declares the site's whole list, so core refuses a forged name; this loop
+           ignores a real field this reader may not see in this scope. */
         $this->fieldfilters = [];
         foreach ($this->offeredfilters as $token => $offered) {
             if (!$filterset->has_filter($token)) {
@@ -318,22 +280,14 @@ class applications extends \table_sql implements dynamic_table {
     /**
      * Render the table, having defined its columns first.
      *
-     * **The columns cannot be defined in set_filterset(), and they cannot be left to setup()
-     * either. This is the one place that satisfies both constraints.**
+     * The columns cannot be defined in set_filterset(): select_all_header() renders through
+     * $OUTPUT, and the dynamic table service calls set_filterset() before validate_context(), so
+     * on the AJAX refresh path there is no page context yet and rendering throws "$PAGE->context
+     * was not set". Page loads do not show this, because manage.php sets the context first.
      *
-     * Not set_filterset(), because select_all_header() renders a core renderable through $OUTPUT
-     * and get.php calls set_filterset() BEFORE validate_context() - so on the refresh path there
-     * is no page context yet, $OUTPUT is still the bootstrap placeholder, and the first render
-     * throws "$PAGE->context was not set". That worked on every page load, because manage.php
-     * sets the context long before it builds the table, and only a real AJAX refresh in a real
-     * browser ever showed it.
-     *
-     * Not setup() alone, because sql_table::out() PROBES for columns before it calls setup():
-     * `if (!$this->columns)` runs an unpaginated `SELECT <fields> FROM <from> WHERE <where>` and
-     * names the columns after that row's keys (lib/table/classes/sql_table.php:213-222). With the
-     * definition deferred to setup() that branch fired on every single render - a second full
-     * query, joins and the EXISTS subquery included, thrown away moments later. Defining them
-     * here, before core's own out() is entered, is what keeps the branch cold.
+     * Nor can they be left to setup(): sql_table::out() runs an extra query (joins and EXISTS
+     * subquery included) to name the columns when none are defined before it calls setup().
+     * Defining them here, before core's out() is entered, avoids that query.
      *
      * @param int $pagesize Rows per page.
      * @param bool $useinitialsbar Ignored downstream; see initialbars().
@@ -362,11 +316,8 @@ class applications extends \table_sql implements dynamic_table {
     /**
      * Define the columns, once, however many of the entry points above are reached.
      *
-     * Idempotent by a flag rather than by define_columns() being idempotent - it is: core's
-     * define_columns() rebuilds $this->columns from scratch and resets the per-column styles and
-     * classes with it (lib/table/classes/flexible_table.php:460-476). So a second call would not
-     * duplicate anything; it would redo the identity lookup and the comment-label resolution for
-     * no reason. The flag says once and means it.
+     * Core's define_columns() is itself idempotent (it rebuilds the column list from scratch);
+     * the flag only saves repeating the header rendering and the comment-label resolution.
      *
      * @return void
      */
@@ -382,12 +333,12 @@ class applications extends \table_sql implements dynamic_table {
     /**
      * The context this table is read in.
      *
-     * Mandatory because get.php:230 calls it, not because the interface declares it - the
-     * interface declares has_capability() and nothing else.
+     * Required: flexible_table's version throws for a dynamic table, and the dynamic table
+     * service calls it for validate_context().
      *
-     * Never null and never false: the return type is a context, so a refusal has to be carried by
-     * has_capability() below. queue::listing_scope() answers an unresolvable id with the system
-     * context and allowed false for that reason.
+     * Never null: a refusal is carried by has_capability() below, which is why
+     * queue::listing_scope() answers an unresolvable id with the system context and allowed
+     * false.
      *
      * @return context The scope's context.
      */
@@ -411,16 +362,12 @@ class applications extends \table_sql implements dynamic_table {
     /**
      * The url paging and sorting link back to.
      *
-     * Mandatory for a dynamic table - flexible_table::guess_base_url() throws for one that does
-     * not override it - and called by set_filterset(), which is why the scope is resolved first.
+     * Required for a dynamic table (flexible_table's version throws), and called by
+     * set_filterset(), which is why the scope is resolved first. Every filter has to be carried
+     * here, or the no-JavaScript path loses it on the first page turn.
      *
-     * Every filter that can be GET-encoded has to be carried here, or the no-JavaScript path
-     * silently loses it on the first page turn: the scope, the search term and the status.
-     *
-     * It does NOT cover everything. get_dynamic_table_html_end() builds the "Show all / Show per
-     * page" link from `new moodle_url($PAGE->url)` rather than from this base url
-     * (lib/table/classes/flexible_table.php:1815), so manage.php has to put the same parameters
-     * into $PAGE->set_url() as well - see url_params(), which is the one definition both read.
+     * The "Show all / Show per page" link is built from $PAGE->url instead, so manage.php has to
+     * put the same parameters into $PAGE->set_url(); it takes them from request_filters().
      *
      * @return void
      */
@@ -470,14 +417,12 @@ class applications extends \table_sql implements dynamic_table {
     /**
      * How many applications this operator's queue holds before any filter narrows it.
      *
-     * The "of 312" in the count line, and the number the capacity header's first tile reports.
-     * They are the same number by construction rather than by two call sites agreeing: a filtered
-     * table_sql totalrows in that tile would render "4 awaiting decision" beside a deferred count
-     * read straight from \enrol_apply\local\capacity, which is arithmetically impossible and
-     * reads as a bug in the capacity figures rather than in the header.
+     * The "M" of the "N of M" count line, and the figure the capacity header's first tile
+     * reports. That tile must not use the filtered totalrows, which could fall below the deferred
+     * count it sits beside (read unfiltered from \enrol_apply\local\capacity).
      *
-     * One COUNT over two tables, and only when something is actually narrowing - otherwise it
-     * equals totalrows, which the table has already paid for.
+     * One COUNT over two tables, and only when something is narrowing; otherwise it equals
+     * totalrows, which the table has already computed.
      *
      * @return int Applications in scope, unfiltered.
      */
@@ -502,7 +447,7 @@ class applications extends \table_sql implements dynamic_table {
     /**
      * Whether the operator has narrowed this listing at all.
      *
-     * @return bool True when a search term or a status is applied.
+     * @return bool True when a search term, status, field, date, course or category filter is applied.
      */
     public function is_narrowed(): bool {
         return $this->search !== ''
@@ -539,18 +484,13 @@ class applications extends \table_sql implements dynamic_table {
     /**
      * The enrolment statuses this queue may be narrowed to.
      *
-     * The vocabulary in one place, because three readers need it and a fourth spelling is how it
-     * goes wrong: the renderer builds the select from it, manage.php validates the query string
-     * against it, and the predicate in build_sql() compares to it. It is exactly the two states
-     * queue::awaiting_decision_where() can leave a row in - ACTIVE is excluded by that predicate
-     * and a cancelled application has no row at all - so no other value could ever match.
+     * The renderer builds the status select from it and manage.php validates the query string
+     * against it. It is exactly the two states queue::awaiting_decision_where() can leave a row
+     * in: ACTIVE is excluded by that predicate and a cancelled application has no row at all.
      *
-     * That is not academic. The select's "any status" option carries the EMPTY string, so the GET
-     * form submits `status=` whenever no status is chosen; read with
-     * optional_param(..., PARAM_INT) that cleans to 0, which is ENROL_USER_ACTIVE, and every
-     * search made through the form silently applied a status no row can hold. Validating against
-     * this list is what makes an unrecognised value mean "no filter" rather than "filter by
-     * something impossible".
+     * The validation matters because the select's "any status" option submits `status=`, which
+     * PARAM_INT cleans to 0 (ENROL_USER_ACTIVE), a status no listed row can hold; an unrecognised
+     * value must mean "no filter".
      *
      * @return array The statuses, as ints.
      */
@@ -584,10 +524,9 @@ class applications extends \table_sql implements dynamic_table {
     /**
      * The filters this listing carries, as query-string parameters.
      *
-     * One definition, read by guess_base_url() here and by manage.php for the page url and the
-     * decision form's action. They have to agree: a bulk decision taken on a filtered queue posts
-     * to whatever the form's action says and is redirected back to whatever the page url says, so
-     * a disagreement drops the operator into the unfiltered queue after every decision.
+     * Read by guess_base_url() and by the renderer's filter chips. manage.php builds the page url
+     * and the decision form's action from request_filters() instead, and the two must agree: a
+     * disagreement drops the operator into a differently filtered queue after every decision.
      *
      * @return array Parameters for /enrol/apply/manage.php.
      */
@@ -670,18 +609,13 @@ class applications extends \table_sql implements dynamic_table {
     /**
      * Which parameters the queue reads off a url, and how each one is read.
      *
-     * The ONE definition, called by manage.php and used to build both the table and the page url,
-     * so the listing and the address it is reached at cannot disagree about what is applied. It
-     * resolves the offered set from the scope for the same reason set_filterset() does: a
-     * parameter naming a field this reader may not see is not read at all.
+     * Called by manage.php, which builds both the table and the page url from the result, so the
+     * listing and its address agree about what is applied. Only fields this reader is offered in
+     * the scope are read, as in set_filterset().
      *
-     * **It returns the CLEANED set, which is what makes that claim true.** An earlier version
-     * returned whatever survived optional_param(), while url_params() reports what survived
-     * queuefilter::clean() and date_filter() - so a select value outside its own vocabulary, or a
-     * malformed date, landed in the page url and the decision form's action while the table
-     * ignored it. Inert, because neither side narrowed anything by it, but it was precisely the
-     * disagreement the paragraph above says cannot happen, and the next filter to be added would
-     * not have been inert.
+     * It returns the cleaned set, validated by the same helpers set_filterset() uses
+     * (queuefilter::clean(), coursefilter, queuefilter::day_bounds()), so a value the table
+     * ignores never reaches the page url or the decision form's action.
      *
      * @param \stdClass $listing The scope, from \enrol_apply\local\queue::listing_scope().
      * @return array Parameter name => cleaned value, for the ones that narrow anything.
@@ -709,10 +643,8 @@ class applications extends \table_sql implements dynamic_table {
         }
 
         foreach (['appliedfrom', 'appliedto'] as $bound) {
-            /* PARAM_ALPHANUMEXT keeps [A-Za-z0-9_-] and drops the rest, which is a safe transport
-               charset rather than a date-shape check - `not-a-date` survives it whole. The shape
-               is checked by queuefilter::day_bounds(), the same helper date_filter() validates
-               through, so the url and the table agree about what a date is. */
+            /* PARAM_ALPHANUMEXT is a transport charset, not a date check (`not-a-date` survives
+               it); the shape is checked by queuefilter::day_bounds(), as in date_filter(). */
             $value = trim(optional_param($bound, '', PARAM_ALPHANUMEXT));
             if ($value !== '' && queuefilter::day_bounds($value, null)[0] !== null) {
                 $filters[$bound] = $value;
@@ -725,22 +657,16 @@ class applications extends \table_sql implements dynamic_table {
     /**
      * The columns a search term is matched against.
      *
-     * **Derived from what this reader can already SEE, never from a fixed list.** Every entry here
-     * is rendered on the row for this reader in this scope: the name by col_fullname(), the
-     * identity fields by the same loop that draws the identity line, the comment by
-     * col_applycomment(), and the course only where the course column exists. A column that is
-     * merely present in the SELECT is not eligible - \core_user\fields::for_userpic() pulls
-     * u.email into the projection of every scope including the mentee scope, where
-     * identity::fields(null) returns nothing, so matching it would answer "does this applicant's
-     * address contain <guess>?" to a reader who may not see the address. A hit count is an answer.
+     * Only what this reader can already see on the row in this scope: the name, the identity
+     * fields, the comment, and the course where the course column exists. A column merely present
+     * in the SELECT is not eligible: for_userpic() selects u.email in every scope, including the
+     * mentee scope where no identity field is shown, and a hit count would disclose the address.
      *
-     * The identity fields come from the mappings and not from $extrafields, which hold the SELECT
-     * aliases: WHERE is evaluated before SELECT on both families, and a custom profile field's
-     * value lives in a joined table that no alias can stand in for.
+     * Identity fields are matched through their expressions (see $identitymappings), not their
+     * SELECT aliases.
      *
-     * The snapshot column is deliberately absent. It is masked PER ROW by visible_keys(), and a
-     * searchable surface cannot honour a per-row mask - a reader denied a field on some rows would
-     * recover it by searching for it.
+     * The snapshot is deliberately absent: it is masked per row by visible_keys(), and a search
+     * cannot honour a per-row mask.
      *
      * @return array SQL expressions to match.
      */
@@ -766,16 +692,13 @@ class applications extends \table_sql implements dynamic_table {
     /**
      * The predicate matching the operator's search term.
      *
-     * One placeholder NAME per column, every one bound to the same value: fix_sql_params() counts
-     * placeholder OCCURRENCES and throws duplicateparaminsql when the total differs from the
-     * parameter array, so a single name reused across four columns is a fatal rather than a
-     * convenience.
+     * One placeholder name per column, all bound to the same value: fix_sql_params() rejects a
+     * reused placeholder.
      *
-     * has_unaccent() is resolved once here rather than inside like_ai(), so four searched columns
-     * cost one catalogue lookup instead of four - on every keystroke, once the module is wired.
+     * has_unaccent() is resolved once here rather than inside like_ai(), so the searched columns
+     * cost one catalogue lookup rather than one each.
      *
-     * sql_like_escape() is not optional. Core's own participants search omits it, which makes a
-     * percent sign an applicant typed into a live wildcard; that is a defect to leave behind.
+     * sql_like_escape() keeps a "%" or "_" in the term literal rather than a wildcard.
      *
      * @return array [where fragment, parameters].
      */
@@ -807,39 +730,29 @@ class applications extends \table_sql implements dynamic_table {
 
         [$wheres, $params] = $this->scope_where();
 
-        /* The identity fields this reader may see, and the SQL for them. Everything about which
-           fields those are is core's decision - see \enrol_apply\local\identity - so that the
-           queue and the participants page beside it cannot answer differently. */
+        /* The identity fields and their SQL were resolved in set_filterset(). Which fields those
+           are is core's decision - see \enrol_apply\local\identity - so the queue and the
+           participants page cannot answer differently. */
 
         $userfieldsapi = \core_user\fields::for_userpic()->including('username');
         $userfields = $userfieldsapi->get_sql('u', false, '', 'userid', false)->selects;
 
-        /* The comment is read from the durable record first and from the application info
-           row only as a fallback. The two hold the same text, but the application info row is
-           deleted the moment a decision is taken, and a decided enrolment can come back to
-           this queue: suspending an approved participant from core's participants page
-           leaves status != active with timeend = 0, which is exactly the predicate above.
-           Before this join those rows showed an empty comment; the fallback is what keeps
-           applications that predate the durable record readable.
+        /* The comment is read from the durable record first and from the application info row
+           only as a fallback, for applications that predate the durable record. The info row is
+           deleted on approval, and an approved enrolment can come back to this queue: suspending
+           it from the participants page leaves status != active with timeend = 0.
 
-           Joined on the user enrolment and not on courseid + userid, which is the natural
-           key of that table but is deliberately not unique: an applicant who was cancelled
-           and applied again has two records for the same course, and joining on the pair
-           would show each of their rows twice. */
-        /* Whether this applicant has a record of applying to this course BEFORE. It is a badge
-           on the row rather than a number, because what it changes is whether the operator opens
-           the review page - "they were cancelled here in June" is the kind of fact that turns a
-           30-second decision into a 3-minute one, and the queue is where that choice is made.
+           Joined on the user enrolment, not on courseid + userid, which is not unique: an
+           applicant who was cancelled and applied again has two records for the course. */
+        /* Whether this applicant applied to this course before: a badge prompting the operator
+           to open the review page.
 
-           A correlated EXISTS rather than a join, so the row count cannot change: a join to a
-           table whose natural key (courseid, userid) is deliberately NOT unique - cancelling and
-           re-applying is the ordinary route - would multiply the row per earlier application.
-           The courseuser index is the one this reads. CASE WHEN EXISTS is portable; both
-           database families CI runs plan it as a semi-join.
+           A correlated EXISTS rather than a join, so the row count cannot change: (courseid,
+           userid) is not unique, and a join would multiply the row per earlier application. It
+           reads the courseuser index.
 
-           `s.id IS NULL OR prior.id <> s.id` excludes the row's own record: a submission that IS
-           the current application is not evidence of an earlier one. The null branch is for the
-           applications that predate the durable record, which have no s.id to exclude. */
+           `s.id IS NULL OR prior.id <> s.id` excludes the row's own record; the null branch is
+           for applications that predate the durable record and have no s.id. */
         $priorsql = "CASE WHEN EXISTS (
                             SELECT 1
                               FROM {enrol_apply_submission} prior
@@ -848,11 +761,9 @@ class applications extends \table_sql implements dynamic_table {
                                AND (s.id IS NULL OR prior.id <> s.id)
                           ) THEN 1 ELSE 0 END AS appliedbefore";
 
-        /* s.userinfodata is the frozen record of what the applicant typed, and it costs nothing
-           to select: the row it comes from is already joined for the comment. There is no
-           fallback to enrol_apply_applicationinfo the way applycomment has one, because that row
-           has never held a snapshot - an application predating the durable record shows no
-           evidence rather than an empty envelope that would read as "they filled nothing in". */
+        /* s.userinfodata, the frozen snapshot, comes from the row already joined for the comment.
+           It has no fallback: enrol_apply_applicationinfo never held a snapshot, so an
+           application predating the durable record shows no evidence. */
         $fields = "ue.id AS userenrolmentid, ue.status AS enrolstatus, ue.timecreated AS applydate,
                    COALESCE(s.comment, ai.comment) AS applycomment, s.userinfodata AS snapshot,
                    c.fullname AS course,
@@ -865,36 +776,29 @@ class applications extends \table_sql implements dynamic_table {
                  JOIN {course} c ON c.id = e.courseid
                  {$this->identitysql->joins}";
 
-        /* The operator's own filters, last, so that everything above is the SCOPE and everything
-           here is the narrowing - which is the split scope_total() counts across. */
+        /* The operator's own filters, last: everything above is the scope, everything below the
+           narrowing, which is the split scope_total() counts across. */
         if ($this->search !== '') {
             [$searchwhere, $searchparams] = $this->search_where();
             $wheres[] = $searchwhere;
             $params += $searchparams;
         }
 
-        /* The ENROLMENT's status, not the durable record's, and the two measurably disagree: the
-           record is only moved to APPROVED on a transition to ENROL_USER_ACTIVE, so an approved
-           participant later suspended from the participants page re-enters this queue carrying
-           status APPROVED on the record and SUSPENDED on the enrolment. The queue lists what is
-           awaiting a decision NOW, which is the enrolment's question. The option LABELS are the
-           record's vocabulary because that is the wording the operator already reads on the review
-           page; the predicate is the enrolment's. */
+        /* The enrolment's status, not the record's: an approved participant later suspended from
+           the participants page re-enters this queue as APPROVED on the record and SUSPENDED on
+           the enrolment, and the queue lists what awaits a decision now. The option labels use the
+           record's wording, which the operator reads on the review page. */
         if ($this->status !== null) {
             $wheres[] = 'ue.status = :statusfilter';
             $params['statusfilter'] = $this->status;
         }
 
-        /* One predicate per applied field filter, over the EXPRESSION core's identity mapping
-           produced - never over a column name this plugin composed, and never over the SELECT
-           alias, since WHERE is evaluated first and a custom field's value lives in a joined table.
+        /* One predicate per applied field filter, over the expression core's identity mapping
+           produced (see $identitymappings).
 
-           The placeholder names are prefixed because this statement already binds `now` and
-           `active` from awaiting_decision_where(), `enrolid` or `enrol`, `mentee<N>` from the
-           mentee clause, `searchterm<N>` from the search and `statusfilter` above.
-           fix_sql_params() counts placeholder occurrences and throws duplicateparaminsql when the
-           total differs from the parameter array, so a collision is a fatal rather than a subtly
-           wrong answer. */
+           The placeholder names are prefixed because this statement already binds `now`,
+           `active`, `enrolid` or `enrol`, `mentee<N>`, `searchterm<N>` and `statusfilter`; a
+           collision would make fix_sql_params() throw. */
         $unaccent = null;
         $index = 0;
         foreach ($this->fieldfilters as $token => $value) {
@@ -902,19 +806,18 @@ class applications extends \table_sql implements dynamic_table {
             $name = 'queuefilter' . (++$index);
 
             if ($offered->control === 'select') {
-                /* A closed vocabulary is compared for equality rather than matched loosely - but
-                   through core's helper, because a bare `=` is not the same operator on the two
-                   database families this plugin is tested on. moodle_database::sql_equal() emits
-                   `=` unchanged, which on PostgreSQL is case sensitive, while
-                   mysqli_native_moodle_database::sql_equal() has to force COLLATE <family>_bin to
-                   reach that same behaviour - so a bare `=` on MariaDB takes the column's own,
-                   normally case-insensitive collation instead. Nothing in the expression
-                   neutralises it: sql_compare_text() delegates to sql_order_by_text(), which
-                   returns the field name unchanged on both drivers.
-                   Case matters here because stored data drifts out of case with the vocabulary
-                   naming it - an administrator may re-case a menu option at any time and
-                   {user_info_data} keeps whatever spelling it was written with. */
-                $wheres[] = $DB->sql_equal($offered->expression, ':' . $name, false, false);
+                /* A closed vocabulary is compared for equality through sql_equal(), case-insensitive
+                   and accent-sensitive, which every database family can express: LOWER() on both
+                   sides, plus the charset's _bin collation on MySQL and MariaDB. A bare `=` is case
+                   sensitive on PostgreSQL but follows the column's usually case- and
+                   accent-insensitive collation on MariaDB.
+
+                   Case must not matter because an administrator may re-case a menu option while
+                   {user_info_data} keeps the spelling it was written with. Accents must, because
+                   two options differing only by one ("Pais" and "País") are two members of the
+                   vocabulary, and accent-insensitive equality is what MySQL and MariaDB alone
+                   would give. */
+                $wheres[] = $DB->sql_equal($offered->expression, ':' . $name, false, true);
                 $params[$name] = $value;
                 continue;
             }
@@ -924,20 +827,17 @@ class applications extends \table_sql implements dynamic_table {
             $params[$name] = '%' . $DB->sql_like_escape($value) . '%';
         }
 
-        /* The course and the category, FIRST among the operator's filters because they are the
-           only ones a database can narrow with an index: {course}.category and {course}.id both
-           carry one, so these cut the row set before the search's LIKE has anything to scan. The
-           search can only ever scan, whatever it is given. */
+        /* The course and the category, on indexed columns ({course}.category and {course}.id),
+           unlike the search's LIKE, which can only scan. */
         [$coursewheres, $courseparams] = coursefilter::where($this->categoryfilter, $this->coursefilter);
         foreach ($coursewheres as $coursewhere) {
             $wheres[] = $coursewhere;
         }
         $params += $courseparams;
 
-        /* The applied-date range, as whole days in the reader's own timezone. The upper bound is
-           the midnight that STARTS the following day compared with a strict less-than, so the "to"
-           date is inclusive without any second-level arithmetic and without assuming a day is
-           86400 seconds - which it is not, twice a year. */
+        /* The applied-date range, as whole days in the reader's timezone. The upper bound is the
+           midnight starting the following day, compared with a strict less-than, so the "to" date
+           is inclusive without assuming a day is 86400 seconds. */
         [$fromstamp, $tostamp] = queuefilter::day_bounds($this->appliedfrom, $this->appliedto);
         if ($fromstamp !== null) {
             $wheres[] = 'ue.timecreated >= :appliedfromstamp';
@@ -954,29 +854,18 @@ class applications extends \table_sql implements dynamic_table {
     /**
      * The sort, with a unique final key so that two applications never trade places.
      *
-     * Every column this table offers can tie. `applydate` is `ue.timecreated`, which
-     * `enrol_plugin::enrol_user()` writes as whole Unix seconds, so a cohort admitted by one
-     * script or one busy minute shares a value - measured on the live 5.2 site, three pending
-     * applications already do. `course`, `fullname` and `email` tie more easily still. With no
-     * unique key the database is free to return a tied group in any order it likes, and it does
-     * not have to make the same choice twice: each page of a paged table is a separately planned
-     * statement with its own LIMIT and OFFSET, so a row can appear on two pages while another
-     * appears on none. Measured on PostgreSQL 17 over a tied 100-row set: 11 rows duplicated,
-     * 11 never shown, and adding a unique final key gave exactly 100 distinct rows.
+     * Every column this table offers can tie: `applydate` is `ue.timecreated` in whole seconds,
+     * so a batch of applications shares a value, and `course` and `fullname` tie more easily
+     * still. Without a unique key each page (a separate statement with its own LIMIT and OFFSET)
+     * may order a tied group differently, so a row can appear on two pages and another on none.
      *
-     * Core's own fallback cannot cover this. `set_sorting_preferences()` appends
-     * `sort_default_column` when it is missing, and here that column IS `applydate` - so
-     * clicking any other header gives "<that column> ASC, applydate ASC", which is two keys that
-     * both tie, and clicking `applydate` itself appends nothing at all.
+     * Core's fallback does not cover this: set_sorting_preferences() appends
+     * `sort_default_column`, which here is `applydate`, itself a key that ties.
      *
-     * This method, and not `get_sql_sort()` or `construct_order_by()`, is the injection point.
-     * `construct_order_by()` is static and reached through `self::`, which is early bound, so an
-     * override of it is never called. Appending to `get_sql_sort()`'s string instead would put a
-     * raw fragment after core's per-driver NULL ordering, which is not portable. The shape below
-     * is core's own, in `tool_policy`, `mod_quiz` and `mod_assign`.
-     *
-     * The raw `ue.id` and not the `userenrolmentid` alias: both work on PostgreSQL and MariaDB,
-     * but the raw column is what core uses and it does not depend on the SELECT list.
+     * This method is the injection point: construct_order_by() is static and called through
+     * `self::`, so an override is never reached, and appending to get_sql_sort()'s string would
+     * land after core's per-driver NULL ordering. Core does the same in tool_policy, mod_quiz and
+     * mod_assign. The raw `ue.id` rather than its alias does not depend on the SELECT list.
      *
      * @return array Column name => SORT_ASC or SORT_DESC, ending in a unique key.
      */
@@ -990,12 +879,9 @@ class applications extends \table_sql implements dynamic_table {
     /**
      * Declare the columns and their headings.
      *
-     * The comment heading comes from the scope rather than from a caller. It used to be a
-     * constructor argument, and a dynamic table has no constructor arguments to pass it in -
-     * which is no loss, because the instance it is read from is exactly what the scope resolves.
-     * The site-wide and mentee scopes span instances, each of which may word the question
-     * differently, so a single heading there would be true of some rows and false of others;
-     * those scopes carry no instance and get the shipped wording.
+     * The comment heading comes from the scope's instance. The site-wide and mentee scopes span
+     * instances, each of which may word the question differently, so they carry no instance and
+     * get the shipped wording.
      *
      * @return void
      */
@@ -1003,10 +889,8 @@ class applications extends \table_sql implements dynamic_table {
         $columns = ['checkboxcolumn'];
         $headers = [$this->select_all_header()];
 
-        /* The course, and only where a row's course is not already known from the url. Every row
-           of an instance-scoped queue belongs to the same course, so the column would repeat one
-           value down the page and cost the applicant's own cell the width to do it. The site-wide
-           and mentee scopes span courses and cannot do without it. */
+        /* The course, only for the site-wide and mentee scopes, which span courses; every row of
+           an instance-scoped queue belongs to the same course. */
         if ($this->scope->instance === null) {
             $columns[] = 'course';
             $headers[] = get_string('course');
@@ -1016,27 +900,19 @@ class applications extends \table_sql implements dynamic_table {
         // The heading of a column named 'fullname' is filled in by table_sql itself.
         $headers[] = 'fullname';
 
-        /* The identity fields are NOT columns any more; they ride as a second line inside the
-           applicant's cell, and that is what makes a variable, capability-gated field list fit a
-           table at all - a site naming five of them would otherwise push the evidence off the
-           right-hand edge. What it costs is their sortability, which is a real loss and a small
-           one: sorting a triage queue by institution is not a thing operators do, and the filters
-           of a later slice are the affordance that replaces it. */
+        /* The identity fields are not columns: they form a second line inside the applicant's
+           cell, so a variable, capability-gated field list fits the table. They lose sortability;
+           the field filters stand in for it. */
 
         $columns[] = 'applydate';
         $headers[] = get_string('applydate', 'enrol_apply');
 
-        /* The evidence, and the reason this queue exists at all: the answers the applicant gave
-           are what the decision is made on, and the page this replaces showed them nowhere.
+        /* The answers the applicant gave, which the decision is made on.
 
-           Absent on the mentee scope, by the decision recorded in the plan: identity fields
-           appear on the ?id= and site-wide scopes only, never there. These pills are identity
-           data of exactly that kind - a site offers city, institution and custom profile fields
-           through this form - so the decision governs them too, and `identitycontext === null` is
-           the predicate that already means "the mentee scope" everywhere else in this class.
-           It is not that the column COULD not be masked there; visible_keys() judges each row in
-           its own course and would answer for a mentor as well as for anybody. It is that the
-           owner decided this data does not belong on that surface. */
+           Absent on the mentee scope (`identitycontext === null`), which shows no identity data:
+           these answers are identity data of the same kind (city, institution, custom profile
+           fields). visible_keys() could mask them per row there too; leaving them out is a
+           product decision, not a technical limit. */
         if ($this->scope->identitycontext !== null) {
             $columns[] = 'snapshot';
             $headers[] = get_string('queuesubmitted', 'enrol_apply');
@@ -1050,10 +926,8 @@ class applications extends \table_sql implements dynamic_table {
             ? get_string('applycomment', 'enrol_apply')
             : commentlabel::custom($this->scope->instance);
 
-        /* The door to one application, and the queue had none. Its only routes in were the
-           participants-page icon, the notification e-mail and the previous/next chain, so an
-           operator reading the queue could not open the row they were reading. The header is
-           empty on purpose: a column of buttons needs no name, and every button carries one. */
+        /* A link to each application's review page. The header is empty on purpose: every
+           button carries its own accessible name. */
         $columns[] = 'review';
         $headers[] = '';
 
@@ -1065,8 +939,8 @@ class applications extends \table_sql implements dynamic_table {
            against the applicant's name rather than reading a wall of bare values. */
         $this->define_header_column('fullname');
         $this->no_sorting('checkboxcolumn');
-        /* Unsortable because there is nothing to sort on: the column renders a list of pairs out
-           of a JSON envelope, and no database this plugin supports can order by one of them. */
+        /* Unsortable: the column renders pairs out of a JSON envelope, which SQL cannot order by;
+           see also search_columns() on why it must stay out of SQL. */
         $this->no_sorting('snapshot');
         $this->no_sorting('applycomment');
         $this->no_sorting('review');
@@ -1076,16 +950,12 @@ class applications extends \table_sql implements dynamic_table {
     /**
      * What an empty result says, which depends on why it is empty.
      *
-     * Core's "Nothing to display" is right for a queue with no applications and wrong for a filter
-     * that matched none: the operator has just typed something, and a message that does not
-     * mention the filter reads as "this queue is empty" - which sends them looking for a fault in
-     * the enrolment method rather than at the box they just typed in.
+     * Core's "Nothing to display" is right for a queue with no applications, but a filter that
+     * matched nothing gets a message naming the filter, so it does not read as an empty queue.
      *
-     * The unfiltered branch delegates verbatim rather than reproducing core's markup, so the
-     * dynamic header, the reset button and the initials bar keep whatever core does with them. A
-     * Behat scenario in this plugin asserts core's own string on the unfiltered empty queue
-     * (tests/behat/enrol_apply.feature), and that is the control on this override: change it to
-     * fire unconditionally and that scenario goes red.
+     * The unfiltered branch delegates to core rather than reproducing its markup. A Behat
+     * scenario in tests/behat/enrol_apply.feature asserts core's string on the unfiltered empty
+     * queue.
      *
      * @return void
      */
@@ -1107,22 +977,13 @@ class applications extends \table_sql implements dynamic_table {
     /**
      * A cell's own heading, for the card the row becomes below the breakpoint.
      *
-     * **Real text in the markup, and NOT `content: attr(data-label)`.** The first cut of the card
-     * view put the wording in a data-* attribute and drew it from the stylesheet, which reads as
-     * the tidier answer and is the weaker one: CSS-generated content is announced inconsistently
-     * across screen readers, and - worse - turning the rows and cells into blocks costs the table
-     * its own semantics in the accessibility tree, so the association between a value and its
-     * column heading in the thead goes with it. Text inside the cell needs neither: it is
-     * announced everywhere, and it is beside the value it names whatever the display is.
+     * Real text in the markup rather than `content: attr(data-label)`: CSS-generated content is
+     * announced inconsistently by screen readers, and turning rows and cells into blocks loses
+     * the table semantics that tie a value to its thead heading. ARIA roles were rejected because
+     * flexible_table offers no hook for row attributes, and role="cell" without a role="row"
+     * ancestor is worse than none. Hidden above the breakpoint by styles.css.
      *
-     * `role="cell"` and friends were the other candidate and were rejected: flexible_table
-     * offers no hook for ROW attributes, so the cells could have been given a role and the rows
-     * could not, and an orphan role="cell" with no role="row" ancestor is worse than none.
-     *
-     * Hidden above the breakpoint by styles.css, where the thead already says all this.
-     *
-     * The caller passes the ESCAPED spelling: html_writer::span() concatenates its content
-     * without escaping it, exactly as html_writer::tag() does for the headers.
+     * The caller passes the escaped spelling: html_writer::span() does not escape its content.
      *
      * @param string $label Heading for this cell, already escaped.
      * @return string The heading markup, to prefix the cell's own content with.
@@ -1134,12 +995,9 @@ class applications extends \table_sql implements dynamic_table {
     /**
      * The select-all checkbox shown in the header of the checkbox column.
      *
-     * Core's own renderable, so the queue is driven by core/checkbox-toggleall rather than by
-     * markup of this plugin's invention. The label text is pinned to the same string in both
-     * directions on purpose: the module rewrites the label's innerHTML on every toggle, and a
-     * header cell whose label alternates between "Select all" and "Deselect all" changes width
-     * under the reader. Core does the same, with the same comment, in the gradebook and in the
-     * participation report.
+     * Core's renderable, driven by core/checkbox-toggleall. The label is the same string in both
+     * states because the module rewrites it on every toggle, and a header alternating between
+     * "Select all" and "Deselect all" would change width.
      *
      * @return string Rendered checkbox with its accessible label.
      */
@@ -1169,10 +1027,8 @@ class applications extends \table_sql implements dynamic_table {
     public function col_checkboxcolumn($row) {
         global $OUTPUT;
 
-        /* The name, the value and the label are unchanged from the hand-written markup this
-           replaces, which is what keeps the POST contract (userenrolments[]) and the Behat
-           locator ("Select Student 1") intact. Adopting core's renderable changes the data
-           attributes, not the contract. */
+        /* The name and value are manage.php's POST contract (userenrolments[]), and the label is
+           what Behat locates the checkbox by ("Select Student 1"). */
         return $OUTPUT->render(new \core\output\checkbox_toggleall(self::TOGGLE_GROUP, false, [
             'id' => 'enrol_apply_ue_' . $row->userenrolmentid,
             'name' => 'userenrolments[]',
@@ -1185,18 +1041,12 @@ class applications extends \table_sql implements dynamic_table {
     /**
      * No initials BAR either, whatever the caller asks for.
      *
-     * The other half of the override below, and the two are genuinely separate:
-     * get_sql_where() stops the filter narrowing the query, this stops the control being drawn.
-     * Killing only the filter would leave an A-Z bar on the page that silently does nothing when
-     * clicked, which is worse than either end state.
+     * The other half of get_sql_where() below: that stops the filter, this stops the A-Z bar
+     * being drawn, which would otherwise do nothing when clicked.
      *
-     * It is an override rather than a call because the argument is not the caller's to make here:
-     * renderer::capture_table() passes true to out(), and on core's dynamic-table path
-     * external\dynamic\get calls out($pagesize, true) unconditionally. Forcing it false at the
-     * source is what survives both.
-     *
-     * With use_initials false, get_initial_first() and get_initial_last() return null, so
-     * print_initials_bar()'s condition is false on all three of its terms and nothing is drawn.
+     * An override, because both callers pass true: renderer::capture_table() to out(), and the
+     * dynamic table service calls out($pagesize, true), which query_db() turns into
+     * initialbars(true). With use_initials false, print_initials_bar() draws nothing.
      *
      * @param bool $bool Ignored.
      * @return void
@@ -1208,22 +1058,14 @@ class applications extends \table_sql implements dynamic_table {
     /**
      * No initials filter, on either path.
      *
-     * Rendering with `out(50, false)` hides the A-Z bar and does nothing else: get_sql_where()
-     * reads `prefs['i_first']` and `prefs['i_last']` and never consults `use_initials`, and
-     * table_sql::query_db() appends the result to both the count and the data query. Measured
-     * against the real queue: with a stored `i_first = 'Z'` and no bar anywhere on the page, a
-     * three-row queue returned nothing, with no control on screen able to explain it. The
-     * preference lives in $SESSION->flextable, so it survives page loads and is invisible.
+     * Hiding the A-Z bar is not enough: core's get_sql_where() reads `prefs['i_first']` and
+     * `prefs['i_last']` without consulting `use_initials`, and query_db() applies the result to
+     * both the count and the data query. The preference lives in $SESSION->flextable, so a
+     * stale initial would silently empty the queue with no control on screen to explain it; the
+     * dynamic table service can also set it from the request's firstinitial and lastinitial.
      *
-     * On the dynamic path there is a third way in that the page path never had: get.php reads
-     * `firstinitial` and `lastinitial` straight off the request and calls set_first_initial() /
-     * set_last_initial() with them (:238-244). Those write the same preference, so a crafted
-     * request could re-arm the filter this override exists to kill - and this override is what
-     * keeps that harmless, because the preference is never read.
-     *
-     * Overriding this is the complete kill. Emptying $userfullnamecolumns also stops the filter
-     * and silently costs the fullname column its firstname/lastname sub-sort links, which is why
-     * it is not what this does.
+     * Emptying $userfullnamecolumns would also stop the filter, but would cost the fullname
+     * column its firstname/lastname sort links.
      *
      * @return array Empty where clause and no parameters.
      */
@@ -1234,20 +1076,15 @@ class applications extends \table_sql implements dynamic_table {
     /**
      * The applicant: their picture, their name, what is unusual about them, and who they are.
      *
-     * Four things in one cell, and the reason they are in one cell rather than four columns is
-     * that only one of them has a fixed width. The identity list is whatever the site named in
-     * showuseridentity and this reader may see, so as columns it is a table whose shape changes
-     * per site and per reader; as a second line it is a paragraph that wraps.
+     * One cell rather than four columns because the identity list varies per site and per
+     * reader; as a second line it wraps instead of changing the table's shape.
      *
-     * **This is now the escaping boundary, and it moved here from other_cols().** flexible_table
-     * writes a cell's value into the markup with no escaping of its own, and an identity field is
-     * user-controlled text. Everything below that is not already a link or a lang string goes
-     * through s() or format_string(). Gate AM is the one that reddens if an identity value stops
-     * being escaped.
+     * This is the escaping boundary for the cell: flexible_table writes a cell's value into the
+     * markup unescaped, and identity fields are user-controlled text, so every value below that
+     * is not already a link or a lang string goes through s().
      *
-     * The name is a plain profile link and deliberately not a details modal: the decision needs
-     * the profile, and a modal that summarises it is a second thing to keep in step with the
-     * first.
+     * The name links to the profile rather than opening a summary modal, which would be a second
+     * rendering of the profile to keep in step.
      *
      * @param stdClass $row Row data carrying the aliased user picture fields.
      * @return string Rendered cell.
@@ -1255,13 +1092,9 @@ class applications extends \table_sql implements dynamic_table {
     public function col_fullname($row) {
         global $CFG, $OUTPUT;
 
-        /* ENROL_APPLY_USER_WAIT lives in the plugin's lib.php, which is not autoloaded while this
-           class is, and an undefined constant is a fatal on PHP 8. It is the FOURTH place in this
-           plugin needing the same line, and the first where the page path hid the omission: this
-           method is reached from manage.php, which requires lib.php itself, AND from core's
-           dynamic-table service, which requires nothing of the sort. So it worked for every page
-           load and died on the first AJAX refresh - measured, and only because a Behat scenario
-           provoked a sort. Anything else this class reaches for from lib.php has the same shape. */
+        /* ENROL_APPLY_USER_WAIT is defined in lib.php, which is not autoloaded. manage.php
+           includes it, but the dynamic table service does not, so without this line an AJAX
+           refresh fails. */
         require_once($CFG->dirroot . '/enrol/apply/lib.php');
 
         $user = user_picture::unalias($row, ['username'], 'userid');
@@ -1274,10 +1107,8 @@ class applications extends \table_sql implements dynamic_table {
 
         $badges = '';
         if ($row->enrolstatus == ENROL_APPLY_USER_WAIT) {
-            /* text-dark beside bg-warning is not decoration. Bootstrap 5's .badge defaults its
-               colour to WHITE, so a light fill renders white on near-white - measured at 1.95:1
-               against the 4.5:1 floor. Every bg-* on a badge in this plugin carries an explicit
-               text utility for that reason. */
+            /* An explicit text colour on every badge fill: Bootstrap 5's .badge defaults to white
+               text, which gives 1.95:1 on this light fill against the 4.5:1 floor. */
             $badges .= html_writer::span(
                 get_string('queuewaitinglist', 'enrol_apply'),
                 'badge bg-warning text-dark me-1'
@@ -1321,9 +1152,8 @@ class applications extends \table_sql implements dynamic_table {
     public function col_review($row) {
         $user = user_picture::unalias($row, ['username'], 'userid');
 
-        /* The label names the applicant and is hidden, because the visible word is "Review" on
-           every row and a screen reader reading a column of them learns nothing. aria-label and
-           not a title: a title is not announced reliably and is invisible to a keyboard user. */
+        /* The aria-label names the applicant, as the visible word is "Review" on every row. Not a
+           title, which is not announced reliably and is invisible to a keyboard user. */
         return html_writer::link(
             new moodle_url('/enrol/apply/manage.php', ['userenrol' => $row->userenrolmentid]),
             get_string('queuereview', 'enrol_apply'),
@@ -1354,10 +1184,7 @@ class applications extends \table_sql implements dynamic_table {
      * @return string Rendered cell.
      */
     public function col_applydate($row) {
-        /* How long ago, over the date itself. An operator triaging a queue is asking "how long
-           has this person been waiting", and a column of timestamps makes them do the subtraction
-           on every row. The exact date stays underneath, because the answer to "when exactly" has
-           to be on the page somewhere and this is where a reader looks for it. */
+        /* How long the applicant has been waiting, with the exact date underneath. */
         return $this->card_label(s(get_string('applydate', 'enrol_apply')))
             . html_writer::div(format_time(time() - $row->applydate), 'enrol_apply-applyago')
             . html_writer::div(
@@ -1369,31 +1196,15 @@ class applications extends \table_sql implements dynamic_table {
     /**
      * The snapshot keys this reader may see for one row, judged in that row's own course.
      *
-     * **Per row, and an earlier version of this class got it wrong in a way worth recording.**
-     * That version resolved the mask once from the SCOPE's context, and justified it in a
-     * docblock claiming that a capability held at system level is held in every course below it,
-     * so a system-context mask could never be more permissive than a per-row one. That claim is
-     * false, and core says so plainly: has_capability_in_accessdata() builds its list of contexts
-     * by walking UPWARD from the one it is given (lib/accesslib.php:792-800, byte-identical on
-     * 5.1 and 5.2) and returns false only for a CAP_PROHIBIT found in that list. A prohibit
-     * recorded at a course context is therefore invisible to a check made at the system context.
-     * So an operator holding moodle/site:viewuseridentity site-wide, with it prohibited in one
-     * course - which is what the Permissions page exists to do - passed the system check and had
-     * every pill of that course's applicants rendered to them.
+     * Per row, not per scope: has_capability() walks upward from the context it is given, so a
+     * check at the system context does not see a CAP_PROHIBIT set in one course, and a scope-level
+     * mask would show that course's snapshots to an operator prohibited there. This matches
+     * renderer::snapshot_context(), which masks in the application's course context.
      *
-     * Judging each row in its own course context removes that, and it is also what makes this
-     * column agree with renderer::snapshot_context(), which has always masked on
-     * context_course::instance($application->courseid). The two surfaces onto this record now ask
-     * literally the same question.
+     * The identity line beside it uses the scope's context because identity::fields() decides the
+     * SELECT list, one per statement; the snapshot is rendered per row and has no such limit.
      *
-     * The identity line in the applicant's cell beside these pills still asks the scope's
-     * context, and that is NOT an oversight left behind: identity::fields() decides the SELECT
-     * list, so one statement spanning courses has one field list and cannot be masked per row at
-     * all. The snapshot is a JSON envelope rendered per row and carries no such constraint, which
-     * is why the correct answer is available here and not there.
-     *
-     * Memoised because a site-wide queue spans courses: one context load and one capability check
-     * per distinct course, not per row.
+     * Memoised per course, as a site-wide queue spans courses.
      *
      * @param int $courseid Course the row's application was made to.
      * @return array|bool Keys this reader may see, or submissionformatter::ALL_FIELDS.
@@ -1411,29 +1222,18 @@ class applications extends \table_sql implements dynamic_table {
     /**
      * What the applicant submitted with this application.
      *
-     * Read from the frozen snapshot the applicant's own submission wrote, and from nothing else.
-     * The rule is the review page's and the reasoning is recorded in full on
-     * renderer::snapshot_context(): re-resolving the field set from the LIVE enrol instance would
-     * drop a field the teacher has since stopped asking for, and dereferencing a stored key
-     * against the applicant's live profile once rendered a password hash from a crafted archive.
-     * The stored labels are used for the same reason - they are the wording the applicant saw
-     * when they typed.
+     * Read from the frozen snapshot only, with its stored labels, never re-resolved against the
+     * live instance or profile; see renderer::snapshot_context() for why.
      *
-     * That also settles what the mockup calls a "not given" pill, which this column deliberately
-     * does not draw. fields::submitted_values() never records an empty answer, so a field left
-     * blank and a field that was never offered are the same absence in the envelope, and telling
-     * them apart would need exactly the live re-resolution the paragraph above forbids - per row,
-     * and impossible at all on a scope spanning instances that offer different fields. Showing
-     * only what was actually answered is the honest half of the mockup.
+     * No "not given" marker: fields::submitted_values() never records an empty answer, so a field
+     * left blank and one never offered are the same absence, and telling them apart would need
+     * that live re-resolution.
      *
-     * **This is an escaping boundary.** flexible_table::format_row() writes a cell's value into
-     * the markup with no escaping of its own, and both halves of every pair are user-controlled:
-     * the value is what the applicant typed, and a custom field's label is what an administrator
-     * named it. s() on both, and not format_string(), whose strip_tags() would delete a restored
-     * value from the first "<" onwards. Gate CP is the one that reddens if either stops.
+     * An escaping boundary: flexible_table writes the cell unescaped, and both the value and a
+     * custom field's label are user-controlled. s() on both, not format_string(), whose
+     * strip_tags() would delete a restored value from the first "<" onwards.
      *
-     * Nothing at all when there is nothing to show, the card label included: a card headed
-     * "Submitted with the application" over empty space claims a section the record does not have.
+     * Returns nothing, card label included, when there is nothing to show.
      *
      * @param stdClass $row Row data carrying the stored envelope as `snapshot`.
      * @return string Rendered cell.
@@ -1444,9 +1244,7 @@ class applications extends \table_sql implements dynamic_table {
         $pills = '';
         foreach (submissionrecord::read_snapshot($row->snapshot ?? null) as $entry) {
             if ($visible !== submissionformatter::ALL_FIELDS && !in_array($entry['key'], $visible, true)) {
-                /* Withheld from every row rather than only from the rows holding a value: a
-                   marker appearing exactly where there is data is a presence oracle, which is
-                   the rule the report's own formatter states and both other surfaces inherit. */
+                // Dropped without a marker; see submissionformatter::visible_keys().
                 continue;
             }
 
@@ -1470,9 +1268,8 @@ class applications extends \table_sql implements dynamic_table {
      * @return string Rendered cell.
      */
     public function col_applycomment($row) {
-        /* The instance's own wording, in the ESCAPED spelling, which is the same value and the
-           same spelling the column header carries - so the card and the desktop cannot disagree
-           about what the applicant was asked. commentlabel::custom() defaults to that spelling. */
+        /* The same escaped label as the column header, so the card and the table agree about
+           what the applicant was asked. */
         $label = $this->scope->instance === null
             ? s(get_string('applycomment', 'enrol_apply'))
             : commentlabel::custom($this->scope->instance);

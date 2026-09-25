@@ -25,25 +25,24 @@ use stdClass;
  * setting that offers the choices, the filterset that declares the accepted filter names, the table
  * that builds the predicate, and the renderer that draws the controls.
  *
- * **The offered set is an INTERSECTION, and both halves matter.** The administrator picks from the
- * fields this site names in showuseridentity; the reader is then offered only those they may
- * already see in the queue they are looking at. Ticking a box therefore grants nobody anything -
- * the second half is what makes that true, and it is not this class's doing: the field list a
- * caller passes to resolve() is core's own identity mapping, which
- * \core_user\fields::get_identity_fields() has already run the capability check, the
- * hiddenuserfields check and the deleted-custom-field drop over.
+ * The offered set is an intersection. The administrator picks from the fields this site names in
+ * showuseridentity; the reader is then offered only those they may already see in the queue they
+ * are looking at, so ticking a box grants nobody anything. That second half comes from the caller:
+ * the field list passed to resolve() is core's own identity mapping, which
+ * \core_user\fields::get_identity_fields() has already filtered by capability, by
+ * hiddenuserfields and by dropping deleted custom fields.
  *
- * **Never build that list here, and never hand a name to \core_user\fields::including().** That
- * method is array_merge with no validation, and get_sql()'s standard branch builds "{$alias}{$field}"
- * for any string it is given - so an administrator's typo, or a value a restore wrote, would
- * become a WHERE-usable mapping onto u.password with no capability check anywhere in the path. The
- * whole gate lives in get_identity_fields(). Taking the list from the mapping and from nothing else
- * is what inherits it.
+ * Never build that list here, and never hand a name to \core_user\fields::including(). That method
+ * is array_merge with no validation, and get_sql()'s standard branch builds "{$alias}{$field}" for
+ * any string it is given - so a stored setting value that is not (or no longer) an identity field
+ * would become a WHERE-usable mapping onto any {user} column, u.password included, with no
+ * capability check in the path. Taking the list from the mapping and nothing else inherits the
+ * gate in get_identity_fields().
  *
- * **The submitted-profile snapshot is not a filter source and cannot become one.** It is masked per
+ * The submitted-profile snapshot is not a filter source and cannot become one. It is masked per
  * row by the report's own visible_keys(), and no filterable surface can honour a per-row mask: an
- * operator would recover a withheld value by filtering for it and reading the count. That is the
- * same rule that keeps the snapshot out of the search.
+ * operator would recover a withheld value by filtering for it and reading the count. The same rule
+ * keeps the snapshot out of the search.
  *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine
@@ -54,10 +53,9 @@ class queuefilter {
      * Query-string names a filter token may not take.
      *
      * The queue's GET form carries each filter as a parameter of its own, so a token colliding with
-     * one of these would quietly overwrite something that already means something - the scope, the
-     * paging, the decision form's own fields. No identity field core ships collides; a custom one
-     * could, since a profile shortname may be any of [a-zA-Z0-9_]+, and the failure would be a page
-     * that silently loses its scope rather than an error.
+     * one of these would silently overwrite the scope, the paging or the decision form's own fields.
+     * token() checks standard field names against it; a custom field travels as CUSTOM_PREFIX plus
+     * its id and cannot collide.
      *
      * @var array
      */
@@ -73,15 +71,14 @@ class queuefilter {
     /**
      * The fields an administrator has offered as filters.
      *
-     * Read with the GLOBAL get_config() and never through an enrol_plugin object, which memoises
+     * Read with the global get_config() and never through an enrol_plugin object, which memoises
      * $this->config: a set_config() in a test would then leave an already-built plugin on the old
      * value and the test would exercise nothing.
      *
-     * Absent and the empty string are the same answer - no filters - and are read with one rule
-     * rather than with `?:`. The setting ships empty by decision, so an existing site upgrades with
-     * the date filters and no field filters until somebody ticks a box; and
+     * Absent and the empty string both mean no filters. The setting ships empty, so an existing
+     * site upgrades with the date filters and no field filters until somebody ticks a box; and
      * admin_setting_configmulticheckbox::write_setting() stores nothing at all on a site with no
-     * identity fields configured, which is a third spelling of the same state.
+     * identity fields configured.
      *
      * @return array Identity field names, in core's own spelling.
      */
@@ -122,11 +119,9 @@ class queuefilter {
     /**
      * A field's name as the reader reads it.
      *
-     * **Core's own get_display_name() mixes the two spellings and cannot be used directly.** It
-     * runs format_string() - which escapes by default - for a custom field, and a bare get_string()
-     * for a standard one, so the list it returns is half escaped and half not. That is the same
-     * shape as the role names this plugin already normalises in its renderer, and the fix is the
-     * same: produce ONE spelling here and let each sink ask for what it needs.
+     * Not core's get_display_name(), which mixes the two spellings: format_string() - escaping by
+     * default - for a custom field, and a bare get_string() for a standard one. This produces one
+     * spelling and lets each sink ask for what it needs, as the renderer does for role names.
      *
      * @param string $name Identity field name.
      * @param bool $escape True for a sink that renders raw, false for one that escapes.
@@ -180,20 +175,18 @@ class queuefilter {
     /**
      * The filters this reader is actually offered, and how each one narrows the queue.
      *
-     * **No label is resolved here, and that is a hard requirement rather than a tidy separation.**
-     * This runs from applications::set_filterset(), which core's dynamic-table service calls
-     * BEFORE validate_context() (lib/table/classes/external/dynamic/get.php), so on the refresh
-     * path $PAGE has no context yet - and every label of a custom profile field goes through
-     * format_string(), which asks $PAGE for one.
+     * No label is resolved here. This runs from applications::set_filterset(), which core's
+     * dynamic-table service calls before validate_context()
+     * (lib/table/classes/external/dynamic/get.php), so on the refresh path $PAGE has no context
+     * yet - and every label of a custom profile field goes through format_string(), which asks
+     * $PAGE for one.
      *
-     * What happens then depends on the site's debug level, and only one of the two is loud.
-     * moodle_page::magic_get_context() throws "$PAGE->context was not set" when AJAX_SCRIPT and
-     * developer debugging are both on - as this fleet's stacks are, which is where this was
-     * measured: the queue simply stopped refreshing, the service returning HTTP 200 carrying an
-     * exception and nothing appearing on screen. Below that level it does not throw at all. It
-     * emits a debugging() notice and substitutes the SYSTEM context, so the label is resolved
-     * against the wrong context instead - quieter, and worse. The page path sets the context first
-     * and sees neither. The renderer asks label() for a label when it has a page to render onto.
+     * moodle_page::magic_get_context() then throws "$PAGE->context was not set" when AJAX_SCRIPT
+     * and developer debugging are both on, so the queue stops refreshing with the exception inside
+     * an HTTP 200 response. At lower debug levels it emits a debugging() notice and substitutes
+     * the system context, so the label is silently resolved against the wrong context. The page
+     * path sets the context first and sees neither. The renderer asks label() for a label when it
+     * has a page to render onto.
      *
      * @param array $mappings Identity field name => SQL expression, from core's get_sql().
      * @return array Token => object carrying name, token, control, options and expression.
@@ -231,15 +224,14 @@ class queuefilter {
     /**
      * What kind of control a field gets, and the values it offers.
      *
-     * **A closed vocabulary becomes a select; everything else is a text box, and the reason is
-     * disclosure rather than taste.** A text filter is a strict narrowing of the search this queue
-     * already offers over the same expressions, so it can answer no question the search box cannot
-     * already answer. A list of the DISTINCT values present would be different in kind: it
-     * enumerates rather than confirms, and the query behind it would become a third consumer of the
-     * scope predicate - one that, bounded by the instance alone, would list the cities of
-     * applicants already approved or cancelled, rows this reader has never seen, with no symptom on
-     * the page. Where the vocabulary is closed the values come from the field's own definition
-     * instead, which is what core does for its country filter.
+     * A closed vocabulary becomes a select; everything else is a text box, for disclosure reasons.
+     * A text filter is a strict narrowing of the search this queue already offers over the same
+     * expressions, so it can answer no question the search box cannot. A list of the DISTINCT
+     * values present would enumerate rather than confirm, and the query behind it would be a third
+     * consumer of the scope predicate - one that, bounded by the instance alone, would list the
+     * cities of applicants already approved or cancelled, rows this reader has never seen. Where
+     * the vocabulary is closed the values come from the field's own definition instead, as core
+     * does for its country filter.
      *
      * @param string $name Identity field name.
      * @return stdClass|null control and options, or null for a field that cannot be filtered.
@@ -318,12 +310,11 @@ class queuefilter {
     /**
      * The timestamps bounding a whole-day range, in the reader's own timezone.
      *
-     * **usergetmidnight plus 86400 is wrong**, and it is wrong twice a year: a day is not 86400
-     * seconds across a daylight-saving change, so the upper bound lands an hour early or late and
-     * an application submitted in that hour is filed on the wrong day. Each boundary is therefore
-     * computed from its own date rather than by adding to the other, and the upper bound is the
-     * midnight that STARTS the following day, compared with a strict less-than, so the "to" date is
-     * inclusive without any second-level arithmetic.
+     * Not usergetmidnight() plus 86400: across a daylight-saving change a day is not 86400
+     * seconds, so the upper bound would land an hour early or late and an application submitted in
+     * that hour would be filed on the wrong day. Each boundary is computed from its own date, and
+     * the upper bound is the midnight that starts the following day, compared with a strict
+     * less-than, so the "to" date is inclusive.
      *
      * A malformed date is no filter rather than an error, which is what the status filter does with
      * a value outside its vocabulary: the queue narrows by what it understood.

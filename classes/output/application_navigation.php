@@ -25,13 +25,9 @@ use templatable;
 /**
  * Links to the applications either side of the one being reviewed.
  *
- * Shaped on mod_book\output\main_action_menu, which of core's server-side previous/next
- * implementations is the only one already written the way this plugin writes: a renderable and
- * templatable whose export_for_template() returns a title and a url per direction, rendered by
- * a Mustache template with a nav landmark and pix icons, and no html_writer anywhere. The
- * gradebook's single view, which named this shape, builds a bare array inside a renderer
- * method, gives its template no landmark, names no neighbour in its labels and draws its icons
- * with raw Font Awesome classes.
+ * Shaped on mod_book\output\main_action_menu: a renderable and templatable whose
+ * export_for_template() returns a title and a url per direction, rendered by a Mustache
+ * template with a nav landmark and pix icons.
  *
  * The neighbours themselves are resolved by \enrol_apply\local\queue::neighbours(), which owns
  * both the order the walk follows and the scope it runs in. This class only turns them into
@@ -57,9 +53,8 @@ class application_navigation implements renderable, templatable {
      * @param stdClass|null $previous Neighbour record carrying id, userid and the name fields.
      * @param stdClass|null $next Neighbour record carrying id, userid and the name fields.
      * @param moodle_url|null $queueurl The queue this walk runs in, null for an operator who may
-     *        open none. Not defaulted away: the fourth scope() branch is reachable rather than
-     *        defensive, and a "back to the applications" link pointing at a queue that would
-     *        refuse this operator is worse than no link at all.
+     *        open none (see \enrol_apply\local\queue::scope()): a link to a queue that would
+     *        refuse them is worse than no link at all.
      */
     public function __construct(?stdClass $previous, ?stdClass $next, ?moodle_url $queueurl = null) {
         $this->previous = $previous;
@@ -70,22 +65,20 @@ class application_navigation implements renderable, templatable {
     /**
      * Export the two links.
      *
-     * Each link NAMES the applicant it leads to, in its visible text and in its accessible
-     * label alike. That is not decoration: the walk follows the queue's own default order
-     * rather than whatever order the operator last sorted the queue into, so naming the
-     * destination is what turns a possible disagreement with the list on screen into something
-     * the operator reads before they act on it rather than after.
+     * Each link names the applicant it leads to, in its visible text and in its accessible
+     * label alike: the walk follows the queue's default order rather than whatever order the
+     * operator last sorted the queue into, so naming the destination lets the operator notice a
+     * disagreement with the list on screen before acting on it.
      *
-     * fullname() returns the PLAIN spelling and the template double stashes it, here and
-     * inside the string, so each value is escaped exactly once.
+     * fullname() returns the plain spelling; get_string() inserts it unescaped and the template
+     * double stashes the whole title, so each value is escaped exactly once.
      *
      * @param renderer_base $output Renderer the template is rendered with.
      * @return array Template context.
      */
     public function export_for_template(renderer_base $output): array {
-        /* hasnav and not hasneighbours: the wrapper has to render for the queue link even when
-           this application is the only one left, and the old flag put the whole <nav> behind a
-           pair that a queue of one does not have. */
+        /* hasnav, not a neighbours flag: the wrapper has to render for the queue link even when
+           this application is the only one left. */
         $context = [
             'navlabel' => get_string('reviewnavigation', 'enrol_apply'),
             'hasnav' => $this->previous !== null || $this->next !== null || $this->queueurl !== null,

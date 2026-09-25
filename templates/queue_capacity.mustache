@@ -20,9 +20,8 @@
     The decision context above the applications queue: how many are waiting, how many are
     deferred, how full the method is and whether it is still accepting applications.
 
-    Rendered OUTSIDE the section that depends on the queue having rows, deliberately. A method
-    whose applicant limit is reached has an EMPTY queue, and that is exactly the moment its
-    numbers explain something - inside that section they would vanish when they are most needed.
+    Rendered whether or not the queue has rows: a method whose applicant limit is reached can
+    have an empty queue, which is exactly when these numbers explain something.
 
     Context variables required for this template:
     * tiles array - the plain counts, each an object with a value and a label

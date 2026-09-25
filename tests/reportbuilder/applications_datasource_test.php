@@ -78,10 +78,9 @@ final class applications_datasource_test extends \core_reportbuilder\tests\core_
     /**
      * Seed one application record.
      *
-     * Both column stress helpers end in assertNotEmpty() on the report content, inside a try
-     * whose catch re-reports any Throwable as "Error for column 'X'". An ExpectationFailedException
-     * is a Throwable, so an empty table does not fail as "no rows" - it fails blaming whichever
-     * column happened to be first. Seeding is a precondition of those helpers, not decoration.
+     * The column stress helpers assert non-empty content inside a catch that re-reports any
+     * Throwable as "Error for column 'X'", so on an empty table they fail blaming the first
+     * column rather than the missing rows.
      *
      * @param string $snapshot Stored JSON envelope.
      * @param int $status Status to record.
@@ -124,7 +123,7 @@ final class applications_datasource_test extends \core_reportbuilder\tests\core_
     }
 
     /**
-     * A user holding moodle/user:viewalldetails at the system context.
+     * A user with moodle/user:viewalldetails allowed or prohibited at the system context.
      *
      * @param bool $grant Whether to allow the capability or prohibit it.
      * @return \stdClass The user.
@@ -165,34 +164,30 @@ final class applications_datasource_test extends \core_reportbuilder\tests\core_
     /**
      * The source is discovered from its path and namespace alone.
      *
-     * There is no db/reportbuilder.php: manager::get_report_datasources() asks core_component
-     * for every class in the reportbuilder\datasource namespace. Moving the file out of that
-     * directory is all it takes to lose it, with no error anywhere.
+     * Nothing registers it: manager::get_report_datasources() asks core_component for every class
+     * in the reportbuilder\datasource namespace, so moving the file out of that directory loses
+     * it without any error.
      *
      * @return void
      */
     public function test_the_datasource_is_discovered(): void {
         $this->setAdminUser();
 
-        /* Two levels, and the class is a KEY at the inner one, not a value:
-           manager::get_report_datasources() builds $sources[<component display name>][<class>]
-           = <source name>. Asserting over the values would compare class names against
-           localised titles and fail for a reason that has nothing to do with discovery. */
+        /* The result is $sources[component display name][class] = localised source name, so the
+           class is a key of the inner arrays, not a value. */
         $sources = manager::get_report_datasources();
         $flat = array_merge(...array_values($sources));
 
         $this->assertArrayHasKey(applications::class, $flat);
-        /* The control: a classmap that had stopped working entirely would give a short or empty
-           list, and the assertion above would fail looking exactly like a naming mistake. */
+        // Control: discovery works at all, so a failure above is about this class alone.
         $this->assertArrayHasKey(\core_user\reportbuilder\datasource\users::class, $flat);
     }
 
     /**
      * The default columns, filters and conditions a new report starts with.
      *
-     * Only the DEFAULTS are pinned, never the full available set: core's user entity offers
-     * user:moodlenetprofile on 5.1 and not on 5.2, so an ordered assertion over everything on
-     * offer cannot be green on both branches.
+     * Only the defaults are pinned, not the full available set: core's user entity offers
+     * user:moodlenetprofile on 5.1 and not on 5.2.
      *
      * @return void
      */
@@ -215,19 +210,15 @@ final class applications_datasource_test extends \core_reportbuilder\tests\core_
 
         $this->assertSame(['submission:status'], $source->get_default_conditions());
 
-        // The snapshot must never be a default column; see restrict_snapshot_column().
+        // The snapshot must never be a default column; see applications::get_default_columns().
         $this->assertNotContains('submission:snapshot', $source->get_default_columns());
     }
 
     /**
      * The course filter exists here and nowhere near the course report.
      *
-     * Both halves in one test on purpose. The absence half alone is unfalsifiable - it passes
-     * against a course report that failed to build, and against a filter that never existed
-     * anywhere. The presence half is what gives it something to be absent from.
-     *
-     * This replaces the plan's test_course_filter_is_absent_from_the_course_report, which was
-     * never written.
+     * Both halves in one test: the absence half alone would also pass against a course report
+     * that failed to build, or a filter that exists nowhere.
      *
      * @return void
      */
@@ -260,10 +251,9 @@ final class applications_datasource_test extends \core_reportbuilder\tests\core_
     /**
      * A pseudonymised record is excluded even from a report that joins no user at all.
      *
-     * The course report gets this for free from its INNER join onto {user}. A custom report
-     * emits an entity's joins only for the elements actually in use, so a report built from
-     * submission columns alone joins {user} not at all - which is why the exclusion here has to
-     * be a base condition, and why this test deliberately selects no user column.
+     * The course report gets this from its INNER join onto {user}. A custom report emits an
+     * entity's joins only for the elements in use, so a report of submission columns alone never
+     * joins {user}; the exclusion must be a base condition, and this test selects no user column.
      *
      * @return void
      */
@@ -292,10 +282,9 @@ final class applications_datasource_test extends \core_reportbuilder\tests\core_
     /**
      * Without moodle/user:viewalldetails the snapshot column is absent, not blank.
      *
-     * A custom report has no can_view() and its context is always the system one, so the
-     * capability is the whole gate. Absence rather than masking, because get_columns() filters
-     * on availability - which also means the report editor cannot offer it and
-     * helpers\report::add_report_column() refuses it.
+     * A custom report has no can_view() and its context is the system one, so the capability is
+     * the whole gate. Because get_columns() filters on availability, the report editor cannot
+     * offer the column and helpers\report::add_report_column() refuses it.
      *
      * @return void
      */
@@ -310,7 +299,7 @@ final class applications_datasource_test extends \core_reportbuilder\tests\core_
         $instance = $this->instance();
         $this->assertArrayNotHasKey('submission:snapshot', $instance->get_columns());
 
-        // And it cannot be added by hand either, which is the half a picker test would miss.
+        // Nor can it be added directly, bypassing the picker.
         $this->expectException(\core\exception\invalid_parameter_exception::class);
         reporthelper::add_report_column(
             (int) $instance->get_report_persistent()->get('id'),
@@ -321,9 +310,9 @@ final class applications_datasource_test extends \core_reportbuilder\tests\core_
     /**
      * Past the gate, the snapshot shows every field and not merely the names.
      *
-     * The name part is the control: without it this would pass against a column that rendered
-     * nothing at all, and against the entity's fail-closed default, which shows the name parts
-     * and is what this source has to deliberately open.
+     * The entity's fail-closed default shows the name parts only, so the city is what proves
+     * this source opened the column. The name part is the control that tells a column rendering
+     * nothing apart from one still on that default.
      *
      * @return void
      */
@@ -350,10 +339,9 @@ final class applications_datasource_test extends \core_reportbuilder\tests\core_
     /**
      * Every column renders, under every aggregation, and every condition applies.
      *
-     * The three core helpers. setAdminUser() is not incidental: get_columns() filters on
-     * availability, so without the capability the snapshot column is not merely untested, it is
-     * invisible to the helper and the run stays green having skipped it. The explicit assertion
-     * below is what says the coverage happened rather than assuming it.
+     * Runs core's three datasource stress helpers as admin: get_columns() filters on
+     * availability, so without moodle/user:viewalldetails the helpers would skip the snapshot
+     * column silently. The first assertion proves it is included.
      *
      * @return void
      */

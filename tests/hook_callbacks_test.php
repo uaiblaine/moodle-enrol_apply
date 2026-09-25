@@ -62,14 +62,23 @@ final class hook_callbacks_test extends \advanced_testcase {
     /**
      * Create a course with an apply instance, one configured group and one live application.
      *
+     * The applicant submits two profile fields, the city and the institution, and the instance
+     * asks for the whole default pool unless told otherwise. The field set is written before
+     * apply() runs, because apply() is what freezes the snapshot: set afterwards it would change
+     * nothing about this application.
+     *
      * @param string $comment Comment submitted with the application.
+     * @param array|null $fieldkeys Field keys the instance asks for, null for the default pool.
      * @return array Course record, instance record, applicant record and user enrolment id.
      */
-    protected function create_course_with_application(string $comment = 'Please let me in'): array {
+    protected function create_course_with_application(string $comment = 'Please let me in', ?array $fieldkeys = null): array {
         global $DB;
 
         $course = $this->getDataGenerator()->create_course();
         $instanceid = $this->plugin->add_instance($course, $this->plugin->get_instance_defaults());
+        if ($fieldkeys !== null) {
+            $DB->set_field('enrol', 'customtext4', local\fieldset::from_keys($fieldkeys)->to_json(), ['id' => $instanceid]);
+        }
         $instance = $DB->get_record('enrol', ['id' => $instanceid], '*', MUST_EXIST);
 
         $group = $this->getDataGenerator()->create_group(['courseid' => $course->id]);
@@ -82,6 +91,7 @@ final class hook_callbacks_test extends \advanced_testcase {
         $method->invoke($this->plugin, $instance, $applicant->id, (object) [
             'applydescription' => $comment,
             'city' => 'Recife',
+            'institution' => 'Federal University',
         ]);
         $sink->close();
 
@@ -104,14 +114,10 @@ final class hook_callbacks_test extends \advanced_testcase {
         global $DB;
 
         // Ask for a profile field, so the snapshot is not empty and its discarding is testable.
-        [$course, $instance, $applicant, $ueid] = $this->create_course_with_application('Let me in please');
-        $DB->set_field('enrol', 'customtext4', local\fieldset::from_keys(['s_city'])->to_json(), [
-            'id' => $instance->id,
-        ]);
+        [$course, , $applicant, $ueid] = $this->create_course_with_application('Let me in please', ['s_city']);
 
-        /* Decide it first. Without this the row's decidedby is 0 from the moment it is
-           written, so asserting it is 0 afterwards would hold with the pseudonymisation
-           deleted - the assertion would be watching a column nothing had ever set. */
+        /* Decide it first. An undecided row already has decidedby = 0, so asserting 0 after
+           the deletion would hold with the pseudonymisation removed. */
         $decider = $this->getDataGenerator()->create_user();
         // The decider needs the capability: can_manage_application() authorises every row.
         $this->getDataGenerator()->enrol_user(
@@ -134,7 +140,9 @@ final class hook_callbacks_test extends \advanced_testcase {
         // The preconditions the assertions after the deletion are only meaningful against.
         $this->assertEquals($applicant->id, (int) $before->userid);
         $this->assertEquals($decider->id, (int) $before->decidedby);
-        $this->assertNotEmpty($before->userinfodata);
+        /* Exactly the field the instance asks for, although the applicant submitted two: the
+           snapshot was taken against the configured set, not the default pool. */
+        $this->assertSame(['s_city'], array_column(submission::read_snapshot($before->userinfodata), 'key'));
 
         delete_course($course, false);
 
@@ -155,31 +163,17 @@ final class hook_callbacks_test extends \advanced_testcase {
     }
 
     /**
-     * The snapshot really was there to be discarded.
+     * The snapshot captures the submitted value of each field the instance asks for.
      *
-     * Without this the assertion above that userinfodata is empty would hold on a trail that
-     * had never captured anything, and the discard would be unproven.
+     * Complements the precondition in the test above by checking the value as well as the key,
+     * so the value that pseudonymisation discards is known to have been captured.
      *
      * @return void
      */
     public function test_the_snapshot_is_captured_before_it_is_discarded(): void {
         global $DB;
 
-        [, $instance] = $this->create_course_with_application();
-        $DB->set_field('enrol', 'customtext4', local\fieldset::from_keys(['s_city'])->to_json(), [
-            'id' => $instance->id,
-        ]);
-        $reloaded = $DB->get_record('enrol', ['id' => $instance->id], '*', MUST_EXIST);
-
-        $applicant = $this->getDataGenerator()->create_user();
-        $sink = $this->redirectMessages();
-        $method = new \ReflectionMethod(\enrol_apply_plugin::class, 'apply');
-        $method->setAccessible(true);
-        $method->invoke($this->plugin, $reloaded, $applicant->id, (object) [
-            'applydescription' => 'With a city',
-            'city' => 'Recife',
-        ]);
-        $sink->close();
+        [, , $applicant] = $this->create_course_with_application('With a city', ['s_city']);
 
         $row = $DB->get_record('enrol_apply_submission', ['userid' => $applicant->id], '*', MUST_EXIST);
         $snapshot = submission::read_snapshot($row->userinfodata);
@@ -191,9 +185,8 @@ final class hook_callbacks_test extends \advanced_testcase {
     /**
      * Two applicants in one deleted course pseudonymise to two rows, not to a key violation.
      *
-     * This is the measured reason the natural key is not unique, kept as a test so that
-     * reinstating it - which the plan for this slice asked for - fails here rather than in
-     * production on the first course deletion with two applicants.
+     * Pseudonymisation zeroes userid, so both rows end up with the same (courseid, userid): this
+     * is why that index is not unique, and making it unique must make this test fail.
      *
      * @return void
      */
@@ -223,11 +216,8 @@ final class hook_callbacks_test extends \advanced_testcase {
     /**
      * With the plugin disabled, the observer clears up what core orphaned.
      *
-     * enrol_course_delete() resolves its plugin objects from enrol_get_plugins(true), so a
-     * disabled plugin's delete_instance() never runs - yet core deletes the enrol and
-     * user_enrolments rows anyway, leaving the two tables that key off them pointing at
-     * nothing. Event observers are registered whatever the plugin's state, which is the only
-     * reason this is reachable at all.
+     * enrol_course_delete() never calls a disabled plugin's delete_instance() but deletes the
+     * enrol and user_enrolments rows anyway; see {@see \enrol_apply\observers::course_deleted()}.
      *
      * @return void
      */
@@ -236,9 +226,8 @@ final class hook_callbacks_test extends \advanced_testcase {
 
         [$course, $instance, , $ueid] = $this->create_course_with_application();
 
-        /* The control, and it carries the whole test: the observer sweeps orphans rather
-           than rows of one course, so without a live application elsewhere a callback that
-           emptied both tables outright would pass. */
+        /* The control: the observer sweeps orphans rather than rows of one course, so without
+           a live application elsewhere a callback that emptied both tables would pass. */
         [, $otherinstance, , $otherueid] = $this->create_course_with_application();
 
         $enabled = enrol_get_plugins(true);
@@ -261,15 +250,11 @@ final class hook_callbacks_test extends \advanced_testcase {
     /**
      * The pseudonymisation comes from the hook, not from the course_deleted event.
      *
-     * Both fire inside delete_course(), so the row ends up looking the same whichever one did
-     * the work - which means every other test here passes just as well with the call moved to
-     * the observer. Redirecting the hook is what tells them apart: with it silenced, a course
-     * deletion that still pseudonymises proves the work is being done from the event, after
-     * context_helper::delete_instance() has destroyed the course context.
-     *
-     * That distinction is the whole reason for the hook. The event route runs too late for a
-     * privacy provider to reach the row, and core swallows an observer exception with nothing
-     * but a debugging() call, so a failure there would leave real user ids behind in silence.
+     * Both fire inside delete_course() and leave the row looking the same, so every other test
+     * here would pass with the call moved to the observer. With the hook silenced, a deletion
+     * that still pseudonymises is doing the work from the event, after the course context is
+     * gone. See {@see \enrol_apply\hook_callbacks::before_course_deleted()} for why that is too
+     * late.
      *
      * @return void
      */

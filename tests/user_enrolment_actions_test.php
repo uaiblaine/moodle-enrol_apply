@@ -36,13 +36,10 @@ require_once($CFG->dirroot . '/enrol/locallib.php');
 /**
  * The action icon this plugin adds to the course participants page.
  *
- * Built the way core's page builds it - a real course_enrolment_manager, and the user
- * enrolment rows it hands over - rather than by hand-rolling the object shape. Unlike
- * tests/bulk/operations_test.php, which had to invent that shape because core tests its own
- * bulk extension point nowhere, this one has precedent: eight core enrol plugins ship a
- * test_get_user_enrolment_actions() and enrol/manual/tests/lib_test.php:493 is the matching
- * shape, down to the $PAGE->set_url() that keeps the parent method from throwing. An earlier
- * version of this docblock claimed the opposite and was simply wrong.
+ * Built the way core's participants table builds it, from a real course_enrolment_manager
+ * and the user enrolment rows it returns, following core's own tests of this method
+ * ({@see \enrol_manual\lib_test::test_get_user_enrolment_actions()}). Like them it sets
+ * $PAGE->url: the parent method reads it, and an unset url raises a debugging() call.
  *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine
@@ -215,10 +212,9 @@ final class user_enrolment_actions_test extends \advanced_testcase {
 
         $applicant = $this->applicant(ENROL_APPLY_USER_WAIT);
 
-        /* The precondition, asserted rather than assumed. applicant() reaches status 2
-           through a set_field() whose result nothing checks, and the icon is offered on
-           status 1 as well - so without this the test passes on a fixture that never left
-           the pending state, proving nothing about the value it exists for. */
+        /* Precondition: applicant() sets status 2 through an unchecked set_field(), and the
+           icon is offered on status 1 as well, so without this the test could pass on a row
+           still at status 1. */
         $this->assertEquals(
             ENROL_APPLY_USER_WAIT,
             (int) $DB->get_field(
@@ -253,9 +249,10 @@ final class user_enrolment_actions_test extends \advanced_testcase {
     /**
      * Nor is an approved enrolment whose period has since run out.
      *
-     * The second half of the queue's predicate, and the half that is easy to leave out.
-     * process_expirations() re-suspends this row, so it reads as suspended and looks exactly
-     * like a fresh application - deciding it would cancel or re-approve a finished enrolment.
+     * Under a suspend expiredaction, process_expirations() re-suspends such a row, so on
+     * status alone it looks like a fresh application; only the timeend clause of
+     * {@see \enrol_apply\local\queue::is_awaiting_decision()} excludes it. Deciding it would
+     * cancel or re-approve a finished enrolment.
      *
      * @return void
      */
@@ -306,16 +303,12 @@ final class user_enrolment_actions_test extends \advanced_testcase {
     }
 
     /**
-     * Disabling the plugin site wide does not withdraw the icon, and that is a decision.
+     * Disabling the plugin site wide does not withdraw the icon, by design.
      *
-     * It differs from the bulk menu on the same page, which core's own driver refuses on the
-     * enabled-only plugin list. Core does not apply that reading here: the manager resolves
-     * plugin objects through get_enrolment_plugins(false), so its Edit and Unenrol icons
-     * render on a disabled plugin's rows too, and manage.php has no enabled check of its own.
-     * An enabled check on the icon alone would hide the way in to a queue that still works.
-     *
-     * Pinned rather than merely written down, so that changing one's mind about it is a
-     * deliberate edit to a test and a comment rather than a line added in passing.
+     * The manager resolves plugins through get_enrolment_plugins(false), so core's own Edit and
+     * Unenrol icons render on a disabled plugin's rows too, and manage.php has no enabled
+     * check; hiding the icon alone would hide the way in to a queue that still works
+     * ({@see \enrol_apply_plugin::get_user_enrolment_actions()}).
      *
      * @return void
      */
@@ -326,26 +319,23 @@ final class user_enrolment_actions_test extends \advanced_testcase {
         $enabled = array_keys(enrol_get_plugins(true));
         set_config('enrol_plugins_enabled', implode(',', array_diff($enabled, ['apply'])));
 
-        // The precondition, since the whole point is that the plugin really is disabled.
+        // Precondition: the plugin really is disabled.
         $this->assertArrayNotHasKey('apply', enrol_get_plugins(true));
 
         $this->assertContains(get_string('decideapplication', 'enrol_apply'), $this->action_titles($applicant));
     }
 
     /**
-     * A mentor of the applicant is offered nothing here, however the course is read.
+     * A mentor of the applicant is offered no decision icon.
      *
-     * This is the one authorisation decision the override argues at length - the capability
-     * is read in the COURSE, the same reading get_bulk_operations() takes on this page, and
-     * deliberately not can_manage_application(), whose third level is the applicant's own
-     * user context. Every other test in this file stays green when the gate is widened that
-     * way, because none of them creates a user-context assignment; measured before this test
-     * was written, which is why it exists.
+     * The icon reads the capability in the course context, as get_bulk_operations() does, and
+     * deliberately not through can_manage_application(), whose third level is the applicant's
+     * user context. This is the only test here with a user-context assignment, so it is the
+     * one that fails if the gate is widened to can_manage_application().
      *
-     * The operator holds enrol/apply:manage and enrol/apply:unenrol in the course, so core's
-     * own two icons are still built and the missing third one is this gate rather than a
-     * fatal - and they are somebody the participants page really does serve, since they also
-     * hold moodle/course:enrolreview there.
+     * The mentor also holds moodle/course:enrolreview, enrol/apply:manage and
+     * enrol/apply:unenrol in the course, so core's own two icons are still built and the
+     * missing third one is down to this gate.
      *
      * @return void
      */
@@ -387,11 +377,11 @@ final class user_enrolment_actions_test extends \advanced_testcase {
     /**
      * The link it points at admits the teacher who was offered it.
      *
-     * The icon and the page it opens are authorised by different readings of the same
-     * capability - the course context here, can_manage_application()'s three levels there -
-     * so an icon offered to somebody the page then refuses is a reachable defect rather than
-     * a hypothetical one. It is exactly what the older shape of that page did: it required
-     * the capability in the applicant's own user context, where a course teacher fails.
+     * The icon and the page it opens read the same capability differently - the course
+     * context here, can_manage_application()'s three levels in
+     * {@see \enrol_apply\local\queue::require_review_access()} - so the two can disagree; a
+     * page that required the capability in the applicant's user context alone would refuse a
+     * course teacher.
      *
      * @return void
      */

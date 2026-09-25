@@ -39,7 +39,8 @@ const SELECTORS = {
  * @param {Number} instanceId Enrol instance the card belongs to.
  */
 export function init(instanceId) {
-    prefetchStrings('enrol_apply', ['submitapplication', 'checkyourdetails']);
+    // The only string this module fetches: the modal's title comes from the button's data-title.
+    prefetchStrings('enrol_apply', ['submitapplication']);
 
     const button = document.querySelector(SELECTORS.button(instanceId));
     if (!button) {
@@ -61,7 +62,8 @@ export function init(instanceId) {
         });
 
         modalForm.addEventListener(modalForm.events.FORM_SUBMITTED, (event) => {
-            // The form's process_dynamic_submission() returns the acknowledgement page's url.
+            // The form's process_dynamic_submission() returns the acknowledgement page's url, or the
+            // enrolment page's after a refusal.
             window.location.href = event.detail;
         });
 

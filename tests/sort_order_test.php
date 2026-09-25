@@ -26,11 +26,11 @@ require_once($CFG->dirroot . '/enrol/apply/lib.php');
 /**
  * The approval queue orders its rows by something unique.
  *
- * These assert on the ORDER BY the table emits, deliberately, and not on the order rows come
- * back in. A tie only reorders when the database chooses to reorder it, and at fixture size it
- * usually does not: the same five rows on the live 5.2 site page cleanly today while carrying
- * three applications that share a timestamp. A row-order test therefore passes with the
- * tiebreaker deleted, which is the whole reason this defect survived until now.
+ * These assert on the ORDER BY the table emits, not on the order rows come back in: a tie is
+ * reordered only when the database chooses to, and at fixture size it usually does not, so a
+ * row-order test passes with the tiebreaker deleted.
+ *
+ * {@see \enrol_apply\table\applications::get_sort_columns()} has the rationale.
  *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine
@@ -61,12 +61,11 @@ final class sort_order_test extends \advanced_testcase {
      * setup() reads the sort parameters from the request and is what makes get_sort_columns()
      * callable at all, so it cannot be skipped.
      *
-     * As ADMIN, and the table is asked for a scope rather than built bare, because a dynamic
-     * table has no bare state: set_filterset() is what resolves the scope, defines the columns
-     * and builds the query, so a table that was never given a filterset has no columns to sort
-     * by at all. The site-wide scope is the one that needs no fixture.
+     * Built through for_scope() because a dynamic table has no bare state: set_filterset()
+     * resolves the scope and defines the columns, so without it there is nothing to sort by. The
+     * site-wide scope, as admin, needs no fixture.
      *
-     * define_baseurl() is deliberately NOT called: guess_base_url() sets it from the scope, and
+     * define_baseurl() is deliberately not called: guess_base_url() sets it from the scope, and
      * calling it here would mask a broken one.
      *
      * @param array $sortdata Sort items as flexible_table::set_sortdata() takes them.
@@ -103,32 +102,25 @@ final class sort_order_test extends \advanced_testcase {
     /**
      * So does every sort the operator can ask for by clicking a heading.
      *
-     * This is the half core's own fallback cannot reach and the half a narrower fix misses:
-     * gradereport_history appends its unique key only when the sort is exactly the default one,
-     * so clicking any other heading silently drops it.
+     * A narrower fix misses this half: gradereport_history appends its unique key only when the
+     * sort is exactly the default one, so any other heading drops it.
      *
      * @return void
      */
     public function test_every_sort_the_operator_can_choose_ends_in_a_unique_key(): void {
         $this->resetAfterTest();
 
-        /* Read off the table, both halves of it, and the second half was learned the hard way.
-           An earlier version derived the COLUMNS from the table and then subtracted a hardcoded
-           list of the unsortable ones - which is a second statement of a fact the table already
-           holds, and it drifted the day a column was added: the review button's column joined the
-           loop and the test demanded a sort by a column the table refuses to sort. is_sortable()
-           is the table's own answer, so there is now one statement of it. */
+        /* Both the columns and their sortability are read off the table, so this list cannot
+           drift from what the table actually offers when a column is added. */
         $table = $this->table();
         $sortable = array_filter(
             array_keys($table->columns),
             static fn(string $column): bool => $table->is_sortable($column)
         );
 
-        /* The control, because a derived list can be derived from nothing: an empty or truncated
-           set would make the loop below assert on air. The identity fields stopped being columns
-           in U5a PR 2 - they ride inside the applicant's cell now - so the sortable set for the
-           site-wide scope is course, fullname and applydate, and only a column added later would
-           push it higher. */
+        /* Control: an empty or truncated list would make the loop below assert nothing. The
+           site-wide scope sorts by course, fullname and applydate; the identity fields are not
+           columns, they sit inside the applicant's cell. */
         $this->assertGreaterThanOrEqual(3, count($sortable), implode(', ', $sortable));
 
         foreach ($sortable as $column) {
@@ -148,10 +140,10 @@ final class sort_order_test extends \advanced_testcase {
     }
 
     /**
-     * The tiebreaker is the LAST key, not merely present somewhere.
+     * The tiebreaker is the last key, not merely present somewhere.
      *
      * A unique key in front of the operator's own choice would order the table by row id and
-     * ignore what they clicked, which is a different defect with the same test passing.
+     * ignore what they clicked.
      *
      * @return void
      */
@@ -171,9 +163,8 @@ final class sort_order_test extends \advanced_testcase {
     /**
      * The queue still returns the rows it is supposed to, tiebreaker and all.
      *
-     * The point of this one is that the new ORDER BY term is valid SQL against both database
-     * families CI runs, which an assertion over a string cannot tell you: `ue.id` is the raw
-     * column and the SELECT list aliases it to `userenrolmentid`.
+     * Proves the tiebreaker is valid SQL on both database families, which an assertion over the
+     * string cannot: `ue.id` is the raw column, and the SELECT list aliases it to `userenrolmentid`.
      *
      * @return void
      */

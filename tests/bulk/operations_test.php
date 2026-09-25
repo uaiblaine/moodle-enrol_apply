@@ -27,9 +27,9 @@ require_once($CFG->dirroot . '/enrol/locallib.php');
 /**
  * The participants-page bulk decisions.
  *
- * Core has no PHPUnit coverage for this extension point at all - its only test is Behat driving
- * the participants page end to end - so every one of these builds the users array the way core's
- * driver does, through a real course_enrolment_manager, rather than hand-rolling the shape.
+ * Core covers this extension point only with Behat (user/tests/behat/bulk_editenrolment.feature),
+ * so every test here builds the users array the way core's driver does, through a real
+ * course_enrolment_manager, rather than hand-rolling the shape.
  *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine
@@ -71,7 +71,7 @@ final class operations_test extends \advanced_testcase {
     }
 
     /**
-     * A second apply instance on the same course, which is the shape U4 exists for.
+     * A second apply instance on the same course.
      *
      * Two apply methods in one course is supported on purpose - they are two intakes - and it is
      * the configuration in which core's dispatch quietly reaches only one of them.
@@ -98,9 +98,9 @@ final class operations_test extends \advanced_testcase {
     /**
      * The participants page's own manager: the whole course, with no instance filter.
      *
-     * The helper above always filters, because that is what core's DISPATCH does. This is the
-     * other caller - user/index.php - and the two must be told apart, because the menu memo
-     * applies to one of them and would break the other.
+     * selection() always filters, because that is what core's dispatch does. This is the other
+     * caller, user/index.php, and the two must be told apart because the menu memo applies to
+     * one of them and would break the other.
      *
      * @return \course_enrolment_manager The unfiltered manager.
      */
@@ -275,16 +275,13 @@ final class operations_test extends \advanced_testcase {
     /**
      * A menu refused for the capability does not silence the next caller.
      *
-     * The memo is set only once every gate above it has passed, and this is what holds that
-     * ordering. It had to be written for it: the obvious candidate,
-     * test_the_bulk_menu_is_empty_without_the_capability, asks with a FILTERED manager and so
-     * never enters the memo branch at all - it holds a different property, that the memo does not
-     * ignore the filter, and it cannot hold this one.
+     * The memo is set only once every gate above it has passed, and this test holds that
+     * ordering. test_the_bulk_menu_is_empty_without_the_capability cannot: it asks with a
+     * filtered manager and so never enters the memo branch.
      *
-     * Not reachable in production today, and that is worth stating rather than implying
-     * otherwise: one request asks with one $USER and one context, so the capability answer is
-     * constant across user/index.php's loop. The ordering is a property of the code that nothing
-     * would notice losing, which is exactly the kind this repository pins.
+     * Production does not reach this case today - one request asks with one $USER and one
+     * context, so the capability answer is constant across user/index.php's loop. The rationale
+     * is at {@see \enrol_apply_plugin::get_bulk_operations()}.
      *
      * @return void
      */
@@ -323,10 +320,9 @@ final class operations_test extends \advanced_testcase {
      * A site-disabled plugin offers no menu, because its entries could only throw.
      *
      * Core's two sides disagree: user/index.php builds the menu from get_enrolment_plugins(false),
-     * which INCLUDES disabled plugins, while action_redir.php resolves the dispatch through the
-     * enabled-only default and throws errorwithbulkoperation. So the entries were offered and then
-     * refused. This is the opposite of what the per-row action icon does, deliberately - that one
-     * leads to a queue that still works.
+     * which includes disabled plugins, while action_redir.php resolves the dispatch through the
+     * enabled-only default and throws errorwithbulkoperation. The per-row action icon
+     * deliberately does the opposite, because it leads to a queue that still works.
      *
      * @return void
      */
@@ -593,9 +589,11 @@ final class operations_test extends \advanced_testcase {
     /**
      * Only this plugin's enrolments are handed to the decision.
      *
-     * The base class promises nothing about the array process() receives, and a foreign user
-     * enrolment id does not skip when it reaches confirm_enrolment(): get_pending_user_enrolment()
-     * has no enrol-type predicate and the MUST_EXIST lookup after it throws.
+     * The base class promises nothing about the array process() receives. The decision methods
+     * would skip a foreign user enrolment id themselves, since get_pending_user_enrolment() joins
+     * on this plugin's instances, but the operation filters first so that every count it reports
+     * is about this plugin's applications: an unfiltered selection would report the manual
+     * enrolment as not awaiting a decision.
      *
      * @return void
      */
@@ -777,13 +775,12 @@ final class operations_test extends \advanced_testcase {
      *
      * process_expirations() re-suspends an enrolment whose period ran out, so somebody
      * approved and enrolled long ago comes back looking exactly like a fresh application.
-     * The plugin's queue excludes that row deliberately - its predicate pairs
-     * "status != active" with a timeend clause, and
-     * tests/lib_test.php::test_expired_enrolment_does_not_reappear_in_the_queue pins it -
-     * but the exclusion lives only in the LISTING, and the participants page is a second
-     * listing that core owns. The pending applicant in each selection is the control: it
-     * proves the decision really ran, so the expired row surviving is a refusal rather than
-     * a batch that did nothing.
+     * The plugin's queue excludes that row - its predicate pairs "status != active" with a
+     * timeend clause, pinned by tests/lib_test.php::test_expired_enrolment_does_not_reappear_in_the_queue -
+     * and the participants page is a second listing that core owns, so the bulk path applies
+     * the same rule through {@see \enrol_apply\local\queue::is_awaiting_decision()}. The pending
+     * applicant in each selection is the control: it proves the decision really ran, so the
+     * expired row surviving is a refusal rather than a batch that did nothing.
      *
      * @return void
      */
@@ -829,7 +826,7 @@ final class operations_test extends \advanced_testcase {
     /**
      * An application already on the waiting list is reported as unchanged, not as absent.
      *
-     * The row IS reached now - wait_enrolment()'s lookup admits a deferred application, which is
+     * The row is reached - wait_enrolment()'s lookup admits a deferred application, which is
      * what lets a decider edit its reason - but its enrolment does not move, so the operation
      * counts it as unchanged. It is still an application awaiting a decision, which the queue
      * lists, so counting it under the "no application awaiting a decision" heading would tell
@@ -896,11 +893,9 @@ final class operations_test extends \advanced_testcase {
     /**
      * Every name the confirmation form puts on screen is escaped exactly once.
      *
-     * All three sinks here render RAW - a static element is {{{element.html}}} and a select's
+     * Both sinks checked here render raw - a static element is {{{element.html}}} and a select's
      * options are {{{text}}} - so each value has to arrive escaped and must not be escaped
-     * again. Nothing in the pipeline reads this: phpcs reads PHP, the mustache lint reads
-     * structure, and neither knows which stash a value lands in. The plugin has shipped this
-     * defect class four times, which is why it is pinned rather than described.
+     * again. No linter knows which stash a value lands in, so this test is the only guard.
      *
      * @return void
      */
@@ -944,15 +939,14 @@ final class operations_test extends \advanced_testcase {
     /**
      * A bulk decision warns about the same person's applications on another method.
      *
-     * The silent case, and the reachable one. Core's dispatch filters the manager to ONE apply
-     * instance, so get_users_enrolments() returns only that instance's row - and for one person
-     * holding an application on each of two, nothing is "removed", core warns nothing, and the
-     * plugin reported a clean success. Two applications in one course are supported on purpose:
-     * two apply methods are two intakes.
+     * Core's dispatch filters the manager to one apply instance, so get_users_enrolments()
+     * returns only that instance's row; for one person holding an application on each of two,
+     * nothing is removed and core warns nothing. Two applications in one course are supported
+     * on purpose: two apply methods are two intakes.
      *
-     * The other application must still be there afterwards. That is the second half of the
-     * decision recorded in the plan - warn, never decide - and without it this test would pass
-     * against an implementation that had helpfully decided both.
+     * The operation warns and never decides the other application, so it must be unchanged
+     * afterwards. Changes that must make it fail: dropping the warning, or deciding the other
+     * application as well.
      *
      * @return void
      */
@@ -1000,6 +994,11 @@ final class operations_test extends \advanced_testcase {
      * The control. Without it the assertion above passes just as well against an operation that
      * warns on every decision it takes.
      *
+     * The warning is looked for by the wording its lang string opens with, up to the first
+     * placeholder, so a count or a method name of any value is caught and editing the string
+     * cannot leave this looking for text that no longer exists. The report of the decision
+     * itself is the control that process() ran and notified at all.
+     *
      * @return void
      */
     public function test_a_single_method_produces_no_other_methods_warning(): void {
@@ -1012,9 +1011,18 @@ final class operations_test extends \advanced_testcase {
             ->process($manager, $users, (object) ['outcomemessage' => '', 'decisionnote' => '']);
         $sink->close();
 
-        foreach ($this->notifications() as $message) {
-            $this->assertStringNotContainsString('will be left alone', $message);
-            $this->assertStringNotContainsString('left alone', $message);
+        $marker = "\x1f";
+        $opening = strstr(
+            get_string('bulkothermethods', 'enrol_apply', (object) ['count' => $marker, 'method' => $marker]),
+            $marker,
+            true
+        );
+        $this->assertNotEmpty($opening, 'the string must open with fixed wording for this to test anything');
+
+        $notifications = $this->notifications();
+        $this->assertContains(get_string('bulkdecided', 'enrol_apply', 1), $notifications);
+        foreach ($notifications as $message) {
+            $this->assertStringNotContainsString($opening, $message);
         }
     }
 

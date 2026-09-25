@@ -19,20 +19,20 @@
 
     One enrolment application, with the controls to decide it.
 
-    The POST this form makes is the same one the queue makes, which is why manage.php's
-    handler needs no branch of its own: a formaction naming the decision, a non-empty
-    userenrolments array, and the session key. The applicant id travels in a hidden input
-    rather than a checkbox because there is only ever one of them here, and each decision is
-    a submit button carrying its own formaction value, so the button that was pressed is the
-    decision that is taken.
+    The form posts the queue's own contract - a formaction naming the decision, a non-empty
+    userenrolments array and the session key - so every guard manage.php applies to a queue
+    decision applies here too; the only extra branch is the confirmation manage.php asks for
+    before a cancel from this page. The application id travels in a hidden input rather than a
+    checkbox because there is only ever one, and each decision is a submit button carrying its
+    own formaction value, so the button pressed is the decision taken.
 
-    Every value this template renders ITSELF is the PLAIN spelling and is output through a
-    double stash, which escapes each exactly once - the course name included, for which the
-    renderer asks for the plain spelling explicitly because format_string()'s escape flag
-    defaults to true. The exceptions are deliberate and flagged where they sit:
-    the comment, which arrives already escaped from format_text(FORMAT_PLAIN) so that the line
-    breaks the applicant typed survive, and the role names inside the partial this template
-    includes, which core's own element-select.mustache also triple stashes.
+    Values arrive in their plain spelling and are output through double stashes, which escape
+    each exactly once; the renderer asks format_string() for the plain course name because its
+    escape flag defaults to true. The triple-stashed exceptions are the comment, the decision
+    message and the decision note, which arrive already escaped from format_text(FORMAT_PLAIN)
+    so their line breaks survive; the sticky footer, which the renderer has already rendered;
+    and the role names inside the included partial, which core's element-select.mustache also
+    triple stashes.
 
     Context variables required for this template:
     * formurl string - url the decision form posts back to
@@ -212,10 +212,10 @@
             </div>
             {{#hassnapshot}}
                 {{!
-                    The wrapper is load bearing, not decoration: renderer_test scopes its
-                    live-profile assertions to this class, because the page legitimately shows
-                    identifying values elsewhere and a whole-page assertion would either fail for
-                    an unrelated reason or pass while holding the wrong thing.
+                    renderer_test scopes its snapshot assertions to this wrapper, because the page
+                    shows identifying values elsewhere (the identity line). It extracts the panel
+                    with a non-greedy match up to the first closing div tag, so keep this class
+                    first on the div and nest no div inside it.
                 }}
                 <div class="enrol_apply-snapshot">
                     <h2 class="h5">{{snapshotlabel}}</h2>

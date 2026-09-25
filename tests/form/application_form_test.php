@@ -60,14 +60,9 @@ final class application_form_test extends \advanced_testcase {
     /**
      * An instance that asks for nothing still renders something the applicant can act on.
      *
-     * Both section builders return early when their list is empty, so an instance with no
-     * profile fields, no comment and no introduction produced a form of two hidden inputs -
-     * measured, the rendered body had no text in it at all. The applicant opened a modal that
-     * was blank apart from a Save button, with nothing saying what saving would do.
-     *
-     * The named element is the assertion rather than the rendered text, because the text is a
-     * language string and a test that greps for English pins the translation instead of the
-     * behaviour.
+     * With no profile fields, no comment and no introduction the form would otherwise be two
+     * hidden inputs, and the modal blank apart from its Save button. The assertion is on the
+     * element name rather than the rendered text, so it does not pin the English wording.
      *
      * @return void
      */
@@ -87,9 +82,7 @@ final class application_form_test extends \advanced_testcase {
     /**
      * That line appears only when there really is nothing else.
      *
-     * The control for the test above. Without it, the fix could have added the line to every
-     * form - which would read as a working feature and be wrong on every instance that does ask
-     * for something.
+     * The control for the test above: adding the line to every form must make this test fail.
      *
      * @return void
      */
@@ -233,12 +226,9 @@ final class application_form_test extends \advanced_testcase {
     /**
      * The instance id alone is enough to build the form.
      *
-     * The card's button links to apply.php with the instance and nothing else, because that
-     * is the only id identifying anything - the course is derivable from it. An earlier
-     * version demanded a redundant course id alongside, so every real entry point threw
-     * "Invalid enrolment instance" while a hand-built url carrying both worked perfectly.
-     * Both the unit tests and the manual check supplied both ids and sailed past it; Behat,
-     * which clicks the actual button, is what found it.
+     * The enrolment page's button links to apply.php with the instance id and nothing else; the
+     * course is derived from it. A form that also required a course id would throw on every real
+     * entry point while a hand-built url carrying both ids still worked.
      *
      * @return void
      */
@@ -308,14 +298,11 @@ final class application_form_test extends \advanced_testcase {
     }
 
     /**
-     * The refusal names the applicant's OWN state, in each of its three reachable spellings.
+     * The refusal names the applicant's OWN state rather than one fixed wording.
      *
-     * The third decision surface, and it had both halves of the same defect the two pages had.
-     * One fixed wording - the pending one - went to everybody with a row, so reopening the modal
-     * told a deferred applicant their application had been "successfully sent".
-     *
-     * The assertion is on the exception's string IDENTIFIER rather than its rendered message,
-     * which is what moodle_exception actually carries and what a caller could act on.
+     * Covers the pending, deferred and approved states; the full mapping, including the fourth
+     * state, is pinned in applicantstate_test. The assertion is on the exception's string
+     * identifier, which is what moodle_exception carries.
      *
      * @return void
      */
@@ -350,13 +337,10 @@ final class application_form_test extends \advanced_testcase {
     /**
      * A method that has stopped taking applications still tells its applicants about theirs.
      *
-     * The ordering half, and the reason the applicant's own row is now read BEFORE
-     * allow_apply(). Until it was, the moment a method stopped accepting applications everybody
-     * who had already applied was refused with "Enrolment is disabled or inactive", which is a
-     * fact about somebody else's problem.
-     *
-     * The control is in the same run: a user with NO row still gets that refusal, so this cannot
-     * pass against a form that had simply stopped calling allow_apply().
+     * Pins that the applicant's own row is read before allow_apply(), so an applicant is not
+     * refused with "Enrolment is disabled or inactive". The control is in the same run: a user
+     * with no row still gets that refusal, so the test fails if the form stops calling
+     * allow_apply().
      *
      * @return void
      */
@@ -384,21 +368,19 @@ final class application_form_test extends \advanced_testcase {
     }
 
     /**
-     * The places cap is enforced before the form opens.
+     * The applicant limit (customint3) is enforced before the form opens.
      *
      * @return void
      */
-    public function test_check_access_refuses_when_the_places_cap_is_reached(): void {
+    public function test_check_access_refuses_when_the_applicant_limit_is_reached(): void {
         global $DB;
 
         $other = $this->getDataGenerator()->create_user();
         $this->plugin->enrol_user($this->instance, $other->id, null, 0, 0, ENROL_USER_SUSPENDED);
         $DB->set_field('enrol', 'customint3', 1, ['id' => $this->instance->id]);
 
-        /* The message, not just the type. A bare moodle_exception assertion cannot tell the
-           cap refusal apart from the coursehidden and cantenrol throws a few lines above it
-           in the same method, so it stayed green against a mutation that made an earlier
-           guard throw instead. */
+        /* The message, not just the type: the type alone cannot tell this refusal from the
+           earlier throws in the same method, such as coursehidden and cantenrol. */
         $this->expectException(\moodle_exception::class);
         $this->expectExceptionMessage(get_string('maxenrolledreached', 'enrol_apply'));
         $this->make_form()->check_access_for_dynamic_submission();
@@ -443,8 +425,7 @@ final class application_form_test extends \advanced_testcase {
     /**
      * A locked field is shown read-only and never gets a confirmation checkbox.
      *
-     * Hiding it instead would mean snapshotting and mailing an approver a value the
-     * applicant never saw; core's own answer to a locked field is the opposite of hiding it.
+     * See application_form::add_locked_section() for why it is not hidden instead.
      *
      * @return void
      */
@@ -656,7 +637,7 @@ final class application_form_test extends \advanced_testcase {
     }
 
     /**
-     * Two simultaneous submissions produce one application, not two.
+     * A second submission by the same user creates nothing, and is not a refusal.
      *
      * @return void
      */
@@ -711,10 +692,9 @@ final class application_form_test extends \advanced_testcase {
     /**
      * A refused application goes back to the enrolment page and says why.
      *
-     * The fixture is the real race rather than a contrived state: the form is built while a
-     * place is still free, so the applicant passed every check the form makes, and the place
-     * is taken before the write. Until this changed, that produced a bare "Invalid access
-     * detected" from applied.php, whose own gate found no enrolment row.
+     * The fixture reproduces the race: the form is built while the applicant limit (customint3)
+     * still has room, and the last slot is taken before the write. applied.php would reject such
+     * a request, because its gate requires an enrolment row.
      *
      * @return void
      */
@@ -740,8 +720,8 @@ final class application_form_test extends \advanced_testcase {
         $this->assertSame(\core\output\notification::NOTIFY_ERROR, $notifications[0]->get_message_type());
         $this->assertSame(get_string('maxenrolledreached', 'enrol_apply'), $notifications[0]->get_message());
 
-        /* Nothing was written for the applicant, which is precisely why the acknowledgement
-           page would have refused them. */
+        /* Nothing was written for the applicant, which is why the acknowledgement page would
+           have refused them. */
         $this->assertFalse($DB->record_exists('user_enrolments', [
             'userid' => $this->applicant->id,
             'enrolid' => $this->instance->id,
@@ -757,11 +737,10 @@ final class application_form_test extends \advanced_testcase {
      * @return void
      */
     public function test_a_created_application_still_reaches_the_acknowledgement(): void {
-        /* Submitting form rather than the plain one: get_data() returns null on a unit-built
-           form, and the created path hands that straight to submission::create(), which is
-           typed. Production never sees the null - apply.php calls this only inside
-           `else if ($form->get_data())` and the web service only after is_validated() - so
-           the fixture is what makes the test resemble the real call. */
+        /* The submitting fixture rather than the plain form: get_data() returns null on a
+           unit-built form, and the created path hands it to the typed submission::create().
+           Production never passes null - apply.php calls this only inside
+           `else if ($form->get_data())` and the web service only after is_validated(). */
         $form = $this->make_form_submitting([]);
 
         \core\notification::fetch();
@@ -778,13 +757,8 @@ final class application_form_test extends \advanced_testcase {
     /**
      * A refusal leaves no profile-update offer behind in the session.
      *
-     * The offer used to be stashed whatever the write door did, so a refusal left the session
-     * holding an offer to update a profile for an application that does not exist.
-     *
-     * The submitted data is supplied by the fixture form on purpose: with the null that a
-     * unit-built form really returns, diff::compute() finds no changes and offer::stash()
-     * returns before writing, so this test would pass against a build that stashes
-     * unconditionally. The control below is what proves it does not.
+     * The fixture form supplies submitted data on purpose; see testable_application_form for why
+     * a plain form would make this test pass vacuously. The test below is the control.
      *
      * @return void
      */
@@ -806,11 +780,10 @@ final class application_form_test extends \advanced_testcase {
     }
 
     /**
-     * ...and an application that goes through does leave one.
+     * An application that goes through does leave a profile-update offer.
      *
-     * The control for the test above, and it is not optional: it is what proves the stash can
-     * happen at all under this fixture, so that its absence above means the refusal skipped it
-     * rather than that nothing was ever stashable.
+     * The control for the test above: it proves the stash can happen under this fixture, so its
+     * absence there means the refusal skipped it.
      *
      * @return void
      */

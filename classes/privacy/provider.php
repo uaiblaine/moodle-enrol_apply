@@ -105,9 +105,7 @@ class provider implements
             'userid' => $userid,
         ]);
 
-        /* Both roles, and two placeholders bound to the same value rather than one reused:
-           fix_sql_params() counts occurrences and throws duplicateparaminsql when the total
-           does not match the parameter array. */
+        // Both roles. Two names bound to one value: fix_sql_params() rejects a reused placeholder.
         $sql = "SELECT ctx.id
                   FROM {enrol_apply_submission} s
                   JOIN {context} ctx ON ctx.instanceid = s.courseid AND ctx.contextlevel = :contextlevel
@@ -140,13 +138,8 @@ class provider implements
                  WHERE e.courseid = :courseid";
         $userlist->add_from_sql('userid', $sql, ['enrol' => 'apply', 'courseid' => $context->instanceid]);
 
-        /* No "<> 0" filter on either column, deliberately. Both are 0 in normal operation -
-           decidedby on every application nobody has decided yet, userid on every record whose
-           course has been deleted - but userlist::add_from_sql() wraps the query in
-           "JOIN {user} u ON u.id = target.<field>", and no user has id 0. A filter here would
-           be unreachable, so no test could hold it, and an unreachable guard reads as
-           protection while proving nothing. What must not change is the API: add_userids()
-           does no such filtering. */
+        /* No "<> 0" filter is needed although decidedby is 0 until somebody decides:
+           userlist::add_from_sql() joins the result to {user}, and no user has id 0. */
         $userlist->add_from_sql(
             'userid',
             "SELECT s.userid FROM {enrol_apply_submission} s WHERE s.courseid = :courseid",
@@ -244,40 +237,25 @@ class provider implements
                 'timedecided' => $row->timedecided ? transform::datetime($row->timedecided) : null,
             ];
 
-            /* The decision itself, and it goes to BOTH subjects rather than to the applicant
-               alone. The split this method already makes is between the applicant's own words
-               and the decision taken on them - which is why the comment and the profile
-               snapshot below are the applicant's only. These three are the decision: what was
-               written to the applicant, which groups they were put in, which role they were
-               given. The decider is entitled to a record of what they decided, and the
-               applicant to a record of what was decided about them.
-
-               Declared in get_metadata() since the columns existed and exported nowhere until
-               now, which is the gap this closes: metadata that promises more than the export
-               delivers is a worse failure than either alone, because the promise is what a
-               subject reads. */
+            /* The decision (message to the applicant, groups, role) goes to both subjects: the
+               decider is entitled to a record of what they decided, the applicant to a record of
+               what was decided about them. */
             $export->outcomemessage = trim((string) $row->outcomemessage) !== ''
                 ? $row->outcomemessage
                 : null;
 
-            /* The decider's note goes to BOTH subjects too, and the applicant's half is the one
-               worth arguing for. Nothing shows this note to the applicant in the ordinary course
-               of things - it is written for the next member of staff to read - but a subject
-               access request is not the ordinary course of things: it asks what the site holds
-               about a person, and this column holds a member of staff's assessment of them.
-               Withholding it because it was never meant for their eyes is the reason it is
-               exactly what such a request exists to reach. */
+            /* The decider's note goes to both subjects too. No page shows it to the applicant,
+               but it is a member of staff's assessment of them, which is what a subject access
+               request exists to reach. */
             $export->decisionnote = trim((string) $row->decisionnote) !== ''
                 ? $row->decisionnote
                 : null;
             $export->decidedgroups = self::group_names((string) $row->decidedgroups, $context);
             $export->decidedrole = self::role_name((int) $row->decidedrole);
 
-            /* The comment and the profile snapshot belong to the APPLICANT, and only ever go
-               into the applicant's own export. A decider's subject access request is about
-               the decision they took, not about the person they took it on: handing them
-               somebody else's free text and profile details is a disclosure the request never
-               asked for, and one the applicant never consented to. */
+            /* The comment and the profile snapshot are the applicant's own data and go into the
+               applicant's export only; handing them to the decider would disclose a third
+               party's data. */
             if ($asapplicant) {
                 $export->comment = $row->comment;
                 $export->submittedfields = submission::read_snapshot($row->userinfodata);
@@ -291,15 +269,11 @@ class provider implements
     /**
      * The names of the groups a decider chose, for a data export.
      *
-     * The column stores group ids, which mean nothing to the person reading their own export,
-     * so they are resolved to names. A group deleted since the decision cannot be resolved and
-     * is left out rather than reported as a bare number: an id is not recoverable information
-     * to a subject, and a placeholder for it would need a string that says less than nothing.
+     * The column stores group ids, which mean nothing to the subject, so they are resolved to
+     * names. A group deleted since the decision is left out rather than reported as a bare id.
      *
-     * The names are taken in their PLAIN spelling. format_string()'s escape flag defaults to
-     * true, and this value goes into an export file rather than into HTML, so the escaped
-     * spelling would reach the subject as the literal "R&amp;D" - the sink decides, never the
-     * helper.
+     * Names are taken in their plain spelling (escape => false): the export file is not HTML,
+     * so the escaped spelling would reach the subject as the literal "R&amp;D".
      *
      * @param string $decidedgroups Comma-separated group ids as the record stores them.
      * @param context $context Course context the groups belong to.
@@ -327,20 +301,13 @@ class provider implements
     /**
      * The name of the role a decider chose, for a data export.
      *
-     * A role name has no single spelling and role_get_name() does not give it one, which is why
-     * this does not simply call it. Measured on 5.1 and 5.2, where the function is identical:
-     * a role whose role.name is non-empty comes back through format_string() and is therefore
-     * ESCAPED, while an empty one - which is every role a stock site ships - comes back from a
-     * bare get_string() and is not. An export carrying both spellings is one where a site's own
-     * custom roles read as "R&amp;D coordinator" and Moodle's do not.
+     * role_get_name() is not used for a named role because its spelling is mixed: a non-empty
+     * role.name comes back through format_string() and is escaped, while an empty one (every
+     * standard role) comes back from get_string() and is not. Both branches here return the
+     * plain spelling, as the export file is not HTML.
      *
-     * So the two branches are taken deliberately, each in its plain spelling. Core's one
-     * precedent for exporting a role name (badges/classes/privacy/provider.php) calls
-     * role_get_name() directly and inherits the mixture; this is a considered departure.
-     *
-     * The course alias a site may give a role is deliberately not applied. It is a second
-     * admin-set name needing the same treatment, and what the record holds is the role that was
-     * assigned rather than what one course chose to call it.
+     * The course alias is deliberately not applied: the record holds the role that was assigned,
+     * not what one course chose to call it.
      *
      * @param int $roleid Role id as the record stores it, 0 when the instance default applied.
      * @return string|null The role name, or null when none was recorded or the role is gone.
@@ -372,9 +339,8 @@ class provider implements
     /**
      * Where an application belonging to one enrolment method is written in the export.
      *
-     * The enrolment method id is part of the path, and that is a fix rather than decoration:
-     * every application in a context used to be exported to the same path, so a course
-     * carrying two apply methods exported the first and then overwrote it with the second.
+     * The enrolment method id is part of the path so that a course with two apply methods
+     * exports both applications instead of the second overwriting the first.
      *
      * @param int $enrolid Enrol instance the application was submitted to.
      * @return array Subcontext path.
@@ -389,13 +355,10 @@ class provider implements
     /**
      * Where a durable application record is written in the export.
      *
-     * Two discriminators, and both are needed. The role, because one person can legitimately
-     * be the applicant on one record and the decider on another in the same course. And the
-     * record's own id, because the state machine deliberately produces MORE THAN ONE record
-     * per course and user - cancelling and re-applying is the ordinary way - so a path keyed
-     * on the enrolment method alone silently exports the last one over all the others. That
-     * is the same defect this slice set out to fix for enrol_apply_applicationinfo, and it
-     * reappears here for a different reason.
+     * Both discriminators are needed. The role, because one person can be the applicant on one
+     * record and the decider on another in the same course. The record id, because one user can
+     * hold several records per course and method (cancelling and re-applying produces a new
+     * one), and a path without it would export only the last.
      *
      * @param int $recordid Id of the enrol_apply_submission row.
      * @param bool $asapplicant True for the applicant's own record, false for one they decided.
@@ -500,17 +463,12 @@ class provider implements
     /**
      * Erase the given users from the durable application records of the given courses.
      *
-     * The two roles are erased differently, and the difference is the whole point.
+     * The two roles are erased differently. As the applicant, the record is theirs and is
+     * deleted whole: erasure wins over keeping the trail.
      *
-     * As the APPLICANT, the record is theirs and it goes whole. Erasure wins over permanence:
-     * the trail exists to tell a manager what was decided, not to be evidence against the
-     * person it describes, so it is deliberately not tamper-evident against the data subject.
-     *
-     * As the DECIDER, only their name goes. The record belongs to somebody else - it carries
-     * that person's comment and profile snapshot - and deleting it would destroy a third
-     * party's data under a request that third party never made. Zeroing decidedby is the
-     * whole of what the decider can ask for here, and it is exactly what course deletion does
-     * to the same column.
+     * As the decider, only their id goes. The record carries the applicant's comment and
+     * profile snapshot, and deleting it would destroy a third party's data. Zeroing decidedby
+     * matches what {@see submission::pseudonymise()} does on course deletion.
      *
      * @param array $courseids Courses to erase within.
      * @param array $userids Users to erase, in either role.

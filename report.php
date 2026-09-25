@@ -17,7 +17,7 @@
 /**
  * The report of applications made to one course.
  *
- * This script authorises the first view. It does NOT authorise the ones that follow: sorting,
+ * This script authorises the first view. It does not authorise the ones that follow: sorting,
  * filtering and paging all go through core_table_get_dynamic_table_content, which never runs
  * this file. The gate that runs every time is course_applications::can_view().
  *
@@ -48,65 +48,25 @@ $PAGE->set_title(get_string('report:course_applications', 'enrol_apply'));
 $PAGE->set_heading(format_string($course->fullname));
 $PAGE->navbar->add(get_string('report:course_applications', 'enrol_apply'));
 
-/* The report's SCOPE is its context and never the id in the url, and that half is a security
-   boundary rather than a preference: a report's parameters arrive as PARAM_RAW in the filterset
-   and are json_decoded straight into it, so anything a client can set cannot be what decides
-   which course's rows are read. The base condition stays `courseid = <context>->instanceid`.
+/* Rows are scoped by the report's context, never by the id in the url: a report's parameters
+   arrive from the client in the filterset, so they cannot decide which course is read (see
+   course_applications::can_view()). The id still matters, because a course can carry several
+   apply methods and get_action_icons() links each method to its own report.
 
-   What that argument establishes is that the url's id is not a security boundary. It does NOT
-   establish that the id is inert, and an earlier version of this comment drew that second
-   conclusion and stated it as intended behaviour. It was not: `get_action_icons()` builds one
-   icon PER INSTANCE and puts the instance id in the url, so two apply methods in one course
-   produced byte-identical reports under two different urls. Measured on the development site:
-   instance 195 held no applications at all and its report rendered instance 4's eight - an audit
-   report of a method's applications, under that method's url, containing none of them. */
-/* Keyed on the METHOD, through the persistent's itemid, and that is what makes the scoping below
-   survive past the first render. set_filter_values() writes to reportbuilder_user_filter, which
-   is keyed on (reportid, usercreated) and nothing else, and the report persistent is keyed on
-   the source, the context and these three - so with one report per COURSE both methods shared a
-   single stored scope. Every request after the initial page load reads that store and nothing
-   else: sorting and paging go through core_table_get_dynamic_table_content, whose filterset
-   carries the reportid and the report's own parameters and nothing that names a method, and the
-   Download button posts the same id to /reportbuilder/download.php. Two tabs open on two methods
-   therefore overwrote each other, and
-   the second one's scope answered the first one's next click - reinstating the very defect this
-   page exists to remove, for every request but the first.
-
-   The itemid is NOT a scope and must never become one: it arrives from this url and can_view()
-   explains at length why the query is scoped on the CONTEXT instead. What it selects here is
-   which stored filter set is loaded, which changes what this reader last chose and never which
-   rows may be read. A client swapping it gets another method's stored choice, inside the same
-   course, which they are already entitled to see. */
+   One report persistent per method, keyed by the enrol instance as itemid: the reader's filter
+   choice is stored per report and user, and every request after this first render - sorting,
+   paging, downloading - reads that store without naming a method. The itemid only selects which
+   stored choice is loaded, never which rows may be read. See course_applications::for_method(). */
 $report = course_applications::for_method($context, (int) $instance->id);
 
-/* So the url's method is pre-applied as a FILTER value, which is the one mechanism that narrows
-   without touching the boundary above. **The safety is the base condition and nothing else**, and
-   an earlier version of this comment reasoned it the wrong way round: it said a forged value
-   "shows fewer rows ... the intersection of `courseid = X` and a foreign enrolid is empty", and
-   that intersection is never computed. select::get_sql_filter() checks the submitted value
-   against its own options list and returns ['', []] when it is not there, so a forged value
-   produces NO filter and the report widens to the whole course - which is the view this reader
-   already holds enrol/apply:viewreports for. Safe, but for the other reason.
+/* So the url's method is pre-applied as a filter value, merged into the reader's other stored
+   filters, on every load of this url: the url names a method, so a reload restores it even after
+   the reader cleared the filter. A forged value is not one of the filter's options and is
+   ignored, which widens the report to the whole course the reader may already see; the base
+   condition is the boundary. See course_applications::scope_to_method().
 
-   Clearing it in the report widens the view back to that same whole course, which is what this
-   page showed before.
-
-   Merged into whatever the reader already had rather than replacing it, because set_filter_values()
-   overwrites the lot and their status or date filters are not this page's to discard. Core's own
-   precedent for seeding a system report from a url parameter is admin/tasklogs.php, which
-   replaces; here the merge is the difference between a scoped report and a reset one.
-
-   Applied on every load of this url, deliberately and not as an oversight: the url NAMES a
-   method, so that is what it means. A reader who clears the filter widens the report for as long
-   as they are working in it - the filter form posts over a web service and never reloads this
-   script - and a reload of a method's url puts that method back.
-
-   Only where the filter exists at all: the report adds it only when the course carries more than
-   one LIVE apply method, because a filter offering a single choice reads as a control that does
-   not work. Not because it could never narrow - enrol_apply_submission rows outlive the instance
-   they name, so a course that once had two methods holds rows whose enrolid names no live
-   instance, and a one-option filter would exclude exactly those. They stay in the report, which
-   is the course-wide view this page falls back to anyway. */
+   The filter exists only when the course carries more than one apply method, so on a
+   single-method course this does nothing and the report keeps the rows of deleted methods. */
 $report->scope_to_method((int) $instance->id);
 
 echo $OUTPUT->header();

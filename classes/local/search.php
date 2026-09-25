@@ -17,24 +17,22 @@
 namespace enrol_apply\local;
 
 /**
- * Matching text the way a person types it, across both database families CI runs.
+ * Matching text the way a person types it, on PostgreSQL and on MariaDB/MySQL alike.
  *
  * A search box is only useful if "goncalves" finds Gonçalves, and the two families disagree about
  * that by default. MariaDB and MySQL fold accents through the site's ordinary case-insensitive
- * collation, so core's own sql_like() is already accent-insensitive there. PostgreSQL does not, and
- * core says so itself: pgsql_native_moodle_database::sql_like() documents that its
- * $accentsensitive argument has no effect. The gap is closed by the unaccent extension, which this
- * plugin provisions if the database lets it and does without if it does not.
+ * collation, so core's own sql_like() is already accent-insensitive there. PostgreSQL does not:
+ * pgsql_native_moodle_database::sql_like() ignores its $accentsensitive argument. The gap is closed
+ * by the unaccent extension, which this plugin provisions if the database lets it and does without
+ * if it does not.
  *
- * So a site gets one of two behaviours and the help string says which. That was decided rather than
- * discovered - "best-effort, documented fallback" - because the alternative is either refusing to
- * install on a least-privilege database or shipping a search that silently means something
- * different per site with nothing on screen saying so.
+ * So a site gets one of two behaviours, and the queuesearch_help string says which. The
+ * alternatives were refusing to install on a least-privilege database, or a search that silently
+ * means something different per site with nothing on screen saying so.
  *
  * The technique on PostgreSQL follows local_aise, "Accent Insensitive Search Enabler", copyright
  * 2023 Austrian Federal Ministry of Education, GNU GPL v3 or later:
- * https://github.com/Bildungsportal/moodle-local_aise - by way of local_dimensions, which is where
- * this fleet already runs it.
+ * https://github.com/Bildungsportal/moodle-local_aise
  *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine
@@ -44,11 +42,10 @@ class search {
     /**
      * Whether unaccent() may be used in SQL on this site.
      *
-     * **Not cached, and the omission is deliberate.** PostgreSQL PHPUnit wraps each test in a
-     * transaction it rolls back, so a cached "it is installed" flag outlives the CREATE EXTENSION
-     * that set it and the next query references a function that is no longer there. Asking the
-     * catalogue is one indexed lookup; resolve it ONCE per query build and pass the answer down,
-     * rather than once per searched column.
+     * Not cached: PHPUnit on PostgreSQL wraps each test in a transaction it rolls back, so a cached
+     * "it is installed" flag would outlive the CREATE EXTENSION that set it. Asking the catalogue
+     * is one indexed lookup; resolve it once per query build and pass the answer down, rather than
+     * once per searched column.
      *
      * @return bool True when unaccent() is available; always false off PostgreSQL.
      */

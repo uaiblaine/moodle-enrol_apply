@@ -37,12 +37,17 @@ class enrol_apply_notification extends \core\message\message {
     /**
      * Build a notification of the given type.
      *
+     * 'application' goes to the people who decide, and its link opens the approval queue
+     * (manage.php); confirmation, cancelation and waitinglist go to the applicant, and their
+     * link opens the course. The link's label follows the type accordingly.
+     *
      * @param stdClass $to Recipient user record.
      * @param stdClass $from Sender user record.
      * @param string $type One of application, confirmation, cancelation or waitinglist.
      * @param string $subject Message subject.
      * @param string $content Message body as HTML.
-     * @param moodle_url $url Link offered as the message context.
+     * @param moodle_url $url Link offered as the message context: the approval queue for
+     *     'application', the course for the other types.
      * @param int $courseid Course the message is about.
      * @throws invalid_parameter_exception When the notification type is not supported.
      */
@@ -81,7 +86,7 @@ class enrol_apply_notification extends \core\message\message {
 
         $this->notification = 1;
         $this->contexturl = $url;
-        $this->contexturlname = get_string('course');
+        $this->contexturlname = $type === 'application' ? get_string('applymanage', 'enrol_apply') : get_string('course');
         $this->courseid = $courseid;
     }
 }

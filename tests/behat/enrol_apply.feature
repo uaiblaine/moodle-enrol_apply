@@ -36,12 +36,10 @@ Feature: Enrolment upon approval
     And I am on "Course 1" course homepage
     And I should not see "New section"
 
-  # The only scenario that runs with JavaScript, and it is the one that has to. Two paths exist
-  # nowhere else in this feature: the application modal, which is what a browser with JavaScript
-  # actually gets, and the queue's bulk bar, whose whole behaviour is JavaScript. The disabled
-  # assertions below are the only automated check that enrol_apply/manage runs at all - nothing
-  # else in this repository executes the plugin's JavaScript, and a module that only phpcs and
-  # eslint have read has been wrong here before.
+  # With JavaScript, because two paths exist only there: the application modal, which is what a
+  # browser with JavaScript gets, and the queue's bulk bar, which starts disabled only because
+  # enrol_apply/manage disables it on init. Only the @javascript scenarios execute the plugin's
+  # JavaScript at all.
   @javascript
   Scenario: A teacher approves a pending application and the student gains access
     Given I log in as "student1"
@@ -52,8 +50,8 @@ Feature: Enrolment upon approval
     When I log in as "teacher1"
     And I am on the "C1" "enrol_apply > manage applications" page
     Then I should see "Student 1"
-    # The bar lives in core's sticky footer now, and the rows, the header checkbox and the bar
-    # are one core/checkbox-toggleall group. Selecting through the header is what proves it.
+    # The bar lives in core's sticky footer, and the rows, the header checkbox and the bar are
+    # one core/checkbox-toggleall group. Selecting through the header is what proves it.
     And I should see "Go" in the "sticky-footer" "region"
     And the "With selected users..." "field" should be disabled
     And I click on "Select all" "checkbox"
@@ -84,10 +82,9 @@ Feature: Enrolment upon approval
     And I am on "Course 1" course homepage
     And I should not see "New section"
 
-  # No @javascript, and that is the point of this one. The filters have to work as a plain GET
-  # form, and this scenario is also the ONLY thing holding manage.php's url threading: the search
-  # has to survive the decision round trip, which no unit test can see because a page script's url
-  # assembly has no unit to redden. mutations/gates.conf records that absence deliberately.
+  # No @javascript: the filters have to work as a plain GET form. This is also the only test of
+  # manage.php's url threading - the search has to survive the decision's redirect, and a page
+  # script's url assembly has no unit test.
   Scenario: Searching the queue narrows it, and the search survives a decision
     Given the following "users" exist:
       | username | firstname  | lastname    | email                  |
@@ -125,17 +122,16 @@ Feature: Enrolment upon approval
     Then I should see "Student 1"
     And I should not see "Search quillsworth"
 
-  # The second decision route: core's own participants page. @javascript is not a choice
-  # here and it is the opposite of the queue's bar above - core ships the "With selected
-  # users..." select DISABLED and only core/checkbox-toggleall clears it, so without
-  # JavaScript Mink sets the value happily and then never posts "formaction" at all,
-  # because a disabled field is left out of the submission.
+  # The second decision route: core's own participants page. It needs @javascript, unlike the
+  # queue's bar: core ships the "With selected users..." select disabled and only
+  # core/checkbox-toggleall enables it, so without JavaScript Mink sets the value and then never
+  # posts "formaction", because a disabled field is left out of the submission.
   #
-  # One applicant, not two. What this scenario exists to prove is the wiring core owns and
-  # nothing else in this repository exercises: the menu, action_redir.php's regex sweep of
-  # the checkbox names, the confirmation form and the round trip back. That the selection
-  # survives that round trip for MORE than one applicant is a property of the form's hidden
-  # bulkuser[] inputs, and tests/bulk/operations_test.php holds it with two.
+  # One applicant, not two. This proves the wiring core owns and nothing else here exercises:
+  # the menu, action_redir.php's regex sweep of the checkbox names, the confirmation form and
+  # the round trip back. That the selection survives the round trip for more than one applicant
+  # depends on the form's hidden bulkuser[] inputs, and tests/bulk/operations_test.php holds it
+  # with two.
   @javascript
   Scenario: A teacher confirms an application from the course participants page
     Given I log in as "student1"
@@ -179,12 +175,12 @@ Feature: Enrolment upon approval
     And I should see "Confirm this application"
     And I should see "Student 1" in the "page-header" "region"
 
-  # The one branch this slice adds that changes state, and the only surface it lives on.
+  # The cancel confirmation, which exists only on the review page.
   #
   # No @javascript: the review page is a plain form and the confirmation is a plain page, and
-  # this is what proves the destructive decision is reachable and refusable without JavaScript.
-  # It also pins the thing no unit test can reach - that pressing Cancel does NOT unenrol until
-  # the confirmation is answered, which is the whole point of the interception.
+  # this proves the destructive decision is reachable and refusable without JavaScript. It also
+  # pins what no unit test can reach: pressing Cancel does not unenrol until the confirmation is
+  # answered.
   Scenario: Cancelling one application asks first, and backing out changes nothing
     Given I log in as "student1"
     And I am on "Course 1" course homepage
@@ -194,12 +190,16 @@ Feature: Enrolment upon approval
     And I log in as "teacher1"
     And I am on the "Course 1" "enrolled users" page
     And I click on "Decide this application" "link" in the "Student 1" "table_row"
+    And I set the field "Message to the applicant" to "Please resend your transcript."
+    And I set the field "Note for the record" to "Checking with the registry."
     When I press "Cancel this application"
     Then I should see "Cancel this application?"
     And I should see "Keep the application"
-    # Backing out leaves the application exactly where it was.
+    # Backing out leaves the application exactly where it was, and brings back what was typed.
     When I press "Keep the application"
     Then I should see "Awaiting a decision"
+    And the field "Message to the applicant" matches value "Please resend your transcript."
+    And the field "Note for the record" matches value "Checking with the registry."
     # And going through with it does unenrol them.
     When I press "Cancel this application"
     And I press "Cancel and unenrol"
@@ -207,14 +207,12 @@ Feature: Enrolment upon approval
     And I am on the "Course 1" "enrolled users" page
     And I should not see "Student 1"
 
-  # Deferral end to end, and the only place the three halves of it meet. No @javascript, for
-  # the same reason the cancellation scenario above has none: the review page is a plain form.
+  # Deferral end to end. No @javascript, for the same reason as the cancellation scenario above:
+  # the review page is a plain form.
   #
-  # Three things no unit test can put together. The note survives the decision and is read back
-  # by the next person to open the application - which is the whole reason the column exists.
-  # The application stays decidable afterwards, so the reason can be corrected rather than
-  # frozen. And the applicant reads about THEIR OWN state on the course page, where every one of
-  # the three states used to read as "waiting for a decision".
+  # It puts together three things no unit test can: the note survives the decision and is shown
+  # to the next person who opens the application; the application stays decidable, so the reason
+  # can be corrected; and the applicant is told their own state on the course page.
   Scenario: Deferring one application records why, and the applicant is told what happened
     Given I log in as "student1"
     And I am on "Course 1" course homepage
@@ -235,29 +233,27 @@ Feature: Enrolment upon approval
     # headed with that very word, so the bare assertion passes whatever the status says.
     Then I should see "Status: Deferred"
     And I should see "Holding for the September intake."
-    # The box is NOT pre-filled: the note belongs to the decision being taken, so a second
+    # The box is not pre-filled: the note belongs to the decision being taken, so a second
     # decision cannot inherit the first one's reason by leaving the box alone.
     And the field "Note for the record" matches value ""
-    # And the reason can still be corrected, which the old lookup made impossible.
+    # And the reason can still be corrected.
     When I set the field "Note for the record" to "Waiting for the transcript."
     And I press "Defer this application"
     Then I should see "The selected enrolment applications have been updated."
     And I log out
-    # The applicant reads their own state, not the pending wording every state used to get.
+    # The applicant is told their own state, not the pending wording.
     And I log in as "student1"
     And I am on "Course 1" course homepage
     Then I should see "Your enrolment application has been deferred."
     And I should not see "New section"
 
-  # The bulk bar must not lie about what is selected, and only a browser can hold this. The bar
-  # lives in the sticky footer, OUTSIDE the region a refresh replaces, so it survives a page turn,
-  # a sort or a filter change with whatever count and whatever enabled state it had - while every
-  # checkbox it was counting has just been destroyed. Sorting is the cheapest refresh to provoke:
-  # since the table became dynamic, clicking a column heading replaces the region over AJAX
-  # instead of reloading the page.
+  # The bulk bar must not report a stale selection. It lives in the sticky footer, outside the
+  # region a refresh replaces, so a page turn, a sort or a filter change leaves its count and
+  # enabled state as they were while every checkbox it counted is destroyed. Sorting is the
+  # cheapest refresh to provoke: the table is a dynamic one, so a column heading replaces the
+  # region over AJAX instead of reloading the page.
   #
-  # @javascript is not a choice here. The count and the reset are the module's whole behaviour,
-  # and the non-JavaScript driver executes none of it.
+  # It needs @javascript: the count and the reset are the module's own behaviour.
   @javascript
   Scenario: Selecting rows counts them, and a sort puts the count back
     Given I log in as "student1"
@@ -277,14 +273,12 @@ Feature: Enrolment upon approval
     And I should see "0 selected on this page"
     And the "With selected users..." "field" should be disabled
 
-  # The as-you-type half. @javascript is not a preference here: without it nothing in this
-  # scenario exists - the debounce, the refresh, the chip the module renders and the count it
-  # rewrites are all the module's, and with scripting off the queue narrows through a page load
-  # that the non-JavaScript scenario above already covers.
+  # The as-you-type half. The debounce, the refresh, the chip and the count are all the module's,
+  # so it needs @javascript; with scripting off the queue narrows through a page load, which the
+  # non-JavaScript search scenario above covers.
   #
-  # It also pins the interaction the two halves have with each other: a filter change replaces the
-  # table region, which destroys every checkbox in it, while the bulk bar lives outside that region
-  # and would otherwise go on claiming a selection that no longer exists.
+  # It also pins how the two interact: a filter change replaces the table region and every
+  # checkbox in it, while the bulk bar outside that region must stop claiming the lost selection.
   @javascript
   Scenario: The queue narrows as the operator types, and the selection does not survive it
     Given the following "users" exist:
@@ -303,6 +297,7 @@ Feature: Enrolment upon approval
     When I log in as "teacher1"
     And I am on the "C1" "enrol_apply > manage applications" page
     Then I should see "2 of 2 applications"
+    And I should see "Showing 1-2 of 2"
     # A selection the operator is about to lose, and the bar that must stop claiming it.
     And I click on "Select all" "checkbox"
     And I should see "2 selected on this page"
@@ -311,6 +306,8 @@ Feature: Enrolment upon approval
     Then I should see "Zephyrina Quillsworth"
     And I should not see "Student 1"
     And I should see "1 of 2 applications"
+    # The line under the table is outside the refreshed region, so the module redraws it too.
+    And I should see "Showing 1-1 of 1"
     And I should see "Search quillsworth"
     And I should see "0 selected on this page"
     And the "With selected users..." "field" should be disabled
@@ -318,14 +315,18 @@ Feature: Enrolment upon approval
     When I click on "Remove the filter Search: quillsworth" "link"
     Then I should see "Student 1"
     And I should see "2 of 2 applications"
+    And I should see "Showing 1-2 of 2"
     And I should not see "Search quillsworth"
+    # A search matching nothing leaves no range to name, so the line goes rather than reading 1-0 of 0.
+    When I set the field "Search" to "nothingmatchesthis"
+    Then I should see "0 of 2 applications"
+    And I should not see "Showing"
 
-  # The configurable per-field filters, driven through the GET form with no JavaScript. This
-  # scenario is the ONLY guard on manage.php's parameter reading: mdl mutate runs PHPUnit and a
-  # page script has no unit test to redden, which is exactly how the status/PARAM_INT defect of an
-  # earlier slice got in - every hand-built url in testing carried no status parameter at all. So
-  # it PRESSES THE BUTTON rather than navigating to a url, and it applies a field filter and a date
-  # together, because the two are read by different code paths.
+  # The configurable per-field filters, driven through the GET form with no JavaScript. This is
+  # the only test of manage.php's filter parameter reading, since a page script has no unit test.
+  # It presses the button rather than navigating to a hand-built url, so the parameters are the
+  # ones the form really sends, and it applies a field filter and a date together because
+  # different code reads them.
   Scenario: An administrator chooses which fields the queue may be filtered by
     Given the following config values are set as admin:
       | showuseridentity | institution |
@@ -365,13 +366,10 @@ Feature: Enrolment upon approval
     Then I should see "Student 1"
     And I should see "2 of 2 applications"
 
-  # The two halves of the applied-date chip have to spell the date the same way. The server renders
-  # it from PHP and the module redraws it from the input's own value, and there is no formatting the
-  # two could agree on - Moodle's date format is a language-pack string and the browser's is the
-  # reader's operating system - so neither side formats it at all. Formatted on one side only, a
-  # chip that read "31/01/26" on page load became "2026-01-31" the moment anything else on the bar
-  # was touched. @javascript is the whole point of this one: without it only the server's half ever
-  # renders, and a divergence between the two is invisible.
+  # The two halves of the applied-date chip must spell the date the same way. The server renders
+  # it from PHP and the module redraws it from the input's own value, and no date format is shared
+  # by both (Moodle's comes from the language pack, the browser's from the operating system), so
+  # neither side formats it. It needs @javascript: without it only the server's half renders.
   @javascript
   Scenario: The applied-date chip reads the same after a refresh as it did on load
     Given the following "users" exist:
@@ -402,9 +400,8 @@ Feature: Enrolment upon approval
     And the applied-date chip should read what its control holds
 
   # A field the site does not name in showuseridentity is offered to nobody, whatever the plugin
-  # setting says. The administrator's tick decides what the queue MAY offer; what the reader can
-  # already see decides what it does - and this is the half that no amount of admin configuration
-  # can widen.
+  # setting says. The plugin setting decides what the queue may offer; what the reader can
+  # already see decides what it does offer.
   Scenario: A field the site withholds is offered to nobody
     Given the following config values are set as admin:
       | showuseridentity | institution |
@@ -425,21 +422,17 @@ Feature: Enrolment upon approval
   # The audit report belongs to the method whose icon opened it. No @javascript: the icons on
   # the enrolment methods page are ordinary links and the report renders server side.
   #
-  # This is the one thing no unit test in this repository can hold. report.php's call to
-  # scope_to_method() is the whole feature, and it lives in a page script - delete it and every
-  # PHPUnit test still passes, because they call that method directly. Here the deletion shows up
-  # as the second method's report listing an application that is not its own, which is the defect
-  # exactly as it was measured.
+  # report.php's call to scope_to_method() is the whole feature and lives in a page script, so no
+  # PHPUnit test reaches it (they call the method directly). Without it the second method's report
+  # lists an application that is not its own.
   #
-  # The second method is added AFTER the application is submitted, deliberately: with two methods
-  # on the course the enrolment page renders two panels and "Start application" stops being an
-  # unambiguous button. Ordering the fixture this way needs no scoping and no second applicant.
+  # The second method is added after the application is submitted: with two methods on the course
+  # the enrolment page renders two panels and "Start application" is no longer an unambiguous
+  # button. Ordering the fixture this way needs no scoping and no second applicant.
   #
-  # Driven as ADMIN and not as teacher1, and that is a fact about the plugin rather than a
-  # convenience: the report icon is gated on enrol/apply:viewreports, which is deliberately
-  # narrower than manageapplications and which the editingteacher archetype does not carry. A
-  # teacher sees the Edit and Manage icons on that row and no report icon at all - measured in a
-  # faildump when this scenario was first written against teacher1.
+  # Driven as admin rather than teacher1: the report icon is gated on enrol/apply:viewreports,
+  # which is narrower than manageapplications and which the editingteacher archetype does not
+  # carry, so a teacher sees no report icon on that row.
   Scenario: The applications report shows the method whose icon opened it
     Given I log in as "student1"
     And I am on "Course 1" course homepage

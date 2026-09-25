@@ -28,7 +28,7 @@
 require_once(__DIR__ . '/../../../../lib/behat/behat_base.php');
 
 /**
- * Page resolvers for the enrol_apply management screens.
+ * Page resolvers and step definitions for enrol_apply.
  *
  * @package    enrol_apply
  * @category   test
@@ -79,7 +79,7 @@ class behat_enrol_apply extends behat_base {
      *
      * The field set is a JSON envelope on the instance with no generator behind it, and
      * driving the per-field picker through the edit form would make every scenario long and
-     * brittle for something tests/local/fields_test.php already covers exhaustively.
+     * brittle for something tests/local/fields_test.php already covers.
      *
      * @Given /^the "(?P<shortname_string>(?:[^"]|\\")*)" apply enrolment method asks for "(?P<keys_string>(?:[^"]|\\")*)"$/
      * @param string $shortname Course shortname.
@@ -101,19 +101,15 @@ class behat_enrol_apply extends behat_base {
     /**
      * The applied-date chip reads exactly what its own control holds.
      *
-     * **The literal date cannot be named here, and that is a property of the driver rather than a
-     * looseness in the assertion.** For an `input[type=date]` mink-phpwebdriver does not type the
-     * string it was given: it runs `date(DATE_ATOM, strtotime($value))` in the Behat process and
-     * then, in the browser, `element.valueAsDate = new Date("<that string>")`. `valueAsDate` is
-     * defined in terms of the Date's UTC components, so the value that lands in the control has
-     * been through a timezone-bearing round trip and is not always the day the step named -
-     * measured on this suite, where "2020-01-01" arrived as 2019-12-31.
+     * The scenario cannot name a literal date. For an `input[type=date]` mink-phpwebdriver runs
+     * `date(DATE_ATOM, strtotime($value))` in the Behat process and then sets
+     * `element.valueAsDate = new Date("<that string>")` in the browser. `valueAsDate` uses the
+     * Date's UTC components, so the day that lands in the control can differ from the one the
+     * step named ("2020-01-01" can arrive as 2019-12-31).
      *
-     * None of that is what this scenario is about. The guard is that the chip the SERVER renders
-     * and the chip the AMD module redraws spell the same date, because they are produced by
-     * different code in different languages from the same control - so the assertion is against
-     * the control's own value, whatever the driver put there. Naming a literal would have made the
-     * test fail for a reason that has nothing to do with the plugin, which is exactly what it did.
+     * What this pins is that the chip the server renders and the chip the AMD module redraws
+     * spell the same date, since different code produces them from the same control; so the
+     * assertion is against the control's own value, whatever the driver put there.
      *
      * @Then the applied-date chip should read what its control holds
      * @throws \Behat\Mink\Exception\ExpectationException When the control holds no date.

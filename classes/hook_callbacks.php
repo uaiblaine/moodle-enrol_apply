@@ -42,11 +42,10 @@ class hook_callbacks {
      * enrolments" capability and denying it would remove legitimate date editing too —
      * this observer reconciles the state afterwards, whichever route was taken.
      *
-     * The applicant IS notified, and that is worth stating because this docblock used to
-     * claim the opposite: complete_approval() queues \enrol_apply\task\notify_approval for
-     * every route an approval can take, this one included. Queueing is deduplicated on
-     * classname, component and custom data, so the manager who approves from core's screen
-     * and the one who approves from the plugin's queue each produce exactly one message.
+     * The applicant is notified on this route too: complete_approval() queues
+     * \enrol_apply\task\notify_approval, and queueing is deduplicated on classname, component
+     * and custom data while the task is queued, so a queue approval, which reaches
+     * complete_approval() both directly and through this hook, still sends one message.
      *
      * @param before_user_enrolment_updated $hook The dispatched hook.
      * @return void
@@ -89,8 +88,7 @@ class hook_callbacks {
      * context_helper::delete_instance(CONTEXT_COURSE, ...), and only then triggers the event.
      * Every privacy provider query is wrapped in a JOIN against {context} by
      * contextlist::add_from_sql(), so a row still carrying a real userid once that context
-     * row is gone is invisible to subject access and unreachable by erasure - with nothing
-     * anywhere to say so. The event is too late by two statements.
+     * row is gone is silently invisible to subject access and unreachable by erasure.
      *
      * What is kept is the dates and the status, which identify nobody; what goes is both
      * user ids and the whole snapshot the applicant submitted.

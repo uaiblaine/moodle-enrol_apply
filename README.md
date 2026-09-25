@@ -53,7 +53,9 @@ applied to newly created instances.
 
 Per course, add the "Course enrol confirmation" method under Participants → Enrolment
 methods. The pending queue for a course is reachable from the enrolment methods page;
-the site-wide queue is at Site administration → Courses → Manage enrolment applications.
+the site-wide queue is at Site administration → Courses → Manage enrolment applications
+for site administrators, and at `/enrol/apply/manage.php` for anyone else holding
+`enrol/apply:manageapplications` at system level.
 
 ### Placeholders in the notification mails
 
@@ -151,8 +153,9 @@ standard mentor pattern configures this in three steps:
 3. Open the mentee's profile and use **Preferences → Roles → Assign roles relative to
    this user** to give the mentor that role.
 
-The mentor then sees exactly those users' applications at Site administration → Courses →
-Manage enrolment applications, and can decide on them.
+The mentor then opens `/enrol/apply/manage.php` with no parameters, sees exactly those users'
+applications there, and can decide on them. (The Site administration menu entry is only shown to
+site administrators.)
 
 One limitation is worth knowing before you rely on it. A Moodle capability declares a
 single context level, and this one declares `CONTEXT_COURSE`; the user-context override

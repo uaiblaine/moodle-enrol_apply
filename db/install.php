@@ -17,21 +17,16 @@
 /**
  * Install-time work for the applications queue.
  *
- * No MOODLE_INTERNAL guard: the file's only top-level construct is a function definition, so the
- * sniff moodle.Files.MoodleInternal.MoodleInternalNotNeeded fires on one, and a single warning
- * fails the build under --max-warnings 0.
- *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 /**
- * Give the queue's search the best matching the database will allow.
+ * Install the unaccent extension the queue's search uses, where the database account may.
  *
- * DDL, so it runs here and in the upgrade step rather than on any request path. Failure is not an
- * error: a least-privilege database account cannot create an extension, and such a site keeps an
- * accent-sensitive search, which the search field's help string describes.
+ * A failure is swallowed by {@see \enrol_apply\local\search::ensure_unaccent()}: such a site keeps
+ * an accent-sensitive search, as the search field's help string describes.
  *
  * @return bool Always true; the plugin installs either way.
  */

@@ -62,9 +62,9 @@ final class purge_submissions_test extends \advanced_testcase {
     protected function seed(int $age, int $status = submission::STATUS_APPROVED, int $timedecided = 0): int {
         global $DB;
 
-        /* A distinct applicant per row. They need not be real users - the sweep never joins
-           {user} - but they must differ, so that these fixtures carry no signal of their own
-           when the natural key is mutated. */
+        /* A distinct applicant per row. They need not be real users (the sweep never joins
+           {user}), but distinct values keep these tests independent of whether
+           (courseid, userid) is unique. */
         $this->seeded++;
 
         return (int) $DB->insert_record('enrol_apply_submission', (object) [
@@ -97,8 +97,9 @@ final class purge_submissions_test extends \advanced_testcase {
     /**
      * The sweep takes everything older than the retention period, decided or not.
      *
-     * The undecided row is the point of the test: it carries timedecided = 0, so a sweep
-     * written against that column would retain exactly the abandoned applications forever.
+     * The undecided rows are the point of the test: they carry timedecided = 0, so a sweep
+     * keyed on that column instead of timecreated either keeps the old undecided row or
+     * deletes the recent one.
      *
      * @return void
      */
@@ -137,9 +138,8 @@ final class purge_submissions_test extends \advanced_testcase {
     /**
      * The setting is read as seconds, whatever its name suggests.
      *
-     * admin_setting_configduration stores seconds however the administrator sets the unit,
-     * while the setting is called retentiondays. This pins the one place that reads it, so
-     * that a factor of 86400 cannot creep into a delete statement.
+     * retentiondays is an admin_setting_configduration, which stores seconds; this pins its
+     * only reader, {@see submission::retention_seconds()}.
      *
      * @return void
      */
@@ -175,69 +175,78 @@ final class purge_submissions_test extends \advanced_testcase {
     }
 
     /**
-     * A row that cannot be purged costs that row and nothing else.
+     * A row that cannot be purged costs that row and nothing else, and is attempted once.
      *
-     * The failure is injected through the same method any dml_exception would surface in, so
-     * what is being proven is the isolation, not the injection. Two things have to hold: the
-     * sweep completes rather than aborting, and it does not spin - the cursor advances past
-     * the failing row, so the next iteration cannot select it again.
+     * The sweep must complete rather than abort, and must not spin: the cursor advances past a
+     * failing row before the work, so no later iteration can select it again. Two rows fail. The
+     * first sits between rows that purge, which holds the skip-and-continue: the row after it is
+     * still swept. The second has the highest id, so no later row can carry the cursor past it;
+     * only the cursor itself can. Dropping `s.id > :lastid`, or advancing the cursor after
+     * purge_row() rather than before it, makes the next iteration select that row again, which
+     * the attempt count reports.
      *
      * @return void
      */
     public function test_a_bad_row_does_not_abort_the_sweep(): void {
         global $DB;
 
-        /* The harness runs each test inside a transaction of its own, and the sweep's error
-           handler rolls back whatever transaction is open. Without this the handler would
-           discard the fixtures below and the test would fail for a reason unrelated to what
-           it checks. The cost is that the rollback branch itself is then NOT exercised here -
-           with no transaction open, is_transaction_started() is false and the handler skips
-           it. What this test holds is the skip-and-continue, and the cursor advancing past a
-           row that refuses to go; the rollback is core's own documented remedy for a
-           transaction poisoned by an exception on PostgreSQL. */
+        /* On PostgreSQL the harness wraps each test in a transaction, which the sweep's error
+           handler would roll back together with the fixtures below. Turning that off leaves no
+           transaction open, so this test holds the skip-and-continue but not the rollback
+           branch. */
         $this->preventResetByRollback();
         set_config('retentiondays', 30 * DAYSECS, 'enrol_apply');
 
         $first = $this->seed(90 * DAYSECS);
-        $poisoned = $this->seed(80 * DAYSECS);
-        $last = $this->seed(70 * DAYSECS);
+        $poisoned = $this->seed(85 * DAYSECS);
+        $after = $this->seed(80 * DAYSECS);
+        $highest = $this->seed(70 * DAYSECS);
+        $this->assertSame($highest, (int) $DB->get_field_sql('SELECT MAX(id) FROM {enrol_apply_submission}'));
 
         $task = new class extends purge_submissions {
-            /** @var int Row id that refuses to be purged. */
-            public $poisoned = 0;
+            /** @var int A short budget, so a cursor that stops advancing fails in seconds rather than a minute. */
+            public const TIME_BUDGET = 5;
+
+            /** @var array Row ids that refuse to be purged. */
+            public $poisoned = [];
+
+            /** @var array How many times purge_row() was called for each row id. */
+            public $attempts = [];
 
             /**
-             * Fail for one row and behave normally for every other.
+             * Count every attempt, and fail for the poisoned rows.
              *
              * @param int $id Row id to delete.
              * @return void
              */
             protected function purge_row(int $id): void {
-                if ($id === $this->poisoned) {
+                $this->attempts[$id] = ($this->attempts[$id] ?? 0) + 1;
+                if (in_array($id, $this->poisoned, true)) {
                     throw new \dml_write_exception('injected failure');
                 }
                 parent::purge_row($id);
             }
         };
-        $task->poisoned = $poisoned;
+        $task->poisoned = [$poisoned, $highest];
 
         $this->assertEquals(2, $this->sweep($task));
 
         $this->assertFalse($DB->record_exists('enrol_apply_submission', ['id' => $first]));
         $this->assertTrue($DB->record_exists('enrol_apply_submission', ['id' => $poisoned]));
-        // The control: the row AFTER the failure was still swept, so the sweep carried on.
-        $this->assertFalse($DB->record_exists('enrol_apply_submission', ['id' => $last]));
+        $this->assertTrue($DB->record_exists('enrol_apply_submission', ['id' => $highest]));
+        // The control: the row after the first failure was still swept, so the sweep carried on.
+        $this->assertFalse($DB->record_exists('enrol_apply_submission', ['id' => $after]));
+
+        $this->assertSame(1, $task->attempts[$poisoned] ?? 0, 'a failing row was selected again');
+        $this->assertSame(1, $task->attempts[$highest] ?? 0, 'the cursor did not move past the last failing row');
     }
 
     /**
      * More rows than one chunk holds are all swept.
      *
-     * What this holds is that the loop iterates: a sweep that read one chunk and stopped
-     * would leave the remainder behind forever. It does NOT hold the primary-key cursor -
-     * with every delete succeeding, re-running the same query each time would terminate just
-     * as well. The cursor earns its place on the failure path, where a row that refuses to go
-     * would otherwise be selected again on every iteration until the time budget expired;
-     * test_a_bad_row_does_not_abort_the_sweep is what exercises that.
+     * This holds that the loop iterates. It does not hold the primary-key cursor: with every
+     * delete succeeding, re-running the same query would terminate as well. The cursor matters
+     * on the failure path; see test_a_bad_row_does_not_abort_the_sweep.
      *
      * @return void
      */
@@ -258,11 +267,10 @@ final class purge_submissions_test extends \advanced_testcase {
     /**
      * A record whose application is still in the queue is spared, however old it is.
      *
-     * Nothing expires a pending application - apply() enrols with timeend = 0 so that
-     * process_expirations() cannot reach it - so age alone does not make one finished. Purging
-     * the record of an application a manager can still see and act on produces the one state
-     * this table exists to prevent: the decision taken afterwards finds no row to stamp and is
-     * recorded nowhere at all.
+     * Nothing expires a pending application (apply() enrols with timeend = 0), so age alone
+     * does not make one finished. Purging its record would lose the profile snapshot the
+     * applicant submitted, which no later decision can reconstruct
+     * ({@see \enrol_apply\local\submission::ensure()}).
      *
      * @return void
      */
@@ -292,7 +300,7 @@ final class purge_submissions_test extends \advanced_testcase {
         $old = time() - 90 * DAYSECS;
         $DB->set_field('enrol_apply_submission', 'timecreated', $old, ['userid' => $applicant->id]);
 
-        /* The control: an equally old record whose application is NOT in the queue. Without
+        /* The control: an equally old record whose application is not in the queue. Without
            it, a sweep that had simply stopped working would pass. */
         $orphan = $this->seed(90 * DAYSECS);
 
@@ -305,13 +313,10 @@ final class purge_submissions_test extends \advanced_testcase {
     /**
      * An expired enrolment does not keep its record alive forever.
      *
-     * "Spare a live application" is two clauses, and only the second separates a genuinely
-     * pending application from an enrolment that was approved and has since lapsed:
-     * process_expirations() re-suspends a lapsed enrolment, so on status alone it looks
-     * exactly like somebody still waiting. The queue excludes it and this sweep must too, or
-     * the record of an enrolment that ended years ago is kept for ever - which is the opposite
-     * of what a retention period is for, and the reason the predicate is shared with the queue
-     * rather than written out here.
+     * Under a suspend expiredaction, process_expirations() re-suspends a lapsed enrolment, so
+     * on status alone it looks like an application still waiting. The timeend clause of the
+     * queue's predicate, which the sweep shares
+     * ({@see \enrol_apply\local\queue::awaiting_decision_where()}), is what lets its record go.
      *
      * @return void
      */
@@ -368,6 +373,12 @@ final class purge_submissions_test extends \advanced_testcase {
      * The other half of the rule above: "spare it while it is live" must not turn into
      * "keep it forever".
      *
+     * It also pins that a decision does not restart the retention clock: the application is
+     * decided moments before the sweep, and its record goes at once because it was submitted
+     * longer ago than the retention period. That is the behaviour
+     * {@see purge_submissions::purge()} documents as deliberate; a sweep counting from the
+     * decision would keep the record and fail here.
+     *
      * @return void
      */
     public function test_a_record_is_swept_once_its_application_is_decided(): void {
@@ -397,12 +408,18 @@ final class purge_submissions_test extends \advanced_testcase {
             ['enrolid' => $instanceid, 'userid' => $applicant->id],
             MUST_EXIST
         );
+        $decidedat = time();
         $plugin->confirm_enrolment([$ueid]);
         $sink->close();
 
         $DB->set_field('enrol_apply_submission', 'timecreated', time() - 90 * DAYSECS, [
             'userid' => $applicant->id,
         ]);
+
+        // The precondition: the record carries a decision taken just now.
+        $record = $DB->get_record('enrol_apply_submission', ['userid' => $applicant->id], '*', MUST_EXIST);
+        $this->assertEquals(submission::STATUS_APPROVED, (int) $record->status);
+        $this->assertGreaterThanOrEqual($decidedat, (int) $record->timedecided);
 
         $this->assertEquals(1, $this->sweep());
         $this->assertFalse($DB->record_exists('enrol_apply_submission', ['userid' => $applicant->id]));

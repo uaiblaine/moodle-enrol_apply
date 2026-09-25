@@ -8,10 +8,11 @@ file keeps only what is true for this plugin.
 Plugin context: a Moodle **enrol** plugin ("Course enrol confirmation") that inserts an
 approval step into course enrolment. A user applies, optionally leaving a comment and
 filling in profile fields; the enrolment is created **suspended**; a manager then
-confirms, defers to a waiting list, or cancels it. It owns two tables —
+confirms, defers to a waiting list, or cancels it. It owns three tables —
 `enrol_apply_applicationinfo` (the per-application comment, keyed by
-`user_enrolments.id`) and `enrol_apply_groups` (groups an approved applicant joins) —
-and leans on core's enrolment expiry machinery for everything time based. Supports
+`user_enrolments.id`), `enrol_apply_groups` (groups an approved applicant joins) and
+`enrol_apply_submission` (the durable record of each application, which outlives its
+enrolment) — and leans on core's enrolment expiry machinery for everything time based. Supports
 Moodle **5.1 through 5.2** (`$plugin->requires = 2025100600`,
 `$plugin->supported = [501, 502]`). CI is the moodle-an-hochschulen reusable workflow,
 one job per supported branch in `.github/workflows/ci.yml` — **update those jobs when
@@ -33,9 +34,20 @@ most expensive one — and is a defect, not a default:
 - `sonnet` — readers, graders, refuters, verifiers, measurers, stale-reference
   sweeps, mechanical renames, test files written against a stated contract.
 - `opus` — implementers of non-trivial code, ADR and documentation drafters,
-  consolidators, critics, estimators.
+  consolidators, critics, estimators. The alias means the **newest Opus**: since
+  2026-09-22 that is Claude Opus 5.5 (`claude-opus-5-5`), measured by asking a
+  subagent launched with `model: 'opus'` which model it runs on. Never pin
+  `claude-opus-5` or any older Opus id. The `Agent` tool accepts aliases only
+  (`sonnet`, `opus`, `haiku`, `fable`); `agent()` in a Workflow accepts an explicit
+  id as well, but the alias is what to write — it follows the newest Opus without
+  an edit here.
 - the session model — only for work done inline in the main loop, never for a
   subagent.
+- `effort` is set beside `model` on every call, never inherited: `high` for
+  verifiers, readers and refuters, `xhigh` for implementers and fixers (the
+  owner's rule of 2026-09-17). An omitted effort inherits the session's, and on
+  Opus 5.5 an explicit one matters twice over — that model's own default is
+  `medium`, one level below Opus 5.
 
 Multi-agent workflows stay opt-in and lean whatever mode is on: size the fan-out
 to the question (roughly 10 to 25 agents), one refuter per finding and only for
@@ -61,7 +73,8 @@ history before assuming it was deliberate.
 ## Commands
 
 ```sh
-mdl ci moodle-enrol_apply                # full CI locally before any push
+mdl ci moodle-enrol_apply                # one CI leg, while iterating
+mdl ci moodle-enrol_apply --matrix       # every leg GitHub runs, before any push
 mdl phpunit m502 enrol_apply             # targeted tests
 mdl behat m502 @enrol_apply              # Behat smoke tests
 mdl grunt m502 enrol/apply               # rebuild amd/build (commit with src)
@@ -71,7 +84,7 @@ mdl mutate moodle-enrol_apply mutations/gates.conf --dry-run   # patterns only, 
 mdl mutate moodle-enrol_apply mutations/gates.conf             # the mutation sweep
 ```
 
-**`mutations/gates.conf` pairs a hundred guards with the test each one must redden**, and it is
+**`mutations/gates.conf` pairs about 160 guards with the test each one must redden**, and it is
 the executable form of a claim this repository makes constantly in prose. Add a mutation in
 the same change as the guard it protects; a guard whose mutation reddens nothing is held by
 no test, whatever its comment says. `mutations/README.md` has the rules, including the two
@@ -85,20 +98,26 @@ pattern naming `$manager` matches nothing, and `lib.php` carries the same
 lib.php                      enrol_apply_plugin: the whole state machine
 classes/form/application_form.php  what the applicant fills in, in a modal or on apply.php
 apply.php / applied.php      the no-JavaScript transport and the acknowledgement
+profile.php                  the opt-in profile write the acknowledgement page offers
 edit.php / edit_form.php     per-course instance configuration
-manage.php                      the approval queue and its bulk actions
+manage.php                      the approval queue, its bulk actions and the one-application review page
 classes/table/applications.php  the queue's table, a core_table\dynamic one
+classes/local/queue.php      "awaiting a decision", the review lookup, the scopes and the previous/next walk
+classes/bulk/                the participants page's three bulk decisions
+report.php, classes/reportbuilder/  the course report and a custom-report datasource, both over the durable record
 renderer.php                 page rendering plus the notification e-mail body
-templates/                   manage, manage_actions, review, review_actions, decision_controls,
-                             application_navigation, application_notification, profile_offer
+templates/                   manage, manage_actions, queue_capacity, queue_chip, queue_filters, review,
+                             review_actions, decision_controls, application_navigation,
+                             application_notification, profile_offer, profile_missing
 classes/hook_callbacks.php   reconciles approvals made outside confirm_enrolment()
 classes/local/applicantstate.php  what an applicant is told about their OWN application
 classes/local/applications.php  mentee lookup shared by the queue
 classes/local/capacity.php   the two capacity numbers, and how many deferrals hold one
 classes/local/submission.php the durable application record: constants, writes, reads
 classes/observers.php        course_deleted, orphan cleanup for the plugin-disabled case
-classes/privacy/provider.php full provider: two tables, two personal-data roles
-classes/task/                sync_enrolments, send_expiry_notifications, purge_submissions
+classes/privacy/provider.php full provider: the two personal-data tables, two personal-data roles
+classes/task/                sync_enrolments, send_expiry_notifications, purge_submissions (scheduled);
+                             notify_approval (adhoc: the approval message)
 backup/                      group mappings, comments and the durable trail, see below
 ```
 
@@ -125,8 +144,8 @@ backup/                      group mappings, comments and the durable trail, see
   "approved with no access" told a working participant their enrolment was broken and sent them to
   bother their teacher. The row alone cannot tell the two apart — core pairs the status with the
   enrolment's window AND the enrol instance's own status — so each caller passes what it knows,
-  which is `is_enrolled(..., onlyactive: true)` for two of them and a guaranteed false for the
-  enrolment page, whose panel core only renders to somebody it has already refused.
+  which is `is_enrolled(..., onlyactive: true)` for all three. The enrolment page asks too, although
+  core's `enrol/index.php` redirects an actively enrolled user before its panel is shown.
 
   Two more consequences worth keeping. **The applicant's own row must be tested BEFORE
   `allow_apply()`, on the form as well as on the page**, or a method that stops accepting
@@ -160,10 +179,11 @@ backup/                      group mappings, comments and the durable trail, see
 - **`decisionnote` is the decider's, `outcomemessage` is the applicant's, and nothing may blur
   them.** The note is never mailed and appears on no applicant-facing page; it is read by the
   review page, the report and the privacy export. Both writers CLEAR on empty, which is not
-  tidiness: without it a re-queued application — which core's "Edit enrolment" screen and an
-  `expiredaction` of *suspend* both produce — is decided a second time carrying the first
-  decision's reason with nothing on screen to say so. For the same reason the review page SHOWS
-  the stored note but never pre-fills the box with it.
+  tidiness: without it a re-queued application — which core's "Edit enrolment" screen produces —
+  is decided a second time carrying the first decision's reason with nothing on screen to say so.
+  (An `expiredaction` of *suspend* re-queues nothing: it leaves a past `timeend`, which the queue
+  and the decision lookup both exclude.) For the same reason the review page SHOWS the stored
+  note but never pre-fills the box with it.
 
 - **The notification wording falls back at READ time, in `notify_applicant()`.** All six settings
   ship empty and a `settings.php` default cannot reach an existing site:
@@ -208,12 +228,12 @@ backup/                      group mappings, comments and the durable trail, see
   parameter choose which applications are enumerated, and the plan for this navigation said to
   carry the scope exactly that way, on the belief that `manage.php` had already authorised it.
 
-  The three scopes are `can_manage_application()`'s three levels in the same order — the
-  instance queue when the operator may open it, the site-wide queue for a system grant, the
-  mentees otherwise — which is what makes every application the walk can reach one the operator
-  may decide, **by construction rather than by a per-candidate check**. `mod_book`'s
-  skip-the-candidates-that-fail loop is therefore deliberately absent; a test per scope holds the
-  property instead.
+  The three scopes are `can_manage_application()`'s three levels, tried in a different order
+  (that method asks system, course, user): the instance queue when the operator may open it, the
+  site-wide queue for a system grant, the mentees otherwise — which is what makes every
+  application the walk can reach one the operator may decide, **by construction rather than by a
+  per-candidate check**. `mod_book`'s skip-the-candidates-that-fail loop is therefore
+  deliberately absent; a test per scope holds the property instead.
 
   **The access test is `can_access_course($course, null, 'enrol/apply:manageapplications', true)`
   and all four arguments are load bearing.** Two separate defects lived here, and the second one
@@ -260,14 +280,6 @@ backup/                      group mappings, comments and the durable trail, see
   without that gate the page listed every group name in a course the reader cannot open. The
   instance's own groups and role still apply to their decision.
 
-- **Slice U2 narrowed the bullet below, and the headline no longer holds as written.** The
-  snapshot is still read frozen and still never re-resolved. But the page now carries an identity
-  line, which DOES read the live profile - through `\core_user\fields::get_identity_fields()` and
-  `for_identity()->get_sql()`, for the fields the site named and this reader may see, and never
-  from a stored snapshot key. The distinction is the whole point: what was fixed was handing an
-  archive-controlled key to a live column with no allowlist, not the idea of reading a profile at
-  all. Read the bullet with that in mind.
-
 - **The review page's profile snapshot is read frozen, and NOTHING IN THE SNAPSHOT PANEL reads the live
   profile.** It comes from `submission::read_snapshot()` and never from `diff::compute()`, which
   re-resolves the field set from the LIVE instance and re-classifies it against the current user
@@ -293,13 +305,12 @@ backup/                      group mappings, comments and the durable trail, see
   fields** — they hold nothing in the course — which is the stricter reading of a real question
   rather than an obviously right answer. Withheld rows are dropped whether or not they hold a
   value: a marker appearing only where there is data is a presence oracle. The masking governs
-  the PANEL, not the page. **That last sentence used to read "the applicant's e-mail address has
-  its own row and always did", and slice U2 reversed it (2026-08-31, owner's decision):** the
-  address is now one identity field among the rest, so a site whose `showuseridentity` does not
-  name it does not show it here at all. The page DOES read the live profile now, through
-  `\core_user\fields` and for identity fields only - which is a different thing from the stored
-  snapshot key that once reached a live column with no allowlist, and is why that read is gated by
-  core's own helper rather than by this plugin's.
+  the PANEL, not the page: the identity line beside it DOES read the live profile, through
+  `\core_user\fields::get_identity_fields()` and `for_identity()->get_sql()`, for the fields the
+  site named and this reader may see (the e-mail address included; see "One identity rule"
+  below). That read is gated by core's own helper and never takes a stored snapshot key, which is
+  the distinction: what was fixed was handing an archive-controlled key to a live column with no
+  allowlist, not the idea of reading a profile at all.
 
   **Field keys are `s_<column>` and `c_<id>`, not `standard:<column>`.** Build them with
   `fields::standard_key()`. A hand-written prefix fails two ways at once and neither is loud:
@@ -319,25 +330,17 @@ backup/                      group mappings, comments and the durable trail, see
   **`:t` twice is `duplicateparaminsql`.** The comparison needs the timestamp in two places, so
   it binds two NAMES to one value; `fix_sql_params()` counts occurrences.
 
-  **The walk does NOT honour the initials bar, and that is a decision.** The queue renders with
-  `out(50, true)` and `query_db()` appends `get_sql_where()` — `firstname LIKE 'x%'` — so an
-  operator who has picked a letter is looking at a narrower set than the predicate describes.
-  Three measurements settled it. Turning the bar off would NOT close the gap:
-  `set_initials_preferences()` runs from `setup()` whatever the `$useinitialsbar` argument says,
-  and only `get_initial_first()` consults `use_initials`, so a stale preference or a crafted
-  request parameter still filters — the control disappears, the filter does not. The load-bearing
-  fact is that `get_sql_where()` never consults `use_initials` at all, only `prefs['i_first']` and
-  `prefs['i_last']`; an earlier version of this bullet said "only `get_initial_first()` consults
-  `use_initials`", which is wrong three ways over — `get_initial_last()` and
-  `print_initials_bar()` read it too, and none of them is the filter. The preference
-  itself lives in `$SESSION->flextable['enrol_apply_manage_table']`, **not** in a user preference
-  (that key is `\enrol_apply\table\applications::UNIQUEID`, kept verbatim through the move to
-  that class so no operator's stored sort was discarded):
-  `flexible_table::$persistent` defaults to false on both branches and this table never calls
-  `is_persistent(true)`. And honouring it would make the page depend on session state it does
-  not render, so a bookmarked or emailed review link would lose its neighbours because of a
-  letter clicked days earlier — invisible, which is the failure mode this repo treats as the
-  defect. Not honouring it fails visibly instead, because the link names the applicant.
+  **The walk does NOT honour the operator's own sort, and that is a decision.** It stays pinned to
+  `(timecreated, ue.id)` whatever heading was clicked. That sort lives in
+  `$SESSION->flextable['enrol_apply_manage_table']`, **not** in a user preference (that key is
+  `\enrol_apply\table\applications::UNIQUEID`, kept verbatim through the move to that class so no
+  operator's stored sort was discarded): `flexible_table::$persistent` defaults to false on both
+  branches and this table never calls `is_persistent(true)`. Honouring it would make the page
+  depend on session state it does not render, so a bookmarked or emailed review link would change
+  its neighbours because of a heading clicked days earlier — invisible, which is the failure mode
+  this repo treats as the defect. Not honouring it fails visibly instead, because each link names
+  the applicant it leads to. There is no initials filter to honour: the table overrides
+  `get_sql_where()` and `initialbars()` (see "The queue has no initials filter" below).
 
   **Test the walk against the LISTING, not against a hand-written expectation.**
   `test_the_walk_visits_exactly_what_the_queue_lists_and_in_its_order` walks from one row to both
@@ -389,8 +392,8 @@ backup/                      group mappings, comments and the durable trail, see
   runs TWICE for a queue approval while `\core\notification::add()` does not deduplicate: a batch
   of ten would warn twenty times, and the earlier pass sees pre-write state anyway. It lives in
   `manage.php` before the redirect, and on the queue itself — the latter rendered **outside** the
-  template's `hasrows` section, because an instance at its applicant limit has an EMPTY queue,
-  which is exactly when the manager needs to be told why.
+  decision form and gated on nothing about the rows, because an instance at its applicant limit
+  has an EMPTY queue, which is exactly when the manager needs to be told why.
 
   **A deferred row counts against the applicant cap for ever, and the remedy is DATA rather than
   the predicate.** `applicants()` has no status clause, `wait_enrolment()` writes `timeend = 0` so
@@ -444,22 +447,27 @@ backup/                      group mappings, comments and the durable trail, see
   (`enrol/instances.php`) and from `enrol_self`'s cap — documented rather than hidden, because a
   teacher comparing the two screens will notice.
 
-  **`limit()` must stay `> 0`, not `!== 0`.** `db/upgrade.php` writes `customint3 = null` on one
-  path, and a negative would otherwise mean "permanently full" rather than "uncapped".
+  **`applicant_limit()` and `places()` must stay `> 0`, not `!== 0`.** The instance form and the
+  two site defaults refuse a negative (gates `F3C`–`F3F`), but `restore_instance()` passes an
+  archived value through, and a negative would otherwise mean "permanently full" rather than
+  "uncapped". Gate `Z`.
 
   **Three plugins outside this repo consumed the old inline count** — `local_dimensions`,
   `local_unlistedcourses` and `theme_boost_union_fundaseg` — and all three now delegate here
-  behind a `class_exists()` guard, keeping the unfiltered count as the fallback because that is
-  what an older `enrol_apply` build genuinely means. Their own tests seat occupants with
-  `timeend = 0`, so they stayed green through the divergence and nothing in any pipeline
-  reported it. If this predicate changes again, they change with it.
+  through `is_callable([$plugin, 'is_full'])`, keeping the unfiltered count as the fallback
+  because that is what an older `enrol_apply` build genuinely means. Their own tests seat
+  occupants with `timeend = 0`, so they stayed green through the divergence and nothing in any
+  pipeline reported it. If this predicate changes again, they change with it.
 
 - **Deferring clears the expiry, and the literal `0` is load bearing twice.**
   `update_user_enrol()` gates each date on `isset()`, so `null` means "leave it alone" and there
-  is no other spelling — which is how a once-approved application used to land on the waiting
-  list still carrying a past `timeend`. That row is stranded by construction: core's SUSPEND arms
-  filter `status = active`, which it fails, so no sweep touches it, and the queue excludes it by
-  that same `timeend`, so no listing offers it. It waited for a decision nobody could take.
+  is no other spelling. A row reaching `wait_enrolment()` can still carry a FUTURE `timeend` —
+  core's "Edit enrolment" screen can suspend an enrolment part way through its period, and a
+  restore copies an archived one — and deferred with it, the row is stranded once that date
+  passes: core's SUSPEND arms filter `status = active`, which it fails, the UNENROL arm deletes
+  it, and the queue excludes it by that same `timeend`, so no listing offers it. A PAST `timeend`
+  no longer reaches the method at all: the decision lookup refuses it (see "The decision methods
+  read the QUEUE's predicate" below). Gate `AA`.
 
   It must be the **integer** `0`: core's `communication/classes/hook_listener.php` compares
   `timeend !== 0`, and `'0' !== 0` is true, so a string would drop the applicant out of the
@@ -471,19 +479,21 @@ backup/                      group mappings, comments and the durable trail, see
   empty, so that one is a trap rather than a live defect, and `AB` in `gates.conf` holds it.
 
 - **One SQL definition of "awaiting a decision", in `queue::awaiting_decision_where()`** — read
-  by the approval queue, the submitted-comments listing, the review lookup and the retention
-  sweep. It used to be written out in each of them, which is how the participants-page bulk
-  decisions came to act on rows the queue excludes: two copies of a filter that is also a
-  correctness boundary drift, and the one that drifted was the newer. Deleting the `timeend`
-  half of it now reddens a test of the queue AND a test of the review lookup, which is the
-  property the extraction buys.
+  by the approval queue's listing, the review lookup, the previous/next walk,
+  `queue::other_applications()`, the retention sweep and the decision methods' own lookup,
+  `get_pending_user_enrolment()`. It used to be written out in each of them, which is how the
+  participants-page bulk decisions came to act on rows the queue excludes: two copies of a
+  filter that is also a correctness boundary drift, and the one that drifted was the newer.
+  Deleting the `timeend` half of it now reddens a test of the queue AND a test of the review
+  lookup, which is the property the extraction buys.
 
   There is exactly one deliberate second expression of the rule and it is not SQL:
-  `queue::is_awaiting_decision()` applies it to the `{user_enrolments}` rows core's participants
-  page has already loaded and which never reach a query of this plugin's — the selection a bulk
-  decision is given, and the one row behind each action icon. It sits next to the SQL rather than
-  in `classes/bulk/`, where it used to live, because the second reader would otherwise have made
-  it a third copy. Keep those two in step by hand; there is no third.
+  `queue::is_awaiting_decision()` applies it to `{user_enrolments}` rows that are already loaded
+  where no query of this plugin's can run — the selection core's participants page gives a bulk
+  decision, the one row behind each of that page's action icons, and the live enrolment the
+  report's outcome column describes from a display callback. It sits next to the SQL rather than
+  in `classes/bulk/`, where it used to live, because a second reader would otherwise have made it
+  a second copy. Keep those two in step by hand; there is no third.
 
 - **A stale review link is the ordinary case, not the edge one.** An application is decided
   exactly once and the url that reviewed it outlives the decision. `queue::application()`
@@ -523,6 +533,10 @@ backup/                      group mappings, comments and the durable trail, see
   The earlier cohort-based enumeration broke that agreement in both directions — it
   scanned every cohort peer on each request, and it hid mentees who shared no cohort even
   though the mentor could approve them by id.
+  A mentor, like any system-level decider without `moodle/site:config`, reaches that queue by its
+  url only: core includes an enrol plugin's `settings.php` for site administrators alone
+  (`core\plugininfo\enrol::load_settings()`), so the Site administration node never exists for
+  them (`tests/settings_test.php`, gates `F3A`/`F3B`).
 
 - **Group membership follows approval, not application**, and is written with
   `groups_add_member($groupid, $userid, 'enrol_apply', $instance->id)`. The component
@@ -569,8 +583,9 @@ backup/                      group mappings, comments and the durable trail, see
 
   **The stamp also has to be restored, and forgetting that lost the role in silence.** Core hands
   any `{role_assignments}` row whose component starts with `enrol_` to
-  `enrol_plugin::restore_role_assignment()` (`restore_stepslib.php:2350`, the same line on both
-  branches), whose base implementation is empty. That branch has **no fallback and writes no
+  `enrol_plugin::restore_role_assignment()` (`restore_stepslib.php:2370`, in
+  `restore_ras_and_caps_structure_step::process_assignment()`, the same line on both branches),
+  whose base implementation is empty. That branch has **no fallback and writes no
   backup log line** — the generic-component branch beside it does both — so between the commit
   that stamped the assignment and the one that added the override, every restore and every course
   copy gave the applicant an ACTIVE enrolment and no role. Measured on 5.1 and 5.2 with three
@@ -650,12 +665,13 @@ backup/                      group mappings, comments and the durable trail, see
   plugin's own data; if that order ever changes, `get_mappingid()` returns false and the
   comment is skipped rather than mis-attached. `tests/backup_test.php` pins the whole
   round trip — and note it needs `MODE_SAMESITE` plus an explicit unzip, because
-  `MODE_IMPORT` produces no `enrolments.xml` at all.
+  `MODE_IMPORT` produces no `enrolments.xml` at all; its one `backup_course()` helper does both.
 
 - **The notification e-mail must not hardcode profile fields.** `icq`, `skype`, `aim`,
   `yahoo` and `msn` were removed from the user table in Moodle 4.0 and reading them cost
-  five warnings per notification. `renderer.php` iterates `STANDARD_USER_FIELDS` and
-  skips anything the form did not submit, which also covers fields a site has hidden.
+  five warnings per notification. The body is built from `fields::submitted_values()`, which
+  walks the instance's resolved field set (`fields::resolve()`) and skips anything the form did
+  not submit or left empty.
 
 - **The queue's selection is core's `checkbox_toggleall`, and two things about it are not
   obvious.** The header checkbox, every row checkbox and the bulk action share the one group
@@ -676,14 +692,21 @@ backup/                      group mappings, comments and the durable trail, see
   operator the enabled control was left enabled for. The rule is gated on
   `body:not(.jsenabled)`, which core writes from
   `lib/classes/output/requirements/page_requirements_manager.php`. Nothing in this repository
-  renders CSS, so that pair is verified by reading the cascade and not by a test. That module now does nothing else, and the reason is worth keeping: core
-  has no `indeterminate` handling anywhere, so the header checkbox lost its tri-state, and the
-  first attempt to keep it — subscribing to `core/checkbox-toggleall:checkboxToggled` — shipped a
-  runtime error that **phpcs, eslint, grunt and Behat all passed**. `core/pubsub` has named
-  exports and no default, so `import PubSub from 'core/pubsub'` compiles to `_pubsub.default`,
-  which is `undefined`; core's own ES importers write `import * as PubSub`. Nothing in this
-  plugin's pipeline executes its JavaScript, so anything in that module has to be either
-  observable from Behat or not written.
+  renders CSS, so that pair is verified by reading the cascade and not by a test.
+
+  The module has grown since: it counts the selection, narrows the queue as the operator types,
+  and after every AJAX refresh redraws what lives outside the refreshed table region (the chips,
+  clear-all, the count line and the "Showing" line, which `manage.mustache` keeps in the markup,
+  hidden, so there is a node to fill) and strips flexible_table's paging parameters from the
+  address bar. It does not call `core_table/dynamic`'s `init()`:
+  `flexible_table::get_dynamic_table_html_end()` already requires it for every dynamic table.
+  Two things to keep. Core has no `indeterminate` handling anywhere, so the header checkbox has
+  no tri-state. And `core/pubsub` has named exports and no default, so
+  `import PubSub from 'core/pubsub'` compiles to `_pubsub.default`, which is `undefined`: the
+  first subscription to `core/checkbox-toggleall:checkboxToggled` shipped that way past phpcs,
+  eslint and grunt, and Behat shows it only as a timeout waiting for JavaScript. The module
+  imports `{subscribe}` by name. Nothing but Behat executes this plugin's JavaScript, so anything
+  in that module has to be either observable from Behat or not written.
 
   **The sticky footer is NOT relocated in the DOM**, unlike `core/modal`. Its position is CSS,
   so it is rendered inside `<form id="enrol_apply_manage_form">` and its controls post normally;
@@ -811,25 +834,20 @@ backup/                      group mappings, comments and the durable trail, see
   membership. The delete half of both precedents is safe to copy — it goes through
   `allow_unenrol_user()` and `unenrol_user()`.
 
-- **The bulk path had to reproduce the QUEUE's predicate, and the half that is easy to miss is
+- **The decision methods read the QUEUE's predicate, and the half that is easy to miss is
   `timeend`.** The queue pairs `ue.status != :active` with `(ue.timeend = 0 OR ue.timeend
-  > :now)`, and only the second clause keeps an expired enrolment out: `process_expirations()`
-  re-suspends an enrolment whose period ran out, so somebody approved and enrolled long ago comes
-  back looking exactly like a fresh application. That exclusion has only ever lived in the
-  LISTING — `get_pending_user_enrolment()` carries no `timeend` clause at all — so the
-  participants page, which is a second listing that core owns, reached rows the first listing was
-  written to keep away from the decision methods. `awaiting_decision()` is where the whole
-  predicate now lives.
-
-  **Deferral used to be the worst of the three, not cancellation, which is the opposite of what it
-  looks like.** `wait_enrolment()` called `update_user_enrol()` with no dates and that method
-  writes a date only when one is passed, so an expired row kept its past `timeend` and became a
-  deferred application carrying an expiry — a state no queue lists, and one the
-  `ENROL_EXT_REMOVED_UNENROL` branch of `process_expirations()` unenrols on sight, selecting on
-  `timeend` alone with no status filter. It is exactly the state "Never put a `timeend` on a
-  pending application" above forbids, arrived at from the other end. **It passes `null, 0` now**
-  (gate `AA`), so the expiry is cleared; the predicate still excludes expired rows, because a
-  lapsed approval is not an application awaiting a decision whatever the deferral would do to it.
+  > :now)`, and only the second clause keeps an expired enrolment out: under an `expiredaction`
+  of *suspend*, `process_expirations()` re-suspends an enrolment whose period ran out, so
+  somebody approved and enrolled long ago comes back looking exactly like a fresh application.
+  That exclusion used to live only in the LISTINGS, so the participants page — a second listing,
+  which core owns — and any crafted post reached rows the queue keeps away: a lapsed approval
+  could be cancelled (unenrolled), approved again, or deferred back into the queue with its expiry
+  cleared. `get_pending_user_enrolment()`, the lookup all three decision methods share, now
+  applies `queue::awaiting_decision_where()` and joins `{enrol}` on `e.enrol = 'apply'`, so a
+  lapsed approval and another method's enrolment are skipped like any row the operator may not
+  act on; the second used to reach the `MUST_EXIST` instance lookup and abort a batch half way.
+  Gates `F1B` and `F1A`. The bulk operations' own `awaiting_decision()` filter stays, but only to
+  sort rows into the counts below.
 
 - **Counts are taken by re-reading, never by predicting, and there are three of them rather than
   one.** The three decision methods skip a row they will not act on and skip it silently, so the
@@ -924,9 +942,11 @@ backup/                      group mappings, comments and the durable trail, see
   exists to remove.
 
   **The suspended case is split on `timeend` because the halves mean opposite things.** A manual
-  suspension carries no period and the queue's predicate puts that row back in the
-  approval queue; an expiry carries one in the past and does not. One word for both would file
-  half of them in the wrong place.
+  suspension carries no period (or one still running) and the queue's predicate puts that row
+  back in the approval queue; an expiry does not. One word for both would file half of them in
+  the wrong place. The split is `queue::is_awaiting_decision()` itself, not a copy of its rule,
+  so an end equal to now and a negative one a restore can carry read as expired exactly where
+  the queue excludes them (gate `F4A`).
 
   **`outcome` is not sortable and has no filter, and that is load bearing** — it is a display
   callback, and filtering and sorting are SQL that never reach one. The sortable primitives are
@@ -965,28 +985,31 @@ backup/                      group mappings, comments and the durable trail, see
   `ue.id ASC NULLS FIRST`, MariaDB gives `ue.id ASC`, so match by prefix.
 
 - **`table_sql` writes to the output buffer.** The renderer captures it with
-  `ob_start()` so it can be handed to a Mustache template as a triple stash. That is the
-  one place raw HTML is passed through a template on purpose.
+  `ob_start()` so it can be handed to a Mustache template as a triple stash, like the other
+  fragments the renderer pre-renders (the capacity panel, the filters, the sticky footer,
+  `format_text()` output).
 
-- **The profile fields on the application form are never saved.** The form renders the
-  fields the instance asks for, but nothing calls `profile_save_data()` or writes to
-  `{user}`. The submitted values only travel into the notification the approver receives.
-  That is upstream behaviour and it is deliberate here: turning it into a real profile edit
-  would let an enrolment form rewrite user records, which is a much larger change than it
-  looks and a privacy question of its own. Do not "fix" it without deciding that
-  explicitly. (An earlier version of this note also named
-  `useredit_update_user_profile()`; that function exists on neither 5.1 nor 5.2, so it was
-  proving nothing.)
+- **Submitting the application form never writes the profile; only the applicant's own opt-in
+  does.** The submitted values travel into the approver's notification and the durable snapshot,
+  nothing more. A profile write needs both switches — the site's `allowprofilewrite`, off by
+  default and with no restore surface, and the instance's `customint8`, which every restore
+  zeroes (gate `F5A`) — and then writes only what the applicant accepts on `applied.php`:
+  `offer::stash()` keeps the changes at submission, and `profile.php` hands them to
+  `profilewriter::write()` (`user_update_user()` plus `profile_save_data()`). Keep it opt-in: an
+  enrolment form that rewrote user records unasked would be a privacy question of its own. The
+  guards that write path needs are under "Nothing below the form honours a field lock".
 
 - **Which fields are asked for is decided at two levels, and read as an intersection.** An
   administrator sets the site pool in `enrol_apply/allowedfields`; a teacher picks from it
   per instance, stored as a JSON envelope in `customtext4`. `\enrol_apply\local\fields::resolve()`
   recomputes the pool on every read and keeps only the picked keys that survive it. That is
-  not defensive style: `customtext4` is carried verbatim by core's backup and copied onto a
-  restored instance by `enrol_plugin::add_instance()` with no allowlist, so anyone who can
-  restore a course chooses its contents. The deny list is enforced in `pool()` and nowhere
-  else, deliberately — a second check inside `resolve()` is unreachable, and an unreachable
-  guard no test can hold reads as protection while proving nothing.
+  not defensive style: `customtext4` is carried verbatim by core's backup, so anyone who can
+  restore a course chooses what arrives. `restore_instance()` rewrites it through `resolve()`
+  before `add_instance()`, but the recompute on every read is the barrier, because the pool can
+  change after the restore. The deny list is stripped in `pool()`
+  (`test_pool_drops_a_denied_key`) and deliberately not re-checked in `resolve()` — a second
+  check there is unreachable, and an unreachable guard no test can hold reads as protection
+  while proving nothing.
 
 - **The notification carries what the form delivered, and is not put through
   `format_string()`.** Both halves come from the submitted data. `format_string()` runs
@@ -1033,10 +1056,13 @@ backup/                      group mappings, comments and the durable trail, see
 - **Cancelling asks, and button order could never have been the fix.** Confirm was the form's
   first submit and therefore its default, so Enter on either chooser approved the enrolment -
   and whichever button comes first inherits that, so no ordering makes both safe. `manage.php`
-  intercepts `formaction === 'cancel'` without a `confirmed` flag and re-renders a confirmation
-  that re-emits the whole POST contract, `formaction` included. **Only on the review page:** the
-  queue posts the same action for a whole selection and has always applied it directly, and
-  intercepting there would break the scenario that proves the queue works without JavaScript.
+  intercepts `formaction === 'cancel'` without a `confirmed` flag, and
+  `enrol_apply_renderer::cancel_confirmation()` asks: its confirm answer re-emits the whole POST
+  contract, `formaction` included, and Keep posts back only the typed message and note. Both are
+  POST forms, so the decider's private note never lands in a url, a server log or a Referer
+  (gate `F2A`). **Only on the review page:** the queue posts the same action for a whole
+  selection and has always applied it directly, and intercepting there would break the scenario
+  that proves the queue works without JavaScript.
 
 - **The review page's navigation wrapper is gated on `hasnav`, not on the neighbours.** A queue of
   one is exactly when a reader most needs the link back, and the old flag hid the whole landmark
@@ -1044,7 +1070,7 @@ backup/                      group mappings, comments and the durable trail, see
   reachable rather than defensive - passes null and gets no link, because one pointing at a queue
   that would refuse them is worse than none. Gate `AS`.
 
-- **The queue's identifying columns are core's decision, and the mentee scope gets none.**
+- **The queue's identifying fields are core's decision, and the mentee scope gets none.**
   `\enrol_apply\local\identity` is the only reader; it delegates to
   `\core_user\fields::get_identity_fields()` and `for_identity()->get_sql()`, so the queue and the
   participants page beside it cannot answer differently. Before it, the queue printed the e-mail
@@ -1069,9 +1095,10 @@ backup/                      group mappings, comments and the durable trail, see
   **Two things that DO need care.** `get_sql()` must be asked for named parameters or
   `fix_sql_params()` throws `mixedtypesqlparam` — and the placeholders exist only for CUSTOM
   profile fields, so a fixture naming standard fields alone passes against the bug. And
-  `flexible_table` writes `$row->$column` into the cell **with no escaping**, so `other_cols()`
-  returning `s()` is this plugin's own XSS boundary, exactly as it is in core's participants table.
-  Gate `AM`.
+  `flexible_table` writes a cell's value into the markup **with no escaping**, so the `s()` around
+  each identity value in `col_fullname()` — they are the second line of the applicant's cell, not
+  columns of their own — is this plugin's own XSS boundary, as core's participants table has its
+  own. Gate `AM`.
 
   **Both teacher archetypes hold `moodle/course:viewhiddenuserfields`**, so on a stock site
   `hiddenuserfields` never narrows what a teacher sees here; it bites a custom role holding
@@ -1107,7 +1134,7 @@ backup/                      group mappings, comments and the durable trail, see
 
   **Only the `?id=` queue may carry it.** The site-wide and mentee scopes span instances, each free
   to word the question differently, so a single heading there would be true of some rows and false
-  of others. `manage.php` passes `''` on those scopes and the table falls back.
+  of others. The table falls back to the generic heading whenever its scope carries no instance.
 
   **The value can be a leftover recipient list.** Upstream stored the notification recipients in
   this column until 2016 and the 2022 fix retro-edited the step that wrote them, so a site past
@@ -1130,10 +1157,10 @@ backup/                      group mappings, comments and the durable trail, see
   one of its tests.
 
   **The opposite calls in this plugin are correct and must not be "fixed" to match.**
-  `edit_form.php:76` and `:284` feed moodleform selects, the queue's comment heading feeds
-  `html_writer::link()`, and every `$PAGE->set_heading(format_string(...))` feeds a triple
-  stash — all four sinks render raw and want the escaped spelling. The rule is the sink, never
-  the helper.
+  `edit_form.php:76` and `:327` feed moodleform selects, the queue's comment heading feeds
+  `print_headers()`'s `html_writer::tag()`, and every `$PAGE->set_heading(format_string(...))`
+  feeds a triple stash — all four sinks render raw and want the escaped spelling. The rule is the
+  sink, never the helper.
 
   **A role name has no single spelling, and the sentence that used to stand here said it had
   one.** It claimed `get_assignable_roles()` always returns `format_string()` output, so the
@@ -1151,8 +1178,9 @@ backup/                      group mappings, comments and the durable trail, see
   is a no-op on the already-escaped half — `format_string()` is idempotent, because the ampersand
   rule skips an existing entity, measured — and escapes the other half, after which the triple
   stash is correct for every member, exactly as core's own `element-select.mustache` is. It is
-  still the one place in this plugin's templates where a triple stash is right rather than wrong;
-  what changed is that the renderer now earns it instead of assuming it.
+  still the one place in this plugin's templates where a NAME goes through a triple stash (every
+  other one carries markup the renderer built); what changed is that the renderer now earns it
+  instead of assuming it.
 
 - **`allow_apply()` guards BOTH doors, and until recently it guarded only the offer.** It is
   the whole eligibility predicate — instance status, `customint6`, the enrolment window, and the
@@ -1166,7 +1194,9 @@ backup/                      group mappings, comments and the durable trail, see
   It is now re-checked **inside the existing lock**, first thing, next to the duplicate and cap
   checks that were always there. The comparison is `!== true` because the return is
   `bool|string` and anything that is not exactly `true` must fail closed — the cohort refusal is
-  generic today, but the signature still permits detail.
+  generic today, but the signature still permits detail. Keep it generic: it is rendered to any
+  authenticated non-member, and on the production platform a cohort's name says which security
+  force a course is for (`test_allow_apply_admits_only_cohort_members` asserts the name is absent).
 
   **Do not repeat the claim that this closes the form's race; it mostly does not.** Both
   transports re-run `check_access_for_dynamic_submission()` on the SUBMIT request, immediately
@@ -1300,10 +1330,11 @@ backup/                      group mappings, comments and the durable trail, see
   id and the user, and the guard behind it is a `{user_enrolments}` lookup by `enrolid`, so a
   course carrying two apply instances — which the plugin supports on purpose — lets one user
   hold two pending rows sharing `courseid` and `userid`. Measured: both `submit_application()`
-  calls return true. Note that `mdl phpunit-init` alone does **not** rebuild an existing table, so a
-  mutation of `install.xml` runs against the old schema and reads as harmless — drop the test
-  database first (`admin/tool/phpunit/cli/util.php --drop`) and confirm the index really
-  changed before believing the result.
+  calls succeed (they now return `application_result::created()`). Note that `mdl phpunit-init`
+  alone does **not** rebuild an existing table, so a mutation of `install.xml` runs against the
+  old schema and reads as harmless — drop the test database first
+  (`admin/tool/phpunit/cli/util.php --drop`) and confirm the index really changed before
+  believing the result.
 
 - **Only the two user columns carry a foreign key, and that is what core's privacy test
   reads.** `core_privacy\privacy\provider_test::test_table_coverage` decides a table holds
@@ -1398,9 +1429,10 @@ backup/                      group mappings, comments and the durable trail, see
   inserts. Drive `copy_helper::create_copy()` and its adhoc task and assert on the copied
   course's rows.
 
-  Testing it needs its own backup helper: `backup_controller::set_kept_roles()` throws
-  `cannot_set_keep_roles_wrong_mode` outside `backup::MODE_COPY`, and the repo's existing helper
-  uses `MODE_SAMESITE`.
+  Testing it needs `MODE_COPY`: `backup_controller::set_kept_roles()` throws
+  `cannot_set_keep_roles_wrong_mode` in any other mode, which is why `copy_enrolments_xml()`
+  passes it to `backup_course()` while every other backup in `tests/backup_test.php` is
+  `MODE_SAMESITE`.
 
 - **Core wires a plugin's restore handlers to every `<enrol>` element, not just its own.** A
   restore with `enrolments` set to "never" maps every old enrol id onto the course's **manual**
@@ -1428,9 +1460,15 @@ backup/                      group mappings, comments and the durable trail, see
 
 - **The retention sweep spares a record whose application is still in the queue.** Nothing ever
   expires a pending application (`apply()` enrols with `timeend = 0` precisely so
-  `process_expirations()` cannot reach it), so age alone does not make one finished. Purging the
-  record of an application a manager can still see would leave the decision taken tomorrow with
-  no row to stamp, and it would be recorded nowhere at all.
+  `process_expirations()` cannot reach it), so age alone does not make one finished. Its record
+  holds the profile snapshot the review page shows, which no other table keeps: the decision
+  methods would rebuild a missing record through `submission::ensure()`, but without the
+  snapshot, and an approval from core's "Edit enrolment" screen, which never reaches `ensure()`,
+  would be recorded nowhere. Once the application leaves the queue, by any route, the age still
+  counts from `timecreated`: a decision does not restart the clock, so an application that
+  waited longer than the retention period loses its record at the next run after it is decided.
+  That is deliberate (see `purge()`), and `test_a_record_is_swept_once_its_application_is_decided`
+  and gate `F4H` hold it.
 
 - **The restore de-duplication cannot be keyed on `enrolid`.** `restore_instance()` ends in
   `add_instance()`, so every restore creates a brand-new enrol row and no existing record can
@@ -1468,11 +1506,12 @@ backup/                      group mappings, comments and the durable trail, see
 
   What separates the two cases is knowledge the CALLER has and the record does not.
   `confirm_enrolment()` only ever processes rows `get_pending_user_enrolment()` returned, which
-  admits suspended and waiting-list rows only; the hook callback only fires on a status change to
-  active. Both know the enrolment genuinely moved, so all three transition callers pass
-  `$isfreshdecision`. A bare `decide()` call knows nothing and keeps the conservative default,
-  which is why the pinned test still passes unchanged — it is the control that the exception is
-  narrow.
+  admits only this plugin's applications still awaiting a decision; the hook callback only fires
+  on a status change to active. Both know the enrolment genuinely moved, so `complete_approval()`,
+  which both reach, passes `true`, as `cancel_enrolment()` does; `wait_enrolment()` passes
+  `$moved` (see "Correcting a deferral's reason"). A bare `decide()` call knows nothing and keeps
+  the conservative default, which is why the pinned test still passes unchanged — it is the
+  control that the exception is narrow.
 
   The double pass is safe: both run in one request with one `$USER`, so the second restamps the
   same decider milliseconds later.
@@ -1490,16 +1529,19 @@ backup/                      group mappings, comments and the durable trail, see
   `submission::decide()`.** `complete_approval()` runs **twice** for a queue approval:
   `enrol_plugin::update_user_enrol()` dispatches `before_user_enrolment_updated` *before* it
   writes the row, so `hook_callbacks` reaches `complete_approval()` first — and that call carries
-  no operator input, because the hook has none. `decide()` then skips any row already at the
-  target status, so anything threaded through it on the second call is dropped in silence while
-  the status still looks correct. The outcome message is recorded by its own writer before the
-  status changes, and the notification reads it back off the record rather than being handed it —
-  which is also what lets the approval notification work at all, since that one is sent from an
-  adhoc task long after any argument would have gone out of scope. The groups and the role both
-  follow that shape now, and the ROLE is the one where the naive version is worst — worse than
-  the groups, which is not what the earlier note here predicted. Two group lists **union**, so a
-  group the approver deselected is joined anyway; but a membership at least carries a component
-  and an itemid, so it is attributable and removable. Two different roles also both get assigned,
+  no operator input, because the hook has none. That first pass acts on whatever the record says —
+  the role it assigns, the groups it joins — so the decider's choices must already be recorded
+  when `update_user_enrol()` is called; handed to the second pass as arguments, they would arrive
+  after the first had acted on the instance's defaults. Nor can they ride on `decide()`: approval
+  passes it `true`, but its same-status skip still applies to a re-deferral, which passes
+  `$moved`, and would drop them in silence there. The outcome message is recorded by its own
+  writer before the status changes, and the notification reads it back off the record rather than
+  being handed it — which is also what lets the approval notification work at all, since that one
+  is sent from an adhoc task long after any argument would have gone out of scope. The groups
+  and the role both follow that shape now, and the ROLE is the one where the naive version is
+  worst — worse than the groups, which is not what the earlier note here predicted. Two group
+  lists **union**, so a group the approver deselected is joined anyway; but a membership at least
+  carries a component and an itemid, so it is attributable and removable. Two different roles also both get assigned,
   and a role assignment records nothing about which pass wrote it — measured, two rows, both
   looking exactly like something a human did. The dates are the exception and need no record:
   `confirm_enrolment()` writes them onto `{user_enrolments}` itself, before the hook fires, so
@@ -1529,15 +1571,38 @@ Expect no matches. `phpcbf` fixes it too, but the grep is faster than a CI round
 - `tests/lib_test.php` drives the state machine directly against the plugin object. Note
   that `enrol_apply` must be added to `enrol_plugins_enabled` in `setUp()`, otherwise
   `enrol_get_plugin('apply')` works but nothing core-side treats the instance as live.
-- The capability gates are mutation-checked: removing the `can_manage_application()`
-  call from `confirm_enrolment()` must turn `test_confirm_enrolment_requires_the_capability`
-  and `test_confirm_enrolment_is_scoped_to_the_course` red, and nothing else.
-- `enrol_page_hook()` is not unit tested: it needs a submitted `moodleform`. The Behat
-  feature covers that path instead.
+- Removing the `can_manage_application()` call from `confirm_enrolment()` must turn
+  `test_confirm_enrolment_requires_the_capability` and
+  `test_confirm_enrolment_is_scoped_to_the_course` red, and
+  `operations_test::test_an_application_in_another_course_is_not_decided` with them, because the
+  bulk path inherits that check. This one has no line in `gates.conf`.
+- `enrol_page_hook()` only renders the card: the form is `application_form`, submitted through
+  `apply.php` or the modal and tested in `tests/form/application_form_test.php`. `lib_test`
+  renders the card through its `enrol_panel()` helper.
 - `lib_test.php`'s `create_application()` bypasses `apply()` — it calls `enrol_user()` and
   inserts the applicationinfo row by hand — so it leaves **no** `enrol_apply_submission` row.
-  Anything about the durable record must go through `apply_as_current_user()`, which drives
-  the real path. A test that quietly uses the wrong helper asserts on a table that is empty.
+  Anything about the durable record must go through `apply_for()`, which invokes the real
+  `apply()` through reflection and returns the messages it sent (a message sink cannot be
+  nested). A test that quietly uses the wrong helper asserts on a table that is empty.
+- **An unexpected `debugging()` does not fail the suite.** `advanced_testcase` re-emits it at
+  teardown as `E_USER_NOTICE`, and Moodle's `phpunit.xml.dist` sets `failOnDeprecation` and
+  `failOnWarning` but not `failOnNotice` (5.1 and 5.2 alike), so a core deprecation notice passes
+  the PHPUnit gate. Read the notices in the output: a fixture profile field whose shortname another
+  plugin had already used on the shared test site duplicated every queue row through
+  `\core_user\fields::get_sql()`, and surfaced only as a notice about a duplicate
+  `userenrolmentid`.
+- **A PHP error inside a restore step leaves that restore's temporary tables behind**
+  (`backup_ids_temp`), and every later restore in the same PHPUnit process then fails on them.
+  When several `backup_test` tests fail together, read the first.
+- **Page scripts and JavaScript are held by Behat alone.** `mdl mutate` runs PHPUnit, so
+  `manage.php`'s filter reading and url threading, `report.php`'s call to `scope_to_method()`
+  and everything in `amd/src/` have no gate, and `gates.conf` says so where each would be. The
+  status filter's `status=` trap (read as `PARAM_INT`, the "any status" option's empty value
+  became `ENROL_USER_ACTIVE`) was visible only to a scenario pressing the button: hand-built test
+  urls never carry `status=`.
+- `tests/local/bootstrap_compat_test.php` strips comments from each file before it scans
+  (`markup_lines()`), so a comment naming a Bootstrap 4 class does not fail it here; its one blind
+  spot is a JavaScript regex literal holding a comment marker.
 
 ## When in doubt
 

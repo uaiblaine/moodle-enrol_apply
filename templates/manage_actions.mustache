@@ -19,17 +19,16 @@
 
     The bulk action control of the applications queue, rendered into a core sticky footer.
 
-    Only the action itself lives here. The decision's own inputs - the message, the groups and
-    the role - stay in the page body, because a core sticky footer is a fixed 80px bar whose
-    .sticky-footer-content carries overflow hidden, so a three-row textarea would be clipped.
+    Only the action itself lives here. The decision's own inputs - the groups, the role, the
+    message and the note - stay in the page body, because a core sticky footer is a fixed 80px
+    bar whose .sticky-footer-content carries overflow hidden, so a textarea would be clipped.
 
     Both controls carry the toggle-all action vocabulary: data-action toggle, data-toggle action,
-    and the group name, which core matches EXACTLY rather than by prefix. Neither ships the
-    disabled attribute, unlike core's own participants page. That is deliberate and is explained
-    in the amd/src/manage.js docblock - this plugin's queue is operable without JavaScript, and an
-    attribute nothing can clear would take that away. It depends on the rule in styles.css that
-    brings the sticky footer on screen when no script ran, because core parks one off screen
-    until its own JavaScript slides it in.
+    and the group name, which core matches exactly rather than by prefix. Neither ships the
+    disabled attribute, unlike core's own participants page: the queue is operable without
+    JavaScript, so amd/src/manage.js disables them on init instead (see its docblock). That
+    depends on the rule in styles.css that brings the sticky footer on screen when no script ran,
+    because core parks one off screen until its own JavaScript slides it in.
 
     Context variables required for this template:
     * togglegroup string - name of the core/checkbox-toggleall group the table's rows belong to

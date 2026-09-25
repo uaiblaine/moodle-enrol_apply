@@ -21,34 +21,25 @@ use stdClass;
 /**
  * What an applicant is told about their own application.
  *
- * One describer for the two pages that tell them - the enrolment page's own panel and the
- * acknowledgement page - because before this each of them branched on nothing but "does a row
- * exist" and therefore read the PENDING wording to everybody. A deferred applicant was told
- * their application was waiting for a decision that had in fact been taken; somebody approved
- * onto an enrolment that is not active was told the same thing, which is the state the plugin
- * has already shipped a defect into once (an approval inheriting a past expiry leaves the row
- * ACTIVE with no access, under the expiredaction this plugin ships).
+ * One describer for every surface that tells them - the enrolment page's own panel, the
+ * acknowledgement page, and the application form's refusal through message_key() - so no two
+ * of them can describe the same row differently.
  *
- * FOUR states, and the last two are the pair that is easy to collapse. An enrolment can be
- * ACTIVE and grant access, or ACTIVE and grant none - core's is_enrolled() with the onlyactive
- * flag pairs the status with the enrolment's own window, so an approval that has expired or has
- * not started yet is active and shut out. Telling either of them their application is still
- * being considered sends them to wait for a message that will never come; telling the FIRST of
- * them that their enrolment is not active is worse, because it is simply false and it sends a
- * working participant to bother their teacher.
+ * Four states, and the last two are the pair that is easy to collapse. An enrolment can be
+ * ACTIVE and grant access, or ACTIVE and grant none: core's is_enrolled() with the onlyactive
+ * flag pairs the status with the enrolment's own window and the enrol instance's own status,
+ * so an approval that has expired or has not started yet is active and shut out. Neither may
+ * be told the application is still being considered, and only the second may be told that the
+ * enrolment is not active.
  *
- * That last sentence is why access is a PARAMETER rather than something read off the row. The
- * row alone cannot answer it: core pairs the status and the window with the enrol INSTANCE's own
- * status, and each caller already knows the answer for its own page - the enrolment page is only
- * rendered to somebody without access, and the other two callers have the course context in hand
- * and ask core directly. Deriving it here would be this plugin reimplementing is_enrolled(), and
- * getting a third of it wrong is exactly how a working participant reads a broken-enrolment
- * warning.
+ * That is why access is a parameter rather than something read off the row: the row alone
+ * cannot answer it, and every caller asks is_enrolled() itself (the enrolment page is only
+ * rendered to somebody core has refused, so it gets false in practice). Deriving it here would
+ * mean reimplementing is_enrolled().
  *
- * It is deliberately a describer and not a renderer. The two callers put the result in
- * different places: the enrolment page has no heading of its own and puts the body in a core
- * notification inside its enrol_page panel, while the acknowledgement page uses all three parts
- * and also has its own profile machinery below them.
+ * It is deliberately a describer and not a renderer. The enrolment page has no heading of its
+ * own and puts the body in a core notification inside its enrol_page panel, while the
+ * acknowledgement page uses all three parts.
  *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine
@@ -70,10 +61,8 @@ final class applicantstate {
     /**
      * Heading, body and notification level for one applicant's own application.
      *
-     * Returned together rather than as three methods, so the three cannot fall out of step:
-     * a heading saying "Application submitted" over a body explaining a deferral is the exact
-     * failure this class exists to remove, and three parallel match statements is how it comes
-     * back.
+     * Returned together, all derived from one state(), so a heading can never describe a
+     * different state from its body.
      *
      * @param stdClass $userenrolment The applicant's own {user_enrolments} row, carrying status.
      * @param bool $hasaccess Whether that enrolment currently lets them into the course, as the
@@ -91,9 +80,8 @@ final class applicantstate {
                 default => get_string('applicationsubmitted', 'enrol_apply'),
             },
             'message' => get_string(self::message_key($userenrolment, $hasaccess), 'enrol_apply'),
-            /* Warning on the INACTIVE state alone, and it is not decoration: that applicant has
-               an approval and no access, which is something to act on rather than to wait for.
-               The other three are states the plugin is working correctly in. */
+            /* Warning on the INACTIVE state alone: that applicant has an approval and no access,
+               which is something to act on rather than to wait for. */
             'type' => match ($state) {
                 self::INACTIVE => \core\output\notification::NOTIFY_WARNING,
                 self::DEFERRED => \core\output\notification::NOTIFY_INFO,
@@ -106,13 +94,10 @@ final class applicantstate {
      * The string id of the body, for a caller that needs an ID rather than the text.
      *
      * The application form's own refusal is that caller: it throws a moodle_exception, which
-     * takes a string identifier and cannot be handed a rendered sentence. That refusal had the
-     * same defect the two pages had - one wording for every state, so a deferred applicant who
-     * reopened the form was told their application had been "successfully sent" - and this is
-     * how it takes the same fix without a second copy of the mapping.
+     * takes a string identifier rather than a rendered sentence.
      *
-     * A literal per branch, which is the shape the fleet standard asks for: the ban is on
-     * building an id by concatenation, not on choosing between fixed ones.
+     * A literal per branch rather than an id built by concatenation, so tools that check
+     * string usage can see every key.
      *
      * @param stdClass $userenrolment The applicant's own {user_enrolments} row.
      * @param bool $hasaccess Whether that enrolment currently lets them into the course.
@@ -130,15 +115,12 @@ final class applicantstate {
     /**
      * Which of the four states this enrolment puts the applicant in.
      *
-     * A literal match per branch and never a computed string id, which the fleet standard bans
-     * and the lang file checker cannot see. SUSPENDED is the default arm rather than a branch
-     * of its own: it is the pending state, and so is any value neither this plugin nor core
-     * writes - a restore can carry anything at all, and "waiting for a decision" is the only
-     * answer that is safe to give somebody whose row means nothing to us.
+     * SUSPENDED is the default arm rather than a branch of its own: it is the pending state, and
+     * so is any value neither this plugin nor core writes - a restore can carry anything, and
+     * "waiting for a decision" is the only safe answer for a status this plugin does not know.
      *
-     * Access is consulted on the ACTIVE arm and nowhere else, which is what keeps it narrow: a
-     * pending applicant has no access either, and telling them their approved enrolment is not
-     * active would be a fresh falsehood rather than the one being fixed.
+     * Access is consulted on the ACTIVE arm and nowhere else: a pending applicant has no access
+     * either, and must not be told their enrolment is inactive.
      *
      * @param stdClass $userenrolment The applicant's own {user_enrolments} row.
      * @param bool $hasaccess Whether that enrolment currently lets them into the course.

@@ -28,26 +28,18 @@ defined('MOODLE_INTERNAL') || die();
 /**
  * The plugin files that are measurable, beyond the ones Moodle measures by default.
  *
- * Moodle decides what is measurable, not the coverage flag, and its default list is shaped for
- * activity modules: coverage_info::get_includelists() merges 'classes', 'tests/generator' and the
- * top-level externallib/lib/locallib/renderer/rsslib files. Everything else is not counted low, it
- * is ABSENT from the clover entirely - so unmeasured code makes a plugin look better rather than
- * worse, and the instinct that a low number is the pessimistic reading is backwards.
+ * By default {@see \phpunit_coverage_info::get_includelists()} measures only 'classes',
+ * 'tests/generator' and the top-level externallib/lib/locallib/renderer/rsslib files. Anything
+ * else is absent from the clover rather than counted as uncovered, so leaving it out makes the
+ * number look better, not worse. For this plugin the default would omit the page scripts,
+ * edit_form.php (the whole instance configuration form), db/upgrade.php and backup/moodle2/.
  *
- * For an enrol plugin that default measures classes/, lib.php and renderer.php, and leaves out
- * 1933 lines of top-level code plus db/upgrade.php - measured on this plugin. That is not glue:
- * edit_form.php is the whole instance configuration form, and backup/moodle2/ is the pair of
- * classes tests/backup_test.php exists for. A number over
- * the default denominator would be flattering by construction.
+ * The lists below are merged into the defaults, so classes/, lib.php and renderer.php are not
+ * repeated here.
  *
- * The lists below ADD to the defaults rather than replacing them - get_includelists() array_merges
- * them - so classes/, lib.php and renderer.php are not repeated here.
- *
- * What is deliberately left out is the declaration-only half of db/: access.php, events.php,
- * hooks.php, messages.php and tasks.php define arrays and nothing else, so they would add lines
- * that are neither exercised nor exercisable and would move the number without meaning. Files
- * holding executable logic are in, whether or not a test reaches them today: a file at 0% is an
- * honest statement that nothing tests it.
+ * Deliberately left out: the declaration-only files of db/ (access.php, events.php, hooks.php,
+ * messages.php and tasks.php), which define arrays and nothing else and would add lines no test
+ * can exercise. Files holding executable logic are listed whether or not a test reaches them.
  *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine

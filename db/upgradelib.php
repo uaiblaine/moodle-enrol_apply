@@ -77,17 +77,16 @@ function enrol_apply_migrate_field_switches(): int {
 /**
  * Write the site field pool explicitly, wide enough to keep every instance collecting.
  *
- * A setting's declared default is only applied when an administrator opens the settings
- * page, and admin_setting_configmulticheckbox::write_setting() reports success while
- * writing nothing when its choice list is empty, so the pool is written here instead.
+ * Not left to the setting's declared default, which admin_apply_default_settings() applies
+ * only after the upgrade steps have run, and which
+ * admin_setting_configmulticheckbox::write_setting() skips without error when its choice list
+ * is empty.
  *
- * It is written WIDER than the default set when the site needs it to be. customint2 meant
- * "ask for every custom profile field", and the picked set is intersected with this pool on
- * every read - so seeding the pool with the standard fields alone would migrate each
- * instance's choice faithfully and then immediately filter the custom half of it away.
- * Every instance that was collecting custom fields would silently stop, which is the exact
- * failure this whole two-level design has to avoid. A fresh install is unaffected: upgrade
- * steps do not run on one, so a new site starts with the conservative declared default.
+ * It is written wider than the default set when the site needs it. customint2 meant "ask for
+ * every custom profile field", and the picked set is intersected with this pool on every
+ * read, so a pool of standard fields alone would silently stop every such instance from
+ * collecting its custom fields. A fresh install runs no upgrade steps and starts with the
+ * declared default.
  *
  * @return bool True when the pool was written, false when it was already set.
  */
@@ -115,21 +114,17 @@ function enrol_apply_seed_field_pool(): bool {
 /**
  * Blank every Custom label that is really a leftover notification recipient list.
  *
- * Upstream made customtext2 the notification recipient list in commit 3d27870 (2016-06-13) while
- * the custom label was still read from the same column. Three writers put a value there - the
- * 2016060803 upgrade step, add_instance()'s defaults and the instance edit form - and all three
- * could write the literal marker below. Alexander Bias's b88a8d2 (2022-02-04), titled "for fresh
- * installations only", moved all three to customtext3 and RETRO-EDITED the 2016 step, so a site
- * already past that savepoint never re-ran it and kept the value. Such a site shows the marker as
- * the heading of the applicant's comment box.
+ * Upstream once stored the notification recipient list in customtext2, the column that also
+ * holds the custom label, through the 2016060803 upgrade step, the instance defaults and the
+ * edit form. It later moved the list to customtext3 by editing that step rather than adding a
+ * new one, so a site already past the savepoint kept the value, and shows the marker as the
+ * heading of the applicant's comment box.
  *
- * Only the exact marker is cleared. The same column could also hold a comma-separated list of
- * user ids, and that shape is deliberately left alone: it cannot be told apart from a label
- * somebody typed, and this one can. A reader-side guard in \enrol_apply\local\commentlabel
- * covers what a restore can still bring back, since customtext2 is the one custom field
- * restore_instance() does not sanitise.
+ * Only the exact marker is cleared: a comma-separated list of user ids, which the column could
+ * also hold, cannot be told apart from a typed label. \enrol_apply\local\commentlabel guards
+ * the reader as well, because restore_instance() does not sanitise customtext2.
  *
- * Idempotent by construction: the WHERE is the negation of the step's own effect.
+ * Idempotent: the WHERE excludes the rows this function has already cleared.
  *
  * @return int How many instances were cleaned.
  */

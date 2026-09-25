@@ -28,10 +28,9 @@ defined('MOODLE_INTERNAL') || die();
 
 $tasks = [
     [
-        /* Applies the configured expiry action to enrolments whose timeend has passed.
-           Without this task the 'expiredaction' setting would never take effect: the
-           legacy enrol_plugin::cron() hook it used to rely on is no longer called by
-           core (lib/enrollib.php declares an empty cron(), nothing invokes it). */
+        /* Applies the configured expiry action to enrolments whose timeend has passed. Core
+           never calls enrol_plugin::cron(), so without this task 'expiredaction' would never
+           take effect. */
         'classname' => '\enrol_apply\task\sync_enrolments',
         'blocking' => 0,
         'minute' => '*/10',
@@ -53,8 +52,7 @@ $tasks = [
     ],
     [
         /* Applies the retention period to the durable application trail. Daily and
-           off-peak: nothing depends on it running promptly, and it is the only task here
-           that deletes rather than reads. */
+           off-peak, because nothing depends on it running promptly. */
         'classname' => '\enrol_apply\task\purge_submissions',
         'blocking' => 0,
         'minute' => '25',

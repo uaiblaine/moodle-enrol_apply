@@ -40,7 +40,7 @@ defect that shipped:
   resolvable. Without them `mdl ci --coverage` fails, and which tests warn depends on
   execution order.
 - **S, T, U and V** hold what an applicant is told when the write door refuses. `V` is the one
-  worth noting: it deletes the `customint3` places cap, and **before this set existed that
+  worth noting: it deletes the `customint3` applicant limit, and **before this set existed that
   mutation reddened nothing** — the cap was written out in three places and held by a single
   test on one of them. `T` is the subtle one: it stashes the profile offer unconditionally, and
   it can only be caught because `tests/fixtures/testable_application_form.php` makes `get_data()`

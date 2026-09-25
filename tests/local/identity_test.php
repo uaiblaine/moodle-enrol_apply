@@ -91,21 +91,14 @@ final class identity_test extends \advanced_testcase {
     /**
      * A mentor of the given applicant, holding no capability anywhere else.
      *
-     * The role is DEFINED at the system context and ASSIGNED only in the mentee's user context,
-     * which is what makes the distinction this file needs: has_capability() at the system context
-     * is false for them, so queue::listing_scope(0) takes the mentee branch rather than the
-     * site-wide one.
+     * The apply role is defined at the system context but assigned only in the mentee's user
+     * context, so has_capability() at the system context is false for them and
+     * queue::listing_scope(0) takes the mentee branch rather than the site-wide one.
      *
-     * **And they hold moodle/site:viewuseridentity at the system context, which is the whole
-     * point of the fixture rather than a detail of it.** Without it identity::fields() returns
-     * an empty array for ANY context, so this reader would see no identity columns whichever
-     * context the mentee scope resolved - and the test below would pass just as happily against
-     * a scope that resolved the system context, which is the defect it exists to catch. Measured:
-     * gate CE reddened nothing until this capability was granted.
-     *
-     * The reader is reachable rather than contrived. Holding viewuseridentity site-wide without
-     * holding enrol/apply:manageapplications site-wide is the ordinary shape of a support or
-     * enquiries role, and mentoring is delegated to exactly that kind of account.
+     * They also hold moodle/site:viewuseridentity at the system context. Without it
+     * identity::fields() returns an empty array for any context, and the mentee-scope test would
+     * pass even against a scope that resolved the system context. The reader is realistic: a
+     * support role can hold viewuseridentity site-wide without the apply capability.
      *
      * @param \stdClass $mentee The applicant they mentor.
      * @return \stdClass The mentor.
@@ -117,11 +110,9 @@ final class identity_test extends \advanced_testcase {
         assign_capability('enrol/apply:manageapplications', CAP_ALLOW, $roleid, \context_system::instance());
         role_assign($roleid, $mentor->id, \context_user::instance($mentee->id)->id);
 
-        /* A SECOND role, carrying the identity capability and nothing else, assigned at the
-           system context - because a role assignment in a user context grants nothing at the
-           system one, and identity::fields() asks there. Keeping it separate is what stops the
-           apply capability coming along with it, which would move this reader to the site-wide
-           branch and take the mentee scope out of the test entirely. */
+        /* A separate role for the identity capability, assigned at the system context. Adding
+           it to the apply role instead would grant the apply capability there too and move this
+           reader to the site-wide scope. */
         $siteroleid = $this->getDataGenerator()->create_role(['shortname' => 'applyidentityonly']);
         set_role_contextlevels($siteroleid, [CONTEXT_SYSTEM]);
         assign_capability('moodle/site:viewuseridentity', CAP_ALLOW, $siteroleid, \context_system::instance());
@@ -133,11 +124,8 @@ final class identity_test extends \advanced_testcase {
     /**
      * Render the queue for a scope, named the way a url names one.
      *
-     * The identity context used to be handed in here and is not any more: the table derives it
-     * from the scope, so these tests now produce the scope and read the consequence rather than
-     * asserting a consequence of a context they injected. That is a stronger claim - the mapping
-     * from scope to context is itself under test - and it is the only claim available, because a
-     * caller can no longer state a context at all.
+     * The table derives the identity context from the scope, so these tests exercise the
+     * mapping from scope to context as well as its consequence.
      *
      * @param int|null $enrolid Enrol instance to list, 0 for the scope with no instance, null for
      *                          this fixture's own instance.
@@ -177,15 +165,11 @@ final class identity_test extends \advanced_testcase {
     /**
      * A field the site hides is not shown to a reader who may not see hidden fields.
      *
-     * This is the half the queue used to get wrong: it printed the address unconditionally, so on
-     * a site configured like this one it disclosed more than core's participants page beside it.
-     *
-     * The capability is PROHIBITed explicitly rather than relying on a role that lacks it,
-     * because measured against core's own access.php both `teacher` and `editingteacher` are
-     * granted `moodle/course:viewhiddenuserfields` by archetype - so on a stock site
-     * `hiddenuserfields` never narrows what a teacher sees on this queue, and a test using one
-     * would assert the opposite of what it looks like it asserts. The reader this protects is a
-     * custom role holding `moodle/site:viewuseridentity` without the hidden-fields override.
+     * The capability is prohibited explicitly because core grants both `teacher` and
+     * `editingteacher` `moodle/course:viewhiddenuserfields` by archetype, so on a stock site
+     * `hiddenuserfields` never narrows what a teacher sees and a stock teacher would make this
+     * test assert the opposite of what it appears to. The reader this protects is a custom role
+     * holding `moodle/site:viewuseridentity` without the hidden-fields override.
      *
      * @return void
      */
@@ -211,11 +195,10 @@ final class identity_test extends \advanced_testcase {
     }
 
     /**
-     * On a stock site, hiddenuserfields does NOT narrow what a teacher sees here.
+     * On a stock site, hiddenuserfields does not narrow what a teacher sees here.
      *
-     * The counterpart of the test above, and the reason it has to prohibit the capability by hand.
-     * Recording it as an assertion rather than a comment: if core ever changes those archetypes,
-     * this reddens and the sibling test's premise is re-examined instead of quietly rotting.
+     * Pins the premise of the test above: if core changes those archetypes this fails, and that
+     * test's fixture needs re-examining.
      *
      * @return void
      */
@@ -265,11 +248,9 @@ final class identity_test extends \advanced_testcase {
     /**
      * The mentee scope gets no identity columns, because no single context can judge it.
      *
-     * Driven by a real MENTOR now rather than by handing the table a null context, and the
-     * change is what gives the test its subject back. The mapping from scope to identity
-     * context lives in queue::listing_scope(), so a test that injected null was asserting
-     * identity::fields(null)'s behaviour twice and the mapping not at all - it would have passed
-     * with the mentee branch resolving the system context.
+     * Driven by a real mentor, so it exercises queue::listing_scope()'s mapping from scope to
+     * identity context and not only identity::fields(null): it fails if the mentee branch
+     * resolves the system context.
      *
      * @return void
      */
@@ -288,8 +269,8 @@ final class identity_test extends \advanced_testcase {
 
         $this->assertStringNotContainsString('ana@example.org', $html);
         $this->assertStringNotContainsString('RA-2026-0042', $html);
-        /* The control, and this scope needs one badly: a listing that showed no rows at all
-           would satisfy both assertions above. The applicant is there, without their details. */
+        /* The control: a listing with no rows would satisfy both assertions above. The
+           applicant is there, without their details. */
         $this->assertStringContainsString(fullname($applicant), $html);
     }
 
@@ -343,9 +324,9 @@ final class identity_test extends \advanced_testcase {
     /**
      * An identity value is escaped before it reaches the markup.
      *
-     * flexible_table writes $row->$column into the cell with no escaping of its own, so this is
-     * the plugin's own boundary and not core's. Core closes the identical hole in its participants
-     * table with the identical method.
+     * The values are rendered inside the applicant cell ({@see \enrol_apply\table\applications::col_fullname()}),
+     * which flexible_table writes into the markup unescaped, so the s() there is this plugin's own
+     * boundary; core's participants table escapes its identity columns with s() the same way.
      *
      * @return void
      */
@@ -367,10 +348,8 @@ final class identity_test extends \advanced_testcase {
     /**
      * The A-Z bar is not drawn, whatever the caller asks for.
      *
-     * The display half. Killing only the filter would leave a control on the page that does
-     * nothing when clicked, which is worse than either end state - and the argument is not the
-     * caller's to make: the renderer passes true, and core's dynamic-table service passes true
-     * unconditionally, so this has to be forced at the source.
+     * The display half of the initials override; {@see \enrol_apply\table\applications::initialbars()}
+     * says why it ignores the caller's argument.
      *
      * @return void
      */
@@ -389,10 +368,9 @@ final class identity_test extends \advanced_testcase {
     /**
      * A stored initials preference no longer filters the queue.
      *
-     * Hiding the A-Z bar never removed the filter: get_sql_where() reads the stored preference and
-     * never consults use_initials, and query_db() appends it to both the count and the data query.
-     * The preference lives in $SESSION->flextable, so it survives page loads with nothing on screen
-     * able to explain the rows that vanished.
+     * Core's get_sql_where() applies the stored preference whether or not the bar is drawn; see
+     * {@see \enrol_apply\table\applications::get_sql_where()}. The preference lives in
+     * $SESSION->flextable, which is why the fixture writes it there.
      *
      * @return void
      */
@@ -404,7 +382,7 @@ final class identity_test extends \advanced_testcase {
         $this->applicant(['firstname' => 'Ana', 'lastname' => 'Ribeiro']);
         $this->applicant(['firstname' => 'Bruno', 'lastname' => 'Alves']);
 
-        // What clicking "Z" in the bar used to leave behind.
+        // What clicking "Z" in an initials bar leaves behind.
         $SESSION->flextable = ['enrol_apply_manage_table' => [
             'i_first' => 'Z',
             'i_last' => 'Z',

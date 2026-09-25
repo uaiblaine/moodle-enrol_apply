@@ -25,26 +25,18 @@ use enrol_apply\local\queuefilter;
  * What the applications table may be filtered by.
  *
  * Found by core, not registered: flexible_table::get_filterset_class() returns
- * `static::class . '_filterset'` (lib/table/classes/flexible_table.php:2021), so this class has to
- * sit beside applications and be named for it. Renaming either half breaks the web service path
- * with "The filter specified (...) is invalid" and leaves the page path working, which is the
- * asymmetry test_the_filterset_class_is_the_one_core_derives exists to catch.
+ * `static::class . '_filterset'`, so this class must sit beside applications and be named for it.
+ * Renaming either half breaks only the web service path;
+ * test_the_filterset_class_is_the_one_core_derives catches it.
  *
- * **One required filter, and the requirement is not decorative.** The enrol instance id is the
- * whole of what the client is trusted to say; everything the listing is narrowed by is recomputed
- * from it server-side by queue::listing_scope(). An omitted id must therefore be a hard error
- * rather than a silent zero, because zero is itself a meaningful scope - every application this
- * operator may decide on - and a request that forgot to say which one it meant would silently get
- * the widest one.
+ * One required filter: the enrol instance id is all the client is trusted to say, and
+ * queue::listing_scope() recomputes everything else from it. An omitted id must be an error
+ * rather than zero, because zero is the widest scope (every application this operator may
+ * decide on). Core's service never calls check_validity(), so applications::set_filterset()
+ * calls it and also refuses an empty value.
  *
- * Nothing in core enforces that for us, and check_validity() does not go far enough on its own:
- * get.php never calls it, and it tests only that a filter of the name is PRESENT, not that it
- * carries a value. applications::set_filterset() therefore calls it AND reads the value; see the
- * note there for the empty-value request that slips through otherwise.
- *
- * Filter NAMES must be strictly alphanumeric. The service declares the name as PARAM_ALPHANUM
- * (lib/table/classes/external/dynamic/get.php:79), so `enrol_id` or `enrol-id` would be refused
- * by validate_parameters() with invalid_parameter_exception before this class is ever consulted.
+ * Filter names must be strictly alphanumeric: the service declares them PARAM_ALPHANUM, so
+ * `enrol_id` would be refused before this class is consulted.
  *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine
@@ -65,71 +57,37 @@ class applications_filterset extends filterset {
     /**
      * The filters that may be present.
      *
-     * Optional by definition: a listing with no filters applied is the ordinary case, and the
-     * required enrolid above is the only thing a request must say.
+     * `status` is an integer_filter, whose add_filter_value() throws a TypeError on anything but
+     * an int, so a value read from a DOM dataset must be cast first. `search` is a string_filter,
+     * which accepts '' where the base filter class ignores it; applications::set_filterset()
+     * treats an empty value as no search.
      *
-     * `search` is a string_filter and `status` an integer_filter, and the two classes behave
-     * differently in a way that decides code elsewhere. integer_filter::add_filter_value() tests
-     * is_int() and throws a TypeError on anything else, so a value read from a DOM dataset - where
-     * everything is a string - has to be cast first. string_filter::add_filter_value() is a
-     * COMPLETE override that gates only on is_string() and never reaches the base class, whose
-     * `''` rejection (lib/table/classes/local/filter/filter.php:218-221) therefore never runs for
-     * it: an empty search string installs a live filter carrying nothing. applications::set_filterset()
-     * treats that as no filter, because the alternative is a queue that empties itself the moment
-     * somebody clears the box.
+     * The identity-field filters are declared from the site's whole identity vocabulary plus the
+     * plugin's own list (enrol_apply/queuefilterfields), not from what the reader may see and not
+     * from the plugin's list alone:
+     * - Not per reader, because a filterset knows nothing about contexts; the per-reader refusal
+     *   is applications::set_filterset()'s.
+     * - Not the plugin's list alone, because core refuses an undeclared name in
+     *   add_filter_from_params() before any authorisation runs, and the service has no capability
+     *   of its own. Any logged-in user could then probe which fields the administrator ticked, a
+     *   setting behind moodle/site:config. With the union, every field the site publishes is
+     *   recognised whether ticked or not; for a field it does not publish, "recognised" still
+     *   means "ticked", which reveals a setting that has no effect on anything.
      *
-     * **The identity-field filters are declared from the site's whole identity vocabulary, not from
-     * this plugin's setting and not from what the reader may see.** Two separate reasons, and the
-     * second was found by review rather than by design.
+     * queuefilter::token() is safe to call here and queuefilter::choices() is not: choices()
+     * resolves labels through format_string(), which needs a $PAGE context that does not exist
+     * yet on the web service path.
      *
-     * Not per reader, because filterset::add_filter() throws InvalidArgumentException for a name
-     * this method does not declare - a free first barrier against a forged request - and declaring
-     * only what the reader may see would make that barrier the security boundary. It is the wrong
-     * one to lean on: a filterset knows nothing about contexts. The per-reader refusal belongs to
-     * applications::set_filterset(), which intersects the offered set with core's own identity
-     * mapping and ignores a filter for a field this reader is not offered.
-     *
-     * And not from enrol_apply/queuefilterfields ALONE, because that refusal is OBSERVABLE BEFORE
-     * ANY AUTHORISATION RUNS. core_table_get_dynamic_table_content is registered with no capability
-     * of its own, and get.php calls add_filter_from_params() for every submitted name before it
-     * constructs the table, before set_filterset(), and before validate_context() and
-     * has_capability(). So with the tick-list as the declared set, any logged-in user with no
-     * capability here at all could send `pf7` and read from which of the two exceptions came back
-     * whether the administrator had ticked custom profile field 7 - a setting otherwise behind
-     * moodle/site:config.
-     *
-     * The declared set is therefore the UNION of the site's published identity vocabulary and the
-     * plugin's own list. Everything the site publishes is recognised whether ticked or not, so for
-     * every field that could ever be offered to anybody the answer no longer depends on the
-     * setting. **What remains, stated rather than papered over: for a field the site does NOT
-     * publish, "recognised" still means "once ticked".** That is a fact about a setting entry with
-     * no effect on anything - the queue cannot offer such a field to any reader - and closing it
-     * completely would mean refusing names this table has always ignored, which is the behaviour
-     * the union preserves: a filter whose field is withheld is dropped by set_filterset() rather
-     * than throwing at a stale browser tab whose administrator changed the site under it.
-     *
-     * queuefilter::token() is safe to call here and queuefilter::choices() is NOT: token() reads
-     * the field record, while choices() resolves labels through format_string(), which asks $PAGE
-     * for a context this early in the request and does not get one.
-     *
-     * The dates are two filters and not one, because core's table filter classes express no range:
-     * there is integer_filter, string_filter and their siblings, and nothing that carries a pair.
-     *
-     * **The submitted-profile snapshot is not here and cannot be.** It is masked per row, and no
-     * filterable surface can honour a per-row mask - an operator would recover a withheld value by
-     * filtering for it and reading the count. Only enrol_apply/queuefilterfields decides what is
-     * offered, and it offers live identity fields.
+     * The dates are two filters because core's table filters express no range. The snapshot is
+     * not filterable: it is masked per row, and a filter would let an operator recover a withheld
+     * value by counting results.
      *
      * @return array Filter name => filter class.
      */
     public function get_optional_filters(): array {
-        /* course and category are string filters rather than integer ones although their values
-           are integers, and deliberately: the AMD module sends every control in the filter bar the
-           same way, and a second shape there is a second thing to keep in step. The filterset's
-           job is transport; \enrol_apply\table\applications is what decides whether a course has
-           an apply method and whether a category exists. Declared unconditionally, for the reason
-           the paragraph above gives about not making this the security boundary - the scope test
-           lives in coursefilter::offered(), which the table applies. */
+        /* The course and category are string filters although their values are integers, because
+           the AMD module sends every filter-bar control the same way. Declared unconditionally:
+           the table validates them and applies the scope test, coursefilter::offered(). */
         $filters = [
             'search' => string_filter::class,
             'status' => integer_filter::class,

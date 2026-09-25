@@ -40,21 +40,18 @@ $capabilities = [
     ],
 
     /* Decide on enrolment applications.
-     * Granted at system level it covers every course, which is what the
-     * Site administration -> Courses -> Manage enrolment applications page uses.
+     * Granted at system level it covers every course: that is what opens the site-wide queue
+     * (manage.php with no parameter), which site administrators also reach from
+     * Site administration -> Courses -> Manage enrolment applications.
      *
-     * This capability is also evaluated against the applicant's own user context, which
-     * is what lets a mentor decide for the users assigned to them. A capability can only
-     * declare one context level, so CONTEXT_COURSE is the one recorded here; core has the
-     * same situation with moodle/grade:viewall, whose declaration in lib/db/access.php
-     * carries the comment "and CONTEXT_USER".
+     * It is also evaluated against the applicant's own user context, which lets a mentor
+     * decide for the users assigned to them. A capability declares one context level, so
+     * CONTEXT_COURSE is recorded here, as core does for moodle/grade:viewall.
      *
-     * The consequence is limited to one screen: context_user::get_capabilities() lists
-     * only capabilities declared at CONTEXT_USER (plus a hardcoded moodle/grade:viewall
-     * that a plugin cannot extend), so this one does not appear when overriding
+     * Consequence: context_user::get_capabilities() lists only CONTEXT_USER capabilities
+     * (plus a hardcoded moodle/grade:viewall), so this one does not appear when overriding
      * permissions on a user. Defining the mentor role still works, because
-     * admin/roles/define.php runs in the system context, where every capability is
-     * listed. See the README for the three steps. */
+     * admin/roles/define.php lists every capability. See the README for the setup. */
     'enrol/apply:manageapplications' => [
         'captype' => 'write',
         'contextlevel' => CONTEXT_COURSE,
@@ -86,16 +83,10 @@ $capabilities = [
 
     /* Read the report of applications made to a course.
      *
-     * RISK_PERSONAL, and archetypes stated rather than inherited. The other five capabilities
-     * in this file carry no riskbitmask, and the four that are not unenrolself - which defaults
-     * to student - default to editingteacher. That is defensible for configuring a method or
-     * deciding an application. It is not defensible here: the
-     * report shows the frozen profile snapshot every applicant submitted, for every
-     * application the course has ever had, including those already decided and those whose
-     * enrolment is long gone. Inheriting the neighbours' default by omission would hand that
-     * to every editing teacher on the site.
-     *
-     * A site that wants teachers to have it grants it to them deliberately. */
+     * RISK_PERSONAL and granted to managers only, unlike the capabilities above: the report
+     * shows the profile snapshot every applicant submitted, for every application the course
+     * has ever had, including decided ones and ones whose enrolment is gone. A site that
+     * wants teachers to have it grants it to them deliberately. */
     'enrol/apply:viewreports' => [
         'riskbitmask' => RISK_PERSONAL,
         'captype' => 'read',

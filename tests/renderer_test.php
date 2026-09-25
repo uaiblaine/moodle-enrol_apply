@@ -15,7 +15,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Tests for how the renderer spells the names it hands to its templates.
+ * Tests for what the enrol_apply renderer hands to its templates.
  *
  * @package    enrol_apply
  * @category   test
@@ -33,13 +33,12 @@ global $CFG;
 require_once($CFG->dirroot . '/enrol/apply/lib.php');
 
 /**
- * Tests for how the renderer spells the names it hands to its templates.
+ * Tests for what the enrol_apply renderer hands to its templates.
  *
- * Both templates render these names through a double stash, so the renderer owes them the
- * PLAIN spelling. format_string()'s escape flag defaults to true, which is why every one of
- * these calls has to say so explicitly, and why the wrong spelling is invisible to phpcs, to
- * the mustache lint and to every other gate: nothing in the pipeline knows which stash a
- * value lands in.
+ * Covers the queue (its filter bar, capacity header and decision controls), the review page and
+ * the new-application notification, and the spelling of every name they render. Most names land
+ * in a double stash and need the plain spelling, which format_string() gives only with
+ * 'escape' => false; no lint can tell which stash a value lands in, so these tests do.
  *
  * @package    enrol_apply
  * @category   test
@@ -66,6 +65,15 @@ final class renderer_test extends \advanced_testcase {
 
     /** @var string The awkward name escaped twice, which is what a reader must never get. */
     private const ESCAPED_TWICE = 'R&amp;amp;D &amp;lt; Team';
+
+    /**
+     * A lang string placeholder left unsubstituted, in either spelling.
+     *
+     * get_string() replaces only `{$a}` and `{$a->name}`, so a string written in single quotes as
+     * '{\$a} selected' keeps its backslash and renders as `{\$a}`, which a search for `{$a` does
+     * not find.
+     */
+    private const PLACEHOLDER = '/\{\\\\?\$a/';
 
     /** @var \stdClass Course the apply instance belongs to. */
     private $course;
@@ -105,11 +113,9 @@ final class renderer_test extends \advanced_testcase {
     /**
      * A group name reaches the chooser escaped exactly once.
      *
-     * Mutation check: drop the 'escape' => false option from the group name in
-     * enrol_apply_renderer::decision_controls_context() and TWO tests go red, this one and
-     * test_a_group_name_reaches_the_review_chooser_escaped_once. Two rather than one because
-     * the queue and the review page read that one helper, which is the property being pinned;
-     * the call used to live in manage_form(), where only this test could see it.
+     * Changes that must make it fail: dropping 'escape' => false from the group name in
+     * enrol_apply_renderer::decision_controls_context(). The queue and the review page share that
+     * helper, so test_a_group_name_reaches_the_review_chooser_escaped_once fails with it.
      *
      * @return void
      */
@@ -152,29 +158,16 @@ final class renderer_test extends \advanced_testcase {
     /**
      * A role name reaches the chooser escaped exactly once.
      *
-     * The renderer now normalises every role name through format_string() before the template's
-     * triple stash sees it, because core hands back a MIXED list: role_get_name() escapes a role
-     * whose role.name column is set and returns a bare get_string() for one whose column is
-     * empty, which is every role a stock site ships.
+     * The renderer normalises every role name through format_string() before the template's
+     * triple stash sees it, because role_get_name() returns a mixed list: escaped for a role whose
+     * role.name is set, a bare get_string() for one whose role.name is empty, which is every role
+     * a stock site ships.
      *
-     * **This test holds only one of those two halves, and says so rather than implying more.**
-     * It pins the escaped half — that normalising an already-escaped name does not escape it a
-     * second time, which is the regression the new call could have introduced. The raw half is
-     * NOT reachable from a fixture: its two sources are a core lang string and a role shortname,
-     * and neither can be given an ampersand from a test (shortnames are alphanumeric, and
-     * overriding a core string means driving tool_customlang and flushing its caches for one
-     * assertion). It was verified by measurement instead — on m502 all eight stock roles return
-     * an empty role.name while the site's own custom role returns "R&amp;D coordinator" — and by
-     * reading role_get_name() at lib/accesslib.php:4575-4594 on both branches.
-     *
-     * **What this test holds, measured rather than assumed, is the STASH — not the
-     * normalisation.** Switching the role option to a double stash reddens it, because an
-     * already-escaped name then arrives escaped twice. Adding a second format_string() call
-     * reddens NOTHING, because format_string() is idempotent; and removing the one that is there
-     * reddens nothing either, for the fixture reason above. So the normalisation this test sits
-     * beside is verified by measurement and by reading, and by no assertion in this file. Said
-     * plainly because the alternative — a docblock claiming a mutation that does not happen — is
-     * the exact shape this repository treats as its worst defect.
+     * This test holds the stash, not the normalisation. Switching the role option to a double
+     * stash makes it fail, because an already-escaped name then arrives escaped twice. Removing
+     * the format_string() call does not: the unescaped half comes from a core lang string or an
+     * alphanumeric shortname, neither of which a fixture can give an ampersand. Adding a second
+     * call does not either, because format_string() is idempotent.
      *
      * @return void
      */
@@ -231,11 +224,11 @@ final class renderer_test extends \advanced_testcase {
     /**
      * A filter that matches nothing leaves every control on the page.
      *
-     * The queue used to gate its count line, its decision controls and its sticky footer on the
-     * server-side "has rows", which a search that matches nothing makes false - so the operator
-     * lost the box they had just typed in and had no way back but the browser's own history. It
-     * is worse over AJAX: the refresh replaces the table's region alone and never re-renders this
-     * template, so clearing the filter brought rows and checkboxes back with no bar to act on.
+     * The count line, the decision controls and the sticky footer are not gated on the server-side
+     * "has rows", which a search matching nothing makes false: the operator would lose the box
+     * they had just typed in. Over AJAX the refresh replaces the table's region alone and never
+     * re-renders this template, so clearing the filter would bring rows and checkboxes back with
+     * no bar to act on.
      *
      * The control is the row that exists but does not match: it proves the fixture has an
      * application, so an empty table here is the filter's doing.
@@ -250,7 +243,7 @@ final class renderer_test extends \advanced_testcase {
         $this->assertStringContainsString(get_string('queuefilterempty', 'enrol_apply'), $rendered);
         $this->assertStringContainsString('data-region="queuefilters"', $rendered);
         $this->assertStringContainsString('name="search"', $rendered);
-        // The bulk bar and its chooser, which used to vanish with the rows.
+        // The bulk bar's toggle group is still on the page.
         $this->assertStringContainsString('enrol-apply-queue', $rendered);
     }
 
@@ -268,11 +261,25 @@ final class renderer_test extends \advanced_testcase {
         $rendered = $this->render_filtered_queue('nothingmatchesthis');
 
         // One application in scope, none matching: the header says 1 and the count line says 0 of 1.
-        $this->assertStringContainsString('>1<', $rendered);
+        $this->assertSame('1', $this->tile_value($rendered, get_string('queueawaiting', 'enrol_apply')), $rendered);
         $this->assertStringContainsString(
             get_string('queuefiltercount', 'enrol_apply', (object) ['matched' => 0, 'total' => 1]),
             $rendered
         );
+    }
+
+    /**
+     * The number shown on one tile of the queue's capacity header.
+     *
+     * @param string $html The rendered queue.
+     * @param string $label The tile's label.
+     * @return string The value on that tile, or the empty string when there is no such tile.
+     */
+    private function tile_value(string $html, string $label): string {
+        $pattern = '~<span class="enrol_apply-tilevalue">([^<]*)</span>\s*<span class="enrol_apply-tilelabel">'
+            . preg_quote(s($label), '~') . '</span>~';
+
+        return preg_match($pattern, $html, $m) ? trim($m[1]) : '';
     }
 
     /**
@@ -284,8 +291,7 @@ final class renderer_test extends \advanced_testcase {
      * it fire unconditionally, though, and a method with no applications at all tells its manager
      * to clear filters that are not there.
      *
-     * A Behat scenario asserts core's string on this same state, so the pair is held on both
-     * sides; this is the half a mutation sweep can see, since mdl mutate runs PHPUnit.
+     * A Behat scenario asserts core's string on this same state as well.
      *
      * @return void
      */
@@ -325,19 +331,13 @@ final class renderer_test extends \advanced_testcase {
     /**
      * The status select keeps its own vocabulary when a field filter is offered beside it.
      *
-     * **This shipped.** The context builder filled a variable named `$options` for the status
-     * select and the per-field loop below reassigned the same name, so `statusoptions` published
-     * whatever the LAST field left there: a site whose administrator ticked a "menu" profile field
-     * got a status control listing that field's options - Cabo, Sargento, Tenente - and one who
-     * ticked a text field got an empty control. The status filter then posted a value no status
-     * can hold, which `integer_filter` refuses, so the as-you-type refresh threw and the search
-     * appeared broken.
+     * queue_filters_context() builds the status options and then loops over the offered fields,
+     * each with options of its own; if the two shared a variable, the status select would carry
+     * the last field's vocabulary and post values no status can hold. The queuefilterfields
+     * setting ships empty, so the other tests here render the queue with no field offered.
      *
-     * Nothing caught it because no test rendered the queue with a field filter offered AND then
-     * looked at the status select; the setting ships empty, so every other test had no field at
-     * all. The assertions are scoped to each `<select>` element rather than run over the whole
-     * page, because both vocabularies are present somewhere in it - a page-wide regex would pass
-     * against the very defect this test exists for.
+     * The assertions are scoped to each `<select>` element, because both vocabularies are present
+     * somewhere on the page and a page-wide match would pass against that defect.
      *
      * @return void
      */
@@ -377,13 +377,9 @@ final class renderer_test extends \advanced_testcase {
     private function render_queue_with_a_menu_field(): string {
         global $DB, $PAGE;
 
-        /* A shortname nothing else would pick. Not fussiness: core's identity join matches
-           {user_info_field} BY SHORTNAME - `JOIN {user_info_field} f ON f.shortname = :x` in
-           \core_user\fields::get_sql() - and that table carries no unique index on it, so a
-           second field of the same name multiplies every row of this query. A first draft used
-           'patente' and found two of them already in the test database, which is how the
-           duplicate surfaced: as a debugging() notice about a duplicate userenrolmentid, not as
-           a failure. */
+        /* A shortname nothing else would pick: \core_user\fields::get_sql() joins
+           {user_info_field} by shortname, which carries no unique index, so a second field of
+           the same name duplicates every row of the queue query. */
         $this->menufield = $this->getDataGenerator()->create_custom_profile_field([
             'datatype' => 'menu',
             'shortname' => 'enrolapplyqueuerank',
@@ -416,12 +412,9 @@ final class renderer_test extends \advanced_testcase {
     /**
      * The applied-date chip reads as the control holds it, on both paths.
      *
-     * **Not a formatting preference - the two paths have to agree.** The same chip is redrawn
-     * client-side from the date input's own value on every refresh, and no formatting the server
-     * can do is reproducible there: Moodle's date format is a language-pack string and the
-     * browser's is the reader's operating system. A first cut ran this through
-     * userdate(strftimedateshort), so a chip that read "31/01/26" on page load became
-     * "2026-01-31" the moment anything else on the filter bar was touched.
+     * The same chip is redrawn client-side from the date input's own value on every refresh, and
+     * no server-side date formatting is reproducible there, so both paths show the date as the
+     * input holds it. See enrol_apply_renderer::queue_filters_context().
      *
      * @return void
      */
@@ -520,17 +513,13 @@ final class renderer_test extends \advanced_testcase {
     /**
      * The decision context renders on an EMPTY queue, which is when it explains the most.
      *
-     * The whole reason the header sits outside the decision form. A method whose applicant limit
-     * is reached holds an empty queue - every application it is counting may be deferred, and a
-     * deferred one is freed by nothing - so the state whose only symptom is "there is nothing
-     * here" is exactly the state the numbers are for. Gated on rows, they would vanish at that
-     * moment.
+     * The reason the header sits outside the decision form. A method whose applicant limit is
+     * reached can hold an empty queue - every application it is counting may be deferred, and no
+     * expiry frees a deferred one - so an empty queue is exactly when the numbers are needed.
+     * Gated on rows, they would vanish then.
      *
-     * The control used to be that the bulk bar is ABSENT here, which stopped being true when the
-     * filters arrived: a search matching nothing must not take away the controls, so the template
-     * gates nothing on the row count any more. The closed notice replaces it - this instance has
-     * no applicant limit, so that notice is genuinely withheld, and the assertions above are
-     * still not being satisfied by a template that renders everything it is given.
+     * The control is the closed notice: this instance has no applicant limit, so the template
+     * withholds it, which shows the template is not simply rendering everything it is given.
      *
      * @return void
      */
@@ -557,20 +546,17 @@ final class renderer_test extends \advanced_testcase {
             'limit' => 0,
             'deferred' => 0,
         ]), $html);
-        // And the bulk bar IS here now, on an empty queue, which is the behaviour that replaced it.
+        // The bulk bar renders on an empty queue too, so a filter matching nothing keeps it.
         $this->assertStringContainsString(get_string('withselectedusers'), $html);
     }
 
     /**
      * No lang string reaches the queue with its placeholder still in it.
      *
-     * **A test asserting that get_string(X) appears in the markup cannot see this**, because both
-     * sides of the comparison read the same broken string and agree. Measured: five strings were
-     * written with an escaped placeholder - `{\$a}` rather than `{$a}`, which PHP single quotes
-     * keep verbatim - and every unit test over them passed while the page rendered the literal
-     * text "{\$a} selected on this page". A Behat scenario spelling the expected words out is what
-     * caught it, and this is the cheap general form of that: one assertion for the whole class,
-     * over a page that renders the header, the rows and the bulk bar.
+     * A test asserting that get_string(X) appears in the markup cannot see this, because both
+     * sides of the comparison read the same broken string. This asserts over a page that renders
+     * the header, the rows and the bulk bar that no unsubstituted placeholder survives, in either
+     * spelling; see assert_no_placeholder().
      *
      * @return void
      */
@@ -579,17 +565,28 @@ final class renderer_test extends \advanced_testcase {
 
         // The control: the page really did render, so this is not passing over an empty string.
         $this->assertStringContainsString(get_string('queueawaiting', 'enrol_apply'), $html);
-        $this->assertStringNotContainsString('{$a', $html);
+        // And the guard sees a placeholder in both spellings, so its silence below means something.
+        $this->assertSame(1, preg_match(self::PLACEHOLDER, '{$a->count} selected'));
+        $this->assertSame(1, preg_match(self::PLACEHOLDER, '{\$a} selected'));
+        $this->assert_no_placeholder($html);
+    }
+
+    /**
+     * Assert that no lang string placeholder reached the markup unsubstituted.
+     *
+     * @param string $html The rendered markup.
+     * @return void
+     */
+    private function assert_no_placeholder(string $html): void {
+        $this->assertDoesNotMatchRegularExpression(self::PLACEHOLDER, $html, 'a lang string placeholder was not substituted');
     }
 
     /**
      * The status block renders for a queue scoped to one enrolment method.
      *
-     * It did not, and the reason is the trap this repository documented earlier the same day and
-     * gated as `BW` earlier the same day: the context was returned with `$context + [...]`, and `+` keeps the LEFT
-     * side on a duplicate key - so the `hasstatus => false` set for the scopes that span methods
-     * silently won over the `true` set here, and the block never appeared on any instance-scoped
-     * queue. Every test passed, because none of them asserted the block existed.
+     * queue_capacity_context() merges with array_merge(): `+` keeps the left side on a duplicate
+     * key, so the `hasstatus => false` default set for the scopes that span methods would win and
+     * the block would never appear on an instance-scoped queue.
      *
      * @return void
      */
@@ -609,14 +606,12 @@ final class renderer_test extends \advanced_testcase {
     /**
      * The card view labels every cell it shows, with the wording that column actually carries.
      *
-     * Below the breakpoint each labelled cell carries its own heading as REAL TEXT, hidden by
-     * the stylesheet above that width. It used to be a data-* attribute drawn with
-     * content: attr(), which is announced inconsistently by screen readers and - worse - leans on
-     * a thead association that turning rows into blocks has already destroyed. Nothing else in
-     * the suite reads these headings, which is exactly the kind of markup that rots unnoticed.
+     * Below the breakpoint each labelled cell carries its own heading as real text, hidden by the
+     * stylesheet above that width. A content: attr() label would be announced inconsistently by
+     * screen readers and would lean on a thead association the card layout removes.
      *
      * The comment column is the one worth naming: its heading is the question the teacher
-     * configured, and the card said "Comment" while the desktop header said what was asked.
+     * configured in customtext2, not the shipped "Comment".
      *
      * @return void
      */
@@ -625,10 +620,9 @@ final class renderer_test extends \advanced_testcase {
 
         $DB->set_field('enrol', 'customtext2', 'Why you want in', ['id' => $this->instance->id]);
 
-        /* Through the helper that seeds a row, because the attributes live on CELLS: an empty
-           queue renders "Nothing to display" and no data-label at all, so a test without an
-           applicant would pass or fail for the wrong reason. The helper re-reads the instance
-           through listing_scope(), so the field set above is the one the table sees. */
+        /* Through the helper that seeds a row, because the labels live on cells: an empty queue
+           renders "Nothing to display" and no card label at all. The table re-reads the instance
+           through queue::listing_scope(), so the field set above is the one it sees. */
         $html = $this->render_queue();
 
         $this->assertMatchesRegularExpression(
@@ -678,7 +672,7 @@ final class renderer_test extends \advanced_testcase {
 
         $this->assertStringContainsString(get_string('queueapplicationsopen', 'enrol_apply'), $open);
         $this->assertStringContainsString(get_string('queueremaining', 'enrol_apply', 1), $open);
-        $this->assertStringNotContainsString('{$a', $open);
+        $this->assert_no_placeholder($open);
 
         // And at the limit it is closed, with the room-left sentence gone rather than reading zero.
         $user = $this->getDataGenerator()->create_user();
@@ -721,7 +715,7 @@ final class renderer_test extends \advanced_testcase {
             get_string('queuecloseson', 'enrol_apply', userdate($when, get_string('strftimedate', 'langconfig'))),
             $html
         );
-        $this->assertStringNotContainsString('{$a', $html);
+        $this->assert_no_placeholder($html);
     }
 
     /**
@@ -767,18 +761,14 @@ final class renderer_test extends \advanced_testcase {
     /**
      * Every checkbox in the queue speaks core/checkbox-toggleall's vocabulary, in one group.
      *
-     * The three data attributes are what core's module matches on; the plugin's own markup
-     * carried none of them, so nothing in the queue was wired to core before this. The group
-     * name is asserted literally rather than through the constant, because the whole point is
-     * that the header, the rows and the bar agree on one string - reading the constant in the
-     * test would make a rename invisible.
+     * The three data attributes are what core's module matches on. The group name is asserted
+     * literally rather than through the constant, because the header, the rows and the bar must
+     * agree on one string, and reading the constant here would hide a change to it. Core gives no
+     * signal if they disagree: the targets match by prefix and the action element by an exact
+     * string, so a mismatch quietly stops working.
      *
-     * Mutation check, measured against the whole suite: renaming TOGGLE_GROUP reddens TWO tests,
-     * this one and test_the_bulk_action_is_wired_to_the_same_group, and nothing else. Two rather
-     * than one because the header, the rows and the bar all read the one constant - which is the
-     * property being pinned. Core itself gives no signal at all if they disagree: the targets
-     * match by prefix and the action element by an exact string, so a mismatch quietly stops
-     * working.
+     * Changes that must make it fail: changing the value of TOGGLE_GROUP (which also fails
+     * test_the_bulk_action_is_wired_to_the_same_group).
      *
      * @return void
      */
@@ -805,12 +795,10 @@ final class renderer_test extends \advanced_testcase {
     /**
      * The bulk action carries the toggle-all action vocabulary, in the same group.
      *
-     * getActionElements() matches the group EXACTLY where the targets match by prefix, so a
-     * mismatch here disables nothing and reports nothing. That silence is the reason this is
-     * asserted rather than left to the browser.
+     * getActionElements() matches the group exactly where the targets match by prefix, so a
+     * mismatch here disables nothing and reports nothing.
      *
-     * Mutation check, measured against the whole suite: removing the toggle-all attributes from
-     * the action select reddens exactly this test.
+     * Changes that must make it fail: removing the toggle-all attributes from the action select.
      *
      * @return void
      */
@@ -827,14 +815,11 @@ final class renderer_test extends \advanced_testcase {
     /**
      * The action bar sits in core's sticky footer, and that footer sits inside the form.
      *
-     * Both halves matter and only the second is obvious. A sticky footer rendered outside the
-     * form would post nothing - the action select and the Go button would simply not be part of
-     * the submission - and the page would look perfectly correct while every decision silently
-     * did nothing. Core places its own inside the form for the same reason
-     * (grade/templates/edit_tree.mustache).
+     * A sticky footer rendered outside the form would post nothing - the action select and the Go
+     * button would not be part of the submission - while the page looked correct. Core places its
+     * own inside the form for the same reason (grade/templates/edit_tree.mustache).
      *
-     * Mutation check, measured against the whole suite: rendering the footer outside the form
-     * reddens exactly this test.
+     * Changes that must make it fail: rendering the footer outside the form.
      *
      * @return void
      */
@@ -844,7 +829,7 @@ final class renderer_test extends \advanced_testcase {
         $footerat = strpos($html, 'id="sticky-footer"');
         $this->assertNotFalse($footerat, 'the bar is rendered into core\'s sticky footer');
 
-        /* The DECISION form specifically. A plain search for the first "<form " now finds the
+        /* The decision form specifically. A plain search for the first "<form " finds the
            filter bar's GET form, which is rendered before this one and must be - HTML forbids
            nested forms, so a search box inside the decision form would submit a decision. */
         $formopen = strpos($html, '<form id="enrol_apply_manage_form"');
@@ -867,8 +852,7 @@ final class renderer_test extends \advanced_testcase {
      * .sticky-footer-content carries overflow hidden, so a three-row textarea put in it is
      * clipped. The bar is for the action; the decision's own inputs are not actions.
      *
-     * Mutation check, measured against the whole suite: rendering the footer above the decision
-     * inputs instead of below them reddens exactly this test.
+     * Changes that must make it fail: rendering the footer above the decision inputs.
      *
      * @return void
      */
@@ -1002,9 +986,9 @@ final class renderer_test extends \advanced_testcase {
     /**
      * A group name reaches the review page's chooser escaped exactly once, as the queue's does.
      *
-     * Mutation check: dropping the escape option from decision_controls_context() reddens this
-     * and test_a_group_name_reaches_the_chooser_escaped_once, and nothing else - which is the
-     * property being pinned, since both surfaces read the one helper.
+     * Changes that must make it fail: dropping the escape option from
+     * decision_controls_context(), which also fails test_a_group_name_reaches_the_chooser_escaped_once
+     * since both surfaces read the one helper.
      *
      * @return void
      */
@@ -1025,10 +1009,8 @@ final class renderer_test extends \advanced_testcase {
     /**
      * The identity line carries what the site named, and nothing else.
      *
-     * The e-mail address used to have a row of its own and be printed unconditionally, while the
-     * snapshot panel beside it masked identity fields from the same reader. It is now one
-     * identity field among the rest, resolved by core's own helper - so a site that does not
-     * name it does not see it here, exactly as its participants page behaves.
+     * The e-mail address is one identity field among the rest, resolved by core's own helper, so
+     * a site that does not name it does not see it here, as on its participants page.
      *
      * @return void
      */
@@ -1122,11 +1104,8 @@ final class renderer_test extends \advanced_testcase {
 
         $this->setAdminUser();
 
-        /* Two DIFFERENT limits, and a fixture whose two counts also differ. The first version of
-           this test capped places and left applicants uncapped, which reads as a fair test and is
-           not one: it passed with the two numbers fully swapped, because "of 20" appeared either
-           way. Mixing these two is the standing hazard this plugin records in CLAUDE.md, so the
-           test has to be able to see it. */
+        /* Two different limits and two different counts, so the test can see the places and
+           applicants numbers swapped; with one side uncapped, "of 20" would appear either way. */
         $DB->set_field('enrol', 'customint4', 20, ['id' => $this->instance->id]);
         $DB->set_field('enrol', 'customint3', 30, ['id' => $this->instance->id]);
         $this->instance = $DB->get_record('enrol', ['id' => $this->instance->id], '*', MUST_EXIST);
@@ -1140,11 +1119,8 @@ final class renderer_test extends \advanced_testcase {
 
         $this->assertStringContainsString(get_string('reviewcapacity', 'enrol_apply'), $html);
 
-        /* Each value asserted INSIDE its own row. A bare assertStringContainsString over the whole
-           page cannot see the two numbers swapped - both strings are still present, just against
-           the other label - and the first two versions of this test passed against exactly that
-           mutation. It is the trap CLAUDE.md states in general: extract the element, then assert
-           inside it. */
+        /* Each value asserted inside its own row. A page-wide match cannot see the two numbers
+           swapped - both strings are still present, just against the other label. */
         $this->assertSame(
             get_string('reviewofmany', 'enrol_apply', (object) ['taken' => 1, 'total' => 20]),
             $this->capacity_row($html, get_string('places', 'enrol_apply')),
@@ -1160,14 +1136,13 @@ final class renderer_test extends \advanced_testcase {
     /**
      * The capacity panel reports how many of those applications are deferred.
      *
-     * A third row, and it is a subset of the applicants row rather than a limit of its own. It
-     * is here because a deferred application counts against the applicant cap for ever and
-     * nothing frees it - so a method refusing new applications with an empty queue has no other
-     * screen able to explain itself.
+     * A third row, and it is a subset of the applicants row rather than a limit of its own. A
+     * deferred application counts against the applicant cap until it is cancelled, since no
+     * expiry reaches it, so this is what explains a method refusing new applications with an
+     * empty queue.
      *
-     * The three rows carry three DIFFERENT values on this fixture, and each is asserted inside
-     * its own row. That is the trap this file has already walked into twice: both numbers stay
-     * on the page when they are swapped, so only a row-scoped assertion can see it.
+     * The three rows carry three different values on this fixture, and each is asserted inside
+     * its own row, because swapped numbers stay on the page.
      *
      * @return void
      */
@@ -1284,9 +1259,8 @@ final class renderer_test extends \advanced_testcase {
     /**
      * A deferred application says who deferred it, when, and what they wrote.
      *
-     * The one case where the reader is looking at something a colleague already decided. The page
-     * used to say only "On the waiting list", while every one of these facts sat on a table
-     * queue::application() was already joining and simply not selecting.
+     * The one case where the reader is looking at something a colleague already decided, so the
+     * page names the decider and shows the message they wrote.
      *
      * @return void
      */
@@ -1358,10 +1332,9 @@ final class renderer_test extends \advanced_testcase {
     /**
      * A deferred application shows the note the last decider left, and does NOT pre-fill it.
      *
-     * The two halves are one property. The note is shown because that is what the column is
-     * for - the next member of staff reads why. It is not pre-filled into the box because the
-     * writer clears on empty on purpose: a pre-filled box would carry one decision's reason
-     * silently into the next, which is the exact defect the outcome message was fixed for.
+     * The note is shown because the next member of staff reads why. It is not pre-filled into the
+     * box because the writer clears on empty: a pre-filled box would carry one decision's reason
+     * silently into the next.
      *
      * A whole-page assertion cannot see the second half, because the note is legitimately on the
      * page twice over in the failing case. The textarea is extracted and read on its own.
@@ -1430,11 +1403,9 @@ final class renderer_test extends \advanced_testcase {
      * The instance's own comment label heads the review page, escaped exactly once.
      *
      * This is the sink that differs from the other two, and the reason the helper takes a flag.
-     * The queue's column header and the applicant form's element label both render RAW and want
-     * the escaped spelling; review.mustache renders this one through a DOUBLE stash, so it wants
-     * the PLAIN spelling and Mustache escapes it. Handing it the escaped one shows the reader the
-     * entities, which is a defect no gate in this repository can see - phpcs reads PHP, the
-     * mustache lint reads structure, and neither knows which stash a value lands in.
+     * The queue's column header and the applicant form's element label both render raw and want
+     * the escaped spelling; review.mustache renders this one through a double stash, so it wants
+     * the plain spelling, and the escaped one would show the reader the entities.
      *
      * @return void
      */
@@ -1477,11 +1448,9 @@ final class renderer_test extends \advanced_testcase {
      * @return void
      */
     public function test_the_applicants_comment_is_escaped_once_and_kept_whole(): void {
-        /* AWKWARD_NAME is the wrong fixture here and using it was the defect: its "<" has a
-           space after it, deliberately, so strip_tags() leaves it alone and format_string()
-           would render byte-identically. A "<" that opens something tag-shaped is what a
-           stripping call actually eats - everything from it to the next ">" - so that is what
-           the comment has to carry for this test to hold anything. */
+        /* Not AWKWARD_NAME: its "<" has a space after it, so strip_tags() leaves it alone and
+           format_string() would render byte-identically. A "<" that opens something tag-shaped
+           is what a stripping call eats, so that is what the comment carries. */
         $comment = "First line, mentioning R&D.\nSecond line, where A <b is smaller.";
 
         $html = $this->render_review($comment);
@@ -1510,7 +1479,8 @@ final class renderer_test extends \advanced_testcase {
     }
 
     /**
-     * The review page shows the applicant's email, as the queue row it replaces does.
+     * Under the default showuseridentity, the review page shows the applicant's e-mail address,
+     * as the queue does.
      *
      * @return void
      */
@@ -1618,8 +1588,7 @@ final class renderer_test extends \advanced_testcase {
      * The review page carries no bulk-selection apparatus.
      *
      * There is one application on it, so a select-all checkbox and a toggle group would be
-     * controls with nothing to control - and the toggle group in particular would leave
-     * enrol_apply/manage disabling a submit button this page needs enabled.
+     * controls with nothing to control.
      *
      * @return void
      */
@@ -1635,10 +1604,8 @@ final class renderer_test extends \advanced_testcase {
     /**
      * The course name reaches the new-application notification escaped exactly once.
      *
-     * Mutation check: drop the 'escape' => false option from the course name in
-     * enrol_apply_renderer::application_notification_mail_body() and exactly this test goes
-     * red. The template's own docblock has claimed since it was written that "every label and
-     * value arrives in its PLAIN spelling"; for this one value that was not true.
+     * Changes that must make it fail: dropping 'escape' => false from the course name in
+     * enrol_apply_renderer::application_notification_mail_body().
      *
      * @return void
      */
@@ -1664,11 +1631,9 @@ final class renderer_test extends \advanced_testcase {
     /**
      * The submitted profile details are rendered from the frozen snapshot's own label and value.
      *
-     * The stored label is deliberately NOT one core would recompute for that key: an earlier
-     * version of this test stored "City/town", which is byte-identical to what fields::label()
-     * returns for s_city, so replacing $entry['label'] with a live lookup left it green. The
-     * value is likewise not the applicant's live one, so neither assertion can be satisfied by
-     * anything except the frozen record.
+     * The stored label is deliberately not what fields::label() returns for s_city, and the
+     * value is not the applicant's live one, so neither assertion can be satisfied by anything
+     * except the frozen record.
      *
      * @return void
      */
@@ -1716,13 +1681,11 @@ final class renderer_test extends \advanced_testcase {
     /**
      * The page never reads the applicant's live profile for a snapshot field.
      *
-     * This is a security boundary, not a scoping choice, so it is asserted rather than left to
-     * the absence of a call. The stored key is attacker-choosable - restore_enrol_apply_plugin
-     * writes userinfodata verbatim out of a foreign archive - and fields::current_value()
-     * dereferences whatever {user} column an "s_" key names, with no allowlist: measured on
-     * m502, an earlier version of this panel rendered the applicant's password hash from an
-     * envelope naming s_password. The DENY list that keeps such keys out of this plugin governs
-     * the WRITE path only.
+     * This is a security boundary, so it is asserted rather than left to the absence of a call.
+     * The stored key is attacker-choosable - restore_enrol_apply_plugin writes userinfodata
+     * verbatim out of a foreign archive - and fields::current_value() dereferences whatever
+     * {user} column an "s_" key names, with no allowlist, so an envelope naming s_password would
+     * expose the password hash. The fields::DENY list governs the write path only.
      *
      * @return void
      */
@@ -1778,9 +1741,8 @@ final class renderer_test extends \advanced_testcase {
      * An identity field is withheld from a reader without the identity capability.
      *
      * The same rule the Report Builder surface applies to the same stored record, judged in the
-     * COURSE context. Without this the review page would be the weaker of the two doors onto it.
-     * The name row is the control: it proves the panel rendered at all, so the missing city is
-     * masking rather than an empty panel.
+     * course context. The name row is the control: it proves the panel rendered at all, so the
+     * missing city is masking rather than an empty panel.
      *
      * @return void
      */
@@ -1795,8 +1757,7 @@ final class renderer_test extends \advanced_testcase {
     /**
      * The masking is judged in the COURSE context, not at system level.
      *
-     * The pair that tells the two apart, and without it the diff's central claim is unpinned:
-     * this reader holds moodle/site:viewuseridentity in the COURSE and not at system level, so a
+     * This reader holds moodle/site:viewuseridentity in the course and not at system level, so a
      * masking rule that asked the system context would withhold the city from somebody entitled
      * to it. The sibling test above is the other half - there the reader holds it nowhere.
      *
@@ -1900,13 +1861,12 @@ final class renderer_test extends \advanced_testcase {
     /**
      * The queue tells the manager when the places are gone.
      *
-     * The state worth surfacing is places exhausted while applications are still open: a
-     * manager receiving applications they have nowhere to put. Places never block an approval -
-     * they are an indicator, and the decision stays the manager's - so this notice is the whole
-     * of how that number reaches the person who set it.
+     * Places exhausted means a manager receiving applications they have nowhere to put. Places
+     * never block an approval - the decision stays the manager's - so this notice is how that
+     * number reaches the person who set it.
      *
-     * The control renders the same queue with a place free, and is not optional: an assertion
-     * that the notice IS present passes just as well against a renderer that shows it always.
+     * The control renders the same queue with a place free: an assertion that the notice is
+     * present passes just as well against a renderer that shows it always.
      *
      * @return void
      */
@@ -1937,10 +1897,9 @@ final class renderer_test extends \advanced_testcase {
     /**
      * The notice survives an empty queue, which is the state it exists for.
      *
-     * An instance whose APPLICANT limit is reached has nothing left to list, and that is exactly
-     * when the manager most needs to know why. Rendering the notice inside the template's
-     * hasrows section would make it disappear in precisely that case - the failure this test
-     * exists to prevent, and one no assertion about a populated queue could ever see.
+     * Once every application has been approved into the places, the queue lists nothing, which is
+     * when the manager most needs to know why. Rendering the notice inside the template's hasrows
+     * section would hide it in exactly that case, which no test over a populated queue can see.
      *
      * @return void
      */
@@ -1968,13 +1927,12 @@ final class renderer_test extends \advanced_testcase {
     /**
      * The queue says when the APPLICANT limit is reached, and names the deferred backlog.
      *
-     * The other exhausted state, and until now nothing on any screen could explain it: the method
-     * refuses new applications, and the rows holding it against its limit may all be deferred -
-     * in which case the queue is empty, the course is closed to everybody, and no number anywhere
-     * says why. A deferred row is freed by nothing, so the notice names how many there are.
+     * The other exhausted state: the method refuses new applications, and the rows holding it
+     * against its limit may all be deferred, leaving the queue empty. No expiry frees a deferred
+     * row, so the notice names how many there are.
      *
-     * The control renders the same queue one application below the limit, and is not optional:
-     * asserting only that the notice IS present passes against a renderer that shows it always.
+     * The control renders the same queue one application below the limit: asserting only that
+     * the notice is present passes against a renderer that shows it always.
      *
      * @return void
      */
@@ -2020,10 +1978,9 @@ final class renderer_test extends \advanced_testcase {
     /**
      * That notice survives an empty queue, which is the state it exists for.
      *
-     * An instance whose applicant limit is held entirely by APPROVED enrolments lists nothing at
-     * all - the queue shows applications awaiting a decision, and there are none. Rendering the
-     * notice inside the template's hasrows section would make it vanish in exactly the case it
-     * was written for, and no assertion about a populated queue could see that.
+     * An instance whose applicant limit is held entirely by approved enrolments lists nothing -
+     * the queue shows applications awaiting a decision, and there are none. Rendering the notice
+     * inside the template's hasrows section would hide it in exactly that case.
      *
      * @return void
      */
@@ -2053,5 +2010,255 @@ final class renderer_test extends \advanced_testcase {
             ]),
             $html
         );
+    }
+
+    /**
+     * A page holding no row names no range, and the line saying which rows are shown is hidden.
+     *
+     * The arithmetic that names the range reads "Showing 1-0 of 0" on an empty queue, and
+     * "Showing 101-1 of 1" on a page number past the end of the queue, which core does not clamp.
+     * The line stays in the markup, hidden, so the queue's module can fill it after a refresh.
+     *
+     * The control is a queue with a row, which does name its range and shows the line.
+     *
+     * @return void
+     */
+    public function test_a_page_with_no_rows_names_no_range(): void {
+        global $PAGE;
+
+        $this->setAdminUser();
+        $url = new \moodle_url('/enrol/apply/manage.php', ['id' => $this->instance->id]);
+        $PAGE->set_url($url);
+        $PAGE->set_context(\context_course::instance($this->course->id));
+
+        $table = \enrol_apply\table\applications::for_scope((int) $this->instance->id);
+        $html = $PAGE->get_renderer('enrol_apply')->manage_form($table, $url, $this->instance);
+
+        // The precondition: the queue really is empty.
+        $this->assertSame(0, (int) $table->totalrows);
+        [$classes, $text] = $this->showing_line($html);
+        $this->assertSame('', $text, $html);
+        $this->assertStringContainsString('d-none', $classes);
+        $this->assertStringNotContainsString(
+            get_string('queueshowing', 'enrol_apply', (object) ['from' => 1, 'to' => 0, 'total' => 0]),
+            $html
+        );
+
+        // The control: one application, on the first page, is a range to name.
+        $withrow = $this->render_queue();
+        [$classes, $text] = $this->showing_line($withrow);
+        $this->assertSame(
+            get_string('queueshowing', 'enrol_apply', (object) ['from' => 1, 'to' => 1, 'total' => 1]),
+            $text,
+            $withrow
+        );
+        $this->assertStringNotContainsString('d-none', $classes);
+
+        // And the same queue on a page past its end has none, though the queue is not empty.
+        $table = \enrol_apply\table\applications::for_scope((int) $this->instance->id);
+        $table->set_page_number(3);
+        $pastend = $PAGE->get_renderer('enrol_apply')->manage_form($table, $url, $this->instance);
+        $this->assertSame(1, (int) $table->totalrows);
+        [$classes, $text] = $this->showing_line($pastend);
+        $this->assertSame('', $text, $pastend);
+        $this->assertStringContainsString('d-none', $classes);
+    }
+
+    /**
+     * The line under the queue saying which rows are shown: its extra classes and its text.
+     *
+     * @param string $html The rendered queue.
+     * @return array [the classes after enrol_apply-showing, the line's text].
+     */
+    private function showing_line(string $html): array {
+        $found = preg_match('~<div class="enrol_apply-showing([^"]*)" data-region="showing">(.*?)</div>~s', $html, $m);
+        $this->assertSame(1, $found, 'no showing line in the rendered queue');
+
+        return [trim($m[1]), trim($m[2])];
+    }
+
+    /**
+     * The queue explains its waiting-list badge in a paragraph of the template's own.
+     *
+     * @return void
+     */
+    public function test_the_queue_explains_its_waiting_list_badge(): void {
+        $html = $this->render_queue();
+
+        $this->assertStringContainsString('<p>' . s(get_string('confirmusers_desc', 'enrol_apply')) . '</p>', $html);
+    }
+
+    /**
+     * Backing out of a cancellation posts what the operator typed, and never puts it in an address.
+     *
+     * The decision note is the decider's own and never reaches the applicant. A GET form would
+     * submit it, and the message, as the query string of the review page it opens - into server
+     * logs, the browser history and every Referer that page sends.
+     *
+     * The control is the destructive answer beside it, which carries the queue's decision contract:
+     * the back button carries the text and nothing that could decide anything.
+     *
+     * @return void
+     */
+    public function test_backing_out_of_a_cancellation_posts_what_was_typed(): void {
+        global $DB, $PAGE;
+
+        $this->render_review();
+        $ueid = (int) $DB->get_field_sql(
+            "SELECT MAX(id) FROM {user_enrolments} WHERE enrolid = :enrolid",
+            ['enrolid' => $this->instance->id]
+        );
+        $applicant = \core_user::get_user(
+            (int) $DB->get_field('user_enrolments', 'userid', ['id' => $ueid], MUST_EXIST),
+            '*',
+            MUST_EXIST
+        );
+        $message = 'Please resend your transcript.';
+        $note = 'Checking with the registry & the dean.';
+
+        $html = $PAGE->get_renderer('enrol_apply')->cancel_confirmation(
+            $applicant,
+            new \moodle_url('/enrol/apply/manage.php', ['userenrol' => $ueid]),
+            $ueid,
+            $message,
+            $note
+        );
+
+        $keep = $this->form_with_button($html, get_string('reviewkeep', 'enrol_apply'));
+        // Posted, to an address carrying no query string.
+        $this->assertMatchesRegularExpression('~^<form method="post" action="[^"?]*"~', $keep, $keep);
+        $this->assertStringContainsString('name="userenrol" value="' . $ueid . '"', $keep);
+        $this->assertStringContainsString('name="outcomemessage" value="' . s($message) . '"', $keep);
+        $this->assertStringContainsString('name="decisionnote" value="' . s($note) . '"', $keep);
+        $this->assertStringNotContainsString('name="formaction"', $keep);
+
+        $cancel = $this->form_with_button($html, get_string('reviewcancelaction', 'enrol_apply'));
+        $this->assertMatchesRegularExpression('~^<form method="post" action="[^"?]*"~', $cancel, $cancel);
+        $this->assertStringContainsString('name="formaction" value="cancel"', $cancel);
+        $this->assertStringContainsString('name="confirmed" value="1"', $cancel);
+        $this->assertStringContainsString('name="userenrolments[0]" value="' . $ueid . '"', $cancel);
+        $this->assertStringContainsString('name="decisionnote" value="' . s($note) . '"', $cancel);
+    }
+
+    /**
+     * The form a button of the given label submits.
+     *
+     * @param string $html Rendered markup holding one or more single-button forms.
+     * @param string $label The button's label.
+     * @return string The form, opening tag to closing tag.
+     */
+    private function form_with_button(string $html, string $label): string {
+        preg_match_all('~<form\b[^>]*>.*?</form>~s', $html, $m);
+        foreach ($m[0] as $form) {
+            if (str_contains($form, '>' . s($label) . '</button>')) {
+                return $form;
+            }
+        }
+        $this->fail("no form is submitted by a button labelled {$label}: {$html}");
+    }
+
+    /**
+     * A profile field the applicant still has to fill in is listed escaped exactly once.
+     *
+     * completeness::missing() returns the plain spelling and the template double stashes it. The
+     * control is an ordinary label in the same list, beside the heading the page introduces it with.
+     *
+     * @return void
+     */
+    public function test_a_missing_profile_field_is_listed_escaped_once(): void {
+        global $PAGE;
+
+        $html = $PAGE->get_renderer('enrol_apply')->profile_missing([
+            ['key' => 'c_1', 'label' => self::AWKWARD_NAME],
+            ['key' => 's_city', 'label' => 'City/town'],
+        ]);
+
+        $this->assertStringContainsString('<li>' . self::ESCAPED_ONCE . '</li>', $html);
+        $this->assertStringNotContainsString(self::ESCAPED_TWICE, $html);
+        $this->assertStringContainsString('<li>City/town</li>', $html);
+        $this->assertStringContainsString(s(get_string('profileincomplete', 'enrol_apply')), $html);
+    }
+
+    /**
+     * Neither the renderer nor the acknowledgement page builds markup with html_writer.
+     *
+     * Both render through templates, where a name's spelling is decided by the stash it lands in;
+     * html_writer::tag() concatenates its content unescaped, so each call is an escaping decision
+     * no template shows. Read through the tokenizer, so a comment naming the class does not count.
+     *
+     * @return void
+     */
+    public function test_the_renderer_and_the_acknowledgement_page_use_no_html_writer(): void {
+        global $CFG;
+
+        // The control: the scan does see a call, and does not see one named in a comment.
+        $this->assertSame(1, $this->html_writer_uses("<?php\necho html_writer::tag('p', 'x');\n"));
+        $this->assertSame(0, $this->html_writer_uses("<?php\n// Html_writer::tag() is not used here.\n"));
+
+        foreach (['renderer.php', 'applied.php'] as $file) {
+            $source = file_get_contents($CFG->dirroot . '/enrol/apply/' . $file);
+            $this->assertSame(0, $this->html_writer_uses($source), $file);
+        }
+    }
+
+    /**
+     * How many times a PHP source names the html_writer class in code.
+     *
+     * @param string $source PHP source.
+     * @return int Count of name tokens naming html_writer, in any namespace spelling.
+     */
+    private function html_writer_uses(string $source): int {
+        $uses = 0;
+        foreach (\PhpToken::tokenize($source) as $token) {
+            if (
+                $token->is([T_STRING, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED])
+                && str_ends_with(strtolower($token->text), 'html_writer')
+            ) {
+                $uses++;
+            }
+        }
+
+        return $uses;
+    }
+
+    /**
+     * A category name reaches the site-wide queue's category filter and its chip escaped once.
+     *
+     * core_course_category::make_categories_list() formats names with format_string()'s default
+     * escaping, and both sinks here are double stashes: the option text, and the chip's value.
+     *
+     * @return void
+     */
+    public function test_a_category_name_reaches_the_filter_and_its_chip_escaped_once(): void {
+        global $PAGE;
+
+        $this->setAdminUser();
+        $category = $this->getDataGenerator()->create_category(['name' => self::AWKWARD_NAME]);
+
+        $url = new \moodle_url('/enrol/apply/manage.php', ['category' => $category->id]);
+        $PAGE->set_url($url);
+        $PAGE->set_context(\context_system::instance());
+        $table = \enrol_apply\table\applications::for_scope(0, '', null, ['category' => (string) $category->id]);
+        $html = $PAGE->get_renderer('enrol_apply')->manage_form($table, $url, null);
+
+        // The precondition: the filter really is applied, so a chip is drawn for it.
+        $this->assertSame([(int) $category->id, null], $table->get_course_scope());
+
+        $select = $this->select_named($html, 'category');
+        $this->assertMatchesRegularExpression(
+            '~<option value="' . $category->id . '"[^>]*>' . preg_quote(self::ESCAPED_ONCE, '~') . '</option>~',
+            $select,
+            $select
+        );
+        $this->assertStringNotContainsString(self::ESCAPED_TWICE, $select);
+
+        $found = preg_match(
+            '~<span class="enrol_apply-chipname">[^<]*</span>([^<]*)<a href="[^"]*" class="enrol_apply-chipremove"'
+                . ' data-filter="category"~',
+            $html,
+            $chip
+        );
+        $this->assertSame(1, $found, 'no category chip in the rendered queue');
+        $this->assertSame(self::ESCAPED_ONCE, trim($chip[1]));
     }
 }
