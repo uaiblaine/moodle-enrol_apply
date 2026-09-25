@@ -974,8 +974,9 @@ class enrol_apply_plugin extends enrol_plugin {
     /**
      * Confirm the given applications, activating the enrolments.
      *
-     * Every application is authorised individually: an id the current user may not act
-     * on is skipped rather than failing the whole batch.
+     * Every id is looked up and authorised individually: one that is not an application of
+     * this plugin's awaiting a decision (see get_pending_user_enrolment()), or that the current
+     * user may not act on, is skipped rather than failing the whole batch.
      *
      * @param array $enrols User enrolment ids to confirm.
      * @param string $message Message the decider wrote to the applicant, empty for none.
@@ -1127,11 +1128,14 @@ class enrol_apply_plugin extends enrol_plugin {
             $this->record_decision_note($userenrolment, $decision);
 
             /* Deferring clears the expiry. update_user_enrol() writes only the dates that are
-               set, so passing null would leave a once-approved row on the waiting list with a
-               past timeend, which no expiry sweep touches (the suspend arms filter
-               status = active) and no queue lists. It must be the integer 0: core's
-               communication hook listener compares timeend !== 0, and '0' would drop the
-               applicant from the course communication room. */
+               set, so passing null would keep any future timeend the row carries: core's "Edit
+               enrolment" screen can suspend an enrolment part way through its period, and a
+               restore copies an archived timeend. Once that date passed, the deferred row would
+               drop out of the queue, which lists only unexpired rows, with nothing left to
+               decide it: the suspend arms of process_expirations() filter status = active, and
+               the unenrol arm deletes it. It must be the integer 0: core's communication hook
+               listener compares timeend !== 0, and '0' would drop the applicant from the course
+               communication room. */
             $this->update_user_enrol($instance, $userenrolment->userid, ENROL_APPLY_USER_WAIT, null, 0);
 
             /* The row was read before the update, and notify_applicant() below substitutes
@@ -1252,23 +1256,38 @@ class enrol_apply_plugin extends enrol_plugin {
     }
 
     /**
-     * Fetch a user enrolment that is still awaiting a decision.
+     * Fetch an application of this plugin's that is still awaiting a decision.
+     *
+     * "Awaiting a decision" is {@see \enrol_apply\local\queue::awaiting_decision_where()}, the
+     * rule the approval queue and the review page list by, so a posted id can only reach a row
+     * those pages would offer. Everything else returns false, and the decision methods skip it
+     * as they skip a row the operator may not act on:
+     *  - a user enrolment of another enrolment method, which would otherwise reach the caller's
+     *    instance lookup and throw half way through a batch;
+     *  - an application already decided;
+     *  - an approval whose period has ended. Under an expiredaction of suspend,
+     *    process_expirations() puts it back to suspended with its past timeend, and deciding it
+     *    would unenrol the learner, put them back in the queue or approve them a second time.
+     *
+     * An application already deferred is still awaiting a decision, which is what lets
+     * wait_enrolment() correct its reason.
      *
      * @param int $userenrolmentid User enrolment id.
-     * @return stdClass|false The user enrolment record, or false when it is not pending.
+     * @return stdClass|false The {user_enrolments} row, or false when there is nothing to decide.
      */
     protected function get_pending_user_enrolment($userenrolmentid) {
         global $DB;
 
-        return $DB->get_record_select(
-            'user_enrolments',
-            'id = :id AND (status = :enrolusersuspended OR status = :enrolapplyuserwait)',
-            [
-                'id' => $userenrolmentid,
-                'enrolusersuspended' => ENROL_USER_SUSPENDED,
-                'enrolapplyuserwait' => ENROL_APPLY_USER_WAIT,
-            ],
-            '*',
+        [$wheres, $params] = \enrol_apply\local\queue::awaiting_decision_where();
+        $params['ueid'] = (int) $userenrolmentid;
+        $params['enrol'] = 'apply';
+
+        return $DB->get_record_sql(
+            "SELECT ue.*
+               FROM {user_enrolments} ue
+               JOIN {enrol} e ON e.id = ue.enrolid
+              WHERE ue.id = :ueid AND e.enrol = :enrol AND " . implode(' AND ', $wheres),
+            $params,
             IGNORE_MISSING
         );
     }
@@ -1491,7 +1510,11 @@ class enrol_apply_plugin extends enrol_plugin {
     }
 
     /**
-     * Returns enrolled users of a course who should be notified about new applications.
+     * Returns the actively enrolled users of a course who should be notified about new applications.
+     *
+     * Only active enrolments count: the message links to the course's approval queue, whose
+     * require_login() refuses a user whose own enrolment is suspended or outside its dates, even
+     * though their role, and with it the capability, survives.
      *
      * Note: mostly copied from the get_users_from_config() function in moodlelib.php.
      *
@@ -1509,7 +1532,7 @@ class enrol_apply_plugin extends enrol_plugin {
         /* We have to make sure that users still hold the necessary capability. It is
            faster to fetch them all first and then test whether they are present than
            to validate them one by one. */
-        $users = get_enrolled_users($context, 'enrol/apply:manageapplications');
+        $users = get_enrolled_users($context, 'enrol/apply:manageapplications', 0, 'u.*', null, 0, 0, true);
 
         if ($value === '$@ALL@$') {
             return $users;
@@ -1642,7 +1665,8 @@ class enrol_apply_plugin extends enrol_plugin {
            back to comparing a wwwroot string taken from the archive itself when the site
            identifier hash is absent, so it is forgeable - and the thing being switched off
            here writes to {user}. Somebody restoring a course they built elsewhere re-ticks
-           the box if they meant it. */
+           the box if they meant it. backup_test::test_a_restore_switches_the_profile_write_off
+           holds this. */
         $data->customint8 = 0;
 
         $instanceid = $this->add_instance($course, (array) $data);

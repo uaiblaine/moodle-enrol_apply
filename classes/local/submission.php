@@ -132,9 +132,10 @@ class submission {
      * immediately afterwards.
      *
      * A user enrolment that is not this plugin's, or that is already gone, writes nothing. The
-     * three decision methods never pass a foreign id - each resolves the instance with a
-     * MUST_EXIST lookup keyed on enrol = 'apply' first - but this method is public, and an
-     * enrol_apply trail row against another plugin's enrolment would be uninterpretable.
+     * three decision methods never pass a foreign id, because their lookup
+     * (enrol_apply_plugin::get_pending_user_enrolment()) joins on enrol = 'apply', but this
+     * method is public, and an enrol_apply trail row against another plugin's enrolment would be
+     * uninterpretable.
      *
      * Not a substitute for create(), the writer for a real application and the only one that
      * can hold the snapshot.
@@ -207,9 +208,9 @@ class submission {
      * while complete_approval() notifies the applicant of the second approval.
      *
      * Only the caller knows the enrolment genuinely moved: confirm_enrolment() processes only
-     * rows get_pending_user_enrolment() returned, which admits suspended and waiting-list rows
-     * only, and the hook callback fires only on a status change to active. A bare decide() call
-     * knows nothing, so the default stays conservative.
+     * rows get_pending_user_enrolment() returned, which are this plugin's applications still
+     * awaiting a decision, and the hook callback fires only on a status change to active. A bare
+     * decide() call knows nothing, so the default stays conservative.
      *
      * Passing it is safe for the double pass complete_approval() makes on every queue approval:
      * both passes run in one request with one $USER, so the second restamps the same decider.

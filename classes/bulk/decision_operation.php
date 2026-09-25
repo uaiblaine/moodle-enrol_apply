@@ -50,9 +50,9 @@ abstract class decision_operation extends enrol_bulk_enrolment_operation {
      *
      * The base class is handed `array $users` and promises nothing about it, so this is
      * where the operation decides what it owns. Through core's dispatch every row is an apply
-     * row already (the manager is filtered to one instance), but a foreign user enrolment id
-     * handed to confirm_enrolment() would not be skipped: get_pending_user_enrolment() has no
-     * enrol-type predicate and the MUST_EXIST lookup that follows it throws.
+     * row already (the manager is filtered to one instance). The decision methods skip a
+     * foreign user enrolment id themselves, so what this keeps is the operation's counts about
+     * this plugin's rows only.
      *
      * @param array $users Users as course_enrolment_manager::get_users_enrolments() builds them.
      * @return array User enrolment id => the user_enrolments row, for this plugin's rows only.
@@ -156,10 +156,10 @@ abstract class decision_operation extends enrol_bulk_enrolment_operation {
      * Which of those are actually applications awaiting a decision.
      *
      * The predicate is queue::is_awaiting_decision(), the object-form definition of "awaiting a
-     * decision" kept next to the SQL one it has to agree with. Its expiry half matters here:
-     * get_pending_user_enrolment() carries no timeend clause, so an approved enrolment that has
-     * since lapsed reads as suspended and would otherwise be decided as if it were a fresh
-     * application.
+     * decision" kept next to the SQL one it has to agree with. Its expiry half matters here: an
+     * approved enrolment that has since lapsed reads as suspended. The decision methods refuse
+     * such a row too, since get_pending_user_enrolment() applies the SQL form, so this filter
+     * decides which rows are reported as skipped rather than being the only barrier.
      *
      * Rows excluded here stay in the selection for the counting, so the operator is told how
      * many people the decision did not apply to.

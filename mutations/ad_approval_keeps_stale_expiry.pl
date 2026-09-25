@@ -1,7 +1,7 @@
 # AD: let an approval inherit an expiry the row was already carrying, by not writing timeend at
-# all. With no enrolperiod on the instance nothing else overwrites it, so a past date survives and
-# the applicant ends up ACTIVE with no access - and under the shipped expiredaction of KEEP
-# nothing corrects it.
+# all. With no enrolperiod on the instance nothing else overwrites it, so a leftover date survives
+# and the approved enrolment ends on it instead of never. (A past date can no longer reach an
+# approval: the decision lookup refuses an expired row.)
 #
 # Anchored on the timestart line above it, because the assignment alone also appears in
 # wait_enrolment().

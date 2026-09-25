@@ -806,12 +806,18 @@ class applications extends \table_sql implements dynamic_table {
             $name = 'queuefilter' . (++$index);
 
             if ($offered->control === 'select') {
-                /* A closed vocabulary is compared for equality, case-insensitively through
-                   sql_equal(): a bare `=` is case sensitive on PostgreSQL but follows the column's
-                   usually case-insensitive collation on MariaDB. Case must not matter because an
-                   administrator may re-case a menu option while {user_info_data} keeps the
-                   spelling it was written with. */
-                $wheres[] = $DB->sql_equal($offered->expression, ':' . $name, false, false);
+                /* A closed vocabulary is compared for equality through sql_equal(), case-insensitive
+                   and accent-sensitive, which every database family can express: LOWER() on both
+                   sides, plus the charset's _bin collation on MySQL and MariaDB. A bare `=` is case
+                   sensitive on PostgreSQL but follows the column's usually case- and
+                   accent-insensitive collation on MariaDB.
+
+                   Case must not matter because an administrator may re-case a menu option while
+                   {user_info_data} keeps the spelling it was written with. Accents must, because
+                   two options differing only by one ("Pais" and "País") are two members of the
+                   vocabulary, and accent-insensitive equality is what MySQL and MariaDB alone
+                   would give. */
+                $wheres[] = $DB->sql_equal($offered->expression, ':' . $name, false, true);
                 $params[$name] = $value;
                 continue;
             }

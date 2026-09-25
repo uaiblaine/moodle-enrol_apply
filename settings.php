@@ -267,13 +267,19 @@ if ($ADMIN->fulltree) {
 
     /* The config key stays 'maxenrolled' while the strings are 'maxapplicants': the lang key
        changed because its meaning did - it names one of two limits now - but a config key is
-       data, and renaming it would silently reset the limit every site has configured. */
+       data, and renaming it would silently reset the limit every site has configured.
+
+       Both defaults take a regex rather than PARAM_INT, so a negative is refused as the instance
+       form refuses it (enrol_apply_edit_form::validation()): PARAM_INT stores -1 as typed, and
+       \enrol_apply\local\capacity reads it as no limit. Unlike PARAM_INT, the regex does not
+       turn an emptied field into 0, so an empty value is refused as well. */
     $settings->add(new admin_setting_configtext(
         'enrol_apply/maxenrolled',
         get_string('maxapplicants', 'enrol_apply'),
         get_string('maxapplicants_help', 'enrol_apply'),
         0,
-        PARAM_INT
+        '/^[0-9]+$/',
+        5
     ));
 
     $settings->add(new admin_setting_configtext(
@@ -281,7 +287,8 @@ if ($ADMIN->fulltree) {
         get_string('places', 'enrol_apply'),
         get_string('places_help', 'enrol_apply'),
         0,
-        PARAM_INT
+        '/^[0-9]+$/',
+        5
     ));
 
     if (!during_initial_install()) {
@@ -311,12 +318,14 @@ if ($ADMIN->fulltree) {
     ));
 }
 
-/* Gating this on $hassiteconfig alone hid the site-wide queue from exactly the people it
-   is for: a manager may hold enrol/apply:manageapplications at system level without
-   holding moodle/site:config. The capability is passed to admin_externalpage so the node
-   is only shown to users who can actually use it. The guard itself is kept because
-   registering the node unconditionally errored on the login page. */
-if ($hassiteconfig || has_capability('enrol/apply:manageapplications', context_system::instance())) {
+/* The site-wide queue's node in Site administration, for site administrators only: core
+   includes an enrol plugin's settings.php solely for moodle/site:config holders
+   (core\plugininfo\enrol::load_settings() returns early otherwise), so no condition here can
+   show the node to anybody else. A system-level holder of enrol/apply:manageapplications
+   without moodle/site:config reaches the same queue at /enrol/apply/manage.php by its url,
+   which \enrol_apply\local\queue::listing_scope() serves them. The condition restates core's
+   gate rather than widening it. */
+if ($hassiteconfig) {
     $ADMIN->add('courses', new admin_externalpage(
         'enrol_apply',
         get_string('applymanage', 'enrol_apply'),

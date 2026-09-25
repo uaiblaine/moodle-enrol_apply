@@ -23,11 +23,11 @@
  * screen when no script ran; the two go together.
  *
  * Table refreshes: refreshTableContent() replaces the whole table region on a page turn, a sort or
- * a filter change, while the bulk bar (in the sticky footer) and the filter bar's chips, clear-all
- * control and count line all live outside that region. The refreshed html comes from
- * core_table\external\dynamic\get, which returns no JavaScript, so everything outside the region
- * is reset or redrawn here from the tableContentRefreshed event. The selection count is worded
- * "on this page" because a refresh discards the selection.
+ * a filter change, while the bulk bar (in the sticky footer), the filter bar's chips, clear-all
+ * control and count line, and the "Showing" line under the table all live outside that region.
+ * The refreshed html comes from core_table\external\dynamic\get, which returns no JavaScript, so
+ * everything outside the region is reset or redrawn here from the tableContentRefreshed event.
+ * The selection count is worded "on this page" because a refresh discards the selection.
  *
  * The filter bar narrows the queue as the operator types. The GET form underneath still works
  * with scripting off, and pressing Enter still submits it, which gives the operator a permalink.
@@ -38,7 +38,7 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-import {init as initDynamicTable, setFilters, getFilters} from 'core_table/dynamic';
+import {setFilters, getFilters} from 'core_table/dynamic';
 import CheckboxToggleAll from 'core/checkbox-toggleall';
 import DynamicTableEvents from 'core_table/local/dynamic/events';
 import Notification from 'core/notification';
@@ -58,6 +58,7 @@ const SELECTORS = {
     CHIPROW: '[data-region="chiprow"]',
     CLEARALL: '[data-region="clearall"]',
     FILTERCOUNT: '[data-region="filtercount"]',
+    SHOWING: '[data-region="showing"]',
     CHIPREMOVE: '.enrol_apply-chipremove',
 };
 
@@ -395,6 +396,41 @@ const redrawCount = (tableRoot) => {
 };
 
 /**
+ * Say which rows of how many the refreshed table shows, or hide the line when it shows none.
+ *
+ * The same rule as enrol_apply_renderer::manage_form(), which renders the line on page load: a page
+ * holding no row has no range to name, so the line is emptied and hidden rather than reading
+ * "Showing 1-0 of 0". The three numbers come off the refreshed table root, which core writes from
+ * the table's own state.
+ *
+ * @param {HTMLElement} tableRoot The refreshed table region.
+ * @return {Promise} Resolved once the line has been written or hidden.
+ */
+const redrawShowing = (tableRoot) => {
+    const line = document.querySelector(SELECTORS.SHOWING);
+    if (!line || !tableRoot) {
+        return Promise.resolve();
+    }
+
+    const total = Number(tableRoot.dataset.tableTotalRows || 0);
+    const size = Number(tableRoot.dataset.tablePageSize || 0);
+    const from = (Number(tableRoot.dataset.tablePageNumber || 1) - 1) * size + 1;
+    const to = Math.min(total, from + size - 1);
+
+    if (from > to) {
+        line.textContent = '';
+        line.classList.add('d-none');
+        return Promise.resolve();
+    }
+
+    return getString('queueshowing', 'enrol_apply', {from, to, total}).then((text) => {
+        line.textContent = text;
+        line.classList.remove('d-none');
+        return text;
+    }).catch(Notification.exception);
+};
+
+/**
  * Drop one filter, or all of them, without a page load.
  *
  * @param {String|null} drop Filter to remove, or null for every one.
@@ -440,8 +476,8 @@ export const init = (group) => {
         return;
     }
 
-    // Core already calls this from flexible_table::get_dynamic_table_html_end(); init() is idempotent.
-    initDynamicTable();
+    /* No core_table/dynamic init() here: flexible_table::get_dynamic_table_html_end() already
+       requires it for every dynamic table it renders, an empty one included. */
     setSelected(group, 0);
 
     /* The subscribe import is named because core/pubsub has no default export: a default import
@@ -461,6 +497,7 @@ export const init = (group) => {
         /* The event's target is the new table root (core dispatches on it), so the count is read
            from the refreshed markup rather than from the detached node. */
         redrawCount(e.target);
+        redrawShowing(e.target);
         syncAddressBar();
     });
 

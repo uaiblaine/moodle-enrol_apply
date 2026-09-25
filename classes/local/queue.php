@@ -27,13 +27,16 @@ use stdClass;
  * What counts as an application awaiting a decision, and who may decide it.
  *
  * awaiting_decision_where() is the only SQL definition of "awaiting a decision" in the plugin:
- * the approval queue, the submitted-comments listing, the review lookup and the retention sweep
- * all read it, so a filter that is also a correctness boundary cannot drift between copies.
+ * the approval queue, the review lookup, the previous/next walk, the other-applications warning,
+ * the retention sweep and the decision methods' own lookup
+ * ({@see \enrol_apply_plugin::get_pending_user_enrolment()}) all read it, so a filter that is also
+ * a correctness boundary cannot drift between copies.
  *
  * is_awaiting_decision() is the one deliberate second expression of the rule, for
- * {user_enrolments} rows core's participants page has already loaded and that never reach a
- * query of this plugin's: the selection handed to a bulk decision, and the row behind each of
- * that page's action icons. Keep the two in step by hand; there is no third.
+ * {user_enrolments} rows that are already loaded where no query of this plugin's can apply the
+ * SQL form: the selection core's participants page hands to a bulk decision, the row behind each
+ * of that page's action icons, and the live enrolment the report's outcome column describes from
+ * a display callback. Keep the two in step by hand; there is no third.
  *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine
@@ -68,17 +71,21 @@ final class queue {
     }
 
     /**
-     * The same predicate, applied to a user enrolment row core has already loaded.
+     * The same predicate, applied to a user enrolment row that is already loaded.
      *
-     * The twin of {@see awaiting_decision_where()}; keep the two in step. Both callers are on
+     * The twin of {@see awaiting_decision_where()}; keep the two in step. Two callers are on
      * core's participants page, which hands over {user_enrolments} rows rather than running a
      * query of this plugin's: the bulk decisions, which get the selection, and
-     * get_user_enrolment_actions(), which gets one row per action icon it is asked to build.
+     * get_user_enrolment_actions(), which gets one row per action icon it is asked to build. The
+     * third is the report's outcome formatter
+     * ({@see \enrol_apply\reportbuilder\local\formatters\submission::outcome()}), a display
+     * callback that is handed a row and can run no SQL; it uses this so that "back in the queue"
+     * and "expired" split exactly where the queue does.
      *
-     * The timeend clause matters most there, because core paints its own status badge from the
-     * same status value: under an expiredaction of suspend, somebody approved long ago comes back
-     * reading exactly like a fresh application. Under the shipped default of
-     * ENROL_EXT_REMOVED_KEEP the row stays active and the first clause excludes it.
+     * The timeend clause matters most on the participants page, because core paints its own
+     * status badge from the same status value: under an expiredaction of suspend, somebody
+     * approved long ago comes back reading exactly like a fresh application. Under the shipped
+     * default of ENROL_EXT_REMOVED_KEEP the row stays active and the first clause excludes it.
      *
      * Written as the SQL is - timeend 0 or in the future - so a negative timeend counts as
      * expired here too.
@@ -255,10 +262,11 @@ final class queue {
      * against its own course, the same refusal manage.php?id= gives. The mentee list never
      * travels, so no request can widen it.
      *
-     * Never returns false, and an unknown id does not throw: get_context() must return a context
-     * and is called before has_capability(), and a forged request must get "no permission"
-     * rather than a database exception. An id that resolves to nothing comes back with the
-     * system context and allowed false.
+     * Never returns false, and neither an unknown id nor an orphaned one throws: get_context()
+     * must return a context and is called before has_capability(), and a forged request must get
+     * "no permission" rather than a database exception. An id that names no apply instance, or
+     * names one whose course context no longer exists, comes back with the system context and
+     * allowed false.
      *
      * `allowed` is the capability half only. Course access is applied by each caller on its own
      * path: manage.php calls require_login($course) itself, and on the web service path
@@ -281,7 +289,13 @@ final class queue {
                 return self::refused();
             }
 
-            $context = context_course::instance($instance->courseid, MUST_EXIST);
+            $context = context_course::instance((int) $instance->courseid, IGNORE_MISSING);
+            if (!$context) {
+                /* An {enrol} row whose course context is gone. Core deletes the enrol rows with
+                   their course, so only a direct or interrupted deletion leaves one; it is refused
+                   like an unknown id rather than raised. */
+                return self::refused();
+            }
 
             return (object) [
                 'enrolid' => (int) $instance->id,

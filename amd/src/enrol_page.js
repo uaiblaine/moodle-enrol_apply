@@ -39,7 +39,8 @@ const SELECTORS = {
  * @param {Number} instanceId Enrol instance the card belongs to.
  */
 export function init(instanceId) {
-    prefetchStrings('enrol_apply', ['submitapplication', 'checkyourdetails']);
+    // The only string this module fetches: the modal's title comes from the button's data-title.
+    prefetchStrings('enrol_apply', ['submitapplication']);
 
     const button = document.querySelector(SELECTORS.button(instanceId));
     if (!button) {

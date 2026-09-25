@@ -86,6 +86,67 @@ final class backup_test extends \advanced_testcase {
     }
 
     /**
+     * Back a course up and extract the archive, ready to be read or restored.
+     *
+     * MODE_SAMESITE by default, not MODE_IMPORT: backup_course_task skips
+     * backup_enrolments_structure_step outside a real backup ("prevent it in any IMPORT/HUB
+     * operation"), so an import-mode copy carries no enrol data at all - not even a manual
+     * method - and there is nothing here to test. This mirrors
+     * backup/moodle2/tests/moodle2_test.php::prepare_for_enrolments_test().
+     *
+     * Kept roles need MODE_COPY: backup_controller::set_kept_roles() throws
+     * cannot_set_keep_roles_wrong_mode in any other mode, so roles passed with another mode fail
+     * the test rather than being ignored.
+     *
+     * @param \stdClass $course Course to back up.
+     * @param bool $userdata Value of the users setting.
+     * @param int $mode One of the backup::MODE_* constants.
+     * @param array $keptroles Role ids whose holders' enrolments a copy keeps, empty to keep no roles.
+     * @return array The backup id and the path of the extracted archive, in that order.
+     */
+    protected function backup_course(
+        $course,
+        bool $userdata,
+        int $mode = backup::MODE_SAMESITE,
+        array $keptroles = []
+    ): array {
+        global $CFG, $USER;
+
+        $CFG->backup_file_logger_level = backup::LOG_NONE;
+
+        $bc = new backup_controller(
+            backup::TYPE_1COURSE,
+            $course->id,
+            backup::FORMAT_MOODLE,
+            backup::INTERACTIVE_NO,
+            $mode,
+            $USER->id
+        );
+        if ($keptroles) {
+            $bc->set_kept_roles($keptroles);
+        }
+        $bc->get_plan()->get_setting('users')->set_status(backup_setting::NOT_LOCKED);
+        $bc->get_plan()->get_setting('users')->set_value($userdata);
+        $backupid = $bc->get_backupid();
+        $basepath = $bc->get_plan()->get_basepath();
+        $bc->execute_plan();
+        $results = $bc->get_results();
+        $bc->destroy();
+
+        /* Every mode but MODE_IMPORT zips the archive and deletes the directory it was written
+           in, so it is extracted back there: the XML cannot be read otherwise, and without it
+           the restore controller builds no plan and get_plan() returns null. */
+        if (!file_exists($basepath . '/moodle_backup.xml')) {
+            $results['backup_destination']->extract_to_pathname(
+                get_file_packer('application/vnd.moodle.backup'),
+                $basepath
+            );
+        }
+
+        return [$backupid, $basepath];
+    }
+
+    /**
      * Back a course up and restore it into a brand new one.
      *
      * @param \stdClass $course Course to copy.
@@ -94,7 +155,8 @@ final class backup_test extends \advanced_testcase {
      * @param bool|null $restoreusers Users setting on the RESTORE side, null to match the backup.
      * @param int $enrolments One of the backup::ENROL_* constants for the restore.
      * @param callable|null $tweakarchive Called with the extracted archive's basepath before the
-     *                                    restore, to alter the XML a fixture cannot produce.
+     *                                    restore, to check the XML or to alter it into something a
+     *                                    fixture cannot produce.
      * @return int Id of the restored course.
      */
     protected function backup_and_restore(
@@ -105,44 +167,15 @@ final class backup_test extends \advanced_testcase {
         int $enrolments = backup::ENROL_ALWAYS,
         ?callable $tweakarchive = null
     ): int {
-        global $CFG, $USER;
+        global $USER;
 
-        $CFG->backup_file_logger_level = backup::LOG_NONE;
+        [$backupid, $backupbasepath] = $this->backup_course($course, $userdata);
 
-        /* MODE_SAMESITE, not MODE_IMPORT: backup_course_task skips
-           backup_enrolments_structure_step outside a real backup ("prevent it in any
-           IMPORT/HUB operation"), so an import-mode copy carries no enrol data at all —
-           not even a manual method — and there is nothing here to test. This mirrors
-           backup/moodle2/tests/moodle2_test.php::prepare_for_enrolments_test(). */
-        $bc = new backup_controller(
-            backup::TYPE_1COURSE,
-            $course->id,
-            backup::FORMAT_MOODLE,
-            backup::INTERACTIVE_NO,
-            backup::MODE_SAMESITE,
-            $USER->id
-        );
-        $bc->get_plan()->get_setting('users')->set_status(backup_setting::NOT_LOCKED);
-        $bc->get_plan()->get_setting('users')->set_value($userdata);
-        $backupid = $bc->get_backupid();
-        $backupbasepath = $bc->get_plan()->get_basepath();
-        $bc->execute_plan();
-        $results = $bc->get_results();
-        $bc->destroy();
-
-        /* A real backup is zipped, and the restore controller can only build a plan from
-           an extracted one — without this it returns null from get_plan(). */
-        if (!file_exists($backupbasepath . '/moodle_backup.xml')) {
-            $results['backup_destination']->extract_to_pathname(
-                get_file_packer('application/vnd.moodle.backup'),
-                $backupbasepath
-            );
-        }
-
-        /* An archive written by an older version of this plugin cannot be produced by a
-           fixture, so editing the extracted XML is the only way to reach that path. A restore
-           handler reading an element missing from such an archive gets an undefined property,
-           an E_WARNING that --fail-on-warning turns into a failed run. */
+        /* The callback sees the archive before the restore reads it, to check what it carries or
+           to edit it into what no fixture can produce, such as an archive written by an older
+           version of this plugin. A restore handler reading an element missing from such an
+           archive gets an undefined property, an E_WARNING that --fail-on-warning turns into a
+           failed run. */
         if ($tweakarchive !== null) {
             $tweakarchive($backupbasepath);
         }
@@ -194,31 +227,7 @@ final class backup_test extends \advanced_testcase {
      * @return string Contents of course/enrolments.xml.
      */
     protected function backup_enrolments_xml($course, bool $userdata): string {
-        global $CFG, $USER;
-
-        $CFG->backup_file_logger_level = backup::LOG_NONE;
-
-        $bc = new backup_controller(
-            backup::TYPE_1COURSE,
-            $course->id,
-            backup::FORMAT_MOODLE,
-            backup::INTERACTIVE_NO,
-            backup::MODE_SAMESITE,
-            $USER->id
-        );
-        $bc->get_plan()->get_setting('users')->set_status(backup_setting::NOT_LOCKED);
-        $bc->get_plan()->get_setting('users')->set_value($userdata);
-        $basepath = $bc->get_plan()->get_basepath();
-        $bc->execute_plan();
-        $results = $bc->get_results();
-        $bc->destroy();
-
-        if (!file_exists($basepath . '/moodle_backup.xml')) {
-            $results['backup_destination']->extract_to_pathname(
-                get_file_packer('application/vnd.moodle.backup'),
-                $basepath
-            );
-        }
+        [, $basepath] = $this->backup_course($course, $userdata);
 
         $xml = $basepath . '/course/enrolments.xml';
         $this->assertFileExists($xml, 'MODE_SAMESITE must produce an enrolments file');
@@ -348,8 +357,40 @@ final class backup_test extends \advanced_testcase {
         $this->assertSame((string) $newgroupid, (string) $restored->decidedgroups);
 
         // A role is site-wide, so a same-site restore maps it to itself; this assertion cannot
-        // tell the mapping from a verbatim copy.
+        // tell the mapping from a verbatim copy, and the test below can.
         $this->assertSame($roleid, (int) $restored->decidedrole);
+    }
+
+    /**
+     * A decided role that no longer names a role is restored as none, not copied through.
+     *
+     * The test above cannot tell a mapping from a verbatim copy, because a same-site restore maps
+     * a role to itself. A role deleted after the decision can: its id is still in the archive,
+     * but roles.xml is built by joining the annotated ids against {role}, so the archive carries
+     * no such role and the restore has no mapping for it. A handler copying the value through
+     * would write an id that names nothing.
+     *
+     * @return void
+     */
+    public function test_a_decided_role_that_names_no_role_is_restored_as_none(): void {
+        [$course, , $applicant] = $this->create_course_with_application();
+        $roleid = create_role('Deleted after the decision', 'deletedafterdecision', '');
+        $this->record_decision($course, $applicant, [], $roleid);
+        delete_role($roleid);
+
+        $premise = function (string $basepath) use ($roleid): void {
+            $this->assertStringContainsString(
+                '<decidedrole>' . $roleid . '</decidedrole>',
+                file_get_contents($basepath . '/course/enrolments.xml'),
+                'the premise: the archive still carries the deleted role\'s id'
+            );
+        };
+        $newcourseid = $this->backup_and_restore($course, true, false, null, backup::ENROL_ALWAYS, $premise);
+        $restored = $this->restored_record($newcourseid);
+
+        // The control: the record itself travelled, so the 0 is the mapping and not a missing row.
+        $this->assertSame('I would like to join this course', $restored->comment);
+        $this->assertSame(0, (int) $restored->decidedrole);
     }
 
     /**
@@ -474,33 +515,7 @@ final class backup_test extends \advanced_testcase {
      * @return string Contents of course/enrolments.xml.
      */
     protected function copy_enrolments_xml($course, array $keptroles, bool $userdata): string {
-        global $CFG, $USER;
-
-        $CFG->backup_file_logger_level = backup::LOG_NONE;
-
-        $bc = new backup_controller(
-            backup::TYPE_1COURSE,
-            $course->id,
-            backup::FORMAT_MOODLE,
-            backup::INTERACTIVE_NO,
-            backup::MODE_COPY,
-            $USER->id
-        );
-        $bc->set_kept_roles($keptroles);
-        $bc->get_plan()->get_setting('users')->set_status(backup_setting::NOT_LOCKED);
-        $bc->get_plan()->get_setting('users')->set_value($userdata);
-
-        $basepath = $bc->get_plan()->get_basepath();
-        $bc->execute_plan();
-        $results = $bc->get_results();
-        $bc->destroy();
-
-        if (!file_exists($basepath . '/moodle_backup.xml')) {
-            $results['backup_destination']->extract_to_pathname(
-                get_file_packer('application/vnd.moodle.backup'),
-                $basepath
-            );
-        }
+        [, $basepath] = $this->backup_course($course, $userdata, backup::MODE_COPY, $keptroles);
 
         $xml = $basepath . '/course/enrolments.xml';
         $this->assertFileExists($xml, 'a copy must still produce an enrolments file');
@@ -747,32 +762,9 @@ final class backup_test extends \advanced_testcase {
      * @return void
      */
     protected function restore_into_existing($course, int $targetid): void {
-        global $CFG, $USER;
+        global $USER;
 
-        $CFG->backup_file_logger_level = backup::LOG_NONE;
-
-        $bc = new backup_controller(
-            backup::TYPE_1COURSE,
-            $course->id,
-            backup::FORMAT_MOODLE,
-            backup::INTERACTIVE_NO,
-            backup::MODE_SAMESITE,
-            $USER->id
-        );
-        $bc->get_plan()->get_setting('users')->set_status(backup_setting::NOT_LOCKED);
-        $bc->get_plan()->get_setting('users')->set_value(true);
-        $backupid = $bc->get_backupid();
-        $basepath = $bc->get_plan()->get_basepath();
-        $bc->execute_plan();
-        $results = $bc->get_results();
-        $bc->destroy();
-
-        if (!file_exists($basepath . '/moodle_backup.xml')) {
-            $results['backup_destination']->extract_to_pathname(
-                get_file_packer('application/vnd.moodle.backup'),
-                $basepath
-            );
-        }
+        [$backupid] = $this->backup_course($course, true);
 
         $rc = new restore_controller(
             $backupid,
@@ -1063,6 +1055,42 @@ final class backup_test extends \advanced_testcase {
             MUST_EXIST
         );
         $this->assertEquals(0, (int) $untouched->customint5);
+    }
+
+    /**
+     * A restore switches the instance's profile write off, on the same site as well as on another.
+     *
+     * customint8 is the per-instance half of the switch that lets an application write to
+     * {user} ({@see \enrol_apply\local\profilewriter::is_enabled()}), and restore_instance()
+     * zeroes it on every restore. A same-site restore is the one to test: a guard narrowed to
+     * cross-site restores would still pass a cross-site test, and is_samesite() can be satisfied
+     * by what the archive itself claims.
+     *
+     * Two things make the zero mean something. The archive is checked to carry the switch on, and
+     * customint3, which core backs up in the same element, arrives unchanged, so the restore did
+     * write the instance's custom fields and zeroed this one alone.
+     *
+     * @return void
+     */
+    public function test_a_restore_switches_the_profile_write_off(): void {
+        global $DB;
+
+        [$course, $instance] = $this->create_course_with_application();
+        $DB->set_field('enrol', 'customint8', 1, ['id' => $instance->id]);
+        $DB->set_field('enrol', 'customint3', 7, ['id' => $instance->id]);
+
+        $premise = function (string $basepath): void {
+            $this->assertStringContainsString(
+                '<customint8>1</customint8>',
+                file_get_contents($basepath . '/course/enrolments.xml'),
+                'the premise: the archive carries the switch on'
+            );
+        };
+        $newcourseid = $this->backup_and_restore($course, false, false, null, backup::ENROL_ALWAYS, $premise);
+
+        $restored = $DB->get_record('enrol', ['courseid' => $newcourseid, 'enrol' => 'apply'], '*', MUST_EXIST);
+        $this->assertEquals(7, (int) $restored->customint3, 'the control: the instance\'s custom fields were restored');
+        $this->assertEquals(0, (int) $restored->customint8);
     }
 
     /**

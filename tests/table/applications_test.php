@@ -1082,7 +1082,8 @@ final class applications_test extends \advanced_testcase {
      * A select filter finds a value whose case has drifted from the vocabulary naming it.
      *
      * A bare `=` is case-sensitive on PostgreSQL and follows the site collation on MariaDB, so the
-     * predicate uses a case-insensitive sql_equal() to answer the same on both.
+     * predicate uses a case-insensitive sql_equal() to answer the same on both. Its accent half is
+     * test_a_select_filter_keeps_two_options_differing_only_by_an_accent_apart().
      *
      * The drift is ordinary: profile_field_menu keeps its vocabulary in param1 and its values in
      * {user_info_data}, with no validation between them, so re-casing an option leaves every row
@@ -1108,6 +1109,46 @@ final class applications_test extends \advanced_testcase {
 
         $this->assertSame([(int) $this->userenrolment($wanted)], $listed);
         $this->assertNotContains((int) $this->userenrolment($decoy), $listed);
+    }
+
+    /**
+     * A select filter keeps two options that differ only by an accent apart.
+     *
+     * "Pais" and "País" are two members of the menu's vocabulary, and picking one must not list
+     * the applicants who hold the other. PostgreSQL's LOWER() comparison is accent-sensitive by
+     * itself; MariaDB and MySQL are accent-sensitive only because sql_equal() is asked to be, which
+     * makes it add the charset's _bin collation instead of trusting the column's accent-insensitive
+     * one.
+     *
+     * Only MariaDB or MySQL can make this fail. The control is the case half: the same filter
+     * still finds a value whose case has drifted, so an accent-sensitive comparison did not become
+     * a case-sensitive one on the way.
+     *
+     * @return void
+     */
+    public function test_a_select_filter_keeps_two_options_differing_only_by_an_accent_apart(): void {
+        $this->setAdminUser();
+        $field = $this->profile_field('home', 'menu', "Pais\nPaís");
+        $plain = $this->applicant();
+        $recased = $this->applicant();
+        $accented = $this->applicant();
+        $this->set_profile_value($plain, $field, 'Pais');
+        $this->set_profile_value($recased, $field, 'PAIS');
+        $this->set_profile_value($accented, $field, 'País');
+
+        set_config('showuseridentity', 'profile_field_home');
+        set_config('queuefilterfields', 'profile_field_home', 'enrol_apply');
+
+        $unaccented = $this->narrowed_by(['pf' . $field->id => 'Pais']);
+        sort($unaccented);
+        $expected = [(int) $this->userenrolment($plain), (int) $this->userenrolment($recased)];
+        sort($expected);
+        $this->assertSame($expected, $unaccented);
+
+        $this->assertSame(
+            [(int) $this->userenrolment($accented)],
+            $this->narrowed_by(['pf' . $field->id => 'País'])
+        );
     }
 
     /**
@@ -1248,7 +1289,7 @@ final class applications_test extends \advanced_testcase {
      */
     public function test_a_scoped_queue_ignores_a_course_filter(): void {
         $this->setAdminUser();
-        $applicant = $this->applicant();
+        $this->applicant();
 
         $table = applications::for_scope(
             (int) $this->instance->id,

@@ -164,6 +164,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   over the page, because both vocabularies appear somewhere in it and a page-wide match would pass
   against the very defect.
 
+- **A decision acts only on an application the queue would list.** Approving, deferring and
+  cancelling looked the posted user enrolment up by its status alone. So a crafted request could
+  cancel, re-defer (which put it back in the queue) or approve again an approval whose period had
+  ended under the *suspend* expiry action, and a posted id belonging to another enrolment method
+  stopped a batch half way, after the rows before it had already been decided. The lookup now
+  applies the queue's own definition of "awaiting a decision" and only to this plugin's enrolments;
+  anything else is skipped and left out of the count, like any row the decider may not act on.
+- **Backing out of a cancellation no longer puts the decider's note in the address bar.** The
+  confirmation's Keep button was a GET form carrying the private note and the message to the
+  applicant, so both reached web server logs, the browser history and the Referer header. It posts
+  now.
+- **Category names in the site-wide queue's filter are escaped once.** A category called `R&D`
+  appeared as `R&amp;D` in the category control and in its filter chip.
+- **An empty queue no longer says "Showing 1-0 of 0"**, and the count line is redrawn after the
+  queue narrows as you type, where it used to keep describing the page as it first loaded.
+- **The new-application notice goes only to deciders whose own enrolment is active.** A teacher
+  whose enrolment was suspended or had ended was still mailed a link to a queue the course would not
+  let them open.
+- **The link in the new-application notice is labelled as the approval queue it opens**, not as
+  "Course".
+- **The report's outcome column agrees with the queue at the edges.** An approval ending exactly
+  now, or carrying the negative end date an archive can bring, read as back in the queue while the
+  queue left it out.
+- **Field filters offered as a drop-down list tell accented options apart on MySQL and MariaDB**,
+  as they already did on PostgreSQL; case still does not matter.
+- **A queue address naming an enrolment method whose course is gone** is refused like any unknown
+  id instead of raising an exception.
+
 ### Removed
 
 - **The decision-time enrolment period.** `confirm_enrolment()` accepted `timestart` and `timeend`
@@ -182,6 +210,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Internal: the code comments were rewritten to be accurate and objective, and notes about the
   development environment were taken out of the shipped code. No behaviour changed.
+- **A negative applicant limit or number of places is refused.** Both read as "no limit" without a
+  word, so a teacher who typed -1 meaning "none" opened the method to everybody. The instance form
+  now says so, and the two site defaults accept only a whole number (0 for no limit), which also
+  means an emptied default has to be set back to 0.
+- **The Site administration entry for the site-wide queue is for site administrators.** Moodle
+  builds an enrolment plugin's settings only for them, so the condition that seemed to offer it to
+  anyone holding `enrol/apply:manageapplications` at system level never took effect. Such a user,
+  and a mentor, open `/enrol/apply/manage.php` directly; the README now says so.
+- **The retention setting's help says what the sweep does**: the period counts from submission,
+  an application still awaiting a decision keeps its record whatever its age, and taking a decision
+  does not restart the count.
+- Internal: the queue page and the acknowledgement page render through templates only, the queue
+  script no longer re-initialises core's dynamic table, and the test suite gained the cases and
+  mutation gates that hold each of the fixes above.
+
 - **The approval queue is a dynamic table.** Its rows now refresh over
   `core_table_get_dynamic_table_content` instead of reloading the page, which is what the rebuilt
   queue is assembled on. Paging and sorting still emit real anchors, so both keep working with

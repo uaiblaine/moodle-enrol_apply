@@ -92,11 +92,7 @@ if (\enrol_apply\local\profilewriter::is_enabled($instance)) {
        cancelemailchange), so this list is the only thing telling them what to fill in. */
     $missing = \enrol_apply\local\completeness::missing($instance, $USER);
     if ($missing) {
-        echo $OUTPUT->heading(get_string('profileincomplete', 'enrol_apply'), 3);
-        echo html_writer::tag('p', get_string('profileincomplete_desc', 'enrol_apply'));
-        echo html_writer::alist(array_map(static function (array $field): string {
-            return s($field['label']);
-        }, $missing));
+        echo $PAGE->get_renderer('enrol_apply')->profile_missing($missing);
         echo $OUTPUT->single_button(
             new moodle_url('/user/edit.php', ['id' => $USER->id, 'returnto' => 'profile']),
             get_string('gotoprofile', 'enrol_apply'),

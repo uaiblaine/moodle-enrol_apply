@@ -190,12 +190,16 @@ Feature: Enrolment upon approval
     And I log in as "teacher1"
     And I am on the "Course 1" "enrolled users" page
     And I click on "Decide this application" "link" in the "Student 1" "table_row"
+    And I set the field "Message to the applicant" to "Please resend your transcript."
+    And I set the field "Note for the record" to "Checking with the registry."
     When I press "Cancel this application"
     Then I should see "Cancel this application?"
     And I should see "Keep the application"
-    # Backing out leaves the application exactly where it was.
+    # Backing out leaves the application exactly where it was, and brings back what was typed.
     When I press "Keep the application"
     Then I should see "Awaiting a decision"
+    And the field "Message to the applicant" matches value "Please resend your transcript."
+    And the field "Note for the record" matches value "Checking with the registry."
     # And going through with it does unenrol them.
     When I press "Cancel this application"
     And I press "Cancel and unenrol"
@@ -293,6 +297,7 @@ Feature: Enrolment upon approval
     When I log in as "teacher1"
     And I am on the "C1" "enrol_apply > manage applications" page
     Then I should see "2 of 2 applications"
+    And I should see "Showing 1-2 of 2"
     # A selection the operator is about to lose, and the bar that must stop claiming it.
     And I click on "Select all" "checkbox"
     And I should see "2 selected on this page"
@@ -301,6 +306,8 @@ Feature: Enrolment upon approval
     Then I should see "Zephyrina Quillsworth"
     And I should not see "Student 1"
     And I should see "1 of 2 applications"
+    # The line under the table is outside the refreshed region, so the module redraws it too.
+    And I should see "Showing 1-1 of 1"
     And I should see "Search quillsworth"
     And I should see "0 selected on this page"
     And the "With selected users..." "field" should be disabled
@@ -308,7 +315,12 @@ Feature: Enrolment upon approval
     When I click on "Remove the filter Search: quillsworth" "link"
     Then I should see "Student 1"
     And I should see "2 of 2 applications"
+    And I should see "Showing 1-2 of 2"
     And I should not see "Search quillsworth"
+    # A search matching nothing leaves no range to name, so the line goes rather than reading 1-0 of 0.
+    When I set the field "Search" to "nothingmatchesthis"
+    Then I should see "0 of 2 applications"
+    And I should not see "Showing"
 
   # The configurable per-field filters, driven through the GET form with no JavaScript. This is
   # the only test of manage.php's filter parameter reading, since a page script has no unit test.

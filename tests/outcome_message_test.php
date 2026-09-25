@@ -119,11 +119,17 @@ final class outcome_message_test extends \advanced_testcase {
     /**
      * The bodies of every message sent to the applicant during the callback.
      *
+     * Each body is the HTML half followed by the plain-text half, unless only the HTML half is
+     * asked for: the plain half is derived from it by html_to_text(), which turns escaped markup
+     * back into literal text, so an assertion that no markup reached the message reads the HTML
+     * half alone.
+     *
      * @param \stdClass $applicant Recipient to filter on.
      * @param callable $decide What to run while the sink is open.
+     * @param bool $htmlonly Whether to return only the HTML half of each body.
      * @return array List of message bodies.
      */
-    protected function bodies_of(\stdClass $applicant, callable $decide): array {
+    protected function bodies_of(\stdClass $applicant, callable $decide, bool $htmlonly = false): array {
         $sink = $this->redirectMessages();
         $decide();
 
@@ -143,7 +149,9 @@ final class outcome_message_test extends \advanced_testcase {
         $bodies = [];
         foreach ($messages as $message) {
             if ((int) $message->useridto === (int) $applicant->id) {
-                $bodies[] = (string) $message->fullmessagehtml . ' ' . (string) $message->fullmessage;
+                $bodies[] = $htmlonly
+                    ? (string) $message->fullmessagehtml
+                    : (string) $message->fullmessagehtml . ' ' . (string) $message->fullmessage;
             }
         }
 
@@ -611,24 +619,28 @@ final class outcome_message_test extends \advanced_testcase {
      * this half is free text somebody typed into a form. It is escaped at that boundary rather
      * than stripped, because stripping would silently delete from a bare "<" onwards.
      *
+     * The typed text carries a whole tag, so the absence of the raw tag and the presence of its
+     * escaped form are both about the escaping; the HTML half is read alone (see bodies_of()).
+     *
      * @return void
      */
     public function test_the_message_is_escaped_where_it_lands(): void {
         [$applicant, $ueid] = $this->apply();
         $this->setAdminUser();
 
-        $typed = 'Bring A<B and a pen & paper';
-        $bodies = $this->bodies_of($applicant, function () use ($ueid, $typed): void {
+        $typed = 'Bring A<B and a pen & paper <script>alert(1)</script>';
+        $decide = function () use ($ueid, $typed): void {
             $this->plugin->confirm_enrolment([$ueid], $typed);
-        });
-        $body = implode(' ', $bodies);
+        };
+        $html = implode(' ', $this->bodies_of($applicant, $decide, true));
 
         // Stored exactly as typed: the record is the audit trail, not a rendering.
         $this->assertSame($typed, (string) $this->record($applicant)->outcomemessage);
 
         // Escaped in the HTML body, so no markup is injected and no tail is lost.
-        $this->assertStringContainsString('A&lt;B', $body);
-        $this->assertStringContainsString('&amp;', $body);
-        $this->assertStringNotContainsString('<script', $body);
+        $this->assertStringContainsString('A&lt;B', $html);
+        $this->assertStringContainsString('pen &amp; paper', $html);
+        $this->assertStringContainsString('&lt;script&gt;alert(1)&lt;/script&gt;', $html);
+        $this->assertStringNotContainsString('<script', $html);
     }
 }

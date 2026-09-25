@@ -58,6 +58,15 @@ class purge_submissions extends \core\task\scheduled_task {
      * against and the one date every record carries; timedecided stays 0 on a record that was
      * never decided, so it cannot date those.
      *
+     * A decision does not restart the clock. A record is swept once its application has left the
+     * queue and its timecreated is older than the retention period, even when the decision was
+     * taken moments before this run: an application that waited in the queue longer than the
+     * retention period loses its record, decider and outcome message included, at the next run
+     * after it is decided. That is deliberate. The setting is defined from submission, and
+     * keeping personal data longer than the administrator set is the riskier direction. A record
+     * submission::ensure() reconstructs carries the enrolment's own timecreated and is in the
+     * same position.
+     *
      * It never deletes a record whose application is still awaiting a decision, pending or
      * deferred, whatever its age. Nothing expires such an application (apply() and
      * wait_enrolment() both leave timeend at 0), so an old one is still live, and its record

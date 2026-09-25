@@ -73,9 +73,8 @@ final class capacity {
      * How many applications this method will accept in total.
      *
      * Anything at or below zero means "no limit". It must stay `> 0` rather than `!== 0`, or a
-     * negative value would mean "permanently closed", and nothing keeps one out: the instance
-     * form field and the site default it starts from are PARAM_INT with no range check, and
-     * restore_instance() passes the archived value through.
+     * negative value would mean "permanently closed": the instance form and the site default
+     * refuse a negative, but restore_instance() passes the archived value through.
      *
      * @param stdClass $instance Course enrol instance.
      * @return int Applications allowed, or 0 when there is no limit.
@@ -126,8 +125,8 @@ final class capacity {
      * How many applicants the method may have approved at one time.
      *
      * Zero and negative both mean "no limit", as in applicant_limit() and for the same reason:
-     * the form field and its site default accept any integer, and a restore passes the archived
-     * value through.
+     * the form and its site default refuse a negative, but a restore passes the archived value
+     * through.
      *
      * @param stdClass $instance Course enrol instance.
      * @return int Places allowed, or 0 when there is no limit.

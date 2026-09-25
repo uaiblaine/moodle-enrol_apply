@@ -274,7 +274,7 @@ final class decision_note_test extends \advanced_testcase {
      * A later decision with the box left empty CLEARS the earlier note.
      *
      * The note belongs to the decision being taken. Without this a re-queued application - which
-     * core's "Edit enrolment" screen and an expiredaction of suspend both produce - would be
+     * core's "Edit enrolment" screen produces by suspending an approved enrolment - would be
      * decided a second time carrying the first decision's reason, with nothing on screen saying
      * so. The outcome message follows the same rule.
      *
@@ -578,10 +578,10 @@ final class decision_note_test extends \advanced_testcase {
     /**
      * An enrolment this plugin does not own writes nothing, and neither does one that is gone.
      *
-     * get_pending_user_enrolment() carries no enrol-type predicate. The decision methods refuse
-     * a foreign user enrolment id with their MUST_EXIST instance lookup before calling ensure(),
-     * and ensure() refuses it again itself, so any other caller is safe too. Writing a record for
-     * it would put an enrol_apply trail on somebody else's enrolment.
+     * The decision methods never hand ensure() a foreign user enrolment id, because
+     * get_pending_user_enrolment() joins on this plugin's instances; ensure() refuses one again
+     * itself, so any other caller is safe too. Writing a record for it would put an enrol_apply
+     * trail on somebody else's enrolment.
      *
      * @return void
      */

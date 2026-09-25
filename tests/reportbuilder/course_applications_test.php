@@ -228,10 +228,6 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
      * @return array List of row objects carrying the formatted cell values.
      */
     protected function rows(?\core_reportbuilder\system_report $report = null): array {
-        global $CFG;
-
-        require_once($CFG->dirroot . '/reportbuilder/classes/table/system_report_table.php');
-
         $report = $report ?? $this->report();
         $table = \core_reportbuilder\table\system_report_table::create(
             (int) $report->get_report_persistent()->get('id'),
@@ -408,6 +404,85 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
         $this->setUser($this->reader());
 
         $this->assertSame(get_string('outcomeexpired', 'enrol_apply'), $this->outcome_cell());
+    }
+
+    /**
+     * A suspended approval with a negative end reads as expired, because the queue excludes it.
+     *
+     * A restore passes an archived timeend through verbatim, so a negative one is reachable. The
+     * queue's rule is "timeend = 0 OR timeend > now", which a negative end fails, so the queue
+     * does not list the application and the report must not say it is back there.
+     *
+     * The control is the second half: with no end at all the same row is in the queue and reads
+     * as suspended, so the first half cannot pass through a lookup that finds nothing anyway.
+     *
+     * @return void
+     */
+    public function test_a_negative_end_reads_as_expired_because_the_queue_excludes_it(): void {
+        global $DB;
+
+        $applicant = $this->seed_live(ENROL_USER_SUSPENDED, submission::STATUS_APPROVED);
+        $ueid = (int) $DB->get_field(
+            'user_enrolments',
+            'id',
+            ['userid' => $applicant->id, 'enrolid' => $this->instance->id],
+            MUST_EXIST
+        );
+        $DB->set_field('user_enrolments', 'timeend', -1, ['id' => $ueid]);
+        $this->setUser($this->reader());
+
+        $this->assertNull(\enrol_apply\local\queue::application($ueid));
+        $this->assertSame(get_string('outcomeexpired', 'enrol_apply'), $this->outcome_cell());
+
+        $DB->set_field('user_enrolments', 'timeend', 0, ['id' => $ueid]);
+
+        $this->assertNotNull(\enrol_apply\local\queue::application($ueid));
+        $this->assertSame(get_string('outcomesuspended', 'enrol_apply'), $this->outcome_cell());
+    }
+
+    /**
+     * The outcome of a suspended approval splits exactly where the queue does.
+     *
+     * Called on the formatter directly rather than through a rendered report, so the end that
+     * equals now is still now when it is judged. Each case states the label it must produce and
+     * checks that it agrees with {@see \enrol_apply\local\queue::is_awaiting_decision()}: back in
+     * the queue reads as suspended, anything else as expired.
+     *
+     * @return void
+     */
+    public function test_the_suspended_outcome_splits_where_the_queue_does(): void {
+        $suspended = get_string('outcomesuspended', 'enrol_apply');
+        $expired = get_string('outcomeexpired', 'enrol_apply');
+        $now = time();
+        $cases = [
+            'no end' => [0, $suspended],
+            'an end in the future' => [$now + DAYSECS, $suspended],
+            'an end equal to now' => [$now, $expired],
+            'an end in the past' => [$now - DAYSECS, $expired],
+            'a negative end' => [-1, $expired],
+        ];
+
+        foreach ($cases as $label => [$timeend, $expected]) {
+            // Shaped as the report's row arrives: every column a string.
+            $row = (object) [
+                'outcomeueid' => '7',
+                'outcomeenrolstatus' => (string) ENROL_USER_SUSPENDED,
+                'outcomeenroltimeend' => (string) $timeend,
+            ];
+            $outcome = submissionformatter::outcome((string) submission::STATUS_APPROVED, $row);
+
+            $this->assertSame($expected, $outcome, $label);
+
+            $inqueue = \enrol_apply\local\queue::is_awaiting_decision((object) [
+                'status' => ENROL_USER_SUSPENDED,
+                'timeend' => $timeend,
+            ]);
+            $this->assertSame(
+                $inqueue,
+                $outcome === $suspended,
+                $label . ': the report and the queue disagree'
+            );
+        }
     }
 
     /**

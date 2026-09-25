@@ -141,7 +141,8 @@ class enrol_apply_edit_form extends moodleform {
 
         /* The two capacity numbers: customint3 is how many people may apply, customint4 how
            many may be approved at once. The gap between them is overbooking, which is
-           legitimate where approval is discretionary.
+           legitimate where approval is discretionary. 0 means no limit, and validation()
+           refuses a negative.
 
            Added before the profile-field header below, which stays open until the next header
            or the action buttons: anything added after it would render inside that section, or
@@ -252,7 +253,7 @@ class enrol_apply_edit_form extends moodleform {
     }
 
     /**
-     * Reject a submission whose dates or cohort do not hold up server side.
+     * Reject a submission whose dates, capacity limits or cohort do not hold up server side.
      *
      * @param array $data Submitted form data.
      * @param array $files Submitted files.
@@ -271,6 +272,15 @@ class enrol_apply_edit_form extends moodleform {
             $closes = (int) ($data['enrolenddate'] ?? 0);
             if ($closes > 0 && $closes < $opens) {
                 $errors['enrolenddate'] = get_string('enrolenddaterror', 'enrol_apply');
+            }
+        }
+
+        /* A negative limit is refused rather than stored: \enrol_apply\local\capacity reads
+           anything below 1 as no limit, so the instance would keep a number it does not honour
+           as typed. 0 is the way to ask for no limit. */
+        foreach (['customint3', 'customint4'] as $limit) {
+            if ((int) ($data[$limit] ?? 0) < 0) {
+                $errors[$limit] = get_string('limitnegative', 'enrol_apply');
             }
         }
 

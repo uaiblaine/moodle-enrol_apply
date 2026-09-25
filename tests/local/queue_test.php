@@ -1064,6 +1064,45 @@ final class queue_test extends \advanced_testcase {
         $this->assertNull(queue::neighbours(queue::application($application), $scope)['next']);
         $this->assertSame([$application], $this->walk_from($application, $instance));
     }
+
+    /**
+     * An enrol row whose course is gone is refused like an unknown id, and without throwing.
+     *
+     * Core deletes the enrol rows with their course, so only a direct or interrupted deletion
+     * leaves one behind. Its id still names an apply instance, so the unknown-id branch does not
+     * answer it; the missing course context has to. The dynamic table's service calls
+     * get_context() before any capability check, so a throw there would answer a forged or stale
+     * filter value with a database exception rather than "no permission".
+     *
+     * The control is the first assertion: the same id is allowed to the same administrator while
+     * the course exists, so the refusal comes from the orphaning and not from the id or the reader.
+     *
+     * @return void
+     */
+    public function test_an_orphaned_enrol_row_is_refused_without_throwing(): void {
+        global $DB;
+
+        $this->setAdminUser();
+        $enrolid = (int) $this->instance->id;
+        $this->assertTrue(queue::listing_scope($enrolid)->allowed);
+
+        \context_helper::delete_instance(CONTEXT_COURSE, (int) $this->course->id);
+        $DB->delete_records('course', ['id' => $this->course->id]);
+        // The precondition: the enrol row is still there, so the unknown-id branch cannot answer.
+        $this->assertTrue($DB->record_exists('enrol', ['id' => $enrolid, 'enrol' => 'apply']));
+
+        $scope = queue::listing_scope($enrolid);
+        $this->assertFalse($scope->allowed);
+        $this->assertNull($scope->instance);
+        $this->assertSame(0, $scope->enrolid);
+        $this->assertEquals(\context_system::instance(), $scope->context);
+
+        // And through the table core's service builds, which is where a throw would surface.
+        $table = \enrol_apply\table\applications::for_scope($enrolid);
+        $this->assertEquals(\context_system::instance(), $table->get_context());
+        $this->assertFalse($table->has_capability());
+    }
+
     /**
      * The earlier-applications lookup returns this applicant's records and nobody else's.
      *

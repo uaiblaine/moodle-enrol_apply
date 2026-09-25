@@ -24,6 +24,7 @@
     role names inside the decision_controls partial; see it.
 
     Context variables required for this template:
+    * descriptiontext string - one sentence under the page heading explaining the queue's badges
     * formurl string - url the decision form posts back to
     * sesskey string - session key guarding the state change
     * capacityhtml string - the decision context above the table, already rendered. OUTSIDE the
@@ -33,7 +34,10 @@
       so it CANNOT sit inside the decision form below - HTML forbids nested forms, and nesting it
       would make the search box submit a decision
     * tablehtml string - pre-rendered applications table
-    * showingtext string - which rows of how many are on screen
+    * hasshowing boolean - whether the page holds any row, and so a range to name
+    * showingtext string - which rows of how many are on screen, empty when hasshowing is false.
+      The line stays in the markup, hidden with d-none, so that enrol_apply/manage can fill it and
+      show it after an AJAX refresh brings rows back; data-region="showing" is how it finds it
     * hasplacesnotice boolean - whether every place on the method is taken
     * placesnotice string - the sentence saying so
     * hasclosednotice boolean - whether the method has reached its applicant limit and is
@@ -57,6 +61,7 @@
 
     Example context (json):
     {
+        "descriptiontext": "Applications badged as on the waiting list have been deferred.",
         "formurl": "https://example.com/enrol/apply/manage.php?id=7",
         "sesskey": "Ab12Cd34Ef",
         "hasplacesnotice": true,
@@ -66,6 +71,7 @@
         "capacityhtml": "<div class=\"card\"><div class=\"card-body\">12 awaiting decision</div></div>",
         "tablehtml": "<table class=\"generaltable\"><tbody><tr><td>Student 1</td></tr></tbody></table>",
         "filtershtml": "<form method=\"get\"><input type=\"text\" name=\"search\" value=\"\"></form>",
+        "hasshowing": true,
         "showingtext": "Showing 1-4 of 4",
         "stickyfooter": "<div id=\"sticky-footer\"><button type=\"submit\">Go</button></div>",
         "messagelabel": "Message to the applicant",
@@ -92,6 +98,7 @@
     }
 }}
 <div class="enrol_apply-queue">
+    <p>{{descriptiontext}}</p>
     {{#hasplacesnotice}}
         <div class="alert alert-warning" role="status">{{placesnotice}}</div>
     {{/hasplacesnotice}}
@@ -105,7 +112,7 @@
         <div class="enrol_apply-table">
             {{{tablehtml}}}
         </div>
-        <div class="enrol_apply-showing small text-muted mb-3">{{showingtext}}</div>
+        <div class="enrol_apply-showing small text-muted mb-3{{^hasshowing}} d-none{{/hasshowing}}" data-region="showing">{{showingtext}}</div>
         {{> enrol_apply/decision_controls }}
         {{{stickyfooter}}}
     </form>

@@ -154,24 +154,164 @@ final class bootstrap_compat_test extends \basic_testcase {
     }
 
     /**
-     * Whether a line is prose rather than markup.
+     * The lines of one source that can reach the browser, keyed by their line number.
      *
-     * These rules are about what reaches the browser. A comment naming a class in order to
-     * explain the rule - as this file's own neighbours do - is not a breach of it. Only a line
-     * that itself starts with a comment marker is recognised, so a continuation line of a block
-     * comment that does not start with "*" is scanned as markup.
+     * These rules are about what reaches the browser, so a comment naming a class in order to
+     * explain the rule - as this file's own neighbours do - is not a breach of it. Comments are
+     * removed from the whole source before it is split, each replaced by the newlines it spanned
+     * so every remaining line keeps its number, as strip_css_comments() does for the stylesheet.
+     * Deciding line by line cannot work: a line inside a block comment need not start with a
+     * comment marker, and this plugin's block comments continue on indented prose lines with no
+     * leading "*".
      *
-     * @param string $line One raw source line.
-     * @return bool True when the line is blank or opens with a PHP, JS or Mustache comment marker.
+     * @param string $source File contents.
+     * @param string $extension File extension without the dot: php, mustache or js.
+     * @return array Line number (1-based) => raw line, blank lines left out.
      */
-    private function is_comment_line(string $line): bool {
-        $trimmed = ltrim($line);
+    private function markup_lines(string $source, string $extension): array {
+        $stripped = match ($extension) {
+            'php' => $this->strip_php_comments($source),
+            'mustache' => $this->strip_mustache_comments($source),
+            'js' => $this->strip_js_comments($source),
+        };
 
-        return $trimmed === ''
-            || str_starts_with($trimmed, '//')
-            || str_starts_with($trimmed, '/*')
-            || str_starts_with($trimmed, '*')
-            || str_starts_with($trimmed, '{{!');
+        $lines = [];
+        foreach (explode("\n", $stripped) as $index => $line) {
+            if (trim($line) !== '') {
+                $lines[$index + 1] = $line;
+            }
+        }
+
+        return $lines;
+    }
+
+    /**
+     * Remove PHP comments, keeping every line on the line number it started on.
+     *
+     * The tokenizer decides what a comment is, so a comment marker inside a string literal is
+     * kept as the string it is, and a trailing // comment after code goes as well.
+     *
+     * @param string $source PHP source.
+     * @return string The same source with each comment replaced by its own newlines.
+     */
+    private function strip_php_comments(string $source): string {
+        $out = '';
+        foreach (token_get_all($source) as $token) {
+            if (is_array($token) && ($token[0] === T_COMMENT || $token[0] === T_DOC_COMMENT)) {
+                $out .= str_repeat("\n", substr_count($token[1], "\n"));
+            } else {
+                $out .= is_array($token) ? $token[1] : $token;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Remove Mustache comments, keeping every line on the line number it started on.
+     *
+     * A Mustache comment closes at the first "}}", which is also where this match stops.
+     *
+     * @param string $source Template source.
+     * @return string The same source with each comment replaced by its own newlines.
+     */
+    private function strip_mustache_comments(string $source): string {
+        return (string) preg_replace_callback(
+            '~\{\{!.*?\}\}~s',
+            static function ($match) {
+                return str_repeat("\n", substr_count($match[0], "\n"));
+            },
+            $source
+        );
+    }
+
+    /**
+     * Remove JavaScript comments, keeping every line on the line number it started on.
+     *
+     * String literals are matched first and kept, so a "/*" in a string does not open a comment
+     * and the "//" of a url does not end the line. A regular expression literal is not
+     * recognised, so a comment marker inside one would be taken for a comment.
+     *
+     * @param string $source JavaScript source.
+     * @return string The same source with each comment replaced by its own newlines.
+     */
+    private function strip_js_comments(string $source): string {
+        $strings = '"(?:\\\\.|[^"\\\\\n])*"|\'(?:\\\\.|[^\'\\\\\n])*\'|\x60(?:\\\\.|[^\x60\\\\])*\x60';
+
+        return (string) preg_replace_callback(
+            '~(' . $strings . ')|/\*.*?\*/|//[^\n]*~s',
+            static function ($match) {
+                if ($match[1] !== null) {
+                    return $match[0];
+                }
+                return str_repeat("\n", substr_count($match[0], "\n"));
+            },
+            $source,
+            flags: PREG_UNMATCHED_AS_NULL
+        );
+    }
+
+    /**
+     * Deprecated Bootstrap 4 class names used in the given lines.
+     *
+     * @param string $name File name to report the offenders under.
+     * @param array $lines Line number => line, as markup_lines() returns them.
+     * @return array One message per token found.
+     */
+    private function deprecated_class_offenders(string $name, array $lines): array {
+        $offenders = [];
+        foreach ($lines as $number => $line) {
+            foreach ($this->deprecated_class_names() as $token => $replacement) {
+                /* Matched as a whole class token: mr-2 must not be found inside data-mr-2x,
+                   and text-left must not be found inside a longer hyphenated name. */
+                if (preg_match('/(?<![-\w])' . preg_quote($token, '/') . '(?![-\w])/', $line)) {
+                    $offenders[] = $name . ':' . $number . ' uses ' . $token . ', write ' . $replacement;
+                }
+            }
+        }
+
+        return $offenders;
+    }
+
+    /**
+     * Badge backgrounds in the given lines that lack the text colour badge_text_colours() pairs them with.
+     *
+     * Only the utility paired with that background satisfies it: text-white on bg-warning is
+     * exactly the 1.95:1 case the rule exists for. The utility has to be in the same element's
+     * class list, which is the opening tag holding the background in markup, or failing that the
+     * quoted string holding it - a class list in a PHP or JavaScript string literal. A utility on
+     * a sibling or on a wrapper does not count: .badge sets its own color, so a wrapper's never
+     * reaches it. A background found in neither is checked against its whole line.
+     *
+     * @param string $name File name to report the offenders under.
+     * @param array $lines Line number => line, as markup_lines() returns them.
+     * @return array One message per background missing its paired text colour.
+     */
+    private function badge_offenders(string $name, array $lines): array {
+        $offenders = [];
+        foreach ($lines as $number => $line) {
+            foreach ($this->badge_text_colours() as $background => $required) {
+                $hasbackground = '/(?<![-\w])' . preg_quote($background, '/') . '(?![-\w])/';
+                if (!preg_match($hasbackground, $line)) {
+                    continue;
+                }
+                $scopes = [];
+                foreach (['/<[a-z][^<>]*>/i', '/"[^"]*"|\'[^\']*\'|\x60[^\x60]*\x60/'] as $element) {
+                    preg_match_all($element, $line, $matches);
+                    $scopes = preg_grep($hasbackground, $matches[0]);
+                    if ($scopes) {
+                        break;
+                    }
+                }
+                foreach ($scopes ?: [$line] as $scope) {
+                    if (!preg_match('/(?<![-\w])' . preg_quote($required, '/') . '(?![-\w])/', $scope)) {
+                        $offenders[] = $name . ':' . $number . ' ' . $background . ' needs ' . $required;
+                    }
+                }
+            }
+        }
+
+        return $offenders;
     }
 
     /**
@@ -182,19 +322,8 @@ final class bootstrap_compat_test extends \basic_testcase {
     public function test_no_bootstrap4_only_class_names(): void {
         $offenders = [];
         foreach ($this->markup_files() as $path) {
-            foreach (file($path) as $number => $line) {
-                if ($this->is_comment_line($line)) {
-                    continue;
-                }
-                foreach ($this->deprecated_class_names() as $token => $replacement) {
-                    /* Matched as a whole class token: mr-2 must not be found inside data-mr-2x,
-                       and text-left must not be found inside a longer hyphenated name. */
-                    if (preg_match('/(?<![-\w])' . preg_quote($token, '/') . '(?![-\w])/', $line)) {
-                        $offenders[] = basename($path) . ':' . ($number + 1) . ' uses ' . $token
-                            . ', write ' . $replacement;
-                    }
-                }
-            }
+            $lines = $this->markup_lines((string) file_get_contents($path), pathinfo($path, PATHINFO_EXTENSION));
+            $offenders = array_merge($offenders, $this->deprecated_class_offenders(basename($path), $lines));
         }
         sort($offenders);
         $this->assertSame(
@@ -207,39 +336,140 @@ final class bootstrap_compat_test extends \basic_testcase {
     }
 
     /**
-     * Every background utility must state its text colour rather than rely on Bootstrap's default.
+     * Every background utility must state the text colour it is paired with, on the same element.
      *
      * Checked on every line carrying a background utility, not only on lines that also say
      * "badge": a match arm returning a bare 'bg-success' seldom has that word on its own line.
-     * Any of text-white, text-dark or text-body satisfies it; the pairing in
-     * badge_text_colours() is only named in the failure message.
+     * {@see badge_offenders()} says what counts as the same element.
      *
      * @return void
      */
     public function test_every_badge_background_declares_a_text_colour(): void {
         $offenders = [];
         foreach ($this->markup_files() as $path) {
-            foreach (file($path) as $number => $line) {
-                if ($this->is_comment_line($line)) {
-                    continue;
-                }
-                foreach ($this->badge_text_colours() as $background => $required) {
-                    if (!preg_match('/(?<![-\w])' . preg_quote($background, '/') . '(?![-\w])/', $line)) {
-                        continue;
-                    }
-                    if (!preg_match('/(?<![-\w])text-(white|dark|body)(?![-\w])/', $line)) {
-                        $offenders[] = basename($path) . ':' . ($number + 1) . ' needs ' . $required;
-                    }
-                }
-            }
+            $lines = $this->markup_lines((string) file_get_contents($path), pathinfo($path, PATHINFO_EXTENSION));
+            $offenders = array_merge($offenders, $this->badge_offenders(basename($path), $lines));
         }
         sort($offenders);
         $this->assertSame(
             [],
             $offenders,
             'Bootstrap 4 gives .badge no text colour and Bootstrap 5 defaults it to white, so a '
-                . 'background that does not state its own colour fails the 4.5:1 contrast floor on '
-                . 'one branch or the other: ' . implode('; ', $offenders)
+                . 'background that does not carry the text colour paired with it in '
+                . 'badge_text_colours() fails the 4.5:1 contrast floor on one branch or the other: '
+                . implode('; ', $offenders)
+        );
+    }
+
+    /**
+     * A comment is skipped on every line it spans, and the markup around it is still read.
+     *
+     * Each fixture names a deprecated class inside comments, including on a block comment's
+     * continuation line with no leading "*", and in markup. Only the markup may be reported, and
+     * it must be: that half is the control proving the scanner still reads what is not a
+     * comment, including a line a comment shares with markup and a string holding a comment
+     * marker.
+     *
+     * @return void
+     */
+    public function test_a_comment_is_skipped_on_every_line_it_spans(): void {
+        $php = implode("\n", [
+            '<?php',
+            '/* The label is hidden with visually-hidden,',
+            '   never sr-only, which only the compatibility layer defines. */',
+            '$a = 1; // Nor sr-only here.',
+            '/**',
+            ' * A docblock naming sr-only.',
+            ' */',
+            'echo html_writer::span(\'x\', \'sr-only\');',
+            '$glob = \'backup/*.xml\';',
+            'echo html_writer::span(\'x\', \'no-gutters\'); /* Closing comment. */',
+        ]);
+        $this->assertSame(
+            [
+                'fixture.php:8 uses sr-only, write visually-hidden',
+                'fixture.php:10 uses no-gutters, write g-0',
+            ],
+            $this->deprecated_class_offenders('fixture.php', $this->markup_lines($php, 'php'))
+        );
+
+        $mustache = implode("\n", [
+            '{{!',
+            '    A template docblock naming sr-only',
+            '    on a line with no marker of its own.',
+            '}}',
+            '<span class="sr-only">{{label}}</span>',
+            '{{! One line naming sr-only. }}<span class="badge-pill">{{count}}</span>',
+        ]);
+        $this->assertSame(
+            [
+                'fixture.mustache:5 uses sr-only, write visually-hidden',
+                'fixture.mustache:6 uses badge-pill, write rounded-pill',
+            ],
+            $this->deprecated_class_offenders('fixture.mustache', $this->markup_lines($mustache, 'mustache'))
+        );
+
+        $js = implode("\n", [
+            '/* The label is hidden with visually-hidden,',
+            '   never sr-only. */',
+            'const a = 1; // Nor sr-only here.',
+            'const glob = \'backup/*.xml\';',
+            'el.classList.add(\'sr-only\');',
+            'link.href = \'https://example.org\'; link.className = \'no-gutters\';',
+            '/* Closing comment. */',
+        ]);
+        $this->assertSame(
+            [
+                'fixture.js:5 uses sr-only, write visually-hidden',
+                'fixture.js:6 uses no-gutters, write g-0',
+            ],
+            $this->deprecated_class_offenders('fixture.js', $this->markup_lines($js, 'js'))
+        );
+    }
+
+    /**
+     * A badge passes only with the text colour paired with its background, on its own element.
+     *
+     * The first line of each fixture is the control: a correctly paired badge is not reported,
+     * so the other lines are refused for their pairing and not for being badges.
+     *
+     * @return void
+     */
+    public function test_a_badge_needs_the_text_colour_paired_with_its_background(): void {
+        $mustache = implode("\n", [
+            '<span class="badge bg-warning text-dark">{{label}}</span>',
+            '<span class="badge bg-warning text-white">{{label}}</span>',
+            '<span class="badge bg-secondary text-white">{{label}}</span>',
+            '<span class="badge bg-success text-dark">{{label}}</span>',
+            '<span class="text-dark"><span class="badge bg-warning">{{label}}</span></span>',
+            '<span class="badge bg-success">{{label}}</span> <span class="text-white">{{other}}</span>',
+        ]);
+        $this->assertSame(
+            [
+                'fixture.mustache:2 bg-warning needs text-dark',
+                'fixture.mustache:3 bg-secondary needs text-dark',
+                'fixture.mustache:4 bg-success needs text-white',
+                'fixture.mustache:5 bg-warning needs text-dark',
+                'fixture.mustache:6 bg-success needs text-white',
+            ],
+            $this->badge_offenders('fixture.mustache', $this->markup_lines($mustache, 'mustache'))
+        );
+
+        $php = implode("\n", [
+            '<?php',
+            'echo html_writer::span($text, \'badge bg-danger text-white me-1\');',
+            'echo html_writer::span($text, \'badge bg-danger me-1\') . html_writer::span(\'\', \'text-white\');',
+            'return match ($state) {',
+            '    \'open\' => \'bg-dark text-white\',',
+            '    \'waiting\' => \'bg-warning\',',
+            '};',
+        ]);
+        $this->assertSame(
+            [
+                'fixture.php:3 bg-danger needs text-white',
+                'fixture.php:6 bg-warning needs text-dark',
+            ],
+            $this->badge_offenders('fixture.php', $this->markup_lines($php, 'php'))
         );
     }
 
@@ -332,11 +562,11 @@ final class bootstrap_compat_test extends \basic_testcase {
         $this->assertSame(
             [],
             $offenders,
-            'These rules paint a background and leave the text colour to inheritance. The two then '
-                . 'come from different dark-mode mechanisms - .theme-dark moves the inherited '
-                . 'colour and not the --bs-* tokens - so one of them renders the text on top of '
-                . 'itself. Declare both, or name the selector in this test as painting no text: '
-                . implode('; ', $offenders)
+            'These rules paint a background and leave the text colour to inheritance. '
+                . '[data-bs-theme="dark"] redefines the --bs-* tokens but not color, so a fill read '
+                . 'from a token turns dark while the inherited text keeps the colour computed outside '
+                . 'that scope, and lands on a fill of its own lightness. Declare both, or name the '
+                . 'selector in this test as painting no text: ' . implode('; ', $offenders)
         );
     }
 

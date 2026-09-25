@@ -175,10 +175,15 @@ final class purge_submissions_test extends \advanced_testcase {
     }
 
     /**
-     * A row that cannot be purged costs that row and nothing else.
+     * A row that cannot be purged costs that row and nothing else, and is attempted once.
      *
-     * The sweep must complete rather than abort, and must not spin: the cursor advances past
-     * the failing row, so the next iteration cannot select it again.
+     * The sweep must complete rather than abort, and must not spin: the cursor advances past a
+     * failing row before the work, so no later iteration can select it again. Two rows fail. The
+     * first sits between rows that purge, which holds the skip-and-continue: the row after it is
+     * still swept. The second has the highest id, so no later row can carry the cursor past it;
+     * only the cursor itself can. Dropping `s.id > :lastid`, or advancing the cursor after
+     * purge_row() rather than before it, makes the next iteration select that row again, which
+     * the attempt count reports.
      *
      * @return void
      */
@@ -193,34 +198,47 @@ final class purge_submissions_test extends \advanced_testcase {
         set_config('retentiondays', 30 * DAYSECS, 'enrol_apply');
 
         $first = $this->seed(90 * DAYSECS);
-        $poisoned = $this->seed(80 * DAYSECS);
-        $last = $this->seed(70 * DAYSECS);
+        $poisoned = $this->seed(85 * DAYSECS);
+        $after = $this->seed(80 * DAYSECS);
+        $highest = $this->seed(70 * DAYSECS);
+        $this->assertSame($highest, (int) $DB->get_field_sql('SELECT MAX(id) FROM {enrol_apply_submission}'));
 
         $task = new class extends purge_submissions {
-            /** @var int Row id that refuses to be purged. */
-            public $poisoned = 0;
+            /** @var int A short budget, so a cursor that stops advancing fails in seconds rather than a minute. */
+            public const TIME_BUDGET = 5;
+
+            /** @var array Row ids that refuse to be purged. */
+            public $poisoned = [];
+
+            /** @var array How many times purge_row() was called for each row id. */
+            public $attempts = [];
 
             /**
-             * Fail for one row and behave normally for every other.
+             * Count every attempt, and fail for the poisoned rows.
              *
              * @param int $id Row id to delete.
              * @return void
              */
             protected function purge_row(int $id): void {
-                if ($id === $this->poisoned) {
+                $this->attempts[$id] = ($this->attempts[$id] ?? 0) + 1;
+                if (in_array($id, $this->poisoned, true)) {
                     throw new \dml_write_exception('injected failure');
                 }
                 parent::purge_row($id);
             }
         };
-        $task->poisoned = $poisoned;
+        $task->poisoned = [$poisoned, $highest];
 
         $this->assertEquals(2, $this->sweep($task));
 
         $this->assertFalse($DB->record_exists('enrol_apply_submission', ['id' => $first]));
         $this->assertTrue($DB->record_exists('enrol_apply_submission', ['id' => $poisoned]));
-        // The control: the row after the failure was still swept, so the sweep carried on.
-        $this->assertFalse($DB->record_exists('enrol_apply_submission', ['id' => $last]));
+        $this->assertTrue($DB->record_exists('enrol_apply_submission', ['id' => $highest]));
+        // The control: the row after the first failure was still swept, so the sweep carried on.
+        $this->assertFalse($DB->record_exists('enrol_apply_submission', ['id' => $after]));
+
+        $this->assertSame(1, $task->attempts[$poisoned] ?? 0, 'a failing row was selected again');
+        $this->assertSame(1, $task->attempts[$highest] ?? 0, 'the cursor did not move past the last failing row');
     }
 
     /**
@@ -355,6 +373,12 @@ final class purge_submissions_test extends \advanced_testcase {
      * The other half of the rule above: "spare it while it is live" must not turn into
      * "keep it forever".
      *
+     * It also pins that a decision does not restart the retention clock: the application is
+     * decided moments before the sweep, and its record goes at once because it was submitted
+     * longer ago than the retention period. That is the behaviour
+     * {@see purge_submissions::purge()} documents as deliberate; a sweep counting from the
+     * decision would keep the record and fail here.
+     *
      * @return void
      */
     public function test_a_record_is_swept_once_its_application_is_decided(): void {
@@ -384,12 +408,18 @@ final class purge_submissions_test extends \advanced_testcase {
             ['enrolid' => $instanceid, 'userid' => $applicant->id],
             MUST_EXIST
         );
+        $decidedat = time();
         $plugin->confirm_enrolment([$ueid]);
         $sink->close();
 
         $DB->set_field('enrol_apply_submission', 'timecreated', time() - 90 * DAYSECS, [
             'userid' => $applicant->id,
         ]);
+
+        // The precondition: the record carries a decision taken just now.
+        $record = $DB->get_record('enrol_apply_submission', ['userid' => $applicant->id], '*', MUST_EXIST);
+        $this->assertEquals(submission::STATUS_APPROVED, (int) $record->status);
+        $this->assertGreaterThanOrEqual($decidedat, (int) $record->timedecided);
 
         $this->assertEquals(1, $this->sweep());
         $this->assertFalse($DB->record_exists('enrol_apply_submission', ['userid' => $applicant->id]));

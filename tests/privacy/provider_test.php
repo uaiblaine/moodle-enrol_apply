@@ -104,7 +104,7 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         $DB->insert_record('enrol_apply_submission', (object) [
             'courseid' => $this->course->id,
             'userid' => $user->id,
-            'enrolid' => $instance ? $instance->id : $this->instance->id,
+            'enrolid' => $instance->id,
             'userenrolmentid' => $ueid,
             'comment' => $comment,
             'userinfodata' => '',

@@ -62,14 +62,23 @@ final class hook_callbacks_test extends \advanced_testcase {
     /**
      * Create a course with an apply instance, one configured group and one live application.
      *
+     * The applicant submits two profile fields, the city and the institution, and the instance
+     * asks for the whole default pool unless told otherwise. The field set is written before
+     * apply() runs, because apply() is what freezes the snapshot: set afterwards it would change
+     * nothing about this application.
+     *
      * @param string $comment Comment submitted with the application.
+     * @param array|null $fieldkeys Field keys the instance asks for, null for the default pool.
      * @return array Course record, instance record, applicant record and user enrolment id.
      */
-    protected function create_course_with_application(string $comment = 'Please let me in'): array {
+    protected function create_course_with_application(string $comment = 'Please let me in', ?array $fieldkeys = null): array {
         global $DB;
 
         $course = $this->getDataGenerator()->create_course();
         $instanceid = $this->plugin->add_instance($course, $this->plugin->get_instance_defaults());
+        if ($fieldkeys !== null) {
+            $DB->set_field('enrol', 'customtext4', local\fieldset::from_keys($fieldkeys)->to_json(), ['id' => $instanceid]);
+        }
         $instance = $DB->get_record('enrol', ['id' => $instanceid], '*', MUST_EXIST);
 
         $group = $this->getDataGenerator()->create_group(['courseid' => $course->id]);
@@ -82,6 +91,7 @@ final class hook_callbacks_test extends \advanced_testcase {
         $method->invoke($this->plugin, $instance, $applicant->id, (object) [
             'applydescription' => $comment,
             'city' => 'Recife',
+            'institution' => 'Federal University',
         ]);
         $sink->close();
 
@@ -104,10 +114,7 @@ final class hook_callbacks_test extends \advanced_testcase {
         global $DB;
 
         // Ask for a profile field, so the snapshot is not empty and its discarding is testable.
-        [$course, $instance, $applicant, $ueid] = $this->create_course_with_application('Let me in please');
-        $DB->set_field('enrol', 'customtext4', local\fieldset::from_keys(['s_city'])->to_json(), [
-            'id' => $instance->id,
-        ]);
+        [$course, , $applicant, $ueid] = $this->create_course_with_application('Let me in please', ['s_city']);
 
         /* Decide it first. An undecided row already has decidedby = 0, so asserting 0 after
            the deletion would hold with the pseudonymisation removed. */
@@ -133,7 +140,9 @@ final class hook_callbacks_test extends \advanced_testcase {
         // The preconditions the assertions after the deletion are only meaningful against.
         $this->assertEquals($applicant->id, (int) $before->userid);
         $this->assertEquals($decider->id, (int) $before->decidedby);
-        $this->assertNotEmpty($before->userinfodata);
+        /* Exactly the field the instance asks for, although the applicant submitted two: the
+           snapshot was taken against the configured set, not the default pool. */
+        $this->assertSame(['s_city'], array_column(submission::read_snapshot($before->userinfodata), 'key'));
 
         delete_course($course, false);
 
@@ -156,29 +165,15 @@ final class hook_callbacks_test extends \advanced_testcase {
     /**
      * The snapshot captures the submitted value of each field the instance asks for.
      *
-     * Complements the non-empty precondition in the test above by checking what the snapshot
-     * holds, so the value that pseudonymisation discards is known to have been captured.
+     * Complements the precondition in the test above by checking the value as well as the key,
+     * so the value that pseudonymisation discards is known to have been captured.
      *
      * @return void
      */
     public function test_the_snapshot_is_captured_before_it_is_discarded(): void {
         global $DB;
 
-        [, $instance] = $this->create_course_with_application();
-        $DB->set_field('enrol', 'customtext4', local\fieldset::from_keys(['s_city'])->to_json(), [
-            'id' => $instance->id,
-        ]);
-        $reloaded = $DB->get_record('enrol', ['id' => $instance->id], '*', MUST_EXIST);
-
-        $applicant = $this->getDataGenerator()->create_user();
-        $sink = $this->redirectMessages();
-        $method = new \ReflectionMethod(\enrol_apply_plugin::class, 'apply');
-        $method->setAccessible(true);
-        $method->invoke($this->plugin, $reloaded, $applicant->id, (object) [
-            'applydescription' => 'With a city',
-            'city' => 'Recife',
-        ]);
-        $sink->close();
+        [, , $applicant] = $this->create_course_with_application('With a city', ['s_city']);
 
         $row = $DB->get_record('enrol_apply_submission', ['userid' => $applicant->id], '*', MUST_EXIST);
         $snapshot = submission::read_snapshot($row->userinfodata);

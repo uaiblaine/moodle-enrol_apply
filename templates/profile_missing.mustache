@@ -1,0 +1,49 @@
+{{!
+    This file is part of Moodle - http://moodle.org/
+
+    Moodle is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Moodle is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+}}
+{{!
+    @template enrol_apply/profile_missing
+
+    Tells an applicant which profile details they still have to fill in on their own profile
+    page, on a site that does not let courses write to profiles.
+
+    Every label is the plain spelling and is rendered through a double stash, so Mustache
+    escapes each exactly once, as in enrol_apply/profile_offer beside it.
+
+    Context variables required for this template:
+    * heading string - heading of the block
+    * intro string - one line saying the application went in and what is still missing
+    * fields array - one entry per missing field, each with its label
+
+    Example context (json):
+    {
+        "heading": "Some details are missing from your profile",
+        "intro": "Your application has been submitted. These details are not yet on your profile, and this site does not allow courses to fill them in for you.",
+        "fields": [
+            {"label": "City/town"},
+            {"label": "R&D < Team"}
+        ]
+    }
+}}
+<div class="enrol_apply-profile-missing">
+    <h3>{{heading}}</h3>
+    <p>{{intro}}</p>
+    <ul>
+        {{#fields}}
+            <li>{{label}}</li>
+        {{/fields}}
+    </ul>
+</div>

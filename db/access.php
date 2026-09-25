@@ -40,8 +40,9 @@ $capabilities = [
     ],
 
     /* Decide on enrolment applications.
-     * Granted at system level it covers every course, which is what the
-     * Site administration -> Courses -> Manage enrolment applications page uses.
+     * Granted at system level it covers every course: that is what opens the site-wide queue
+     * (manage.php with no parameter), which site administrators also reach from
+     * Site administration -> Courses -> Manage enrolment applications.
      *
      * It is also evaluated against the applicant's own user context, which lets a mentor
      * decide for the users assigned to them. A capability declares one context level, so

@@ -66,6 +66,15 @@ final class renderer_test extends \advanced_testcase {
     /** @var string The awkward name escaped twice, which is what a reader must never get. */
     private const ESCAPED_TWICE = 'R&amp;amp;D &amp;lt; Team';
 
+    /**
+     * A lang string placeholder left unsubstituted, in either spelling.
+     *
+     * get_string() replaces only `{$a}` and `{$a->name}`, so a string written in single quotes as
+     * '{\$a} selected' keeps its backslash and renders as `{\$a}`, which a search for `{$a` does
+     * not find.
+     */
+    private const PLACEHOLDER = '/\{\\\\?\$a/';
+
     /** @var \stdClass Course the apply instance belongs to. */
     private $course;
 
@@ -252,11 +261,25 @@ final class renderer_test extends \advanced_testcase {
         $rendered = $this->render_filtered_queue('nothingmatchesthis');
 
         // One application in scope, none matching: the header says 1 and the count line says 0 of 1.
-        $this->assertStringContainsString('>1<', $rendered);
+        $this->assertSame('1', $this->tile_value($rendered, get_string('queueawaiting', 'enrol_apply')), $rendered);
         $this->assertStringContainsString(
             get_string('queuefiltercount', 'enrol_apply', (object) ['matched' => 0, 'total' => 1]),
             $rendered
         );
+    }
+
+    /**
+     * The number shown on one tile of the queue's capacity header.
+     *
+     * @param string $html The rendered queue.
+     * @param string $label The tile's label.
+     * @return string The value on that tile, or the empty string when there is no such tile.
+     */
+    private function tile_value(string $html, string $label): string {
+        $pattern = '~<span class="enrol_apply-tilevalue">([^<]*)</span>\s*<span class="enrol_apply-tilelabel">'
+            . preg_quote(s($label), '~') . '</span>~';
+
+        return preg_match($pattern, $html, $m) ? trim($m[1]) : '';
     }
 
     /**
@@ -532,7 +555,8 @@ final class renderer_test extends \advanced_testcase {
      *
      * A test asserting that get_string(X) appears in the markup cannot see this, because both
      * sides of the comparison read the same broken string. This asserts over a page that renders
-     * the header, the rows and the bulk bar that no unsubstituted `{$a` survives.
+     * the header, the rows and the bulk bar that no unsubstituted placeholder survives, in either
+     * spelling; see assert_no_placeholder().
      *
      * @return void
      */
@@ -541,7 +565,20 @@ final class renderer_test extends \advanced_testcase {
 
         // The control: the page really did render, so this is not passing over an empty string.
         $this->assertStringContainsString(get_string('queueawaiting', 'enrol_apply'), $html);
-        $this->assertStringNotContainsString('{$a', $html);
+        // And the guard sees a placeholder in both spellings, so its silence below means something.
+        $this->assertSame(1, preg_match(self::PLACEHOLDER, '{$a->count} selected'));
+        $this->assertSame(1, preg_match(self::PLACEHOLDER, '{\$a} selected'));
+        $this->assert_no_placeholder($html);
+    }
+
+    /**
+     * Assert that no lang string placeholder reached the markup unsubstituted.
+     *
+     * @param string $html The rendered markup.
+     * @return void
+     */
+    private function assert_no_placeholder(string $html): void {
+        $this->assertDoesNotMatchRegularExpression(self::PLACEHOLDER, $html, 'a lang string placeholder was not substituted');
     }
 
     /**
@@ -635,7 +672,7 @@ final class renderer_test extends \advanced_testcase {
 
         $this->assertStringContainsString(get_string('queueapplicationsopen', 'enrol_apply'), $open);
         $this->assertStringContainsString(get_string('queueremaining', 'enrol_apply', 1), $open);
-        $this->assertStringNotContainsString('{$a', $open);
+        $this->assert_no_placeholder($open);
 
         // And at the limit it is closed, with the room-left sentence gone rather than reading zero.
         $user = $this->getDataGenerator()->create_user();
@@ -678,7 +715,7 @@ final class renderer_test extends \advanced_testcase {
             get_string('queuecloseson', 'enrol_apply', userdate($when, get_string('strftimedate', 'langconfig'))),
             $html
         );
-        $this->assertStringNotContainsString('{$a', $html);
+        $this->assert_no_placeholder($html);
     }
 
     /**
@@ -1973,5 +2010,255 @@ final class renderer_test extends \advanced_testcase {
             ]),
             $html
         );
+    }
+
+    /**
+     * A page holding no row names no range, and the line saying which rows are shown is hidden.
+     *
+     * The arithmetic that names the range reads "Showing 1-0 of 0" on an empty queue, and
+     * "Showing 101-1 of 1" on a page number past the end of the queue, which core does not clamp.
+     * The line stays in the markup, hidden, so the queue's module can fill it after a refresh.
+     *
+     * The control is a queue with a row, which does name its range and shows the line.
+     *
+     * @return void
+     */
+    public function test_a_page_with_no_rows_names_no_range(): void {
+        global $PAGE;
+
+        $this->setAdminUser();
+        $url = new \moodle_url('/enrol/apply/manage.php', ['id' => $this->instance->id]);
+        $PAGE->set_url($url);
+        $PAGE->set_context(\context_course::instance($this->course->id));
+
+        $table = \enrol_apply\table\applications::for_scope((int) $this->instance->id);
+        $html = $PAGE->get_renderer('enrol_apply')->manage_form($table, $url, $this->instance);
+
+        // The precondition: the queue really is empty.
+        $this->assertSame(0, (int) $table->totalrows);
+        [$classes, $text] = $this->showing_line($html);
+        $this->assertSame('', $text, $html);
+        $this->assertStringContainsString('d-none', $classes);
+        $this->assertStringNotContainsString(
+            get_string('queueshowing', 'enrol_apply', (object) ['from' => 1, 'to' => 0, 'total' => 0]),
+            $html
+        );
+
+        // The control: one application, on the first page, is a range to name.
+        $withrow = $this->render_queue();
+        [$classes, $text] = $this->showing_line($withrow);
+        $this->assertSame(
+            get_string('queueshowing', 'enrol_apply', (object) ['from' => 1, 'to' => 1, 'total' => 1]),
+            $text,
+            $withrow
+        );
+        $this->assertStringNotContainsString('d-none', $classes);
+
+        // And the same queue on a page past its end has none, though the queue is not empty.
+        $table = \enrol_apply\table\applications::for_scope((int) $this->instance->id);
+        $table->set_page_number(3);
+        $pastend = $PAGE->get_renderer('enrol_apply')->manage_form($table, $url, $this->instance);
+        $this->assertSame(1, (int) $table->totalrows);
+        [$classes, $text] = $this->showing_line($pastend);
+        $this->assertSame('', $text, $pastend);
+        $this->assertStringContainsString('d-none', $classes);
+    }
+
+    /**
+     * The line under the queue saying which rows are shown: its extra classes and its text.
+     *
+     * @param string $html The rendered queue.
+     * @return array [the classes after enrol_apply-showing, the line's text].
+     */
+    private function showing_line(string $html): array {
+        $found = preg_match('~<div class="enrol_apply-showing([^"]*)" data-region="showing">(.*?)</div>~s', $html, $m);
+        $this->assertSame(1, $found, 'no showing line in the rendered queue');
+
+        return [trim($m[1]), trim($m[2])];
+    }
+
+    /**
+     * The queue explains its waiting-list badge in a paragraph of the template's own.
+     *
+     * @return void
+     */
+    public function test_the_queue_explains_its_waiting_list_badge(): void {
+        $html = $this->render_queue();
+
+        $this->assertStringContainsString('<p>' . s(get_string('confirmusers_desc', 'enrol_apply')) . '</p>', $html);
+    }
+
+    /**
+     * Backing out of a cancellation posts what the operator typed, and never puts it in an address.
+     *
+     * The decision note is the decider's own and never reaches the applicant. A GET form would
+     * submit it, and the message, as the query string of the review page it opens - into server
+     * logs, the browser history and every Referer that page sends.
+     *
+     * The control is the destructive answer beside it, which carries the queue's decision contract:
+     * the back button carries the text and nothing that could decide anything.
+     *
+     * @return void
+     */
+    public function test_backing_out_of_a_cancellation_posts_what_was_typed(): void {
+        global $DB, $PAGE;
+
+        $this->render_review();
+        $ueid = (int) $DB->get_field_sql(
+            "SELECT MAX(id) FROM {user_enrolments} WHERE enrolid = :enrolid",
+            ['enrolid' => $this->instance->id]
+        );
+        $applicant = \core_user::get_user(
+            (int) $DB->get_field('user_enrolments', 'userid', ['id' => $ueid], MUST_EXIST),
+            '*',
+            MUST_EXIST
+        );
+        $message = 'Please resend your transcript.';
+        $note = 'Checking with the registry & the dean.';
+
+        $html = $PAGE->get_renderer('enrol_apply')->cancel_confirmation(
+            $applicant,
+            new \moodle_url('/enrol/apply/manage.php', ['userenrol' => $ueid]),
+            $ueid,
+            $message,
+            $note
+        );
+
+        $keep = $this->form_with_button($html, get_string('reviewkeep', 'enrol_apply'));
+        // Posted, to an address carrying no query string.
+        $this->assertMatchesRegularExpression('~^<form method="post" action="[^"?]*"~', $keep, $keep);
+        $this->assertStringContainsString('name="userenrol" value="' . $ueid . '"', $keep);
+        $this->assertStringContainsString('name="outcomemessage" value="' . s($message) . '"', $keep);
+        $this->assertStringContainsString('name="decisionnote" value="' . s($note) . '"', $keep);
+        $this->assertStringNotContainsString('name="formaction"', $keep);
+
+        $cancel = $this->form_with_button($html, get_string('reviewcancelaction', 'enrol_apply'));
+        $this->assertMatchesRegularExpression('~^<form method="post" action="[^"?]*"~', $cancel, $cancel);
+        $this->assertStringContainsString('name="formaction" value="cancel"', $cancel);
+        $this->assertStringContainsString('name="confirmed" value="1"', $cancel);
+        $this->assertStringContainsString('name="userenrolments[0]" value="' . $ueid . '"', $cancel);
+        $this->assertStringContainsString('name="decisionnote" value="' . s($note) . '"', $cancel);
+    }
+
+    /**
+     * The form a button of the given label submits.
+     *
+     * @param string $html Rendered markup holding one or more single-button forms.
+     * @param string $label The button's label.
+     * @return string The form, opening tag to closing tag.
+     */
+    private function form_with_button(string $html, string $label): string {
+        preg_match_all('~<form\b[^>]*>.*?</form>~s', $html, $m);
+        foreach ($m[0] as $form) {
+            if (str_contains($form, '>' . s($label) . '</button>')) {
+                return $form;
+            }
+        }
+        $this->fail("no form is submitted by a button labelled {$label}: {$html}");
+    }
+
+    /**
+     * A profile field the applicant still has to fill in is listed escaped exactly once.
+     *
+     * completeness::missing() returns the plain spelling and the template double stashes it. The
+     * control is an ordinary label in the same list, beside the heading the page introduces it with.
+     *
+     * @return void
+     */
+    public function test_a_missing_profile_field_is_listed_escaped_once(): void {
+        global $PAGE;
+
+        $html = $PAGE->get_renderer('enrol_apply')->profile_missing([
+            ['key' => 'c_1', 'label' => self::AWKWARD_NAME],
+            ['key' => 's_city', 'label' => 'City/town'],
+        ]);
+
+        $this->assertStringContainsString('<li>' . self::ESCAPED_ONCE . '</li>', $html);
+        $this->assertStringNotContainsString(self::ESCAPED_TWICE, $html);
+        $this->assertStringContainsString('<li>City/town</li>', $html);
+        $this->assertStringContainsString(s(get_string('profileincomplete', 'enrol_apply')), $html);
+    }
+
+    /**
+     * Neither the renderer nor the acknowledgement page builds markup with html_writer.
+     *
+     * Both render through templates, where a name's spelling is decided by the stash it lands in;
+     * html_writer::tag() concatenates its content unescaped, so each call is an escaping decision
+     * no template shows. Read through the tokenizer, so a comment naming the class does not count.
+     *
+     * @return void
+     */
+    public function test_the_renderer_and_the_acknowledgement_page_use_no_html_writer(): void {
+        global $CFG;
+
+        // The control: the scan does see a call, and does not see one named in a comment.
+        $this->assertSame(1, $this->html_writer_uses("<?php\necho html_writer::tag('p', 'x');\n"));
+        $this->assertSame(0, $this->html_writer_uses("<?php\n// Html_writer::tag() is not used here.\n"));
+
+        foreach (['renderer.php', 'applied.php'] as $file) {
+            $source = file_get_contents($CFG->dirroot . '/enrol/apply/' . $file);
+            $this->assertSame(0, $this->html_writer_uses($source), $file);
+        }
+    }
+
+    /**
+     * How many times a PHP source names the html_writer class in code.
+     *
+     * @param string $source PHP source.
+     * @return int Count of name tokens naming html_writer, in any namespace spelling.
+     */
+    private function html_writer_uses(string $source): int {
+        $uses = 0;
+        foreach (\PhpToken::tokenize($source) as $token) {
+            if (
+                $token->is([T_STRING, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED])
+                && str_ends_with(strtolower($token->text), 'html_writer')
+            ) {
+                $uses++;
+            }
+        }
+
+        return $uses;
+    }
+
+    /**
+     * A category name reaches the site-wide queue's category filter and its chip escaped once.
+     *
+     * core_course_category::make_categories_list() formats names with format_string()'s default
+     * escaping, and both sinks here are double stashes: the option text, and the chip's value.
+     *
+     * @return void
+     */
+    public function test_a_category_name_reaches_the_filter_and_its_chip_escaped_once(): void {
+        global $PAGE;
+
+        $this->setAdminUser();
+        $category = $this->getDataGenerator()->create_category(['name' => self::AWKWARD_NAME]);
+
+        $url = new \moodle_url('/enrol/apply/manage.php', ['category' => $category->id]);
+        $PAGE->set_url($url);
+        $PAGE->set_context(\context_system::instance());
+        $table = \enrol_apply\table\applications::for_scope(0, '', null, ['category' => (string) $category->id]);
+        $html = $PAGE->get_renderer('enrol_apply')->manage_form($table, $url, null);
+
+        // The precondition: the filter really is applied, so a chip is drawn for it.
+        $this->assertSame([(int) $category->id, null], $table->get_course_scope());
+
+        $select = $this->select_named($html, 'category');
+        $this->assertMatchesRegularExpression(
+            '~<option value="' . $category->id . '"[^>]*>' . preg_quote(self::ESCAPED_ONCE, '~') . '</option>~',
+            $select,
+            $select
+        );
+        $this->assertStringNotContainsString(self::ESCAPED_TWICE, $select);
+
+        $found = preg_match(
+            '~<span class="enrol_apply-chipname">[^<]*</span>([^<]*)<a href="[^"]*" class="enrol_apply-chipremove"'
+                . ' data-filter="category"~',
+            $html,
+            $chip
+        );
+        $this->assertSame(1, $found, 'no category chip in the rendered queue');
+        $this->assertSame(self::ESCAPED_ONCE, trim($chip[1]));
     }
 }

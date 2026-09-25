@@ -372,7 +372,7 @@ final class application_form_test extends \advanced_testcase {
      *
      * @return void
      */
-    public function test_check_access_refuses_when_the_places_cap_is_reached(): void {
+    public function test_check_access_refuses_when_the_applicant_limit_is_reached(): void {
         global $DB;
 
         $other = $this->getDataGenerator()->create_user();

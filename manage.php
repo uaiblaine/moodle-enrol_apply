@@ -221,42 +221,14 @@ if ($formaction !== '' && $userenrolments) {
        Only on the review page: the queue has always applied the same formaction to its whole
        selection directly. */
     if ($userenrol && $formaction === 'cancel' && !optional_param('confirmed', 0, PARAM_BOOL)) {
-        echo $OUTPUT->header();
-        echo $OUTPUT->heading(get_string('reviewcancelconfirm', 'enrol_apply'));
-        /* Both buttons are labelled explicitly: core's confirm() would label the second one
-           "Cancel", beside a destructive primary button that also starts with "Cancel". */
-        echo $OUTPUT->confirm(
-            get_string('reviewcancelconfirm_desc', 'enrol_apply', fullname($applicant)),
-            new single_button(
-                /* single_button turns each param into a hidden input named by the raw key, so
-                   `userenrolments[0]` is what optional_param_array() reads back.
-
-                   The group and role choosers are not carried, here or on the way back: they are
-                   the approval's parameters and cancelling reads neither. The message and note
-                   travel both ways: onward because the cancellation records them, and back so
-                   the operator's text survives backing out. */
-                new moodle_url($manageurl, [
-                    'formaction' => 'cancel',
-                    'confirmed' => 1,
-                    'sesskey' => sesskey(),
-                    'userenrolments[0]' => $userenrol,
-                    'outcomemessage' => $outcomemessage,
-                    'decisionnote' => $decisionnote,
-                ]),
-                get_string('reviewcancelaction', 'enrol_apply'),
-                'post'
-            ),
-            // Back to the review page with the typed text; see the continue button above.
-            new single_button(
-                new moodle_url($manageurl, [
-                    'outcomemessage' => $outcomemessage,
-                    'decisionnote' => $decisionnote,
-                ]),
-                get_string('reviewkeep', 'enrol_apply'),
-                'get'
-            )
+        // Both answers post back here, carrying what the operator typed; see cancel_confirmation().
+        $PAGE->get_renderer('enrol_apply')->cancel_confirmation_page(
+            $applicant,
+            $manageurl,
+            $userenrol,
+            $outcomemessage,
+            $decisionnote
         );
-        echo $OUTPUT->footer();
         exit;
     }
 
@@ -323,8 +295,9 @@ if ($userenrol) {
         $neighbours['next'],
         $scope->hasqueue ? $scope->url : null
     );
-    /* Whatever the operator had typed before they opened the confirmation and backed out of it.
-       PARAM_TEXT and rendered through a double stash, exactly as it is on the way in. */
+    /* Whatever the operator had typed before they opened the confirmation and backed out of it,
+       posted back by its Keep button. PARAM_TEXT and rendered through a double stash, exactly as
+       it is on the way in. */
     $prefillmessage = optional_param('outcomemessage', '', PARAM_TEXT);
     // The note travels back on the same journey and for the same reason.
     $prefillnote = optional_param('decisionnote', '', PARAM_TEXT);

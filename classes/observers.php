@@ -52,13 +52,18 @@ class observers {
     public static function course_deleted(course_deleted $event): void {
         global $DB;
 
+        /* A correlated NOT EXISTS rather than NOT IN over the whole parent table: this runs on
+           every course deletion, apply instance or not, and it reads the plugin's own small table
+           while probing the parent by primary key for each row. The outer table is named in full
+           because delete_records_select() writes a DELETE with no alias. Both columns are NOT
+           NULL, so it matches the same rows NOT IN would. */
         $DB->delete_records_select(
             'enrol_apply_applicationinfo',
-            'userenrolmentid NOT IN (SELECT id FROM {user_enrolments})'
+            'NOT EXISTS (SELECT 1 FROM {user_enrolments} ue WHERE ue.id = {enrol_apply_applicationinfo}.userenrolmentid)'
         );
         $DB->delete_records_select(
             'enrol_apply_groups',
-            'enrolid NOT IN (SELECT id FROM {enrol})'
+            'NOT EXISTS (SELECT 1 FROM {enrol} e WHERE e.id = {enrol_apply_groups}.enrolid)'
         );
     }
 }

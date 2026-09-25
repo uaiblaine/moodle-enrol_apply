@@ -138,7 +138,7 @@ final class lib_test extends \advanced_testcase {
 
         // The subject: a pending application, which carries no period by construction.
         $applicant = $this->getDataGenerator()->create_user();
-        $this->apply_as_current_user($applicant);
+        $this->apply_for($applicant);
         $ueid = (int) $DB->get_field(
             'user_enrolments',
             'id',
@@ -349,23 +349,37 @@ final class lib_test extends \advanced_testcase {
     }
 
     /**
-     * Submit an application through apply(), so every row the real path writes is written.
+     * Submit an application for a user through apply(), so every row the real path writes is written.
      *
      * apply() is the protected worker submit_application() delegates to once its lock,
-     * duplicate, cap and eligibility checks pass. Unlike create_application(), this leaves an
-     * enrol_apply_submission row.
+     * duplicate, cap and eligibility checks pass, and it is reached through reflection rather
+     * than by widening it. Unlike create_application(), this leaves an enrol_apply_submission
+     * row. The current user is left as it is: apply() takes the applicant as an argument.
      *
-     * @param \stdClass $applicant User submitting the application.
-     * @return void
+     * The notifications apply() sends are caught and returned, because a message sink cannot be
+     * nested: opening one replaces whichever sink the caller had open.
+     *
+     * @param \stdClass $applicant User the application is for.
+     * @param \stdClass|null $instance Enrol instance applied to, this test's own by default.
+     * @param \stdClass|null $data Submitted form data, an empty comment by default.
+     * @return array The messages apply() sent.
      */
-    protected function apply_as_current_user(\stdClass $applicant): void {
+    protected function apply_for(\stdClass $applicant, ?\stdClass $instance = null, ?\stdClass $data = null): array {
         $sink = $this->redirectMessages();
 
         $method = new \ReflectionMethod(\enrol_apply_plugin::class, 'apply');
         $method->setAccessible(true);
-        $method->invoke($this->plugin, $this->instance, $applicant->id, (object) ['applydescription' => '']);
+        $method->invoke(
+            $this->plugin,
+            $instance ?? $this->instance,
+            $applicant->id,
+            $data ?? (object) ['applydescription' => '']
+        );
 
+        $messages = $sink->get_messages();
         $sink->close();
+
+        return $messages;
     }
 
     /**
@@ -461,13 +475,18 @@ final class lib_test extends \advanced_testcase {
      * Deferring clears an expiry the row was carrying.
      *
      * update_user_enrol() writes a date only when given one, and a waiting-list row keeping a
-     * past timeend is stranded: core's suspend arms of process_expirations() filter on
-     * status = active, which it fails, and the queue's predicate excludes it by that timeend, so
-     * nobody can decide it.
+     * timeend is stranded once that date passes: core's suspend arms of process_expirations()
+     * filter on status = active, which it fails, and the queue's predicate excludes it by that
+     * timeend, so nobody can decide it.
+     *
+     * The expiry is in the FUTURE, as on a row suspended from core's "Edit enrolment" screen part
+     * way through its period. A past one would prove nothing here: that row is a lapsed approval,
+     * not an application awaiting a decision, and wait_enrolment() does not reach it at all
+     * (test_a_lapsed_approval_is_not_decided_again).
      *
      * The test asserts both that the row carried an expiry beforehand and that the deferral ran:
-     * wait_enrolment() silently skips a row that is neither suspended nor deferred, and one that
-     * fails can_manage_application(). Without both, the cleared value proves nothing.
+     * wait_enrolment() silently skips a row that is not awaiting a decision, and one that fails
+     * can_manage_application(). Without both, the cleared value proves nothing.
      *
      * @return void
      */
@@ -477,7 +496,7 @@ final class lib_test extends \advanced_testcase {
         $this->setAdminUser();
         [, $ueid] = $this->create_application();
 
-        $DB->set_field('user_enrolments', 'timeend', time() - DAYSECS, ['id' => $ueid]);
+        $DB->set_field('user_enrolments', 'timeend', time() + DAYSECS, ['id' => $ueid]);
         $this->assertNotEquals(
             0,
             (int) $DB->get_field('user_enrolments', 'timeend', ['id' => $ueid]),
@@ -501,10 +520,15 @@ final class lib_test extends \advanced_testcase {
      * Approving resets an expiry the row was carrying, rather than inheriting it.
      *
      * confirm_enrolment() starts from the stored {user_enrolments} row. On an instance with no
-     * enrolperiod, dropping the reset would let a past timeend survive the approval, and under
-     * the default expiredaction (keep) nothing corrects it: the applicant is ACTIVE with no
-     * access. Reachable: a restore writes an archived timeend verbatim, and a once-approved
-     * application can be re-suspended and decided again.
+     * enrolperiod, dropping the reset would let the row's timeend survive the approval, so the
+     * enrolment would end on whatever date the row happened to carry, and under the default
+     * expiredaction (keep) nothing would correct it once passed. Reachable: a restore writes an
+     * archived timeend verbatim, and core's "Edit enrolment" screen can suspend an approved
+     * enrolment part way through its period, which puts it back in the queue.
+     *
+     * The expiry is in the future because only then is the row awaiting a decision: one whose
+     * timeend has passed is a lapsed approval, which confirm_enrolment() does not reach
+     * (test_a_lapsed_approval_is_not_decided_again).
      *
      * @return void
      */
@@ -517,11 +541,11 @@ final class lib_test extends \advanced_testcase {
         // The instance has no period of its own, so nothing else would overwrite the date.
         $this->assertSame(0, (int) $this->reload_instance()->enrolperiod);
 
-        $DB->set_field('user_enrolments', 'timeend', time() - DAYSECS, ['id' => $ueid]);
+        $DB->set_field('user_enrolments', 'timeend', time() + DAYSECS, ['id' => $ueid]);
         $this->assertNotEquals(
             0,
             (int) $DB->get_field('user_enrolments', 'timeend', ['id' => $ueid]),
-            'The precondition: the row must be carrying a past expiry before the approval.'
+            'The precondition: the row must be carrying an expiry before the approval.'
         );
 
         $sink = $this->redirectMessages();
@@ -529,12 +553,11 @@ final class lib_test extends \advanced_testcase {
         $sink->close();
 
         $ue = $DB->get_record('user_enrolments', ['id' => $ueid], '*', MUST_EXIST);
+        // The control: the approval really ran, so the cleared date is its doing.
         $this->assertEquals(ENROL_USER_ACTIVE, (int) $ue->status);
-        $this->assertSame(0, (int) $ue->timeend);
-
-        /* The assertion that says why it matters: approved and actually able to get in. With
-           the stale expiry surviving, this is false while the status still reads active. */
         $this->assertTrue(is_enrolled(\context_course::instance($this->course->id), $user, '', true));
+        // An instance with no period grants an enrolment with no end.
+        $this->assertSame(0, (int) $ue->timeend);
     }
 
     /**
@@ -543,14 +566,15 @@ final class lib_test extends \advanced_testcase {
      * notify_applicant() is handed the row as it was read BEFORE the update, and
      * update_mail_content() substitutes {timeend} for every message type, so without clearing
      * the in-memory copy too the applicant is told their enrolment ends on a date that no
-     * longer exists.
+     * longer exists. The expiry is in the future, the only kind a row awaiting a decision can
+     * carry; see test_deferring_clears_an_expiry_the_row_was_carrying().
      *
      * @return void
      */
     public function test_the_wait_notification_carries_no_expiry_that_was_just_cleared(): void {
         global $DB;
 
-        $expiry = time() - DAYSECS;
+        $expiry = time() + DAYSECS;
         set_config('waitmailsubject', 'Waiting list', 'enrol_apply');
         set_config('waitmailcontent', 'Marker. Ends: {timeend}.', 'enrol_apply');
 
@@ -670,6 +694,134 @@ final class lib_test extends \advanced_testcase {
 
         $ue = $DB->get_record('user_enrolments', ['id' => $ueid], '*', MUST_EXIST);
         $this->assertEquals(ENROL_USER_SUSPENDED, (int) $ue->status);
+    }
+
+    /**
+     * An approval whose period has ended is not decided again, whichever decision is posted.
+     *
+     * Under an expiredaction of suspend, process_expirations() puts an approved enrolment whose
+     * period ran out back to suspended with its past timeend, so by status alone it reads like a
+     * fresh application. The queue does not list it and the review page refuses it, but a posted
+     * id reaches the decision methods directly: without the expiry half of the lookup it would be
+     * cancelled, unenrolling the learner, deferred, which clears the expiry and puts it back in
+     * the queue, or approved a second time.
+     *
+     * Each call also carries a pending application, the control that the method really ran.
+     *
+     * @return void
+     */
+    public function test_a_lapsed_approval_is_not_decided_again(): void {
+        global $DB;
+
+        $this->setAdminUser();
+        $this->plugin->set_config('expiredaction', ENROL_EXT_REMOVED_SUSPEND);
+
+        $learner = $this->getDataGenerator()->create_user();
+        $this->apply_for($learner);
+        $lapsedueid = (int) $DB->get_field(
+            'user_enrolments',
+            'id',
+            ['userid' => $learner->id, 'enrolid' => $this->instance->id],
+            MUST_EXIST
+        );
+        $sink = $this->redirectMessages();
+        $this->plugin->confirm_enrolment([$lapsedueid]);
+        $sink->close();
+
+        // Approved long ago, the period wound into the past, and core's own sweep run over it.
+        $DB->set_field('user_enrolments', 'timestart', time() - (10 * DAYSECS), ['id' => $lapsedueid]);
+        $DB->set_field('user_enrolments', 'timeend', time() - DAYSECS, ['id' => $lapsedueid]);
+        $this->plugin->process_expirations(new \null_progress_trace());
+
+        $lapsed = $DB->get_record('user_enrolments', ['id' => $lapsedueid], '*', MUST_EXIST);
+        // The precondition: core re-suspended it, so its status alone reads like an application.
+        $this->assertEquals(ENROL_USER_SUSPENDED, (int) $lapsed->status);
+
+        foreach (['confirm_enrolment', 'wait_enrolment', 'cancel_enrolment'] as $method) {
+            [, $controlueid] = $this->create_application();
+
+            $sink = $this->redirectMessages();
+            $decided = $this->plugin->$method([$lapsedueid, $controlueid], 'Crafted post.');
+            $sink->close();
+
+            /* get_field() returns false for a row a cancellation removed, which is not the
+               suspended status, so this holds for all three methods. */
+            $this->assertNotEquals(
+                ENROL_USER_SUSPENDED,
+                $DB->get_field('user_enrolments', 'status', ['id' => $controlueid]),
+                $method . ' left the pending application alone as well'
+            );
+            $this->assertSame(1, $decided, $method . ' must count the pending application alone');
+
+            $row = $DB->get_record('user_enrolments', ['id' => $lapsedueid]);
+            $this->assertNotFalse($row, $method . ' unenrolled the lapsed approval');
+            $this->assertEquals(ENROL_USER_SUSPENDED, (int) $row->status, $method);
+            $this->assertEquals((int) $lapsed->timeend, (int) $row->timeend, $method);
+        }
+
+        // Nothing reached the durable record either: the first decision stands, with no message.
+        $record = $this->submission_of($learner);
+        $this->assertEquals(\enrol_apply\local\submission::STATUS_APPROVED, (int) $record->status);
+        $this->assertSame('', (string) $record->outcomemessage);
+    }
+
+    /**
+     * A user enrolment of another method in a posted batch is skipped, and the rest is decided.
+     *
+     * The lookup joins on this plugin's instances. Without that join a suspended enrolment of any
+     * other method passes it and the instance lookup after it throws, so a batch holding one
+     * foreign id stopped half way: the applications before it decided and notified, the ones
+     * after it never reached. The foreign id sits between two applications so both halves show.
+     *
+     * @return void
+     */
+    public function test_a_batch_skips_an_enrolment_of_another_method(): void {
+        global $DB;
+
+        $this->setAdminUser();
+
+        foreach (['confirm_enrolment', 'wait_enrolment', 'cancel_enrolment'] as $method) {
+            [, $first] = $this->create_application();
+            [, $second] = $this->create_application();
+
+            $outsider = $this->getDataGenerator()->create_user();
+            $this->getDataGenerator()->enrol_user(
+                $outsider->id,
+                $this->course->id,
+                'student',
+                'manual',
+                0,
+                0,
+                ENROL_USER_SUSPENDED
+            );
+            $foreign = $DB->get_record_sql(
+                "SELECT ue.*
+                   FROM {user_enrolments} ue
+                   JOIN {enrol} e ON e.id = ue.enrolid
+                  WHERE ue.userid = :userid AND e.enrol = :enrol",
+                ['userid' => $outsider->id, 'enrol' => 'manual'],
+                MUST_EXIST
+            );
+            // The precondition: by its status alone the foreign row reads like an application.
+            $this->assertEquals(ENROL_USER_SUSPENDED, (int) $foreign->status);
+
+            $sink = $this->redirectMessages();
+            $decided = $this->plugin->$method([$first, (int) $foreign->id, $second]);
+            $sink->close();
+
+            $this->assertSame(2, $decided, $method);
+            foreach ([$first, $second] as $ueid) {
+                $this->assertNotEquals(
+                    ENROL_USER_SUSPENDED,
+                    $DB->get_field('user_enrolments', 'status', ['id' => $ueid]),
+                    $method . ' did not decide every application in the batch'
+                );
+            }
+
+            $row = $DB->get_record('user_enrolments', ['id' => $foreign->id]);
+            $this->assertNotFalse($row, $method . ' unenrolled a user enrolment of another method');
+            $this->assertEquals(ENROL_USER_SUSPENDED, (int) $row->status, $method);
+        }
     }
 
     /**
@@ -1057,14 +1209,11 @@ final class lib_test extends \advanced_testcase {
         $DB->set_field('enrol', 'customtext3', '$@ALL@$', ['id' => $this->instance->id]);
         $instance = $DB->get_record('enrol', ['id' => $this->instance->id], '*', MUST_EXIST);
 
-        $sink = $this->redirectMessages();
-        $this->invoke_apply($instance, $applicant->id, (object) [
+        $messages = $this->apply_for($applicant, $instance, (object) [
             'applydescription' => 'Please let me in',
             'city' => 'TypedCity',
             'profile_field_typedfield' => 'TypedAnswer',
         ]);
-        $messages = $sink->get_messages();
-        $sink->close();
 
         $this->assertNotEmpty($messages, 'the approver should have been notified');
         $body = $messages[0]->fullmessagehtml;
@@ -1073,6 +1222,55 @@ final class lib_test extends \advanced_testcase {
         $this->assertStringNotContainsString('StoredAnswer', $body);
         $this->assertStringContainsString('TypedCity', $body);
         $this->assertStringNotContainsString('StoredCity', $body);
+    }
+
+    /**
+     * Only teachers whose own enrolment is active are told about a new application.
+     *
+     * The message links to the course's approval queue, whose require_login() refuses a teacher
+     * whose enrolment is suspended or has ended, while their role, and with it the capability,
+     * survives. Both recipient settings are checked: everybody holding the capability, and a list
+     * naming all three teachers. The active teacher is the control: without them the test would
+     * pass against a notification that reaches nobody.
+     *
+     * @return void
+     */
+    public function test_only_actively_enrolled_teachers_hear_about_a_new_application(): void {
+        global $DB;
+
+        $active = $this->getDataGenerator()->create_user();
+        $this->getDataGenerator()->enrol_user($active->id, $this->course->id, 'editingteacher');
+        $suspended = $this->getDataGenerator()->create_user();
+        $this->getDataGenerator()->enrol_user(
+            $suspended->id,
+            $this->course->id,
+            'editingteacher',
+            'manual',
+            0,
+            0,
+            ENROL_USER_SUSPENDED
+        );
+        $ended = $this->getDataGenerator()->create_user();
+        $this->getDataGenerator()->enrol_user(
+            $ended->id,
+            $this->course->id,
+            'editingteacher',
+            'manual',
+            time() - (10 * DAYSECS),
+            time() - DAYSECS
+        );
+        $teachers = [(int) $active->id, (int) $suspended->id, (int) $ended->id];
+
+        foreach (['$@ALL@$', implode(',', $teachers)] as $setting) {
+            $DB->set_field('enrol', 'customtext3', $setting, ['id' => $this->instance->id]);
+
+            $messages = $this->apply_for($this->getDataGenerator()->create_user(), $this->reload_instance());
+            $notified = array_map(static fn($message): int => (int) $message->useridto, $messages);
+
+            $this->assertContains((int) $active->id, $notified, $setting);
+            $this->assertNotContains((int) $suspended->id, $notified, $setting);
+            $this->assertNotContains((int) $ended->id, $notified, $setting);
+        }
     }
 
     /**
@@ -1103,13 +1301,10 @@ final class lib_test extends \advanced_testcase {
         $DB->set_field('enrol', 'customtext3', '$@ALL@$', ['id' => $this->instance->id]);
         $instance = $DB->get_record('enrol', ['id' => $this->instance->id], '*', MUST_EXIST);
 
-        $sink = $this->redirectMessages();
-        $this->invoke_apply($instance, $applicant->id, (object) [
+        $messages = $this->apply_for($applicant, $instance, (object) [
             'applydescription' => '',
             'profile_field_rawfield' => 'A<B and R&D',
         ]);
-        $messages = $sink->get_messages();
-        $sink->close();
 
         $this->assertNotEmpty($messages);
         $body = $messages[0]->fullmessagehtml;
@@ -1120,23 +1315,6 @@ final class lib_test extends \advanced_testcase {
         $this->assertStringNotContainsString('A&lt;B and R&amp;amp;D', $body);
         // And the bare bracket is not sitting in the body as the start of a tag.
         $this->assertStringNotContainsString('A<B', $body);
-    }
-
-    /**
-     * Call the protected apply() directly, with the given instance and form data.
-     *
-     * Through reflection rather than by widening apply(): the public entry point is
-     * submit_application(), which adds the lock and the eligibility checks.
-     *
-     * @param \stdClass $instance Enrol instance applied to.
-     * @param int $userid Applicant.
-     * @param \stdClass $data Submitted form data.
-     * @return void
-     */
-    protected function invoke_apply(\stdClass $instance, int $userid, \stdClass $data): void {
-        $method = new \ReflectionMethod($this->plugin, 'apply');
-        $method->setAccessible(true);
-        $method->invoke($this->plugin, $instance, $userid, $data);
     }
 
     /**
@@ -1369,7 +1547,7 @@ final class lib_test extends \advanced_testcase {
      */
     public function test_applying_writes_a_submission_row(): void {
         $applicant = $this->getDataGenerator()->create_user();
-        $this->apply_as_current_user($applicant);
+        $this->apply_for($applicant);
 
         $row = $this->submission_of($applicant);
         $this->assertEquals($this->instance->id, (int) $row->enrolid);
@@ -1398,7 +1576,7 @@ final class lib_test extends \advanced_testcase {
         $this->setUser($approver);
 
         $applicant = $this->getDataGenerator()->create_user();
-        $this->apply_as_current_user($applicant);
+        $this->apply_for($applicant);
         $ueid = (int) $DB->get_field(
             'user_enrolments',
             'id',
@@ -1432,7 +1610,7 @@ final class lib_test extends \advanced_testcase {
 
         $this->setAdminUser();
         $applicant = $this->getDataGenerator()->create_user();
-        $this->apply_as_current_user($applicant);
+        $this->apply_for($applicant);
         $ueid = (int) $DB->get_field(
             'user_enrolments',
             'id',
@@ -1464,7 +1642,7 @@ final class lib_test extends \advanced_testcase {
 
         $this->setAdminUser();
         $applicant = $this->getDataGenerator()->create_user();
-        $this->apply_as_current_user($applicant);
+        $this->apply_for($applicant);
         $ueid = (int) $DB->get_field(
             'user_enrolments',
             'id',
@@ -1491,7 +1669,7 @@ final class lib_test extends \advanced_testcase {
 
         $this->setAdminUser();
         $applicant = $this->getDataGenerator()->create_user();
-        $this->apply_as_current_user($applicant);
+        $this->apply_for($applicant);
         $ueid = (int) $DB->get_field(
             'user_enrolments',
             'id',
@@ -1526,7 +1704,7 @@ final class lib_test extends \advanced_testcase {
 
         $this->setAdminUser();
         $applicant = $this->getDataGenerator()->create_user();
-        $this->apply_as_current_user($applicant);
+        $this->apply_for($applicant);
         $ueid = (int) $DB->get_field(
             'user_enrolments',
             'id',
@@ -1567,7 +1745,7 @@ final class lib_test extends \advanced_testcase {
 
         $this->setAdminUser();
         $applicant = $this->getDataGenerator()->create_user();
-        $this->apply_as_current_user($applicant);
+        $this->apply_for($applicant);
         $ueid = (int) $DB->get_field(
             'user_enrolments',
             'id',
@@ -1616,7 +1794,7 @@ final class lib_test extends \advanced_testcase {
     public function test_deciding_with_an_unknown_status_throws(): void {
         $this->setAdminUser();
         $applicant = $this->getDataGenerator()->create_user();
-        $this->apply_as_current_user($applicant);
+        $this->apply_for($applicant);
 
         $this->expectException(\coding_exception::class);
         \enrol_apply\local\submission::decide(1, 99, 1);
@@ -1762,7 +1940,7 @@ final class lib_test extends \advanced_testcase {
 
         $this->setAdminUser();
         $applicant = $this->getDataGenerator()->create_user();
-        $this->apply_as_current_user($applicant);
+        $this->apply_for($applicant);
         $ueid = (int) $DB->get_field(
             'user_enrolments',
             'id',
@@ -1772,7 +1950,7 @@ final class lib_test extends \advanced_testcase {
 
         $sink = $this->redirectMessages();
         $this->plugin->cancel_enrolment([$ueid]);
-        $this->apply_as_current_user($applicant);
+        $this->apply_for($applicant);
         $sink->close();
 
         $rows = $DB->get_records('enrol_apply_submission', [
@@ -1806,7 +1984,7 @@ final class lib_test extends \advanced_testcase {
         $this->setUser($approver);
 
         $applicant = $this->getDataGenerator()->create_user();
-        $this->apply_as_current_user($applicant);
+        $this->apply_for($applicant);
 
         $this->plugin->update_user_enrol($this->instance, $applicant->id, ENROL_USER_ACTIVE);
 
@@ -1838,7 +2016,7 @@ final class lib_test extends \advanced_testcase {
         ]);
 
         $applicant = $this->getDataGenerator()->create_user();
-        $this->apply_as_current_user($applicant);
+        $this->apply_for($applicant);
         $ueid = (int) $DB->get_field(
             'user_enrolments',
             'id',

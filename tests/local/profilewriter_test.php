@@ -355,15 +355,28 @@ final class profilewriter_test extends \advanced_testcase {
     }
 
     /**
-     * A restore switches the instance opt-in off.
+     * A new instance starts with its half of the switch off.
+     *
+     * An instance built from get_instance_defaults() does not write, although the site half is
+     * on in this fixture; the instance from setUp(), which has its half switched on, is the
+     * control showing the site half really is. What a restore does to the same switch is
+     * backup_test::test_a_restore_switches_the_profile_write_off().
      *
      * @return void
      */
-    public function test_restore_zeroes_the_instance_switch(): void {
-        $defaults = $this->plugin->get_instance_defaults();
+    public function test_a_new_instance_starts_with_the_instance_switch_off(): void {
+        global $DB;
 
+        $defaults = $this->plugin->get_instance_defaults();
         $this->assertArrayHasKey('customint8', $defaults);
         $this->assertSame(0, $defaults['customint8']);
+
+        $course = $this->getDataGenerator()->create_course();
+        $instanceid = $this->plugin->add_instance($course, $defaults);
+        $instance = $DB->get_record('enrol', ['id' => $instanceid], '*', MUST_EXIST);
+
+        $this->assertTrue(profilewriter::is_enabled($this->instance), 'the control: the site half is on');
+        $this->assertFalse(profilewriter::is_enabled($instance));
     }
 
     /**

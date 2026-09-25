@@ -589,9 +589,11 @@ final class operations_test extends \advanced_testcase {
     /**
      * Only this plugin's enrolments are handed to the decision.
      *
-     * The base class promises nothing about the array process() receives, and a foreign user
-     * enrolment id does not skip when it reaches confirm_enrolment(): get_pending_user_enrolment()
-     * has no enrol-type predicate and the MUST_EXIST lookup after it throws.
+     * The base class promises nothing about the array process() receives. The decision methods
+     * would skip a foreign user enrolment id themselves, since get_pending_user_enrolment() joins
+     * on this plugin's instances, but the operation filters first so that every count it reports
+     * is about this plugin's applications: an unfiltered selection would report the manual
+     * enrolment as not awaiting a decision.
      *
      * @return void
      */
@@ -992,6 +994,11 @@ final class operations_test extends \advanced_testcase {
      * The control. Without it the assertion above passes just as well against an operation that
      * warns on every decision it takes.
      *
+     * The warning is looked for by the wording its lang string opens with, up to the first
+     * placeholder, so a count or a method name of any value is caught and editing the string
+     * cannot leave this looking for text that no longer exists. The report of the decision
+     * itself is the control that process() ran and notified at all.
+     *
      * @return void
      */
     public function test_a_single_method_produces_no_other_methods_warning(): void {
@@ -1004,9 +1011,18 @@ final class operations_test extends \advanced_testcase {
             ->process($manager, $users, (object) ['outcomemessage' => '', 'decisionnote' => '']);
         $sink->close();
 
-        foreach ($this->notifications() as $message) {
-            $this->assertStringNotContainsString('will be left alone', $message);
-            $this->assertStringNotContainsString('left alone', $message);
+        $marker = "\x1f";
+        $opening = strstr(
+            get_string('bulkothermethods', 'enrol_apply', (object) ['count' => $marker, 'method' => $marker]),
+            $marker,
+            true
+        );
+        $this->assertNotEmpty($opening, 'the string must open with fixed wording for this to test anything');
+
+        $notifications = $this->notifications();
+        $this->assertContains(get_string('bulkdecided', 'enrol_apply', 1), $notifications);
+        foreach ($notifications as $message) {
+            $this->assertStringNotContainsString($opening, $message);
         }
     }
 

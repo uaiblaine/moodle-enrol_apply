@@ -45,7 +45,6 @@ class enrol_apply_renderer extends plugin_renderer_base {
     public function manage_page($table, $manageurl, $instance) {
         echo $this->header();
         echo $this->heading(get_string('confirmusers', 'enrol_apply'));
-        echo html_writer::tag('p', get_string('confirmusers_desc', 'enrol_apply'));
         echo $this->manage_form($table, $manageurl, $instance);
         echo $this->footer();
     }
@@ -116,15 +115,22 @@ class enrol_apply_renderer extends plugin_renderer_base {
         }
 
         /* Which rows of how many are on screen, which table_sql's paging bar never says.
-           Read after capture_table(), which is what populates totalrows and currpage. */
+           Read after capture_table(), which is what populates totalrows and currpage.
+
+           A page holding no row has no range to name: an empty queue would read "Showing 1-0 of
+           0", and a page number past the end of a narrowed queue (core does not clamp it) would
+           read "Showing 101-4 of 4". The text is left empty then and the template hides the line;
+           redrawShowing() in amd/src/manage.js applies the same rule after an AJAX refresh. */
         $from = (int) ($table->currpage * $table->pagesize) + 1;
-        $showing = get_string('queueshowing', 'enrol_apply', (object) [
+        $to = (int) min($table->totalrows, $from + $table->pagesize - 1);
+        $showing = $from > $to ? '' : get_string('queueshowing', 'enrol_apply', (object) [
             'from' => $from,
-            'to' => (int) min($table->totalrows, $from + $table->pagesize - 1),
+            'to' => $to,
             'total' => (int) $table->totalrows,
         ]);
 
         $context = $this->decision_controls_context($instance) + [
+            'descriptiontext' => get_string('confirmusers_desc', 'enrol_apply'),
             'formurl' => $manageurl->out(false),
             'sesskey' => sesskey(),
             'capacityhtml' => $this->render_from_template(
@@ -139,6 +145,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
                 $this->queue_filters_context($table, $manageurl)
             ),
             'tablehtml' => $tablehtml,
+            'hasshowing' => $showing !== '',
             'showingtext' => $showing,
             'stickyfooter' => $stickyfooter,
             'hasplacesnotice' => $placesnotice !== '',
@@ -1024,6 +1031,112 @@ class enrol_apply_renderer extends plugin_renderer_base {
         $context['stickyfooter'] = $this->render(new \core\output\sticky_footer($bar));
 
         return $this->render_from_template('enrol_apply/review', $context);
+    }
+
+    /**
+     * Render the page asking whether to cancel one application.
+     *
+     * @param stdClass $applicant Applicant user record.
+     * @param moodle_url $manageurl The review page's own url.
+     * @param int $userenrolmentid The application being cancelled.
+     * @param string $message What the operator typed for the applicant.
+     * @param string $note The decision note they typed.
+     * @return void
+     */
+    public function cancel_confirmation_page(
+        $applicant,
+        moodle_url $manageurl,
+        int $userenrolmentid,
+        string $message,
+        string $note
+    ) {
+        echo $this->header();
+        echo $this->cancel_confirmation($applicant, $manageurl, $userenrolmentid, $message, $note);
+        echo $this->footer();
+    }
+
+    /**
+     * The question asked before one application is cancelled, and its two answers.
+     *
+     * Both answers are POST forms back to the review page. The message and note travel both ways:
+     * onward because the cancellation records them, and back so the operator's text survives
+     * backing out. single_button writes every url parameter into a hidden input whatever the
+     * method, but a GET form submits them as the query string of the page it opens, which would
+     * put the decider's note - never shown to the applicant - and the message into web server
+     * logs, the browser history and the Referer of whatever that page loads. manage.php reads
+     * both back with optional_param(), which accepts a POST alike.
+     *
+     * The group and role choosers are not carried, in either direction: they are the approval's
+     * parameters and cancelling reads neither.
+     *
+     * @param stdClass $applicant Applicant user record.
+     * @param moodle_url $manageurl The review page's own url, carrying userenrol.
+     * @param int $userenrolmentid The application being cancelled.
+     * @param string $message What the operator typed for the applicant, plain.
+     * @param string $note The decision note they typed, plain.
+     * @return string Rendered markup.
+     */
+    public function cancel_confirmation(
+        $applicant,
+        moodle_url $manageurl,
+        int $userenrolmentid,
+        string $message,
+        string $note
+    ) {
+        $output = $this->heading(get_string('reviewcancelconfirm', 'enrol_apply'));
+        /* Both buttons are labelled explicitly: core's confirm() would label the second one
+           "Cancel", beside a destructive primary button that also starts with "Cancel". */
+        $output .= $this->confirm(
+            get_string('reviewcancelconfirm_desc', 'enrol_apply', fullname($applicant)),
+            new single_button(
+                /* The queue's own decision contract. single_button names each hidden input by the
+                   raw key, so `userenrolments[0]` is what optional_param_array() reads back. */
+                new moodle_url($manageurl, [
+                    'formaction' => 'cancel',
+                    'confirmed' => 1,
+                    'sesskey' => sesskey(),
+                    'userenrolments[0]' => $userenrolmentid,
+                    'outcomemessage' => $message,
+                    'decisionnote' => $note,
+                ]),
+                get_string('reviewcancelaction', 'enrol_apply'),
+                'post'
+            ),
+            new single_button(
+                new moodle_url($manageurl, [
+                    'outcomemessage' => $message,
+                    'decisionnote' => $note,
+                ]),
+                get_string('reviewkeep', 'enrol_apply'),
+                'post'
+            )
+        );
+
+        return $output;
+    }
+
+    /**
+     * The profile details an applicant still has to fill in themselves.
+     *
+     * Shown on the acknowledgement page, applied.php, when the site does not let courses write to
+     * profiles; that page says why the list is needed.
+     *
+     * @param array $missing What \enrol_apply\local\completeness::missing() returns: one entry per
+     *        field, each with a key and a label in the plain spelling.
+     * @return string Rendered markup.
+     */
+    public function profile_missing(array $missing): string {
+        $fields = [];
+        foreach ($missing as $field) {
+            // Plain, because the template double stashes it.
+            $fields[] = ['label' => $field['label']];
+        }
+
+        return $this->render_from_template('enrol_apply/profile_missing', [
+            'heading' => get_string('profileincomplete', 'enrol_apply'),
+            'intro' => get_string('profileincomplete_desc', 'enrol_apply'),
+            'fields' => $fields,
+        ]);
     }
 
     /**

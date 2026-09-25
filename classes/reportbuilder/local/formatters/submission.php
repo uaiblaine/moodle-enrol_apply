@@ -17,6 +17,7 @@
 namespace enrol_apply\reportbuilder\local\formatters;
 
 use enrol_apply\local\fields as applyfields;
+use enrol_apply\local\queue;
 use enrol_apply\local\submission as submissionhelper;
 use stdClass;
 
@@ -111,9 +112,11 @@ class submission {
      * reset, user deletion and the expiry sweep change an enrolment without touching the record,
      * so approved-and-enrolled and approved-then-unenrolled are otherwise the same row.
      *
-     * A suspended approval is split by timeend. A suspension whose end has not passed (usually a
-     * manual one) matches the queue's predicate (status != active AND (timeend = 0 OR timeend >
-     * now)) and is back in the approval queue, so the report says so. One whose end has passed
+     * A suspended approval is split by timeend, through the queue's own rule
+     * ({@see queue::is_awaiting_decision()}) rather than a copy of it, so the report and the
+     * queue cannot disagree about a row. A suspension with no end or an end still in the future
+     * (usually a manual one) is back in the approval queue, so the report says so. Any other end
+     * has expired, including one equal to now and a negative one, which a restore can carry: it
      * is the expiry sweep's work and does not re-queue.
      *
      * A record restored without a mappable enrolment is left at its stored status, as nothing is
@@ -163,8 +166,11 @@ class submission {
             return get_string('outcomeapproved', 'enrol_apply');
         }
 
-        $timeend = (int) ($row->outcomeenroltimeend ?? 0);
-        if ($timeend > 0 && $timeend < time()) {
+        $enrolment = (object) [
+            'status' => (int) $enrolstatus,
+            'timeend' => (int) ($row->outcomeenroltimeend ?? 0),
+        ];
+        if (!queue::is_awaiting_decision($enrolment)) {
             return get_string('outcomeexpired', 'enrol_apply');
         }
 

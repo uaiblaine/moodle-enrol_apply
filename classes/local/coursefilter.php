@@ -72,17 +72,69 @@ final class coursefilter {
     }
 
     /**
-     * Every category this reader may see, named by its full path.
+     * Every category this reader may see, named by its full path in the plain spelling.
      *
-     * Core's make_categories_list(), which caches the list per session and skips the categories
-     * this reader may not view. Not narrowed to categories that hold an apply course: that query
-     * would have to walk the tree upwards for every match, and a category with no applications
-     * simply produces an empty queue.
+     * Which categories, in which order, and which ancestors a path names are
+     * \core_course_category::make_categories_list()'s answer, which caches it per session: the
+     * categories this reader may view, by sortorder, each path skipping the ancestors they may not.
+     * Its names are not used, because core formats them with format_string()'s default escaping
+     * and the renderer puts these into double stashes, the option text and the filter chip, which
+     * would escape them a second time. Each name along the path is formatted again here with
+     * 'escape' => false, in the same filter context core uses. Decoding core's output instead would
+     * be wrong, because the escaping is not reversible: a name typed as "A &amp; B" and one typed
+     * as "A & B" come out of it identical.
      *
-     * @return array Category id => path name such as 'Engineering / Civil', escaped by format_string().
+     * Not narrowed to categories that hold an apply course: that query would have to walk the tree
+     * upwards for every match, and a category with no applications simply produces an empty queue.
+     *
+     * For drawing the control only, like courses(); clean_category() decides whether a value is real.
+     *
+     * @return array Category id => path name such as 'Engineering / Civil', not escaped.
      */
     public static function categories(): array {
-        return \core_course_category::make_categories_list();
+        global $DB;
+
+        $visible = \core_course_category::make_categories_list();
+        if (!$visible) {
+            return [];
+        }
+
+        $ctxselect = \context_helper::get_preload_record_columns_sql('ctx');
+        $records = $DB->get_records_sql(
+            "SELECT cc.id, cc.name, cc.path, {$ctxselect}
+               FROM {course_categories} cc
+               JOIN {context} ctx ON ctx.instanceid = cc.id AND ctx.contextlevel = :contextlevel",
+            ['contextlevel' => CONTEXT_COURSECAT]
+        );
+
+        // Only the categories core listed may lend a name to a path, as in make_categories_list().
+        $plain = [];
+        foreach ($records as $record) {
+            $id = (int) $record->id;
+            if (!array_key_exists($id, $visible)) {
+                continue;
+            }
+            \context_helper::preload_from_record($record);
+            $filtercontext = \context_helper::get_navigation_filter_context(\context_coursecat::instance($id));
+            $plain[$id] = format_string($record->name, true, ['context' => $filtercontext, 'escape' => false]);
+        }
+
+        $names = [];
+        foreach (array_keys($visible) as $id) {
+            // Deleted since the session cache was filled.
+            if (!isset($records[$id])) {
+                continue;
+            }
+            $chunks = [];
+            foreach (explode('/', trim($records[$id]->path, '/')) as $ancestor) {
+                if (isset($plain[(int) $ancestor])) {
+                    $chunks[] = $plain[(int) $ancestor];
+                }
+            }
+            $names[(int) $id] = implode(' / ', $chunks);
+        }
+
+        return $names;
     }
 
     /**

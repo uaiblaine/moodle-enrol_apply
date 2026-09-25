@@ -413,9 +413,8 @@ final class decision_role_test extends \advanced_testcase {
      *
      * record_decided_role() writes a zero rather than returning early on one. Otherwise a stored
      * role is sticky: a row that comes back to the queue (core's "Edit enrolment" screen
-     * re-suspends one, and so does an expiredaction of "suspend") would be approved again with
-     * the superseded role. Changes that must make it fail: record_decided_role() returning early
-     * when the role is 0.
+     * re-suspends one) would be approved again with the superseded role. Changes that must make
+     * it fail: record_decided_role() returning early when the role is 0.
      *
      * @return void
      */
