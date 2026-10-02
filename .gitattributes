@@ -19,3 +19,4 @@ CLAUDE.md             export-ignore
 .gitattributes        export-ignore
 docs                  export-ignore
 mutations             export-ignore
+/.mdlshield          export-ignore
