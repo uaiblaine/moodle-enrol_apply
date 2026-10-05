@@ -147,6 +147,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **A lapsed application is no longer described to its applicant as waiting for a decision.**
+  Under an enrolment expiry action that suspends (with or without removing roles), a row whose end
+  date has passed keeps status 1 with a timeend in the past. The queue
+  already holds no decision awaited on such a row, but the applicant's own describer sent every
+  status other than active and deferred to the pending wording, so the enrolment page, the
+  acknowledgement page and the form's refusal all said "submitted and waiting for a decision" to
+  somebody nobody was going to answer. The describer now asks `queue::is_awaiting_decision()` for a
+  row that is not active, and reads a lapsed one as *Enrolment not active*; the string existed
+  already. A genuinely pending row keeps its wording, and a deferred one stays deferred whatever its
+  timeend says. The three callers read `timeend` off the applicant's row for it. The default
+  expiry action (keep) never produces such a row. Version 2026100501.
+
 - **The queue's status filter listed the wrong things, and that is what broke the search.** The
   filter bar built its status options and its per-field options into the same local variable a few
   lines apart, so the status control published whatever the last configured profile field left

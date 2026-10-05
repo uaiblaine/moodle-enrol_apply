@@ -1432,6 +1432,31 @@ final class lib_test extends \advanced_testcase {
     }
 
     /**
+     * A lapsed application is not shown as waiting for a decision.
+     *
+     * Status 1 with a timeend in the past is what a suspending expiredaction leaves behind. The
+     * control is the same row with no end, which the panel still describes as submitted.
+     *
+     * @return void
+     */
+    public function test_the_enrolment_panel_does_not_say_a_lapsed_application_is_awaited(): void {
+        global $DB;
+
+        [$applicant, $ueid] = $this->create_application();
+        $this->setUser($applicant);
+
+        $this->assertStringContainsString(
+            get_string('applicationsubmitted_body', 'enrol_apply'),
+            $this->enrol_panel()
+        );
+
+        $DB->set_field('user_enrolments', 'timeend', time() - DAYSECS, ['id' => $ueid]);
+        $panel = $this->enrol_panel();
+        $this->assertStringContainsString(get_string('applicationinactive_body', 'enrol_apply'), $panel);
+        $this->assertStringNotContainsString(get_string('applicationsubmitted_body', 'enrol_apply'), $panel);
+    }
+
+    /**
      * A method that has stopped taking applications still tells its applicants about theirs.
      *
      * Pins that enrol_page_hook() tests the applicant's own row before allow_apply(), so an

@@ -36,8 +36,8 @@ require_once($CFG->dirroot . '/enrol/apply/lib.php');
 /**
  * Tests for what an applicant is told about their own application.
  *
- * No database: the describer reads one status off a row and returns three strings, and the two
- * pages that call it are covered where they live.
+ * No database: the describer reads the status and timeend off a row and returns three strings, and
+ * the pages that call it are covered where they live.
  *
  * @package    enrol_apply
  * @category   test
@@ -51,10 +51,14 @@ final class applicantstate_test extends \basic_testcase {
      *
      * @param int $status A {user_enrolments}.status value.
      * @param bool $hasaccess Whether the enrolment currently lets them into the course.
+     * @param int $timeend A {user_enrolments}.timeend value, 0 for no end.
      * @return array What the applicant would be told.
      */
-    protected function describe(int $status, bool $hasaccess = false): array {
-        return applicantstate::describe((object) ['id' => 1, 'status' => $status], $hasaccess);
+    protected function describe(int $status, bool $hasaccess = false, int $timeend = 0): array {
+        return applicantstate::describe(
+            (object) ['id' => 1, 'status' => $status, 'timeend' => $timeend],
+            $hasaccess
+        );
     }
 
     /**
@@ -169,7 +173,7 @@ final class applicantstate_test extends \basic_testcase {
         ];
 
         foreach ($cases as [$status, $hasaccess]) {
-            $row = (object) ['id' => 1, 'status' => $status];
+            $row = (object) ['id' => 1, 'status' => $status, 'timeend' => 0];
             $key = applicantstate::message_key($row, $hasaccess);
 
             $this->assertTrue(
@@ -211,5 +215,83 @@ final class applicantstate_test extends \basic_testcase {
 
         $this->assertCount(4, array_unique($messages));
         $this->assertCount(4, array_unique($headings));
+    }
+
+    /**
+     * A row that has lapsed is not described as waiting for a decision.
+     *
+     * A suspending expiredaction leaves status 1 with a timeend in the past, and the queue holds no
+     * such row as awaiting a decision, so the applicant is told the enrolment is not active. The
+     * control is the same status with no end and with an end in the future: both still read as
+     * pending, which fails this test if the describer stops consulting the timeend at all.
+     *
+     * @return void
+     */
+    public function test_a_lapsed_application_is_not_described_as_waiting_for_a_decision(): void {
+        $lapsed = $this->describe(ENROL_USER_SUSPENDED, false, time() - DAYSECS);
+
+        $this->assertSame(get_string('applicationinactive', 'enrol_apply'), $lapsed['heading']);
+        $this->assertSame(get_string('applicationinactive_body', 'enrol_apply'), $lapsed['message']);
+        $this->assertSame(notification::NOTIFY_WARNING, $lapsed['type']);
+
+        // The controls: the same status still awaiting a decision keeps the pending wording.
+        foreach ([0, time() + DAYSECS] as $timeend) {
+            $pending = $this->describe(ENROL_USER_SUSPENDED, false, $timeend);
+            $this->assertSame(get_string('applicationsubmitted_body', 'enrol_apply'), $pending['message']);
+            $this->assertNotSame($lapsed['message'], $pending['message']);
+        }
+    }
+
+    /**
+     * The describer and the queue never disagree about whether a decision is awaited.
+     *
+     * For every status other than ACTIVE and deferred, the pending wording is given exactly when
+     * queue::is_awaiting_decision() says so, across the timeend values that split the two. The
+     * precondition is asserted: the matrix really holds both answers, so the equality is not
+     * satisfied by a describer and a queue that both always say the same thing.
+     *
+     * @return void
+     */
+    public function test_the_describer_agrees_with_the_queue_on_what_is_awaited(): void {
+        $pending = get_string('applicationsubmitted_body', 'enrol_apply');
+        $answers = [];
+
+        foreach ([ENROL_USER_SUSPENDED, 97] as $status) {
+            foreach ([0, time() + DAYSECS, time() - DAYSECS, -5] as $timeend) {
+                $row = (object) ['id' => 1, 'status' => $status, 'timeend' => $timeend];
+                $awaiting = queue::is_awaiting_decision($row);
+                $answers[$awaiting ? 'awaiting' : 'lapsed'] = true;
+
+                $this->assertSame(
+                    $awaiting,
+                    applicantstate::describe($row, false)['message'] === $pending,
+                    'status ' . $status . ', timeend ' . $timeend
+                );
+            }
+        }
+
+        $this->assertSame(['awaiting', 'lapsed'], array_keys($answers));
+    }
+
+    /**
+     * A deferred application stays deferred whatever its timeend says.
+     *
+     * The deferred state is decided by the status alone: the operator took that decision knowingly,
+     * and the lapse rule is for rows nobody has looked at. The control is the pending status with
+     * the same lapsed timeend, which does change its wording.
+     *
+     * @return void
+     */
+    public function test_a_deferred_application_stays_deferred_with_a_past_timeend(): void {
+        $past = time() - DAYSECS;
+
+        $deferred = $this->describe(ENROL_APPLY_USER_WAIT, false, $past);
+        $this->assertSame(get_string('applicationdeferred_body', 'enrol_apply'), $deferred['message']);
+        $this->assertSame(notification::NOTIFY_INFO, $deferred['type']);
+
+        $this->assertNotSame(
+            $this->describe(ENROL_USER_SUSPENDED, false, 0)['message'],
+            $this->describe(ENROL_USER_SUSPENDED, false, $past)['message']
+        );
     }
 }

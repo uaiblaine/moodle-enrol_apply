@@ -335,6 +335,41 @@ final class application_form_test extends \advanced_testcase {
     }
 
     /**
+     * The refusal does not say a decision is awaited when the row has lapsed.
+     *
+     * A suspending expiredaction leaves status 1 with a timeend in the past. The control is the same
+     * row with no end, which is refused as still pending, so the test also fails if the form stops
+     * reading timeend off the row.
+     *
+     * @return void
+     */
+    public function test_the_refusal_of_a_lapsed_row_does_not_say_a_decision_is_awaited(): void {
+        global $DB;
+
+        $this->plugin->submit_application($this->instance, $this->applicant->id, (object) []);
+        $ueid = (int) $DB->get_field(
+            'user_enrolments',
+            'id',
+            ['userid' => $this->applicant->id, 'enrolid' => $this->instance->id],
+            MUST_EXIST
+        );
+
+        $expected = [
+            0 => 'applicationsubmitted_body',
+            time() - DAYSECS => 'applicationinactive_body',
+        ];
+        foreach ($expected as $timeend => $errorcode) {
+            $DB->set_field('user_enrolments', 'timeend', $timeend, ['id' => $ueid]);
+            try {
+                $this->make_form()->check_access_for_dynamic_submission();
+                $this->fail('timeend ' . $timeend . ' must be refused');
+            } catch (\moodle_exception $e) {
+                $this->assertSame($errorcode, $e->errorcode, 'timeend ' . $timeend);
+            }
+        }
+    }
+
+    /**
      * A method that has stopped taking applications still tells its applicants about theirs.
      *
      * Pins that the applicant's own row is read before allow_apply(), so an applicant is not
