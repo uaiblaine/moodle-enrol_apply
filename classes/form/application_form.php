@@ -386,7 +386,7 @@ class application_form extends dynamic_form {
         $ownrow = $DB->get_record(
             'user_enrolments',
             ['userid' => $USER->id, 'enrolid' => $instance->id],
-            'id, status',
+            'id, status, timeend',
             IGNORE_MULTIPLE
         );
         if ($ownrow) {

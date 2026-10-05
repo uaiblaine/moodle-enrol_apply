@@ -127,6 +127,10 @@ backup/                      group mappings, comments and the durable trail, see
   enrolment's window AND the enrol instance's own status — so each caller passes what it knows,
   which is `is_enrolled(..., onlyactive: true)` for all three. The enrolment page asks too, although
   core's `enrol/index.php` redirects an actively enrolled user before its panel is shown.
+  A row that is not active reads as pending only while `queue::is_awaiting_decision()` agrees
+  (the queue is the authority for "awaiting"): a lapsed one - status 1 with a past timeend, what a
+  suspending expiredaction leaves - reads as not active, so every caller must select `timeend` with
+  `status`. Deferred is decided by the status alone.
 
   Two more consequences worth keeping. **The applicant's own row must be tested BEFORE
   `allow_apply()`, on the form as well as on the page**, or a method that stops accepting

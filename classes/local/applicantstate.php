@@ -32,6 +32,11 @@ use stdClass;
  * be told the application is still being considered, and only the second may be told that the
  * enrolment is not active.
  *
+ * A row that is not active is "waiting" only while the queue says a decision is awaited
+ * ({@see queue::is_awaiting_decision()}, the authority for that). One that has lapsed - a
+ * suspending expiredaction leaves status 1 with a timeend in the past - is not waiting for
+ * anybody and is described as not active, the same as an approval that grants no access.
+ *
  * That is why access is a parameter rather than something read off the row: the row alone
  * cannot answer it, and every caller asks is_enrolled() itself (the enrolment page is only
  * rendered to somebody core has refused, so it gets false in practice). Deriving it here would
@@ -55,7 +60,7 @@ final class applicantstate {
     /** @var string Approved, and the enrolment really does grant access. */
     private const APPROVED = 'approved';
 
-    /** @var string Approved, and yet the applicant cannot enter the course. */
+    /** @var string No access and nothing awaited: an approval that grants none, or a lapsed row. */
     private const INACTIVE = 'inactive';
 
     /**
@@ -64,7 +69,7 @@ final class applicantstate {
      * Returned together, all derived from one state(), so a heading can never describe a
      * different state from its body.
      *
-     * @param stdClass $userenrolment The applicant's own {user_enrolments} row, carrying status.
+     * @param stdClass $userenrolment The applicant's own {user_enrolments} row, carrying status and timeend.
      * @param bool $hasaccess Whether that enrolment currently lets them into the course, as the
      *        caller's own is_enrolled(..., onlyactive: true) answered it.
      * @return array Keys 'heading', 'message' and 'type', the last a \core\output\notification level.
@@ -99,7 +104,7 @@ final class applicantstate {
      * A literal per branch rather than an id built by concatenation, so tools that check
      * string usage can see every key.
      *
-     * @param stdClass $userenrolment The applicant's own {user_enrolments} row.
+     * @param stdClass $userenrolment The applicant's own {user_enrolments} row, carrying status and timeend.
      * @param bool $hasaccess Whether that enrolment currently lets them into the course.
      * @return string A string id in this plugin's language pack.
      */
@@ -118,11 +123,14 @@ final class applicantstate {
      * SUSPENDED is the default arm rather than a branch of its own: it is the pending state, and
      * so is any value neither this plugin nor core writes - a restore can carry anything, and
      * "waiting for a decision" is the only safe answer for a status this plugin does not know.
+     * That answer is given only while queue::is_awaiting_decision() agrees; a row whose timeend has
+     * passed is INACTIVE, so the applicant is never told a decision is awaited that the queue does
+     * not hold. DEFERRED is decided by the status alone, as before.
      *
      * Access is consulted on the ACTIVE arm and nowhere else: a pending applicant has no access
      * either, and must not be told their enrolment is inactive.
      *
-     * @param stdClass $userenrolment The applicant's own {user_enrolments} row.
+     * @param stdClass $userenrolment The applicant's own {user_enrolments} row, carrying status and timeend.
      * @param bool $hasaccess Whether that enrolment currently lets them into the course.
      * @return string One of the state constants.
      */
@@ -137,7 +145,7 @@ final class applicantstate {
         return match ((int) $userenrolment->status) {
             ENROL_APPLY_USER_WAIT => self::DEFERRED,
             ENROL_USER_ACTIVE => $hasaccess ? self::APPROVED : self::INACTIVE,
-            default => self::PENDING,
+            default => queue::is_awaiting_decision($userenrolment) ? self::PENDING : self::INACTIVE,
         };
     }
 }
