@@ -1457,6 +1457,31 @@ final class lib_test extends \advanced_testcase {
     }
 
     /**
+     * A lapsed waiting-list row is not shown as deferred.
+     *
+     * The control is the same row with no end, which the panel still describes as deferred.
+     *
+     * @return void
+     */
+    public function test_the_enrolment_panel_does_not_say_a_lapsed_waiting_list_row_is_deferred(): void {
+        global $DB;
+
+        [$applicant, $ueid] = $this->create_application();
+        $this->setUser($applicant);
+        $DB->set_field('user_enrolments', 'status', ENROL_APPLY_USER_WAIT, ['id' => $ueid]);
+
+        $this->assertStringContainsString(
+            get_string('applicationdeferred_body', 'enrol_apply'),
+            $this->enrol_panel()
+        );
+
+        $DB->set_field('user_enrolments', 'timeend', time() - DAYSECS, ['id' => $ueid]);
+        $panel = $this->enrol_panel();
+        $this->assertStringContainsString(get_string('applicationinactive_body', 'enrol_apply'), $panel);
+        $this->assertStringNotContainsString(get_string('applicationdeferred_body', 'enrol_apply'), $panel);
+    }
+
+    /**
      * A method that has stopped taking applications still tells its applicants about theirs.
      *
      * Pins that enrol_page_hook() tests the applicant's own row before allow_apply(), so an

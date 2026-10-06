@@ -147,6 +147,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **A lapsed waiting-list row is no longer described to its applicant as deferred.** A row on
+  the waiting list (status 2) whose end date has passed is not counted by the queue
+  (`queue::is_awaiting_decision()` is false for it) and not by the applicant limit either, yet the
+  applicant's describer decided the waiting-list state by the status alone, so the enrolment page,
+  the acknowledgement page and the form's refusal still told them the application was deferred.
+  The describer now asks the queue first for every row that is not active: a lapsed one reads as
+  *Enrolment not active*, whichever of pending or waiting list it was, and only a row the queue
+  still counts is deferred. No new string, and nobody's place in the queue or in the applicant
+  count changes. Such a row is not produced by the plugin itself (it clears any end date it
+  defers); a restore or a hand edit can. Version 2026100502.
+
 - **A lapsed application is no longer described to its applicant as waiting for a decision.**
   Under an enrolment expiry action that suspends (with or without removing roles), a row whose end
   date has passed keeps status 1 with a timeend in the past. The queue

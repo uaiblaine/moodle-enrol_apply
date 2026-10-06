@@ -370,6 +370,41 @@ final class application_form_test extends \advanced_testcase {
     }
 
     /**
+     * The refusal of a lapsed waiting-list row says the enrolment is not active, not deferred.
+     *
+     * The control is the same row with no end, which is refused as deferred, so the test also fails
+     * if the form stops reading timeend off the row.
+     *
+     * @return void
+     */
+    public function test_the_refusal_of_a_lapsed_waiting_list_row_does_not_say_it_is_deferred(): void {
+        global $DB;
+
+        $this->plugin->submit_application($this->instance, $this->applicant->id, (object) []);
+        $ueid = (int) $DB->get_field(
+            'user_enrolments',
+            'id',
+            ['userid' => $this->applicant->id, 'enrolid' => $this->instance->id],
+            MUST_EXIST
+        );
+        $DB->set_field('user_enrolments', 'status', ENROL_APPLY_USER_WAIT, ['id' => $ueid]);
+
+        $expected = [
+            0 => 'applicationdeferred_body',
+            time() - DAYSECS => 'applicationinactive_body',
+        ];
+        foreach ($expected as $timeend => $errorcode) {
+            $DB->set_field('user_enrolments', 'timeend', $timeend, ['id' => $ueid]);
+            try {
+                $this->make_form()->check_access_for_dynamic_submission();
+                $this->fail('timeend ' . $timeend . ' must be refused');
+            } catch (\moodle_exception $e) {
+                $this->assertSame($errorcode, $e->errorcode, 'timeend ' . $timeend);
+            }
+        }
+    }
+
+    /**
      * A method that has stopped taking applications still tells its applicants about theirs.
      *
      * Pins that the applicant's own row is read before allow_apply(), so an applicant is not

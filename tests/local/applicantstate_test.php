@@ -245,53 +245,66 @@ final class applicantstate_test extends \basic_testcase {
     /**
      * The describer and the queue never disagree about whether a decision is awaited.
      *
-     * For every status other than ACTIVE and deferred, the pending wording is given exactly when
+     * For every status other than ACTIVE, the wording that says a decision is awaited (pending
+     * for a submitted row, deferred for a waiting-list row) is given exactly when
      * queue::is_awaiting_decision() says so, across the timeend values that split the two. The
-     * precondition is asserted: the matrix really holds both answers, so the equality is not
-     * satisfied by a describer and a queue that both always say the same thing.
+     * precondition is asserted: the matrix really holds both answers for each status, so the
+     * equality is not satisfied by a describer and a queue that both always say the same thing.
      *
      * @return void
      */
     public function test_the_describer_agrees_with_the_queue_on_what_is_awaited(): void {
-        $pending = get_string('applicationsubmitted_body', 'enrol_apply');
+        $awaitingwording = [
+            ENROL_USER_SUSPENDED => get_string('applicationsubmitted_body', 'enrol_apply'),
+            ENROL_APPLY_USER_WAIT => get_string('applicationdeferred_body', 'enrol_apply'),
+            97 => get_string('applicationsubmitted_body', 'enrol_apply'),
+        ];
         $answers = [];
 
-        foreach ([ENROL_USER_SUSPENDED, 97] as $status) {
+        foreach ($awaitingwording as $status => $wording) {
             foreach ([0, time() + DAYSECS, time() - DAYSECS, -5] as $timeend) {
                 $row = (object) ['id' => 1, 'status' => $status, 'timeend' => $timeend];
                 $awaiting = queue::is_awaiting_decision($row);
-                $answers[$awaiting ? 'awaiting' : 'lapsed'] = true;
+                $answers[$status][$awaiting ? 'awaiting' : 'lapsed'] = true;
 
                 $this->assertSame(
                     $awaiting,
-                    applicantstate::describe($row, false)['message'] === $pending,
+                    applicantstate::describe($row, false)['message'] === $wording,
                     'status ' . $status . ', timeend ' . $timeend
                 );
             }
+            $this->assertSame(['awaiting', 'lapsed'], array_keys($answers[$status]), 'status ' . $status);
         }
-
-        $this->assertSame(['awaiting', 'lapsed'], array_keys($answers));
     }
 
     /**
-     * A deferred application stays deferred whatever its timeend says.
+     * A waiting-list row that has lapsed is described as not active, not as deferred.
      *
-     * The deferred state is decided by the status alone: the operator took that decision knowingly,
-     * and the lapse rule is for rows nobody has looked at. The control is the pending status with
-     * the same lapsed timeend, which does change its wording.
+     * The queue does not count it ({@see queue::is_awaiting_decision()}) and neither does the
+     * applicant limit, so telling the applicant they are on the waiting list would be telling them
+     * something no one holds for them. The controls are the same status with no end and with an
+     * end in the future, which stay deferred: the test fails if the describer stops reading
+     * timeend for this status.
      *
      * @return void
      */
-    public function test_a_deferred_application_stays_deferred_with_a_past_timeend(): void {
+    public function test_a_lapsed_waiting_list_row_is_described_as_not_active(): void {
         $past = time() - DAYSECS;
 
-        $deferred = $this->describe(ENROL_APPLY_USER_WAIT, false, $past);
-        $this->assertSame(get_string('applicationdeferred_body', 'enrol_apply'), $deferred['message']);
-        $this->assertSame(notification::NOTIFY_INFO, $deferred['type']);
+        $lapsed = $this->describe(ENROL_APPLY_USER_WAIT, false, $past);
+        $this->assertSame(get_string('applicationinactive', 'enrol_apply'), $lapsed['heading']);
+        $this->assertSame(get_string('applicationinactive_body', 'enrol_apply'), $lapsed['message']);
+        $this->assertSame(notification::NOTIFY_WARNING, $lapsed['type']);
 
-        $this->assertNotSame(
-            $this->describe(ENROL_USER_SUSPENDED, false, 0)['message'],
-            $this->describe(ENROL_USER_SUSPENDED, false, $past)['message']
-        );
+        foreach ([0, time() + DAYSECS] as $timeend) {
+            $waiting = $this->describe(ENROL_APPLY_USER_WAIT, false, $timeend);
+            $this->assertSame(get_string('applicationdeferred', 'enrol_apply'), $waiting['heading']);
+            $this->assertSame(get_string('applicationdeferred_body', 'enrol_apply'), $waiting['message']);
+            $this->assertSame(notification::NOTIFY_INFO, $waiting['type']);
+            $this->assertNotSame($lapsed['message'], $waiting['message']);
+        }
+
+        // Both lapsed kinds read the same: nothing is awaited, whichever kind the row was.
+        $this->assertSame($lapsed, $this->describe(ENROL_USER_SUSPENDED, false, $past));
     }
 }
