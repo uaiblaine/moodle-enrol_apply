@@ -32,10 +32,11 @@ use stdClass;
  * be told the application is still being considered, and only the second may be told that the
  * enrolment is not active.
  *
- * A row that is not active is "waiting" only while the queue says a decision is awaited
- * ({@see queue::is_awaiting_decision()}, the authority for that). One that has lapsed - a
- * suspending expiredaction leaves status 1 with a timeend in the past - is not waiting for
- * anybody and is described as not active, the same as an approval that grants no access.
+ * A row that is not active is "waiting", pending or deferred alike, only while the queue says a
+ * decision is awaited ({@see queue::is_awaiting_decision()}, the authority for that). One that
+ * has lapsed - a suspending expiredaction leaves status 1 with a timeend in the past, and a
+ * waiting-list row can carry one too - is not waiting for anybody and is described as not
+ * active, the same as an approval that grants no access.
  *
  * That is why access is a parameter rather than something read off the row: the row alone
  * cannot answer it, and every caller asks is_enrolled() itself (the enrolment page is only
@@ -54,13 +55,13 @@ final class applicantstate {
     /** @var string The application is waiting for a decision nobody has taken. */
     private const PENDING = 'pending';
 
-    /** @var string A decision was taken and it was to defer: still waiting, but knowingly. */
+    /** @var string A decision was taken and it was to defer: still waiting, but knowingly, and still counted by the queue. */
     private const DEFERRED = 'deferred';
 
     /** @var string Approved, and the enrolment really does grant access. */
     private const APPROVED = 'approved';
 
-    /** @var string No access and nothing awaited: an approval that grants none, or a lapsed row. */
+    /** @var string No access and nothing awaited: an approval that grants none, or a lapsed row of either kind. */
     private const INACTIVE = 'inactive';
 
     /**
@@ -120,14 +121,17 @@ final class applicantstate {
     /**
      * Which of the four states this enrolment puts the applicant in.
      *
-     * SUSPENDED is the default arm rather than a branch of its own: it is the pending state, and
-     * so is any value neither this plugin nor core writes - a restore can carry anything, and
-     * "waiting for a decision" is the only safe answer for a status this plugin does not know.
-     * That answer is given only while queue::is_awaiting_decision() agrees; a row whose timeend has
-     * passed is INACTIVE, so the applicant is never told a decision is awaited that the queue does
-     * not hold. DEFERRED is decided by the status alone, as before.
+     * Pending is the answer for every status that is neither active nor the waiting list, rather
+     * than a branch of its own for suspended: any value neither this plugin nor core writes - a
+     * restore can carry anything - is read as "waiting for a decision", the only safe answer for
+     * a status this plugin does not know.
      *
-     * Access is consulted on the ACTIVE arm and nowhere else: a pending applicant has no access
+     * That answer, and DEFERRED, are given only while queue::is_awaiting_decision() agrees: a row
+     * whose timeend has passed is INACTIVE whichever of the two it was, so the applicant is never
+     * told a decision is awaited, or that they are on the waiting list, when the queue holds
+     * nothing for them and capacity::deferred() does not count the row.
+     *
+     * Access is consulted on the ACTIVE branch and nowhere else: a pending applicant has no access
      * either, and must not be told their enrolment is inactive.
      *
      * @param stdClass $userenrolment The applicant's own {user_enrolments} row, carrying status and timeend.
@@ -142,10 +146,16 @@ final class applicantstate {
            shape as capacity::deferred() and the report formatter. */
         require_once($CFG->dirroot . '/enrol/apply/lib.php');
 
-        return match ((int) $userenrolment->status) {
-            ENROL_APPLY_USER_WAIT => self::DEFERRED,
-            ENROL_USER_ACTIVE => $hasaccess ? self::APPROVED : self::INACTIVE,
-            default => queue::is_awaiting_decision($userenrolment) ? self::PENDING : self::INACTIVE,
-        };
+        $status = (int) $userenrolment->status;
+
+        if ($status === ENROL_USER_ACTIVE) {
+            return $hasaccess ? self::APPROVED : self::INACTIVE;
+        }
+
+        if (!queue::is_awaiting_decision($userenrolment)) {
+            return self::INACTIVE;
+        }
+
+        return $status === ENROL_APPLY_USER_WAIT ? self::DEFERRED : self::PENDING;
     }
 }
