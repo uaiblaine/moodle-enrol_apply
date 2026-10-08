@@ -147,6 +147,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **A lapsed pending or waiting-list application no longer reads as awaiting or deferred in the
+  report.** The Outcome column split only the approved branch by the queue's rule
+  (`queue::is_awaiting_decision()`); a pending or waiting record whose enrolment was not active
+  and whose end had passed still showed "Awaiting a decision" or "Deferred", although the queue
+  no longer lists it. Both now read the new *Lapsed without a decision*, and a live row keeps its
+  old wording.
+
 - **A lapsed waiting-list row is no longer described to its applicant as deferred.** A row on
   the waiting list (status 2) whose end date has passed is not counted by the queue
   (`queue::is_awaiting_decision()` is false for it) and not by the applicant limit either, yet the
