@@ -119,6 +119,10 @@ class submission {
      * has expired, including one equal to now and a negative one, which a restore can carry: it
      * is the expiry sweep's work and does not re-queue.
      *
+     * A pending or waiting-list record is split by the same rule: when its enrolment has lapsed
+     * (not active, with an end that has passed) the queue no longer lists it, so it reads as
+     * lapsed instead of awaiting a decision or deferred.
+     *
      * A record restored without a mappable enrolment is left at its stored status, as nothing is
      * known about its enrolment.
      *
@@ -141,15 +145,22 @@ class submission {
             return submissionhelper::status_label($recordstatus);
         }
 
-        if ($recordstatus === submissionhelper::STATUS_PENDING) {
-            return $gone
-                ? get_string('outcomeneverdecided', 'enrol_apply')
-                : get_string('outcomeawaiting', 'enrol_apply');
-        }
+        if ($recordstatus === submissionhelper::STATUS_PENDING || $recordstatus === submissionhelper::STATUS_WAITING) {
+            if ($gone) {
+                return get_string('outcomeneverdecided', 'enrol_apply');
+            }
 
-        if ($recordstatus === submissionhelper::STATUS_WAITING) {
-            return $gone
-                ? get_string('outcomeneverdecided', 'enrol_apply')
+            // An undecided application whose period has run out is not in the queue any more.
+            $enrolment = (object) [
+                'status' => (int) $enrolstatus,
+                'timeend' => (int) ($row->outcomeenroltimeend ?? 0),
+            ];
+            if (!queue::is_awaiting_decision($enrolment)) {
+                return get_string('outcomelapsed', 'enrol_apply');
+            }
+
+            return $recordstatus === submissionhelper::STATUS_PENDING
+                ? get_string('outcomeawaiting', 'enrol_apply')
                 : get_string('outcomewaiting', 'enrol_apply');
         }
 

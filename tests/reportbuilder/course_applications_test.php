@@ -486,6 +486,41 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
     }
 
     /**
+     * A pending or waiting-list record whose enrolment lapsed reads as lapsed, a live one as before.
+     *
+     * Called on the formatter directly with fixed timestamps well either side of the present, so
+     * the split is the queue's own rule and not clock arithmetic. The live rows (no end, an end
+     * in the future) are the controls: they keep the awaiting and deferred wording.
+     *
+     * Changes that must make it fail: deleting the queue::is_awaiting_decision() check from the
+     * pending/waiting branch of the outcome formatter.
+     *
+     * @return void
+     */
+    public function test_a_lapsed_undecided_application_reads_as_lapsed(): void {
+        $lapsed = get_string('outcomelapsed', 'enrol_apply');
+        $cases = [
+            'pending, lapsed' => [submission::STATUS_PENDING, 946684800, $lapsed],
+            'pending, negative end' => [submission::STATUS_PENDING, -1, $lapsed],
+            'waiting, lapsed' => [submission::STATUS_WAITING, 946684800, $lapsed],
+            'pending, no end' => [submission::STATUS_PENDING, 0, get_string('outcomeawaiting', 'enrol_apply')],
+            'pending, future end' => [submission::STATUS_PENDING, 4102444800, get_string('outcomeawaiting', 'enrol_apply')],
+            'waiting, no end' => [submission::STATUS_WAITING, 0, get_string('outcomewaiting', 'enrol_apply')],
+            'waiting, future end' => [submission::STATUS_WAITING, 4102444800, get_string('outcomewaiting', 'enrol_apply')],
+        ];
+
+        foreach ($cases as $label => [$recordstatus, $timeend, $expected]) {
+            $row = (object) [
+                'outcomeueid' => '7',
+                'outcomeenrolstatus' => (string) ENROL_USER_SUSPENDED,
+                'outcomeenroltimeend' => (string) $timeend,
+            ];
+
+            $this->assertSame($expected, submissionformatter::outcome((string) $recordstatus, $row), $label);
+        }
+    }
+
+    /**
      * A record with no mappable enrolment reads "unknown", never "no longer enrolled".
      *
      * A restore writes userenrolmentid = 0 when it cannot map the enrolment, and zero finds

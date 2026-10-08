@@ -190,6 +190,7 @@ $string['outcomeapproved'] = 'Aprovado, matriculado';
 $string['outcomeawaiting'] = 'Aguardando decisão';
 $string['outcomecancelled'] = 'Cancelado';
 $string['outcomeexpired'] = 'Aprovado e depois expirado';
+$string['outcomelapsed'] = 'Expirou sem decisão';
 $string['outcomemessage'] = 'Mensagem ao solicitante';
 $string['outcomemessage_help'] = 'Incluída na mensagem que o solicitante recebe com a sua decisão. Deixe em branco para enviar apenas o texto padrão.';
 $string['outcomeneverdecided'] = 'Nunca decidido e não está mais matriculado';

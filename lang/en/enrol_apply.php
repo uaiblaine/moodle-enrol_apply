@@ -192,6 +192,7 @@ $string['outcomeapproved'] = 'Approved, enrolled';
 $string['outcomeawaiting'] = 'Awaiting a decision';
 $string['outcomecancelled'] = 'Cancelled';
 $string['outcomeexpired'] = 'Approved, then expired';
+$string['outcomelapsed'] = 'Lapsed without a decision';
 $string['outcomemessage'] = 'Message to the applicant';
 $string['outcomemessage_help'] = 'Included in the message the applicant receives with your decision. Leave it empty to send the standard wording alone.';
 $string['outcomeneverdecided'] = 'Never decided, and no longer enrolled';
