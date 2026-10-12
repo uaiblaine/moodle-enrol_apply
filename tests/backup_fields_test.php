@@ -321,6 +321,40 @@ final class backup_fields_test extends \advanced_testcase {
     }
 
     /**
+     * A description format format_text() cannot render does not come back from the archive.
+     *
+     * format_text() throws on FORMAT_WIKI and on unknown formats, so restored as is it would break
+     * the application form of the restored instance for every applicant.
+     *
+     * @return void
+     */
+    public function test_an_unrenderable_description_format_is_not_restored(): void {
+        global $DB;
+
+        [$course, $enrolid, $first] = $this->create_source();
+        // What a crafted archive carries: the source rows are edited so the backup writes them.
+        $DB->set_field('customfield_category', 'descriptionformat', 99, ['id' => $first->get('id')]);
+        $categoryid = $first->get('id');
+        $fields = ['categoryid' => $categoryid];
+        $DB->set_field('customfield_field', 'descriptionformat', FORMAT_WIKI, $fields + ['shortname' => 'city']);
+        $DB->set_field('customfield_field', 'descriptionformat', FORMAT_HTML, $fields + ['shortname' => 'level']);
+
+        $newenrolid = $this->apply_instance($this->backup_and_restore($course, true));
+
+        $category = $DB->get_record(
+            'customfield_category',
+            ['component' => 'enrol_apply', 'itemid' => $newenrolid, 'name' => 'About you'],
+            '*',
+            MUST_EXIST
+        );
+        $this->assertEquals(FORMAT_MOODLE, (int) $category->descriptionformat);
+        $formats = $DB->get_records_menu('customfield_field', ['categoryid' => $category->id], '', 'shortname, descriptionformat');
+        $this->assertEquals(FORMAT_MOODLE, (int) $formats['city']);
+        // The control: a format format_text() renders is kept.
+        $this->assertEquals(FORMAT_HTML, (int) $formats['level']);
+    }
+
+    /**
      * Nothing is written against the manual instance a never-enrolments restore maps onto.
      *
      * @return void

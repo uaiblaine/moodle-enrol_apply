@@ -58,6 +58,23 @@ class restore_enrol_apply_plugin extends restore_enrol_plugin {
     }
 
     /**
+     * A description format the archive carries, kept only when format_text() renders it.
+     *
+     * Core's custom field persistent takes any integer, and format_text() throws on FORMAT_WIKI
+     * and on unknown formats, so a crafted archive would otherwise leave an application form that
+     * fails for every applicant.
+     *
+     * @param mixed $format Format from the archive.
+     * @return int FORMAT_MOODLE, FORMAT_HTML, FORMAT_PLAIN or FORMAT_MARKDOWN.
+     */
+    protected function description_format($format): int {
+        // The FORMAT_ constants are strings ('1' for HTML), so they are compared as integers.
+        $known = array_map('intval', [FORMAT_MOODLE, FORMAT_HTML, FORMAT_PLAIN, FORMAT_MARKDOWN]);
+        $format = (int) $format;
+        return in_array($format, $known, true) ? $format : (int) FORMAT_MOODLE;
+    }
+
+    /**
      * The apply instance this element belongs to, or 0 when it is not one.
      *
      * When a restore converts enrolment methods to manual (users included, enrolments set to
@@ -252,7 +269,7 @@ class restore_enrol_apply_plugin extends restore_enrol_plugin {
         $category = category_controller::create(0, (object) [
             'name' => $name,
             'description' => $data->description ?? null,
-            'descriptionformat' => (int) ($data->descriptionformat ?? FORMAT_MOODLE),
+            'descriptionformat' => $this->description_format($data->descriptionformat ?? null),
         ], $handler);
         api::save_category($category);
 
@@ -310,7 +327,7 @@ class restore_enrol_apply_plugin extends restore_enrol_plugin {
             'shortname' => $shortname,
             'name' => $name,
             'description' => $data->description ?? null,
-            'descriptionformat' => (int) ($data->descriptionformat ?? FORMAT_MOODLE),
+            'descriptionformat' => $this->description_format($data->descriptionformat ?? null),
             'configdata' => is_array($configdata) ? json_encode($configdata) : '{}',
         ]);
 
