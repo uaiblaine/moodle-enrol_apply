@@ -101,15 +101,29 @@ class answers {
     }
 
     /**
+     * The name of a question's element on the application form, and of its submitted value.
+     *
+     * @param field_controller $field The field.
+     * @return string
+     */
+    public static function element_name(field_controller $field): string {
+        return self::data($field)->get_form_element_name();
+    }
+
+    /**
      * Add the instance's questions to a form, one header per category.
+     *
+     * A question shown only on a condition is wired by conditions::add_to_form() once every
+     * question is on the form, because its rules name the elements of earlier questions.
      *
      * @param MoodleQuickForm $mform The application form.
      * @param stdClass $instance Enrol instance.
      * @return void
      */
     public static function add_to_form(MoodleQuickForm $mform, stdClass $instance): void {
+        $fields = self::fields($instance);
         $lastcategoryid = null;
-        foreach (self::fields($instance) as $field) {
+        foreach ($fields as $field) {
             $category = $field->get_category();
             if ($category->get('id') != $lastcategoryid) {
                 $mform->addElement('header', 'category_' . $category->get('id'), $category->get_formatted_name());
@@ -138,6 +152,8 @@ class answers {
                 );
             }
         }
+
+        conditions::add_to_form($mform, conditions::effective($instance, $fields), $fields);
     }
 
     /**
@@ -165,20 +181,40 @@ class answers {
      * plugin never writes, and for a field of a shared category it would compare against other
      * components' data and refuse an applicant over a value they never saw.
      *
+     * A question hidden by its condition is not validated at all, judged from the submitted data
+     * and never from what the browser hid. A conditional question that is shown and configured as
+     * required is checked here, because conditions::add_to_form() took core's required rule off it.
+     *
      * @param stdClass $instance Enrol instance.
      * @param array $data Submitted form data.
      * @param array $files Submitted files.
      * @return array Element name => error message.
      */
     public static function validate(stdClass $instance, array $data, array $files): array {
+        $fields = self::fields($instance);
+        $conditions = conditions::effective($instance, $fields);
+        $hidden = conditions::hidden($conditions, $fields, $data);
+
         $unique = get_string('erroruniquevalues', 'core_customfield');
         $errors = [];
-        foreach (self::fields($instance) as $field) {
-            $data[self::data($field)->get_form_element_name()] ??= null;
+        foreach ($fields as $id => $field) {
+            if (isset($hidden[(int) $id])) {
+                continue;
+            }
+            $element = self::element_name($field);
+            $data[$element] ??= null;
             foreach (self::data($field)->instance_form_validation($data, $files) as $name => $message) {
                 if ($message !== $unique) {
                     $errors[$name] = $message;
                 }
+            }
+            if (
+                isset($conditions[(int) $id])
+                && $field->get_configdata_property('required')
+                && !isset($errors[$element])
+                && !conditions::is_answered($field, $data[$element])
+            ) {
+                $errors[$element] = get_string('required');
             }
         }
 
@@ -190,16 +226,23 @@ class answers {
      *
      * Plain, never escaped, like fields::submitted_values(): every reader escapes on output. An
      * empty answer is left out, as the profile fields are, except a checkbox, whose "No" is an
-     * answer.
+     * answer. So is the answer to a question its condition hid: the browser still posts what was
+     * typed before the question was hidden, and that is not an answer the applicant gave.
      *
      * @param stdClass $instance Enrol instance.
      * @param stdClass $data Submitted form data.
      * @return array List of arrays carrying 'key', 'label' and 'value' string entries.
      */
     public static function submitted_values(stdClass $instance, stdClass $data): array {
+        $fields = self::fields($instance);
+        $hidden = conditions::hidden(conditions::effective($instance, $fields), $fields, (array) $data);
+
         $values = [];
-        foreach (self::fields($instance) as $field) {
-            $name = self::data($field)->get_form_element_name();
+        foreach ($fields as $id => $field) {
+            if (isset($hidden[(int) $id])) {
+                continue;
+            }
+            $name = self::element_name($field);
             $value = self::display_value($field, $data->$name ?? null);
             if ($value === '') {
                 continue;

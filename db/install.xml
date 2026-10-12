@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<XMLDB PATH="enrol/apply/db" VERSION="20260831" COMMENT="XMLDB file for Moodle enrol/apply"
+<XMLDB PATH="enrol/apply/db" VERSION="20261012" COMMENT="XMLDB file for Moodle enrol/apply"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:noNamespaceSchemaLocation="../../../lib/xmldb/xmldb.xsd"
 >
@@ -56,6 +56,24 @@
         <KEY NAME="enrol" TYPE="foreign" FIELDS="enrolid" REFTABLE="enrol" REFFIELDS="id"/>
         <KEY NAME="group" TYPE="foreign" FIELDS="groupid" REFTABLE="groups" REFFIELDS="id"/>
       </KEYS>
+    </TABLE>
+    <TABLE NAME="enrol_apply_fieldcond" COMMENT="When an application question is shown: at most one condition per question and enrolment method, on the answer to an earlier question. Configuration, not personal data.">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="enrolid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="enrol instance the condition belongs to"/>
+        <FIELD NAME="fieldid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="customfield_field shown only when the condition holds"/>
+        <FIELD NAME="dependsonfieldid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="earlier customfield_field whose answer decides"/>
+        <FIELD NAME="operator" TYPE="char" LENGTH="20" NOTNULL="true" SEQUENCE="false" COMMENT="in, checked or notchecked"/>
+        <FIELD NAME="value" TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false" COMMENT="comma-separated 1-based option positions for in, empty otherwise"/>
+        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="enrolid" UNIQUE="false" FIELDS="enrolid" COMMENT="the instance's conditions are read and deleted together"/>
+        <INDEX NAME="enrolidfieldid" UNIQUE="true" FIELDS="enrolid, fieldid" COMMENT="one condition per question in each instance"/>
+      </INDEXES>
     </TABLE>
   </TABLES>
 </XMLDB>

@@ -20,6 +20,7 @@
  * This page authorises the first view only. Every later action (adding a category, editing a
  * field, switching a shared category on) goes through core's custom field web services and
  * dynamic forms, which never run this file: their gate is application_handler::can_configure().
+ * The display conditions listed below core's UI are edited on condition.php, which checks again.
  *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine
@@ -55,4 +56,5 @@ echo $output->header();
 echo $output->heading($title);
 echo $output->paragraph(get_string('applicationfields_desc', 'enrol_apply'));
 echo $output->render(new \core_customfield\output\management($handler));
+echo $PAGE->get_renderer('enrol_apply')->field_conditions($instance);
 echo $output->footer();

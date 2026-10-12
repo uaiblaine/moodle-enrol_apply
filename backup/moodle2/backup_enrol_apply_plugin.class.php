@@ -39,7 +39,9 @@
  * of the application form's custom fields: the instance's own categories with their fields,
  * and which site-wide shared categories it has switched on. The answers are not part of it;
  * they live in the submission snapshot. Descriptions travel as text only: images embedded in
- * a category or field description are not backed up and do not come back.
+ * a category or field description are not backed up and do not come back. The instance's
+ * display conditions travel with them, after everything else, so the restore can remap both
+ * field ids through the fields it has just created.
  *
  * The comments are keyed by user_enrolments.id, for which core registers no mapping; the
  * plugin registers its own from restore_user_enrolment(), see
@@ -108,6 +110,14 @@ class backup_enrol_apply_plugin extends backup_enrol_plugin {
         $sharedcategories = new backup_nested_element('sharedcategories');
         $sharedcategory = new backup_nested_element('sharedcategory', ['id'], ['categoryid', 'name']);
 
+        $fieldconditions = new backup_nested_element('fieldconditions');
+        $fieldcondition = new backup_nested_element('fieldcondition', ['id'], [
+            'fieldid',
+            'dependsonfieldid',
+            'operator',
+            'value',
+        ]);
+
         $pluginwrapper->add_child($categories);
         $categories->add_child($category);
         $category->add_child($fields);
@@ -120,6 +130,9 @@ class backup_enrol_apply_plugin extends backup_enrol_plugin {
         $applications->add_child($application);
         $pluginwrapper->add_child($submissions);
         $submissions->add_child($submission);
+        // Last: the restore reads the archive in order, and a condition is remapped through the fields above.
+        $pluginwrapper->add_child($fieldconditions);
+        $fieldconditions->add_child($fieldcondition);
 
         $applygroup->set_source_table('enrol_apply_groups', ['enrolid' => backup::VAR_PARENTID]);
 
@@ -160,6 +173,9 @@ class backup_enrol_apply_plugin extends backup_enrol_plugin {
                 backup::VAR_PARENTID,
             ]
         );
+
+        // Configuration too, so outside the users gate; the field ids are remapped on restore.
+        $fieldcondition->set_source_table('enrol_apply_fieldcond', ['enrolid' => backup::VAR_PARENTID], 'id ASC');
 
         /* Whose data travels mirrors core's own <user_enrolments> element in
            backup_enrolments_structure_step, not the users setting alone. A course copy can keep

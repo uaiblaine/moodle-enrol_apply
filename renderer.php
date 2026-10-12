@@ -1237,4 +1237,49 @@ class enrol_apply_renderer extends plugin_renderer_base {
         echo $mform->render();
         echo $this->footer();
     }
+
+    /**
+     * Render the "Display conditions" section of the application fields page.
+     *
+     * One row per question the instance asks, in form order, saying when it is shown. A question
+     * with no earlier select or checkbox question and no stored condition offers no edit link:
+     * nothing could control it.
+     *
+     * @param stdClass $instance Enrol instance.
+     * @return string Rendered markup.
+     */
+    public function field_conditions(stdClass $instance): string {
+        $fields = \enrol_apply\local\answers::fields($instance);
+        $stored = \enrol_apply\local\conditions::stored((int) $instance->id);
+        $effective = \enrol_apply\local\conditions::effective($instance, $fields);
+
+        $rows = [];
+        foreach ($fields as $fieldid => $field) {
+            $fieldid = (int) $fieldid;
+            $params = ['id' => $instance->id, 'fieldid' => $fieldid];
+            $name = $field->get_formatted_name(false);
+            $rows[] = [
+                // Plain, because the template double stashes all of them.
+                'name' => $name,
+                'editlabel' => get_string('conditioneditfor', 'enrol_apply', $name),
+                'removelabel' => get_string('conditionremovefor', 'enrol_apply', $name),
+                'summary' => \enrol_apply\local\conditions::summary($fieldid, $stored, $effective, $fields),
+                'canedit' => isset($stored[$fieldid])
+                    || (bool) \enrol_apply\local\conditions::controllers($fields, $fieldid),
+                'editurl' => (new moodle_url('/enrol/apply/condition.php', $params))->out(false),
+                'hascondition' => isset($stored[$fieldid]),
+                'fieldid' => $fieldid,
+            ];
+        }
+
+        return $this->render_from_template('enrol_apply/field_conditions', [
+            'heading' => get_string('conditions', 'enrol_apply'),
+            'intro' => get_string('conditions_desc', 'enrol_apply'),
+            'hasrows' => (bool) $rows,
+            'rows' => $rows,
+            'removeurl' => (new moodle_url('/enrol/apply/condition.php'))->out(false),
+            'enrolid' => (int) $instance->id,
+            'sesskey' => sesskey(),
+        ]);
+    }
 }

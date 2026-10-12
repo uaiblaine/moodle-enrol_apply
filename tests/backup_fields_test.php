@@ -32,6 +32,7 @@ use restore_controller;
 use restore_dbops;
 use core_customfield\api;
 use enrol_apply\customfield\application_handler;
+use enrol_apply\local\conditions;
 use PHPUnit\Framework\Attributes\CoversClass;
 
 defined('MOODLE_INTERNAL') || die();
@@ -372,5 +373,164 @@ final class backup_fields_test extends \advanced_testcase {
         $this->assertFalse($DB->record_exists('enrol', ['courseid' => $newcourseid, 'enrol' => 'apply']));
         $this->assertEquals($categories, $DB->count_records('customfield_category', ['component' => 'enrol_apply']));
         $this->assertEquals($switches, $DB->count_records('customfield_shared', ['component' => 'enrol_apply']));
+    }
+
+    /**
+     * The display conditions of an instance, as controlled shortname => [controller shortname, operator, value].
+     *
+     * @param int $enrolid Enrol instance id.
+     * @return array
+     */
+    protected function conditions_of(int $enrolid): array {
+        global $DB;
+
+        $out = [];
+        foreach ($DB->get_records(conditions::TABLE, ['enrolid' => $enrolid]) as $row) {
+            $out[$DB->get_field('customfield_field', 'shortname', ['id' => $row->fieldid])] = [
+                $DB->get_field('customfield_field', 'shortname', ['id' => $row->dependsonfieldid]),
+                $row->operator,
+                $row->value,
+            ];
+        }
+        ksort($out);
+
+        return $out;
+    }
+
+    /**
+     * A shared category switched on for the source instance, holding a checkbox and the text it controls.
+     *
+     * @param int $enrolid The source instance.
+     * @param int $sharedid The shared category.
+     * @return array The checkbox and the text field.
+     */
+    protected function create_shared_condition(int $enrolid, int $sharedid): array {
+        $generator = $this->getDataGenerator()->get_plugin_generator('core_customfield');
+        $hasdoc = $generator->create_field([
+            'categoryid' => $sharedid, 'type' => 'checkbox', 'shortname' => 'hasdoc', 'name' => 'Doc?',
+        ]);
+        $doc = $generator->create_field(['categoryid' => $sharedid, 'type' => 'text', 'shortname' => 'doc', 'name' => 'Doc']);
+        $this->enable_shared($sharedid, $enrolid);
+        conditions::save($enrolid, (int) $doc->get('id'), (int) $hasdoc->get('id'), conditions::OPERATOR_CHECKED, []);
+
+        return [$hasdoc, $doc];
+    }
+
+    /**
+     * A condition between the instance's own fields comes back between the restored fields.
+     *
+     * @return void
+     */
+    public function test_a_condition_between_local_fields_is_remapped(): void {
+        global $DB;
+
+        [$course, $enrolid, $first] = $this->create_source();
+        $generator = $this->getDataGenerator()->get_plugin_generator('core_customfield');
+        $why = $generator->create_field([
+            'categoryid' => $first->get('id'), 'type' => 'text', 'shortname' => 'why', 'name' => 'Why',
+        ]);
+        $level = $DB->get_field('customfield_field', 'id', ['categoryid' => $first->get('id'), 'shortname' => 'level']);
+        conditions::save($enrolid, (int) $why->get('id'), (int) $level, conditions::OPERATOR_IN, [2]);
+
+        $newenrolid = $this->apply_instance($this->backup_and_restore($course, false));
+
+        $this->assertSame(['why' => ['level', 'in', '2']], $this->conditions_of($newenrolid));
+        $row = $DB->get_record(conditions::TABLE, ['enrolid' => $newenrolid], '*', MUST_EXIST);
+        $this->assertNotEquals($why->get('id'), $row->fieldid);
+        $this->assertNotEquals($level, $row->dependsonfieldid);
+        $this->assertSame(['why' => ['level', 'in', '2']], $this->conditions_of($enrolid), 'the source is untouched');
+    }
+
+    /**
+     * A condition between fields of a shared category is kept on a same-site restore, by the same ids.
+     *
+     * @return void
+     */
+    public function test_a_condition_between_shared_fields_is_kept_on_the_same_site(): void {
+        [$course, $enrolid, , $shared] = $this->create_source();
+        [$hasdoc, $doc] = $this->create_shared_condition($enrolid, (int) $shared->get('id'));
+
+        $newenrolid = $this->apply_instance($this->backup_and_restore($course, true));
+
+        $this->assertSame(['doc' => ['hasdoc', 'checked', '']], $this->conditions_of($newenrolid));
+        $this->assertEquals(
+            [(int) $doc->get('id') => (int) $hasdoc->get('id')],
+            array_column(conditions::stored($newenrolid), 'dependsonfieldid', 'fieldid')
+        );
+    }
+
+    /**
+     * From another site, an unmapped field id names nothing of ours, so the condition is dropped.
+     *
+     * @return void
+     */
+    public function test_a_condition_between_shared_fields_is_dropped_from_another_site(): void {
+        global $CFG, $DB;
+
+        [$course, $enrolid, $first, $shared] = $this->create_source();
+        $this->create_shared_condition($enrolid, (int) $shared->get('id'));
+        $level = $DB->get_field('customfield_field', 'id', ['categoryid' => $first->get('id'), 'shortname' => 'level']);
+        $why = $this->getDataGenerator()->get_plugin_generator('core_customfield')->create_field([
+            'categoryid' => $first->get('id'), 'type' => 'text', 'shortname' => 'why', 'name' => 'Why',
+        ]);
+        conditions::save($enrolid, (int) $why->get('id'), (int) $level, conditions::OPERATOR_IN, [1]);
+
+        $elsewhere = function () use ($CFG): void {
+            $CFG->siteidentifier = 'another site';
+        };
+        $newenrolid = $this->apply_instance($this->backup_and_restore($course, false, backup::ENROL_ALWAYS, $elsewhere));
+
+        // The control: the local condition is remapped, and the shared category is still switched on.
+        $this->assertSame(['why' => ['level', 'in', '1']], $this->conditions_of($newenrolid));
+        $this->assertTrue(api::is_shared_category_enabled((int) $shared->get('id'), 'enrol_apply', 'application', $newenrolid));
+    }
+
+    /**
+     * A condition naming a field the restored instance does not ask is skipped.
+     *
+     * @return void
+     */
+    public function test_a_condition_naming_a_field_not_asked_is_skipped(): void {
+        global $DB;
+
+        [$course, $enrolid, , $shared] = $this->create_source();
+        $this->create_shared_condition($enrolid, (int) $shared->get('id'));
+
+        $rename = function () use ($DB, $shared): void {
+            $DB->set_field('customfield_category', 'name', 'Renamed', ['id' => $shared->get('id')]);
+        };
+        $newenrolid = $this->apply_instance($this->backup_and_restore($course, true, backup::ENROL_ALWAYS, $rename));
+
+        // The precondition: the shared category was not switched on, so its fields are not asked.
+        $this->assertFalse(api::is_shared_category_enabled((int) $shared->get('id'), 'enrol_apply', 'application', $newenrolid));
+        $this->assertSame([], $this->conditions_of($newenrolid));
+        $this->assertCount(1, $this->conditions_of($enrolid));
+    }
+
+    /**
+     * The archive is untrusted: a condition the configuration page would refuse is not restored.
+     *
+     * @return void
+     */
+    public function test_an_invalid_condition_in_the_archive_is_not_restored(): void {
+        global $DB;
+
+        [$course, $enrolid, $first] = $this->create_source();
+        $generator = $this->getDataGenerator()->get_plugin_generator('core_customfield');
+        $why = $generator->create_field([
+            'categoryid' => $first->get('id'), 'type' => 'text', 'shortname' => 'why', 'name' => 'Why',
+        ]);
+        $other = $generator->create_field([
+            'categoryid' => $first->get('id'), 'type' => 'text', 'shortname' => 'other', 'name' => 'Other',
+        ]);
+        $level = (int) $DB->get_field('customfield_field', 'id', ['categoryid' => $first->get('id'), 'shortname' => 'level']);
+        // Level has two options: position 3 does not exist.
+        conditions::save($enrolid, (int) $why->get('id'), $level, conditions::OPERATOR_IN, [3]);
+        conditions::save($enrolid, (int) $other->get('id'), $level, conditions::OPERATOR_IN, [1]);
+
+        $newenrolid = $this->apply_instance($this->backup_and_restore($course, false));
+
+        // The control: the valid condition beside it is restored.
+        $this->assertSame(['other' => ['level', 'in', '1']], $this->conditions_of($newenrolid));
     }
 }

@@ -171,7 +171,14 @@ Each stage is a pull request with its own tests, mutation entries in
 3. **Backup and restore** of the definitions (D16).
 4. **Conditions** (D12): table, upgrade step, configuration section on `fields.php`,
    form wiring, server-side evaluation, privacy note (the table holds no personal
-   data).
+   data). As built, two points differ from D12's wording. A select condition is wired as
+   `hideIf(..., 'in', <every other position, 0 included>)`, not `in`/`neq`: core_form's
+   dependency manager has no "not in", and several `neq` rules on one element are ORed, so
+   any condition naming two options would hide the question always. And the earlier-field
+   rule is checked on every read as well as at configuration time
+   (`\enrol_apply\local\conditions::effective()`): core's editor can reorder fields, edit
+   options or switch a shared category off afterwards, and a condition that no longer holds
+   is ignored, so the question is shown rather than lost.
 5. **`customfield_pattern`** in its own repository (`moodle-customfield_pattern`):
    the type, the server-side regex check, the AMD mask module, presets, tests;
    then allowed in the handler's allowlist.
