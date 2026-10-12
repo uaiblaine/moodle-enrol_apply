@@ -128,10 +128,14 @@ final class applications_datasource_test extends \core_reportbuilder\tests\core_
     /**
      * A user with moodle/user:viewalldetails allowed or prohibited at the system context.
      *
-     * @param bool $grant Whether to allow the capability or prohibit it.
+     * A granted reader also holds moodle/site:viewuseridentity unless $identity says otherwise; the
+     * source needs both to show submitted data.
+     *
+     * @param bool $grant Whether to allow the capabilities or prohibit them.
+     * @param bool $identity Whether a granted reader also holds moodle/site:viewuseridentity.
      * @return \stdClass The user.
      */
-    protected function reader(bool $grant): \stdClass {
+    protected function reader(bool $grant, bool $identity = true): \stdClass {
         $context = context_system::instance();
         $user = $this->getDataGenerator()->create_user();
         $roleid = $this->getDataGenerator()->create_role();
@@ -139,6 +143,13 @@ final class applications_datasource_test extends \core_reportbuilder\tests\core_
         assign_capability(
             'moodle/user:viewalldetails',
             $grant ? CAP_ALLOW : CAP_PROHIBIT,
+            $roleid,
+            $context->id,
+            true
+        );
+        assign_capability(
+            'moodle/site:viewuseridentity',
+            $grant && $identity ? CAP_ALLOW : CAP_PROHIBIT,
             $roleid,
             $context->id,
             true
@@ -442,6 +453,39 @@ final class applications_datasource_test extends \core_reportbuilder\tests\core_
             $this->assertArrayNotHasKey('answer:' . $name, $instance->get_filters());
             $this->assertArrayNotHasKey('answer:' . $name, $instance->get_conditions());
         }
+    }
+
+    /**
+     * Without moodle/site:viewuseridentity, viewalldetails alone shows no submitted data.
+     *
+     * The course report withholds identity fields and answers from such a reader; the site-wide
+     * source must not be the wider door to the same values.
+     *
+     * @return void
+     */
+    public function test_submitted_data_needs_the_identity_capability_too(): void {
+        $fieldid = $this->shared_question();
+        $key = \enrol_apply\local\answers::key($fieldid);
+        $this->seed((string) json_encode(['version' => submission::SNAPSHOT_VERSION, 'fields' => [
+            ['key' => $key, 'label' => 'Tax number', 'value' => '123.456.789-09'],
+        ]]));
+
+        // The control: with both capabilities everything is offered.
+        $this->setUser($this->reader(true));
+        $instance = $this->instance();
+        $this->assertArrayHasKey('submission:snapshot', $instance->get_columns());
+        $this->assertArrayHasKey('answer:answer', $instance->get_columns());
+        $this->assertArrayHasKey('submission:' . $key, $instance->get_columns());
+
+        $this->setUser($this->reader(true, false));
+        $instance = $this->instance();
+        $this->assertArrayHasKey('submission:status', $instance->get_columns());
+        $this->assertArrayNotHasKey('submission:snapshot', $instance->get_columns());
+        $this->assertArrayNotHasKey('answer:answer', $instance->get_columns());
+        $this->assertArrayNotHasKey('answer:answer', $instance->get_filters());
+        $this->assertArrayNotHasKey('answer:fieldkey', $instance->get_conditions());
+        $this->assertArrayNotHasKey('submission:' . $key, $instance->get_columns());
+        $this->assertArrayNotHasKey('submission:' . $key, $instance->get_filters());
     }
 
     /**

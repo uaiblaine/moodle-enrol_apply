@@ -43,6 +43,9 @@ use enrol_apply\reportbuilder\local\formatters\submission as formatter;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class applications extends datasource {
+    /** @var string[] Capabilities a reader needs, all of them, to see submitted data in this source. */
+    protected const SUBMITTED_DATA_CAPABILITIES = ['moodle/user:viewalldetails', 'moodle/site:viewuseridentity'];
+
     /** @var string Entity name of the second user entity, the one naming the decider. */
     protected const DECIDER = 'applydecider';
 
@@ -156,6 +159,10 @@ class applications extends datasource {
      * field whose custom profile field has since been deleted. The effective control is therefore
      * the report audience plus this one capability, not a per-reader guarantee.
      *
+     * moodle/site:viewuseridentity is required as well, beside it and not instead of it: the
+     * course report shows identity fields and application answers only to holders of it, and a
+     * site-wide report must not be the wider door to the same values.
+     *
      * The same gate covers every other way to the same values, filters and conditions included:
      * the answer entity, whose rows exist only where an applicant answered, and the shared
      * questions' columns. A filter or condition left available on a withheld column would let a
@@ -165,7 +172,7 @@ class applications extends datasource {
      * @return void
      */
     protected function restrict_submitted_data(string $answerentity): void {
-        if (!has_capability('moodle/user:viewalldetails', $this->get_context())) {
+        if (!has_all_capabilities(self::SUBMITTED_DATA_CAPABILITIES, $this->get_context())) {
             $withheld = array_merge(['submission:snapshot'], $this->sharedquestions);
             $prefix = $answerentity . ':';
             // Three lists walked apart: a column and its filter share one identifier.

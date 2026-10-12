@@ -61,9 +61,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   gets no column and no filter at all. The custom report source gains an *Application answer*
   entity (one row per value: field key, question, answer) and a column and filter per question of a
   shared category that some method uses, the same field in every course; both are withheld, with
-  their filters and conditions, from a reader without `moodle/user:viewalldetails`, as the snapshot
-  column already was. The snapshot column keeps its name and its masking and is now built from the
-  rows.
+  their filters and conditions, from a reader without both `moodle/user:viewalldetails` and
+  `moodle/site:viewuseridentity` in the system context. The snapshot column now needs both too
+  (it needed only the first): the site-wide source must not be a wider door than the course
+  report. It keeps its name, is built from the rows, and on MySQL (not MariaDB) can be cut short
+  by the server's `group_concat_max_len`, 1024 bytes by default.
 
 - **Application fields can be shown on a condition.** Below core's editor, *Application fields*
   lists each question with when it is shown, and a page per question (no JavaScript needed) makes
