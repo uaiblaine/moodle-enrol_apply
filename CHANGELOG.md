@@ -29,6 +29,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   or to `customfield_data`, and core's uniqueness check is skipped: it would compare a shared
   field against other components' data.
 
+- **Backup and restore carry the application form's field definitions.** An instance's own
+  custom-field categories and fields, and the site-wide shared categories it has switched on,
+  travel in the course backup whether or not users are included, as the group mappings do. On
+  restore the archive is treated as untrusted: only the field types the method offers (and that
+  are installed) come back, shortnames are cleaned and kept unique, and a shared category is
+  matched by id and name, else by name alone, and is skipped, never created, when the site has no
+  such category. Text in descriptions travels; images embedded in them do not. Answers are not
+  part of this: they live in each application's snapshot.
+
 - **The applications queue shows what the decision needs.** It was a list of names, an e-mail
   address and a date, with no way to open any of the rows it listed.
 

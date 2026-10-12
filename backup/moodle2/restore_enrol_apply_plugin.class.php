@@ -23,6 +23,11 @@
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+use core_customfield\api;
+use core_customfield\category_controller;
+use core_customfield\field_controller;
+use core_customfield\shared;
+use enrol_apply\customfield\application_handler;
 
 /**
  * Restores the enrol_apply owned data from an enrolment backup.
@@ -40,6 +45,12 @@ class restore_enrol_apply_plugin extends restore_enrol_plugin {
      */
     protected function define_enrol_plugin_structure() {
         return [
+            new restore_path_element('enrol_apply_appcategory', $this->get_pathfor('/applicationcategories/applicationcategory')),
+            new restore_path_element(
+                'enrol_apply_appfield',
+                $this->get_pathfor('/applicationcategories/applicationcategory/applicationfields/applicationfield')
+            ),
+            new restore_path_element('enrol_apply_sharedcategory', $this->get_pathfor('/sharedcategories/sharedcategory')),
             new restore_path_element('enrol_apply_applygroup', $this->get_pathfor('/applygroups/applygroup')),
             new restore_path_element('enrol_apply_application', $this->get_pathfor('/applications/application')),
             new restore_path_element('enrol_apply_submission', $this->get_pathfor('/submissions/submission')),
@@ -208,6 +219,145 @@ class restore_enrol_apply_plugin extends restore_enrol_plugin {
             'userenrolmentid' => $userenrolmentid,
             'comment' => $data->comment,
         ]);
+    }
+
+    /**
+     * Restore one category of the application form's custom fields.
+     *
+     * Created through core's own category controller and API, so the sort order and the events
+     * are core's. The instance is always new (restore_instance() ends in add_instance()), so a
+     * restore into an existing course cannot meet a category of this instance already there.
+     *
+     * The path element is named like the mapping it registers (enrol_apply_appcategory):
+     * core tracks the latest parent id of a nested element by the mapping's item name, which is
+     * how the field below finds its category. Stage 4 remaps through the same names.
+     *
+     * @param array $data Backup data of the category.
+     * @return void
+     */
+    public function process_enrol_apply_appcategory($data) {
+        $data = (object) $data;
+
+        $enrolid = $this->get_apply_instanceid();
+        if (!$enrolid) {
+            return;
+        }
+
+        $name = trim(clean_param((string) ($data->name ?? ''), PARAM_TEXT));
+        if ($name === '') {
+            return;
+        }
+
+        $handler = application_handler::create($enrolid);
+        $category = category_controller::create(0, (object) [
+            'name' => $name,
+            'description' => $data->description ?? null,
+            'descriptionformat' => (int) ($data->descriptionformat ?? FORMAT_MOODLE),
+        ], $handler);
+        api::save_category($category);
+
+        $this->set_mapping('enrol_apply_appcategory', $data->id, $category->get('id'));
+    }
+
+    /**
+     * Restore one field of the application form.
+     *
+     * The archive is untrusted, so the field is re-validated here as the field form would
+     * have: the type must be one the handler offers and be installed, the shortname is cleaned
+     * to what core accepts and must be free, and configdata must be a JSON object.
+     *
+     * @param array $data Backup data of the field.
+     * @return void
+     */
+    public function process_enrol_apply_appfield($data) {
+        global $DB;
+
+        $data = (object) $data;
+
+        $enrolid = $this->get_apply_instanceid();
+        if (!$enrolid) {
+            return;
+        }
+
+        $categoryid = (int) $this->get_new_parentid('enrol_apply_appcategory');
+        $record = $categoryid ? $DB->get_record('customfield_category', ['id' => $categoryid]) : false;
+        if (!$record || (int) $record->itemid !== $enrolid || $record->component !== 'enrol_apply') {
+            // The category was skipped, or belongs to somebody else's instance.
+            return;
+        }
+
+        $type = (string) ($data->type ?? '');
+        if (
+            !in_array($type, application_handler::ALLOWED_TYPES, true)
+            || !class_exists("\\customfield_{$type}\\field_controller")
+        ) {
+            $this->step->log('Application field of type ' . s($type) . ' not restored', backup::LOG_WARNING);
+            return;
+        }
+
+        $shortname = preg_replace('/[^a-z0-9_]/', '', strtolower((string) ($data->shortname ?? '')));
+        $name = trim(clean_param((string) ($data->name ?? ''), PARAM_TEXT));
+        $handler = application_handler::create($enrolid);
+        if ($shortname === '' || $name === '' || !api::is_shortname_unique($handler, $shortname, 0)) {
+            $this->step->log('Application field ' . s($shortname) . ' not restored', backup::LOG_WARNING);
+            return;
+        }
+
+        $configdata = json_decode((string) ($data->configdata ?? ''), true);
+        $category = category_controller::create($categoryid, null, $handler);
+        $field = field_controller::create(0, (object) ['type' => $type], $category);
+        api::save_field_configuration($field, (object) [
+            'shortname' => $shortname,
+            'name' => $name,
+            'description' => $data->description ?? null,
+            'descriptionformat' => (int) ($data->descriptionformat ?? FORMAT_MOODLE),
+            'configdata' => is_array($configdata) ? json_encode($configdata) : '{}',
+        ]);
+
+        $this->set_mapping('enrol_apply_appfield', $data->id, $field->get('id'));
+    }
+
+    /**
+     * Switch a site-wide shared category on for the restored instance.
+     *
+     * Never creates one: shared categories belong to the site. The category is found by id and
+     * name together, else by name when exactly one carries it, and otherwise the switch is
+     * not restored.
+     *
+     * @param array $data Backup data of the switch.
+     * @return void
+     */
+    public function process_enrol_apply_sharedcategory($data) {
+        global $DB;
+
+        $data = (object) $data;
+
+        $enrolid = $this->get_apply_instanceid();
+        if (!$enrolid) {
+            return;
+        }
+
+        $name = (string) ($data->name ?? '');
+        $shared = ['component' => 'core_customfield', 'area' => 'shared', 'itemid' => 0];
+        $categoryid = 0;
+        if ($DB->record_exists('customfield_category', $shared + ['id' => (int) $data->categoryid, 'name' => $name])) {
+            $categoryid = (int) $data->categoryid;
+        } else {
+            $matches = $DB->get_records('customfield_category', $shared + ['name' => $name], '', 'id');
+            if (count($matches) === 1) {
+                $categoryid = (int) reset($matches)->id;
+            }
+        }
+        if (!$categoryid) {
+            $this->step->log('Shared category ' . s($name) . ' not found, not enabled', backup::LOG_WARNING);
+            return;
+        }
+
+        $switch = ['categoryid' => $categoryid, 'component' => 'enrol_apply',
+            'area' => application_handler::AREA, 'itemid' => $enrolid];
+        if (!$DB->record_exists('customfield_shared', $switch)) {
+            (new shared(0, (object) $switch))->create();
+        }
     }
 
     /**

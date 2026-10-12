@@ -35,6 +35,12 @@
  * narrower and would restore the comments while dropping the record of the decisions taken on
  * them.
  *
+ * A fourth, also instance configuration and so also outside the users gate, is the definition
+ * of the application form's custom fields: the instance's own categories with their fields,
+ * and which site-wide shared categories it has switched on. The answers are not part of it;
+ * they live in the submission snapshot. Descriptions travel as text only: images embedded in
+ * a category or field description are not backed up and do not come back.
+ *
  * The comments are keyed by user_enrolments.id, for which core registers no mapping; the
  * plugin registers its own from restore_user_enrolment(), see
  * enrol_apply_plugin::restore_user_enrolment(). The trail is keyed by its own user ids
@@ -81,6 +87,33 @@ class backup_enrol_apply_plugin extends backup_enrol_plugin {
             'decidedby',
         ]);
 
+        $categories = new backup_nested_element('applicationcategories');
+        $category = new backup_nested_element('applicationcategory', ['id'], [
+            'name',
+            'description',
+            'descriptionformat',
+            'sortorder',
+        ]);
+        $fields = new backup_nested_element('applicationfields');
+        $field = new backup_nested_element('applicationfield', ['id'], [
+            'shortname',
+            'type',
+            'name',
+            'description',
+            'descriptionformat',
+            'sortorder',
+            'configdata',
+        ]);
+
+        $sharedcategories = new backup_nested_element('sharedcategories');
+        $sharedcategory = new backup_nested_element('sharedcategory', ['id'], ['categoryid', 'name']);
+
+        $pluginwrapper->add_child($categories);
+        $categories->add_child($category);
+        $category->add_child($fields);
+        $fields->add_child($field);
+        $pluginwrapper->add_child($sharedcategories);
+        $sharedcategories->add_child($sharedcategory);
         $pluginwrapper->add_child($applygroups);
         $applygroups->add_child($applygroup);
         $pluginwrapper->add_child($applications);
@@ -89,6 +122,44 @@ class backup_enrol_apply_plugin extends backup_enrol_plugin {
         $submissions->add_child($submission);
 
         $applygroup->set_source_table('enrol_apply_groups', ['enrolid' => backup::VAR_PARENTID]);
+
+        /* The form definition is configuration, so it sits outside the users gate below. The
+           component, area and itemid literals are parameters, not SQL text, as core does for
+           its own literals; the field rows are read per category and ordered, so the restore
+           can append them in the order the teacher arranged. */
+        $category->set_source_sql(
+            "SELECT cc.id, cc.name, cc.description, cc.descriptionformat, cc.sortorder
+               FROM {customfield_category} cc
+              WHERE cc.component = ? AND cc.area = ? AND cc.itemid = ?
+           ORDER BY cc.sortorder, cc.id",
+            [
+                backup_helper::is_sqlparam('enrol_apply'),
+                backup_helper::is_sqlparam(\enrol_apply\customfield\application_handler::AREA),
+                backup::VAR_PARENTID,
+            ]
+        );
+        $field->set_source_sql(
+            "SELECT cf.id, cf.shortname, cf.type, cf.name, cf.description, cf.descriptionformat,
+                    cf.sortorder, cf.configdata
+               FROM {customfield_field} cf
+              WHERE cf.categoryid = ?
+           ORDER BY cf.sortorder, cf.id",
+            [backup::VAR_PARENTID]
+        );
+
+        /* The name travels beside the id because the id means nothing on another site: the
+           restore matches a shared category by id and name together, then by name alone. */
+        $sharedcategory->set_source_sql(
+            "SELECT s.id, s.categoryid, cc.name
+               FROM {customfield_shared} s
+               JOIN {customfield_category} cc ON cc.id = s.categoryid
+              WHERE s.component = ? AND s.area = ? AND s.itemid = ?",
+            [
+                backup_helper::is_sqlparam('enrol_apply'),
+                backup_helper::is_sqlparam(\enrol_apply\customfield\application_handler::AREA),
+                backup::VAR_PARENTID,
+            ]
+        );
 
         /* Whose data travels mirrors core's own <user_enrolments> element in
            backup_enrolments_structure_step, not the users setting alone. A course copy can keep
