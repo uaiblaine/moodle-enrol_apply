@@ -794,6 +794,11 @@ class enrol_apply_plugin extends enrol_plugin {
                 $editlink,
                 new pix_icon('t/edit', get_string('edit'), 'core', ['class' => 'iconsmall'])
             );
+            $fieldslink = new moodle_url('/enrol/apply/fields.php', ['id' => $instance->id]);
+            $icons[] = $OUTPUT->action_icon(
+                $fieldslink,
+                new pix_icon('i/customfield', get_string('applicationfields', 'enrol_apply'), 'core', ['class' => 'iconsmall'])
+            );
         }
 
         if (has_capability('enrol/apply:manageapplications', $context)) {
@@ -849,7 +854,8 @@ class enrol_apply_plugin extends enrol_plugin {
      * Delete an instance together with the plugin data hanging off it.
      *
      * Core removes the user_enrolments rows, which cascades nothing on its own, so the
-     * application info and group mapping rows have to be dropped here.
+     * application info and group mapping rows have to be dropped here, and so do the instance's
+     * application field categories and shared-category switches.
      *
      * The enrol_apply_submission rows are deliberately kept: the record of who applied and
      * what was decided is not part of the course's configuration and outlives the method. It
@@ -876,6 +882,7 @@ class enrol_apply_plugin extends enrol_plugin {
             $DB->delete_records_select('enrol_apply_applicationinfo', "userenrolmentid {$insql}", $params);
         }
         $DB->delete_records('enrol_apply_groups', ['enrolid' => $instance->id]);
+        \enrol_apply\customfield\application_handler::delete_for_instance((int) $instance->id);
 
         parent::delete_instance($instance);
     }
@@ -899,6 +906,11 @@ class enrol_apply_plugin extends enrol_plugin {
                 'id' => $instance->id,
             ]);
             $instancesnode->add($this->get_instance_name($instance), $managelink, navigation_node::TYPE_SETTING);
+            $instancesnode->add(
+                get_string('applicationfields', 'enrol_apply'),
+                new moodle_url('/enrol/apply/fields.php', ['id' => $instance->id]),
+                navigation_node::TYPE_SETTING
+            );
         }
 
         /* Added here, the per-instance hook enrol_add_course_navigation() calls, rather than
@@ -1423,8 +1435,12 @@ class enrol_apply_plugin extends enrol_plugin {
 
         /* What the applicant submitted, keyed by the fields this instance asks for. Standard
            and custom fields both come from the submitted data, not from the account, so the
-           approver sees the answers given in this application. */
-        $submitted = \enrol_apply\local\fields::submitted_values($instance, $data);
+           approver sees the answers given in this application; the answers to the instance's
+           own questions follow, as in the snapshot. */
+        $submitted = array_merge(
+            \enrol_apply\local\fields::submitted_values($instance, $data),
+            \enrol_apply\local\answers::submitted_values($instance, $data)
+        );
 
         // Notify users holding the capability in the course context.
         $recipients = $this->get_notifycoursebased_users($instance);

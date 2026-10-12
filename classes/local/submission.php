@@ -296,9 +296,11 @@ class submission {
     }
 
     /**
-     * Freeze what the applicant typed into the profile fields the instance asked for.
+     * Freeze what the applicant typed into the profile fields and the questions the instance asked.
      *
-     * The label is stored beside the key on purpose. A custom profile field can be renamed,
+     * The answers to the instance's own questions travel in the same envelope under a key of
+     * their own (answers::SOURCE_ANSWER), so every reader of the snapshot shows them without
+     * knowing they exist. The label is stored beside the key on purpose. A custom profile field can be renamed,
      * and a snapshot that resolved its label at read time would then show a question that was
      * never asked; the key alone is stored as well so a later reader can still tell which
      * field it was. The value is stored exactly as submitted - see
@@ -309,7 +311,7 @@ class submission {
      * @return string JSON envelope, or an empty string when nothing was submitted.
      */
     public static function snapshot(stdClass $instance, stdClass $data): string {
-        $values = fields::submitted_values($instance, $data);
+        $values = array_merge(fields::submitted_values($instance, $data), answers::submitted_values($instance, $data));
         if (!$values) {
             return '';
         }

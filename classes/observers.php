@@ -17,6 +17,9 @@
 namespace enrol_apply;
 
 use core\event\course_deleted;
+use core_customfield\api;
+use core_customfield\category_controller;
+use enrol_apply\customfield\application_handler;
 
 /**
  * Event observers cleaning up after core has deleted rows this plugin hangs data off.
@@ -33,8 +36,9 @@ class observers {
      * enabled. enrol_course_delete() (lib/enrollib.php) resolves its plugin objects from
      * enrol_get_plugins(true), so a disabled plugin's delete_instance() is never called - and
      * core then deletes the {enrol} and {user_enrolments} rows anyway. The plugin's own two
-     * tables key off exactly those rows, so they are left behind with nothing pointing at
-     * them and nothing that will ever look at them again. Event observers, unlike
+     * tables and its application fields key off exactly those rows, so they are left behind
+     * with nothing pointing at them and nothing that will ever look at them again. Event
+     * observers, unlike
      * delete_instance(), are registered by every installed plugin whatever its state.
      *
      * The sweep is expressed as "rows whose parent is gone" rather than "rows belonging to
@@ -64,6 +68,26 @@ class observers {
         $DB->delete_records_select(
             'enrol_apply_groups',
             'NOT EXISTS (SELECT 1 FROM {enrol} e WHERE e.id = {enrol_apply_groups}.enrolid)'
+        );
+
+        /* The application fields key off the {enrol} row through the itemid. Categories go through
+           core's API, which also deletes their fields and the files of their descriptions. */
+        $params = ['component' => 'enrol_apply', 'area' => application_handler::AREA];
+        $orphans = $DB->get_fieldset_select(
+            'customfield_category',
+            'id',
+            'component = :component AND area = :area
+             AND NOT EXISTS (SELECT 1 FROM {enrol} e WHERE e.id = {customfield_category}.itemid)',
+            $params
+        );
+        foreach ($orphans as $categoryid) {
+            api::delete_category(category_controller::create((int) $categoryid));
+        }
+        $DB->delete_records_select(
+            'customfield_shared',
+            'component = :component AND area = :area
+             AND NOT EXISTS (SELECT 1 FROM {enrol} e WHERE e.id = {customfield_shared}.itemid)',
+            $params
         );
     }
 }

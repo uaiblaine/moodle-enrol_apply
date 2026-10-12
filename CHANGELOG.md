@@ -13,6 +13,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   as the older branches do. The opt-in profile write calls `\core\user::update_user()` where it
   exists, because 5.3 deprecated `user_update_user()`; 5.1 and 5.2 keep the old call.
 
+- **Application fields: an instance can define questions of its own.** A teacher who may configure
+  the method opens *Application fields* from the instance's actions and builds categories of
+  questions with core's custom field editor (text, select, checkbox, date and number), and can
+  switch on the site's shared categories for that instance. Deleting the instance deletes its
+  questions; with the plugin disabled, the course deletion sweep removes them instead. The
+  questions are not asked yet; see `docs/design/custom-application-fields.md`.
+
+- **Application fields are asked and kept with the application.** The application form asks the
+  instance's questions after the profile fields, with each type's own validation, and the answers
+  are frozen into the application's snapshot under `a_<fieldid>` keys with the question and a plain
+  display value as they were at submission. The approval queue, the review page, the reports, the
+  approver's e-mail and the privacy export therefore show them with no code of their own, masked
+  like custom profile fields (`moodle/site:viewuseridentity`). Nothing is written to the profile
+  or to `customfield_data`, and core's uniqueness check is skipped: it would compare a shared
+  field against other components' data.
+
+- **Backup and restore carry the application form's field definitions.** An instance's own
+  custom-field categories and fields, and the site-wide shared categories it has switched on,
+  travel in the course backup whether or not users are included, as the group mappings do. On
+  restore the archive is treated as untrusted: only the field types the method offers (and that
+  are installed) come back, shortnames are cleaned and kept unique, and a shared category is
+  matched by id and name, else by name alone, and is skipped, never created, when the site has no
+  such category. Text in descriptions travels; images embedded in them do not. Answers are not
+  part of this: they live in each application's snapshot.
+
 - **The applications queue shows what the decision needs.** It was a list of names, an e-mail
   address and a date, with no way to open any of the rows it listed.
 
