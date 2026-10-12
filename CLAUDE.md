@@ -13,10 +13,10 @@ confirms, defers to a waiting list, or cancels it. It owns three tables —
 `user_enrolments.id`), `enrol_apply_groups` (groups an approved applicant joins) and
 `enrol_apply_submission` (the durable record of each application, which outlives its
 enrolment) — and leans on core's enrolment expiry machinery for everything time based. Supports
-Moodle **5.1 through 5.2** (`$plugin->requires = 2025100600`,
-`$plugin->supported = [501, 502]`). CI is the moodle-an-hochschulen reusable workflow,
+Moodle **5.1 through 5.3** (`$plugin->requires = 2025100600`,
+`$plugin->supported = [501, 503]`). CI is the moodle-an-hochschulen reusable workflow,
 one job per supported branch in `.github/workflows/ci.yml` — **update those jobs when
-`supported` changes**. Development happens on the m501/m502 stacks; this repo mounts at
+`supported` changes**. Development happens on the m501, m502 and m503 stacks; this repo mounts at
 `enrol/apply` (see `~/dev/moodle-dev/plugins.conf`).
 
 ## Agent orchestration budget (fleet rule, repeated here on purpose)
@@ -1555,7 +1555,7 @@ Expect no matches. `phpcbf` fixes it too, but the grep is faster than a CI round
   apply here.** `~/dev/CLAUDE.md` keeps `@covers` docblocks alive for plugins that still support
   Moodle 4.5, because moodle-cs on the 4.05 leg cannot see attributes and reports
   `moodle.PHPUnit.TestCaseCovers.Missing` for every method in the file. This plugin declares
-  `$plugin->supported = [501, 502]` and `ci.yml` has no 4.05 job, so `#[CoversClass(...)]` is
+  `$plugin->supported = [501, 503]` and `ci.yml` has no 4.05 job, so `#[CoversClass(...)]` is
   the correct form. PHPUnit 11.5.55 raises one test-runner deprecation per file carrying
   `@covers` in a docblock; the suite is at zero and a restored docblock puts them back.
 - `tests/lib_test.php` drives the state machine directly against the plugin object. Note

@@ -115,7 +115,12 @@ class profilewriter {
             throw new \moodle_exception('cannotupdateprofile');
         }
         if ($wrotestandard) {
-            user_update_user($usernew, false, false);
+            // Moodle 5.3 moved the function to \core\user and deprecated the old name; 5.1 and 5.2 have only the old one.
+            if (method_exists(\core\user::class, 'update_user')) {
+                \core\user::update_user($usernew, false, false);
+            } else {
+                user_update_user($usernew, false, false);
+            }
         }
         profile_save_data($usernew);
 

@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Moodle 5.3 support.** `$plugin->supported` now ends at 5.3, with a CI job for
+  `MOODLE_503_STABLE` running the full PHP x database matrix; the 5.2 job drops to one database,
+  as the older branches do. The opt-in profile write calls `\core\user::update_user()` where it
+  exists, because 5.3 deprecated `user_update_user()`; 5.1 and 5.2 keep the old call.
+
 - **The applications queue shows what the decision needs.** It was a list of names, an e-mail
   address and a date, with no way to open any of the rows it listed.
 
