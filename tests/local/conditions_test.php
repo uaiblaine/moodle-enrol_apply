@@ -152,6 +152,85 @@ final class conditions_test extends \advanced_testcase {
     }
 
     /**
+     * Store a condition row as it stands, bypassing save()'s check.
+     *
+     * What a stale row looks like: one written before core's editor reordered the questions or
+     * changed the options, or one a restore wrote on an older build.
+     *
+     * @param field_controller $field The controlled question.
+     * @param field_controller $controller The controlling question.
+     * @param string $operator Operator.
+     * @param int[] $positions Positions.
+     * @return void
+     */
+    private function stored_condition(
+        field_controller $field,
+        field_controller $controller,
+        string $operator,
+        array $positions = []
+    ): void {
+        global $DB;
+
+        $DB->insert_record('enrol_apply_fieldcond', (object) [
+            'enrolid' => (int) $this->instance->id,
+            'fieldid' => (int) $field->get('id'),
+            'dependsonfieldid' => (int) $controller->get('id'),
+            'operator' => $operator,
+            'value' => implode(',', $positions),
+            'timemodified' => time(),
+        ]);
+    }
+
+    /**
+     * save() refuses what the instance cannot hold, whoever calls it.
+     *
+     * The form and the restore check first to explain a refusal; this is the write itself.
+     *
+     * @return void
+     */
+    public function test_save_refuses_a_condition_the_instance_cannot_hold(): void {
+        global $DB;
+
+        $shift = $this->create_field('select', 'shift', ['options' => "Morning\nNight"]);
+        $reason = $this->create_field('text', 'reason');
+
+        $othercourse = $this->getDataGenerator()->create_course();
+        $otherid = enrol_get_plugin('apply')->add_instance($othercourse, enrol_get_plugin('apply')->get_instance_defaults());
+        $foreign = $this->getDataGenerator()->get_plugin_generator('core_customfield')->create_field([
+            'categoryid' => $this->getDataGenerator()->get_plugin_generator('core_customfield')->create_category([
+                'component' => 'enrol_apply',
+                'area' => 'application',
+                'itemid' => $otherid,
+            ])->get('id'),
+            'type' => 'text',
+            'shortname' => 'foreign',
+        ]);
+
+        try {
+            conditions::save(
+                (int) $this->instance->id,
+                (int) $foreign->get('id'),
+                (int) $shift->get('id'),
+                conditions::OPERATOR_IN,
+                [1]
+            );
+            $this->fail('A question of another instance was given a condition here.');
+        } catch (\invalid_parameter_exception $e) {
+            $this->assertFalse($DB->record_exists('enrol_apply_fieldcond', ['fieldid' => $foreign->get('id')]));
+        }
+
+        // The control: the same call for this instance's own question is written.
+        conditions::save(
+            (int) $this->instance->id,
+            (int) $reason->get('id'),
+            (int) $shift->get('id'),
+            conditions::OPERATOR_IN,
+            [1]
+        );
+        $this->assertTrue($DB->record_exists('enrol_apply_fieldcond', ['fieldid' => $reason->get('id')]));
+    }
+
+    /**
      * Whether a question is shown for the submitted data, read through the instance's effective conditions.
      *
      * @param field_controller $field The question.
@@ -247,8 +326,8 @@ final class conditions_test extends \advanced_testcase {
         $shift = $this->create_field('select', 'shift', ['options' => "Morning\nNight"]);
         $last = $this->create_field('text', 'last');
         // Written past problem(), as a reorder, an option edit or a restore of an older site leaves them.
-        $this->condition($first, $later, conditions::OPERATOR_CHECKED);
-        $this->condition($last, $shift, conditions::OPERATOR_IN, [3]);
+        $this->stored_condition($first, $later, conditions::OPERATOR_CHECKED);
+        $this->stored_condition($last, $shift, conditions::OPERATOR_IN, [3]);
 
         $this->assertSame([], conditions::effective($this->instance, answers::fields($this->instance)));
         $this->assertTrue($this->visible($first, []));
@@ -439,7 +518,7 @@ final class conditions_test extends \advanced_testcase {
         $plain = $this->create_field('text', 'plain');
         $this->condition($reason, $shift, conditions::OPERATOR_IN, [2]);
         $this->condition($employer, $employed, conditions::OPERATOR_NOTCHECKED);
-        $this->condition($shift, $plain, conditions::OPERATOR_CHECKED);
+        $this->stored_condition($shift, $plain, conditions::OPERATOR_CHECKED);
 
         $fields = answers::fields($this->instance);
         $stored = conditions::stored((int) $this->instance->id);

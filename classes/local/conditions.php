@@ -399,7 +399,8 @@ class conditions {
     /**
      * Save the condition of a question, replacing any it had.
      *
-     * The caller has checked it with problem().
+     * Checked here with problem() against the instance's own questions, whatever the caller did:
+     * the form and the restore check first to explain a refusal, but this is the write.
      *
      * @param int $enrolid Enrol instance id.
      * @param int $fieldid The controlled field.
@@ -407,9 +408,16 @@ class conditions {
      * @param string $operator One of the OPERATOR_ constants.
      * @param int[] $positions Option positions, for OPERATOR_IN.
      * @return void
+     * @throws \invalid_parameter_exception When the condition is not one this instance can hold.
      */
     public static function save(int $enrolid, int $fieldid, int $controllerid, string $operator, array $positions): void {
         global $DB;
+
+        $instance = $DB->get_record('enrol', ['id' => $enrolid, 'enrol' => 'apply'], '*', MUST_EXIST);
+        $problem = self::problem(answers::fields($instance), $fieldid, $controllerid, $operator, $positions);
+        if ($problem !== '') {
+            throw new \invalid_parameter_exception(self::problem_message($problem));
+        }
 
         $value = $operator === self::OPERATOR_IN ? implode(',', self::parse_positions(implode(',', $positions))) : '';
         $record = [

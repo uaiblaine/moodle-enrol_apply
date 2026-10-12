@@ -525,7 +525,15 @@ final class backup_fields_test extends \advanced_testcase {
         ]);
         $level = (int) $DB->get_field('customfield_field', 'id', ['categoryid' => $first->get('id'), 'shortname' => 'level']);
         // Level has two options: position 3 does not exist.
-        conditions::save($enrolid, (int) $why->get('id'), $level, conditions::OPERATOR_IN, [3]);
+        // Written past save()'s check, as an archive from another build could carry it.
+        $DB->insert_record('enrol_apply_fieldcond', (object) [
+            'enrolid' => $enrolid,
+            'fieldid' => (int) $why->get('id'),
+            'dependsonfieldid' => $level,
+            'operator' => conditions::OPERATOR_IN,
+            'value' => '3',
+            'timemodified' => time(),
+        ]);
         conditions::save($enrolid, (int) $other->get('id'), $level, conditions::OPERATOR_IN, [1]);
 
         $newenrolid = $this->apply_instance($this->backup_and_restore($course, false));
