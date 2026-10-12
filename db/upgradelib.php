@@ -151,3 +151,43 @@ function enrol_apply_clear_legacy_comment_labels(): int {
 
     return $affected;
 }
+
+/**
+ * Move every JSON snapshot envelope in enrol_apply_submission.userinfodata into enrol_apply_answer.
+ *
+ * The envelope is parsed with the reader it always had (submission::parse_envelope()) and stored
+ * through the one writer (submission::write_answers()), so the same entries survive that the old
+ * reader would have shown: a wrong version, a non-scalar part or a malformed entry is dropped,
+ * and a record with no envelope gets no rows.
+ *
+ * Idempotent per record, which the DDL guard in the upgrade step is not: the savepoint is reached
+ * only after the whole loop, so a failure part way leaves the rows already written committed and
+ * the re-run starts again from the first record. A record that already has rows is skipped, and
+ * write_answers() writes each record's rows in one transaction, so "has rows" always means "has
+ * all of them". Read through a recordset, since the table holds every application ever made.
+ *
+ * @return int Number of records whose envelope produced rows.
+ */
+function enrol_apply_migrate_snapshot_envelopes(): int {
+    global $DB;
+
+    $dbman = $DB->get_manager();
+    if (!$dbman->field_exists('enrol_apply_submission', 'userinfodata')) {
+        return 0;
+    }
+
+    $migrated = 0;
+    $rows = $DB->get_recordset('enrol_apply_submission', null, 'id', 'id, userinfodata');
+    foreach ($rows as $row) {
+        if ($DB->record_exists(\enrol_apply\local\submission::ANSWER_TABLE, ['submissionid' => $row->id])) {
+            continue;
+        }
+        $entries = \enrol_apply\local\submission::parse_envelope($row->userinfodata);
+        if (\enrol_apply\local\submission::write_answers((int) $row->id, $entries) > 0) {
+            $migrated++;
+        }
+    }
+    $rows->close();
+
+    return $migrated;
+}

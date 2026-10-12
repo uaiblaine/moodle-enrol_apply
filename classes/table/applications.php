@@ -84,6 +84,9 @@ class applications extends \table_sql implements dynamic_table {
     /** @var array Snapshot keys this reader may see, memoised by course id; see visible_keys(). */
     protected $visiblekeys = [];
 
+    /** @var array Submission id => the page's frozen answers, read in one query by query_db(). */
+    protected $snapshots = [];
+
     /** @var string What the listing is narrowed to match, empty for no search. */
     protected $search = '';
 
@@ -761,11 +764,11 @@ class applications extends \table_sql implements dynamic_table {
                                AND (s.id IS NULL OR prior.id <> s.id)
                           ) THEN 1 ELSE 0 END AS appliedbefore";
 
-        /* s.userinfodata, the frozen snapshot, comes from the row already joined for the comment.
-           It has no fallback: enrol_apply_applicationinfo never held a snapshot, so an
-           application predating the durable record shows no evidence. */
+        /* s.id names the record whose frozen answers query_db() reads for the whole page. They
+           have no fallback: enrol_apply_applicationinfo never held a snapshot, so an application
+           predating the durable record shows no evidence. */
         $fields = "ue.id AS userenrolmentid, ue.status AS enrolstatus, ue.timecreated AS applydate,
-                   COALESCE(s.comment, ai.comment) AS applycomment, s.userinfodata AS snapshot,
+                   COALESCE(s.comment, ai.comment) AS applycomment, s.id AS submissionid,
                    c.fullname AS course,
                    c.id AS courseid, {$priorsql}, {$userfields}{$this->identitysql->selects}";
         $from = "{user_enrolments} ue
@@ -1220,6 +1223,25 @@ class applications extends \table_sql implements dynamic_table {
     }
 
     /**
+     * Fetch the page, then the frozen answers of every row on it in one query.
+     *
+     * A batch read after the rows rather than an aggregate column in the listing's own SQL: the
+     * answers keep their structure (key, label, value), which the per-row masking in col_snapshot()
+     * matches on, and the listing's count and narrowing queries stay free of a subquery per row.
+     * One extra statement per page, whatever its size;
+     * test_the_answers_of_a_whole_page_are_read_in_one_query holds that.
+     *
+     * @param int $pagesize Rows per page.
+     * @param bool $useinitialsbar Passed through to core.
+     * @return void
+     */
+    public function query_db($pagesize, $useinitialsbar = true) {
+        parent::query_db($pagesize, $useinitialsbar);
+
+        $this->snapshots = submissionrecord::read_snapshots(array_column((array) $this->rawdata, 'submissionid'));
+    }
+
+    /**
      * What the applicant submitted with this application.
      *
      * Read from the frozen snapshot only, with its stored labels, never re-resolved against the
@@ -1235,14 +1257,14 @@ class applications extends \table_sql implements dynamic_table {
      *
      * Returns nothing, card label included, when there is nothing to show.
      *
-     * @param stdClass $row Row data carrying the stored envelope as `snapshot`.
+     * @param stdClass $row Row data carrying the record's id as `submissionid`, null for none.
      * @return string Rendered cell.
      */
     public function col_snapshot($row) {
         $visible = $this->visible_keys((int) $row->courseid);
 
         $pills = '';
-        foreach (submissionrecord::read_snapshot($row->snapshot ?? null) as $entry) {
+        foreach ($this->snapshots[(int) ($row->submissionid ?? 0)] ?? [] as $entry) {
             if ($visible !== submissionformatter::ALL_FIELDS && !in_array($entry['key'], $visible, true)) {
                 // Dropped without a marker; see submissionformatter::visible_keys().
                 continue;

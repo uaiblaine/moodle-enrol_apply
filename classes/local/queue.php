@@ -116,10 +116,10 @@ final class queue {
      * the applicant nor the course. The caller cannot be authorised before this runs: the
      * context to authorise against is derived from this row.
      *
-     * The profile snapshot comes from the durable record only, with no fallback: the
+     * The profile snapshot belongs to the durable record only, with no fallback: the
      * applicationinfo row has never held one, so an application that predates that record shows
      * its comment and no snapshot rather than an empty one that looks like "they filled nothing
-     * in". Null and the empty string are the same thing to read_snapshot().
+     * in". The caller reads it by submissionid, which is null for such an application.
      *
      * @param int $userenrolmentid User enrolment id.
      * @return stdClass|null The application, or null when there is none to decide.
@@ -135,7 +135,7 @@ final class queue {
            nothing. They let the review page say who deferred an application, when, and what
            they wrote to the applicant; s.id is what links the page to the durable record. */
         $sql = "SELECT ue.id, ue.userid, ue.enrolid, ue.status, ue.timecreated AS applydate,
-                       COALESCE(s.comment, ai.comment) AS applycomment, s.userinfodata AS snapshot,
+                       COALESCE(s.comment, ai.comment) AS applycomment,
                        s.id AS submissionid, s.status AS recordstatus, s.timedecided,
                        s.decidedby, s.outcomemessage, s.decisionnote,
                        e.courseid, c.fullname AS coursename

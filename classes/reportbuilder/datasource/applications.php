@@ -21,6 +21,8 @@ use core_reportbuilder\datasource;
 use core_reportbuilder\local\entities\course;
 use core_reportbuilder\local\entities\user;
 use core_reportbuilder\local\helpers\database;
+use enrol_apply\local\answers;
+use enrol_apply\reportbuilder\local\entities\answer;
 use enrol_apply\reportbuilder\local\entities\submission;
 use enrol_apply\reportbuilder\local\formatters\submission as formatter;
 
@@ -32,8 +34,9 @@ use enrol_apply\reportbuilder\local\formatters\submission as formatter;
  * Unlike {@see \enrol_apply\reportbuilder\local\systemreports\course_applications}, a system
  * report scoped to one course with a can_view() re-run on every request, a datasource has no
  * per-reader access check: a custom report is governed by the Report Builder capabilities and
- * the report's audience, neither of which this plugin controls. That is why the snapshot column
- * is gated separately, in restrict_snapshot_column().
+ * the report's audience, neither of which this plugin controls. That is why everything the
+ * applicant submitted - the snapshot column, the answer entity and the shared questions' columns -
+ * is gated separately, in restrict_submitted_data().
  *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine
@@ -42,6 +45,9 @@ use enrol_apply\reportbuilder\local\formatters\submission as formatter;
 class applications extends datasource {
     /** @var string Entity name of the second user entity, the one naming the decider. */
     protected const DECIDER = 'applydecider';
+
+    /** @var array Unique identifiers of the shared questions' columns, filters and conditions. */
+    protected $sharedquestions = [];
 
     /**
      * The name shown in the report source picker.
@@ -105,11 +111,32 @@ class applications extends datasource {
         $this->add_all_from_entity($decider->get_entity_name());
         $this->add_all_from_entity($courseentity->get_entity_name());
 
-        $this->restrict_snapshot_column();
+        /* One row per frozen value when its columns are used, LEFT joined so a record with no
+           answers still lists once. */
+        $answer = new answer();
+        $answeralias = $answer->get_table_alias('enrol_apply_answer');
+        $this->add_entity($answer->add_join(
+            "LEFT JOIN {enrol_apply_answer} {$answeralias} ON {$answeralias}.submissionid = {$alias}.id"
+        ));
+        $this->add_all_from_entity($answer->get_entity_name());
+
+        /* A column and a filter per question of a shared category some instance uses: that field
+           is the same in every course, so one column holds its answers site-wide. A local
+           question exists in one instance only and is reached through the answer entity. */
+        foreach (answers::shared_fields_in_use() as $id => $field) {
+            $key = answers::key((int) $id);
+            $title = $field->get_formatted_name(false);
+            $this->add_column($entity->answer_column($key, $title));
+            $this->add_filter($entity->answer_filter($key, $title));
+            $this->add_condition($entity->answer_filter($key, $title));
+            $this->sharedquestions[] = $entity->get_entity_name() . ':' . $key;
+        }
+
+        $this->restrict_submitted_data($answer->get_entity_name());
     }
 
     /**
-     * Withhold the frozen profile snapshot from a reader who may not see everyone's details.
+     * Withhold what the applicants submitted from a reader who may not see everyone's details.
      *
      * The course report gates this on a capability in the course, re-checked on every request.
      * A custom report has neither: it lives in the system context, a datasource has no
@@ -129,16 +156,31 @@ class applications extends datasource {
      * field whose custom profile field has since been deleted. The effective control is therefore
      * the report audience plus this one capability, not a per-reader guarantee.
      *
+     * The same gate covers every other way to the same values, filters and conditions included:
+     * the answer entity, whose rows exist only where an applicant answered, and the shared
+     * questions' columns. A filter or condition left available on a withheld column would let a
+     * reader recover the value by narrowing and counting rows.
+     *
+     * @param string $answerentity Entity name of the answer entity.
      * @return void
      */
-    protected function restrict_snapshot_column(): void {
-        $column = $this->get_column('submission:snapshot');
-        if ($column === null) {
+    protected function restrict_submitted_data(string $answerentity): void {
+        if (!has_capability('moodle/user:viewalldetails', $this->get_context())) {
+            $withheld = array_merge(['submission:snapshot'], $this->sharedquestions);
+            $prefix = $answerentity . ':';
+            // Three lists walked apart: a column and its filter share one identifier.
+            foreach ([$this->get_columns(), $this->get_filters(), $this->get_conditions()] as $elements) {
+                foreach ($elements as $identifier => $element) {
+                    if (in_array($identifier, $withheld, true) || str_starts_with($identifier, $prefix)) {
+                        $element->set_is_available(false);
+                    }
+                }
+            }
             return;
         }
 
-        if (!has_capability('moodle/user:viewalldetails', $this->get_context())) {
-            $column->set_is_available(false);
+        $column = $this->get_column('submission:snapshot');
+        if ($column === null) {
             return;
         }
 
@@ -150,9 +192,10 @@ class applications extends datasource {
     /**
      * The columns a newly created report starts with.
      *
-     * submission:snapshot must stay absent: helpers\report::add_report_column() rejects an
-     * unavailable column, so a reader without moodle/user:viewalldetails creating a report from
-     * this source would get invalid_parameter_exception rather than a report.
+     * submission:snapshot must stay absent, and so must every answer and shared-question column:
+     * helpers\report::add_report_column() rejects an unavailable column, so a reader without
+     * moodle/user:viewalldetails creating a report from this source would get
+     * invalid_parameter_exception rather than a report.
      *
      * @return array Column identifiers.
      */

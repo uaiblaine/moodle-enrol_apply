@@ -38,7 +38,7 @@
  * A fourth, also instance configuration and so also outside the users gate, is the definition
  * of the application form's custom fields: the instance's own categories with their fields,
  * and which site-wide shared categories it has switched on. The answers are not part of it;
- * they live in the submission snapshot. Descriptions travel as text only: images embedded in
+ * they travel with the record they belong to, as user data. Descriptions travel as text only: images embedded in
  * a category or field description are not backed up and do not come back. The instance's
  * display conditions travel with them, after everything else, so the restore can remap both
  * field ids through the fields it has just created.
@@ -78,7 +78,6 @@ class backup_enrol_apply_plugin extends backup_enrol_plugin {
             'userid',
             'userenrolmentid',
             'comment',
-            'userinfodata',
             'status',
             'outcomemessage',
             'decisionnote',
@@ -88,6 +87,12 @@ class backup_enrol_apply_plugin extends backup_enrol_plugin {
             'timedecided',
             'decidedby',
         ]);
+
+        /* What the applicant submitted, frozen, as children of their record: they travel exactly
+           when the record does, inside the users gate below, with no source of their own to gate.
+           The archive keeps their order; the restore reads it rather than the archive's ids. */
+        $answers = new backup_nested_element('answers');
+        $answer = new backup_nested_element('answer', ['id'], ['fieldkey', 'label', 'value', 'sortorder']);
 
         $categories = new backup_nested_element('applicationcategories');
         $category = new backup_nested_element('applicationcategory', ['id'], [
@@ -130,6 +135,8 @@ class backup_enrol_apply_plugin extends backup_enrol_plugin {
         $applications->add_child($application);
         $pluginwrapper->add_child($submissions);
         $submissions->add_child($submission);
+        $submission->add_child($answers);
+        $answers->add_child($answer);
         // Last: the restore reads the archive in order, and a condition is remapped through the fields above.
         $pluginwrapper->add_child($fieldconditions);
         $fieldconditions->add_child($fieldcondition);
@@ -173,6 +180,10 @@ class backup_enrol_apply_plugin extends backup_enrol_plugin {
                 backup::VAR_PARENTID,
             ]
         );
+
+        /* Read per record, whichever of the two sources below the record came from; a record with
+           no source is never read, so its answers are not either. */
+        $answer->set_source_table('enrol_apply_answer', ['submissionid' => backup::VAR_PARENTID], 'sortorder ASC, id ASC');
 
         // Configuration too, so outside the users gate; the field ids are remapped on restore.
         $fieldcondition->set_source_table('enrol_apply_fieldcond', ['enrolid' => backup::VAR_PARENTID], 'id ASC');

@@ -8,11 +8,12 @@ file keeps only what is true for this plugin.
 Plugin context: a Moodle **enrol** plugin ("Course enrol confirmation") that inserts an
 approval step into course enrolment. A user applies, optionally leaving a comment and
 filling in profile fields; the enrolment is created **suspended**; a manager then
-confirms, defers to a waiting list, or cancels it. It owns three tables —
+confirms, defers to a waiting list, or cancels it. Its personal-data tables are
 `enrol_apply_applicationinfo` (the per-application comment, keyed by
-`user_enrolments.id`), `enrol_apply_groups` (groups an approved applicant joins) and
-`enrol_apply_submission` (the durable record of each application, which outlives its
-enrolment) — and leans on core's enrolment expiry machinery for everything time based. Supports
+`user_enrolments.id`), `enrol_apply_submission` (the durable record of each application, which
+outlives its enrolment) and `enrol_apply_answer` (what that application submitted, one frozen row
+per value, owned by the record); `enrol_apply_groups` (groups an approved applicant joins) and
+`enrol_apply_fieldcond` (when a question is shown) are configuration. It leans on core's enrolment expiry machinery for everything time based. Supports
 Moodle **5.1 through 5.3** (`$plugin->requires = 2025100600`,
 `$plugin->supported = [501, 503]`). CI is the moodle-an-hochschulen reusable workflow,
 one job per supported branch in `.github/workflows/ci.yml` — **update those jobs when
@@ -99,7 +100,7 @@ classes/local/applications.php  mentee lookup shared by the queue
 classes/local/capacity.php   the two capacity numbers, and how many deferrals hold one
 classes/local/submission.php the durable application record: constants, writes, reads
 classes/observers.php        course_deleted, orphan cleanup for the plugin-disabled case
-classes/privacy/provider.php full provider: the two personal-data tables, two personal-data roles
+classes/privacy/provider.php full provider: three personal-data tables, two personal-data roles
 classes/task/                sync_enrolments, send_expiry_notifications, purge_submissions (scheduled);
                              notify_approval (adhoc: the approval message)
 backup/                      group mappings, comments and the durable trail, see below
@@ -152,8 +153,8 @@ backup/                      group mappings, comments and the durable trail, see
   message nowhere and mailed it nowhere while the status looked perfectly correct.
   `submission::ensure()` closes that. It reconstructs only what a pending application can honestly
   claim: the comment from `enrol_apply_applicationinfo`, the enrolment's OWN `timecreated` (not
-  this moment — `prior_applications()` orders by it and the retention sweep filters on it), an
-  empty snapshot, and `STATUS_PENDING` whatever the enrolment is doing, because the caller stamps
+  this moment — `prior_applications()` orders by it and the retention sweep filters on it), no
+  answer rows, and `STATUS_PENDING` whatever the enrolment is doing, because the caller stamps
   the real decision immediately afterwards.
 
 - **Correcting a deferral's reason is not a second decision, and `wait_enrolment()` has to know
@@ -278,8 +279,9 @@ backup/                      group mappings, comments and the durable trail, see
 
   **The live read is a security boundary, and the first version of this panel got it wrong.** It
   showed "what the profile says now" beside each row by handing the stored key to
-  `fields::current_value()`. That key comes out of `userinfodata`, which
-  `restore_enrol_apply_plugin` writes **verbatim from a foreign archive**, and `current_value()`
+  `fields::current_value()`. That key comes out of `enrol_apply_answer`, whose rows
+  `restore_enrol_apply_plugin` writes **verbatim from a foreign archive** (or from the JSON
+  envelope an archive older than that table carries), and `current_value()`
   dereferences whatever `{user}` column an `s_` key names with no allowlist — the `DENY` list
   that keeps `s_password`, `s_secret`, `s_email` and `s_idnumber` out of this plugin governs the
   WRITE path only. Measured on m502 with a crafted envelope: the panel rendered the applicant's
@@ -1012,7 +1014,7 @@ backup/                      group mappings, comments and the durable trail, see
   approver read `A`": every editable field on the form is `PARAM_TEXT` and formslib cleans the
   submission through `clean_param()` before `get_data()`, so the tail is gone at submission —
   measured, `clean_param('A<B and R&D', PARAM_TEXT)` is `'A'`. The value that really can hold
-  a bare `<` comes from a **restore**, which writes `userinfodata` and `comment` verbatim out
+  a bare `<` comes from a **restore**, which writes the answer rows and `comment` verbatim out
   of a foreign archive. And a **report column does not have to satisfy `PARAM_TEXT`**: a Report
   Builder cell is raw HTML, where escaping is safe and lossless, and stripping there is a
   defect rather than a deliberate cost. Only a web service return genuinely has to strip.
@@ -1435,8 +1437,32 @@ backup/                      group mappings, comments and the durable trail, see
   profile snapshot is not an audit trail, it is loose personal data. A missing *decider* is only
   zeroed, because the record is still the applicant's and still means what it says.
 
+- **The snapshot is rows in `enrol_apply_answer`, and a second table is a second place for a
+  deletion to miss.** It replaced the JSON column `userinfodata` (D18 in
+  `docs/design/custom-application-fields.md`), so privacy, pseudonymisation, retention and backup
+  each handle one copy. Every path that deletes records deletes their answers FIRST, through
+  `submission::delete_answers()` (a condition on the record table: the rows carry no user, course
+  or date of their own) or `submission::delete()`; the `course_deleted` observer sweeps any row
+  whose record is gone anyway. A decider's erasure never touches them. `submission::write_answers()`
+  is the one writer — submission, the 2026101300 upgrade and the restore of an old archive's
+  envelope all go through it — and `answer_record()` is the one check, which a restored
+  `<answer>` row takes too. Core's `test_table_coverage` cannot see the table (no `userid`, no key
+  to `user.id`), so the provider declares it by hand.
+
+  **The restore finds a row's record through `get_new_parentid()`, which returns the LATEST id
+  mapped under that name**, not the parent of this row. A record the restore skips (its applicant
+  unmapped, or already in the course) must therefore still call `set_mapping()` — to 0 — or its
+  answers attach to whichever applicant was restored before it. Gate `CF5K`.
+
+  **The custom report's snapshot column aggregates the rows in SQL** (`submission::aggregate_sql()`,
+  `sql_group_concat()` with two control characters as separators, which `answer_record()` keeps
+  out of the data); the queue reads its page's answers in ONE batch query after the rows
+  (`applications::query_db()`). MySQL truncates `GROUP_CONCAT` at `group_concat_max_len` (1024
+  bytes by default; MariaDB 1M) and `parse_aggregate()` drops a row cut in half.
+
 - **The two privacy roles are erased and exported differently, and neither is symmetric.** A
-  record belongs to its APPLICANT: it carries that person's comment and profile snapshot. So a
+  record belongs to its APPLICANT: it carries that person's comment and, in its answer rows, their
+  profile snapshot. So a
   decider's subject access export gets the decision — status, dates, which method — and never
   the applicant's words, and an erasure request from a decider only zeroes `decidedby` rather
   than deleting the row. Deleting it would destroy a third party's data under a request that

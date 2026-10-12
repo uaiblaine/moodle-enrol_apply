@@ -30,11 +30,17 @@ use enrol_apply\local\submission;
 /**
  * Privacy Subsystem implementation for enrol_apply.
  *
- * Two tables and two roles. enrol_apply_applicationinfo holds the comment submitted with an
+ * Three tables and two roles. enrol_apply_applicationinfo holds the comment submitted with an
  * application still awaiting a decision, keyed by the user enrolment. enrol_apply_submission
  * is the durable record of the same application, which outlives the enrolment, the enrolment
  * method and every decision taken on it, and which names two people: the applicant in userid
  * and whoever decided in decidedby. Both roles are exported and both are erased.
+ * enrol_apply_answer holds what the applicant submitted, one row per value; it names nobody
+ * itself and belongs to the applicant of its record, so it is exported and erased with that
+ * record and never in the decider's name.
+ *
+ * Core's table coverage test cannot see enrol_apply_answer as personal data - it has no userid
+ * column and no key to user.id - which is why it is declared and handled here by hand.
  *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine
@@ -68,7 +74,6 @@ class provider implements
                 'enrolid' => 'privacy:metadata:enrol_apply_submission:enrolid',
                 'userenrolmentid' => 'privacy:metadata:enrol_apply_submission:userenrolmentid',
                 'comment' => 'privacy:metadata:enrol_apply_submission:comment',
-                'userinfodata' => 'privacy:metadata:enrol_apply_submission:userinfodata',
                 'decidedgroups' => 'privacy:metadata:enrol_apply_submission:decidedgroups',
                 'decidedrole' => 'privacy:metadata:enrol_apply_submission:decidedrole',
                 'status' => 'privacy:metadata:enrol_apply_submission:status',
@@ -79,6 +84,17 @@ class provider implements
                 'decidedby' => 'privacy:metadata:enrol_apply_submission:decidedby',
             ],
             'privacy:metadata:enrol_apply_submission'
+        );
+
+        $items->add_database_table(
+            'enrol_apply_answer',
+            [
+                'submissionid' => 'privacy:metadata:enrol_apply_answer:submissionid',
+                'fieldkey' => 'privacy:metadata:enrol_apply_answer:fieldkey',
+                'label' => 'privacy:metadata:enrol_apply_answer:label',
+                'value' => 'privacy:metadata:enrol_apply_answer:value',
+            ],
+            'privacy:metadata:enrol_apply_answer'
         );
 
         return $items;
@@ -220,7 +236,11 @@ class provider implements
                   FROM {enrol_apply_submission} s
                  WHERE s.{$column} = :userid AND s.courseid {$insql}";
 
-        foreach ($DB->get_records_sql($sql, $params) as $row) {
+        $rows = $DB->get_records_sql($sql, $params);
+        // The decider's export never carries the answers, so they are not even read for it.
+        $snapshots = $asapplicant ? submission::read_snapshots(array_keys($rows)) : [];
+
+        foreach ($rows as $row) {
             $context = context_course::instance($row->courseid, IGNORE_MISSING);
             if (!$context) {
                 // Should be unreachable: the context is what put this course in the list.
@@ -258,7 +278,7 @@ class provider implements
                party's data. */
             if ($asapplicant) {
                 $export->comment = $row->comment;
-                $export->submittedfields = submission::read_snapshot($row->userinfodata);
+                $export->submittedfields = $snapshots[(int) $row->id] ?? [];
             }
 
             $subcontext = self::submission_subcontext((int) $row->id, $asapplicant);
@@ -396,6 +416,7 @@ class provider implements
         $ids = $DB->get_fieldset_sql($sql, ['enrol' => 'apply', 'courseid' => $context->instanceid]);
         self::delete_by_id($ids);
 
+        submission::delete_answers('courseid = :courseid', ['courseid' => $context->instanceid]);
         $DB->delete_records('enrol_apply_submission', ['courseid' => $context->instanceid]);
     }
 
@@ -464,10 +485,10 @@ class provider implements
      * Erase the given users from the durable application records of the given courses.
      *
      * The two roles are erased differently. As the applicant, the record is theirs and is
-     * deleted whole: erasure wins over keeping the trail.
+     * deleted whole, its frozen answers first: erasure wins over keeping the trail.
      *
      * As the decider, only their id goes. The record carries the applicant's comment and
-     * profile snapshot, and deleting it would destroy a third party's data. Zeroing decidedby
+     * answers, and deleting either would destroy a third party's data. Zeroing decidedby
      * matches what {@see submission::pseudonymise()} does on course deletion.
      *
      * @param array $courseids Courses to erase within.
@@ -484,11 +505,9 @@ class provider implements
         [$courseinsql, $courseparams] = $DB->get_in_or_equal($courseids, SQL_PARAMS_NAMED, 'course');
         [$userinsql, $userparams] = $DB->get_in_or_equal($userids, SQL_PARAMS_NAMED, 'user');
 
-        $DB->delete_records_select(
-            'enrol_apply_submission',
-            "courseid {$courseinsql} AND userid {$userinsql}",
-            $courseparams + $userparams
-        );
+        $select = "courseid {$courseinsql} AND userid {$userinsql}";
+        submission::delete_answers($select, $courseparams + $userparams);
+        $DB->delete_records_select('enrol_apply_submission', $select, $courseparams + $userparams);
 
         [$deciderinsql, $deciderparams] = $DB->get_in_or_equal($userids, SQL_PARAMS_NAMED, 'decider');
         $DB->set_field_select(

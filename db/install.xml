@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<XMLDB PATH="enrol/apply/db" VERSION="20261012" COMMENT="XMLDB file for Moodle enrol/apply"
+<XMLDB PATH="enrol/apply/db" VERSION="20261013" COMMENT="XMLDB file for Moodle enrol/apply"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:noNamespaceSchemaLocation="../../../lib/xmldb/xmldb.xsd"
 >
@@ -23,7 +23,6 @@
         <FIELD NAME="enrolid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="enrol instance applied to, for the backup and the approval queue"/>
         <FIELD NAME="userenrolmentid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="reference only, never a key: the row it points at is deleted on cancellation"/>
         <FIELD NAME="comment" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="comment submitted with the application"/>
-        <FIELD NAME="userinfodata" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="frozen JSON snapshot of the profile values submitted"/>
         <FIELD NAME="status" TYPE="int" LENGTH="4" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="0 pending, 1 approved, 2 waiting, 3 cancelled"/>
         <FIELD NAME="outcomemessage" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="message the decider wrote to the applicant"/>
         <FIELD NAME="decidedgroups" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="group ids the decider chose at approval, comma separated; empty means the instance default was used"/>
@@ -43,6 +42,24 @@
         <INDEX NAME="enrolid" UNIQUE="false" FIELDS="enrolid" COMMENT="an index and not a foreign key: the row outlives the enrol instance on purpose"/>
         <INDEX NAME="userenrolmentid" UNIQUE="false" FIELDS="userenrolmentid" COMMENT="an index and not a foreign key: the row outlives the user enrolment on purpose"/>
         <INDEX NAME="timecreated" UNIQUE="false" FIELDS="timecreated" COMMENT="the retention sweep orders and filters on this"/>
+      </INDEXES>
+    </TABLE>
+    <TABLE NAME="enrol_apply_answer" COMMENT="What an application submitted, frozen: one row per profile field value and per answer to the instance's questions, with the question as it read then. Belongs to its enrol_apply_submission row and goes with it; it carries no user of its own.">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="submissionid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="the application record; its userid is the person these values describe"/>
+        <FIELD NAME="fieldkey" TYPE="char" LENGTH="100" NOTNULL="true" SEQUENCE="false" COMMENT="s_column, c_profilefieldid or a_customfieldid; what the masking matches"/>
+        <FIELD NAME="label" TYPE="text" NOTNULL="true" SEQUENCE="false" COMMENT="the question as it read at submission, plain spelling"/>
+        <FIELD NAME="value" TYPE="text" NOTNULL="true" SEQUENCE="false" COMMENT="the answer as displayed at submission, plain spelling"/>
+        <FIELD NAME="sortorder" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="position in the snapshot, the order the form asked"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="submission" TYPE="foreign" FIELDS="submissionid" REFTABLE="enrol_apply_submission" REFFIELDS="id" COMMENT="every path that deletes a record deletes its answers first; see submission::delete_answers()"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="submissionfieldkey" UNIQUE="true" FIELDS="submissionid, fieldkey" COMMENT="one value per question and record, which the per-question report columns read as a scalar"/>
+        <INDEX NAME="fieldkey" UNIQUE="false" FIELDS="fieldkey" COMMENT="the report filters on one question across records"/>
       </INDEXES>
     </TABLE>
     <TABLE NAME="enrol_apply_groups" COMMENT="Groups an applicant is added to once their enrolment application is approved.">

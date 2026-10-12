@@ -188,25 +188,59 @@ Each stage is a pull request with its own tests, mutation entries in
    course entities), and after stage 2 its snapshot column carries the application answers.
    That column is one block per application: it cannot be sorted or filtered by a single
    answer. Stage 6 adds that ability. It needs structured storage, because a display callback
-   never reaches SQL. The proposal (D17) is to be decided before the stage starts.
+   never reaches SQL. Built on D17 and D18.
 
 Stages 3 and 5 are independent of each other and of 4.
 
-### D17 (proposed). A frozen answer table for reporting
+### D17 (accepted 2026-10-13). A frozen answer table for reporting
 
-`enrol_apply_answer` (submissionid, fieldkey, label, value, timecreated). It is written in
-the same transaction as the snapshot and with the same frozen values, so it obeys D1: it is
-not a live copy, and renaming or deleting a field changes nothing in it. It gives:
+`enrol_apply_answer` (submissionid, fieldkey, label, value, sortorder). It is written in the same
+transaction as the application record and with the frozen values, so it obeys D1: it is not a
+live copy, and renaming or deleting a field changes nothing in it. It gives:
 
-- **a column and a filter per field of a shared category.** Those fields are the same in
-  every instance, so a site-wide report can have one column for "CPF" across all courses;
-- **an "Application answer" entity** with one row per answer (field label, value), joined
-  to the submission, for the fields that are local to an instance.
+- **a column and a filter per question in the course report**, for every question the course's
+  methods ask, requested profile fields included, masked by D8's rule: a question the reader may
+  not see has no column and no filter at all, never a blank one;
+- **a column and a filter per field of a shared category** that some method uses, in the custom
+  report source. Those fields are the same in every instance, so a site-wide report can have one
+  column for "CPF" across all courses;
+- **an "Application answer" entity** with one row per answer (field key, question, answer),
+  joined to the submission, for the fields that are local to an instance.
 
-The cost is a fourth personal-data table: privacy metadata, export and deletion,
-pseudonymisation on course deletion, retention sweep, and backup and restore, each in step
-with the snapshot. Without it, stage 6 shrinks to what a display callback can do: one
-column per shared field, readable but not sortable or filterable.
+In the custom report source all three are withheld, filters and conditions included, from a
+reader without `moodle/user:viewalldetails`, the gate the snapshot column already had: a custom
+report has no single context to judge D8's rule in. The header of a per-question column is the
+question's current name, while each cell holds the value frozen with its record; the frozen
+label stays with the record's snapshot.
+
+### D18 (accepted 2026-10-13). The table replaces the JSON envelope
+
+D17 first proposed the table beside `enrol_apply_submission.userinfodata`. It replaces it
+instead: the snapshot IS the rows, and the column is gone (upgrade 2026101300).
+
+- **One source of truth.** Privacy export and erasure, pseudonymisation on course deletion, the
+  retention sweep and backup each handle one copy of what the applicant typed, not two that must
+  stay in step; a second copy is a second place for a deletion to miss.
+- **Every reader moved**: the queue (one batch read per page, not one query per row), the review
+  page, the privacy export, and the report's snapshot column, now aggregated from the rows in SQL
+  (`sql_group_concat`) under its old name, so existing custom reports keep working.
+- **The table names no user.** Its owner is the record's applicant, so core's privacy table
+  coverage test cannot see it as personal data; the provider declares it and handles it by hand,
+  and a decider's erasure never touches it.
+- **Old data and old archives still arrive.** The upgrade and the restore of an archive whose
+  application record carries the envelope both parse it with the reader it always had (version
+  check, every part scalar, malformed entries dropped) and write it through the one writer. The
+  upgrade skips a record that already has rows, and each record's rows are written in one
+  transaction, so a re-run after a failure is safe. The other direction is lost: an archive
+  written now, restored into a site running an older version of this plugin, brings the records
+  without their answers, since that version reads only the envelope (D7's forward compatibility
+  ends here).
+- **What the storage adds.** A key over 100 characters or carrying a control character is
+  dropped (shortening or cleaning it could turn a withheld key into a shown one); control
+  characters are removed from labels and values (the aggregate separates parts and rows with
+  two of them); a key repeated in one snapshot keeps its first value (the table is unique on
+  submission and key, because a per-question column reads one value per record). Only a crafted
+  archive or envelope reaches any of the three.
 
 ## Open questions
 

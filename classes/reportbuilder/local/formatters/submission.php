@@ -236,7 +236,7 @@ class submission {
      * Neither label nor value goes through format_string(): under the default
      * formatstringstriptags it runs strip_tags(), which reads a bare "<" as a tag and deletes the
      * rest of the value ("A<B and R&D" becomes "A"). The form cannot produce such a value (its
-     * fields are PARAM_TEXT), but a restore writes userinfodata and comment verbatim from the
+     * fields are PARAM_TEXT), but a restore writes the answers and the comment verbatim from the
      * archive. Labels need escaping too: they are stored in the plain spelling of
      * fields::label($key, false), and a restored label is arbitrary. A Report Builder cell is raw
      * HTML, so escape() is the sink, and it is lossless.
@@ -252,7 +252,7 @@ class submission {
      * registered argument, null when none was registered, so a default here is unreachable and
      * null must be the restrictive case: names only. Only ALL_FIELDS lifts it.
      *
-     * @param mixed $value Stored JSON envelope.
+     * @param mixed $value The record's answers, as submission::aggregate_sql() concatenates them.
      * @param stdClass $row Row being rendered.
      * @param mixed $visible Keys the reader may see, or ALL_FIELDS; anything else means names only.
      * @return string One "label: value" pair per line the reader may see.
@@ -267,7 +267,7 @@ class submission {
             $visible = self::name_keys();
         }
 
-        $entries = submissionhelper::read_snapshot((string) $value);
+        $entries = submissionhelper::parse_aggregate((string) $value);
         if (!$entries) {
             return '';
         }

@@ -439,5 +439,41 @@ function xmldb_enrol_apply_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026101200, 'enrol', 'apply');
     }
 
+    if ($oldversion < 2026101300) {
+        // Required by this step, as in the 2026083104 step above.
+        require_once($CFG->dirroot . '/enrol/apply/db/upgradelib.php');
+
+        /* The frozen snapshot moves out of the JSON column enrol_apply_submission.userinfodata into
+           rows, one per submitted value, so that privacy, retention, backup and the reports read
+           one source of truth and a report can sort and filter by a single answer. */
+        $table = new xmldb_table('enrol_apply_answer');
+        $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('submissionid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('fieldkey', XMLDB_TYPE_CHAR, '100', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('label', XMLDB_TYPE_TEXT, null, null, XMLDB_NOTNULL, null, null);
+        $table->add_field('value', XMLDB_TYPE_TEXT, null, null, XMLDB_NOTNULL, null, null);
+        $table->add_field('sortorder', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_key('submission', XMLDB_KEY_FOREIGN, ['submissionid'], 'enrol_apply_submission', ['id']);
+        $table->add_index('submissionfieldkey', XMLDB_INDEX_UNIQUE, ['submissionid', 'fieldkey']);
+        $table->add_index('fieldkey', XMLDB_INDEX_NOTUNIQUE, ['fieldkey']);
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        /* Idempotent per record, not through the DDL guard above: see
+           enrol_apply_migrate_snapshot_envelopes(). The column is dropped only once every
+           envelope has been read, so a failure part way leaves it in place for the re-run. */
+        enrol_apply_migrate_snapshot_envelopes();
+
+        $submissions = new xmldb_table('enrol_apply_submission');
+        $field = new xmldb_field('userinfodata');
+        if ($dbman->field_exists($submissions, $field)) {
+            $dbman->drop_field($submissions, $field);
+        }
+
+        upgrade_plugin_savepoint(true, 2026101300, 'enrol', 'apply');
+    }
+
     return true;
 }

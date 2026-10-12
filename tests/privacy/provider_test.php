@@ -30,6 +30,7 @@ use core_privacy\local\request\approved_contextlist;
 use core_privacy\local\request\approved_userlist;
 use core_privacy\local\request\userlist;
 use core_privacy\local\request\writer;
+use enrol_apply\local\submission;
 use PHPUnit\Framework\Attributes\CoversClass;
 
 /**
@@ -101,18 +102,21 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
             'userenrolmentid' => $ueid,
             'comment' => $comment,
         ]);
-        $DB->insert_record('enrol_apply_submission', (object) [
+        $submissionid = (int) $DB->insert_record('enrol_apply_submission', (object) [
             'courseid' => $this->course->id,
             'userid' => $user->id,
             'enrolid' => $instance->id,
             'userenrolmentid' => $ueid,
             'comment' => $comment,
-            'userinfodata' => '',
             'status' => \enrol_apply\local\submission::STATUS_PENDING,
             'outcomemessage' => '',
             'timecreated' => time(),
             'timedecided' => 0,
             'decidedby' => $decidedby,
+        ]);
+        // One frozen answer per application, named after the comment so a test can find it.
+        \enrol_apply\local\submission::write_answers($submissionid, [
+            ['key' => 's_city', 'label' => 'City', 'value' => 'City of ' . $comment],
         ]);
 
         return $user;
@@ -132,7 +136,7 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
     }
 
     /**
-     * The provider declares both tables and their personal-data fields.
+     * The provider declares all three tables and their personal-data fields.
      *
      * @return void
      */
@@ -144,9 +148,9 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         $names = array_map(static function ($item): string {
             return $item->get_name();
         }, $items);
-        $this->assertCount(2, $items);
+        $this->assertCount(3, $items);
         $this->assertEqualsCanonicalizing(
-            ['enrol_apply_applicationinfo', 'enrol_apply_submission'],
+            ['enrol_apply_applicationinfo', 'enrol_apply_submission', 'enrol_apply_answer'],
             $names
         );
 
@@ -158,9 +162,14 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         $submissionfields = $byname['enrol_apply_submission']->get_privacy_fields();
         $this->assertArrayHasKey('userid', $submissionfields);
         $this->assertArrayHasKey('decidedby', $submissionfields);
-        $this->assertArrayHasKey('userinfodata', $submissionfields);
         // The decider's note, which the export delivers to both subjects.
         $this->assertArrayHasKey('decisionnote', $submissionfields);
+
+        /* The answers are declared by hand: core's table coverage test cannot see them, as the
+           table has no userid column and no key to user.id. */
+        $answerfields = $byname['enrol_apply_answer']->get_privacy_fields();
+        $this->assertArrayHasKey('submissionid', $answerfields);
+        $this->assertArrayHasKey('value', $answerfields);
     }
 
     /**
@@ -227,10 +236,13 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         $this->assertEquals(2, $DB->count_records('enrol_apply_applicationinfo'));
         $this->assertEquals(2, $DB->count_records('enrol_apply_submission'));
 
+        $this->assertEquals(2, $DB->count_records(submission::ANSWER_TABLE));
+
         provider::delete_data_for_all_users_in_context(context_course::instance($this->course->id));
 
         $this->assertEquals(0, $DB->count_records('enrol_apply_applicationinfo'));
         $this->assertEquals(0, $DB->count_records('enrol_apply_submission'));
+        $this->assertEquals(0, $DB->count_records(submission::ANSWER_TABLE));
     }
 
     /**
@@ -332,6 +344,11 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         $this->assertNotEmpty($exported);
         $this->assertEquals(get_string('privacy:roleapplicant', 'enrol_apply'), $exported->role);
         $this->assertEquals('Please approve me', $exported->comment);
+        // What they typed into the form, read from the answer rows.
+        $this->assertSame(
+            [['key' => 's_city', 'label' => 'City', 'value' => 'City of Please approve me']],
+            $exported->submittedfields
+        );
     }
 
     /**
@@ -568,7 +585,6 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
             'enrolid' => $this->instance->id,
             'userenrolmentid' => 0,
             'comment' => 'The second attempt',
-            'userinfodata' => '',
             'status' => \enrol_apply\local\submission::STATUS_PENDING,
             'outcomemessage' => '',
             'timecreated' => time(),
@@ -653,6 +669,7 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         $this->assertEquals(0, (int) $kept->decidedby);
         // The applicant's own content is untouched: it was never the decider's to erase.
         $this->assertSame('Decided by the erased user', (string) $kept->comment);
+        $this->assertSame(1, $DB->count_records(submission::ANSWER_TABLE, ['submissionid' => $kept->id]));
     }
 
     /**
@@ -669,6 +686,9 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         // The control: another applicant's record in the same course must survive.
         $bystander = $this->create_application('Leave me alone');
 
+        $erased = $this->submission_id_of($applicant);
+        $spared = $this->submission_id_of($bystander);
+
         $context = context_course::instance($this->course->id);
         provider::delete_data_for_user(
             new approved_contextlist($applicant, 'enrol_apply', [$context->id])
@@ -676,6 +696,9 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
 
         $this->assertEquals(0, $DB->count_records('enrol_apply_submission', ['userid' => $applicant->id]));
         $this->assertEquals(1, $DB->count_records('enrol_apply_submission', ['userid' => $bystander->id]));
+        // The answers go with the record, which leaves nothing pointing at them otherwise.
+        $this->assertSame(0, $DB->count_records(submission::ANSWER_TABLE, ['submissionid' => $erased]));
+        $this->assertSame(1, $DB->count_records(submission::ANSWER_TABLE, ['submissionid' => $spared]));
     }
 
     /**
@@ -690,17 +713,21 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         $erased = $this->create_application('Erase this one', (int) $decider->id);
         $kept = $this->create_application('Keep this one', (int) $decider->id);
 
+        $erasedrecord = $this->submission_id_of($erased);
+
         $context = context_course::instance($this->course->id);
         provider::delete_data_for_users(
             new approved_userlist($context, 'enrol_apply', [$erased->id])
         );
 
         $this->assertEquals(0, $DB->count_records('enrol_apply_submission', ['userid' => $erased->id]));
+        $this->assertSame(0, $DB->count_records(submission::ANSWER_TABLE, ['submissionid' => $erasedrecord]));
 
         // The control: the record of somebody not in the list survives, still naming the
         // decider, who was not in the list either.
         $survivor = $DB->get_record('enrol_apply_submission', ['userid' => $kept->id], '*', MUST_EXIST);
         $this->assertEquals($decider->id, (int) $survivor->decidedby);
+        $this->assertSame(1, $DB->count_records(submission::ANSWER_TABLE, ['submissionid' => $survivor->id]));
     }
 
     /**

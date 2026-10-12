@@ -38,6 +38,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   such category. Text in descriptions travels; images embedded in them do not. Answers are not
   part of this: they live in each application's snapshot.
 
+- **What an application submitted is stored as rows, one per value.** The frozen snapshot of the
+  requested profile fields and the answers to the method's questions moves out of the JSON column
+  `enrol_apply_submission.userinfodata` into a new table, `enrol_apply_answer` (field key, the
+  question as it read at submission, the answer, and its position). The upgrade to 2026101300
+  moves every stored snapshot with the reader it always had - an envelope of another version, a
+  non-scalar part or a malformed entry is dropped as before - and then drops the column; it can be
+  re-run safely after a failure. Every surface reads the rows: the approval queue (one query per
+  page), the review page, both reports, the privacy export and the backup, where the answers are
+  children of the application record and travel only with it. Every path that deletes a record -
+  an applicant's erasure, the retention sweep - deletes its answers, course deletion discards them
+  with the rest of the personal data, and the course deletion sweep removes any left without a
+  record. A backup taken before this change still restores: the snapshot on its application record
+  becomes rows with the same checks. Three rules are new and only reachable from a crafted archive:
+  a key longer than 100 characters or carrying a control character is dropped, control characters
+  are removed from labels and values, and a key repeated in one snapshot keeps its first value.
+
+- **Reports can sort and filter by a single answer.** The course report has a column and a text
+  filter per question its methods ask, requested profile fields included, each sortable; the header
+  is the question's current name and the cell the value frozen with the application. A question the
+  reader may not see under the snapshot's own rule (`moodle/site:viewuseridentity` in the course)
+  gets no column and no filter at all. The custom report source gains an *Application answer*
+  entity (one row per value: field key, question, answer) and a column and filter per question of a
+  shared category that some method uses, the same field in every course; both are withheld, with
+  their filters and conditions, from a reader without `moodle/user:viewalldetails`, as the snapshot
+  column already was. The snapshot column keeps its name and its masking and is now built from the
+  rows.
+
 - **Application fields can be shown on a condition.** Below core's editor, *Application fields*
   lists each question with when it is shown, and a page per question (no JavaScript needed) makes
   it depend on ONE earlier question: a drop-down menu having one of the chosen answers, or a

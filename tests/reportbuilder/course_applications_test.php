@@ -82,7 +82,7 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
      *
      * @param string $comment Comment submitted.
      * @param int $status Status to record.
-     * @param string $snapshot Stored JSON envelope.
+     * @param string $snapshot Snapshot as a JSON envelope, written as answer rows.
      * @param \stdClass|null $course Course to record it against, null for the default one.
      * @return \stdClass The applicant.
      */
@@ -98,19 +98,22 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
         $instanceid = (int) $DB->get_field('enrol', 'id', ['courseid' => $course->id, 'enrol' => 'apply'], IGNORE_MULTIPLE);
         $user = $this->getDataGenerator()->create_user();
 
-        $DB->insert_record('enrol_apply_submission', (object) [
+        $submissionid = (int) $DB->insert_record('enrol_apply_submission', (object) [
             'courseid' => $course->id,
             'userid' => $user->id,
             'enrolid' => $instanceid,
             'userenrolmentid' => 0,
             'comment' => $comment,
-            'userinfodata' => $snapshot,
             'status' => $status,
             'outcomemessage' => '',
             'timecreated' => time(),
             'timedecided' => $status === submission::STATUS_PENDING ? 0 : time(),
             'decidedby' => 0,
         ]);
+        \enrol_apply\local\submission::write_answers(
+            $submissionid,
+            \enrol_apply\local\submission::parse_envelope($snapshot)
+        );
 
         return $user;
     }
@@ -225,15 +228,28 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
      * the class as a datasource.
      *
      * @param \core_reportbuilder\system_report|null $report Report to read, null for the plain one.
+     * @param string|null $sortby Unique identifier of a column to sort by, null for the report's own sort.
+     * @param int $sortorder SORT_ASC or SORT_DESC.
      * @return array List of row objects carrying the formatted cell values.
      */
-    protected function rows(?\core_reportbuilder\system_report $report = null): array {
+    protected function rows(
+        ?\core_reportbuilder\system_report $report = null,
+        ?string $sortby = null,
+        int $sortorder = SORT_ASC
+    ): array {
         $report = $report ?? $this->report();
         $table = \core_reportbuilder\table\system_report_table::create(
             (int) $report->get_report_persistent()->get('id'),
             []
         );
         $table->define_baseurl(new \moodle_url('/enrol/apply/report.php'));
+        if ($sortby !== null) {
+            $sortalias = array_search($sortby, array_map(
+                static fn($column) => $column->get_unique_identifier(),
+                $report->get_active_columns_by_alias()
+            ), true);
+            $table->set_sortdata([['sortby' => $sortalias, 'sortorder' => $sortorder]]);
+        }
         $table->setup();
 
         /* query_db() rather than out(): rawdata is a RECORDSET, and out() consumes and closes
@@ -293,7 +309,6 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
             'enrolid' => $this->instance->id,
             'userenrolmentid' => $ueid,
             'comment' => 'Please let me in',
-            'userinfodata' => '',
             'status' => $recordstatus,
             'outcomemessage' => '',
             'decidedgroups' => '',
@@ -681,7 +696,6 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
             'enrolid' => $id,
             'userenrolmentid' => 0,
             'comment' => 'Please let me in',
-            'userinfodata' => '',
             'status' => submission::STATUS_PENDING,
             'outcomemessage' => '',
             'timecreated' => time(),
@@ -902,6 +916,128 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
     }
 
     /**
+     * Ask one question of this instance, as its own custom field.
+     *
+     * @param string $name The question's name.
+     * @return int The field id.
+     */
+    protected function question(string $name): int {
+        $generator = $this->getDataGenerator()->get_plugin_generator('core_customfield');
+        $category = $generator->create_category([
+            'component' => 'enrol_apply',
+            'area' => \enrol_apply\customfield\application_handler::AREA,
+            'itemid' => $this->instance->id,
+        ]);
+
+        return (int) $generator->create_field([
+            'categoryid' => $category->get('id'),
+            'type' => 'text',
+            'shortname' => 'q' . random_string(6),
+            'name' => $name,
+        ])->get('id');
+    }
+
+    /**
+     * Seed an application whose snapshot holds the given entries.
+     *
+     * @param string $comment Comment, to tell the rows apart.
+     * @param array $entries Snapshot entries.
+     * @return \stdClass The applicant.
+     */
+    protected function seed_answers(string $comment, array $entries): \stdClass {
+        return $this->seed($comment, submission::STATUS_PENDING, (string) json_encode([
+            'version' => submission::SNAPSHOT_VERSION,
+            'fields' => $entries,
+        ]));
+    }
+
+    /**
+     * A question gets a column holding each record's frozen answer, sortable and filterable.
+     *
+     * The question is renamed after the answers were frozen: the header follows the current name,
+     * the cells keep what was submitted, and the record's own frozen label stays in its snapshot.
+     *
+     * @return void
+     */
+    public function test_a_question_column_shows_the_frozen_answer_and_sorts_and_filters(): void {
+        global $DB;
+
+        $fieldid = $this->question('Old wording');
+        $key = \enrol_apply\local\answers::key($fieldid);
+        foreach (['Banana', 'Apple', 'Cherry'] as $fruit) {
+            $this->seed_answers('Likes ' . $fruit, [['key' => $key, 'label' => 'Old wording', 'value' => $fruit]]);
+        }
+        // An application that never answered it: an empty cell, and still listed.
+        $this->seed_answers('Silent', [['key' => 's_city', 'label' => 'City', 'value' => 'Recife']]);
+        $DB->set_field('customfield_field', 'name', 'Current wording', ['id' => $fieldid]);
+        $this->setUser($this->reader());
+
+        $identifier = 'submission:' . $key;
+        $column = $this->report()->get_column($identifier);
+        $this->assertNotNull($column);
+        $this->assertSame('Current wording', $column->get_title());
+        $this->assertTrue($column->get_is_sortable());
+
+        $rows = $this->rows(null, $identifier, SORT_ASC);
+        $bycomment = array_column(array_map(static fn($row) => (array) $row, $rows), $identifier, 'submission:comment');
+        $this->assertSame('Banana', $bycomment['Likes Banana']);
+        $this->assertSame('', (string) $bycomment['Silent']);
+
+        $sorted = array_values(array_filter(array_column(array_map(static fn($row) => (array) $row, $rows), $identifier)));
+        $this->assertSame(['Apple', 'Banana', 'Cherry'], $sorted);
+        $descending = array_values(array_filter(array_column(
+            array_map(static fn($row) => (array) $row, $this->rows(null, $identifier, SORT_DESC)),
+            $identifier
+        )));
+        $this->assertSame(['Cherry', 'Banana', 'Apple'], $descending);
+
+        $this->assertContains($identifier, $this->filter_ids());
+        $report = $this->report();
+        $report->set_filter_values([
+            $identifier . '_operator' => \core_reportbuilder\local\filters\text::IS_EQUAL_TO,
+            $identifier . '_value' => 'Apple',
+        ]);
+        $filtered = $this->rows($report);
+        $this->assertCount(1, $filtered);
+        $this->assertSame('Likes Apple', $filtered[0]->{'submission:comment'});
+    }
+
+    /**
+     * A question the reader may not see gets no column and no filter, never a blank one.
+     *
+     * Sorting and filtering are SQL, which a display callback never reaches, so a blanked column
+     * would still order the rows by the hidden value and a filter would still narrow them by it.
+     * The name field is the control: the same reader keeps its column, so the absence is the
+     * masking and not a report that offers no question at all.
+     *
+     * @return void
+     */
+    public function test_a_question_the_reader_may_not_see_has_no_column_and_no_filter(): void {
+        $key = \enrol_apply\local\answers::key($this->question('Document number'));
+        $this->seed_answers('Masked', [
+            ['key' => 's_firstname', 'label' => 'First name', 'value' => 'Terry'],
+            ['key' => $key, 'label' => 'Document number', 'value' => 'SECRET-123'],
+        ]);
+
+        $this->setUser($this->reader(true));
+        $this->assertContains('submission:' . $key, $this->column_ids());
+        $this->assertContains('submission:' . $key, $this->filter_ids());
+
+        $this->setUser($this->reader(false));
+        $columns = $this->column_ids();
+        $this->assertNotContains('submission:' . $key, $columns);
+        $this->assertNotContains('submission:s_city', $columns);
+        $this->assertNotContains('submission:' . $key, $this->filter_ids());
+        $this->assertContains('submission:s_firstname', $columns);
+        // The formatted cells only: the raw row also carries the SQL values no reader is shown.
+        foreach ($this->rows() as $row) {
+            $cells = array_filter((array) $row, static fn($key) => str_contains($key, ':'), ARRAY_FILTER_USE_KEY);
+            $this->assertStringContainsString('Terry', implode(' ', array_map('strval', $cells)));
+            $this->assertStringNotContainsString('SECRET-123', implode(' ', array_map('strval', $cells)));
+        }
+    }
+
+    /**
      * The default columns and filters, in order.
      *
      * Pinned in order, so any change in how either branch assembles them shows up here.
@@ -909,9 +1045,18 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
      * @return void
      */
     public function test_default_columns_and_filters(): void {
+        global $DB;
+
         /* Two identity fields rather than the site default's single one, so the order within
-           the identity block is asserted too. */
+           the identity block is asserted too. One requested profile field, so the per-question
+           block is one column long and its position is pinned. */
         set_config('showuseridentity', 'email,idnumber');
+        $DB->set_field(
+            'enrol',
+            'customtext4',
+            \enrol_apply\local\fieldset::from_keys(['s_city'])->to_json(),
+            ['id' => $this->instance->id]
+        );
         $this->seed();
         $this->setUser($this->reader());
 
@@ -927,6 +1072,7 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
             'submission:enrolment',
             'submission:outcome',
             'submission:snapshot',
+            'submission:s_city',
             'applydecider:fullname',
         ], $this->column_ids());
 
@@ -940,6 +1086,7 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
             'submission:timedecided',
             'submission:comment',
             'submission:decisionnote',
+            'submission:s_city',
             'applydecider:fullname',
         ], $this->filter_ids());
     }
@@ -1061,12 +1208,11 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
      * @return void
      */
     public function test_an_entity_column_used_without_the_report_shows_names_only(): void {
-        $snapshot = json_encode([
-            'version' => submission::SNAPSHOT_VERSION,
-            'fields' => [
-                ['key' => 's_firstname', 'label' => 'First name', 'value' => 'Terry'],
-                ['key' => 's_city', 'label' => 'City', 'value' => 'Campinas'],
-            ],
+        // The value the column's SQL produces; see submission::aggregate_sql().
+        $unit = submission::AGGREGATE_UNIT;
+        $snapshot = implode(submission::AGGREGATE_RECORD, [
+            's_firstname' . $unit . 'First name' . $unit . 'Terry',
+            's_city' . $unit . 'City' . $unit . 'Campinas',
         ]);
 
         $this->setAdminUser();
@@ -1144,7 +1290,7 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
      *
      * The form cannot produce this value: its editable fields are PARAM_TEXT, and
      * clean_param('A<B and R&D', PARAM_TEXT) is 'A'. A restore can, because it writes
-     * userinfodata verbatim from the archive, so the cell must escape rather than trust, and the
+     * the answers verbatim from the archive, so the cell must escape rather than trust, and the
      * fixture is inserted directly.
      *
      * The exact string is asserted, on screen and again after the download transform: a weaker

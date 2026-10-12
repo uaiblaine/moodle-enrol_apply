@@ -91,6 +91,45 @@ class answers {
     }
 
     /**
+     * The fields of every shared category that at least one apply instance has switched on.
+     *
+     * For the site-wide report: a shared field is the same field in every instance that uses it,
+     * so one column can hold its answers across courses. Only the types the handler allows, as
+     * fields() keeps; the order is the site's own (category, then field).
+     *
+     * @return field_controller[] Keyed by field id.
+     */
+    public static function shared_fields_in_use(): array {
+        global $DB;
+
+        $enabled = $DB->get_fieldset_select(
+            'customfield_shared',
+            'DISTINCT categoryid',
+            'component = :component AND area = :area',
+            ['component' => 'enrol_apply', 'area' => application_handler::AREA]
+        );
+        if (!$enabled) {
+            return [];
+        }
+        $enabled = array_flip(array_map('intval', $enabled));
+        $allowed = application_handler::create(0)->get_available_field_types();
+
+        $fields = [];
+        foreach (\core_customfield\api::get_categories_with_fields('core_customfield', 'shared', 0) as $category) {
+            if (!isset($enabled[(int) $category->get('id')])) {
+                continue;
+            }
+            foreach ($category->get_fields() as $field) {
+                if (array_key_exists($field->get('type'), $allowed)) {
+                    $fields[(int) $field->get('id')] = $field;
+                }
+            }
+        }
+
+        return $fields;
+    }
+
+    /**
      * A data controller with no row behind it, for a field of this instance.
      *
      * @param field_controller $field The field.

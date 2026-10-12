@@ -365,7 +365,7 @@ final class answers_test extends \advanced_testcase {
         $sink->close();
 
         $snapshot = submission::read_snapshot(
-            $DB->get_field('enrol_apply_submission', 'userinfodata', ['userid' => $applicant->id], MUST_EXIST)
+            (int) $DB->get_field('enrol_apply_submission', 'id', ['userid' => $applicant->id], MUST_EXIST)
         );
         $this->assertContains(
             ['key' => answers::key((int) $field->get('id')), 'label' => 'Why this course', 'value' => 'To learn'],
@@ -386,16 +386,18 @@ final class answers_test extends \advanced_testcase {
      * @return void
      */
     public function test_an_answer_is_masked_like_a_custom_profile_field(): void {
-        $json = json_encode(['version' => submission::SNAPSHOT_VERSION, 'fields' => [
-            ['key' => 's_firstname', 'label' => 'First name', 'value' => 'Ana'],
-            ['key' => answers::key(7), 'label' => 'Document', 'value' => 'SECRET-DOC'],
-        ]]);
+        // The cell's value as the report's SQL aggregates it; see submission::aggregate_sql().
+        $unit = submission::AGGREGATE_UNIT;
+        $aggregate = implode(submission::AGGREGATE_RECORD, [
+            's_firstname' . $unit . 'First name' . $unit . 'Ana',
+            answers::key(7) . $unit . 'Document' . $unit . 'SECRET-DOC',
+        ]);
         $row = (object) ['courseid' => $this->course->id];
 
-        $all = submission_formatter::snapshot($json, $row, submission_formatter::ALL_FIELDS);
+        $all = submission_formatter::snapshot($aggregate, $row, submission_formatter::ALL_FIELDS);
         $this->assertStringContainsString('SECRET-DOC', $all);
 
-        $restricted = submission_formatter::snapshot($json, $row, [fields::standard_key('firstname')]);
+        $restricted = submission_formatter::snapshot($aggregate, $row, [fields::standard_key('firstname')]);
         $this->assertStringContainsString('Ana', $restricted);
         $this->assertStringNotContainsString('SECRET-DOC', $restricted);
     }
