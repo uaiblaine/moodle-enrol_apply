@@ -10,6 +10,7 @@ leaves it out of the release zip.
 | [`implementation-plan.md`](implementation-plan.md) | Ready, not started | Eleven slices with files, traps and a runnable verification checklist each. Read this to know *what to do*. |
 | [`applications-desk.html`](applications-desk.html) | Decided 2026-08-31 | Answers to five UI questions about the approval screens, with mockups of a rebuilt queue and review page, and the decisions taken from them. Read this to understand *what the screens should be*. |
 | [`ui-rebuild-plan.md`](ui-rebuild-plan.md) | Ready, not started | Eight slices (U0&ndash;U5b) rebuilding the two decision screens and fixing what the investigation found. Read this to know *what to do*. |
+| [`custom-application-fields.md`](custom-application-fields.md) | Decided 2026-10-12, in progress | Questions an instance asks at application time (core custom fields as definitions, answers frozen into the snapshot), conditional fields, the `customfield_pattern` type and per-answer report columns. Read this before touching `classes/customfield/` or `classes/local/answers.php`. |
 
 Start with the decision log below, then the plan. The HTML document is the
 reference you go back to when a decision looks arbitrary — it always has a reason,
