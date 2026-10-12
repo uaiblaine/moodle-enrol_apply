@@ -198,9 +198,12 @@ class application_handler extends \core_customfield\handler {
     }
 
     /**
-     * Delete every category, field and shared-category switch this instance owns.
+     * Delete every category, field, shared-category switch and display condition this instance owns.
      *
      * The frozen answers in enrol_apply_submission are not touched: they outlive the instance.
+     * Deleting a local field already removes the conditions naming it (observers::field_deleted()),
+     * but a condition between two fields of a shared category survives the fields, so the
+     * instance's rows are deleted by enrolid as well.
      *
      * @param int $enrolid The enrol instance id.
      * @return void
@@ -216,5 +219,6 @@ class application_handler extends \core_customfield\handler {
             'area' => self::AREA,
             'itemid' => $enrolid,
         ]);
+        $DB->delete_records(\enrol_apply\local\conditions::TABLE, ['enrolid' => $enrolid]);
     }
 }

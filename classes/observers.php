@@ -19,7 +19,9 @@ namespace enrol_apply;
 use core\event\course_deleted;
 use core_customfield\api;
 use core_customfield\category_controller;
+use core_customfield\event\field_deleted;
 use enrol_apply\customfield\application_handler;
+use enrol_apply\local\conditions;
 
 /**
  * Event observers cleaning up after core has deleted rows this plugin hangs data off.
@@ -89,5 +91,26 @@ class observers {
              AND NOT EXISTS (SELECT 1 FROM {enrol} e WHERE e.id = {customfield_shared}.itemid)',
             $params
         );
+
+        // The display conditions; the ones between fields of a shared category outlive every field deletion above.
+        $DB->delete_records_select(
+            conditions::TABLE,
+            'NOT EXISTS (SELECT 1 FROM {enrol} e WHERE e.id = {' . conditions::TABLE . '}.enrolid)'
+        );
+    }
+
+    /**
+     * Drop the display conditions that name a deleted custom field.
+     *
+     * Core deletes a field from its own management UI and web services, and from
+     * api::delete_category() for every field of a category, with no callback into the handler.
+     * Any component's field fires the event; field ids are site-wide, so the delete can only
+     * match this plugin's rows that named that field, as the controlled or the controlling one.
+     *
+     * @param field_deleted $event The dispatched event.
+     * @return void
+     */
+    public static function field_deleted(field_deleted $event): void {
+        conditions::delete_for_field((int) $event->objectid);
     }
 }

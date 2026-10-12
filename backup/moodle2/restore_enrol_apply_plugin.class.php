@@ -28,6 +28,8 @@ use core_customfield\category_controller;
 use core_customfield\field_controller;
 use core_customfield\shared;
 use enrol_apply\customfield\application_handler;
+use enrol_apply\local\answers;
+use enrol_apply\local\conditions;
 
 /**
  * Restores the enrol_apply owned data from an enrolment backup.
@@ -54,6 +56,7 @@ class restore_enrol_apply_plugin extends restore_enrol_plugin {
             new restore_path_element('enrol_apply_applygroup', $this->get_pathfor('/applygroups/applygroup')),
             new restore_path_element('enrol_apply_application', $this->get_pathfor('/applications/application')),
             new restore_path_element('enrol_apply_submission', $this->get_pathfor('/submissions/submission')),
+            new restore_path_element('enrol_apply_fieldcondition', $this->get_pathfor('/fieldconditions/fieldcondition')),
         ];
     }
 
@@ -375,6 +378,62 @@ class restore_enrol_apply_plugin extends restore_enrol_plugin {
         if (!$DB->record_exists('customfield_shared', $switch)) {
             (new shared(0, (object) $switch))->create();
         }
+    }
+
+    /**
+     * Restore one display condition of the application form.
+     *
+     * Both field ids are remapped through the fields this restore created. A field with no
+     * mapping keeps its id only on a restore into the same site, where it may name a field of a
+     * shared category, which a restore never creates; on another site the same id names an
+     * unrelated field. The archive is untrusted, so the condition must then pass the same check as
+     * one saved on condition.php, against the questions the restored instance asks: both fields
+     * asked, the controller earlier and of a type that can control, the positions existing. That
+     * check is also what limits an unmapped id to a field of a shared category switched on for the
+     * restored instance: the instance's own fields are all new, so all mapped.
+     *
+     * @param array $data Backup data of the condition.
+     * @return void
+     */
+    public function process_enrol_apply_fieldcondition($data) {
+        global $DB;
+
+        $data = (object) $data;
+
+        $enrolid = $this->get_apply_instanceid();
+        if (!$enrolid) {
+            return;
+        }
+
+        $fieldid = $this->restored_field_id((int) ($data->fieldid ?? 0));
+        $controllerid = $this->restored_field_id((int) ($data->dependsonfieldid ?? 0));
+        $operator = (string) ($data->operator ?? '');
+        $positions = conditions::parse_positions((string) ($data->value ?? ''));
+        $instance = $DB->get_record('enrol', ['id' => $enrolid], '*', MUST_EXIST);
+        if (
+            !$fieldid || !$controllerid
+            || conditions::problem(answers::fields($instance), $fieldid, $controllerid, $operator, $positions) !== ''
+        ) {
+            $this->step->log('Application field condition not restored', backup::LOG_WARNING);
+            return;
+        }
+
+        conditions::save($enrolid, $fieldid, $controllerid, $operator, $positions);
+    }
+
+    /**
+     * The id on this site of an application field named in the archive, or 0.
+     *
+     * @param int $oldid Field id in the archive.
+     * @return int
+     */
+    protected function restored_field_id(int $oldid): int {
+        $newid = (int) $this->get_mappingid('enrol_apply_appfield', $oldid);
+        if ($newid) {
+            return $newid;
+        }
+
+        return $this->task->is_samesite() ? $oldid : 0;
     }
 
     /**

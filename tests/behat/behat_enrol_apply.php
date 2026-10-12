@@ -41,6 +41,7 @@ class behat_enrol_apply extends behat_base {
      *
      * Recognised pages:
      *   "<shortname> > manage applications"   the per-course application queue
+     *   "<shortname> > application fields"    the instance's own application questions
      *
      * @param string $type Identifies which page to resolve.
      * @param string $identifier Course short name.
@@ -51,6 +52,9 @@ class behat_enrol_apply extends behat_base {
         switch (strtolower($type)) {
             case 'manage applications':
                 return new moodle_url('/enrol/apply/manage.php', ['id' => $this->get_instance_id($identifier)]);
+
+            case 'application fields':
+                return new moodle_url('/enrol/apply/fields.php', ['id' => $this->get_instance_id($identifier)]);
 
             default:
                 throw new Exception("Unrecognised enrol_apply page type '{$type}'.");
@@ -96,6 +100,95 @@ class behat_enrol_apply extends behat_base {
             \enrol_apply\local\fieldset::from_keys($picked)->to_json(),
             ['id' => $this->get_instance_id($shortname)]
         );
+    }
+
+    /**
+     * Give an apply enrolment method a question of its own.
+     *
+     * Core's custom field generator needs the category's itemid, which is the enrol instance id
+     * and cannot be named in a feature file; configuring it through core's editor needs
+     * JavaScript and is core's own feature to test.
+     *
+     * @Given /^the "(?P<course_string>[^"]*)" apply method asks a "(?P<type_string>[^"]*)" "(?P<name_string>[^"]*)"$/
+     * @param string $shortname Course shortname.
+     * @param string $type Custom field type, for example text.
+     * @param string $name Question shown to the applicant.
+     * @return void
+     */
+    public function the_apply_enrolment_method_asks_the_question(string $shortname, string $type, string $name): void {
+        $this->create_question($shortname, $type, $name, []);
+    }
+
+    /**
+     * Give an apply enrolment method a select question with the given options.
+     *
+     * @Given /^the "(?P<course_string>[^"]*)" apply method asks a select "(?P<name_string>[^"]*)" of "(?P<options_string>[^"]*)"$/
+     * @param string $shortname Course shortname.
+     * @param string $name Question shown to the applicant.
+     * @param string $options Comma separated options.
+     * @return void
+     */
+    public function the_apply_enrolment_method_asks_a_select(string $shortname, string $name, string $options): void {
+        $this->create_question($shortname, 'select', $name, [
+            'options' => implode("\n", array_map('trim', explode(',', $options))),
+            'defaultvalue' => '',
+        ]);
+    }
+
+    /**
+     * Show one question of an apply enrolment method only when a select question has an answer.
+     *
+     * @Given /^in "(?P<course_string>[^"]*)" "(?P<q_string>[^"]*)" shows when "(?P<c_string>[^"]*)" is "(?P<o_string>[^"]*)"$/
+     * @param string $shortname Course shortname.
+     * @param string $name The question shown conditionally.
+     * @param string $controller The select question it depends on.
+     * @param string $option The option that shows it.
+     * @return void
+     */
+    public function the_apply_question_shows_when(string $shortname, string $name, string $controller, string $option): void {
+        global $DB;
+
+        $enrolid = $this->get_instance_id($shortname);
+        $instance = $DB->get_record('enrol', ['id' => $enrolid], '*', MUST_EXIST);
+        $byname = [];
+        foreach (\enrol_apply\local\answers::fields($instance) as $field) {
+            $byname[$field->get('name')] = $field;
+        }
+        $options = preg_split("/\s*\n\s*/", trim((string) $byname[$controller]->get_configdata_property('options')));
+        \enrol_apply\local\conditions::save(
+            $enrolid,
+            (int) $byname[$name]->get('id'),
+            (int) $byname[$controller]->get('id'),
+            \enrol_apply\local\conditions::OPERATOR_IN,
+            [array_search($option, $options) + 1]
+        );
+    }
+
+    /**
+     * Create a question in a category of its own on the course's apply instance.
+     *
+     * @param string $shortname Course shortname.
+     * @param string $type Custom field type.
+     * @param string $name Question shown to the applicant.
+     * @param array $config Field configdata.
+     * @return void
+     */
+    protected function create_question(string $shortname, string $type, string $name, array $config): void {
+        $generator = testing_util::get_data_generator()->get_plugin_generator('core_customfield');
+        $category = $generator->create_category([
+            'component' => 'enrol_apply',
+            'area' => \enrol_apply\customfield\application_handler::AREA,
+            'itemid' => $this->get_instance_id($shortname),
+            'name' => 'Questions',
+        ]);
+        $generator->create_field([
+            'categoryid' => $category->get('id'),
+            'type' => $type,
+            'shortname' => 'q' . substr(md5($name), 0, 8),
+            'name' => $name,
+            'description' => '',
+            'configdata' => $config,
+        ]);
     }
 
     /**

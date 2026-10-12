@@ -179,6 +179,29 @@ final class answers_test extends \advanced_testcase {
     }
 
     /**
+     * A pattern answer is frozen in the type's own canonical spelling.
+     *
+     * customfield_pattern is the fleet's own type and is not a dependency, so the test is skipped
+     * where it is not installed (the plugin's CI).
+     *
+     * @return void
+     */
+    public function test_a_pattern_answer_is_frozen_in_its_canonical_spelling(): void {
+        if (!class_exists(\customfield_pattern\field_controller::class)) {
+            $this->markTestSkipped('customfield_pattern is not installed.');
+        }
+        $field = $this->create_field('pattern', 'cpf', ['preset' => 'cpf', 'storeformat' => 'masked'], null, 'CPF');
+
+        $values = answers::submitted_values($this->instance, (object) ['customfield_cpf' => ' 52998224725 ']);
+        $this->assertSame('529.982.247-25', $this->entry($values, $field)['value']);
+
+        $errors = answers::validate($this->instance, ['customfield_cpf' => '529.982.247-26'], []);
+        $this->assertArrayHasKey('customfield_cpf', $errors);
+        // The control: the valid number passes.
+        $this->assertSame([], answers::validate($this->instance, ['customfield_cpf' => '52998224725'], []));
+    }
+
+    /**
      * An unanswered question is left out, as an empty profile field is; a checkbox is never unanswered.
      *
      * @return void

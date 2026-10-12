@@ -35,4 +35,10 @@ $observers = [
         'eventname' => '\core\event\course_deleted',
         'callback' => '\enrol_apply\observers::course_deleted',
     ],
+    [
+        /* A deleted application field takes the display conditions naming it along, whether it
+           was the question shown on a condition or the one controlling it. */
+        'eventname' => '\core_customfield\event\field_deleted',
+        'callback' => '\enrol_apply\observers::field_deleted',
+    ],
 ];

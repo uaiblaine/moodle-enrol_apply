@@ -418,5 +418,26 @@ function xmldb_enrol_apply_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026090302, 'enrol', 'apply');
     }
 
+    if ($oldversion < 2026101200) {
+        /* When an application question is shown, per enrolment method; see
+           \enrol_apply\local\conditions. Configuration only, so the privacy provider is unchanged. */
+        $table = new xmldb_table('enrol_apply_fieldcond');
+        $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('enrolid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('fieldid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('dependsonfieldid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('operator', XMLDB_TYPE_CHAR, '20', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('value', XMLDB_TYPE_CHAR, '255', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('timemodified', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_index('enrolid', XMLDB_INDEX_NOTUNIQUE, ['enrolid']);
+        $table->add_index('enrolidfieldid', XMLDB_INDEX_UNIQUE, ['enrolid', 'fieldid']);
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        upgrade_plugin_savepoint(true, 2026101200, 'enrol', 'apply');
+    }
+
     return true;
 }

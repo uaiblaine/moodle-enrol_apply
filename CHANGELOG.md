@@ -38,6 +38,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   such category. Text in descriptions travels; images embedded in them do not. Answers are not
   part of this: they live in each application's snapshot.
 
+- **Application fields can be shown on a condition.** Below core's editor, *Application fields*
+  lists each question with when it is shown, and a page per question (no JavaScript needed) makes
+  it depend on ONE earlier question: a drop-down menu having one of the chosen answers, or a
+  checkbox being checked or not checked. Conditions belong to the instance (new table
+  `enrol_apply_fieldcond`), so a field of a shared category can be controlled differently in each
+  method. Only an earlier question can control a later one, and a question whose controller is
+  hidden is hidden too. The application form hides questions through core's `hideIf`; the server
+  decides again from the submitted answers, so a hidden question is never required or validated
+  and what was typed into it is not kept. A condition that stops holding (the questions reordered,
+  an option removed, a shared category switched off) is ignored and the question is shown.
+  Conditions are deleted with the instance or with either field, travel in the backup with the
+  definitions, are remapped to the restored fields and checked again on restore.
+
 - **The applications queue shows what the decision needs.** It was a list of names, an e-mail
   address and a date, with no way to open any of the rows it listed.
 
