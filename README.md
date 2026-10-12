@@ -9,11 +9,12 @@ list, or cancels it. Applicants are notified of the decision by message and e-ma
 
 | Moodle | Supported | PHP |
 |--------|-----------|-----|
+| 5.3    | yes       | 8.3 – 8.4 |
 | 5.2    | yes       | 8.2 – 8.4 |
 | 5.1    | yes       | 8.2 – 8.4 |
 | 4.5 and older | no  | — |
 
-Declared in `version.php` as `$plugin->supported = [501, 502]`. CI runs one
+Declared in `version.php` as `$plugin->supported = [501, 503]`. CI runs one
 moodle-an-hochschulen job per supported branch; the compatibility table and the job list
 in `.github/workflows/ci.yml` are updated together with `supported`.
 
