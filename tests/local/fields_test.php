@@ -475,7 +475,9 @@ final class fields_test extends \advanced_testcase {
      * @return \stdClass The created {user_info_field} record.
      */
     protected function create_custom_field(string $shortname, string $name = 'Extra field'): \stdClass {
-        global $DB;
+        global $CFG, $DB;
+        // PROFILE_VISIBLE_ALL lives there; run alone, this file would otherwise reach it unloaded.
+        require_once($CFG->dirroot . '/user/profile/lib.php');
 
         $categoryid = $DB->insert_record('user_info_category', (object) ['name' => 'Extra', 'sortorder' => 1]);
         $id = $DB->insert_record('user_info_field', (object) [
