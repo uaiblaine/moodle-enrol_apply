@@ -20,6 +20,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   questions; with the plugin disabled, the course deletion sweep removes them instead. The
   questions are not asked yet; see `docs/design/custom-application-fields.md`.
 
+- **Application fields are asked and kept with the application.** The application form asks the
+  instance's questions after the profile fields, with each type's own validation, and the answers
+  are frozen into the application's snapshot under `a_<fieldid>` keys with the question and a plain
+  display value as they were at submission. The approval queue, the review page, the reports, the
+  approver's e-mail and the privacy export therefore show them with no code of their own, masked
+  like custom profile fields (`moodle/site:viewuseridentity`). Nothing is written to the profile
+  or to `customfield_data`, and core's uniqueness check is skipped: it would compare a shared
+  field against other components' data.
+
 - **The applications queue shows what the decision needs.** It was a list of names, an e-mail
   address and a date, with no way to open any of the rows it listed.
 

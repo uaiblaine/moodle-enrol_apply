@@ -1435,8 +1435,12 @@ class enrol_apply_plugin extends enrol_plugin {
 
         /* What the applicant submitted, keyed by the fields this instance asks for. Standard
            and custom fields both come from the submitted data, not from the account, so the
-           approver sees the answers given in this application. */
-        $submitted = \enrol_apply\local\fields::submitted_values($instance, $data);
+           approver sees the answers given in this application; the answers to the instance's
+           own questions follow, as in the snapshot. */
+        $submitted = array_merge(
+            \enrol_apply\local\fields::submitted_values($instance, $data),
+            \enrol_apply\local\answers::submitted_values($instance, $data)
+        );
 
         // Notify users holding the capability in the course context.
         $recipients = $this->get_notifycoursebased_users($instance);

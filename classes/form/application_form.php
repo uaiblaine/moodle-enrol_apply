@@ -18,6 +18,7 @@ namespace enrol_apply\form;
 
 use context_course;
 use core_form\dynamic_form;
+use enrol_apply\local\answers;
 use enrol_apply\local\fields;
 use moodle_url;
 
@@ -151,12 +152,14 @@ class application_form extends dynamic_form {
 
         $this->add_editable_section($editable, $resolved);
         $this->add_locked_section($locked, $USER);
+        $hasanswers = (bool) answers::fields($instance);
+        answers::add_to_form($mform, $instance);
 
         /* An instance can legitimately ask for nothing at all: no profile fields, no comment
            and no introduction. Both section builders above return early when their list is
            empty, so without this the form would be two hidden inputs. There is still an action
            to confirm, so the form says what it is. */
-        if (!$editable && !$locked && empty($instance->customint7) && empty($instance->customtext1)) {
+        if (!$editable && !$locked && !$hasanswers && empty($instance->customint7) && empty($instance->customtext1)) {
             $mform->addElement(
                 'static',
                 'nothingtoprovide',
@@ -300,6 +303,7 @@ class application_form extends dynamic_form {
      */
     public function validation($data, $files) {
         $errors = parent::validation($data, $files);
+        $errors = array_merge($errors, answers::validate($this->get_instance(), $data, $files));
         $resolved = fields::resolve($this->get_instance());
 
         $editable = array_keys(array_filter(
@@ -455,6 +459,8 @@ class application_form extends dynamic_form {
             }
         }
 
+        $data = (object) $data;
+        answers::set_defaults($instance, $data);
         $this->set_data($data);
     }
 
