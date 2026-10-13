@@ -26,6 +26,8 @@
  */
 
 require_once('../../config.php');
+// The form class is autoloaded, its parent moodleform is not.
+require_once($CFG->libdir . '/formslib.php');
 
 use enrol_apply\form\condition_form;
 use enrol_apply\local\answers;
@@ -61,14 +63,12 @@ if (!isset($fields[$fieldid])) {
 
 $stored = conditions::stored((int) $instance->id)[$fieldid] ?? null;
 // The first step's choice decides which second step is drawn; validation() checks it again.
-$controllerid = optional_param('dependsonfieldid', $stored ? $stored->dependsonfieldid : 0, PARAM_INT);
 
 $pageurl = new moodle_url('/enrol/apply/condition.php', ['id' => $instance->id, 'fieldid' => $fieldid]);
 $form = new condition_form($pageurl, [
     'enrolid' => (int) $instance->id,
     'fieldid' => $fieldid,
     'fields' => $fields,
-    'controllerid' => $controllerid,
 ]);
 
 if ($form->is_cancelled()) {
