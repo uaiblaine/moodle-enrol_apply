@@ -162,17 +162,17 @@ class purge_submissions extends \core\task\scheduled_task {
     }
 
     /**
-     * Delete one application record.
+     * Delete one application record with its frozen answers.
      *
      * A separate method so a test can make a single row fail and check that the sweep
      * carries on; any exception raised here reaches the same per-row handler in purge().
+     * submission::delete() takes both tables in one transaction, so a row that fails keeps
+     * its answers as well as its record.
      *
      * @param int $id Row id to delete.
      * @return void
      */
     protected function purge_row(int $id): void {
-        global $DB;
-
-        $DB->delete_records('enrol_apply_submission', ['id' => $id]);
+        submission::delete($id);
     }
 }

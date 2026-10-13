@@ -50,7 +50,10 @@ class observers {
      *
      * enrol_apply_submission is deliberately not swept here: it is not an orphan, it is the
      * durable trail, and \enrol_apply\hook_callbacks::before_course_deleted() has already
-     * pseudonymised it while the course context still existed.
+     * pseudonymised it while the course context still existed. Its frozen answers are swept
+     * when their record is gone, which no path of this plugin produces - each deletes the answers
+     * first - but a record deleted by hand or by another tool would otherwise leave every value
+     * the applicant typed with nothing left to say whose it was.
      *
      * @param course_deleted $event The dispatched event.
      * @return void
@@ -90,6 +93,11 @@ class observers {
             'component = :component AND area = :area
              AND NOT EXISTS (SELECT 1 FROM {enrol} e WHERE e.id = {customfield_shared}.itemid)',
             $params
+        );
+
+        $DB->delete_records_select(
+            'enrol_apply_answer',
+            'NOT EXISTS (SELECT 1 FROM {enrol_apply_submission} s WHERE s.id = {enrol_apply_answer}.submissionid)'
         );
 
         // The display conditions; the ones between fields of a shared category outlive every field deletion above.

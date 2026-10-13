@@ -129,4 +129,42 @@ final class observers_test extends \advanced_testcase {
         $this->assertTrue($DB->record_exists('enrol_apply_applicationinfo', ['id' => $liveinfo]));
         $this->assertTrue($DB->record_exists('enrol_apply_groups', ['id' => $livegroup]));
     }
+
+    /**
+     * Deleting any course sweeps the frozen answers whose record is gone, and keeps the rest.
+     *
+     * No path of this plugin leaves such a row - each deletes the answers before the record - so
+     * the orphan is made by deleting the record directly, as a hand edit or another tool would.
+     * Every value it holds is something an applicant typed, with nothing left to say whose.
+     *
+     * @return void
+     */
+    public function test_a_course_deletion_sweeps_answers_whose_record_is_gone(): void {
+        global $DB;
+
+        $record = function (): int {
+            global $DB;
+
+            return (int) $DB->insert_record('enrol_apply_submission', (object) [
+                'courseid' => 0,
+                'userid' => 0,
+                'enrolid' => 0,
+                'userenrolmentid' => 0,
+                'comment' => '',
+                'status' => local\submission::STATUS_PENDING,
+                'timecreated' => time(),
+            ]);
+        };
+        $live = $record();
+        $orphaned = $record();
+        foreach ([$live, $orphaned] as $id) {
+            local\submission::write_answers($id, [['key' => 's_city', 'label' => 'City', 'value' => 'Recife']]);
+        }
+        $DB->delete_records('enrol_apply_submission', ['id' => $orphaned]);
+
+        delete_course($this->getDataGenerator()->create_course(), false);
+
+        $this->assertSame(0, $DB->count_records(local\submission::ANSWER_TABLE, ['submissionid' => $orphaned]));
+        $this->assertSame(1, $DB->count_records(local\submission::ANSWER_TABLE, ['submissionid' => $live]));
+    }
 }

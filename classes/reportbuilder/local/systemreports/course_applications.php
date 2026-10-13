@@ -25,6 +25,8 @@ use core_reportbuilder\local\filters\select;
 use core_reportbuilder\local\report\filter;
 use core_reportbuilder\system_report;
 use core_reportbuilder\system_report_factory;
+use enrol_apply\local\answers;
+use enrol_apply\local\fields;
 use enrol_apply\reportbuilder\local\entities\submission;
 use enrol_apply\reportbuilder\local\formatters\submission as formatter;
 
@@ -38,6 +40,9 @@ use enrol_apply\reportbuilder\local\formatters\submission as formatter;
 class course_applications extends system_report {
     /** @var string Entity name of the second user entity, the one naming the decider. */
     protected const DECIDER = 'applydecider';
+
+    /** @var array|null Field key => current name, the questions this reader gets a column for. */
+    protected $questions = null;
 
     /**
      * Unique identifier of the filter that narrows the report to one enrolment method.
@@ -157,7 +162,60 @@ class course_applications extends system_report {
             formatter::visible_keys($this->get_context())
         );
 
+        foreach ($this->questions() as $key => $title) {
+            $this->add_column($this->get_entity('submission')->answer_column($key, $title));
+        }
+
         $this->add_column_from_entity(self::DECIDER . ':fullname');
+    }
+
+    /**
+     * The questions this course's apply instances ask, each one this reader may see.
+     *
+     * Every apply instance of the course, not the one the report was opened from: the rows are the
+     * whole course's (the method filter only narrows them), and the itemid naming that instance is
+     * client-settable. The requested profile fields first, then the instance's own questions and
+     * its shared ones, in form order; a key two instances share gets one column, under the first
+     * name met.
+     *
+     * Masked by the snapshot column's own rule, visible_keys() in the course context. A question
+     * the reader may not see gets no column and no filter at all, rather than a blank one:
+     * sorting and filtering are SQL that a display callback never reaches, so only absence keeps a
+     * hidden value from being recovered, and a column that appeared only with data would itself
+     * say who answered.
+     *
+     * @return array Field key => the question's current name, plain spelling.
+     */
+    protected function questions(): array {
+        global $DB;
+
+        if ($this->questions !== null) {
+            return $this->questions;
+        }
+
+        $visible = formatter::visible_keys($this->get_context());
+        $questions = [];
+        $instances = $DB->get_records(
+            'enrol',
+            ['courseid' => $this->get_context()->instanceid, 'enrol' => 'apply'],
+            'id ASC'
+        );
+        foreach ($instances as $instance) {
+            foreach (fields::resolve($instance)->keys() as $key) {
+                $questions[$key] ??= fields::label($key, false);
+            }
+            foreach (answers::fields($instance) as $field) {
+                $questions[answers::key((int) $field->get('id'))] ??= $field->get_formatted_name(false);
+            }
+        }
+
+        $this->questions = array_filter(
+            $questions,
+            static fn(string $key): bool => $visible === formatter::ALL_FIELDS || in_array($key, $visible, true),
+            ARRAY_FILTER_USE_KEY
+        );
+
+        return $this->questions;
     }
 
     /**
@@ -229,6 +287,10 @@ class course_applications extends system_report {
         }
 
         $this->add_filters_from_entity('submission');
+        // In step with the question columns, so a filter never reaches a value its column withholds.
+        foreach ($this->questions() as $key => $title) {
+            $this->add_filter($this->get_entity('submission')->answer_filter($key, $title));
+        }
         $this->add_filter_from_entity(self::DECIDER . ':fullname');
 
         /* The method filter is added only where the course offers a choice of methods. With one

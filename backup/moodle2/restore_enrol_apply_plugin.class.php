@@ -30,6 +30,7 @@ use core_customfield\shared;
 use enrol_apply\customfield\application_handler;
 use enrol_apply\local\answers;
 use enrol_apply\local\conditions;
+use enrol_apply\local\submission;
 
 /**
  * Restores the enrol_apply owned data from an enrolment backup.
@@ -56,6 +57,7 @@ class restore_enrol_apply_plugin extends restore_enrol_plugin {
             new restore_path_element('enrol_apply_applygroup', $this->get_pathfor('/applygroups/applygroup')),
             new restore_path_element('enrol_apply_application', $this->get_pathfor('/applications/application')),
             new restore_path_element('enrol_apply_submission', $this->get_pathfor('/submissions/submission')),
+            new restore_path_element('enrol_apply_answer', $this->get_pathfor('/submissions/submission/answers/answer')),
             new restore_path_element('enrol_apply_fieldcondition', $this->get_pathfor('/fieldconditions/fieldcondition')),
         ];
     }
@@ -113,22 +115,42 @@ class restore_enrol_apply_plugin extends restore_enrol_plugin {
      * because the record is still the applicant's and still means what it says without a
      * name on the decision.
      *
+     * The record's mapping is registered on EVERY path, to 0 when nothing was written. Its
+     * answers find their record through get_new_parentid(), which returns the latest id mapped
+     * under this name: left unset for a skipped record, it would still name the record restored
+     * before it, and the skipped applicant's answers would be attached to somebody else.
+     *
      * @param array $data Backup data of the application record.
      * @return void
      */
     public function process_enrol_apply_submission($data) {
-        global $DB;
-
         $data = (object) $data;
+
+        $this->set_mapping('enrol_apply_submission', $data->id, $this->restore_submission($data));
+    }
+
+    /**
+     * Write one durable application record, if it belongs here.
+     *
+     * An archive written before enrol_apply_answer existed carries the snapshot as a JSON
+     * envelope on this element. It is read with the parser the envelope always had and written
+     * through the one writer, so the archive gets exactly the tolerance a stored envelope got:
+     * every part scalar-checked, malformed entries dropped, nothing interpreted beyond display.
+     *
+     * @param stdClass $data Backup data of the application record.
+     * @return int Id of the new record, or 0 when none was written.
+     */
+    protected function restore_submission(stdClass $data): int {
+        global $DB;
 
         $enrolid = $this->get_apply_instanceid();
         if (!$enrolid) {
-            return;
+            return 0;
         }
 
         $userid = $this->get_mappingid('user', $data->userid);
         if (!$userid) {
-            return;
+            return 0;
         }
 
         /* Rebuilt from this restore rather than carried: the record belongs to the course it
@@ -151,16 +173,16 @@ class restore_enrol_apply_plugin extends restore_enrol_plugin {
             'timecreated' => (int) $data->timecreated,
         ]);
         if ($exists) {
-            return;
+            // Its answers are already here with it, and must not be written a second time.
+            return 0;
         }
 
-        $DB->insert_record('enrol_apply_submission', (object) [
+        $id = (int) $DB->insert_record('enrol_apply_submission', (object) [
             'courseid' => $courseid,
             'userid' => $userid,
             'enrolid' => $enrolid,
             'userenrolmentid' => $userenrolmentid,
             'comment' => $data->comment,
-            'userinfodata' => $data->userinfodata,
             'status' => (int) $data->status,
             'outcomemessage' => $data->outcomemessage,
             /* An empty element parses back as NULL, not as the '' it was written from, so the
@@ -177,6 +199,51 @@ class restore_enrol_apply_plugin extends restore_enrol_plugin {
             'timedecided' => (int) $data->timedecided,
             'decidedby' => (int) $this->get_mappingid('user', $data->decidedby),
         ]);
+
+        if (isset($data->userinfodata) && is_string($data->userinfodata)) {
+            submission::write_answers($id, submission::parse_envelope($data->userinfodata));
+        }
+
+        return $id;
+    }
+
+    /**
+     * Restore one frozen answer under the record restored just before it.
+     *
+     * The archive is untrusted, so the row goes through the same check every other route into the
+     * table does (submission::answer_record()). An empty element parses back as null rather than
+     * the empty string it was written from, so a missing label or value is read as empty; a key
+     * the record already holds is skipped rather than allowed to abort the restore on the unique
+     * index.
+     *
+     * @param array $data Backup data of the answer.
+     * @return void
+     */
+    public function process_enrol_apply_answer($data) {
+        global $DB;
+
+        $data = (object) $data;
+
+        $submissionid = (int) $this->get_new_parentid('enrol_apply_submission');
+        if (!$submissionid) {
+            return;
+        }
+
+        $record = submission::answer_record(
+            $submissionid,
+            $data->fieldkey ?? '',
+            $data->label ?? '',
+            $data->value ?? '',
+            (int) ($data->sortorder ?? 0)
+        );
+        if ($record === null) {
+            return;
+        }
+        if ($DB->record_exists(submission::ANSWER_TABLE, ['submissionid' => $submissionid, 'fieldkey' => $record->fieldkey])) {
+            return;
+        }
+
+        $DB->insert_record(submission::ANSWER_TABLE, $record);
     }
 
     /**

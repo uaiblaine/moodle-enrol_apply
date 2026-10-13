@@ -82,7 +82,7 @@ final class applications_datasource_test extends \core_reportbuilder\tests\core_
      * Throwable as "Error for column 'X'", so on an empty table they fail blaming the first
      * column rather than the missing rows.
      *
-     * @param string $snapshot Stored JSON envelope.
+     * @param string $snapshot Snapshot as a JSON envelope, written as answer rows.
      * @param int $status Status to record.
      * @return \stdClass The applicant.
      */
@@ -90,19 +90,22 @@ final class applications_datasource_test extends \core_reportbuilder\tests\core_
         global $DB;
 
         $user = $this->getDataGenerator()->create_user();
-        $DB->insert_record('enrol_apply_submission', (object) [
+        $submissionid = (int) $DB->insert_record('enrol_apply_submission', (object) [
             'courseid' => $this->course->id,
             'userid' => $user->id,
             'enrolid' => $this->instance->id,
             'userenrolmentid' => 0,
             'comment' => 'Please let me in',
-            'userinfodata' => $snapshot,
             'status' => $status,
             'outcomemessage' => '',
             'timecreated' => time(),
             'timedecided' => $status === submission::STATUS_PENDING ? 0 : time(),
             'decidedby' => 0,
         ]);
+        \enrol_apply\local\submission::write_answers(
+            $submissionid,
+            \enrol_apply\local\submission::parse_envelope($snapshot)
+        );
 
         return $user;
     }
@@ -125,10 +128,14 @@ final class applications_datasource_test extends \core_reportbuilder\tests\core_
     /**
      * A user with moodle/user:viewalldetails allowed or prohibited at the system context.
      *
-     * @param bool $grant Whether to allow the capability or prohibit it.
+     * A granted reader also holds moodle/site:viewuseridentity unless $identity says otherwise; the
+     * source needs both to show submitted data.
+     *
+     * @param bool $grant Whether to allow the capabilities or prohibit them.
+     * @param bool $identity Whether a granted reader also holds moodle/site:viewuseridentity.
      * @return \stdClass The user.
      */
-    protected function reader(bool $grant): \stdClass {
+    protected function reader(bool $grant, bool $identity = true): \stdClass {
         $context = context_system::instance();
         $user = $this->getDataGenerator()->create_user();
         $roleid = $this->getDataGenerator()->create_role();
@@ -136,6 +143,13 @@ final class applications_datasource_test extends \core_reportbuilder\tests\core_
         assign_capability(
             'moodle/user:viewalldetails',
             $grant ? CAP_ALLOW : CAP_PROHIBIT,
+            $roleid,
+            $context->id,
+            true
+        );
+        assign_capability(
+            'moodle/site:viewuseridentity',
+            $grant && $identity ? CAP_ALLOW : CAP_PROHIBIT,
             $roleid,
             $context->id,
             true
@@ -334,6 +348,238 @@ final class applications_datasource_test extends \core_reportbuilder\tests\core_
 
         $this->assertStringContainsString('Terry', $rendered);
         $this->assertStringContainsString('Campinas', $rendered);
+    }
+
+    /**
+     * Create a custom report from this source with the given columns.
+     *
+     * @param array $columns Column identifiers.
+     * @return \core_reportbuilder\local\models\report The report persistent.
+     */
+    protected function custom_report(array $columns): \core_reportbuilder\local\models\report {
+        $generator = $this->getDataGenerator()->get_plugin_generator('core_reportbuilder');
+        $report = $generator->create_report([
+            'name' => 'Answers',
+            'source' => applications::class,
+            'default' => 0,
+        ]);
+        foreach ($columns as $column) {
+            $generator->create_column(['reportid' => $report->get('id'), 'uniqueidentifier' => $column]);
+        }
+
+        return $report;
+    }
+
+    /**
+     * A shared category with one text question, switched on for this instance.
+     *
+     * @param bool $enabled Whether to switch it on; a category nobody uses offers no column.
+     * @return int The field id.
+     */
+    protected function shared_question(bool $enabled = true): int {
+        $generator = $this->getDataGenerator()->get_plugin_generator('core_customfield');
+        $category = $generator->create_category(['component' => 'core_customfield', 'area' => 'shared', 'itemid' => 0]);
+        $fieldid = (int) $generator->create_field([
+            'categoryid' => $category->get('id'),
+            'type' => 'text',
+            'shortname' => 'shared' . random_string(6),
+            'name' => 'Tax number',
+        ])->get('id');
+        if ($enabled) {
+            (new \core_customfield\shared(0, (object) [
+                'categoryid' => $category->get('id'),
+                'component' => 'enrol_apply',
+                'area' => \enrol_apply\customfield\application_handler::AREA,
+                'itemid' => $this->instance->id,
+            ]))->create();
+        }
+
+        return $fieldid;
+    }
+
+    /**
+     * The answer entity lists one row per frozen value and filters on the answer.
+     *
+     * A record with no answers still lists once, as the LEFT join promises, so adding an answer
+     * column never hides an application.
+     *
+     * @return void
+     */
+    public function test_the_answer_entity_lists_and_filters_the_answers(): void {
+        $this->seed($this->snapshot());
+        $this->seed();
+        $this->setUser($this->reader(true));
+
+        $report = $this->custom_report(['answer:question', 'answer:answer', 'answer:fieldkey']);
+        $content = $this->get_custom_report_content($report->get('id'));
+        $this->assertCount(3, $content);
+        $values = array_map(static fn(array $row): string => implode('|', array_values($row)), $content);
+        $this->assertContains('First name|Terry|s_firstname', $values);
+        $this->assertContains('City|Campinas|s_city', $values);
+
+        $generator = $this->getDataGenerator()->get_plugin_generator('core_reportbuilder');
+        $generator->create_filter(['reportid' => $report->get('id'), 'uniqueidentifier' => 'answer:answer']);
+        $filtered = $this->get_custom_report_content($report->get('id'), 30, [
+            'answer:answer_operator' => \core_reportbuilder\local\filters\text::IS_EQUAL_TO,
+            'answer:answer_value' => 'Campinas',
+        ]);
+        $this->assertCount(1, $filtered);
+        $this->assertSame('City', reset($filtered[0]));
+    }
+
+    /**
+     * Without moodle/user:viewalldetails the answer entity offers nothing at all.
+     *
+     * Columns, filters and conditions alike: an answer row exists only where an applicant
+     * answered, so even the field key column, or a condition on it, says who answered what.
+     *
+     * @return void
+     */
+    public function test_the_answer_entity_is_withheld_without_viewalldetails(): void {
+        $this->seed($this->snapshot());
+
+        $this->setUser($this->reader(true));
+        $instance = $this->instance();
+        $this->assertArrayHasKey('answer:answer', $instance->get_columns());
+        $this->assertArrayHasKey('answer:answer', $instance->get_filters());
+        $this->assertArrayHasKey('answer:fieldkey', $instance->get_conditions());
+
+        $this->setUser($this->reader(false));
+        $instance = $this->instance();
+        // The control: the rest of the source is still offered.
+        $this->assertArrayHasKey('submission:status', $instance->get_columns());
+        foreach (['fieldkey', 'question', 'answer'] as $name) {
+            $this->assertArrayNotHasKey('answer:' . $name, $instance->get_columns());
+            $this->assertArrayNotHasKey('answer:' . $name, $instance->get_filters());
+            $this->assertArrayNotHasKey('answer:' . $name, $instance->get_conditions());
+        }
+    }
+
+    /**
+     * Without moodle/site:viewuseridentity, viewalldetails alone shows no submitted data.
+     *
+     * The course report withholds identity fields and answers from such a reader; the site-wide
+     * source must not be the wider door to the same values.
+     *
+     * @return void
+     */
+    public function test_submitted_data_needs_the_identity_capability_too(): void {
+        $fieldid = $this->shared_question();
+        $key = \enrol_apply\local\answers::key($fieldid);
+        $this->seed((string) json_encode(['version' => submission::SNAPSHOT_VERSION, 'fields' => [
+            ['key' => $key, 'label' => 'Tax number', 'value' => '123.456.789-09'],
+        ]]));
+
+        // The control: with both capabilities everything is offered.
+        $this->setUser($this->reader(true));
+        $instance = $this->instance();
+        $this->assertArrayHasKey('submission:snapshot', $instance->get_columns());
+        $this->assertArrayHasKey('answer:answer', $instance->get_columns());
+        $this->assertArrayHasKey('submission:' . $key, $instance->get_columns());
+
+        $this->setUser($this->reader(true, false));
+        $instance = $this->instance();
+        $this->assertArrayHasKey('submission:status', $instance->get_columns());
+        $this->assertArrayNotHasKey('submission:snapshot', $instance->get_columns());
+        $this->assertArrayNotHasKey('answer:answer', $instance->get_columns());
+        $this->assertArrayNotHasKey('answer:answer', $instance->get_filters());
+        $this->assertArrayNotHasKey('answer:fieldkey', $instance->get_conditions());
+        $this->assertArrayNotHasKey('submission:' . $key, $instance->get_columns());
+        $this->assertArrayNotHasKey('submission:' . $key, $instance->get_filters());
+    }
+
+    /**
+     * A report narrowed by an answer shows nothing to a reader who may not apply that condition.
+     *
+     * Core skips a condition that is not available, so without the base condition the report
+     * would show that reader every application on the site instead of the narrowed few (MDL Shield
+     * finding on #98).
+     *
+     * @return void
+     */
+    public function test_a_report_narrowed_by_an_answer_shows_nothing_to_a_reader_who_cannot_apply_it(): void {
+        $this->seed($this->snapshot());
+        $this->seed($this->snapshot());
+        $generator = $this->getDataGenerator()->get_plugin_generator('core_reportbuilder');
+
+        // The author holds both capabilities, as a site administrator does.
+        $this->setAdminUser();
+        $narrowed = $this->custom_report(['submission:status']);
+        $generator->create_condition(['reportid' => $narrowed->get('id'), 'uniqueidentifier' => 'answer:fieldkey']);
+        $plain = $this->custom_report(['submission:status']);
+
+        // The control: a reader holding both capabilities gets the rows.
+        $this->setUser($this->reader(true));
+        $this->assertNotEmpty($this->get_custom_report_content($narrowed->get('id')));
+
+        $this->setUser($this->reader(true, false));
+        $this->assertCount(0, $this->get_custom_report_content($narrowed->get('id')));
+        // The other control: a report with no such condition still lists for the same reader.
+        $this->assertNotEmpty($this->get_custom_report_content($plain->get('id')));
+    }
+
+    /**
+     * A shared question some instance uses gets a site-wide column and filter; an unused one does not.
+     *
+     * @return void
+     */
+    public function test_a_shared_question_in_use_gets_a_column_and_a_filter(): void {
+        $fieldid = $this->shared_question();
+        $unused = $this->shared_question(false);
+        $key = \enrol_apply\local\answers::key($fieldid);
+        $this->seed((string) json_encode(['version' => submission::SNAPSHOT_VERSION, 'fields' => [
+            ['key' => $key, 'label' => 'Tax number', 'value' => '123.456.789-09'],
+        ]]));
+        $this->seed((string) json_encode(['version' => submission::SNAPSHOT_VERSION, 'fields' => [
+            ['key' => $key, 'label' => 'Tax number', 'value' => '987.654.321-00'],
+        ]]));
+        $this->setUser($this->reader(true));
+
+        $instance = $this->instance();
+        $identifier = 'submission:' . $key;
+        $this->assertArrayHasKey($identifier, $instance->get_columns());
+        $this->assertArrayHasKey($identifier, $instance->get_filters());
+        $this->assertArrayHasKey($identifier, $instance->get_conditions());
+        $this->assertSame('Tax number', $instance->get_column($identifier)->get_title());
+        $this->assertArrayNotHasKey('submission:' . \enrol_apply\local\answers::key($unused), $instance->get_columns());
+
+        $report = $this->custom_report([$identifier]);
+        $first = static fn(array $row): string => (string) reset($row);
+        $values = array_map($first, $this->get_custom_report_content($report->get('id')));
+        $this->assertEqualsCanonicalizing(['123.456.789-09', '987.654.321-00'], $values);
+
+        $generator = $this->getDataGenerator()->get_plugin_generator('core_reportbuilder');
+        $generator->create_filter(['reportid' => $report->get('id'), 'uniqueidentifier' => $identifier]);
+        $filtered = $this->get_custom_report_content($report->get('id'), 30, [
+            $identifier . '_operator' => \core_reportbuilder\local\filters\text::CONTAINS,
+            $identifier . '_value' => '987',
+        ]);
+        $this->assertSame(['987.654.321-00'], array_map($first, $filtered));
+
+        // Core's own checks over every column and aggregation, this question's included.
+        $this->setAdminUser();
+        $this->datasource_stress_test_columns(applications::class);
+        $this->datasource_stress_test_columns_aggregation(applications::class);
+    }
+
+    /**
+     * Without moodle/user:viewalldetails a shared question has no column, filter or condition.
+     *
+     * @return void
+     */
+    public function test_a_shared_question_is_withheld_without_viewalldetails(): void {
+        $identifier = 'submission:' . \enrol_apply\local\answers::key($this->shared_question());
+
+        $this->setUser($this->reader(true));
+        $this->assertArrayHasKey($identifier, $this->instance()->get_columns());
+
+        $this->setUser($this->reader(false));
+        $instance = $this->instance();
+        $this->assertArrayNotHasKey($identifier, $instance->get_columns());
+        $this->assertArrayNotHasKey($identifier, $instance->get_filters());
+        $this->assertArrayNotHasKey($identifier, $instance->get_conditions());
+        // The control: the snapshot goes by the same gate, so the two cannot disagree.
+        $this->assertArrayNotHasKey('submission:snapshot', $instance->get_columns());
     }
 
     /**

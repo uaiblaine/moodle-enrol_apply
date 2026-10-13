@@ -853,8 +853,8 @@ class enrol_apply_renderer extends plugin_renderer_base {
      * for the same reason: they are what the applicant saw.
      *
      * Nothing here reads the applicant's live profile, and that is a security boundary. The
-     * stored keys come from userinfodata, which restore_enrol_apply_plugin writes verbatim from a
-     * foreign archive. fields::current_value() dereferences any {user} column an "s_" key names
+     * stored keys come from enrol_apply_answer, which restore_enrol_apply_plugin writes verbatim
+     * from a foreign archive. fields::current_value() dereferences any {user} column an "s_" key names
      * (fields::DENY governs only the write path) and reads a "c_<id>" key from {user_info_data}
      * past core's PROFILE_VISIBLE_* gates, and a reader for whom visible_keys() returns
      * ALL_FIELDS skips the key filter entirely - so a crafted archive could expose any column,
@@ -874,7 +874,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
      */
     protected function snapshot_context($application): array {
         $formatter = \enrol_apply\reportbuilder\local\formatters\submission::class;
-        $entries = \enrol_apply\local\submission::read_snapshot($application->snapshot ?? null);
+        $entries = \enrol_apply\local\submission::read_snapshot((int) ($application->submissionid ?? 0));
         $visible = $formatter::visible_keys(\context_course::instance($application->courseid));
 
         $rows = [];

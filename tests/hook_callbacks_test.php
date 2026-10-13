@@ -133,7 +133,7 @@ final class hook_callbacks_test extends \advanced_testcase {
 
         /* The control: an application in a different course, which the deletion must not
            touch. Without it a callback that emptied the whole table would pass. */
-        [$othercourse, , $otherapplicant] = $this->create_course_with_application('Another course');
+        [$othercourse, , $otherapplicant] = $this->create_course_with_application('Another course', ['s_city']);
 
         $before = $DB->get_record('enrol_apply_submission', ['courseid' => $course->id], '*', MUST_EXIST);
         $this->assertNotEmpty($before->comment);
@@ -142,7 +142,9 @@ final class hook_callbacks_test extends \advanced_testcase {
         $this->assertEquals($decider->id, (int) $before->decidedby);
         /* Exactly the field the instance asks for, although the applicant submitted two: the
            snapshot was taken against the configured set, not the default pool. */
-        $this->assertSame(['s_city'], array_column(submission::read_snapshot($before->userinfodata), 'key'));
+        $this->assertSame(['s_city'], array_column(submission::read_snapshot((int) $before->id), 'key'));
+        $otherbefore = (int) $DB->get_field('enrol_apply_submission', 'id', ['courseid' => $othercourse->id], MUST_EXIST);
+        $this->assertNotEmpty(submission::read_snapshot($otherbefore), 'the control: the other course has answers to keep');
 
         delete_course($course, false);
 
@@ -150,7 +152,8 @@ final class hook_callbacks_test extends \advanced_testcase {
         $this->assertEquals(0, (int) $after->userid);
         $this->assertEquals(0, (int) $after->decidedby);
         $this->assertSame('', (string) $after->comment);
-        $this->assertSame('', (string) $after->userinfodata);
+        // Every frozen answer goes: each is something the applicant typed.
+        $this->assertSame(0, $DB->count_records(submission::ANSWER_TABLE, ['submissionid' => $after->id]));
 
         // What an audit keeps: the shape of the application, which identifies nobody.
         $this->assertEquals($before->status, $after->status);
@@ -160,6 +163,7 @@ final class hook_callbacks_test extends \advanced_testcase {
         $untouched = $DB->get_record('enrol_apply_submission', ['courseid' => $othercourse->id], '*', MUST_EXIST);
         $this->assertEquals($otherapplicant->id, (int) $untouched->userid);
         $this->assertSame('Another course', (string) $untouched->comment);
+        $this->assertNotEmpty(submission::read_snapshot((int) $untouched->id));
     }
 
     /**
@@ -176,7 +180,7 @@ final class hook_callbacks_test extends \advanced_testcase {
         [, , $applicant] = $this->create_course_with_application('With a city', ['s_city']);
 
         $row = $DB->get_record('enrol_apply_submission', ['userid' => $applicant->id], '*', MUST_EXIST);
-        $snapshot = submission::read_snapshot($row->userinfodata);
+        $snapshot = submission::read_snapshot((int) $row->id);
         $this->assertCount(1, $snapshot);
         $this->assertSame('s_city', $snapshot[0]['key']);
         $this->assertSame('Recife', $snapshot[0]['value']);

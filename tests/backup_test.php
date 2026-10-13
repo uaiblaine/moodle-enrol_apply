@@ -491,10 +491,15 @@ final class backup_test extends \advanced_testcase {
         // The control: the record really is written when it should be, so absence means something.
         $this->assertStringContainsString('<submission id=', $withusers);
         $this->assertStringContainsString('I would like to join this course', $withusers);
+        $this->assertStringContainsString('<answer id=', $withusers);
+        $this->assertStringContainsString('Recife', $withusers);
 
         $withoutusers = $this->backup_enrolments_xml($course, false);
         $this->assertStringNotContainsString('<submission id=', $withoutusers);
         $this->assertStringNotContainsString('I would like to join this course', $withoutusers);
+        // The answers are the record's children, so the record's gate is theirs.
+        $this->assertStringNotContainsString('<answer id=', $withoutusers);
+        $this->assertStringNotContainsString('Recife', $withoutusers);
 
         /* The second control: instance configuration is NOT gated and still travels, so the
            assertions above are about the gate rather than about an empty backup. */
@@ -575,7 +580,6 @@ final class backup_test extends \advanced_testcase {
             'enrolid' => $instance->id,
             'userenrolmentid' => $ueid,
             'comment' => $comment . 'RECORD',
-            'userinfodata' => '',
             'status' => \enrol_apply\local\submission::STATUS_PENDING,
             'outcomemessage' => '',
             'timecreated' => self::SUBMITTED_AT,
@@ -810,6 +814,100 @@ final class backup_test extends \advanced_testcase {
         $row = $DB->get_record('enrol_apply_submission', ['courseid' => $target->id], '*', MUST_EXIST);
         $this->assertEquals($user->id, (int) $row->userid);
         $this->assertEquals(self::SUBMITTED_AT, (int) $row->timecreated);
+        // Nor its answers: a record that already exists keeps the ones it has.
+        $this->assertSame(2, $DB->count_records(\enrol_apply\local\submission::ANSWER_TABLE, ['submissionid' => $row->id]));
+    }
+
+    /**
+     * A record the restore skips does not lend its answers to the record restored before it.
+     *
+     * The answers find their record through get_new_parentid(), which returns the LATEST id
+     * mapped under the record's name. A record that is skipped - here because the target already
+     * holds it - must therefore still register a mapping, to nothing; left unset, its answers
+     * would be attached to whichever applicant was restored just before it.
+     *
+     * The order matters and is built on purpose: the first applicant's record is removed from the
+     * target between the two restores, so the second restore writes it and then skips the second
+     * applicant's, which comes after it in the archive.
+     *
+     * @return void
+     */
+    public function test_a_skipped_record_does_not_lend_its_answers_to_another(): void {
+        global $DB;
+
+        [$course, $instance, $first] = $this->create_course_with_application();
+        $second = $this->add_applicant($course, $instance, 'Second applicant', 'student');
+        $secondrecord = (int) $DB->get_field('enrol_apply_submission', 'id', ['userid' => $second->id], MUST_EXIST);
+        \enrol_apply\local\submission::write_answers($secondrecord, [
+            ['key' => 's_country', 'label' => 'Country', 'value' => 'BR'],
+        ]);
+        $target = $this->getDataGenerator()->create_course();
+
+        $this->restore_into_existing($course, $target->id);
+        $restoredfirst = (int) $DB->get_field(
+            'enrol_apply_submission',
+            'id',
+            ['courseid' => $target->id, 'userid' => $first->id],
+            MUST_EXIST
+        );
+        \enrol_apply\local\submission::delete($restoredfirst);
+
+        $this->restore_into_existing($course, $target->id);
+
+        $rows = $DB->get_records('enrol_apply_submission', ['courseid' => $target->id], '', 'userid, id');
+        $this->assertCount(2, $rows);
+        $this->assertSame(
+            ['s_city', 'a_7'],
+            array_column(\enrol_apply\local\submission::read_snapshot((int) $rows[$first->id]->id), 'key')
+        );
+        $this->assertSame(
+            ['s_country'],
+            array_column(\enrol_apply\local\submission::read_snapshot((int) $rows[$second->id]->id), 'key')
+        );
+    }
+
+    /**
+     * An archive written before the answer table restores its envelope into rows.
+     *
+     * Such an archive carries the snapshot as JSON on the submission element and no answers. It is
+     * as untrusted as any archive, so it gets the old reader's tolerance: the malformed entry is
+     * dropped, the rest arrive in the envelope's order. No fixture can write the old shape, so the
+     * extracted XML is edited into it.
+     *
+     * @return void
+     */
+    public function test_an_archive_carrying_the_old_envelope_restores_its_answers(): void {
+        global $DB;
+
+        [$course, , $user] = $this->create_course_with_application();
+
+        $envelope = json_encode([
+            'version' => \enrol_apply\local\submission::SNAPSHOT_VERSION,
+            'fields' => [
+                ['key' => 'a_7', 'label' => 'Why this course?', 'value' => 'To learn'],
+                ['key' => 'c_3', 'label' => 'Broken', 'value' => ['not', 'scalar']],
+                ['key' => 's_city', 'label' => 'City', 'value' => 'Olinda'],
+            ],
+        ]);
+        $downgrade = function (string $basepath) use ($envelope): void {
+            $path = $basepath . '/course/enrolments.xml';
+            $xml = file_get_contents($path);
+            $this->assertStringContainsString('<answers>', $xml, 'the premise: the new archive carries answers');
+            $xml = preg_replace(
+                '#<answers>.*?</answers>#s',
+                '<userinfodata>' . htmlspecialchars($envelope, ENT_COMPAT | ENT_XML1) . '</userinfodata>',
+                $xml
+            );
+            file_put_contents($path, $xml);
+        };
+
+        $newcourseid = $this->backup_and_restore($course, true, false, null, backup::ENROL_ALWAYS, $downgrade);
+
+        $row = $DB->get_record('enrol_apply_submission', ['courseid' => $newcourseid, 'userid' => $user->id], '*', MUST_EXIST);
+        $this->assertSame([
+            ['key' => 'a_7', 'label' => 'Why this course?', 'value' => 'To learn'],
+            ['key' => 's_city', 'label' => 'City', 'value' => 'Olinda'],
+        ], \enrol_apply\local\submission::read_snapshot((int) $row->id));
     }
 
     /**
@@ -839,21 +937,22 @@ final class backup_test extends \advanced_testcase {
 
         /* The durable record of the same application, seeded rather than produced by apply()
            so that the decider and the snapshot are fixed values the assertions can name. */
-        $DB->insert_record('enrol_apply_submission', (object) [
+        $submissionid = (int) $DB->insert_record('enrol_apply_submission', (object) [
             'courseid' => $course->id,
             'userid' => $user->id,
             'enrolid' => $instanceid,
             'userenrolmentid' => $ueid,
             'comment' => 'I would like to join this course',
-            'userinfodata' => json_encode([
-                'version' => \enrol_apply\local\submission::SNAPSHOT_VERSION,
-                'fields' => [['key' => 's_city', 'label' => 'City', 'value' => 'Recife']],
-            ]),
             'status' => \enrol_apply\local\submission::STATUS_PENDING,
             'outcomemessage' => '',
             'timecreated' => self::SUBMITTED_AT,
             'timedecided' => 0,
             'decidedby' => $decider ? $decider->id : 0,
+        ]);
+        // Two answers, in an order that is not the keys' alphabetical one, so the order is tested.
+        \enrol_apply\local\submission::write_answers($submissionid, [
+            ['key' => 's_city', 'label' => 'City', 'value' => 'Recife'],
+            ['key' => 'a_7', 'label' => 'Why this course?', 'value' => 'R&D <2>'],
         ]);
 
         return [$course, $instance, $user];
@@ -1177,10 +1276,11 @@ final class backup_test extends \advanced_testcase {
         $this->assertEquals(self::SUBMITTED_AT, (int) $row->timecreated);
         $this->assertSame('I would like to join this course', (string) $row->comment);
 
-        // The snapshot travels whole: it is the answer as given, not a reference to resolve later.
-        $snapshot = \enrol_apply\local\submission::read_snapshot($row->userinfodata);
-        $this->assertCount(1, $snapshot);
-        $this->assertSame('Recife', $snapshot[0]['value']);
+        // The snapshot travels whole and in order: it is the answer as given, not a reference to resolve later.
+        $this->assertSame([
+            ['key' => 's_city', 'label' => 'City', 'value' => 'Recife'],
+            ['key' => 'a_7', 'label' => 'Why this course?', 'value' => 'R&D <2>'],
+        ], \enrol_apply\local\submission::read_snapshot((int) $row->id));
 
         /* The reference is remapped rather than carried, so it names the restored enrolment
            and not one in the original course. */

@@ -913,14 +913,13 @@ final class renderer_test extends \advanced_testcase {
             'userenrolmentid' => $ueid,
             'comment' => 'FALLBACK COMMENT',
         ]);
-        $DB->insert_record('enrol_apply_submission', (object) [
+        $submissionid = (int) $DB->insert_record('enrol_apply_submission', (object) [
             'courseid' => $this->course->id,
             'userid' => $applicant->id,
             'enrolid' => $this->instance->id,
             'userenrolmentid' => $ueid,
             'status' => \enrol_apply\local\submission::STATUS_PENDING,
             'comment' => $comment,
-            'userinfodata' => $snapshot,
             'outcomemessage' => '',
             'decidedgroups' => '',
             'decidedrole' => 0,
@@ -928,6 +927,10 @@ final class renderer_test extends \advanced_testcase {
             'timecreated' => time(),
             'timedecided' => 0,
         ]);
+        \enrol_apply\local\submission::write_answers(
+            $submissionid,
+            \enrol_apply\local\submission::parse_envelope($snapshot)
+        );
 
         $url = new \moodle_url('/enrol/apply/manage.php', ['userenrol' => $ueid]);
         $PAGE->set_url($url);
@@ -1073,7 +1076,6 @@ final class renderer_test extends \advanced_testcase {
             'userenrolmentid' => 0,
             'status' => \enrol_apply\local\submission::STATUS_CANCELLED,
             'comment' => '',
-            'userinfodata' => '',
             'outcomemessage' => '',
             'decidedgroups' => '',
             'decidedrole' => 0,
@@ -1682,8 +1684,8 @@ final class renderer_test extends \advanced_testcase {
      * The page never reads the applicant's live profile for a snapshot field.
      *
      * This is a security boundary, so it is asserted rather than left to the absence of a call.
-     * The stored key is attacker-choosable - restore_enrol_apply_plugin writes userinfodata
-     * verbatim out of a foreign archive - and fields::current_value() dereferences whatever
+     * The stored key is attacker-choosable - restore_enrol_apply_plugin writes the answer
+     * rows verbatim out of a foreign archive - and fields::current_value() dereferences whatever
      * {user} column an "s_" key names, with no allowlist, so an envelope naming s_password would
      * expose the password hash. The fields::DENY list governs the write path only.
      *
@@ -1803,14 +1805,13 @@ final class renderer_test extends \advanced_testcase {
             ['userid' => $applicant->id, 'enrolid' => $this->instance->id],
             MUST_EXIST
         );
-        $DB->insert_record('enrol_apply_submission', (object) [
+        $submissionid = (int) $DB->insert_record('enrol_apply_submission', (object) [
             'courseid' => $this->course->id,
             'userid' => $applicant->id,
             'enrolid' => $this->instance->id,
             'userenrolmentid' => $ueid,
             'status' => \enrol_apply\local\submission::STATUS_PENDING,
             'comment' => '',
-            'userinfodata' => $snapshot,
             'outcomemessage' => '',
             'decidedgroups' => '',
             'decidedrole' => 0,
@@ -1818,6 +1819,10 @@ final class renderer_test extends \advanced_testcase {
             'timecreated' => time(),
             'timedecided' => 0,
         ]);
+        \enrol_apply\local\submission::write_answers(
+            $submissionid,
+            \enrol_apply\local\submission::parse_envelope($snapshot)
+        );
 
         /* A reader who may decide the application, with the identity capability set where the
            test wants it. The role is built rather than borrowed so the two capabilities move

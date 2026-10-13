@@ -73,7 +73,6 @@ final class purge_submissions_test extends \advanced_testcase {
             'enrolid' => 11,
             'userenrolmentid' => 0,
             'comment' => 'Seeded',
-            'userinfodata' => '',
             'status' => $status,
             'outcomemessage' => '',
             'timecreated' => time() - $age,
@@ -117,6 +116,32 @@ final class purge_submissions_test extends \advanced_testcase {
         $this->assertFalse($DB->record_exists('enrol_apply_submission', ['id' => $olddecided]));
         $this->assertFalse($DB->record_exists('enrol_apply_submission', ['id' => $oldundecided]));
         $this->assertTrue($DB->record_exists('enrol_apply_submission', ['id' => $recent]));
+    }
+
+    /**
+     * A swept record takes its frozen answers with it, and a kept one keeps them.
+     *
+     * The answers are what the applicant typed, so a sweep that removed the record and left them
+     * would keep exactly the personal data the retention period exists to end - with nothing left
+     * to name whose it is.
+     *
+     * @return void
+     */
+    public function test_a_swept_record_takes_its_answers(): void {
+        global $DB;
+
+        set_config('retentiondays', 30 * DAYSECS, 'enrol_apply');
+
+        $old = $this->seed(60 * DAYSECS, submission::STATUS_APPROVED, time() - 59 * DAYSECS);
+        $recent = $this->seed(2 * DAYSECS, submission::STATUS_PENDING, 0);
+        foreach ([$old, $recent] as $id) {
+            submission::write_answers($id, [['key' => 's_city', 'label' => 'City', 'value' => 'Recife']]);
+        }
+
+        $this->assertEquals(1, $this->sweep());
+
+        $this->assertSame(0, $DB->count_records(submission::ANSWER_TABLE, ['submissionid' => $old]));
+        $this->assertSame(1, $DB->count_records(submission::ANSWER_TABLE, ['submissionid' => $recent]));
     }
 
     /**

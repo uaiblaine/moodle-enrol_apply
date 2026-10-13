@@ -88,7 +88,7 @@ final class applications_test extends \advanced_testcase {
      * Put one applicant on the given instance's queue.
      *
      * @param \stdClass|null $instance Instance to apply to, null for this fixture's own.
-     * @param string $snapshot Stored envelope of what they submitted, empty for none.
+     * @param string $snapshot Snapshot as a JSON envelope, written as answer rows; empty for none.
      * @param array $userfields Overrides for the generated user, so a test can name them.
      * @param int $enrolstatus Enrolment status to create them with; the queue's two are
      *        ENROL_USER_SUSPENDED (pending) and ENROL_APPLY_USER_WAIT (deferred).
@@ -110,7 +110,7 @@ final class applications_test extends \advanced_testcase {
            NULL, so `(s.id IS NULL OR prior.id <> s.id)` - the clause that stops this application
            counting as an earlier one of its own - would be true whatever it says, and no test
            could see it removed. */
-        $DB->insert_record('enrol_apply_submission', (object) [
+        $submissionid = (int) $DB->insert_record('enrol_apply_submission', (object) [
             'courseid' => $instance->courseid,
             'userid' => $user->id,
             'enrolid' => (int) $instance->id,
@@ -119,13 +119,16 @@ final class applications_test extends \advanced_testcase {
                 'enrolid' => (int) $instance->id,
             ], MUST_EXIST),
             'comment' => 'Please let me in',
-            'userinfodata' => $snapshot,
             'status' => submission::STATUS_PENDING,
             'outcomemessage' => '',
             'timecreated' => time(),
             'timedecided' => 0,
             'decidedby' => 0,
         ]);
+        \enrol_apply\local\submission::write_answers(
+            $submissionid,
+            \enrol_apply\local\submission::parse_envelope($snapshot)
+        );
 
         return $user;
     }
@@ -291,7 +294,6 @@ final class applications_test extends \advanced_testcase {
             'enrolid' => $this->instance->id,
             'userenrolmentid' => 0,
             'comment' => 'Cancelled in June by mistake',
-            'userinfodata' => '',
             'status' => submission::STATUS_CANCELLED,
             'outcomemessage' => '',
             'timecreated' => time() - DAYSECS,
@@ -711,6 +713,45 @@ final class applications_test extends \advanced_testcase {
            assertion once the other row has drawn some. */
         $this->assertSame(count($this->snapshot_fields()), substr_count($rendered, 'enrol_apply-fieldpill'));
         $this->assertSame(1, substr_count($rendered, 'enrol_apply-cardlabel">' . get_string('queuesubmitted', 'enrol_apply')));
+    }
+
+    /**
+     * The answers of a whole page are read in one query, however many rows it has.
+     *
+     * Measured as the difference between a page of one application and a page of four: equal
+     * statement counts mean the answers are not read per row. Each page is rendered twice and the
+     * second rendering measured, so caches warmed by the first (strings, capabilities, the
+     * identity fields) do not count against either.
+     *
+     * @return void
+     */
+    public function test_the_answers_of_a_whole_page_are_read_in_one_query(): void {
+        global $DB;
+
+        $this->setAdminUser();
+        $this->applicant(null, $this->snapshot());
+
+        $measure = function (): int {
+            global $DB;
+
+            $this->rendered((int) $this->instance->id);
+            $before = $DB->perf_get_reads();
+            $rendered = $this->rendered((int) $this->instance->id);
+            $reads = $DB->perf_get_reads() - $before;
+            // The control: every row's answers really are on the page.
+            $this->assertSame(
+                count($DB->get_records('enrol_apply_submission')) * count($this->snapshot_fields()),
+                substr_count($rendered, 'enrol_apply-fieldpill')
+            );
+
+            return $reads;
+        };
+
+        $one = $measure();
+        foreach (['Second', 'Third', 'Fourth'] as $name) {
+            $this->applicant(null, $this->snapshot($name . 'ville'));
+        }
+        $this->assertSame($one, $measure());
     }
 
     /**

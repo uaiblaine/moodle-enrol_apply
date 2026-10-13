@@ -73,8 +73,27 @@ class submission {
         self::STATUS_CANCELLED,
     ];
 
-    /** @var int Format of the userinfodata envelope. Bumped only if the stored shape changes. */
+    /**
+     * Format of the JSON envelope the snapshot was stored as before it became rows.
+     *
+     * Read by parse_envelope() and nothing else: the upgrade to enrol_apply_answer and the
+     * restore of an archive written before it both still meet that envelope.
+     *
+     * @var int
+     */
     public const SNAPSHOT_VERSION = 1;
+
+    /** @var string The table holding one frozen row per submitted value. */
+    public const ANSWER_TABLE = 'enrol_apply_answer';
+
+    /** @var int Length of enrol_apply_answer.fieldkey; a longer key cannot be stored as it was. */
+    public const KEY_LENGTH = 100;
+
+    /** @var string Separates key, label and value of one row in aggregate_sql(). */
+    public const AGGREGATE_UNIT = "\x1F";
+
+    /** @var string Separates the rows in aggregate_sql(). */
+    public const AGGREGATE_RECORD = "\x1E";
 
     /**
      * Record a new application.
@@ -88,6 +107,9 @@ class submission {
      * with no record behind it. That is why decide() leaves a row it cannot find alone rather
      * than treating its absence as impossible.
      *
+     * The record and its frozen answers ARE one transaction: a record whose answers were half
+     * written would show the reviewer an application the applicant never submitted.
+     *
      * @param stdClass $instance Course enrol instance applied to.
      * @param int $userid Applicant.
      * @param int $userenrolmentid User enrolment created for the application.
@@ -97,13 +119,13 @@ class submission {
     public static function create(stdClass $instance, int $userid, int $userenrolmentid, stdClass $data): int {
         global $DB;
 
-        return (int) $DB->insert_record('enrol_apply_submission', (object) [
+        $transaction = $DB->start_delegated_transaction();
+        $id = (int) $DB->insert_record('enrol_apply_submission', (object) [
             'courseid' => (int) $instance->courseid,
             'userid' => $userid,
             'enrolid' => (int) $instance->id,
             'userenrolmentid' => $userenrolmentid,
             'comment' => isset($data->applydescription) ? (string) $data->applydescription : '',
-            'userinfodata' => self::snapshot($instance, $data),
             'status' => self::STATUS_PENDING,
             /* Empty until a decision: record_outcome_message() is its only writer. */
             'outcomemessage' => '',
@@ -114,6 +136,10 @@ class submission {
             'timedecided' => 0,
             'decidedby' => 0,
         ]);
+        self::snapshot($id, $instance, $data);
+        $transaction->allow_commit();
+
+        return $id;
     }
 
     /**
@@ -127,7 +153,7 @@ class submission {
      * It reconstructs only what a pending application can honestly claim. The comment is
      * recovered from enrol_apply_applicationinfo, which is still written beside this table; the
      * profile snapshot is not, because the values the applicant typed were never stored anywhere
-     * else, so an empty envelope is the truthful answer. The status is PENDING whatever the
+     * else, so no answer rows is the truthful answer. The status is PENDING whatever the
      * enrolment is doing, because the caller stamps the real decision through decide()
      * immediately afterwards.
      *
@@ -173,7 +199,6 @@ class submission {
             'enrolid' => (int) $enrolment->enrolid,
             'userenrolmentid' => (int) $enrolment->id,
             'comment' => (string) $comment,
-            'userinfodata' => '',
             'status' => self::STATUS_PENDING,
             'outcomemessage' => '',
             'decidedgroups' => '',
@@ -259,7 +284,9 @@ class submission {
      * can reach and no erasure request can delete.
      *
      * What survives is what an audit needs, with both user columns zeroed: the dates, the
-     * status, and the course, enrol and user enrolment ids.
+     * status, and the course, enrol and user enrolment ids. The frozen answers go whole: every
+     * one of them is what the applicant typed, and a question with no answer identifies nobody
+     * worth keeping.
      *
      * That is pseudonymisation, not anonymisation. userenrolmentid is retained, and
      * logstore_standard records enrolment events with objecttable 'user_enrolments', objectid
@@ -272,13 +299,52 @@ class submission {
     public static function pseudonymise(int $courseid): void {
         global $DB;
 
+        $transaction = $DB->start_delegated_transaction();
+        self::delete_answers('courseid = :courseid', ['courseid' => $courseid]);
         $DB->execute(
             "UPDATE {enrol_apply_submission}
-                SET userid = 0, decidedby = 0, comment = ?, userinfodata = ?, outcomemessage = ?,
-                    decisionnote = ?
+                SET userid = 0, decidedby = 0, comment = ?, outcomemessage = ?, decisionnote = ?
               WHERE courseid = ?",
-            ['', '', '', '', $courseid]
+            ['', '', '', $courseid]
         );
+        $transaction->allow_commit();
+    }
+
+    /**
+     * Delete the frozen answers of the records a condition on enrol_apply_submission selects.
+     *
+     * The one way every delete path removes answers, so none of them can forget the second
+     * table: privacy erasure, pseudonymisation and the retention sweep each name the records they
+     * remove and call this before removing them. The condition is applied to the record table,
+     * never to the answers, because the answers carry no user, course or date of their own.
+     *
+     * @param string $select WHERE clause over {enrol_apply_submission}, unaliased, named parameters only.
+     * @param array $params Its parameters.
+     * @return void
+     */
+    public static function delete_answers(string $select, array $params): void {
+        global $DB;
+
+        $DB->delete_records_select(
+            self::ANSWER_TABLE,
+            "submissionid IN (SELECT id FROM {enrol_apply_submission} WHERE {$select})",
+            $params
+        );
+    }
+
+    /**
+     * Delete one record with its frozen answers.
+     *
+     * @param int $id Row id in enrol_apply_submission.
+     * @return void
+     */
+    public static function delete(int $id): void {
+        global $DB;
+
+        $transaction = $DB->start_delegated_transaction();
+        $DB->delete_records(self::ANSWER_TABLE, ['submissionid' => $id]);
+        $DB->delete_records('enrol_apply_submission', ['id' => $id]);
+        $transaction->allow_commit();
     }
 
     /**
@@ -298,40 +364,228 @@ class submission {
     /**
      * Freeze what the applicant typed into the profile fields and the questions the instance asked.
      *
-     * The answers to the instance's own questions travel in the same envelope under a key of
-     * their own (answers::SOURCE_ANSWER), so every reader of the snapshot shows them without
-     * knowing they exist. The label is stored beside the key on purpose. A custom profile field can be renamed,
-     * and a snapshot that resolved its label at read time would then show a question that was
-     * never asked; the key alone is stored as well so a later reader can still tell which
-     * field it was. The value is stored exactly as submitted - see
+     * One row per value in enrol_apply_answer, written inside create()'s transaction. The answers
+     * to the instance's own questions sit beside the profile fields under a key of their own
+     * (answers::SOURCE_ANSWER), so every reader of the snapshot shows them without knowing they
+     * exist. The label is stored beside the key on purpose. A custom profile field or a question
+     * can be renamed, and a snapshot that resolved its label at read time would then show a
+     * question that was never asked; the key is stored as well so a later reader can still tell
+     * which field it was, and mask it. The value is stored exactly as submitted - see
      * fields::submitted_values() for why it is not put through format_string().
      *
+     * @param int $submissionid Record the answers belong to.
      * @param stdClass $instance Enrol instance the application was submitted to.
      * @param stdClass $data Submitted form data.
-     * @return string JSON envelope, or an empty string when nothing was submitted.
+     * @return int Number of rows written.
      */
-    public static function snapshot(stdClass $instance, stdClass $data): string {
+    public static function snapshot(int $submissionid, stdClass $instance, stdClass $data): int {
         $values = array_merge(fields::submitted_values($instance, $data), answers::submitted_values($instance, $data));
-        if (!$values) {
-            return '';
-        }
 
-        return (string) json_encode([
-            'version' => self::SNAPSHOT_VERSION,
-            'fields' => $values,
-        ]);
+        return self::write_answers($submissionid, $values);
     }
 
     /**
-     * The frozen field values of a submission, ready to display.
+     * Write a snapshot's entries as frozen rows, in the order given.
      *
-     * Every failure mode returns an empty list rather than throwing: the column can hold an
-     * envelope written by a newer version of this plugin, restored from another site.
+     * The single writer for every route a snapshot arrives by: a submission, the upgrade that
+     * moved the old JSON envelopes into rows, and the restore of an archive that still carries
+     * one. Entries are filtered through answer_record(); a key repeated within one snapshot keeps
+     * its first value, because a per-question report column reads one value per record. All rows
+     * or none: an upgrade re-run skips a record that already has rows, so a half-written one would
+     * stay half written.
      *
-     * @param string|null $json Stored envelope.
+     * @param int $submissionid Record the answers belong to.
+     * @param array $entries List of arrays carrying 'key', 'label' and 'value'.
+     * @return int Number of rows written.
+     */
+    public static function write_answers(int $submissionid, array $entries): int {
+        global $DB;
+
+        $records = [];
+        foreach ($entries as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+            $record = self::answer_record(
+                $submissionid,
+                $entry['key'] ?? '',
+                $entry['label'] ?? '',
+                $entry['value'] ?? null,
+                count($records)
+            );
+            if ($record === null || isset($records[$record->fieldkey])) {
+                continue;
+            }
+            $records[$record->fieldkey] = $record;
+        }
+        if (!$records) {
+            return 0;
+        }
+
+        $transaction = $DB->start_delegated_transaction();
+        $DB->insert_records(self::ANSWER_TABLE, array_values($records));
+        $transaction->allow_commit();
+
+        return count($records);
+    }
+
+    /**
+     * One frozen row, or null when the entry cannot be stored and masked as it was given.
+     *
+     * The tolerance is the old envelope reader's, because two of the three routes into this table
+     * hand it data this site did not produce: a restored archive, and an envelope a restore wrote
+     * before the table existed. Every part must be scalar - an array would show the reader the
+     * word "Array" - and the entry is dropped rather than repaired, since a key that cannot be
+     * matched against visible_keys() cannot be masked, and an entry that cannot be masked must not
+     * be rendered at all.
+     *
+     * Two rules are the table's own. A key longer than the column, or carrying a control
+     * character, is dropped: truncating or cleaning it could turn a key the masking withholds into
+     * one it shows. Control characters are removed from the label and the value instead, which
+     * changes nothing a reader can see; aggregate_sql() separates rows and parts with two of them,
+     * so a value carrying one could otherwise forge an entry under another key.
+     *
+     * @param int $submissionid Record the row belongs to.
+     * @param mixed $key Field key.
+     * @param mixed $label Frozen question text, plain spelling.
+     * @param mixed $value Frozen display value, plain spelling.
+     * @param int $sortorder Position in the snapshot.
+     * @return stdClass|null The row to insert, or null to drop the entry.
+     */
+    public static function answer_record(int $submissionid, $key, $label, $value, int $sortorder): ?stdClass {
+        if (!is_scalar($key) || !is_scalar($label) || !is_scalar($value)) {
+            return null;
+        }
+
+        $key = (string) $key;
+        if (\core_text::strlen($key) > self::KEY_LENGTH || preg_match('/[\x00-\x1F\x7F]/', $key)) {
+            return null;
+        }
+
+        $clean = static fn($text): string => (string) preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', (string) $text);
+
+        return (object) [
+            'submissionid' => $submissionid,
+            'fieldkey' => $key,
+            'label' => $clean($label),
+            'value' => $clean($value),
+            'sortorder' => $sortorder,
+        ];
+    }
+
+    /**
+     * The frozen values of one submission, ready to display, in the order they were submitted.
+     *
+     * @param int $submissionid Row id in enrol_apply_submission; 0 reads nothing.
      * @return array List of arrays carrying 'key', 'label' and 'value' string entries.
      */
-    public static function read_snapshot(?string $json): array {
+    public static function read_snapshot(int $submissionid): array {
+        return self::read_snapshots([$submissionid])[$submissionid] ?? [];
+    }
+
+    /**
+     * The frozen values of many submissions at once, for a listing that renders many rows.
+     *
+     * One query per thousand records rather than one per record: the approval queue renders a
+     * page of applications and would otherwise read the answers row by row. An empty list reads
+     * nothing.
+     *
+     * @param array $submissionids Row ids in enrol_apply_submission; zeros and repeats are ignored.
+     * @return array Submission id => list of arrays carrying 'key', 'label' and 'value'. A record
+     *               with no answers has no entry.
+     */
+    public static function read_snapshots(array $submissionids): array {
+        global $DB;
+
+        $ids = array_values(array_unique(array_filter(array_map('intval', $submissionids))));
+        $snapshots = [];
+        foreach (array_chunk($ids, 1000) as $chunk) {
+            [$insql, $params] = $DB->get_in_or_equal($chunk, SQL_PARAMS_NAMED, 'sub');
+            /* get_records rather than a recordset: one statement on every driver, where the
+               PostgreSQL recordset adds a cursor's declare and close. */
+            $rows = $DB->get_records_select(
+                self::ANSWER_TABLE,
+                "submissionid {$insql}",
+                $params,
+                'submissionid, sortorder, id',
+                'id, submissionid, fieldkey, label, value'
+            );
+            foreach ($rows as $row) {
+                $snapshots[(int) $row->submissionid][] = [
+                    'key' => (string) $row->fieldkey,
+                    'label' => (string) $row->label,
+                    'value' => (string) $row->value,
+                ];
+            }
+        }
+
+        return $snapshots;
+    }
+
+    /**
+     * SQL giving one submission's answers as a single string, for a Report Builder column.
+     *
+     * A display callback sees one row and could only read the answers with a query per row, so the
+     * custom report's snapshot column aggregates them in SQL instead, through the DML's portable
+     * sql_group_concat(). Parts and rows are separated by two control characters, which
+     * answer_record() keeps out of every key, label and value, so parse_aggregate() can split the
+     * string back without ambiguity. MySQL truncates GROUP_CONCAT at group_concat_max_len (1024
+     * bytes unless raised; MariaDB defaults to 1M), as it does for core's own groupconcat
+     * aggregation; parse_aggregate() drops a row cut in half.
+     *
+     * @param string $submissionidsql SQL naming the submission id in the outer query.
+     * @return string A scalar subquery.
+     */
+    public static function aggregate_sql(string $submissionidsql): string {
+        global $DB;
+
+        $unit = "'" . self::AGGREGATE_UNIT . "'";
+        $entry = $DB->sql_concat('eaagg.fieldkey', $unit, 'eaagg.label', $unit, 'eaagg.value');
+
+        return "(SELECT " . $DB->sql_group_concat($entry, self::AGGREGATE_RECORD, 'eaagg.sortorder') . "
+                   FROM {" . self::ANSWER_TABLE . "} eaagg
+                  WHERE eaagg.submissionid = {$submissionidsql})";
+    }
+
+    /**
+     * Split what aggregate_sql() produced back into entries.
+     *
+     * A row that does not split into exactly three parts is dropped, which is what a row cut by
+     * MySQL's group_concat_max_len looks like.
+     *
+     * @param string|null $aggregate The aggregated string, null when there are no answers.
+     * @return array List of arrays carrying 'key', 'label' and 'value' string entries.
+     */
+    public static function parse_aggregate(?string $aggregate): array {
+        if ($aggregate === null || $aggregate === '') {
+            return [];
+        }
+
+        $entries = [];
+        foreach (explode(self::AGGREGATE_RECORD, $aggregate) as $row) {
+            $parts = explode(self::AGGREGATE_UNIT, $row);
+            if (count($parts) !== 3) {
+                continue;
+            }
+            $entries[] = ['key' => $parts[0], 'label' => $parts[1], 'value' => $parts[2]];
+        }
+
+        return $entries;
+    }
+
+    /**
+     * The entries of a JSON envelope, as the snapshot was stored before it became rows.
+     *
+     * Read by the upgrade that moved every envelope into enrol_apply_answer, and by the restore
+     * of an archive written before that, which still carries one on its submission element. Every
+     * failure mode returns an empty list rather than throwing: the envelope may be one a newer
+     * version of this plugin wrote on another site. The entries come back unfiltered, as the
+     * envelope held them; answer_record() decides which can be stored.
+     *
+     * @param string|null $json Stored envelope.
+     * @return array The envelope's entries, each still to be checked.
+     */
+    public static function parse_envelope(?string $json): array {
         if ($json === null || trim($json) === '') {
             return [];
         }
@@ -344,33 +598,7 @@ class submission {
             return [];
         }
 
-        $entries = [];
-        foreach ($decoded['fields'] as $entry) {
-            if (!is_array($entry) || !isset($entry['value'])) {
-                continue;
-            }
-
-            /* Every part is checked for being scalar before it is cast. The envelope may be JSON
-               another site wrote and a restore copied in verbatim, so a 'value' holding an array
-               is reachable, and (string) on one emits an "Array to string conversion" warning
-               and shows the reader the word "Array".
-               The whole entry is dropped rather than repaired. A key that is not a string
-               cannot be matched against the visible-key list the snapshot formatter masks with,
-               and an entry that cannot be masked correctly must not be rendered at all. */
-            $key = $entry['key'] ?? '';
-            $label = $entry['label'] ?? '';
-            if (!is_scalar($entry['value']) || !is_scalar($key) || !is_scalar($label)) {
-                continue;
-            }
-
-            $entries[] = [
-                'key' => (string) $key,
-                'label' => (string) $label,
-                'value' => (string) $entry['value'],
-            ];
-        }
-
-        return $entries;
+        return array_values($decoded['fields']);
     }
 
     /**

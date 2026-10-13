@@ -21,6 +21,7 @@ use core_reportbuilder\local\entities\base;
 use core_reportbuilder\local\filters\date;
 use core_reportbuilder\local\filters\select;
 use core_reportbuilder\local\filters\text;
+use core_reportbuilder\local\helpers\database;
 use core_reportbuilder\local\report\column;
 use core_reportbuilder\local\report\filter;
 use enrol_apply\local\submission as submissionhelper;
@@ -224,6 +225,8 @@ class submission extends base {
             ->add_callback([formatter::class, 'outcome']);
 
         /* The frozen snapshot, as one long-text column that is neither sortable nor filterable.
+           Built from the record's rows in SQL (submission::aggregate_sql()), because a display
+           callback sees one row and could only read them with a query per row.
            That is what makes a display callback a sound place to mask values here: there is no
            SQL path by which a reader could recover a hidden one by filtering and counting rows.
            test_the_snapshot_column_has_no_filter_and_is_not_sortable holds that precondition; if
@@ -239,7 +242,7 @@ class submission extends base {
         ))
             ->add_joins($this->get_joins())
             ->set_type(column::TYPE_LONGTEXT)
-            ->add_field("{$alias}.userinfodata")
+            ->add_field(submissionhelper::aggregate_sql("{$alias}.id"), 'snapshot')
             ->set_is_sortable(false)
             /* The pairs are separated by a literal newline, which this class makes CSS draw;
                markup would corrupt the download (see formatter::snapshot()). */
@@ -247,6 +250,85 @@ class submission extends base {
             ->add_callback([formatter::class, 'snapshot']);
 
         return $columns;
+    }
+
+    /**
+     * SQL giving the frozen value one record holds for one question, or null when it has none.
+     *
+     * A correlated scalar subquery rather than a join: a join per question would need the key in
+     * the join text, which Report Builder joins cannot carry as a parameter, and a scalar
+     * subquery cannot multiply the row. It is a scalar because enrol_apply_answer is unique on
+     * (submissionid, fieldkey).
+     *
+     * @param string $key Field key, bound as a parameter.
+     * @return array The SQL and its parameters.
+     */
+    protected function answer_sql(string $key): array {
+        $alias = $this->get_table_alias('enrol_apply_submission');
+        $param = database::generate_param_name();
+
+        return [
+            "(SELECT eaans.value
+                FROM {" . submissionhelper::ANSWER_TABLE . "} eaans
+               WHERE eaans.submissionid = {$alias}.id AND eaans.fieldkey = :{$param})",
+            [$param => $key],
+        ];
+    }
+
+    /**
+     * A column showing one question's frozen answer, sortable, named after the field key.
+     *
+     * Not registered by this entity: which questions exist depends on the report (one course's
+     * instances, or the site's shared fields), and so does who may see them. The caller decides
+     * both and adds what it builds.
+     *
+     * The header is the question's CURRENT name, while each cell holds the value frozen with the
+     * record. A column spans every record and has one header, and the name the reader manages
+     * today is how they find the column; the question each record was actually asked stays in its
+     * snapshot, beside its own frozen label.
+     *
+     * @param string $key Field key: s_column, c_profilefieldid or a_customfieldid.
+     * @param string $title The question's current name, plain spelling.
+     * @return column The column.
+     */
+    public function answer_column(string $key, string $title): column {
+        [$sql, $params] = $this->answer_sql($key);
+
+        return (new column(
+            $key,
+            new lang_string('customfieldcolumn', 'core_reportbuilder', $title),
+            $this->get_entity_name()
+        ))
+            ->add_joins($this->get_joins())
+            ->set_type(column::TYPE_TEXT)
+            ->add_field($sql, 'answer', $params)
+            ->set_is_sortable(true)
+            ->add_attributes(['class' => 'enrol_apply-linebreaks'])
+            ->add_callback([formatter::class, 'plaintext']);
+    }
+
+    /**
+     * A text filter on one question's frozen answer, for the column answer_column() builds.
+     *
+     * A new object per call, with its own parameter, so the same question can be both a filter
+     * and a condition of one report.
+     *
+     * @param string $key Field key.
+     * @param string $title The question's current name, plain spelling.
+     * @return filter The filter.
+     */
+    public function answer_filter(string $key, string $title): filter {
+        [$sql, $params] = $this->answer_sql($key);
+
+        return (new filter(
+            text::class,
+            $key,
+            new lang_string('customfieldcolumn', 'core_reportbuilder', $title),
+            $this->get_entity_name(),
+            $sql,
+            $params
+        ))
+            ->add_joins($this->get_joins());
     }
 
     /**
