@@ -117,6 +117,9 @@ if ($mform->is_cancelled()) {
         ]);
     }
 
+    if (!empty($data->savefields)) {
+        redirect(new moodle_url('/enrol/apply/fields.php', ['id' => $instanceid]));
+    }
     redirect($return);
 }
 

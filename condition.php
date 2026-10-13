@@ -26,6 +26,8 @@
  */
 
 require_once('../../config.php');
+// The form class is autoloaded, its parent moodleform is not.
+require_once($CFG->libdir . '/formslib.php');
 
 use enrol_apply\form\condition_form;
 use enrol_apply\local\answers;

@@ -63,3 +63,30 @@ Feature: Questions an enrolment method asks of its own
     And I set the field "Night permit number" to "NP-42"
     And I set the field "Shift" to "Morning"
     And I should not see "Night permit number"
+
+  # No @javascript: the condition editor is two plain form posts, and this is the only test that
+  # loads condition.php as a page (a missing formslib require reached the owner as a Whoops while
+  # every unit test, which builds the form directly, stayed green).
+  Scenario: A teacher makes a question depend on an earlier one
+    Given the "C1" apply method asks a select "Shift" of "Morning,Night"
+    And the "C1" apply method asks a "text" "Night permit number"
+    And I log in as "teacher1"
+    And I am on the "C1" "enrol_apply > application fields" page
+    # By its own label: core's editor above lists the same question with an Edit link of its own.
+    When I click on "//a[@aria-label='Edit the display condition of Night permit number']" "xpath_element"
+    Then I should see "Display condition" in the "page-header" "region"
+    And I set the field "Show this question only when this earlier question" to "Shift"
+    And I press "Choose"
+    And I set the field "Night" to "1"
+    And I press "Save changes"
+    Then I should see "The display condition was saved."
+    And I should see "Shown when the answer to \"Shift\" is one of: Night"
+
+  Scenario: Adding the method can lead straight to its questions
+    Given I log in as "teacher1"
+    And I am on the "Course 1" "enrolment methods" page
+    And I select "Course enrol confirmation" from the "Add method" singleselect
+    And I set the field "Custom instance name" to "Second intake"
+    When I press "Save and edit application fields"
+    Then I should see "Application fields" in the "region-main" "region"
+    And I should see "Display conditions"

@@ -247,7 +247,16 @@ class enrol_apply_edit_form extends moodleform {
         $mform->addElement('hidden', 'courseid');
         $mform->setType('courseid', PARAM_INT);
 
-        $this->add_action_buttons(true, $instance->id ? null : get_string('addinstance', 'enrol'));
+        /* A second save button that lands on the instance's own questions: they hang off the
+           instance id, so they can only be edited once the instance exists. */
+        $savelabel = $instance->id ? get_string('savechanges') : get_string('addinstance', 'enrol');
+        $buttons = [
+            $mform->createElement('submit', 'submitbutton', $savelabel),
+            $mform->createElement('submit', 'savefields', get_string('saveandeditfields', 'enrol_apply')),
+            $mform->createElement('cancel'),
+        ];
+        $mform->addGroup($buttons, 'buttonar', '', [' '], false);
+        $mform->closeHeaderBefore('buttonar');
 
         $this->set_data($this->prepare_instance_data($instance, $DB));
     }
