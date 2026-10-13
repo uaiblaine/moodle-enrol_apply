@@ -136,6 +136,30 @@ class behat_enrol_apply extends behat_base {
     }
 
     /**
+     * Give an apply enrolment method a customfield_pattern question with a preset format.
+     *
+     * Only where the fleet's customfield_pattern type is installed: elsewhere, including this
+     * plugin's CI, the scenario is skipped rather than failed.
+     *
+     * @Given /^the "(?P<course_string>[^"]*)" apply method asks a "(?P<preset_string>[^"]*)" pattern "(?P<name_string>[^"]*)"$/
+     * @param string $shortname Course shortname.
+     * @param string $preset Preset, for example cpf.
+     * @param string $name Question shown to the applicant.
+     * @return void
+     */
+    public function the_apply_enrolment_method_asks_a_pattern(string $shortname, string $preset, string $name): void {
+        if (!class_exists(\customfield_pattern\field_controller::class)) {
+            throw new \Moodle\BehatExtension\Exception\SkippedException('customfield_pattern is not installed.');
+        }
+        $this->create_question($shortname, 'pattern', $name, [
+            'preset' => $preset,
+            'storeformat' => 'masked',
+            'displaysize' => 30,
+            'maxlength' => 30,
+        ]);
+    }
+
+    /**
      * Show one question of an apply enrolment method only when a select question has an answer.
      *
      * @Given /^in "(?P<course_string>[^"]*)" "(?P<q_string>[^"]*)" shows when "(?P<c_string>[^"]*)" is "(?P<o_string>[^"]*)"$/

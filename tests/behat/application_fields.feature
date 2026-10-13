@@ -90,3 +90,16 @@ Feature: Questions an enrolment method asks of its own
     When I press "Save and edit application fields"
     Then I should see "Application fields" in the "region-main" "region"
     And I should see "Display conditions"
+
+  # Needs the fleet's customfield_pattern type, which this plugin's CI does not install; run it
+  # where the type is mounted. @javascript: the mask is a browser behaviour, and the application
+  # form is a modal whose HTML and JavaScript arrive through a fragment after the page loaded.
+  @javascript @customfield_pattern
+  Scenario: A masked question formats what the applicant types in the application modal
+    Given the "C1" apply method asks a "cpf" pattern "CPF"
+    And I log in as "student1"
+    And I am on "Course 1" course homepage
+    When I press "Start application"
+    And I click on "CPF" "field"
+    And I type "ab52998224725"
+    Then the field "CPF" matches value "529.982.247-25"

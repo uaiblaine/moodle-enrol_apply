@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **"Save and edit application fields"** on the instance form saves and lands on the method's
+  questions: they hang off the instance id, so they can only be edited once it exists.
+
+### Fixed
+
+- **The display-condition page loads.** `condition.php` built its form without loading formslib
+  and died with "Class 'moodleform' not found"; unit tests build the form in a process that already
+  had it, and no Behat scenario opened the page. A scenario now drives it end to end. The message
+  shown when nothing can control a question now says to drag a drop-down or checkbox above it.
+
 - **Moodle 5.3 support.** `$plugin->supported` now ends at 5.3, with a CI job for
   `MOODLE_503_STABLE` running the full PHP x database matrix; the 5.2 job drops to one database,
   as the older branches do. The opt-in profile write calls `\core\user::update_user()` where it
