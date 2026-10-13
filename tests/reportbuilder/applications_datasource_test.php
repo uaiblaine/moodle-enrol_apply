@@ -489,6 +489,36 @@ final class applications_datasource_test extends \core_reportbuilder\tests\core_
     }
 
     /**
+     * A report narrowed by an answer shows nothing to a reader who may not apply that condition.
+     *
+     * Core skips a condition that is not available, so without the base condition the report
+     * would show that reader every application on the site instead of the narrowed few (MDL Shield
+     * finding on #98).
+     *
+     * @return void
+     */
+    public function test_a_report_narrowed_by_an_answer_shows_nothing_to_a_reader_who_cannot_apply_it(): void {
+        $this->seed($this->snapshot());
+        $this->seed($this->snapshot());
+        $generator = $this->getDataGenerator()->get_plugin_generator('core_reportbuilder');
+
+        // The author holds both capabilities, as a site administrator does.
+        $this->setAdminUser();
+        $narrowed = $this->custom_report(['submission:status']);
+        $generator->create_condition(['reportid' => $narrowed->get('id'), 'uniqueidentifier' => 'answer:fieldkey']);
+        $plain = $this->custom_report(['submission:status']);
+
+        // The control: a reader holding both capabilities gets the rows.
+        $this->setUser($this->reader(true));
+        $this->assertNotEmpty($this->get_custom_report_content($narrowed->get('id')));
+
+        $this->setUser($this->reader(true, false));
+        $this->assertCount(0, $this->get_custom_report_content($narrowed->get('id')));
+        // The other control: a report with no such condition still lists for the same reader.
+        $this->assertNotEmpty($this->get_custom_report_content($plain->get('id')));
+    }
+
+    /**
      * A shared question some instance uses gets a site-wide column and filter; an unused one does not.
      *
      * @return void

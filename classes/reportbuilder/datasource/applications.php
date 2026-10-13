@@ -21,6 +21,7 @@ use core_reportbuilder\datasource;
 use core_reportbuilder\local\entities\course;
 use core_reportbuilder\local\entities\user;
 use core_reportbuilder\local\helpers\database;
+use core_reportbuilder\local\models\filter as filter_model;
 use enrol_apply\local\answers;
 use enrol_apply\reportbuilder\local\entities\answer;
 use enrol_apply\reportbuilder\local\entities\submission;
@@ -181,6 +182,25 @@ class applications extends datasource {
                     if (in_array($identifier, $withheld, true) || str_starts_with($identifier, $prefix)) {
                         $element->set_is_available(false);
                     }
+                }
+            }
+
+            /* A withheld condition is skipped by core (get_active_conditions() keeps available ones
+               only), which would WIDEN a report its author narrowed by an answer to every application
+               on the site. Such a report shows this reader nothing instead. A shared question's
+               condition is matched by its key prefix too: one whose category nobody uses any more is
+               not registered, and core would drop it as well. */
+            $reportid = (int) $this->get_report_persistent()->get('id');
+            $sharedprefix = 'submission:' . answers::SOURCE_ANSWER;
+            foreach (filter_model::get_condition_records($reportid) as $condition) {
+                $identifier = (string) $condition->get('uniqueidentifier');
+                if (
+                    in_array($identifier, $withheld, true)
+                    || str_starts_with($identifier, $prefix)
+                    || str_starts_with($identifier, $sharedprefix)
+                ) {
+                    $this->add_base_condition_sql('1 = 0');
+                    break;
                 }
             }
             return;
