@@ -23,15 +23,13 @@ use moodleform;
 /**
  * When one application question is shown: always, or on the answer to an earlier question.
  *
- * Two steps, with no JavaScript: the first chooses the controlling question, and the second,
- * shown once one is chosen, chooses the answers that show this question. The second step's
- * elements are named after the controlling question's id, so switching to another one and
- * saving at once posts nothing for it, and the form asks again instead of reusing the answers
- * chosen for the previous one.
+ * One page: choosing the controlling question shows its answers at once (hideIf), and the
+ * answers of every other controller stay hidden. Each controller's elements are named after its
+ * id and only the chosen one's are read, so answers ticked for a question that was then
+ * un-chosen are never saved.
  *
- * Custom data: 'enrolid' (int), 'fieldid' (int, the question configured), 'fields' (what
- * answers::fields() returns for the instance) and 'controllerid' (int, the controlling question
- * the second step is drawn for, 0 for none). The page has already checked the question belongs
+ * Custom data: 'enrolid' (int), 'fieldid' (int, the question configured) and 'fields' (what
+ * answers::fields() returns for the instance). The page has already checked the question belongs
  * to the instance; validation() checks everything posted again.
  *
  * @package    enrol_apply
@@ -39,9 +37,6 @@ use moodleform;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class condition_form extends moodleform {
-    /** @var string The no-submit button that draws the second step. */
-    public const CHOOSE_BUTTON = 'choosecontroller';
-
     /**
      * The name of the second step's element for a select controller.
      *
@@ -91,12 +86,19 @@ class condition_form extends moodleform {
         }
         $mform->addElement('select', 'dependsonfieldid', get_string('conditioncontroller', 'enrol_apply'), $choices);
         $mform->setType('dependsonfieldid', PARAM_INT);
-        $mform->addElement('submit', self::CHOOSE_BUTTON, get_string('conditionchoose', 'enrol_apply'));
-        $mform->registerNoSubmitButton(self::CHOOSE_BUTTON);
 
-        $controllerid = (int) $this->_customdata['controllerid'];
-        if (isset($controllers[$controllerid])) {
-            $this->add_answer_step($mform, $controllers[$controllerid]);
+        /* Every controller's answers are on the form at once, each shown only while its question is
+           the one chosen, so picking a question shows its answers with no reload. Without
+           JavaScript all of them show, each labelled with its question, and only the chosen one is
+           read on save (condition_from()). */
+        foreach ($controllers as $id => $controller) {
+            $this->add_answer_step($mform, $controller);
+            $mform->hideIf(
+                $controller->get('type') === 'select' ? self::positions_name($id) : self::operator_name($id),
+                'dependsonfieldid',
+                'neq',
+                $id
+            );
         }
 
         $this->add_action_buttons();
@@ -121,14 +123,15 @@ class condition_form extends moodleform {
             $mform->addGroup(
                 $boxes,
                 self::positions_name($controllerid),
-                get_string('conditionpositions', 'enrol_apply'),
+                get_string('conditionpositions', 'enrol_apply', $controller->get_formatted_name()),
                 '<br>',
                 true
             );
             return;
         }
 
-        $mform->addElement('select', self::operator_name($controllerid), get_string('conditionoperator', 'enrol_apply'), [
+        $label = get_string('conditionoperator', 'enrol_apply', $controller->get_formatted_name());
+        $mform->addElement('select', self::operator_name($controllerid), $label, [
             conditions::OPERATOR_CHECKED => get_string('conditionchecked', 'enrol_apply'),
             conditions::OPERATOR_NOTCHECKED => get_string('conditionnotchecked', 'enrol_apply'),
         ]);

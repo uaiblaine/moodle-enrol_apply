@@ -76,10 +76,24 @@ Feature: Questions an enrolment method asks of its own
     When I click on "//a[@aria-label='Edit the display condition of Night permit number']" "xpath_element"
     Then I should see "Display condition" in the "page-header" "region"
     And I set the field "Show this question only when this earlier question" to "Shift"
-    And I press "Choose"
     And I set the field "Night" to "1"
     And I press "Save changes"
     Then I should see "The display condition was saved."
+    And I should see "Shown when the answer to \"Shift\" is one of: Night"
+
+  # @javascript: the answers of the chosen question appear with no reload (core's hideIf).
+  @javascript
+  Scenario: Choosing the controlling question shows its answers at once
+    Given the "C1" apply method asks a select "Shift" of "Morning,Night"
+    And the "C1" apply method asks a "text" "Night permit number"
+    And I log in as "teacher1"
+    And I am on the "C1" "enrol_apply > application fields" page
+    And I click on "//a[@aria-label='Edit the display condition of Night permit number']" "xpath_element"
+    And "Night" "checkbox" should not be visible
+    When I set the field "Show this question only when this earlier question" to "Shift"
+    Then "Night" "checkbox" should be visible
+    And I set the field "Night" to "1"
+    And I press "Save changes"
     And I should see "Shown when the answer to \"Shift\" is one of: Night"
 
   Scenario: Adding the method can lead straight to its questions

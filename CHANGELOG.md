@@ -17,6 +17,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   and died with "Class 'moodleform' not found"; unit tests build the form in a process that already
   had it, and no Behat scenario opened the page. A scenario now drives it end to end. The message
   shown when nothing can control a question now says to drag a drop-down or checkbox above it.
+- **Choosing the controlling question shows its answers at once.** The condition page had a
+  "Choose" button that reloaded the page to draw them; every controller's answers are now on the
+  page, each shown only while its question is chosen (without JavaScript all of them show, each
+  labelled with its question). The page's explanation now says plainly that a hidden question is
+  not required even if set as required, and that what was typed into it is not saved only when it
+  is still hidden at submission.
 
 - **Moodle 5.3 support.** `$plugin->supported` now ends at 5.3, with a CI job for
   `MOODLE_503_STABLE` running the full PHP x database matrix; the 5.2 job drops to one database,

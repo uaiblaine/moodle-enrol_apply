@@ -457,7 +457,6 @@ final class conditions_test extends \advanced_testcase {
                 'enrolid' => (int) $this->instance->id,
                 'fieldid' => $fieldid,
                 'fields' => $fields,
-                'controllerid' => (int) ($data['dependsonfieldid'] ?? 0),
             ]);
             return $form->validation($data, []);
         };
