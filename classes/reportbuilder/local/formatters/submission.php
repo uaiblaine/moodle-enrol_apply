@@ -418,7 +418,8 @@ class submission {
 
         require_once($CFG->dirroot . '/user/profile/lib.php');
 
-        if ($visibility === PROFILE_VISIBLE_ALL || $visibility === PROFILE_VISIBLE_TEACHERS) {
+        // Core defines the PROFILE_VISIBLE_* constants as strings, so compare the cast value.
+        if ($visibility === (int) PROFILE_VISIBLE_ALL || $visibility === (int) PROFILE_VISIBLE_TEACHERS) {
             return true;
         }
 
