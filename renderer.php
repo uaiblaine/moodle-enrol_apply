@@ -879,7 +879,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
 
         $rows = [];
         foreach ($entries as $entry) {
-            if ($visible !== $formatter::ALL_FIELDS && !in_array($entry['key'], $visible, true)) {
+            if (!$formatter::shows($entry['key'], $visible)) {
                 /* Withheld from every row rather than only from the rows holding a value: a
                    marker that appears exactly where there is data is a presence oracle. */
                 continue;

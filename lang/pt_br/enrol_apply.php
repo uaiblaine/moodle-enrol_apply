@@ -238,6 +238,7 @@ $string['placestaken'] = 'Vagas ocupadas: {$a->taken} de {$a->limit}.';
 $string['pluginname'] = 'Matrículas solicitadas';
 $string['pluginname_desc'] = 'Com este plugin os usuários podem solicitar matrícula em um curso. Um professor ou gerente do site precisa aprovar a solicitação antes de o usuário ser matriculado.';
 $string['privacy:applicationpath'] = 'Solicitação de matrícula';
+$string['privacy:metadata:core_group'] = 'Uma aprovação adiciona o solicitante aos grupos escolhidos para o método de inscrição ou por quem decidiu; o plugin exporta e exclui as participações em grupo que adicionou.';
 $string['privacy:metadata:enrol_apply_answer'] = 'O que o usuário enviou com uma solicitação de inscrição no curso, um valor por campo de perfil e por pergunta feita, como estava no envio.';
 $string['privacy:metadata:enrol_apply_answer:fieldkey'] = 'A qual campo de perfil ou pergunta da solicitação o valor responde.';
 $string['privacy:metadata:enrol_apply_answer:label'] = 'A pergunta como estava redigida quando a solicitação foi enviada.';

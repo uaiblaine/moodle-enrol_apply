@@ -1275,6 +1275,8 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
             ],
         ]);
         $this->seed('With a city', submission::STATUS_PENDING, $snapshot);
+        // Department is an identity field, shown only where showuseridentity names it.
+        set_config('showuseridentity', 'email,department');
 
         $this->setUser($this->reader());
         $rendered = (string) $this->rows()[0]->{'submission:snapshot'};

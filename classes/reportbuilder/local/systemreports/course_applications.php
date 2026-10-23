@@ -211,7 +211,7 @@ class course_applications extends system_report {
 
         $this->questions = array_filter(
             $questions,
-            static fn(string $key): bool => $visible === formatter::ALL_FIELDS || in_array($key, $visible, true),
+            static fn(string $key): bool => formatter::shows($key, $visible),
             ARRAY_FILTER_USE_KEY
         );
 

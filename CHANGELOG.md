@@ -8,11 +8,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **A `LICENSE` file in the package** (the GPL v3 text, a copy of `COPYING.txt`), which the Moodle
+  plugins directory requires, and `tests/marketplace_readiness_test.php`, which pins the
+  directory's submission guidelines no other gate reads: the licence files, an English-only
+  package, data-only lang files, a README naming every table, capability and dependency,
+  per-plugin setting names, plugin-scoped CSS, the boilerplate, and the privacy cover of core rows
+  stamped with the component.
 - **"Save and edit application fields"** on the instance form saves and lands on the method's
   questions: they hang off the instance id, so they can only be edited once it exists.
 
+### Changed
+
+- **`lang/pt_br` leaves the release package.** The plugins directory accepts English strings only
+  in a package; the Brazilian Portuguese pack stays in the repository and reaches sites through
+  AMOS.
+- **The README** gains "Data stored" (every table, what it keeps, how long and what removes it),
+  "Settings" and "Translations" sections, and its privacy section now names the three
+  personal-data tables and the group memberships instead of "both" tables.
+
 ### Fixed
 
+- **Group memberships an approval adds are covered by the privacy API.** They are written with
+  component `enrol_apply`, which core_group's own provider leaves to the component, so no export
+  or erasure reached them. The provider now links core_group, lists and deletes those memberships
+  through core_group's helpers, and exports them for the request's subject itself:
+  `core_group\privacy\provider::export_groups()` reads `$USER`, which the export task never sets
+  to the subject.
+- **The submitted details follow core's visibility rules for each reader.** The queue, the review
+  page, the course report and the approver's e-mail showed every submitted field to anybody
+  holding `moodle/site:viewuseridentity`. Now the address, phone numbers, institution and
+  department appear only where `showuseridentity` names them, a field in `hiddenuserfields` needs
+  `moodle/course:viewhiddenuserfields`, and a private custom profile field needs
+  `moodle/user:viewalldetails`, as on the applicant's profile. The e-mail is masked per recipient,
+  so a mentor gets the name fields only, as on the review page. A site whose approvers relied on
+  seeing the department should add it to *Show user identity*.
+- **The privacy provider credits its original author again.** The rewrite had dropped the
+  upstream `@copyright` of Mikhail Golenkov; the plugins directory asks adapted code to keep it.
 - **The display-condition page loads.** `condition.php` built its form without loading formslib
   and died with "Class 'moodleform' not found"; unit tests build the form in a process that already
   had it, and no Behat scenario opened the page. A scenario now drives it end to end. The message

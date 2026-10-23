@@ -1421,13 +1421,11 @@ class enrol_apply_plugin extends enrol_plugin {
      * @return void
      */
     protected function send_application_notification($instance, $userid, $data) {
-        global $CFG, $DB, $PAGE;
+        global $CFG, $DB;
 
         require_once($CFG->dirroot . '/enrol/apply/notification.php');
         // Required for the course_get_url() function.
         require_once($CFG->dirroot . '/course/lib.php');
-
-        $renderer = $PAGE->get_renderer('enrol_apply');
 
         $course = get_course($instance->courseid);
         $applicant = core_user::get_user($userid);
@@ -1447,14 +1445,15 @@ class enrol_apply_plugin extends enrol_plugin {
         $notified = [];
         if ($recipients) {
             $manageurl = new moodle_url('/enrol/apply/manage.php', ['id' => $instance->id]);
-            $content = $renderer->application_notification_mail_body(
-                $course,
-                $applicant,
-                $manageurl,
-                $applydescription,
-                $submitted
-            );
             foreach ($recipients as $user) {
+                $content = $this->application_notification_body(
+                    $user,
+                    $manageurl,
+                    $course,
+                    $applicant,
+                    $applydescription,
+                    $submitted
+                );
                 $this->send_application_notification_to($user, $applicant, $content, $manageurl, $instance->courseid);
                 $notified[$user->id] = true;
             }
@@ -1465,17 +1464,18 @@ class enrol_apply_plugin extends enrol_plugin {
         if ($recipients) {
             $userenrolment = $DB->get_record('user_enrolments', ['userid' => $userid, 'enrolid' => $instance->id]);
             $manageurl = new moodle_url('/enrol/apply/manage.php', ['userenrol' => $userenrolment->id]);
-            $content = $renderer->application_notification_mail_body(
-                $course,
-                $applicant,
-                $manageurl,
-                $applydescription,
-                $submitted
-            );
             foreach ($recipients as $user) {
                 if (isset($notified[$user->id])) {
                     continue;
                 }
+                $content = $this->application_notification_body(
+                    $user,
+                    $manageurl,
+                    $course,
+                    $applicant,
+                    $applydescription,
+                    $submitted
+                );
                 $this->send_application_notification_to($user, $applicant, $content, $manageurl, $instance->courseid);
                 $notified[$user->id] = true;
             }
@@ -1485,21 +1485,65 @@ class enrol_apply_plugin extends enrol_plugin {
         $recipients = $this->get_notifyglobal_users();
         if ($recipients) {
             $manageurl = new moodle_url('/enrol/apply/manage.php');
-            $content = $renderer->application_notification_mail_body(
-                $course,
-                $applicant,
-                $manageurl,
-                $applydescription,
-                $submitted
-            );
             foreach ($recipients as $user) {
                 if (isset($notified[$user->id])) {
                     continue;
                 }
+                $content = $this->application_notification_body(
+                    $user,
+                    $manageurl,
+                    $course,
+                    $applicant,
+                    $applydescription,
+                    $submitted
+                );
                 $this->send_application_notification_to($user, $applicant, $content, $manageurl, $instance->courseid);
                 $notified[$user->id] = true;
             }
         }
+    }
+
+    /**
+     * The new-application e-mail for one recipient, carrying only the submitted fields they may see.
+     *
+     * Each recipient reads what the review page would show them, judged in the course context by
+     * the snapshot's own masking rule ({@see \enrol_apply\reportbuilder\local\formatters\submission::visible_keys()}),
+     * so a mentor holding nothing in the course gets the name fields only and nobody reads a field
+     * core would hide from them on the applicant's profile.
+     *
+     * @param stdClass $recipient User the message goes to.
+     * @param moodle_url $manageurl Link to the screen where the application can be decided.
+     * @param stdClass $course Course applied for.
+     * @param stdClass $applicant Applicant.
+     * @param string $applydescription Comment submitted with the application.
+     * @param array $submitted Key, label and value of every submitted field, in form order.
+     * @return string Rendered HTML body.
+     */
+    protected function application_notification_body(
+        $recipient,
+        $manageurl,
+        $course,
+        $applicant,
+        $applydescription,
+        array $submitted
+    ): string {
+        global $PAGE;
+
+        $formatter = \enrol_apply\reportbuilder\local\formatters\submission::class;
+        $coursecontext = context_course::instance($course->id);
+        $visible = $formatter::visible_keys($coursecontext, (int) $recipient->id);
+        $shown = array_values(array_filter(
+            $submitted,
+            static fn(array $pair): bool => $formatter::shows((string) $pair['key'], $visible)
+        ));
+
+        return $PAGE->get_renderer('enrol_apply')->application_notification_mail_body(
+            $course,
+            $applicant,
+            $manageurl,
+            $applydescription,
+            $shown
+        );
     }
 
     /**

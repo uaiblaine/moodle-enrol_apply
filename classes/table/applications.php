@@ -1210,7 +1210,7 @@ class applications extends \table_sql implements dynamic_table {
      * Memoised per course, as a site-wide queue spans courses.
      *
      * @param int $courseid Course the row's application was made to.
-     * @return array|bool Keys this reader may see, or submissionformatter::ALL_FIELDS.
+     * @return array|bool What submissionformatter::shows() reads for this reader and course.
      */
     protected function visible_keys(int $courseid) {
         if (!array_key_exists($courseid, $this->visiblekeys)) {
@@ -1265,7 +1265,7 @@ class applications extends \table_sql implements dynamic_table {
 
         $pills = '';
         foreach ($this->snapshots[(int) ($row->submissionid ?? 0)] ?? [] as $entry) {
-            if ($visible !== submissionformatter::ALL_FIELDS && !in_array($entry['key'], $visible, true)) {
+            if (!submissionformatter::shows($entry['key'], $visible)) {
                 // Dropped without a marker; see submissionformatter::visible_keys().
                 continue;
             }
