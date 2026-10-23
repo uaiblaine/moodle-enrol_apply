@@ -11,6 +11,7 @@ leaves it out of the release zip.
 | [`applications-desk.html`](applications-desk.html) | Decided 2026-08-31 | Answers to five UI questions about the approval screens, with mockups of a rebuilt queue and review page, and the decisions taken from them. Read this to understand *what the screens should be*. |
 | [`ui-rebuild-plan.md`](ui-rebuild-plan.md) | Ready, not started | Eight slices (U0&ndash;U5b) rebuilding the two decision screens and fixing what the investigation found. Read this to know *what to do*. |
 | [`custom-application-fields.md`](custom-application-fields.md) | Decided 2026-10-12, in progress | Questions an instance asks at application time (core custom fields as definitions, answers frozen into the snapshot), conditional fields, the `customfield_pattern` type and per-answer report columns. Read this before touching `classes/customfield/` or `classes/local/answers.php`. |
+| [`group-enrolment-key.md`](group-enrolment-key.md) | Decided 2026-10-23, in progress (K0 done) | Group enrolment keys that admit an applicant without a decision, and per-group seats read from `local_groupdist` when it is installed: core facts, the flow, fifteen owner decisions and stages K0&ndash;K8. Mockups in [`group-enrolment-key-mockup.html`](group-enrolment-key-mockup.html). |
 
 Start with the decision log below, then the plan. The HTML document is the
 reference you go back to when a decision looks arbitrary — it always has a reason,

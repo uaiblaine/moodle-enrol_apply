@@ -257,6 +257,18 @@ if ($ADMIN->fulltree) {
         $yesno
     ));
 
+    // Off by default: keys already on groups must not start skipping the review unasked.
+    $settings->add(new admin_setting_configselect(
+        'enrol_apply/groupkeys',
+        get_string('groupkeys', 'enrol_apply'),
+        get_string('groupkeys_desc', 'enrol_apply'),
+        \enrol_apply\local\groupkey::MODE_OFF,
+        [
+            \enrol_apply\local\groupkey::MODE_OFF => get_string('groupkeys_off', 'enrol_apply'),
+            \enrol_apply\local\groupkey::MODE_ANY => get_string('groupkeys_any', 'enrol_apply'),
+        ]
+    ));
+
     $settings->add(new admin_setting_configselect(
         'enrol_apply/opt_commentaryzone',
         get_string('opt_commentaryzone', 'enrol_apply'),

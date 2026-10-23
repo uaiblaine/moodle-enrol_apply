@@ -942,6 +942,9 @@ class enrol_apply_plugin extends enrol_plugin {
         $fields['customint6'] = $this->get_config('newenrols');
         $fields['customint7'] = (int) $this->get_config('opt_commentaryzone', 0);
         $fields['customint8'] = 0;
+        $fields['customchar1'] = in_array($this->get_config('groupkeys'), \enrol_apply\local\groupkey::MODES, true)
+            ? $this->get_config('groupkeys')
+            : \enrol_apply\local\groupkey::MODE_OFF;
         $fields['customtext2'] = '';
         $fields['customtext3'] = $this->get_config('notifycoursebased') ? '$@ALL@$' : '';
         $fields['customtext4'] = \enrol_apply\local\fieldset::from_keys(

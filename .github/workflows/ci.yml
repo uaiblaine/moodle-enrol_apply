@@ -41,6 +41,9 @@ jobs:
     with:
       runner: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.CI_RUNNER || '' }}
       moodle-core-branch: MOODLE_503_STABLE
+      # Optional: the per-group seats a group enrolment key respects. Each job installs the
+      # local_groupdist branch of its own Moodle version.
+      plugin-dependencies: uaiblaine/moodle-local_groupdist,MOODLE_503_STABLE
 
   ci-502:
     name: Moodle 5.02
@@ -49,6 +52,7 @@ jobs:
       runner: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.CI_RUNNER || '' }}
       moodle-core-branch: MOODLE_502_STABLE
       one-db-only: true
+      plugin-dependencies: uaiblaine/moodle-local_groupdist,MOODLE_502_STABLE
 
   ci-501:
     name: Moodle 5.01
@@ -57,3 +61,4 @@ jobs:
       runner: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.CI_RUNNER || '' }}
       moodle-core-branch: MOODLE_501_STABLE
       one-db-only: true
+      plugin-dependencies: uaiblaine/moodle-local_groupdist,MOODLE_501_STABLE

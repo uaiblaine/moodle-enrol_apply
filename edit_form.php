@@ -79,6 +79,24 @@ class enrol_apply_edit_form extends moodleform {
         $groupselect->setMultiple(true);
         $mform->addHelpButton('groupselect', 'group', 'enrol_apply');
 
+        /* Whether a group's enrolment key admits without review. The groups that carry a key are
+           listed beneath it, the keys themselves never; hideIf because the list only matters
+           while the option is on. No header: one opened here would stay open over every element
+           that follows, down to the requested fields. */
+        $mform->addElement('select', 'customchar1', get_string('groupkeys', 'enrol_apply'), [
+            \enrol_apply\local\groupkey::MODE_OFF => get_string('groupkeys_off', 'enrol_apply'),
+            \enrol_apply\local\groupkey::MODE_ANY => get_string('groupkeys_any', 'enrol_apply'),
+        ]);
+        $mform->setType('customchar1', PARAM_ALPHA);
+        $mform->addHelpButton('customchar1', 'groupkeys', 'enrol_apply');
+        $mform->addElement(
+            'static',
+            'groupkeysummary',
+            get_string('groupkeysingroups', 'enrol_apply'),
+            $this->group_key_summary((int) $instance->courseid, $context)
+        );
+        $mform->hideIf('groupkeysummary', 'customchar1', 'eq', \enrol_apply\local\groupkey::MODE_OFF);
+
         // Enrolment duration.
         $mform->addElement('duration', 'enrolperiod', get_string('defaultperiod', 'enrol_apply'), [
             'optional' => true,
@@ -307,7 +325,58 @@ class enrol_apply_edit_form extends moodleform {
             }
         }
 
+        if (!in_array((string) ($data['customchar1'] ?? ''), \enrol_apply\local\groupkey::MODES, true)) {
+            $errors['customchar1'] = get_string('invaliddata', 'error');
+        }
+
         return $errors;
+    }
+
+    /**
+     * The groups of the course that carry an enrolment key, rendered for the static element.
+     *
+     * Names only, never a key. With local_groupdist installed each group also shows its seats,
+     * and a full one is marked, because its key currently admits nobody.
+     *
+     * @param int $courseid Course id.
+     * @param context $context Course context, for formatting the group names.
+     * @return string HTML for the static element, which renders it raw.
+     */
+    protected function group_key_summary(int $courseid, $context): string {
+        global $OUTPUT;
+
+        $keyed = \enrol_apply\local\groupkey::summary($courseid);
+        $seats = \enrol_apply\local\groupseats::for_groups(array_keys($keyed));
+        $hasseats = \enrol_apply\local\groupseats::available();
+
+        $names = [];
+        foreach ($keyed as $id => $group) {
+            // Plain spelling: every sink in the template is a double stash or a {{#str}} parameter.
+            $names[$id] = format_string($group->name, true, ['context' => $context, 'escape' => false]);
+        }
+
+        $groups = [];
+        foreach ($keyed as $id => $group) {
+            $seat = $seats[$id];
+            $groups[] = [
+                'name' => $names[$id],
+                'hasseats' => $hasseats,
+                'nolimit' => $seat->seats === null,
+                'members' => (int) $seat->members,
+                'seats' => (int) $seat->seats,
+                'full' => $seat->seats !== null && (int) $seat->members >= $seat->seats,
+                // A flag beside the name: Mustache reads a group named "0" as false.
+                'isshadowed' => $group->shadowedby !== null,
+                'shadowedby' => $group->shadowedby === null ? '' : $names[$group->shadowedby],
+                'untypable' => $group->untypable,
+            ];
+        }
+
+        return $OUTPUT->render_from_template('enrol_apply/groupkey_summary', [
+            'hasgroups' => (bool) $groups,
+            'groups' => $groups,
+            'manageurl' => (new moodle_url('/group/index.php', ['id' => $courseid]))->out(false),
+        ]);
     }
 
     /**

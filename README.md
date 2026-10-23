@@ -74,7 +74,24 @@ Every setting is stored per plugin, as `enrol_apply/<name>`:
 | `notifyglobal` | who is told about every new application, site wide |
 | `retentiondays` | how long an application record is kept (30 days by default, 0 for ever) |
 | `expiredaction`, `expirynotifyhour` | what happens when an enrolment period ends, and when expiry notices go out |
-| `defaultenrol`, `status`, `newenrols`, `opt_commentaryzone`, `maxenrolled`, `places`, `roleid`, `notifycoursebased`, `enrolperiod` | the defaults of a new instance |
+| `defaultenrol`, `status`, `newenrols`, `groupkeys`, `opt_commentaryzone`, `maxenrolled`, `places`, `roleid`, `notifycoursebased`, `enrolperiod` | the defaults of a new instance |
+
+### Group enrolment keys
+
+An instance can accept the enrolment key of one of the course's groups ("Accept group
+enrolment keys", off by default; the site default for new instances is
+`enrol_apply/groupkeys`). The key is core's own group enrolment key, set on each group's
+settings page, the one `enrol_self` reads; this plugin stores none. The instance form lists
+which groups carry a key, never the keys. The key route on the application form, which
+enrols a key holder at once, is not released yet: today the setting changes nothing an
+applicant sees.
+
+Wrong keys are counted per applicant and instance in the `keyattempts` application cache,
+for 15 minutes, so the form cannot be used to guess keys without limit.
+
+**Optional: `local_groupdist`.** When it is installed, each group's **Seats** (a group
+custom field it provides) count too: the instance form shows each keyed group's seats and
+marks a full one. Nothing else needs it, and it is not declared as a dependency.
 
 ### Placeholders in the notification mails
 

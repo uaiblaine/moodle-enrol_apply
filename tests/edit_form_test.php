@@ -212,4 +212,122 @@ final class edit_form_test extends \advanced_testcase {
 
         return $data;
     }
+
+    /**
+     * The group key mode accepts the two known values and nothing else.
+     *
+     * @return void
+     */
+    public function test_the_group_key_mode_is_validated(): void {
+        $form = $this->form();
+
+        foreach (['', 'any'] as $mode) {
+            $errors = $form->validation($this->submission(['customchar1' => $mode]), []);
+            $this->assertArrayNotHasKey('customchar1', $errors, "mode '{$mode}' should be accepted");
+        }
+        foreach (['ANY', 'listed'] as $mode) {
+            $errors = $form->validation($this->submission(['customchar1' => $mode]), []);
+            $this->assertArrayHasKey('customchar1', $errors, "mode '{$mode}' should be refused");
+        }
+    }
+
+    /**
+     * The summary under the option, read on its own rather than from the whole page: the group
+     * chooser above it lists every group name too.
+     *
+     * @return string The summary's HTML.
+     */
+    private function group_key_summary(): string {
+        $method = new \ReflectionMethod(\enrol_apply_edit_form::class, 'group_key_summary');
+        return $method->invoke($this->form(), (int) $this->course->id, \context_course::instance($this->course->id));
+    }
+
+    /**
+     * The summary names the groups that carry a key, flags a shared and an untypable key, and
+     * never prints a key.
+     *
+     * Changes that must make it fail: passing the key into the template, or listing keyless
+     * groups.
+     *
+     * @return void
+     */
+    public function test_the_summary_names_keyed_groups_and_never_a_key(): void {
+        $generator = $this->getDataGenerator();
+        $generator->create_group(['courseid' => $this->course->id, 'name' => 'Keyless', 'enrolmentkey' => '']);
+        $generator->create_group(['courseid' => $this->course->id, 'name' => 'R&D Turma', 'enrolmentkey' => 'Sekret-A1']);
+        $generator->create_group(['courseid' => $this->course->id, 'name' => 'Twin', 'enrolmentkey' => 'Sekret-A1']);
+        $generator->create_group(['courseid' => $this->course->id, 'name' => 'Padded', 'enrolmentkey' => 'Sekret-B2 ']);
+
+        $html = $this->group_key_summary();
+
+        $this->assertStringContainsString('R&amp;D Turma', $html);
+        // The plain spelling went in, so the ampersand is escaped once, not twice.
+        $this->assertStringNotContainsString('R&amp;amp;D', $html);
+        $this->assertStringContainsString('Twin', $html);
+        $this->assertStringContainsString('Padded', $html);
+        $this->assertStringNotContainsString('Keyless', $html);
+        $this->assertStringNotContainsString('Sekret', $html);
+        $this->assertStringContainsString(s(get_string('groupkeyshadowed', 'enrol_apply', 'R&D Turma')), $html);
+        $this->assertStringContainsString(s(get_string('groupkeyuntypable', 'enrol_apply')), $html);
+        $this->assertStringNotContainsString(s(get_string('groupkeysnone', 'enrol_apply')), $html);
+    }
+
+    /**
+     * A group named "0" still shows as the one that admits: the template keys the note on a
+     * flag, because Mustache reads the string "0" as false.
+     *
+     * @return void
+     */
+    public function test_a_group_named_zero_is_named_as_the_one_that_admits(): void {
+        $generator = $this->getDataGenerator();
+        $generator->create_group(['courseid' => $this->course->id, 'name' => '0', 'enrolmentkey' => 'Same-1']);
+        $generator->create_group(['courseid' => $this->course->id, 'name' => 'Later', 'enrolmentkey' => 'Same-1']);
+
+        $this->assertStringContainsString(s(get_string('groupkeyshadowed', 'enrol_apply', '0')), $this->group_key_summary());
+    }
+
+    /**
+     * With no keyed group, the summary says every application is still reviewed.
+     *
+     * @return void
+     */
+    public function test_the_summary_warns_when_no_group_has_a_key(): void {
+        $this->getDataGenerator()->create_group(['courseid' => $this->course->id, 'name' => 'Keyless']);
+
+        $this->assertStringContainsString(s(get_string('groupkeysnone', 'enrol_apply')), $this->group_key_summary());
+    }
+
+    /**
+     * With local_groupdist installed the summary shows each keyed group's seats and marks a
+     * full one, whose key admits nobody now.
+     *
+     * @return void
+     */
+    public function test_the_summary_shows_seats_when_groupdist_is_installed(): void {
+        if (!class_exists('\local_groupdist\seats')) {
+            $this->markTestSkipped('local_groupdist with \local_groupdist\seats is not installed');
+        }
+        // Its Seats field is not provisioned on a site built by an initial install; see
+        // groupseats_test::require_groupdist().
+        \local_groupdist\local\fields::reset_field_cache();
+        \local_groupdist\local\fields::ensure_fields_exist();
+        \local_groupdist\local\fields::reset_field_cache();
+        $generator = $this->getDataGenerator();
+        $full = $generator->create_group(['courseid' => $this->course->id, 'name' => 'Full', 'enrolmentkey' => 'K-1']);
+        $generator->create_group(['courseid' => $this->course->id, 'name' => 'Open', 'enrolmentkey' => 'K-2']);
+        \core_group\customfield\group_handler::create()->instance_form_save((object) [
+            'id' => $full->id,
+            'customfield_groupdist_seats' => 1,
+        ]);
+        groups_add_member($full->id, $generator->create_and_enrol($this->course)->id);
+
+        $html = $this->group_key_summary();
+
+        $this->assertStringContainsString(
+            s(get_string('groupseatsof', 'enrol_apply', (object) ['members' => 1, 'seats' => 1])),
+            $html
+        );
+        $this->assertStringContainsString(s(get_string('groupseatsnolimit', 'enrol_apply', 0)), $html);
+        $this->assertSame(1, substr_count($html, s(get_string('groupkeyadmitsnobody', 'enrol_apply'))));
+    }
 }
