@@ -42,7 +42,16 @@ use enrol_apply\local\submission;
  * Core's table coverage test cannot see enrol_apply_answer as personal data - it has no userid
  * column and no key to user.id - which is why it is declared and handled here by hand.
  *
+ * An approval also writes core rows stamped with this component. The group memberships it adds
+ * carry component 'enrol_apply', and core_group's own provider handles only the rows with an empty
+ * component, so this provider lists and deletes them through the core_group helpers, the way
+ * enrol_meta does, and exports them itself ({@see self::export_memberships()}). The role
+ * assignments it stamps need nothing here: core_role's provider lists, exports and deletes
+ * role_assignments whatever their component (tool_cohortroles alone excepted), and core_enrol's
+ * covers the user_enrolments rows of every enrolment method.
+ *
  * @package    enrol_apply
+ * @copyright  2021 Mikhail Golenkov <mikhailgolenkov@catalyst-au.net>
  * @copyright  2026 Anderson Blaine
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -97,11 +106,14 @@ class provider implements
             'privacy:metadata:enrol_apply_answer'
         );
 
+        $items->add_subsystem_link('core_group', [], 'privacy:metadata:core_group');
+
         return $items;
     }
 
     /**
-     * Course contexts in which the given user applied, or decided on somebody's application.
+     * Course contexts in which the given user applied, decided on somebody's application, or was
+     * added to a group by an approval.
      *
      * @param int $userid User to look up.
      * @return contextlist The contexts holding data for this user.
@@ -132,11 +144,24 @@ class provider implements
             'decidedby' => $userid,
         ]);
 
+        /* The membership query of core_group\privacy\provider::get_contexts_for_group_member(),
+           without the group conversations it also adds: those belong to core_group's own
+           provider, which lists them for every user. */
+        $contextlist->add_from_sql(
+            "SELECT ctx.id
+               FROM {groups_members} gm
+               JOIN {groups} g ON g.id = gm.groupid
+               JOIN {context} ctx ON ctx.instanceid = g.courseid AND ctx.contextlevel = :contextlevel
+              WHERE gm.userid = :userid AND gm.component = :component",
+            ['contextlevel' => CONTEXT_COURSE, 'userid' => $userid, 'component' => 'enrol_apply']
+        );
+
         return $contextlist;
     }
 
     /**
-     * Users holding an application, or named as its decider, in the given context.
+     * Users holding an application, named as its decider, or added to a group by an approval, in
+     * the given context.
      *
      * @param userlist $userlist Userlist to add the matching users to.
      * @return void
@@ -167,10 +192,13 @@ class provider implements
             "SELECT s.decidedby FROM {enrol_apply_submission} s WHERE s.courseid = :courseid",
             ['courseid' => $context->instanceid]
         );
+
+        \core_group\privacy\provider::get_group_members_in_context($userlist, 'enrol_apply');
     }
 
     /**
-     * Export the applications of the given user in the approved contexts.
+     * Export the applications of the given user, and the group memberships an approval gave them,
+     * in the approved contexts.
      *
      * @param approved_contextlist $contextlist Approved contexts to export.
      * @return void
@@ -211,6 +239,52 @@ class provider implements
 
         self::export_submissions($contextlist, $courseids, true);
         self::export_submissions($contextlist, $courseids, false);
+        self::export_memberships((int) $user->id, $courseids);
+    }
+
+    /**
+     * Export the group memberships this plugin added for the user, per course.
+     *
+     * The query and record shape of core_group\privacy\provider::export_groups(), for the
+     * request's user: that helper selects the memberships of $USER, and neither the privacy
+     * manager nor tool_dataprivacy's task switches $USER to the subject, so calling it would
+     * export the memberships of whoever runs the request.
+     *
+     * @param int $userid The request's subject.
+     * @param array $courseids Course ids of the approved contexts.
+     * @return void
+     */
+    protected static function export_memberships(int $userid, array $courseids) {
+        global $DB;
+
+        [$insql, $params] = $DB->get_in_or_equal($courseids, SQL_PARAMS_NAMED, 'course');
+        $params['userid'] = $userid;
+        $params['component'] = 'enrol_apply';
+        $rows = $DB->get_records_sql(
+            "SELECT gm.id, g.courseid, g.name, gm.timeadded
+               FROM {groups_members} gm
+               JOIN {groups} g ON g.id = gm.groupid
+              WHERE gm.userid = :userid AND gm.component = :component AND g.courseid {$insql}
+           ORDER BY gm.id",
+            $params
+        );
+
+        $bycourse = [];
+        foreach ($rows as $row) {
+            $context = context_course::instance((int) $row->courseid);
+            $bycourse[(int) $row->courseid][] = (object) [
+                // Plain spelling, as for the decided groups: the export file is not HTML.
+                'name' => format_string($row->name, true, ['context' => $context, 'escape' => false]),
+                'timeadded' => transform::datetime($row->timeadded),
+            ];
+        }
+
+        foreach ($bycourse as $courseid => $groups) {
+            writer::with_context(context_course::instance($courseid))->export_data(
+                [get_string('privacy:applicationpath', 'enrol_apply'), get_string('groups', 'core_group')],
+                (object) ['groups' => $groups]
+            );
+        }
     }
 
     /**
@@ -395,7 +469,8 @@ class provider implements
     }
 
     /**
-     * Delete every application recorded in the given context.
+     * Delete every application recorded in the given context, and the group memberships
+     * approvals added there.
      *
      * @param context $context Context to purge.
      * @return void
@@ -418,10 +493,13 @@ class provider implements
 
         submission::delete_answers('courseid = :courseid', ['courseid' => $context->instanceid]);
         $DB->delete_records('enrol_apply_submission', ['courseid' => $context->instanceid]);
+
+        \core_group\privacy\provider::delete_groups_for_all_users($context, 'enrol_apply');
     }
 
     /**
-     * Delete the applications of one user in the approved contexts.
+     * Delete the applications of one user, and the group memberships approvals gave them, in the
+     * approved contexts.
      *
      * @param approved_contextlist $contextlist Approved contexts to purge.
      * @return void
@@ -446,10 +524,13 @@ class provider implements
 
         self::delete_by_id($DB->get_fieldset_sql($sql, $params));
         self::delete_submissions($courseids, [$contextlist->get_user()->id]);
+
+        \core_group\privacy\provider::delete_groups_for_user($contextlist, 'enrol_apply');
     }
 
     /**
-     * Delete the applications of several users in one context.
+     * Delete the applications of several users, and the group memberships approvals gave them, in
+     * one context.
      *
      * @param approved_userlist $userlist Approved users to purge.
      * @return void
@@ -479,6 +560,8 @@ class provider implements
 
         self::delete_by_id($DB->get_fieldset_sql($sql, $params));
         self::delete_submissions([$context->instanceid], $userids);
+
+        \core_group\privacy\provider::delete_groups_for_users($userlist, 'enrol_apply');
     }
 
     /**

@@ -1225,6 +1225,62 @@ final class lib_test extends \advanced_testcase {
     }
 
     /**
+     * Each approver's e-mail carries only the submitted fields core would show that approver.
+     *
+     * Judged per recipient in the course: a decider without moodle/site:viewuseridentity gets the
+     * name fields only, and department follows showuseridentity for everybody. The city is the
+     * control that the teacher's e-mail does carry submitted values.
+     *
+     * @return void
+     */
+    public function test_the_notification_masks_the_submitted_fields_per_recipient(): void {
+        global $DB;
+
+        set_config('showuseridentity', 'email');
+        set_config('allowedfields', 's_city,s_department', 'enrol_apply');
+        $DB->set_field(
+            'enrol',
+            'customtext4',
+            \enrol_apply\local\fieldset::from_keys(['s_city', 's_department'])->to_json(),
+            ['id' => $this->instance->id]
+        );
+        $DB->set_field('enrol', 'customtext3', '$@ALL@$', ['id' => $this->instance->id]);
+        $instance = $DB->get_record('enrol', ['id' => $this->instance->id], '*', MUST_EXIST);
+
+        $teacher = $this->getDataGenerator()->create_user();
+        $this->getDataGenerator()->enrol_user($teacher->id, $this->course->id, 'editingteacher');
+        $context = \context_course::instance($this->course->id);
+        $roleid = $this->getDataGenerator()->create_role();
+        assign_capability('enrol/apply:manageapplications', CAP_ALLOW, $roleid, $context->id, true);
+        assign_capability('moodle/site:viewuseridentity', CAP_PROHIBIT, $roleid, $context->id, true);
+        $restricted = $this->getDataGenerator()->create_user();
+        $this->getDataGenerator()->enrol_user($restricted->id, $this->course->id, $roleid);
+
+        $bodies = function () use ($instance): array {
+            $messages = $this->apply_for($this->getDataGenerator()->create_user(), $instance, (object) [
+                'applydescription' => 'Please let me in',
+                'city' => 'TypedCity',
+                'department' => 'TypedDept',
+            ]);
+            $bodies = [];
+            foreach ($messages as $message) {
+                $bodies[(int) $message->useridto] = $message->fullmessagehtml;
+            }
+            return $bodies;
+        };
+
+        $first = $bodies();
+        $this->assertStringContainsString('TypedCity', $first[(int) $teacher->id]);
+        $this->assertStringNotContainsString('TypedDept', $first[(int) $teacher->id]);
+        $this->assertStringNotContainsString('TypedCity', $first[(int) $restricted->id]);
+
+        set_config('showuseridentity', 'email,department');
+        $second = $bodies();
+        $this->assertStringContainsString('TypedDept', $second[(int) $teacher->id]);
+        $this->assertStringNotContainsString('TypedDept', $second[(int) $restricted->id]);
+    }
+
+    /**
      * Only teachers whose own enrolment is active are told about a new application.
      *
      * The message links to the course's approval queue, whose require_login() refuses a teacher

@@ -3,4 +3,4 @@
 # identity capability governs, and the set the identity line two lines above the pills is
 # correctly withholding from the same reader in the same cell. Nothing about the page looks
 # different to an administrator, who may see all of it either way.
-s{            if \(\$visible !== submissionformatter::ALL_FIELDS && !in_array\(\$entry\['key'\], \$visible, true\)\) \{}{            if (false) \{}s;
+s{            if \(!submissionformatter::shows\(\$entry\['key'\], \$visible\)\) \{}{            if (false) \{}s;

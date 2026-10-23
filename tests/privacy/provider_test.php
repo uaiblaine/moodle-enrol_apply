@@ -148,14 +148,17 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         $names = array_map(static function ($item): string {
             return $item->get_name();
         }, $items);
-        $this->assertCount(3, $items);
+        $this->assertCount(4, $items);
         $this->assertEqualsCanonicalizing(
-            ['enrol_apply_applicationinfo', 'enrol_apply_submission', 'enrol_apply_answer'],
+            ['enrol_apply_applicationinfo', 'enrol_apply_submission', 'enrol_apply_answer', 'core_group'],
             $names
         );
 
         $byname = array_combine($names, $items);
         $this->assertArrayHasKey('comment', $byname['enrol_apply_applicationinfo']->get_privacy_fields());
+
+        // The memberships an approval stamps with the component are this plugin's to declare.
+        $this->assertInstanceOf(\core_privacy\local\metadata\types\subsystem_link::class, $byname['core_group']);
 
         /* Both personal-data roles are declared. Core's table coverage test sees decidedby
            only through its foreign key to user.id, since it is not named userid. */
@@ -839,5 +842,134 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         /* The control: the record itself survives. This is about detaching a person from an
            audit row, not about deleting the row - deletion is what erasure does. */
         $this->assertEquals(1, $DB->count_records('enrol_apply_submission'));
+    }
+
+    /**
+     * Two groups in the course, the applicant added to one by an approval and to the other by hand.
+     *
+     * The approval's membership carries the component and the instance id, as
+     * enrol_apply_plugin::add_instance_groups() writes it; the manual one is core_group's.
+     *
+     * @return array [the applicant, the approval's group id, the manual group id]
+     */
+    protected function seed_memberships(): array {
+        $applicant = $this->create_application('Grouped');
+        $generator = $this->getDataGenerator();
+        $approvalgroup = (int) $generator->create_group(['courseid' => $this->course->id, 'name' => 'Turma A'])->id;
+        $manualgroup = (int) $generator->create_group(['courseid' => $this->course->id, 'name' => 'Turma B'])->id;
+        $this->assertTrue(groups_add_member($approvalgroup, $applicant->id, 'enrol_apply', $this->instance->id));
+        $this->assertTrue(groups_add_member($manualgroup, $applicant->id));
+
+        return [$applicant, $approvalgroup, $manualgroup];
+    }
+
+    /**
+     * Whether a user is a member of a group.
+     *
+     * @param int $groupid Group id.
+     * @param int $userid User id.
+     * @return bool True when a membership row exists.
+     */
+    protected function is_member(int $groupid, int $userid): bool {
+        global $DB;
+
+        return $DB->record_exists('groups_members', ['groupid' => $groupid, 'userid' => $userid]);
+    }
+
+    /**
+     * A membership an approval stamped is found and exported for its member, and nobody else's is.
+     *
+     * Found for a user holding nothing but that membership, since the applicant's own application
+     * would list the course anyway. Exported by another user who holds an approval's membership of
+     * their own, as tool_dataprivacy's task runs the export: core_group's export_groups() reads
+     * $USER, so calling it would export "Turma C" instead of the subject's "Turma A".
+     *
+     * @return void
+     */
+    public function test_approval_memberships_are_found_and_exported(): void {
+        $generator = $this->getDataGenerator();
+        $context = context_course::instance($this->course->id);
+        $approvalgroup = (int) $generator->create_group(['courseid' => $this->course->id, 'name' => 'Turma A'])->id;
+
+        $member = $generator->create_and_enrol($this->course, 'student');
+        $this->assertTrue(groups_add_member($approvalgroup, $member->id, 'enrol_apply', $this->instance->id));
+        $manualonly = $generator->create_and_enrol($this->course, 'student');
+        $this->assertTrue(groups_add_member($approvalgroup, $manualonly->id));
+
+        $contextids = static function (int $userid): array {
+            return array_map('intval', provider::get_contexts_for_userid($userid)->get_contextids());
+        };
+        $this->assertContains((int) $context->id, $contextids((int) $member->id));
+        // Control: a manual membership alone is core_group's, not this provider's.
+        $this->assertNotContains((int) $context->id, $contextids((int) $manualonly->id));
+
+        $userlist = new userlist($context, 'enrol_apply');
+        provider::get_users_in_context($userlist);
+        $this->assertContains((int) $member->id, array_map('intval', $userlist->get_userids()));
+        $this->assertNotContains((int) $manualonly->id, array_map('intval', $userlist->get_userids()));
+
+        $other = (int) $generator->create_group(['courseid' => $this->course->id, 'name' => 'Turma C'])->id;
+        $generator->enrol_user((int) get_admin()->id, (int) $this->course->id);
+        $this->assertTrue(groups_add_member($other, get_admin()->id, 'enrol_apply', $this->instance->id));
+        $this->setAdminUser();
+
+        $this->export_context_data_for_user((int) $member->id, $context, 'enrol_apply');
+        $data = writer::with_context($context)->get_data([
+            get_string('privacy:applicationpath', 'enrol_apply'),
+            get_string('groups', 'core_group'),
+        ]);
+        $this->assertNotEmpty($data);
+        $this->assertSame(['Turma A'], array_values(array_map(static function ($group): string {
+            return $group->name;
+        }, (array) $data->groups)));
+    }
+
+    /**
+     * Erasing one user removes the memberships approvals gave them and leaves the manual one.
+     *
+     * @return void
+     */
+    public function test_delete_data_for_user_removes_approval_memberships(): void {
+        [$applicant, $approvalgroup, $manualgroup] = $this->seed_memberships();
+        $context = context_course::instance($this->course->id);
+
+        provider::delete_data_for_user(new approved_contextlist($applicant, 'enrol_apply', [$context->id]));
+
+        $this->assertFalse($this->is_member($approvalgroup, (int) $applicant->id));
+        // Control: the manual membership is core_group's to erase.
+        $this->assertTrue($this->is_member($manualgroup, (int) $applicant->id));
+    }
+
+    /**
+     * Erasing a list of users removes those users' approval memberships only.
+     *
+     * @return void
+     */
+    public function test_delete_data_for_users_removes_approval_memberships(): void {
+        [$applicant, $approvalgroup, $manualgroup] = $this->seed_memberships();
+        $context = context_course::instance($this->course->id);
+        $other = $this->create_application('Also grouped');
+        $this->assertTrue(groups_add_member($approvalgroup, $other->id, 'enrol_apply', $this->instance->id));
+
+        provider::delete_data_for_users(new approved_userlist($context, 'enrol_apply', [(int) $applicant->id]));
+
+        $this->assertFalse($this->is_member($approvalgroup, (int) $applicant->id));
+        $this->assertTrue($this->is_member($manualgroup, (int) $applicant->id));
+        // Control: a user the request did not name keeps their approval membership.
+        $this->assertTrue($this->is_member($approvalgroup, (int) $other->id));
+    }
+
+    /**
+     * Purging a context removes every approval membership in it and no manual one.
+     *
+     * @return void
+     */
+    public function test_delete_data_for_all_users_removes_approval_memberships(): void {
+        [$applicant, $approvalgroup, $manualgroup] = $this->seed_memberships();
+
+        provider::delete_data_for_all_users_in_context(context_course::instance($this->course->id));
+
+        $this->assertFalse($this->is_member($approvalgroup, (int) $applicant->id));
+        $this->assertTrue($this->is_member($manualgroup, (int) $applicant->id));
     }
 }

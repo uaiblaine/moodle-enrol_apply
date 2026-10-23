@@ -240,6 +240,7 @@ $string['placestaken'] = 'Places taken: {$a->taken} of {$a->limit}.';
 $string['pluginname'] = 'Course enrol confirmation';
 $string['pluginname_desc'] = 'With this plug-in users can apply to be enrolled in a course. A teacher or site manager will then have to approve the enrolment before the user gets enroled.';
 $string['privacy:applicationpath'] = 'Enrolment application';
+$string['privacy:metadata:core_group'] = 'An approval adds the applicant to the groups chosen for the enrolment method or by the decider; the plugin exports and deletes the memberships it added.';
 $string['privacy:metadata:enrol_apply_answer'] = 'What the user submitted with a course enrolment application, one value per profile field and per question asked, as it was at submission.';
 $string['privacy:metadata:enrol_apply_answer:fieldkey'] = 'Which profile field or application question the value answers.';
 $string['privacy:metadata:enrol_apply_answer:label'] = 'The question as it read when the application was submitted.';

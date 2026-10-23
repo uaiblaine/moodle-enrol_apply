@@ -22,7 +22,8 @@ in `.github/workflows/ci.yml` are updated together with `supported`.
 
 - Applications are queued for approval instead of enrolling the user immediately.
 - A configurable free-text comment field on the application form.
-- Optionally collect the standard and the custom user profile fields with the application.
+- Optionally collect the standard and the custom user profile fields with the application,
+  and ask questions of the method's own (application fields), shown or hidden by an earlier answer.
 - A waiting list, distinct from a plain pending application.
 - Groups an applicant automatically joins **once the application is approved**.
 - A cap on the number of applicants per instance.
@@ -58,6 +59,23 @@ the site-wide queue is at Site administration → Courses → Manage enrolment a
 for site administrators, and at `/enrol/apply/manage.php` for anyone else holding
 `enrol/apply:manageapplications` at system level.
 
+### Settings
+
+Every setting is stored per plugin, as `enrol_apply/<name>`:
+
+| Setting | What it decides |
+|---------|-----------------|
+| `allowedfields` | which profile fields a course may ask for |
+| `allowprofilewrite` | whether a course may offer to save the submitted details to the profile (off by default) |
+| `queuefilterfields` | which identity fields the applications queue offers as filters |
+| `confirmmailsubject`, `confirmmailcontent` | the approval message |
+| `waitmailsubject`, `waitmailcontent` | the waiting-list message |
+| `cancelmailsubject`, `cancelmailcontent` | the cancellation message |
+| `notifyglobal` | who is told about every new application, site wide |
+| `retentiondays` | how long an application record is kept (30 days by default, 0 for ever) |
+| `expiredaction`, `expirynotifyhour` | what happens when an enrolment period ends, and when expiry notices go out |
+| `defaultenrol`, `status`, `newenrols`, `opt_commentaryzone`, `maxenrolled`, `places`, `roleid`, `notifycoursebased`, `enrolperiod` | the defaults of a new instance |
+
 ### Placeholders in the notification mails
 
 `{firstname}`, `{lastname}`, `{username}`, `{content}` (the course name) and `{timeend}`
@@ -91,6 +109,14 @@ a reader without `moodle/site:viewuseridentity` in the course sees the applicant
 nothing else. The identity fields are not blanked for them, they are absent — no column, no
 filter, no sort — because filtering and sorting are database operations and would otherwise
 let a reader recover a hidden value by narrowing on it and counting the rows.
+
+The details an applicant submitted follow the same rules on the queue, the review page, the
+course report and the approver's e-mail, judged for each reader in the course: the address,
+phone numbers, institution and department appear only where *Show user identity*
+(`showuseridentity`) names them; a field listed in *Hide user fields* (`hiddenuserfields`), such
+as the city or country, needs `moodle/course:viewhiddenuserfields`; and a custom profile field
+whose visibility is private or nobody needs `moodle/user:viewalldetails`. To let approvers read a
+department they asked for, add it to *Show user identity*.
 
 ## The applications report
 
@@ -212,12 +238,44 @@ Two consequences worth knowing before you rely on a backup:
   reachable by a privacy request and still swept by the retention period — it simply does not
   follow the course into a copy.
 
+## Data stored
+
+Five tables. Three hold personal data:
+
+- `enrol_apply_applicationinfo` — the comment written with an application still awaiting a
+  decision, keyed by the user enrolment. Deleted on approval, on cancellation, on unenrolment,
+  with the enrolment method and with the course.
+- `enrol_apply_submission` — the durable record of each application: the applicant, the comment,
+  the decision, its message to the applicant, the decider's note, the groups and role chosen, who
+  decided and when. Kept for the retention period (`enrol_apply/retentiondays`, 30 days by
+  default; a record still in the queue is never swept), pseudonymised when the course is deleted,
+  and kept when the enrolment or the method is deleted. See "The record of an application" above.
+- `enrol_apply_answer` — what the application submitted: one row per profile field and per
+  question asked, with the question as it read at submission. Removed with its record, by every
+  route that removes one.
+
+Two are configuration and name nobody: `enrol_apply_groups` (the groups an approved applicant
+joins, per method) and `enrol_apply_fieldcond` (when a question is shown). Both are deleted with
+the method.
+
+An approval also writes core rows: a role assignment and group memberships stamped with
+`enrol_apply`, and the enrolment itself. The plugin never writes the applicant's profile unless
+the site allows it (`enrol_apply/allowprofilewrite`) and the applicant accepts the offer.
+
 ## Privacy
 
 The plugin implements the full privacy API — metadata, data export, and deletion for a
-user, for a list of users, and for a whole context — over both of its personal-data tables.
-`enrol_apply_submission` names two people rather than one: the applicant, and whoever
-decided the application. Both roles are exported and both are erased.
+user, for a list of users, and for a whole context — over its three personal-data tables and
+the group memberships its approvals add.
+
+- **A data export** gives the applicant their pending comment, every application record they
+  submitted with the details and answers it carried and the decision taken on it, and the groups
+  an approval added them to. Somebody who decided applications gets each decision they took,
+  never the applicant's comment or answers.
+- **A deletion** removes the applicant's comments, records and answers and the group memberships
+  approvals gave them in the course; for a decider it only clears their name from the records,
+  which stay the applicant's. Role assignments and the enrolment itself are core's, covered by
+  core's own privacy providers.
 
 ## Development
 
@@ -236,10 +294,13 @@ work by Johannes Burk (sudile GbR), Romain Deleau (IMT Lille Douai), Esdras Cale
 community translators of the earlier releases. This fork continues from
 [emeneo/moodle-enrol_apply](https://github.com/emeneo/moodle-enrol_apply).
 
-The repository ships English and Brazilian Portuguese only. Other languages are welcome
-through [AMOS](https://lang.moodle.org/), Moodle's translation platform, which is where
-translations for a published plugin belong.
+## Translations
+
+The package ships English only, as the Moodle plugins directory requires. Translations reach
+sites through [AMOS](https://lang.moodle.org/), Moodle's translation platform. The repository
+keeps a Brazilian Portuguese pack in `lang/pt_br` for development; it is left out of the release
+package and is contributed to AMOS instead.
 
 ## License
 
-GNU GPL v3 or later. See the header of any source file.
+GNU GPL v3 or later; see `LICENSE`.

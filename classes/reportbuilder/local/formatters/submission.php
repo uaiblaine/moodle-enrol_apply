@@ -38,14 +38,38 @@ class submission {
     /**
      * Sentinel meaning the reader may see every field the snapshot holds.
      *
-     * Only a caller that has asked a context may pass it. An array is taken as the explicit
-     * list of visible keys, which is what the report passes for a reader without the identity
-     * capability. Every other value - and in particular null, which is what core supplies when
-     * no argument was registered - means the names and nothing else.
+     * Only a caller that has asked a context may pass it. A list is taken as the explicit list
+     * of visible keys, which is what the report passes for a reader without the identity
+     * capability; an array carrying EXCEPT is the rule for a reader holding it, see
+     * visible_keys(). Every other value - and in particular null, which is what core supplies
+     * when no argument was registered - means the names and nothing else. Read a value of any
+     * shape through shows(), never with in_array().
      *
      * @var bool
      */
     public const ALL_FIELDS = true;
+
+    /** @var string Key of the visibility array listing the keys withheld from an identity reader. */
+    public const EXCEPT = 'except';
+
+    /**
+     * Key of the visibility array listing the custom profile fields that still exist.
+     *
+     * Null when the reader holds moodle/user:viewalldetails, which every visibility level yields
+     * to; otherwise a c_ key naming a field deleted since submission is withheld, because its
+     * visibility can no longer be read.
+     *
+     * @var string
+     */
+    public const KNOWNCUSTOM = 'knowncustom';
+
+    /**
+     * The {user} columns core treats as identity fields, which show only where showuseridentity
+     * names them ({@see \core_user\fields::get_identity_fields()}, lib/myprofilelib.php).
+     *
+     * @var array
+     */
+    public const IDENTITY_COLUMNS = ['email', 'idnumber', 'phone1', 'phone2', 'institution', 'department', 'address'];
 
     /**
      * The status, as the plugin's own label.
@@ -254,17 +278,12 @@ class submission {
      *
      * @param mixed $value The record's answers, as submission::aggregate_sql() concatenates them.
      * @param stdClass $row Row being rendered.
-     * @param mixed $visible Keys the reader may see, or ALL_FIELDS; anything else means names only.
+     * @param mixed $visible What visible_keys() returned, or ALL_FIELDS; anything else means names only.
      * @return string One "label: value" pair per line the reader may see.
      */
     public static function snapshot($value, stdClass $row, $visible = null): string {
         if ($value === null || $value === '') {
             return '';
-        }
-
-        if ($visible !== self::ALL_FIELDS && !is_array($visible)) {
-            // No report judged the reader, so show the name fields only.
-            $visible = self::name_keys();
         }
 
         $entries = submissionhelper::parse_aggregate((string) $value);
@@ -274,7 +293,8 @@ class submission {
 
         $lines = [];
         foreach ($entries as $entry) {
-            if ($visible !== self::ALL_FIELDS && !in_array($entry['key'], $visible, true)) {
+            // A $visible no report judged (null) shows the name fields only; see shows().
+            if (!self::shows($entry['key'], $visible)) {
                 continue;
             }
             $lines[] = self::escape($entry['label']) . ': ' . self::escape($entry['value']);
@@ -302,26 +322,141 @@ class submission {
     }
 
     /**
-     * The snapshot keys a reader may see in the given context.
+     * Which snapshot keys a reader may see in the given context.
      *
      * The single masking rule for the snapshot, shared by the course report (as the callback's
-     * argument), the queue table and the review page. Same rule as the identity columns: with
-     * moodle/site:viewuseridentity in the course, everything; without it, only the name fields.
-     * Withheld fields leave no marker: one appearing only where there is data would reveal that a
-     * value exists.
+     * argument), the queue table, the review page and the approver's e-mail. Without
+     * moodle/site:viewuseridentity in the course, only the name fields. With it, every key except
+     * the ones core would not show this reader on the applicant's profile:
+     *
+     * - an identity column (IDENTITY_COLUMNS) that showuseridentity does not name;
+     * - a column named in hiddenuserfields, without moodle/course:viewhiddenuserfields (inside a
+     *   course) or moodle/user:viewhiddendetails (outside one), as get_identity_fields() decides;
+     * - a custom profile field its own visibility hides ({@see self::custom_visible()}).
+     *
+     * The answers to the method's own questions (a_ keys) are not profile fields and follow the
+     * identity capability alone. Withheld fields leave no marker: one appearing only where there
+     * is data would reveal that a value exists.
      *
      * Returns ALL_FIELDS rather than null for the unrestricted reader, because null is what core
      * passes when no argument was registered; see snapshot().
      *
      * @param \context $context Context to judge the reader in.
-     * @return array|bool List of visible field keys, or ALL_FIELDS for no restriction.
+     * @param int|null $userid Reader to judge, null for the current user (the e-mail judges each
+     *        recipient).
+     * @return array|bool What shows() reads: a list of visible keys, an EXCEPT rule, or ALL_FIELDS.
      */
-    public static function visible_keys(\context $context): array|bool {
-        if (has_capability('moodle/site:viewuseridentity', $context)) {
+    public static function visible_keys(\context $context, ?int $userid = null): array|bool {
+        global $CFG, $DB;
+
+        if (!has_capability('moodle/site:viewuseridentity', $context, $userid)) {
+            return self::name_keys();
+        }
+
+        $except = [];
+
+        // Lower-cased as get_identity_fields() returns them.
+        $identity = array_map('core_text::strtolower', self::config_list((string) $CFG->showuseridentity));
+        $hidden = self::config_list((string) ($CFG->hiddenuserfields ?? ''));
+        $hiddencapability = $context->get_course_context(false)
+            ? 'moodle/course:viewhiddenuserfields'
+            : 'moodle/user:viewhiddendetails';
+        $canviewhidden = !$hidden || has_capability($hiddencapability, $context, $userid);
+        foreach (array_unique(array_merge(self::IDENTITY_COLUMNS, $hidden)) as $column) {
+            $unlisted = in_array($column, self::IDENTITY_COLUMNS, true) && !in_array($column, $identity, true);
+            $hiddenhere = in_array($column, $hidden, true) && !$canviewhidden;
+            if ($unlisted || $hiddenhere) {
+                $except[] = applyfields::standard_key($column);
+            }
+        }
+
+        $viewalldetails = has_capability('moodle/user:viewalldetails', $context, $userid);
+        $knowncustom = [];
+        foreach ($DB->get_records('user_info_field', null, '', 'id, visible') as $field) {
+            $key = applyfields::custom_key((int) $field->id);
+            $knowncustom[] = $key;
+            if (!self::custom_visible((int) $field->visible, $viewalldetails)) {
+                $except[] = $key;
+            }
+        }
+
+        if (!$except && $viewalldetails) {
             return self::ALL_FIELDS;
         }
 
-        return self::name_keys();
+        return [self::EXCEPT => $except, self::KNOWNCUSTOM => $viewalldetails ? null : $knowncustom];
+    }
+
+    /**
+     * The names in a comma-separated site setting.
+     *
+     * @param string $value Stored setting, such as showuseridentity or hiddenuserfields.
+     * @return array Non-empty names, trimmed.
+     */
+    protected static function config_list(string $value): array {
+        return array_values(array_filter(array_map('trim', explode(',', $value)), static fn(string $name): bool => $name !== ''));
+    }
+
+    /**
+     * Whether a reader holding moodle/site:viewuseridentity may see a custom profile field.
+     *
+     * Mirrors profile_field_base::is_visible() for a field read with no user (userid 0) in the
+     * reader's context, which is how core_user\fields::get_identity_fields() calls it: everyone
+     * sees a PROFILE_VISIBLE_ALL field, a PROFILE_VISIBLE_TEACHERS one follows
+     * moodle/site:viewuseridentity (already held here), and PROFILE_VISIBLE_PRIVATE and
+     * PROFILE_VISIBLE_NONE need moodle/user:viewalldetails. Inlined rather than called because
+     * is_visible() judges the current user only, and the e-mail judges each recipient. The
+     * applicant's own-field exception does not arise: a reader is never judged on their own
+     * application here.
+     *
+     * @param int $visibility The field's user_info_field.visible.
+     * @param bool $viewalldetails Whether the reader holds moodle/user:viewalldetails in the context.
+     * @return bool True when the field may be shown.
+     */
+    protected static function custom_visible(int $visibility, bool $viewalldetails): bool {
+        global $CFG;
+
+        require_once($CFG->dirroot . '/user/profile/lib.php');
+
+        // Core defines the PROFILE_VISIBLE_* constants as strings, so compare the cast value.
+        if ($visibility === (int) PROFILE_VISIBLE_ALL || $visibility === (int) PROFILE_VISIBLE_TEACHERS) {
+            return true;
+        }
+
+        return $viewalldetails;
+    }
+
+    /**
+     * Whether one snapshot key may be shown, given what visible_keys() returned.
+     *
+     * The one reader of every shape that value takes, so no caller repeats the rule: ALL_FIELDS
+     * shows everything; an EXCEPT rule shows every key it does not list, except a c_ key naming a
+     * field that no longer exists when KNOWNCUSTOM is a list; a plain list shows its own keys; and
+     * anything else, null included, shows the name fields only.
+     *
+     * @param string $key Snapshot key.
+     * @param mixed $visible What visible_keys() returned.
+     * @return bool True when the key may be shown.
+     */
+    public static function shows(string $key, $visible): bool {
+        if ($visible === self::ALL_FIELDS) {
+            return true;
+        }
+        if (!is_array($visible)) {
+            return in_array($key, self::name_keys(), true);
+        }
+        if (!array_key_exists(self::EXCEPT, $visible)) {
+            return in_array($key, $visible, true);
+        }
+        if (in_array($key, $visible[self::EXCEPT], true)) {
+            return false;
+        }
+        $known = $visible[self::KNOWNCUSTOM] ?? null;
+        if (is_array($known) && str_starts_with($key, applyfields::SOURCE_CUSTOM) && !in_array($key, $known, true)) {
+            return false;
+        }
+
+        return true;
     }
 
     /**
