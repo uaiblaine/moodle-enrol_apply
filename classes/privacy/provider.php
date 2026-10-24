@@ -85,6 +85,8 @@ class provider implements
                 'comment' => 'privacy:metadata:enrol_apply_submission:comment',
                 'decidedgroups' => 'privacy:metadata:enrol_apply_submission:decidedgroups',
                 'decidedrole' => 'privacy:metadata:enrol_apply_submission:decidedrole',
+                'keygroupid' => 'privacy:metadata:enrol_apply_submission:keygroupid',
+                'keyoutcome' => 'privacy:metadata:enrol_apply_submission:keyoutcome',
                 'status' => 'privacy:metadata:enrol_apply_submission:status',
                 'outcomemessage' => 'privacy:metadata:enrol_apply_submission:outcomemessage',
                 'decisionnote' => 'privacy:metadata:enrol_apply_submission:decisionnote',
@@ -346,6 +348,14 @@ class provider implements
                 : null;
             $export->decidedgroups = self::group_names((string) $row->decidedgroups, $context);
             $export->decidedrole = self::role_name((int) $row->decidedrole);
+
+            /* Whether a group enrolment key admitted the applicant, and which group's: part of
+               what was decided about them, so both subjects get it. The group is named, as the
+               decided groups are, and left out when it no longer exists. */
+            if ((int) $row->keyoutcome !== submission::KEY_NONE) {
+                $export->keyoutcome = submission::key_outcome_label((int) $row->keyoutcome);
+                $export->keygroup = self::group_names((string) $row->keygroupid, $context)[0] ?? null;
+            }
 
             /* The comment and the profile snapshot are the applicant's own data and go into the
                applicant's export only; handing them to the decider would disclose a third

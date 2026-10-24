@@ -429,6 +429,55 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
     }
 
     /**
+     * The key route reaches both subjects' exports, the group by name; a record without a key
+     * exports no key fields at all.
+     *
+     * Changes that must make it fail: the export leaving the key route out, or naming the group
+     * by its id.
+     *
+     * @return void
+     */
+    public function test_the_key_route_is_exported_to_both_subjects(): void {
+        global $DB;
+
+        $decider = $this->getDataGenerator()->create_user();
+        $applicant = $this->create_application('Please approve me', (int) $decider->id);
+        $context = context_course::instance($this->course->id);
+        $group = $this->getDataGenerator()->create_group(['courseid' => $this->course->id, 'name' => 'Turma B']);
+        $recordid = $this->submission_id_of($applicant);
+        $DB->update_record('enrol_apply_submission', (object) [
+            'id' => $recordid,
+            'keygroupid' => (int) $group->id,
+            'keyoutcome' => submission::KEY_ADMITTED,
+        ]);
+
+        foreach (['privacy:roleapplicant' => $applicant, 'privacy:roledecider' => $decider] as $rolekey => $subject) {
+            writer::reset();
+            $this->export_context_data_for_user((int) $subject->id, $context, 'enrol_apply');
+            $exported = writer::with_context($context)->get_data([
+                get_string('privacy:trailpath', 'enrol_apply'),
+                get_string($rolekey, 'enrol_apply'),
+                get_string('privacy:recordpath', 'enrol_apply', $recordid),
+            ]);
+
+            $this->assertSame(submission::key_outcome_label(submission::KEY_ADMITTED), $exported->keyoutcome, $rolekey);
+            $this->assertSame('Turma B', $exported->keygroup, $rolekey);
+        }
+
+        // The control: without a key the record exports no key fields.
+        $DB->set_field('enrol_apply_submission', 'keyoutcome', submission::KEY_NONE, ['id' => $recordid]);
+        writer::reset();
+        $this->export_context_data_for_user((int) $applicant->id, $context, 'enrol_apply');
+        $exported = writer::with_context($context)->get_data([
+            get_string('privacy:trailpath', 'enrol_apply'),
+            get_string('privacy:roleapplicant', 'enrol_apply'),
+            get_string('privacy:recordpath', 'enrol_apply', $recordid),
+        ]);
+        $this->assertFalse(property_exists($exported, 'keyoutcome'));
+        $this->assertFalse(property_exists($exported, 'keygroup'));
+    }
+
+    /**
      * A group and a custom role are exported in their plain spelling.
      *
      * format_string()'s escape flag defaults to true, and an export file is data rather than

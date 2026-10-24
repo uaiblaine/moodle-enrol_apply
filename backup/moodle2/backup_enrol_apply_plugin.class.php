@@ -86,6 +86,8 @@ class backup_enrol_apply_plugin extends backup_enrol_plugin {
             'timecreated',
             'timedecided',
             'decidedby',
+            'keygroupid',
+            'keyoutcome',
         ]);
 
         /* What the applicant submitted, frozen, as children of their record: they travel exactly

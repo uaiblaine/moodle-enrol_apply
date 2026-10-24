@@ -177,7 +177,7 @@ class restore_enrol_apply_plugin extends restore_enrol_plugin {
             return 0;
         }
 
-        $id = (int) $DB->insert_record('enrol_apply_submission', (object) [
+        $id = (int) $DB->insert_record('enrol_apply_submission', (object) ([
             'courseid' => $courseid,
             'userid' => $userid,
             'enrolid' => $enrolid,
@@ -198,7 +198,7 @@ class restore_enrol_apply_plugin extends restore_enrol_plugin {
             'timecreated' => (int) $data->timecreated,
             'timedecided' => (int) $data->timedecided,
             'decidedby' => (int) $this->get_mappingid('user', $data->decidedby),
-        ]);
+        ] + $this->key_fields($data)));
 
         if (isset($data->userinfodata) && is_string($data->userinfodata)) {
             submission::write_answers($id, submission::parse_envelope($data->userinfodata));
@@ -273,6 +273,29 @@ class restore_enrol_apply_plugin extends restore_enrol_plugin {
         }
 
         return implode(',', $mapped);
+    }
+
+    /**
+     * What a group enrolment key did, translated to this restore.
+     *
+     * The group is course-local like the decided groups, so it is mapped and becomes 0 when it
+     * did not travel. The outcome is a fact about the application and is kept even then: the
+     * applicant was admitted by a key whatever happened to the group since. An outcome outside
+     * the vocabulary, which only a foreign archive carries, restores as no key at all.
+     *
+     * @param stdClass $data Backup data of the application record.
+     * @return array The keygroupid and keyoutcome columns.
+     */
+    protected function key_fields(stdClass $data): array {
+        $outcome = (int) ($data->keyoutcome ?? submission::KEY_NONE);
+        if (!in_array($outcome, submission::KEY_OUTCOMES, true) || $outcome === submission::KEY_NONE) {
+            return ['keygroupid' => 0, 'keyoutcome' => submission::KEY_NONE];
+        }
+
+        return [
+            'keygroupid' => (int) $this->get_mappingid('group', $data->keygroupid ?? 0),
+            'keyoutcome' => $outcome,
+        ];
     }
 
     /**

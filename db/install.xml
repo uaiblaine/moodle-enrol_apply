@@ -31,6 +31,8 @@
         <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="when the application was submitted; the retention sweep reads this"/>
         <FIELD NAME="timedecided" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="when it was decided, 0 while undecided"/>
         <FIELD NAME="decidedby" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="who decided it; zeroed when the course is deleted"/>
+        <FIELD NAME="keygroupid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="group whose enrolment key the applicant presented, 0 for none; an id and not a key, the record outlives the group on purpose"/>
+        <FIELD NAME="keyoutcome" TYPE="int" LENGTH="4" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="what the key did: 0 no key, 1 admitted without review, 2 valid but no place left on the method, 3 valid but a group to join had no seat left"/>
       </FIELDS>
       <KEYS>
         <KEY NAME="primary" TYPE="primary" FIELDS="id"/>

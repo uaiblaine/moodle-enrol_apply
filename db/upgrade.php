@@ -475,5 +475,24 @@ function xmldb_enrol_apply_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026101300, 'enrol', 'apply');
     }
 
+    if ($oldversion < 2026102400) {
+        /* What a group enrolment key did for the application (docs/design/group-enrolment-key.md,
+           K3): the group whose key was presented and the outcome, so every later display reads
+           the recorded fact instead of recomputing seats and places that have moved since. Rows
+           that exist predate keys, so 0 and 0 are their truth. */
+        $table = new xmldb_table('enrol_apply_submission');
+        $fields = [
+            new xmldb_field('keygroupid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0', 'decidedby'),
+            new xmldb_field('keyoutcome', XMLDB_TYPE_INTEGER, '4', null, XMLDB_NOTNULL, null, '0', 'keygroupid'),
+        ];
+        foreach ($fields as $field) {
+            if (!$dbman->field_exists($table, $field)) {
+                $dbman->add_field($table, $field);
+            }
+        }
+
+        upgrade_plugin_savepoint(true, 2026102400, 'enrol', 'apply');
+    }
+
     return true;
 }
