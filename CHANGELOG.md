@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Group enrolment keys: the record (K3).** `enrol_apply_submission` gains `keygroupid` (the
+  group whose key was entered) and `keyoutcome` (admitted without review, valid but no place,
+  valid but a group full), written with the record by `submission::create()` and read back by
+  `submission::key_of()`. The backup carries both and the restore maps the group (0 when it did not
+  travel, the outcome kept); the privacy export names the group and the outcome. Version
+  2026102400, with its upgrade step. Nothing writes a key route yet: that is K4.
 - **A `LICENSE` file in the package** (the GPL v3 text, a copy of `COPYING.txt`), which the Moodle
   plugins directory requires, and `tests/marketplace_readiness_test.php`, which pins the
   directory's submission guidelines no other gate reads: the licence files, an English-only

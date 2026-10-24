@@ -26,6 +26,7 @@
 namespace enrol_apply\local;
 
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 
 /**
  * Tests for storing and reading the durable application record's frozen answers.
@@ -379,5 +380,142 @@ final class submission_test extends \advanced_testcase {
             $this->assertSame(0, enrol_apply_migrate_snapshot_envelopes());
             $this->assertSame(1, $DB->count_records(submission::ANSWER_TABLE, ['submissionid' => $id]));
         });
+    }
+
+    /**
+     * An apply instance on a new course, for create().
+     *
+     * @return \stdClass The {enrol} record.
+     */
+    protected function apply_instance(): \stdClass {
+        global $DB;
+
+        $plugin = enrol_get_plugin('apply');
+        $course = $this->getDataGenerator()->create_course();
+        $id = $plugin->add_instance($course, $plugin->get_instance_defaults());
+
+        return $DB->get_record('enrol', ['id' => $id], '*', MUST_EXIST);
+    }
+
+    /**
+     * A record without a key route says so, and one with a key route stores its group and outcome.
+     *
+     * Changes that must make it fail: create() not writing the two columns it is handed.
+     *
+     * @return void
+     */
+    public function test_create_records_the_key_route(): void {
+        global $DB;
+
+        $instance = $this->apply_instance();
+        $group = $this->getDataGenerator()->create_group(['courseid' => $instance->courseid]);
+
+        $plain = submission::create($instance, 41, 0, (object) []);
+        $keyed = submission::create($instance, 42, 0, (object) [], (int) $group->id, submission::KEY_ADMITTED);
+
+        $this->assertSame(0, (int) $DB->get_field('enrol_apply_submission', 'keygroupid', ['id' => $plain]));
+        $this->assertSame(submission::KEY_NONE, (int) $DB->get_field('enrol_apply_submission', 'keyoutcome', ['id' => $plain]));
+        $this->assertSame((int) $group->id, (int) $DB->get_field('enrol_apply_submission', 'keygroupid', ['id' => $keyed]));
+        $this->assertSame(
+            submission::KEY_ADMITTED,
+            (int) $DB->get_field('enrol_apply_submission', 'keyoutcome', ['id' => $keyed])
+        );
+    }
+
+    /**
+     * Key routes that do not add up.
+     *
+     * @return array Group id and outcome, keyed by a readable case name.
+     */
+    public static function incoherent_key_provider(): array {
+        return [
+            'an outcome outside the vocabulary' => [5, 9],
+            'a group with no outcome' => [5, submission::KEY_NONE],
+            'an outcome with no group' => [0, submission::KEY_NO_PLACE],
+        ];
+    }
+
+    /**
+     * A key route that does not add up is refused, and nothing is written.
+     *
+     * Changes that must make it fail: dropping either check at the top of create().
+     *
+     * @param int $groupid Group handed to create().
+     * @param int $outcome Outcome handed to create().
+     * @return void
+     */
+    #[DataProvider('incoherent_key_provider')]
+    public function test_create_refuses_a_key_route_that_does_not_add_up(int $groupid, int $outcome): void {
+        global $DB;
+
+        $instance = $this->apply_instance();
+
+        try {
+            submission::create($instance, 41, 0, (object) [], $groupid, $outcome);
+            $this->fail('create() accepted an incoherent key route');
+        } catch (\coding_exception $e) {
+            $this->assertSame(0, $DB->count_records('enrol_apply_submission', ['enrolid' => $instance->id]));
+        }
+    }
+
+    /**
+     * key_of() answers for the newest application of the user enrolment.
+     *
+     * Changes that must make it fail: reading the oldest record instead.
+     *
+     * @return void
+     */
+    public function test_key_of_reads_the_newest_application(): void {
+        global $DB;
+
+        $base = [
+            'courseid' => 1, 'userid' => 41, 'enrolid' => 7, 'userenrolmentid' => 300,
+            'comment' => '', 'status' => submission::STATUS_PENDING,
+        ];
+        $DB->insert_record('enrol_apply_submission', (object) ($base + [
+            'timecreated' => 1000, 'keygroupid' => 12, 'keyoutcome' => submission::KEY_ADMITTED,
+        ]));
+        $this->assertSame(12, submission::key_of(300)->groupid);
+        $this->assertSame(submission::KEY_ADMITTED, submission::key_of(300)->outcome);
+
+        // A later application by the same enrolment, without a key, is the one that answers.
+        $DB->insert_record('enrol_apply_submission', (object) ($base + [
+            'timecreated' => 2000, 'keygroupid' => 0, 'keyoutcome' => submission::KEY_NONE,
+        ]));
+        $this->assertNull(submission::key_of(300));
+        $this->assertNull(submission::key_of(301));
+    }
+
+    /**
+     * An outcome outside the vocabulary reads as no key, never as a route that never ran.
+     *
+     * Changes that must make it fail: dropping the vocabulary check in key_of().
+     *
+     * @return void
+     */
+    public function test_an_outcome_outside_the_vocabulary_reads_as_no_key(): void {
+        global $DB;
+
+        $DB->insert_record('enrol_apply_submission', (object) [
+            'courseid' => 1, 'userid' => 41, 'enrolid' => 7, 'userenrolmentid' => 300,
+            'comment' => '', 'status' => submission::STATUS_PENDING, 'timecreated' => 1000,
+            'keygroupid' => 12, 'keyoutcome' => 7,
+        ]);
+
+        $this->assertNull(submission::key_of(300));
+    }
+
+    /**
+     * Each outcome has its own label, and no key has none.
+     *
+     * @return void
+     */
+    public function test_each_key_outcome_has_its_label(): void {
+        $this->assertSame('', submission::key_outcome_label(submission::KEY_NONE));
+        $labels = array_map(
+            [submission::class, 'key_outcome_label'],
+            [submission::KEY_ADMITTED, submission::KEY_NO_PLACE, submission::KEY_GROUP_FULL]
+        );
+        $this->assertCount(3, array_unique(array_filter($labels)));
     }
 }

@@ -73,6 +73,30 @@ class submission {
         self::STATUS_CANCELLED,
     ];
 
+    /** @var int No group enrolment key was presented, or none counted. */
+    public const KEY_NONE = 0;
+
+    /** @var int A valid key admitted the applicant without review. */
+    public const KEY_ADMITTED = 1;
+
+    /** @var int The key was valid, but the method had no place left, so the application waits. */
+    public const KEY_NO_PLACE = 2;
+
+    /** @var int The key was valid, but a group the admission would join had no seat left. */
+    public const KEY_GROUP_FULL = 3;
+
+    /**
+     * Every value keyoutcome may hold.
+     *
+     * @var array
+     */
+    public const KEY_OUTCOMES = [
+        self::KEY_NONE,
+        self::KEY_ADMITTED,
+        self::KEY_NO_PLACE,
+        self::KEY_GROUP_FULL,
+    ];
+
     /**
      * Format of the JSON envelope the snapshot was stored as before it became rows.
      *
@@ -110,14 +134,37 @@ class submission {
      * The record and its frozen answers ARE one transaction: a record whose answers were half
      * written would show the reviewer an application the applicant never submitted.
      *
+     * What a group enrolment key did is written here too, with the record, so no later display
+     * has to recompute it from seats and places that have moved since. It is the caller's
+     * resolution of the key, never anything the form carried: the key itself is not stored.
+     *
      * @param stdClass $instance Course enrol instance applied to.
      * @param int $userid Applicant.
      * @param int $userenrolmentid User enrolment created for the application.
      * @param stdClass $data Submitted application form data.
+     * @param int $keygroupid Group whose key was presented and resolved, 0 for none.
+     * @param int $keyoutcome One of the KEY_ constants; KEY_NONE exactly when $keygroupid is 0.
      * @return int Id of the new row.
+     * @throws \coding_exception When the outcome is unknown, or the group and the outcome disagree.
      */
-    public static function create(stdClass $instance, int $userid, int $userenrolmentid, stdClass $data): int {
+    public static function create(
+        stdClass $instance,
+        int $userid,
+        int $userenrolmentid,
+        stdClass $data,
+        int $keygroupid = 0,
+        int $keyoutcome = self::KEY_NONE
+    ): int {
         global $DB;
+
+        /* Refused rather than corrected: a group with no outcome, or an outcome with no group, is
+           a caller that resolved the key one way and recorded it another. */
+        if (!in_array($keyoutcome, self::KEY_OUTCOMES, true)) {
+            throw new \coding_exception("Unknown group key outcome {$keyoutcome}");
+        }
+        if (($keyoutcome === self::KEY_NONE) !== ($keygroupid <= 0)) {
+            throw new \coding_exception('A group key outcome needs its group, and a key group needs an outcome');
+        }
 
         $transaction = $DB->start_delegated_transaction();
         $id = (int) $DB->insert_record('enrol_apply_submission', (object) [
@@ -135,6 +182,8 @@ class submission {
             'timecreated' => time(),
             'timedecided' => 0,
             'decidedby' => 0,
+            'keygroupid' => max(0, $keygroupid),
+            'keyoutcome' => $keyoutcome,
         ]);
         self::snapshot($id, $instance, $data);
         $transaction->allow_commit();
@@ -211,6 +260,10 @@ class submission {
             'timecreated' => (int) $enrolment->timecreated,
             'timedecided' => 0,
             'decidedby' => 0,
+            /* No key is the honest reconstruction: an application with no record went through no
+               key route, which writes its record in create(). */
+            'keygroupid' => 0,
+            'keyoutcome' => self::KEY_NONE,
         ]);
     }
 
@@ -862,6 +915,55 @@ class submission {
             self::STATUS_WAITING => get_string('submissionstatuswaiting', 'enrol_apply'),
             self::STATUS_CANCELLED => get_string('submissionstatuscancelled', 'enrol_apply'),
             default => get_string('submissionstatuspending', 'enrol_apply'),
+        };
+    }
+
+    /**
+     * What a group enrolment key did for the newest application of a user enrolment.
+     *
+     * Newest first, as chosen_groups() reads: a user enrolment can carry an older record from a
+     * cancelled application, and the key route of that one is not this one's.
+     *
+     * @param int $userenrolmentid User enrolment the application belongs to.
+     * @return stdClass|null Object with int 'groupid' (0 when the group could not be restored) and
+     *     int 'outcome' (a KEY_ constant other than KEY_NONE); null when no key was presented.
+     */
+    public static function key_of(int $userenrolmentid): ?stdClass {
+        global $DB;
+
+        $rows = $DB->get_records(
+            'enrol_apply_submission',
+            ['userenrolmentid' => $userenrolmentid],
+            'timecreated DESC, id DESC',
+            'id, keygroupid, keyoutcome',
+            0,
+            1
+        );
+        $row = reset($rows);
+        $outcome = $row ? (int) $row->keyoutcome : self::KEY_NONE;
+        /* An outcome outside the vocabulary - only a hand edit writes one; the restore cleans
+           them - reads as no key rather than as some route that never ran. */
+        if ($outcome === self::KEY_NONE || !in_array($outcome, self::KEY_OUTCOMES, true)) {
+            return null;
+        }
+
+        return (object) ['groupid' => (int) $row->keygroupid, 'outcome' => $outcome];
+    }
+
+    /**
+     * The language string naming a group key outcome.
+     *
+     * A literal per branch, as status_label() is.
+     *
+     * @param int $outcome One of the KEY_ constants.
+     * @return string Localised label; empty for KEY_NONE.
+     */
+    public static function key_outcome_label(int $outcome): string {
+        return match ($outcome) {
+            self::KEY_ADMITTED => get_string('keyoutcomeadmitted', 'enrol_apply'),
+            self::KEY_NO_PLACE => get_string('keyoutcomenoplace', 'enrol_apply'),
+            self::KEY_GROUP_FULL => get_string('keyoutcomegroupfull', 'enrol_apply'),
+            default => '',
         };
     }
 }

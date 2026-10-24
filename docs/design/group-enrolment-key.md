@@ -266,7 +266,14 @@ such a site the field appears only when its pages are first used (until then: no
   `for_groups()` built on `fields::get_group_values()` and `get_member_counts()`, its PHPUnit,
   and a README line naming the consumer. Nothing else in groupdist changes.
 
-### K3. Record
+### K3. Record &mdash; written 2026-10-24
+
+As built: the outcome is a column of its own beside the group (`keyoutcome`, KEY_NONE,
+KEY_ADMITTED, KEY_NO_PLACE, KEY_GROUP_FULL), both written by `submission::create()` inside its
+existing transaction (the write door knows the outcome before it writes), not by a separate
+writer. `create()` refuses a group without an outcome and an outcome without a group. The
+restore keeps the outcome when the group did not travel, and drops an outcome outside the
+vocabulary. Nine gates, KR1&ndash;KR9.
 
 - `enrol_apply_submission.keygroupid` int(10) default 0, upgrade step with its savepoint,
   `install.xml` `VERSION` unchanged rule respected.

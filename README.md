@@ -212,7 +212,10 @@ constraint for `moodle/grade:viewall`, which its own declaration marks as
 ## The record of an application
 
 Every application leaves a durable record in `enrol_apply_submission`: what the applicant
-wrote, the profile details they entered, the decision taken, who took it and when. The
+wrote, the profile details they entered, the decision taken, who took it and when, and, when
+a group enrolment key was entered, which group's key it was and what it did (admitted without
+review, or left the application waiting because no place or seat was left; the key itself is
+never stored). The
 pending comment in `enrol_apply_applicationinfo` is deleted on approval, on cancellation and
 on unenrolment — deferring an application to the waiting list keeps it, because the
 application is still awaiting a decision. This record survives all four, and, from this

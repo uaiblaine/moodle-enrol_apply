@@ -28,6 +28,7 @@ namespace enrol_apply;
 use backup;
 use backup_controller;
 use backup_setting;
+use enrol_apply\local\submission;
 use restore_controller;
 use restore_dbops;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -417,6 +418,89 @@ final class backup_test extends \advanced_testcase {
         $this->assertSame('', (string) $restored->decidedgroups);
         // The control: the record itself did travel, so the empty value is the mapping having
         // dropped the id and not a record that never arrived.
+        $this->assertSame('I would like to join this course', $restored->comment);
+    }
+
+    /**
+     * Stamp a group key route on the only applicant's record.
+     *
+     * @param \stdClass $course Course the application belongs to.
+     * @param \stdClass $applicant The applicant.
+     * @param int $groupid Group whose key was presented.
+     * @param int $outcome Outcome to store, a submission::KEY_ constant or a foreign value.
+     * @return void
+     */
+    protected function record_key(\stdClass $course, \stdClass $applicant, int $groupid, int $outcome): void {
+        global $DB;
+
+        $where = 'courseid = :courseid AND userid = :userid';
+        $params = ['courseid' => $course->id, 'userid' => $applicant->id];
+        $DB->set_field_select('enrol_apply_submission', 'keygroupid', $groupid, $where, $params);
+        $DB->set_field_select('enrol_apply_submission', 'keyoutcome', $outcome, $where, $params);
+    }
+
+    /**
+     * The key route survives a restore, its group translated to the new course's id.
+     *
+     * Changes that must make it fail: the two elements left out of the backup, or the group
+     * copied through rather than mapped.
+     *
+     * @return void
+     */
+    public function test_the_key_route_survives_a_restore(): void {
+        global $DB;
+
+        [$course, , $applicant] = $this->create_course_with_application();
+        $group = $this->getDataGenerator()->create_group(['courseid' => $course->id, 'name' => 'Joined by key']);
+        $this->record_key($course, $applicant, (int) $group->id, submission::KEY_ADMITTED);
+
+        $newcourseid = $this->backup_and_restore($course, true);
+        $restored = $this->restored_record($newcourseid);
+
+        $newgroupid = (int) $DB->get_field('groups', 'id', ['courseid' => $newcourseid, 'name' => 'Joined by key'], MUST_EXIST);
+        $this->assertNotEquals((int) $group->id, $newgroupid, 'the premise: the group really was re-created');
+        $this->assertSame($newgroupid, (int) $restored->keygroupid);
+        $this->assertSame(submission::KEY_ADMITTED, (int) $restored->keyoutcome);
+    }
+
+    /**
+     * A key group that did not travel restores as 0, and the outcome stays: the applicant was
+     * admitted by a key whatever happened to the group.
+     *
+     * Changes that must make it fail: copying the archived group id through unmapped.
+     *
+     * @return void
+     */
+    public function test_a_key_group_that_did_not_travel_keeps_its_outcome(): void {
+        [$course, , $applicant] = $this->create_course_with_application();
+        $elsewhere = $this->getDataGenerator()->create_course();
+        $foreign = $this->getDataGenerator()->create_group(['courseid' => $elsewhere->id]);
+        $this->record_key($course, $applicant, (int) $foreign->id, submission::KEY_NO_PLACE);
+
+        $restored = $this->restored_record($this->backup_and_restore($course, true));
+
+        $this->assertSame(0, (int) $restored->keygroupid);
+        $this->assertSame(submission::KEY_NO_PLACE, (int) $restored->keyoutcome);
+    }
+
+    /**
+     * An outcome outside the vocabulary, which only a foreign archive carries, restores as no
+     * key at all, group included.
+     *
+     * Changes that must make it fail: dropping the vocabulary check in key_fields().
+     *
+     * @return void
+     */
+    public function test_an_unknown_key_outcome_restores_as_no_key(): void {
+        [$course, , $applicant] = $this->create_course_with_application();
+        $group = $this->getDataGenerator()->create_group(['courseid' => $course->id]);
+        $this->record_key($course, $applicant, (int) $group->id, 9);
+
+        $restored = $this->restored_record($this->backup_and_restore($course, true));
+
+        $this->assertSame(0, (int) $restored->keygroupid);
+        $this->assertSame(submission::KEY_NONE, (int) $restored->keyoutcome);
+        // The control: the record itself travelled.
         $this->assertSame('I would like to join this course', $restored->comment);
     }
 
