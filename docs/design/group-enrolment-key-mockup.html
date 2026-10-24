@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Mockups for group enrolment keys in enrol_apply: where the key appears, what a valid, wrong or throttled key looks like, and what managers see.">
+<title>Group Enrolment Keys</title>
+<style>
+:root{
+  --paper:#e9ecef; --card:#fff; --ink:#1d2125; --muted:#6a737b; --rule:#dee2e6; --soft:#f5f6f7;
+  --primary:#0f6cbf; --primary-wash:#e7f0f9; --ok:#357a32; --ok-wash:#e6f3e5;
+  --warn:#8a5a00; --warn-wash:#fcefdc; --bad:#ca3120; --bad-wash:#fbe9e7; --info-wash:#e8f3f8; --info:#0b5b7a;
+  --note:#6b4c00; --note-bg:#fff8e1; --shadow:0 1px 2px rgba(0,0,0,.06),0 8px 24px -12px rgba(0,0,0,.25);
+  --ui:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#15181b; --card:#1f2327; --ink:#e6e8ea; --muted:#9aa3ab; --rule:#353a40; --soft:#272b30;
+    --primary:#5aa2e6; --primary-wash:#1c2d3d; --ok:#7cc77a; --ok-wash:#1d2e1d;
+    --warn:#e8b45c; --warn-wash:#33281a; --bad:#f08a7c; --bad-wash:#3a201d; --info-wash:#17303a; --info:#7cc4e0;
+    --note:#f0d58a; --note-bg:#2e2817;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.5 var(--ui)}
+.wrap{max-width:1080px;margin:0 auto;padding:32px 16px 64px}
+h1{font-size:28px;margin:0 0 4px}
+h2{font-size:20px;margin:48px 0 6px;padding-top:12px;border-top:1px solid var(--rule)}
+h2 .n{font-family:var(--mono);color:var(--muted);font-weight:500;margin-right:8px}
+.lede{color:var(--muted);max-width:760px}
+.why{max-width:760px;color:var(--muted);margin:0 0 16px}
+.why b{color:var(--ink)}
+.row{display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start}
+.row>*{flex:1 1 45%;min-width:18rem}
+.cap{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0 0 6px;font-weight:600}
+.note{background:var(--note-bg);color:var(--note);border-radius:6px;padding:8px 12px;font-size:13px;margin-top:10px}
+.note code,.why code,td code{font-family:var(--mono);font-size:12.5px}
+
+/* Moodle-ish chrome */
+.screen{background:var(--card);border:1px solid var(--rule);border-radius:8px;box-shadow:var(--shadow);overflow:hidden}
+.bar{display:flex;align-items:center;gap:8px;padding:8px 14px;background:var(--soft);border-bottom:1px solid var(--rule);font-size:12px;color:var(--muted)}
+.bar i{width:9px;height:9px;border-radius:50%;background:var(--rule);display:inline-block}
+.page{padding:18px 20px}
+.crumb{font-size:13px;color:var(--primary);margin-bottom:6px}
+.ptitle{font-size:22px;font-weight:600;margin:0 0 14px}
+.card{border:1px solid var(--rule);border-radius:6px;padding:14px 16px;margin-bottom:12px}
+.card h4{margin:0 0 8px;font-size:16px}
+.alert{border-radius:6px;padding:10px 14px;font-size:14px;margin:0 0 10px}
+.alert.info{background:var(--info-wash);color:var(--info)}
+.alert.ok{background:var(--ok-wash);color:var(--ok)}
+.alert.warn{background:var(--warn-wash);color:var(--warn)}
+.alert.bad{background:var(--bad-wash);color:var(--bad)}
+.btn{display:inline-block;border-radius:6px;padding:7px 14px;font-size:14px;border:1px solid transparent;font-weight:500}
+.btn.pri{background:var(--primary);color:#fff}
+.btn.sec{background:var(--soft);border-color:var(--rule);color:var(--ink)}
+.hint{font-size:13px;color:var(--muted);margin-top:8px}
+.hint .k{font-family:var(--mono);background:var(--soft);border:1px solid var(--rule);border-radius:4px;padding:0 4px;font-size:12px}
+
+/* Modal */
+.modal{background:var(--card);border:1px solid var(--rule);border-radius:8px;box-shadow:var(--shadow)}
+.mh{display:flex;justify-content:space-between;align-items:center;padding:12px 18px;border-bottom:1px solid var(--rule);font-weight:600;font-size:17px}
+.mh span{color:var(--muted);font-weight:400}
+.mb{padding:16px 18px}
+.mf{display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--rule)}
+.intro{font-size:14px;margin:0 0 14px;color:var(--ink)}
+.fs{border:1px solid var(--rule);border-radius:6px;margin:0 0 14px}
+.fs .lg{padding:8px 12px;font-weight:600;font-size:14px;border-bottom:1px solid var(--rule);background:var(--soft);display:flex;justify-content:space-between;align-items:center}
+.fs .lg .opt{font-weight:400;color:var(--muted);font-size:12px}
+.fs .in{padding:12px}
+.keyfs{border-color:var(--primary);}
+.keyfs .lg{background:var(--primary-wash)}
+.f{display:grid;grid-template-columns:9.5rem 1fr;gap:6px 12px;align-items:start;margin-bottom:10px;font-size:14px}
+.f label{padding-top:6px}
+.req{color:var(--bad);font-size:12px;margin-left:2px}
+.inp{border:1px solid var(--rule);border-radius:6px;padding:6px 10px;background:var(--card);min-height:34px;display:flex;align-items:center;justify-content:space-between;color:var(--ink)}
+.inp.ph{color:var(--muted)}
+.inp.err{border-color:var(--bad);box-shadow:0 0 0 2px var(--bad-wash)}
+.inp.dis{background:var(--soft);color:var(--muted)}
+.inp .eye{font-size:12px;color:var(--primary)}
+.ferr{color:var(--bad);font-size:13px;margin-top:4px}
+.fhelp{color:var(--muted);font-size:12.5px;margin-top:4px}
+.chk{display:flex;gap:8px;align-items:flex-start;font-size:14px;margin-top:8px;padding:10px 12px;border-radius:6px;background:var(--warn-wash);color:var(--ink)}
+.box{width:16px;height:16px;border:1.5px solid var(--muted);border-radius:3px;flex:0 0 16px;margin-top:2px;background:var(--card)}
+.box.on{background:var(--primary);border-color:var(--primary);position:relative}
+.box.on::after{content:"";position:absolute;left:4px;top:1px;width:4px;height:8px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg)}
+.help{display:inline-flex;width:16px;height:16px;border-radius:50%;background:var(--primary);color:#fff;font-size:11px;align-items:center;justify-content:center;margin-left:4px;vertical-align:middle}
+.dim{opacity:.55}
+
+/* Badges, table */
+.badge{display:inline-block;border-radius:10px;padding:1px 9px;font-size:12px;font-weight:600}
+.b-ok{background:var(--ok);color:#fff}
+.b-warn{background:var(--warn-wash);color:var(--warn);border:1px solid var(--warn)}
+.b-key{background:var(--primary-wash);color:var(--primary);border:1px solid var(--primary)}
+.b-pend{background:var(--soft);color:var(--ink);border:1px solid var(--rule)}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--rule);vertical-align:top}
+th{font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.who b{display:block}
+.who span{color:var(--muted);font-size:12px}
+
+/* Flow */
+.flow{display:grid;grid-template-columns:repeat(auto-fit,minmax(12rem,1fr));gap:12px;margin-top:12px}
+.step{background:var(--card);border:1px solid var(--rule);border-radius:8px;padding:12px 14px;font-size:13.5px}
+.step b{display:block;margin-bottom:4px}
+.step.ok{border-left:4px solid var(--ok)}
+.step.warn{border-left:4px solid var(--warn)}
+.step.bad{border-left:4px solid var(--bad)}
+.step.pend{border-left:4px solid var(--muted)}
+.toc{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px;margin:14px 0 0;padding:0;list-style:none}
+.toc a{color:var(--primary);text-decoration:none}
+.strings td:first-child{font-family:var(--mono);font-size:12px;white-space:nowrap}
+@media (max-width:600px){ .f{grid-template-columns:1fr} .f label{padding-top:0} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Group enrolment keys</h1>
+<p class="lede">Mockups for <code>enrol_apply</code>: an applicant holding a valid group key fills in the application and is enrolled at once, in that group, without waiting for a decision. A wrong key is never a dead end: the applicant is offered the ordinary route. Where <code>local_groupdist</code> is installed, each group's own <b>seats</b> count too. Plan and decisions: <code>group-enrolment-key.md</code> (G1&ndash;G15). Each screen shows the recommended option.</p>
+<ul class="toc">
+  <li><a href="#flow">0 Flow</a></li><li><a href="#card">1 Enrolment page</a></li><li><a href="#form">2 Form</a></li>
+  <li><a href="#wrong">3 Wrong key</a></li><li><a href="#locked">4 Throttled</a></li><li><a href="#ack">5 After submit</a></li>
+  <li><a href="#settings">6 Instance settings</a></li><li><a href="#queue">7 Managers</a></li><li><a href="#seats">8 Group seats</a></li><li><a href="#strings">9 Strings</a></li>
+</ul>
+
+<h2 id="flow"><span class="n">0</span>The five outcomes</h2>
+<p class="why">Eligibility is unchanged: the window, the cohort, "new enrolments" and the applicant limit refuse a key holder like anybody else. The key only replaces <b>the decision</b>, and it is checked again inside the submission lock, from the database. Two capacities can stop an admission: the course's <code>places</code>, and, with <code>local_groupdist</code>, the seats of every group the admission would join.</p>
+<div class="flow">
+  <div class="step ok"><b>Valid key, a place and a seat free</b>Enrolled now, active, joins the key's group plus the instance's groups. Managers get an informational message.</div>
+  <div class="step warn"><b>Valid key, course places full</b>Becomes a normal application, flagged "valid key, no place". The approver's group chooser pre-ticks the key's group. (G4)</div>
+  <div class="step warn"><b>Valid key, group out of seats</b>Only with <code>local_groupdist</code>. Becomes a normal application, flagged "valid key, group full: Turma B". (G14)</div>
+  <div class="step bad"><b>Wrong key</b>Form error. Fix it, or tick "send without the key" to apply for approval. (G6)</div>
+  <div class="step pend"><b>No key</b>Exactly today's route: pending until a manager decides.</div>
+</div>
+
+<h2 id="card"><span class="n">1</span>Course enrolment page (<code>enrol_page_hook</code>)</h2>
+<p class="why">The card gains one sentence, and only on an instance that accepts keys. The button stays "Start application": the key is entered in the form, so an applicant without one is never made to feel they are missing something.</p>
+<div class="row">
+<div>
+  <p class="cap">Instance accepts group keys</p>
+  <div class="screen"><div class="bar"><i></i><i></i><i></i> /enrol/index.php?id=42</div>
+  <div class="page">
+    <div class="crumb">Courses / Leadership 2027</div>
+    <div class="ptitle">Enrolment options</div>
+    <div class="card">
+      <h4>Course enrol confirmation</h4>
+      <div class="alert info">Your application will be reviewed before you can access the course. You will be asked to check some details.<br><b>Have a group enrolment key?</b> Enter it in the application to join straight away, with no review.</div>
+      <span class="btn pri">Start application</span>
+    </div>
+  </div></div>
+</div>
+<div>
+  <p class="cap">Option off (default): unchanged</p>
+  <div class="screen"><div class="bar"><i></i><i></i><i></i> /enrol/index.php?id=42</div>
+  <div class="page">
+    <div class="crumb">Courses / Leadership 2027</div>
+    <div class="ptitle">Enrolment options</div>
+    <div class="card">
+      <h4>Course enrol confirmation</h4>
+      <div class="alert info">Your application will be reviewed before you can access the course. You will be asked to check some details.</div>
+      <span class="btn pri">Start application</span>
+    </div>
+  </div></div>
+  <div class="note">Lang: <code>groupkeyoffered</code> is appended to <code>youwillchecknddetails</code> as a second paragraph, not merged into it, so a site that customised the first string keeps it.</div>
+</div>
+</div>
+
+<h2 id="form"><span class="n">2</span>Application form: where the key goes</h2>
+<p class="why">The key is the <b>first</b> section, right after the teacher's introduction: it decides what the submit will do, so it is read before the applicant spends time on the rest. It is optional and says so. Required fields stay required on both routes. <code>passwordunmask</code> so a key copied from paper can be checked before submitting.</p>
+<div class="row">
+<div>
+  <p class="cap">Modal, empty key</p>
+  <div class="modal">
+    <div class="mh">Course enrol confirmation <span>&times;</span></div>
+    <div class="mb">
+      <p class="intro">Welcome! Tell us a little about your role before you join.</p>
+      <div class="fs keyfs"><div class="lg">Group enrolment key <span class="opt">Optional</span></div>
+        <div class="in">
+          <div class="f"><label>Key <span class="help">?</span></label>
+            <div><div class="inp ph">&nbsp;<span class="eye">Show</span></div>
+            <div class="fhelp">If your teacher gave you a key for your group, enter it to be enrolled straight away. Without one, your application is reviewed first.</div></div></div>
+        </div></div>
+      <div class="fs"><div class="lg">Details that travel with your application</div>
+        <div class="in">
+          <div class="f"><label>Department<span class="req">&#9679;</span></label><div class="inp">Operations</div></div>
+          <div class="f"><label>City<span class="req">&#9679;</span></label><div class="inp ph">&nbsp;</div></div>
+          <div class="f"><label></label><div style="display:flex;gap:8px;font-size:14px"><span class="box on"></span>My department is up to date</div></div>
+        </div></div>
+      <div class="f"><label>Comment</label><div class="inp ph" style="min-height:64px">&nbsp;</div></div>
+    </div>
+    <div class="mf"><span class="btn sec">Cancel</span><span class="btn pri">Submit application</span></div>
+  </div>
+</div>
+<div>
+  <p class="cap">Modal, key typed (revealed)</p>
+  <div class="modal">
+    <div class="mh">Course enrol confirmation <span>&times;</span></div>
+    <div class="mb">
+      <p class="intro">Welcome! Tell us a little about your role before you join.</p>
+      <div class="fs keyfs"><div class="lg">Group enrolment key <span class="opt">Optional</span></div>
+        <div class="in">
+          <div class="f"><label>Key <span class="help">?</span></label>
+            <div><div class="inp">turmaB-2027 <span class="eye">Hide</span></div>
+            <div class="fhelp">If your teacher gave you a key for your group, enter it to be enrolled straight away. Without one, your application is reviewed first.</div></div></div>
+        </div></div>
+      <div class="fs dim"><div class="lg">Details that travel with your application</div><div class="in" style="font-size:13px;color:var(--muted)">(same fields, still required)</div></div>
+    </div>
+    <div class="mf"><span class="btn sec">Cancel</span><span class="btn pri">Submit application</span></div>
+  </div>
+  <div class="note">No live "check key" button and no web service: the key is judged only on submit (fewer oracles, see G7). The submit label stays "Submit application" because the modal footer is core's and cannot change with the field.</div>
+</div>
+</div>
+
+<h2 id="wrong"><span class="n">3</span>Wrong key: suggest the ordinary route (G6)</h2>
+<p class="why">The modal re-renders with the error and, only now, a checkbox offering the approval route. The message never says <i>why</i> the key failed (no "no such group", no first-letter hint), and never names a group.</p>
+<div class="row">
+<div>
+  <p class="cap">After a wrong key</p>
+  <div class="modal">
+    <div class="mh">Course enrol confirmation <span>&times;</span></div>
+    <div class="mb">
+      <div class="fs keyfs"><div class="lg">Group enrolment key <span class="opt">Optional</span></div>
+        <div class="in">
+          <div class="f"><label>Key <span class="help">?</span></label>
+            <div><div class="inp err">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull; <span class="eye">Show</span></div>
+            <div class="ferr">This key is not valid for this course. Check it and try again, or send your application for review below.</div></div></div>
+          <div class="chk"><span class="box"></span><div><b>Send my application for review without the key</b><br><span style="font-size:13px;color:var(--muted)">A teacher will review it, and you will be told when there is a decision.</span></div></div>
+        </div></div>
+      <div class="fs dim"><div class="lg">Details that travel with your application</div><div class="in" style="font-size:13px;color:var(--muted)">(what was typed is kept)</div></div>
+    </div>
+    <div class="mf"><span class="btn sec">Cancel</span><span class="btn pri">Submit application</span></div>
+  </div>
+</div>
+<div>
+  <p class="cap">Box ticked: the key is ignored</p>
+  <div class="modal">
+    <div class="mh">Course enrol confirmation <span>&times;</span></div>
+    <div class="mb">
+      <div class="fs keyfs"><div class="lg">Group enrolment key <span class="opt">Optional</span></div>
+        <div class="in">
+          <div class="f"><label>Key</label><div><div class="inp dis">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</div></div></div>
+          <div class="chk" style="background:var(--soft)"><span class="box on"></span><div><b>Send my application for review without the key</b><br><span style="font-size:13px;color:var(--muted)">A teacher will review it, and you will be told when there is a decision.</span></div></div>
+        </div></div>
+      <div class="fs dim"><div class="lg">Details that travel with your application</div><div class="in" style="font-size:13px;color:var(--muted)">&nbsp;</div></div>
+    </div>
+    <div class="mf"><span class="btn sec">Cancel</span><span class="btn pri">Submit application</span></div>
+  </div>
+  <div class="note">Clearing the field does the same as ticking the box. The field is disabled with <code>disabledIf('groupkey', 'withoutkey', 'checked')</code>; the server ignores the key whenever the box is ticked, whatever was posted. K0 checks that an element added in <code>definition_after_data()</code> survives the modal round trip; fallback: the box is always present, hidden until a key is typed.</div>
+</div>
+</div>
+
+<h2 id="locked"><span class="n">4</span>Too many wrong keys (G7)</h2>
+<p class="why">After five wrong keys for this user on this instance within 15 minutes the field is replaced by a sentence. The application itself is still possible: the throttle protects the key, it does not punish the applicant.</p>
+<div class="row">
+<div>
+  <div class="modal">
+    <div class="mh">Course enrol confirmation <span>&times;</span></div>
+    <div class="mb">
+      <div class="fs keyfs"><div class="lg">Group enrolment key <span class="opt">Optional</span></div>
+        <div class="in"><div class="alert warn" style="margin:0">Too many incorrect keys. You can try again in a few minutes, or send your application for review now.</div></div></div>
+      <div class="fs dim"><div class="lg">Details that travel with your application</div><div class="in">&nbsp;</div></div>
+    </div>
+    <div class="mf"><span class="btn sec">Cancel</span><span class="btn pri">Submit application</span></div>
+  </div>
+</div>
+<div>
+  <div class="note">MUC application cache <code>enrol_apply/keyattempts</code>, key <code>&lt;instanceid&gt;_&lt;userid&gt;</code>, TTL 900 s. Counted in <code>validation()</code> only; the in-lock re-check never counts. A successful key clears the counter.</div>
+</div>
+</div>
+
+<h2 id="ack"><span class="n">5</span>After submit (<code>applied.php</code>)</h2>
+<p class="why">The acknowledgement page already describes the applicant's own row through <code>applicantstate</code>. Two new readings, both driven by the recorded <code>keygroupid</code>, never by what the form carried.</p>
+<div class="row">
+<div>
+  <p class="cap">Valid key, a place free</p>
+  <div class="screen"><div class="bar"><i></i><i></i><i></i> /enrol/apply/applied.php?instance=7</div>
+  <div class="page">
+    <div class="ptitle">Leadership 2027</div>
+    <div class="alert ok"><b>You are enrolled.</b> Your group key was accepted and you have joined <b>Turma B</b>. No review was needed.</div>
+    <span class="btn pri">Go to course</span>
+    <p class="hint">The profile-update offer (when the instance allows it) still appears below, as today.</p>
+  </div></div>
+</div>
+<div>
+  <p class="cap">Valid key, places full (G4)</p>
+  <div class="screen"><div class="bar"><i></i><i></i><i></i> /enrol/apply/applied.php?instance=7</div>
+  <div class="page">
+    <div class="ptitle">Leadership 2027</div>
+    <div class="alert warn"><b>Your key is valid, but there are no places left.</b> Your application has been sent for review, and you will be told when there is a decision.</div>
+    <span class="btn sec">Back to course list</span>
+  </div></div>
+  <div class="note">Wrong-key-then-ticked and no-key applications land on today's "Your application is waiting for a decision" page, unchanged.</div>
+</div>
+</div>
+<div class="row" style="margin-top:20px">
+<div>
+  <p class="cap">Valid key, group out of seats (with local_groupdist, G14)</p>
+  <div class="screen"><div class="bar"><i></i><i></i><i></i> /enrol/apply/applied.php?instance=7</div>
+  <div class="page">
+    <div class="ptitle">Leadership 2027</div>
+    <div class="alert warn"><b>Your key is valid, but Turma B has no seats left.</b> Your application has been sent for review, and you will be told when there is a decision.</div>
+    <span class="btn sec">Back to course list</span>
+  </div></div>
+</div>
+<div>
+  <div class="note" style="margin-top:22px">Only the key's own group is ever named. When the seat that ran out belongs to an <i>instance</i> group (G14), the applicant reads the "no places left" wording instead: naming that group would tell them about a group nobody gave them a key for. The record keeps which groups were full (<code>keyoutcome</code>), so the manager sees the real reason.</div>
+</div>
+</div>
+
+<h2 id="settings"><span class="n">6</span>Instance settings (<code>edit_form.php</code>)</h2>
+<p class="why">Off by default (G2). The line under the select is the teacher's view of what switching it on means: which groups would admit, with a link to where keys are set. Keys themselves are never shown here.</p>
+<div class="row">
+<div>
+  <div class="screen"><div class="bar"><i></i><i></i><i></i> /enrol/apply/edit.php?courseid=42&amp;id=7</div>
+  <div class="page">
+    <div class="ptitle" style="font-size:18px">Course enrol confirmation</div>
+    <div class="fs"><div class="lg">Group enrolment keys</div>
+      <div class="in">
+        <div class="f"><label>Accept group keys <span class="help">?</span></label>
+          <div><div class="inp">Yes: a valid key enrols without review <span class="eye">&#9662;</span></div>
+          <div class="fhelp">3 groups in this course have an enrolment key. <a style="color:var(--primary)">Manage groups</a></div>
+          <table style="margin-top:6px;font-size:13px">
+            <tr><th>Group with a key</th><th>Seats</th></tr>
+            <tr><td>Turma A</td><td>12 / 20</td></tr>
+            <tr><td>Turma B</td><td>20 / 20 <span class="badge b-warn">Full: its key admits nobody now</span></td></tr>
+            <tr><td>Turma C</td><td>8 <span style="color:var(--muted)">(no limit declared)</span></td></tr>
+          </table></div></div>
+      </div></div>
+    <div class="fs"><div class="lg">Groups</div>
+      <div class="in"><div class="f"><label>Approved applicants join</label><div class="inp">Leadership 2027 (all)</div></div>
+      <div class="fhelp" style="margin-left:10.2rem">A key holder joins these and the key's own group.</div></div></div>
+  </div></div>
+</div>
+<div>
+  <p class="cap">Option on, but no group has a key</p>
+  <div class="screen"><div class="page">
+    <div class="fs" style="margin:0"><div class="lg">Group enrolment keys</div>
+      <div class="in">
+        <div class="f"><label>Accept group keys</label>
+          <div><div class="inp">Yes: a valid key enrols without review <span class="eye">&#9662;</span></div>
+          <div class="alert warn" style="margin-top:8px;font-size:13px">No group in this course has an enrolment key yet, so every application is still reviewed. Set a key on a group's settings page.</div></div></div>
+      </div></div>
+  </div></div>
+  <div class="note">The <b>Seats</b> column appears only when <code>local_groupdist</code> is installed and its seats field exists; its heading is the field's own name, as groupdist names it. Without groupdist the table shows the group names alone.</div>
+  <div class="note">Help text (<code>groupkeys_help</code>) says plainly that anybody with a group's key skips the review, that keys are set by whoever may manage groups, and that the applicant limit, the enrolment window and the cohort restriction still apply. Stored in <code>customchar1</code> (<code>''</code> / <code>'any'</code>).</div>
+</div>
+</div>
+
+<h2 id="queue"><span class="n">7</span>What managers see</h2>
+<p class="why">A key admission never enters the queue, so it surfaces in the report and the notification. A valid key that met full places does enter it, flagged so the approver knows the applicant was expected.</p>
+<div class="row">
+<div>
+  <p class="cap">Queue row: valid key, places full</p>
+  <div class="screen"><div class="page" style="padding:0">
+    <table>
+      <tr><th></th><th>Applicant</th><th>Applied</th><th>Status</th></tr>
+      <tr><td><span class="box"></span></td><td class="who"><b>Joana Prado</b><span>Operations</span></td><td>23 Oct 2027</td>
+        <td><span class="badge b-pend">Pending</span><br><span class="badge b-key" style="margin-top:4px">Valid key: Turma B</span></td></tr>
+      <tr><td><span class="box"></span></td><td class="who"><b>Caio Mendes</b><span>Logistics</span></td><td>23 Oct 2027</td>
+        <td><span class="badge b-pend">Pending</span><br><span class="badge b-warn" style="margin-top:4px">Valid key, group full: Turma B</span></td></tr>
+      <tr><td><span class="box"></span></td><td class="who"><b>Rui Campos</b><span>Finance</span></td><td>22 Oct 2027</td><td><span class="badge b-pend">Pending</span></td></tr>
+    </table>
+  </div></div>
+  <p class="cap" style="margin-top:16px">Review page header</p>
+  <div class="screen"><div class="page">
+    <div class="alert warn" style="margin:0"><b>Valid key for Turma B, but no place was free.</b> Approving pre-selects Turma B; you can change it.</div>
+  </div></div>
+</div>
+<div>
+  <p class="cap">Course report: admission route column</p>
+  <div class="screen"><div class="page" style="padding:0">
+    <table>
+      <tr><th>Applicant</th><th>Outcome</th><th>Route</th><th>Decided by</th></tr>
+      <tr><td>Ana Lima</td><td><span class="badge b-ok">Enrolled</span></td><td><span class="badge b-key">Group key: Turma B</span></td><td>Ana Lima</td></tr>
+      <tr><td>Rui Campos</td><td><span class="badge b-ok">Enrolled</span></td><td>Decision</td><td>Prof. Souza</td></tr>
+      <tr><td>Joana Prado</td><td><span class="badge b-pend">Pending</span></td><td><span class="badge b-warn">Valid key, no place</span></td><td>&mdash;</td></tr>
+      <tr><td>Caio Mendes</td><td><span class="badge b-pend">Pending</span></td><td><span class="badge b-warn">Valid key, group full: Turma B</span></td><td>&mdash;</td></tr>
+    </table>
+  </div></div>
+  <p class="cap" style="margin-top:16px">Manager notification (G8)</p>
+  <div class="screen"><div class="page" style="font-size:14px">
+    <b>Ana Lima joined Leadership 2027 with a group key</b>
+    <p style="margin:6px 0 0;color:var(--muted)">Ana Lima was enrolled in Leadership 2027 and joined Turma B using that group's enrolment key. No review was needed. Their details are below. If the key was shared beyond the group, change it on the group's settings page.</p>
+  </div></div>
+</div>
+</div>
+
+<h2 id="seats"><span class="n">8</span>Group seats from <code>local_groupdist</code></h2>
+<p class="why">Seats are groupdist's group custom field (empty = no limit, <code>0</code> = no seats), and a seat is taken by <b>every</b> member of the group, as on groupdist's bulk edit page (G13). On the key route they are a <b>gate</b>; for a person approving they are <b>information</b> (G15). Without groupdist none of this appears and nothing changes.</p>
+<div class="row">
+<div>
+  <p class="cap">Review page: group chooser with seats</p>
+  <div class="screen"><div class="bar"><i></i><i></i><i></i> /enrol/apply/manage.php?userenrol=311</div>
+  <div class="page">
+    <div class="ptitle" style="font-size:18px">Caio Mendes &middot; Leadership 2027</div>
+    <div class="alert warn"><b>Valid key for Turma B, but Turma B had no seats left.</b> Approving pre-selects Turma B; you can choose another group.</div>
+    <div class="fs" style="margin:0"><div class="lg">Groups to join on approval</div>
+      <div class="in" style="font-size:14px">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px"><span class="box"></span>Turma A <span style="color:var(--muted)">12 / 20</span></div>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px"><span class="box on"></span>Turma B <span style="color:var(--muted)">20 / 20</span> <span class="badge b-warn">Full</span></div>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px"><span class="box"></span>Turma C <span style="color:var(--muted)">8, no limit</span></div>
+        <div style="display:flex;gap:8px;align-items:center"><span class="box on"></span>All participants <span style="color:var(--muted)">143, no limit</span></div>
+      </div></div>
+    <div style="margin-top:12px;display:flex;gap:8px"><span class="btn pri">Approve</span><span class="btn sec">Defer</span><span class="btn sec">Cancel application</span></div>
+  </div></div>
+</div>
+<div>
+  <p class="cap">After approving into a full group</p>
+  <div class="screen"><div class="bar"><i></i><i></i><i></i> /enrol/apply/manage.php?id=7</div>
+  <div class="page">
+    <div class="alert ok" style="margin-bottom:8px">1 application approved.</div>
+    <div class="alert warn">Turma B now has 21 members for 20 seats.</div>
+    <p class="hint">Emitted in <code>manage.php</code> before the redirect, beside the existing places warning, never from <code>complete_approval()</code> (it runs twice).</p>
+  </div></div>
+  <p class="cap" style="margin-top:16px">Same chooser without local_groupdist</p>
+  <div class="screen"><div class="page" style="font-size:14px">
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px"><span class="box"></span>Turma A</div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px"><span class="box on"></span>Turma B</div>
+    <div style="display:flex;gap:8px;align-items:center"><span class="box on"></span>All participants</div>
+  </div></div>
+  <div class="note">The counts are live, read when the page opens, while the "group full" flag is the recorded fact from the submission. They can disagree (a member left since), and both are shown on purpose: the flag says why this application is in the queue, the count says what approving does now.</div>
+</div>
+</div>
+
+<h2 id="strings"><span class="n">9</span>Proposed strings</h2>
+<p class="why">English is <code>lang/en</code>; the Brazilian Portuguese column is the proposal for <code>lang/pt_br</code>, kept in lockstep.</p>
+<div class="screen"><div class="page" style="padding:0;overflow-x:auto">
+<table class="strings">
+<tr><th>Id</th><th>en</th><th>pt_br</th></tr>
+<tr><td>groupkey</td><td>Group enrolment key</td><td>Chave de inscrição do grupo</td></tr>
+<tr><td>groupkey_help</td><td>If your teacher gave you a key for your group, enter it to be enrolled straight away. Without one, your application is reviewed first.</td><td>Se o seu professor lhe deu uma chave do seu grupo, informe-a para ser inscrito imediatamente. Sem a chave, sua inscrição passa por análise.</td></tr>
+<tr><td>groupkeyoffered</td><td>Have a group enrolment key? Enter it in the application to join straight away, with no review.</td><td>Tem uma chave de inscrição do grupo? Informe-a no formulário para entrar imediatamente, sem análise.</td></tr>
+<tr><td>groupkeyinvalid</td><td>This key is not valid for this course. Check it and try again, or send your application for review below.</td><td>Esta chave não é válida para este curso. Confira e tente novamente, ou envie sua inscrição para análise abaixo.</td></tr>
+<tr><td>withoutkey</td><td>Send my application for review without the key</td><td>Enviar minha inscrição para análise sem a chave</td></tr>
+<tr><td>groupkeylocked</td><td>Too many incorrect keys. You can try again in a few minutes, or send your application for review now.</td><td>Muitas chaves incorretas. Tente novamente em alguns minutos ou envie sua inscrição para análise agora.</td></tr>
+<tr><td>admittedbykey</td><td>You are enrolled. Your group key was accepted and you have joined {$a}. No review was needed.</td><td>Você está inscrito. Sua chave de grupo foi aceita e você entrou no grupo {$a}. Não foi necessária análise.</td></tr>
+<tr><td>keyvalidnoplace</td><td>Your key is valid, but there are no places left. Your application has been sent for review, and you will be told when there is a decision.</td><td>Sua chave é válida, mas não há vagas. Sua inscrição foi enviada para análise e você será avisado quando houver uma decisão.</td></tr>
+<tr><td>keyvalidgroupfull</td><td>Your key is valid, but {$a} has no seats left. Your application has been sent for review, and you will be told when there is a decision.</td><td>Sua chave é válida, mas o grupo {$a} não tem mais vagas. Sua inscrição foi enviada para análise e você será avisado quando houver uma decisão.</td></tr>
+<tr><td>routegroupfull</td><td>Valid key, group full: {$a}</td><td>Chave válida, grupo lotado: {$a}</td></tr>
+<tr><td>groupseatsfull</td><td>Full</td><td>Lotado</td></tr>
+<tr><td>groupseatsnolimit</td><td>{$a}, no limit</td><td>{$a}, sem limite</td></tr>
+<tr><td>groupoverseats</td><td>{$a->name} now has {$a->members} members for {$a->seats} seats.</td><td>O grupo {$a->name} agora tem {$a->members} membros para {$a->seats} vagas.</td></tr>
+<tr><td>groupkeyadmitsnobody</td><td>Full: its key admits nobody now</td><td>Lotado: a chave não admite ninguém agora</td></tr>
+<tr><td>groupkeys</td><td>Accept group keys</td><td>Aceitar chaves de grupo</td></tr>
+<tr><td>groupkeys_any</td><td>Yes: a valid key enrols without review</td><td>Sim: uma chave válida inscreve sem análise</td></tr>
+<tr><td>groupkeysingroups</td><td>{$a->count} groups in this course have an enrolment key: {$a->names}.</td><td>{$a->count} grupos deste curso têm chave de inscrição: {$a->names}.</td></tr>
+<tr><td>groupkeysnone</td><td>No group in this course has an enrolment key yet, so every application is still reviewed.</td><td>Nenhum grupo deste curso tem chave de inscrição ainda, então todas as inscrições continuam passando por análise.</td></tr>
+<tr><td>routekey</td><td>Group key: {$a}</td><td>Chave de grupo: {$a}</td></tr>
+<tr><td>eventapplicationadmittedbykey</td><td>Applicant enrolled with a group key</td><td>Candidato inscrito com chave de grupo</td></tr>
+</table>
+</div></div>
+
+</div>
+</body>
+</html>

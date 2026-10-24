@@ -14,6 +14,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   package, data-only lang files, a README naming every table, capability and dependency,
   per-plugin setting names, plugin-scoped CSS, the boilerplate, and the privacy cover of core rows
   stamped with the component.
+
+- **Group enrolment keys, first half (setting and building blocks).** An instance can now accept
+  the enrolment key of a course group ("Accept group enrolment keys", off by default, with a site
+  default under `enrol_apply/groupkeys`). The instance form lists the groups that carry a key,
+  never the keys, flags a key two groups share and a key nobody can type, and, with
+  `local_groupdist` installed, shows each group's seats. The key route on the application form
+  comes next; until then the setting changes nothing an applicant sees. New cache
+  `keyattempts` (wrong keys per applicant, 15 minutes). Design:
+  `docs/design/group-enrolment-key.md`.
 - **"Save and edit application fields"** on the instance form saves and lands on the method's
   questions: they hang off the instance id, so they can only be edited once it exists.
 
