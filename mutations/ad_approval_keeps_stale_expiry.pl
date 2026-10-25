@@ -13,4 +13,4 @@
 #
 # Distinct from DQ below: this one writes NO timeend, so a stale one survives; DQ writes 0, which
 # still clears a stale expiry but loses the method's period.
-s{\$userenrolment->timestart = time\(\);\n            \$userenrolment->timeend = \$instance->enrolperiod\n                \? \$userenrolment->timestart \+ \$instance->enrolperiod\n                : 0;}{\$userenrolment->timestart = time();}s;
+s{\$userenrolment->timestart = time\(\);\n        \$userenrolment->timeend = \$instance->enrolperiod\n            \? \$userenrolment->timestart \+ \$instance->enrolperiod\n            : 0;}{\$userenrolment->timestart = time();}s;

@@ -525,7 +525,9 @@ class application_form extends dynamic_form {
         if ($ownrow) {
             throw new \moodle_exception(
                 \enrol_apply\local\applicantstate::message_key($ownrow, $hasaccess),
-                'enrol_apply'
+                'enrol_apply',
+                '',
+                \enrol_apply\local\applicantstate::message_param($ownrow, $hasaccess)
             );
         }
 

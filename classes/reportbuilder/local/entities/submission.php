@@ -47,7 +47,7 @@ class submission extends base {
      * @return array Table names.
      */
     protected function get_default_tables(): array {
-        return ['enrol_apply_submission', 'user_enrolments'];
+        return ['enrol_apply_submission', 'user_enrolments', 'groups'];
     }
 
     /**
@@ -70,6 +70,21 @@ class submission extends base {
         $uealias = $this->get_table_alias('user_enrolments');
 
         return "LEFT JOIN {user_enrolments} {$uealias} ON {$uealias}.id = {$alias}.userenrolmentid";
+    }
+
+    /**
+     * The join onto the group whose enrolment key the applicant presented.
+     *
+     * LEFT, because most records carry no key, and a key group can be deleted after the fact
+     * while the record keeps its id.
+     *
+     * @return string The join.
+     */
+    protected function key_group_join(): string {
+        $alias = $this->get_table_alias('enrol_apply_submission');
+        $galias = $this->get_table_alias('groups');
+
+        return "LEFT JOIN {groups} {$galias} ON {$galias}.id = {$alias}.keygroupid";
     }
 
     /**
@@ -223,6 +238,36 @@ class submission extends base {
             ->add_field("{$alias}.userenrolmentid", 'outcomeueid')
             ->set_is_sortable(false)
             ->add_callback([formatter::class, 'outcome']);
+
+        /* How the application was admitted, from the record: through review, or by a group key,
+           with what a valid key that could not admit ran into. Sortable and filterable, because
+           it is a stored column and a plain vocabulary, unlike the outcome above. */
+        $columns[] = (new column(
+            'admissionroute',
+            new lang_string('admissionroute', 'enrol_apply'),
+            $this->get_entity_name()
+        ))
+            ->add_joins($this->get_joins())
+            ->set_type(column::TYPE_INTEGER)
+            ->add_field("{$alias}.keyoutcome")
+            ->set_is_sortable(true)
+            ->add_callback([formatter::class, 'admission_route']);
+
+        $galias = $this->get_table_alias('groups');
+        $columns[] = (new column(
+            'keygroup',
+            new lang_string('keygroup', 'enrol_apply'),
+            $this->get_entity_name()
+        ))
+            ->add_joins($this->get_joins())
+            ->add_join($this->key_group_join())
+            ->set_type(column::TYPE_TEXT)
+            ->add_field("{$galias}.name", 'keygroupname')
+            ->add_field("{$alias}.keygroupid", 'keygroupid')
+            ->add_field("{$alias}.keyoutcome", 'keygroupoutcome')
+            ->add_field("{$galias}.courseid", 'keygroupcourseid')
+            ->set_is_sortable(true, ["{$galias}.name"])
+            ->add_callback([formatter::class, 'key_group']);
 
         /* The frozen snapshot, as one long-text column that is neither sortable nor filterable.
            Built from the record's rows in SQL (submission::aggregate_sql()), because a display
@@ -412,6 +457,22 @@ class submission extends base {
             "{$alias}.decisionnote"
         ))
             ->add_joins($this->get_joins());
+
+        $filters[] = (new filter(
+            select::class,
+            'admissionroute',
+            new lang_string('admissionroute', 'enrol_apply'),
+            $this->get_entity_name(),
+            "{$alias}.keyoutcome"
+        ))
+            ->add_joins($this->get_joins())
+            ->set_options([
+                submissionhelper::KEY_NONE => new lang_string('admissionroutereview', 'enrol_apply'),
+                submissionhelper::KEY_ADMITTED => new lang_string('keyoutcomeadmitted', 'enrol_apply'),
+                submissionhelper::KEY_NO_PLACE => new lang_string('keyoutcomenoplace', 'enrol_apply'),
+                submissionhelper::KEY_GROUP_FULL => new lang_string('keyoutcomegroupfull', 'enrol_apply'),
+                submissionhelper::KEY_SEAT_UNCONFIRMED => new lang_string('keyoutcomeseatunconfirmed', 'enrol_apply'),
+            ]);
 
         return $filters;
     }

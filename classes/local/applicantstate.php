@@ -43,6 +43,14 @@ use stdClass;
  * rendered to somebody core has refused, so it gets false in practice). Deriving it here would
  * mean reimplementing is_enrolled().
  *
+ * A group enrolment key refines two of the states, and only while the record still says what the
+ * key did ({@see submission::key_of()}): an approval the key made with nobody deciding over it
+ * since reads as ADMITTED, and a pending application a valid key could not admit says why (no
+ * place, a full group, seats not confirmed in time). A deferral is a person's decision and says
+ * so whatever the key did. Each names the group the applicant typed the key for, and only that
+ * one: it is the one group they already know. A key group deleted since leaves the plain state,
+ * because a sentence about a group that no longer exists would explain nothing.
+ *
  * It is deliberately a describer and not a renderer. The enrolment page has no heading of its
  * own and puts the body in a core notification inside its enrol_page panel, while the
  * acknowledgement page uses all three parts.
@@ -64,35 +72,53 @@ final class applicantstate {
     /** @var string No access and nothing awaited: an approval that grants none, or a lapsed row of either kind. */
     private const INACTIVE = 'inactive';
 
+    /** @var string APPROVED by a group key, with nobody deciding over it since. */
+    private const ADMITTED = 'admitted';
+
+    /** @var string PENDING because a valid key found no place left in the course. */
+    private const KEY_NO_PLACE = 'keynoplace';
+
+    /** @var string PENDING because a valid key's group had no seat left. */
+    private const KEY_GROUP_FULL = 'keygroupfull';
+
+    /** @var string PENDING because a valid key's place or seat could not be confirmed in time. */
+    private const KEY_UNCONFIRMED = 'keyunconfirmed';
+
     /**
      * Heading, body and notification level for one applicant's own application.
      *
      * Returned together, all derived from one state(), so a heading can never describe a
      * different state from its body.
      *
-     * @param stdClass $userenrolment The applicant's own {user_enrolments} row, carrying status and timeend.
+     * @param stdClass $userenrolment The applicant's own {user_enrolments} row, carrying id, status and timeend.
      * @param bool $hasaccess Whether that enrolment currently lets them into the course, as the
      *        caller's own is_enrolled(..., onlyactive: true) answered it.
-     * @return array Keys 'heading', 'message' and 'type', the last a \core\output\notification level.
+     * @return array Keys 'heading', 'message', 'type' (a \core\output\notification level) and
+     *     'admitted' (whether a group key admitted the applicant, with nobody deciding over it since).
      */
     public static function describe(stdClass $userenrolment, bool $hasaccess): array {
-        $state = self::state($userenrolment, $hasaccess);
+        [$state, $groupname] = self::resolve($userenrolment, $hasaccess);
 
         return [
             'heading' => match ($state) {
                 self::DEFERRED => get_string('applicationdeferred', 'enrol_apply'),
                 self::APPROVED => get_string('applicationapproved', 'enrol_apply'),
+                self::ADMITTED => get_string('applicationadmittedbykey', 'enrol_apply'),
                 self::INACTIVE => get_string('applicationinactive', 'enrol_apply'),
                 default => get_string('applicationsubmitted', 'enrol_apply'),
             },
-            'message' => get_string(self::message_key($userenrolment, $hasaccess), 'enrol_apply'),
+            'message' => get_string(self::key_for($state), 'enrol_apply', $groupname),
             /* Warning on the INACTIVE state alone: that applicant has an approval and no access,
-               which is something to act on rather than to wait for. */
+               which is something to act on rather than to wait for. A valid key that could not
+               admit is information: the applicant expected to be in already. */
             'type' => match ($state) {
                 self::INACTIVE => \core\output\notification::NOTIFY_WARNING,
-                self::DEFERRED => \core\output\notification::NOTIFY_INFO,
+                self::DEFERRED, self::KEY_NO_PLACE, self::KEY_GROUP_FULL, self::KEY_UNCONFIRMED
+                    => \core\output\notification::NOTIFY_INFO,
                 default => \core\output\notification::NOTIFY_SUCCESS,
             },
+            // Only an admission sends the applicant on to the course; see applied.php.
+            'admitted' => $state === self::ADMITTED,
         ];
     }
 
@@ -105,17 +131,89 @@ final class applicantstate {
      * A literal per branch rather than an id built by concatenation, so tools that check
      * string usage can see every key.
      *
-     * @param stdClass $userenrolment The applicant's own {user_enrolments} row, carrying status and timeend.
+     * @param stdClass $userenrolment The applicant's own {user_enrolments} row, carrying id, status and timeend.
      * @param bool $hasaccess Whether that enrolment currently lets them into the course.
      * @return string A string id in this plugin's language pack.
      */
     public static function message_key(stdClass $userenrolment, bool $hasaccess): string {
-        return match (self::state($userenrolment, $hasaccess)) {
+        return self::key_for(self::resolve($userenrolment, $hasaccess)[0]);
+    }
+
+    /**
+     * The parameter the body string takes, for the caller of message_key().
+     *
+     * @param stdClass $userenrolment The applicant's own {user_enrolments} row, carrying id, status and timeend.
+     * @param bool $hasaccess Whether that enrolment currently lets them into the course.
+     * @return string|null The key group's name, escaped for HTML; null for a state that names none.
+     */
+    public static function message_param(stdClass $userenrolment, bool $hasaccess): ?string {
+        return self::resolve($userenrolment, $hasaccess)[1];
+    }
+
+    /**
+     * The body's string id for a state.
+     *
+     * @param string $state One of the state constants.
+     * @return string A string id in this plugin's language pack.
+     */
+    private static function key_for(string $state): string {
+        return match ($state) {
             self::DEFERRED => 'applicationdeferred_body',
             self::APPROVED => 'applicationapproved_body',
+            self::ADMITTED => 'applicationadmittedbykey_body',
             self::INACTIVE => 'applicationinactive_body',
+            self::KEY_NO_PLACE => 'applicationkeynoplace_body',
+            self::KEY_GROUP_FULL => 'applicationkeygroupfull_body',
+            self::KEY_UNCONFIRMED => 'applicationkeyunconfirmed_body',
             default => 'applicationsubmitted_body',
         };
+    }
+
+    /**
+     * The state, refined by what a group key did, and the key group's name when it names one.
+     *
+     * The name is escaped (format_string()'s default), because both sinks render the body raw: a
+     * core notification's message and a moodle_exception's.
+     *
+     * @param stdClass $userenrolment The applicant's own {user_enrolments} row, carrying id, status and timeend.
+     * @param bool $hasaccess Whether that enrolment currently lets them into the course.
+     * @return array The state constant, then the group name or null.
+     */
+    private static function resolve(stdClass $userenrolment, bool $hasaccess): array {
+        global $DB;
+
+        $state = self::state($userenrolment, $hasaccess);
+        if ($state !== self::APPROVED && $state !== self::PENDING) {
+            return [$state, null];
+        }
+
+        $key = submission::key_of((int) ($userenrolment->id ?? 0));
+        if ($key === null) {
+            return [$state, null];
+        }
+
+        $refined = match (true) {
+            $state === self::APPROVED && submission::admitted_by_key($key) => self::ADMITTED,
+            $state === self::PENDING && $key->outcome === submission::KEY_NO_PLACE => self::KEY_NO_PLACE,
+            $state === self::PENDING && $key->outcome === submission::KEY_GROUP_FULL => self::KEY_GROUP_FULL,
+            $state === self::PENDING && $key->outcome === submission::KEY_SEAT_UNCONFIRMED => self::KEY_UNCONFIRMED,
+            default => null,
+        };
+        if ($refined === null) {
+            return [$state, null];
+        }
+
+        $group = $key->groupid > 0
+            ? $DB->get_record('groups', ['id' => $key->groupid], 'id, courseid, name')
+            : false;
+        if (!$group) {
+            return [$state, null];
+        }
+
+        return [
+            $refined,
+            format_string($group->name, true, ['context' => \context_course::instance($group->courseid)]),
+        ];
     }
 
     /**
@@ -134,7 +232,7 @@ final class applicantstate {
      * Access is consulted on the ACTIVE branch and nowhere else: a pending applicant has no access
      * either, and must not be told their enrolment is inactive.
      *
-     * @param stdClass $userenrolment The applicant's own {user_enrolments} row, carrying status and timeend.
+     * @param stdClass $userenrolment The applicant's own {user_enrolments} row, carrying id, status and timeend.
      * @param bool $hasaccess Whether that enrolment currently lets them into the course.
      * @return string One of the state constants.
      */

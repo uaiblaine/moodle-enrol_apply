@@ -338,6 +338,34 @@ final class application_form_test extends \advanced_testcase {
     }
 
     /**
+     * Reopening the form after a group key admitted the applicant refuses with the admission's
+     * own sentence, and hands the exception the key group's name to fill it in.
+     *
+     * Changes that must make it fail: the refusal thrown without the string's parameter.
+     *
+     * @return void
+     */
+    public function test_the_refusal_after_an_admission_names_the_key_group(): void {
+        $group = $this->accept_group_keys();
+        $sink = $this->redirectMessages();
+        $this->plugin->submit_application(
+            $this->instance,
+            (int) $this->applicant->id,
+            (object) ['groupkey' => 'Turma-B-2027', 'applydescription' => '']
+        );
+        $sink->close();
+
+        try {
+            $this->make_form()->check_access_for_dynamic_submission();
+            $this->fail('an admitted applicant must be refused');
+        } catch (\moodle_exception $e) {
+            $this->assertSame('applicationadmittedbykey_body', $e->errorcode);
+            $this->assertSame($group->name, $e->a);
+            $this->assertStringContainsString('Turma B', $e->getMessage());
+        }
+    }
+
+    /**
      * The refusal does not say a decision is awaited when the row has lapsed.
      *
      * A suspending expiredaction leaves status 1 with a timeend in the past. The control is the same

@@ -928,9 +928,15 @@ class submission {
      * Newest first, as chosen_groups() reads: a user enrolment can carry an older record from a
      * cancelled application, and the key route of that one is not this one's.
      *
+     * The decider comes with it because an admission is the key's only while the applicant is
+     * still recorded as the decider (G11): a decision taken on the same record later - a
+     * suspension from the participants page and a fresh approval - restamps it, and the
+     * enrolment is then a person's decision whatever the key once did.
+     *
      * @param int $userenrolmentid User enrolment the application belongs to.
-     * @return stdClass|null Object with int 'groupid' (0 when the group could not be restored) and
-     *     int 'outcome' (a KEY_ constant other than KEY_NONE); null when no key was presented.
+     * @return stdClass|null Object with int 'groupid' (0 when the group could not be restored),
+     *     int 'outcome' (a KEY_ constant other than KEY_NONE), int 'userid' and int 'decidedby';
+     *     null when no key was presented.
      */
     public static function key_of(int $userenrolmentid): ?stdClass {
         global $DB;
@@ -939,7 +945,7 @@ class submission {
             'enrol_apply_submission',
             ['userenrolmentid' => $userenrolmentid],
             'timecreated DESC, id DESC',
-            'id, keygroupid, keyoutcome',
+            'id, userid, decidedby, keygroupid, keyoutcome',
             0,
             1
         );
@@ -951,7 +957,12 @@ class submission {
             return null;
         }
 
-        return (object) ['groupid' => (int) $row->keygroupid, 'outcome' => $outcome];
+        return (object) [
+            'groupid' => (int) $row->keygroupid,
+            'outcome' => $outcome,
+            'userid' => (int) $row->userid,
+            'decidedby' => (int) $row->decidedby,
+        ];
     }
 
     /**
@@ -970,5 +981,19 @@ class submission {
             self::KEY_SEAT_UNCONFIRMED => get_string('keyoutcomeseatunconfirmed', 'enrol_apply'),
             default => '',
         };
+    }
+
+    /**
+     * Whether this key outcome still describes the user enrolment: an admission by the key that
+     * no person has decided over since.
+     *
+     * @param stdClass|null $key What key_of() returned.
+     * @return bool True for an admission the applicant is still recorded as having decided.
+     */
+    public static function admitted_by_key(?stdClass $key): bool {
+        return $key !== null
+            && $key->outcome === self::KEY_ADMITTED
+            && $key->userid > 0
+            && $key->decidedby === $key->userid;
     }
 }

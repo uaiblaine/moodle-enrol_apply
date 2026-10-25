@@ -769,6 +769,7 @@ class applications extends \table_sql implements dynamic_table {
            predating the durable record shows no evidence. */
         $fields = "ue.id AS userenrolmentid, ue.status AS enrolstatus, ue.timecreated AS applydate,
                    COALESCE(s.comment, ai.comment) AS applycomment, s.id AS submissionid,
+                   s.keyoutcome,
                    c.fullname AS course,
                    c.id AS courseid, {$priorsql}, {$userfields}{$this->identitysql->selects}";
         $from = "{user_enrolments} ue
@@ -1116,6 +1117,13 @@ class applications extends \table_sql implements dynamic_table {
                 get_string('queuewaitinglist', 'enrol_apply'),
                 'badge bg-warning text-dark me-1'
             );
+        }
+        /* What a group key did, by the record's own label and without the group's name: the
+           mentee scope spans courses whose groups a mentor may not see (see the review page's
+           choosers), and the review page names the group to a reader who may. */
+        $keylabel = \enrol_apply\local\submission::key_outcome_label((int) ($row->keyoutcome ?? 0));
+        if ($keylabel !== '') {
+            $badges .= html_writer::span($keylabel, 'badge bg-primary text-white me-1');
         }
         if (!empty($row->appliedbefore)) {
             $badges .= html_writer::span(
