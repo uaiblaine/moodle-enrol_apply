@@ -514,8 +514,8 @@ final class submission_test extends \advanced_testcase {
         $this->assertSame('', submission::key_outcome_label(submission::KEY_NONE));
         $labels = array_map(
             [submission::class, 'key_outcome_label'],
-            [submission::KEY_ADMITTED, submission::KEY_NO_PLACE, submission::KEY_GROUP_FULL]
+            [submission::KEY_ADMITTED, submission::KEY_NO_PLACE, submission::KEY_GROUP_FULL, submission::KEY_SEAT_UNCONFIRMED]
         );
-        $this->assertCount(3, array_unique(array_filter($labels)));
+        $this->assertCount(4, array_unique(array_filter($labels)));
     }
 }
