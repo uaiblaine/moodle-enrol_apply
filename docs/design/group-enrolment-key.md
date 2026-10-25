@@ -5,7 +5,7 @@ done the same day: no design change, three corrections (no trimming, a lowest-id
 key ignored whenever `withoutkey` is set). The prerequisites, K1 and K2 are written
 (2026-10-23, uncommitted): `\local_groupdist\seats` on groupdist's main, 5.1 and 5.3 branches,
 the `extra_deps_for()` case in moodle-dev, and here the setting, the resolver, the throttle and
-the seats reader. Nothing an applicant sees has changed yet: that is K3 to K6. Mockups: [`group-enrolment-key-mockup.html`](group-enrolment-key-mockup.html).
+the seats reader. K3 to K6 are written and K3 to K5 merged; K7 and K8 remain. Mockups: [`group-enrolment-key-mockup.html`](group-enrolment-key-mockup.html).
 Revised the same day for per-group seats from `local_groupdist` (G12&ndash;G15).
 
 ## The request
@@ -332,7 +332,24 @@ Behat feature (`group_enrolment_key.feature`, page transport) for the two journe
   `\core\notification::success()` naming the group.
 - `enrol_page_hook()`: the extra sentence on the card when the instance accepts keys.
 
-### K6. Surfaces
+### K6. Surfaces &mdash; written 2026-10-25
+
+As built: `applicantstate` refines only APPROVED and PENDING, and only while the record still
+says what the key did &mdash; an admission whose decider is still the applicant
+(`submission::admitted_by_key()`), a pending application whose key ran into no place, a full group
+or an unconfirmed seat. A deferral reads as deferred, a key group deleted since leaves the plain
+wording, and the form's refusal gets the group through `message_param()`. The queue's badge
+carries the outcome without the group's name (the mentee scope spans courses whose groups a mentor
+may not see); the review page names it to a reader holding the course capability and ticks
+`key_route_groups()`, now public, because the chooser's pick replaces the method's list. The
+chooser shows seats only for a group that declares them; `groupseats::overfilled()` reads the
+memberships an approval stamped and feeds `manage.php`'s warning (members &gt; seats, a group
+exactly at its seats is full, not over). The manager notice reuses the `application` provider and
+recipients, with type `admission` in `enrol_apply_notification`; it is sent from inside `admit()`'s
+transaction, which core's message buffer makes safe, and names the key group only to a recipient
+holding the course capability (the security read found it reaching mentors and site-wide
+recipients). The instance settings line already showed
+seats from K1. Nineteen gates, KS1&ndash;KS19.
 
 - `applicantstate`: ACTIVE with access and `keygroupid` &rarr; "You are enrolled and joined
   {group}"; PENDING with `keygroupid` &rarr; "Your key is valid, but there are no places left.

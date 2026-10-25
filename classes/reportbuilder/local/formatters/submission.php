@@ -93,6 +93,54 @@ class submission {
     }
 
     /**
+     * How the application was admitted: through review, or what a group key did.
+     *
+     * @param mixed $value Stored keyoutcome.
+     * @param stdClass $row Row being rendered.
+     * @return string Localised label, or the raw value when it is not one this plugin knows.
+     */
+    public static function admission_route($value, stdClass $row): string {
+        if ($value === null || $value === '') {
+            return '';
+        }
+
+        $outcome = (int) $value;
+        if ($outcome === submissionhelper::KEY_NONE) {
+            return get_string('admissionroutereview', 'enrol_apply');
+        }
+        if (!in_array($outcome, submissionhelper::KEY_OUTCOMES, true)) {
+            // Not a vocabulary member: show it rather than inventing a label for it.
+            return (string) $value;
+        }
+
+        return submissionhelper::key_outcome_label($outcome);
+    }
+
+    /**
+     * The group whose enrolment key the applicant presented.
+     *
+     * Escaped by format_string(), as core's group entity does: a Report Builder cell is raw HTML.
+     * A key presented and its group since deleted, or never mapped by a restore (keygroupid 0
+     * with an outcome), says so rather than reading as no key at all.
+     *
+     * @param mixed $value The group's name, null when the join found nothing.
+     * @param stdClass $row Row being rendered, carrying keygroupid, keygroupoutcome and keygroupcourseid.
+     * @return string The name, a note that the group is gone, or empty when no key was presented.
+     */
+    public static function key_group($value, stdClass $row): string {
+        if ((int) ($row->keygroupoutcome ?? 0) === submissionhelper::KEY_NONE) {
+            return '';
+        }
+        if ($value === null || $value === '') {
+            return get_string('keygroupgone', 'enrol_apply');
+        }
+
+        return format_string((string) $value, true, [
+            'context' => \context_course::instance((int) $row->keygroupcourseid),
+        ]);
+    }
+
+    /**
      * What the enrolment is doing now, or why there is nothing to report.
      *
      * A null live status means the join found nothing: no longer enrolled. But a record restored

@@ -155,8 +155,8 @@ final class key_admission_test extends \advanced_testcase {
 
     /**
      * A valid key admits at once: active, in the key's group and the instance's own, recorded as
-     * decided by the applicant, no manager asked to decide, the event raised, the wrong-key count
-     * cleared.
+     * decided by the applicant, the manager told rather than asked to decide, the event raised,
+     * the wrong-key count cleared.
      *
      * Changes that must make it fail: the admission not recording its groups before activating,
      * the instance's list left out of the groups, the decider left as whoever is logged in, the
@@ -188,7 +188,13 @@ final class key_admission_test extends \advanced_testcase {
         $this->assertSame((int) $applicant->id, (int) $record->decidedby);
         $this->assertFalse($DB->record_exists('enrol_apply_applicationinfo', ['userenrolmentid' => $record->userenrolmentid]));
 
-        $this->assertSame(0, $this->sent_to($messages, $this->teacher), 'no manager is asked to decide');
+        $told = array_values(array_filter($messages, fn($m): bool => (int) $m->useridto === (int) $this->teacher->id));
+        $this->assertCount(1, $told);
+        $this->assertSame(
+            get_string('mailtoteacher_admitted_subject', 'enrol_apply'),
+            $told[0]->subject,
+            'the manager is told, not asked to decide'
+        );
         $this->assertFalse(keyattempts::locked((int) $this->instance->id, (int) $applicant->id));
 
         $admitted = array_values(array_filter(

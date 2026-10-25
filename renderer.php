@@ -582,25 +582,44 @@ class enrol_apply_renderer extends plugin_renderer_base {
      * cannot open. The instance's own groups and role still apply to a mentor's decision; they
      * only cannot override them.
      *
+     * With local_groupdist installed, each group that declares seats reads its occupancy, and a
+     * full one says so and stays selectable (G15): approving into it is the decider's call, as
+     * approving past the course's places is, and manage.php warns after the decision.
+     *
      * @param stdClass|null $instance Enrol instance the decision belongs to, null when unknown.
      * @param string $message What the operator had already typed, empty on the ordinary path.
      * @param string $note The decision note they had already typed, empty on the ordinary path.
+     * @param array $preselected Group ids to offer ticked: the groups a valid key would have joined,
+     *        on the review page of an application the key could not admit. Empty elsewhere.
      * @return array Context for the partial.
      */
-    protected function decision_controls_context($instance, $message = '', $note = ''): array {
+    protected function decision_controls_context($instance, $message = '', $note = '', array $preselected = []): array {
         $groups = [];
         $roles = [];
 
         $coursecontext = $instance === null ? null : \context_course::instance($instance->courseid);
         if ($coursecontext && has_capability('enrol/apply:manageapplications', $coursecontext)) {
+            $coursegroups = groups_get_all_groups($instance->courseid);
+            $seats = \enrol_apply\local\groupseats::for_groups(array_keys($coursegroups));
+
             /* The plain spelling ('escape' => false), because the template renders the name
                through a double stash; with format_string()'s default a group named "R&D < Team"
                would read "R&amp;D &lt; Team". edit_form.php's call keeps the escaped spelling
-               because a moodleform select renders its options through a triple stash. */
-            foreach (groups_get_all_groups($instance->courseid) as $group) {
+               because a moodleform select renders its options through a triple stash. The seats
+               suffix keeps the same spelling: get_string() substitutes without escaping. */
+            foreach ($coursegroups as $group) {
+                $name = format_string($group->name, true, ['context' => $coursecontext, 'escape' => false]);
+                $seat = $seats[(int) $group->id] ?? null;
+                if ($seat !== null && $seat->seats !== null) {
+                    $a = (object) ['name' => $name, 'members' => (int) $seat->members, 'seats' => (int) $seat->seats];
+                    $name = (int) $seat->members >= $seat->seats
+                        ? get_string('decisiongroupfull', 'enrol_apply', $a)
+                        : get_string('decisiongroupseats', 'enrol_apply', $a);
+                }
                 $groups[] = [
                     'id' => $group->id,
-                    'name' => format_string($group->name, true, ['context' => $coursecontext, 'escape' => false]),
+                    'name' => $name,
+                    'selected' => in_array((int) $group->id, $preselected, true),
                 ];
             }
 
@@ -645,6 +664,49 @@ class enrol_apply_renderer extends plugin_renderer_base {
             'rolehelp' => get_string('decisionrole_help', 'enrol_apply'),
             'roledefault' => get_string('decisionroledefault', 'enrol_apply'),
             'roles' => $roles,
+        ];
+    }
+
+    /**
+     * What a group key did for this application, for the review page.
+     *
+     * The chip names the key group only to a reader who may see the course's groups, the gate
+     * the group chooser applies ({@see self::decision_controls_context()}); a mentor reads the
+     * outcome alone, as on the queue. The groups offered ticked are the ones the key would have
+     * joined - its own group and the method's list, key_route_groups() - so approving without
+     * touching the chooser does what the key would have done had a place been left. A key group
+     * deleted since offers nothing ticked and is not named.
+     *
+     * @param stdClass $application Application as \enrol_apply\local\queue::application() returns it.
+     * @param stdClass|null $instance Enrol instance the application belongs to.
+     * @param \context_course $coursecontext Course the application was made to.
+     * @return array Keys 'chip' (plain spelling, empty when no key was presented) and 'preselected' (group ids).
+     */
+    protected function key_context($application, $instance, \context_course $coursecontext): array {
+        global $DB;
+
+        $key = \enrol_apply\local\submission::key_of((int) $application->id);
+        if ($key === null) {
+            return ['chip' => '', 'preselected' => []];
+        }
+
+        $label = \enrol_apply\local\submission::key_outcome_label($key->outcome);
+        $group = $key->groupid > 0
+            ? $DB->get_record('groups', ['id' => $key->groupid, 'courseid' => $application->courseid], 'id, name')
+            : false;
+        if (!$group || !has_capability('enrol/apply:manageapplications', $coursecontext)) {
+            return ['chip' => $label, 'preselected' => []];
+        }
+
+        return [
+            // Plain, for the same reason as the group names: the template double-stashes it.
+            'chip' => get_string('keychipgroup', 'enrol_apply', (object) [
+                'outcome' => $label,
+                'group' => format_string($group->name, true, ['context' => $coursecontext, 'escape' => false]),
+            ]),
+            'preselected' => $instance === null
+                ? []
+                : enrol_get_plugin('apply')->key_route_groups($instance, (int) $group->id),
         ];
     }
 
@@ -960,8 +1022,9 @@ class enrol_apply_renderer extends plugin_renderer_base {
         $waiting = (int) $application->status === ENROL_APPLY_USER_WAIT;
 
         $coursecontext = \context_course::instance($application->courseid);
+        $keyed = $this->key_context($application, $instance, $coursecontext);
 
-        $context = $this->decision_controls_context($instance, $message, $note)
+        $context = $this->decision_controls_context($instance, $message, $note, $keyed['preselected'])
             + $this->snapshot_context($application)
             + $this->identity_context($applicant, $coursecontext)
             + $this->history_context($application, $coursecontext)
@@ -986,6 +1049,8 @@ class enrol_apply_renderer extends plugin_renderer_base {
             'profilelabel' => get_string('viewprofile'),
             'appliedlabel' => get_string('applydate', 'enrol_apply'),
             'applied' => userdate((int) $application->applydate, get_string('strftimedatetimeshort', 'langconfig')),
+            'haskeychip' => $keyed['chip'] !== '',
+            'keychip' => $keyed['chip'],
             'statuslabel' => get_string('submissionstatus', 'enrol_apply'),
             'status' => $waiting
                 ? get_string('outcomewaiting', 'enrol_apply')
@@ -1187,6 +1252,8 @@ class enrol_apply_renderer extends plugin_renderer_base {
      * @param moodle_url $manageurl Link to the screen where the application can be decided.
      * @param string $applydescription Comment submitted with the application.
      * @param array $submitted Label and value pairs the applicant typed, from fields::submitted_values().
+     * @param string|null $admittedgroup For an admission by key, the key group's plain name, or empty
+     *     where the recipient may not be told it; null for an application waiting for review.
      * @return string Rendered HTML body.
      */
     public function application_notification_mail_body(
@@ -1194,7 +1261,8 @@ class enrol_apply_renderer extends plugin_renderer_base {
         $user,
         $manageurl,
         $applydescription,
-        array $submitted = []
+        array $submitted = [],
+        ?string $admittedgroup = null
     ) {
         /* Labels and values are both the plain spelling. The template renders each through a
            double stash, so Mustache escapes them exactly once - which is both correct and
@@ -1220,8 +1288,17 @@ class enrol_apply_renderer extends plugin_renderer_base {
             'profilelabel' => get_string('user_profile', 'enrol_apply'),
             'hasprofile' => (bool) $profile,
             'profile' => $profile,
+            /* An admission by key is news, not a request: one line saying who decided, and the link
+               leads to the applicant rather than to a queue that holds nothing for them. Plain,
+               because the template double-stashes it. */
+            'admitted' => $admittedgroup !== null,
+            'admission' => match ($admittedgroup) {
+                null => '',
+                '' => get_string('mailtoteacher_admittednogroup', 'enrol_apply'),
+                default => get_string('mailtoteacher_admitted', 'enrol_apply', $admittedgroup),
+            },
             'manageurl' => $manageurl->out(false),
-            'managelabel' => get_string('applymanage', 'enrol_apply'),
+            'managelabel' => $admittedgroup === null ? get_string('applymanage', 'enrol_apply') : get_string('viewprofile'),
         ]);
     }
 

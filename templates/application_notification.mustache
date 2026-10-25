@@ -17,7 +17,8 @@
 {{!
     @template enrol_apply/application_notification
 
-    HTML body of the notification sent when a user applies for a course enrolment.
+    HTML body of the notification sent when a user applies for a course enrolment, or when a
+    group enrolment key admitted them without review.
 
     Every label and value arrives in its plain spelling and is output through a double stash,
     so Mustache escapes it exactly once. That escaping is the only protection: the submitted
@@ -34,7 +35,10 @@
     * profilelabel string - heading of the submitted profile section
     * hasprofile boolean - whether any profile field was collected and filled in
     * profile array - list of label and value pairs, in the order the instance asks for them
-    * manageurl string - link to the screen where the application can be decided
+    * admitted boolean - whether a group key admitted the applicant, so nothing waits for a decision
+    * admission string - the sentence saying so, naming the key group; plain spelling
+    * manageurl string - link to the screen where the application can be decided, or to the
+      applicant's profile for an admission
     * managelabel string - link text
 
     Example context (json):
@@ -51,11 +55,14 @@
             {"label": "City/town", "value": "Belo Horizonte"},
             {"label": "Registration number", "value": "2026-0042"}
         ],
+        "admitted": true,
+        "admission": "Enrolled with the enrolment key of the group Turma B, without review. Nothing waits for a decision.",
         "manageurl": "https://example.com/enrol/apply/manage.php?id=7",
         "managelabel": "Manage enrolment applications"
     }
 }}
 <div class="enrol_apply-notification">
+    {{#admitted}}<p><strong>{{admission}}</strong></p>{{/admitted}}
     <p>{{coursenamelabel}}: {{coursename}}</p>
     <p>{{applicantlabel}}: {{applicant}}</p>
     <p>{{commentlabel}}: {{comment}}</p>

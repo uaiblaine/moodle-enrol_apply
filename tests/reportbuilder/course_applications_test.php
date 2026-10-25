@@ -1071,6 +1071,8 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
             'submission:decisionnote',
             'submission:enrolment',
             'submission:outcome',
+            'submission:admissionroute',
+            'submission:keygroup',
             'submission:snapshot',
             'submission:s_city',
             'applydecider:fullname',
@@ -1086,6 +1088,7 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
             'submission:timedecided',
             'submission:comment',
             'submission:decisionnote',
+            'submission:admissionroute',
             'submission:s_city',
             'applydecider:fullname',
         ], $this->filter_ids());

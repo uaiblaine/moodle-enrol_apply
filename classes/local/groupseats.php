@@ -99,4 +99,58 @@ class groupseats {
         }
         return $full;
     }
+
+    /**
+     * The groups these approvals joined that now hold more members than seats.
+     *
+     * Read back from the memberships this plugin stamped ('enrol_apply', the enrolment's own
+     * instance) after the decision, never predicted from what was posted: a decision method can
+     * skip a row in silence, and the instance's list applies when nothing was picked. Over means
+     * members > seats, groupdist's own red line (G13); a group exactly at its seats is full, not
+     * over, and an approval into it is ordinary.
+     *
+     * @param array $userenrolmentids The user enrolments a decision was asked for.
+     * @return array Group id => object with int 'courseid', string 'name' (raw), int 'members'
+     *     and int 'seats', ascending by id; empty when seats are unknown on this site.
+     */
+    public static function overfilled(array $userenrolmentids): array {
+        global $DB;
+
+        $userenrolmentids = array_values(array_unique(array_map('intval', $userenrolmentids)));
+        if (!$userenrolmentids || !static::available()) {
+            return [];
+        }
+
+        [$insql, $params] = $DB->get_in_or_equal($userenrolmentids, SQL_PARAMS_NAMED, 'ue');
+        $params['component'] = 'enrol_apply';
+        $params['active'] = ENROL_USER_ACTIVE;
+        $groups = $DB->get_records_sql(
+            "SELECT DISTINCT g.id, g.courseid, g.name
+               FROM {groups_members} gm
+               JOIN {user_enrolments} ue ON ue.userid = gm.userid AND ue.enrolid = gm.itemid
+               JOIN {groups} g ON g.id = gm.groupid
+              WHERE gm.component = :component
+                AND ue.status = :active
+                AND ue.id {$insql}
+           ORDER BY g.id",
+            $params
+        );
+        if (!$groups) {
+            return [];
+        }
+
+        $over = [];
+        foreach (static::for_groups(array_keys($groups)) as $groupid => $seat) {
+            if ($seat->seats === null || (int) $seat->members <= $seat->seats) {
+                continue;
+            }
+            $over[$groupid] = (object) [
+                'courseid' => (int) $groups[$groupid]->courseid,
+                'name' => $groups[$groupid]->name,
+                'members' => (int) $seat->members,
+                'seats' => (int) $seat->seats,
+            ];
+        }
+        return $over;
+    }
 }

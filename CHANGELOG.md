@@ -8,6 +8,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Group enrolment keys: what each surface says (K6).** The applicant's three surfaces (the
+  enrolment page's card, `applied.php` and the form's refusal) say "Enrolled with your group key"
+  after an admission, naming the group, and `applied.php` offers **Go to the course**; a valid key
+  that could not admit says why (no place, the group full, or not confirmed in time), naming the
+  key's group. A person's later decision over an admission reads as theirs. The queue badges what
+  a key ran into; the review page says it too, naming the group to a reader who may see the
+  course's groups, and offers ticked the groups the key would have joined. With `local_groupdist`,
+  the group chooser reads each group's seats ("20 of 20 seats taken, full", still selectable), and
+  `manage.php` warns after an approval that took a group past its seats. The report gains
+  **Admission route** (with a filter) and **Group of the enrolment key**. Managers get an
+  informational notice of an admission, with its own subject and a link to the applicant instead
+  of the queue; it names the key group only to a recipient who may see the course's groups. Six mutation gates that K4 and K6 had moved out from under their patterns (AD, BK,
+  DQ, F3G, F3H, KR4) were repointed; KW9 became KS9. Version 2026102502 (no upgrade step).
 - **Group enrolment keys: the application form (K5).** With the instance's option on, the form
   starts with an optional **Group enrolment key**; a valid key enrols the applicant at once and
   sends them into the course with a message naming the group. A wrong key is refused and counted,

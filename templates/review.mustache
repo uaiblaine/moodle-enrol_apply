@@ -85,6 +85,9 @@
     * applied string - when the application was submitted, already formatted
     * statuslabel string - label of the state row
     * status string - whether the application is pending or on the waiting list
+    * haskeychip boolean - whether the applicant presented a group enrolment key
+    * keychip string - what that key did, naming its group to a reader who may see the course's
+      groups; plain spelling, escaped by the double stash
     * commentlabel string - label of the applicant's comment
     * hascomment boolean - whether the applicant wrote one
     * comment string - what the applicant wrote, ALREADY escaped and with its line breaks
@@ -142,6 +145,8 @@
         "appliedlabel": "Application date",
         "applied": "25/08/26, 09:14",
         "statuslabel": "Status",
+        "haskeychip": true,
+        "keychip": "Valid group key, but a group had no seat left: Turma B",
         "status": "Awaiting a decision",
         "commentlabel": "Comment",
         "hascomment": true,
@@ -189,6 +194,7 @@
                 </dl>
             {{/hasidentity}}
             <p class="mb-0">{{statuslabel}}: <strong>{{status}}</strong>
+                {{#haskeychip}}<span class="badge bg-primary text-white ms-1">{{keychip}}</span>{{/haskeychip}}
                 <span class="text-muted">&middot; {{appliedlabel}} {{applied}}</span></p>
         </div>
         <a class="btn btn-outline-secondary btn-sm" href="{{profileurl}}">{{profilelabel}}</a>

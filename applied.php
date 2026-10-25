@@ -101,11 +101,21 @@ if (\enrol_apply\local\profilewriter::is_enabled($instance)) {
     }
 }
 
-/* Never the course page: an applicant without access would be bounced back to the enrolment
-   page. See \enrol_apply\local\destination::home_page_url(). */
-echo $OUTPUT->single_button(
-    \enrol_apply\local\destination::home_page_url(),
-    get_string('continue'),
-    'get'
-);
+/* Never the course page for anybody else: an applicant without access would be bounced back to the
+   enrolment page. See \enrol_apply\local\destination::home_page_url(). An admission by a group key
+   is the one state that both grants access and was reached on purpose a moment ago. */
+if ($state['admitted']) {
+    echo $OUTPUT->single_button(
+        new moodle_url('/course/view.php', ['id' => $course->id]),
+        get_string('gotocourse', 'enrol_apply'),
+        'get',
+        ['type' => \core\output\single_button::BUTTON_PRIMARY]
+    );
+} else {
+    echo $OUTPUT->single_button(
+        \enrol_apply\local\destination::home_page_url(),
+        get_string('continue'),
+        'get'
+    );
+}
 echo $OUTPUT->footer();

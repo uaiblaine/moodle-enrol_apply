@@ -38,16 +38,17 @@ class enrol_apply_notification extends \core\message\message {
      * Build a notification of the given type.
      *
      * 'application' goes to the people who decide, and its link opens the approval queue
-     * (manage.php); confirmation, cancelation and waitinglist go to the applicant, and their
-     * link opens the course. The link's label follows the type accordingly.
+     * (manage.php); 'admission' goes to the same people when a group key admitted somebody
+     * without them, and its link opens the applicant's profile; confirmation, cancelation and
+     * waitinglist go to the applicant, and their link opens the course. The link's label follows the type accordingly.
      *
      * @param stdClass $to Recipient user record.
      * @param stdClass $from Sender user record.
-     * @param string $type One of application, confirmation, cancelation or waitinglist.
+     * @param string $type One of application, admission, confirmation, cancelation or waitinglist.
      * @param string $subject Message subject.
      * @param string $content Message body as HTML.
      * @param moodle_url $url Link offered as the message context: the approval queue for
-     *     'application', the course for the other types.
+     *     'application', the applicant's profile for 'admission', the course for the other types.
      * @param int $courseid Course the message is about.
      * @throws invalid_parameter_exception When the notification type is not supported.
      */
@@ -59,6 +60,11 @@ class enrol_apply_notification extends \core\message\message {
             case 'application':
                 $this->name = 'application';
                 $this->smallmessage = get_string('newapplicationnotification', 'enrol_apply');
+                break;
+            case 'admission':
+                // The same provider as a new application: the same people asked to hear about it.
+                $this->name = 'application';
+                $this->smallmessage = get_string('admittedbykeynotification', 'enrol_apply');
                 break;
             case 'confirmation':
                 $this->name = 'confirmation';
@@ -86,7 +92,11 @@ class enrol_apply_notification extends \core\message\message {
 
         $this->notification = 1;
         $this->contexturl = $url;
-        $this->contexturlname = $type === 'application' ? get_string('applymanage', 'enrol_apply') : get_string('course');
+        $this->contexturlname = match ($type) {
+            'application' => get_string('applymanage', 'enrol_apply'),
+            'admission' => get_string('viewprofile'),
+            default => get_string('course'),
+        };
         $this->courseid = $courseid;
     }
 }

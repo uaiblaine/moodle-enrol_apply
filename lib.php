@@ -289,8 +289,10 @@ class enrol_apply_plugin extends enrol_plugin {
      * nobody reviewed in time would be deleted instead of decided.
      *
      * The group key route (submit_application()) passes what the key did, which the record keeps.
-     * Managers are told about a new application only when it waits for them: an admission by key
-     * is not one.
+     * An admission by key is not an application waiting for anybody, so the managers get the
+     * informational notice instead (G8), with its own subject and no link to the queue. It is
+     * sent from inside admit()'s transaction, which is safe: core buffers a message until the
+     * transaction commits and drops it on a rollback.
      *
      * @param stdClass $instance Course enrol instance.
      * @param int $userid Applicant user id.
@@ -341,9 +343,12 @@ class enrol_apply_plugin extends enrol_plugin {
             $keyoutcome
         );
 
-        if ($keyoutcome !== \enrol_apply\local\submission::KEY_ADMITTED) {
-            $this->send_application_notification($instance, $userid, $data);
-        }
+        $this->send_application_notification(
+            $instance,
+            $userid,
+            $data,
+            $keyoutcome === \enrol_apply\local\submission::KEY_ADMITTED ? $keygroupid : 0
+        );
 
         return ['userenrolmentid' => (int) $userenrolment->id, 'submissionid' => $submissionid];
     }
@@ -576,11 +581,14 @@ class enrol_apply_plugin extends enrol_plugin {
      * to it rather than replacing it (G10). Only groups that still belong to the course count, as
      * in add_instance_groups().
      *
+     * Public because the review page offers these ticked for an application a valid key could not
+     * admit: the decider then approves into exactly what the key would have joined.
+     *
      * @param stdClass $instance Course enrol instance.
      * @param int $keygroupid The group the key resolved to.
      * @return array Group ids, ascending, without duplicates.
      */
-    protected function key_route_groups(stdClass $instance, int $keygroupid): array {
+    public function key_route_groups(stdClass $instance, int $keygroupid): array {
         global $DB;
 
         $listed = $DB->get_fieldset_sql(
@@ -1678,14 +1686,19 @@ class enrol_apply_plugin extends enrol_plugin {
     }
 
     /**
-     * Notify everybody configured to hear about a new application.
+     * Notify everybody configured to hear about a new application, or about an admission by key.
+     *
+     * The same recipients either way (G8): whoever would have decided the application keeps
+     * sight of who came in without them. An admission names its key group and links to the
+     * applicant's profile instead of a queue that holds nothing for it.
      *
      * @param stdClass $instance Course enrol instance.
      * @param int $userid Applicant user id.
      * @param stdClass $data Submitted application form data.
+     * @param int $admittedgroupid The key group of an admission by key; 0 for an application waiting for review.
      * @return void
      */
-    protected function send_application_notification($instance, $userid, $data) {
+    protected function send_application_notification($instance, $userid, $data, int $admittedgroupid = 0) {
         global $CFG, $DB;
 
         require_once($CFG->dirroot . '/enrol/apply/notification.php');
@@ -1705,11 +1718,26 @@ class enrol_apply_plugin extends enrol_plugin {
             \enrol_apply\local\answers::submitted_values($instance, $data)
         );
 
+        /* Not MUST_EXIST: this runs inside admit()'s transaction, and a group deleted since the key
+           resolved must not undo the admission over a sentence. The notice then names no group. */
+        $admission = null;
+        if ($admittedgroupid > 0) {
+            $group = $DB->get_record('groups', ['id' => $admittedgroupid], 'id, name');
+            $admission = (object) [
+                // Plain: the template double-stashes it, like the course name.
+                'group' => $group ? format_string($group->name, true, [
+                    'context' => context_course::instance($instance->courseid),
+                    'escape' => false,
+                ]) : '',
+                'url' => new moodle_url('/user/profile.php', ['id' => $userid]),
+            ];
+        }
+
         // Notify users holding the capability in the course context.
         $recipients = $this->get_notifycoursebased_users($instance);
         $notified = [];
         if ($recipients) {
-            $manageurl = new moodle_url('/enrol/apply/manage.php', ['id' => $instance->id]);
+            $manageurl = $admission->url ?? new moodle_url('/enrol/apply/manage.php', ['id' => $instance->id]);
             foreach ($recipients as $user) {
                 $content = $this->application_notification_body(
                     $user,
@@ -1717,9 +1745,17 @@ class enrol_apply_plugin extends enrol_plugin {
                     $course,
                     $applicant,
                     $applydescription,
-                    $submitted
+                    $submitted,
+                    $admission
                 );
-                $this->send_application_notification_to($user, $applicant, $content, $manageurl, $instance->courseid);
+                $this->send_application_notification_to(
+                    $user,
+                    $applicant,
+                    $content,
+                    $manageurl,
+                    $instance->courseid,
+                    $admission !== null
+                );
                 $notified[$user->id] = true;
             }
         }
@@ -1728,7 +1764,7 @@ class enrol_apply_plugin extends enrol_plugin {
         $recipients = $this->get_notifyuserbased_users($userid);
         if ($recipients) {
             $userenrolment = $DB->get_record('user_enrolments', ['userid' => $userid, 'enrolid' => $instance->id]);
-            $manageurl = new moodle_url('/enrol/apply/manage.php', ['userenrol' => $userenrolment->id]);
+            $manageurl = $admission->url ?? new moodle_url('/enrol/apply/manage.php', ['userenrol' => $userenrolment->id]);
             foreach ($recipients as $user) {
                 if (isset($notified[$user->id])) {
                     continue;
@@ -1739,9 +1775,17 @@ class enrol_apply_plugin extends enrol_plugin {
                     $course,
                     $applicant,
                     $applydescription,
-                    $submitted
+                    $submitted,
+                    $admission
                 );
-                $this->send_application_notification_to($user, $applicant, $content, $manageurl, $instance->courseid);
+                $this->send_application_notification_to(
+                    $user,
+                    $applicant,
+                    $content,
+                    $manageurl,
+                    $instance->courseid,
+                    $admission !== null
+                );
                 $notified[$user->id] = true;
             }
         }
@@ -1749,7 +1793,7 @@ class enrol_apply_plugin extends enrol_plugin {
         // Notify users configured globally in the plugin settings.
         $recipients = $this->get_notifyglobal_users();
         if ($recipients) {
-            $manageurl = new moodle_url('/enrol/apply/manage.php');
+            $manageurl = $admission->url ?? new moodle_url('/enrol/apply/manage.php');
             foreach ($recipients as $user) {
                 if (isset($notified[$user->id])) {
                     continue;
@@ -1760,9 +1804,17 @@ class enrol_apply_plugin extends enrol_plugin {
                     $course,
                     $applicant,
                     $applydescription,
-                    $submitted
+                    $submitted,
+                    $admission
                 );
-                $this->send_application_notification_to($user, $applicant, $content, $manageurl, $instance->courseid);
+                $this->send_application_notification_to(
+                    $user,
+                    $applicant,
+                    $content,
+                    $manageurl,
+                    $instance->courseid,
+                    $admission !== null
+                );
                 $notified[$user->id] = true;
             }
         }
@@ -1782,6 +1834,13 @@ class enrol_apply_plugin extends enrol_plugin {
      * @param stdClass $applicant Applicant.
      * @param string $applydescription Comment submitted with the application.
      * @param array $submitted Key, label and value of every submitted field, in form order.
+     * The key group of an admission is named the same way: only to a recipient holding the
+     * capability in the course, the gate the review page's group chooser applies. A mentor, who
+     * holds it in the applicant's user context alone, and a site-wide recipient without it are
+     * told of the admission without the group, as the page would tell them.
+     *
+     * @param stdClass|null $admission For an admission by key: 'group', the key group's plain name
+     *     (empty when the group is gone).
      * @return string Rendered HTML body.
      */
     protected function application_notification_body(
@@ -1790,7 +1849,8 @@ class enrol_apply_plugin extends enrol_plugin {
         $course,
         $applicant,
         $applydescription,
-        array $submitted
+        array $submitted,
+        ?stdClass $admission = null
     ): string {
         global $PAGE;
 
@@ -1807,7 +1867,13 @@ class enrol_apply_plugin extends enrol_plugin {
             $applicant,
             $manageurl,
             $applydescription,
-            $shown
+            $shown,
+            match (true) {
+                $admission === null => null,
+                $admission->group !== ''
+                    && has_capability('enrol/apply:manageapplications', $coursecontext, $recipient) => $admission->group,
+                default => '',
+            }
         );
     }
 
@@ -1817,16 +1883,27 @@ class enrol_apply_plugin extends enrol_plugin {
      * @param stdClass $recipient User to notify.
      * @param stdClass $applicant User who applied.
      * @param string $content Rendered message body.
-     * @param moodle_url $manageurl Link to the screen where the application can be decided.
+     * @param moodle_url $manageurl Link to the screen where the application can be decided, or
+     *     to the applicant's profile for an admission.
      * @param int $courseid Course the application belongs to.
+     * @param bool $admitted Whether a group key admitted the applicant without review.
      * @return void
      */
-    protected function send_application_notification_to($recipient, $applicant, $content, $manageurl, $courseid) {
+    protected function send_application_notification_to(
+        $recipient,
+        $applicant,
+        $content,
+        $manageurl,
+        $courseid,
+        bool $admitted = false
+    ) {
         $message = new enrol_apply_notification(
             $recipient,
             $applicant,
-            'application',
-            get_string('mailtoteacher_subject', 'enrol_apply'),
+            $admitted ? 'admission' : 'application',
+            $admitted
+                ? get_string('mailtoteacher_admitted_subject', 'enrol_apply')
+                : get_string('mailtoteacher_subject', 'enrol_apply'),
             $content,
             $manageurl,
             $courseid

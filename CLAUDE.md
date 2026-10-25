@@ -138,6 +138,11 @@ backup/                      group mappings, comments and the durable trail, see
   Deferred follows the same rule rather than the status alone: `capacity::deferred()` and the
   queue drop a lapsed waiting-list row, so the applicant is not told they are still on the list.
 
+  A group key refines two of the four, and only while the durable record still says what the key
+  did: APPROVED reads as an admission while the applicant is still the recorded decider (a later
+  decision by a person restamps it), and PENDING says what a valid key ran into. The body then
+  names the key group, so the form's refusal passes `message_param()` beside `message_key()`.
+
   Two more consequences worth keeping. **The applicant's own row must be tested BEFORE
   `allow_apply()`, on the form as well as on the page**, or a method that stops accepting
   applications tells everybody who already applied "Enrolment is disabled or inactive" — a message
