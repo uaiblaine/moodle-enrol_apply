@@ -27,6 +27,7 @@
 
 defined('MOODLE_INTERNAL') || die();
 
+$string['admittedbykey'] = 'You are enrolled. Your group key was accepted and you have joined {$a}. No review was needed.';
 $string['allowedfields'] = 'Profile fields courses may ask for';
 $string['allowedfields_desc'] = 'The pool of profile fields a course may collect with an enrolment application. A teacher picks from this list for each enrolment method; unticking a field here removes it from every existing method as well, because the picked set is checked against this list on every use.';
 $string['allowprofilewrite'] = 'Allow courses to offer to save profile details';
@@ -194,7 +195,12 @@ $string['fieldrequired'] = 'Required';
 $string['gotoprofile'] = 'Go to my profile';
 $string['group'] = 'Group assignment';
 $string['group_help'] = 'You can assign none or multiples groups. Members are added once the enrolment application is approved.';
+$string['groupkey'] = 'Group enrolment key';
+$string['groupkey_help'] = 'If your teacher gave you a key for your group, enter it to be enrolled straight away and join that group. Without one, your application is reviewed first. The key is optional.';
 $string['groupkeyadmitsnobody'] = 'Full: its key admits nobody now';
+$string['groupkeyinvalid'] = 'This key is not valid for this course. Check it and try again, or send your application for review below.';
+$string['groupkeylocked'] = 'Too many incorrect keys. You can try again in a few minutes, or send your application for review now.';
+$string['groupkeyoffered'] = 'Have a group enrolment key? Enter it in the application to join straight away, with no review.';
 $string['groupkeys'] = 'Accept group enrolment keys';
 $string['groupkeys_any'] = 'Yes: a valid key enrols without review';
 $string['groupkeys_desc'] = 'Whether a new enrolment method accepts the enrolment key of a course group: an applicant who enters a valid key is enrolled at once and joins that group, without waiting for a review.';
@@ -394,4 +400,5 @@ $string['waitmailsubject'] = 'Deferral email subject';
 $string['waitmailsubject_default'] = 'Your enrolment application for {$a} was deferred';
 $string['waitmailsubject_desc'] = 'Leave empty to use the wording this plugin ships.';
 $string['whatyouentered'] = 'What you entered';
+$string['withoutkey'] = 'Send my application for review without the key';
 $string['youwillchecknddetails'] = 'You will be asked to check a few details before your application is submitted for review.';

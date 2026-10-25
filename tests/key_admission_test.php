@@ -488,4 +488,25 @@ final class key_admission_test extends \advanced_testcase {
         $this->assertFalse($result->was_admitted());
         $this->assertSame(submission::KEY_NONE, (int) $this->record($applicant)->keyoutcome);
     }
+
+    /**
+     * The enrolment page's card mentions the key only where a key can count.
+     *
+     * Changes that must make it fail: the sentence added whatever the option says.
+     *
+     * @return void
+     */
+    public function test_the_card_mentions_the_key_only_where_it_counts(): void {
+        global $DB, $PAGE;
+
+        $PAGE->set_url('/enrol/index.php', ['id' => $this->course->id]);
+        $this->setUser($this->getDataGenerator()->create_user());
+        $offered = get_string('groupkeyoffered', 'enrol_apply');
+
+        $this->assertStringContainsString(s($offered), (string) $this->plugin->enrol_page_hook($this->instance));
+
+        $DB->set_field('enrol', 'customchar1', \enrol_apply\local\groupkey::MODE_OFF, ['id' => $this->instance->id]);
+        $this->instance->customchar1 = \enrol_apply\local\groupkey::MODE_OFF;
+        $this->assertStringNotContainsString(s($offered), (string) $this->plugin->enrol_page_hook($this->instance));
+    }
 }

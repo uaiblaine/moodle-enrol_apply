@@ -27,6 +27,9 @@ namespace enrol_apply\form;
 
 use enrol_apply\local\fields;
 use enrol_apply\local\fieldset;
+use enrol_apply\local\groupkey;
+use enrol_apply\local\keyattempts;
+use enrol_apply\local\submission;
 use enrol_apply\local\offer;
 use PHPUnit\Framework\Attributes\CoversClass;
 
@@ -870,5 +873,172 @@ final class application_form_test extends \advanced_testcase {
         $sink->close();
 
         $this->assertNotSame([], offer::peek((int) $this->instance->id));
+    }
+
+    /**
+     * Make the instance accept group keys, ask for nothing else, and create a keyed group.
+     *
+     * @return \stdClass The keyed group.
+     */
+    protected function accept_group_keys(): \stdClass {
+        global $DB;
+
+        $this->ask_for([]);
+        $DB->set_field('enrol', 'customchar1', groupkey::MODE_ANY, ['id' => $this->instance->id]);
+        $this->instance = $DB->get_record('enrol', ['id' => $this->instance->id], '*', MUST_EXIST);
+
+        return $this->getDataGenerator()->create_group([
+            'courseid' => $this->course->id,
+            'name' => 'Turma B',
+            'enrolmentkey' => 'Turma-B-2027',
+        ]);
+    }
+
+    /**
+     * Submit the form through the web service the modal calls, the real path for validation and
+     * for definition_after_data().
+     *
+     * @param array $posted Posted values on top of the instance and course ids.
+     * @return array The web service's result: 'submitted', and 'data' or 'html'.
+     */
+    protected function submit_through_the_modal(array $posted): array {
+        $_POST['sesskey'] = sesskey();
+        $query = http_build_query($posted + [
+            'instance' => $this->instance->id,
+            'id' => $this->course->id,
+            'sesskey' => sesskey(),
+            '_qf__enrol_apply_form_application_form' => 1,
+        ], '', '&');
+
+        ob_start();
+        try {
+            return \core_form\external\dynamic_form::execute(application_form::class, $query);
+        } finally {
+            ob_end_clean();
+        }
+    }
+
+    /**
+     * The key field is offered exactly where a key can count.
+     *
+     * Changes that must make it fail: the field added whatever the instance's option says.
+     *
+     * @return void
+     */
+    public function test_the_key_field_is_offered_only_where_a_key_counts(): void {
+        $this->assertNotContains('groupkey', $this->element_names($this->make_form()));
+
+        $this->accept_group_keys();
+
+        $this->assertContains('groupkey', $this->element_names($this->make_form()));
+        $this->assertNotContains('withoutkey', $this->element_names($this->make_form()), 'the way out waits for a wrong key');
+    }
+
+    /**
+     * After too many wrong keys the field gives way to a sentence.
+     *
+     * Changes that must make it fail: the field offered whatever the count.
+     *
+     * @return void
+     */
+    public function test_too_many_wrong_keys_replace_the_field(): void {
+        $this->accept_group_keys();
+        for ($i = 0; $i < keyattempts::LIMIT; $i++) {
+            keyattempts::record_failure((int) $this->instance->id, (int) $this->applicant->id);
+        }
+
+        $names = $this->element_names($this->make_form());
+
+        $this->assertNotContains('groupkey', $names);
+        $this->assertContains('groupkeylocked', $names);
+    }
+
+    /**
+     * A wrong key is refused with the way out offered, and counted; the count locks the field.
+     *
+     * Changes that must make it fail: validation not refusing a wrong key, not counting it, or the
+     * checkbox not added after it.
+     *
+     * @return void
+     */
+    public function test_a_wrong_key_is_refused_counted_and_offers_the_way_out(): void {
+        $this->accept_group_keys();
+
+        $result = $this->submit_through_the_modal(['groupkey' => 'Turma-Z-2027']);
+
+        $this->assertFalse($result['submitted']);
+        $this->assertStringContainsString(get_string('groupkeyinvalid', 'enrol_apply'), $result['html']);
+        $this->assertStringContainsString('name="withoutkey"', $result['html']);
+
+        for ($i = 1; $i < keyattempts::LIMIT; $i++) {
+            $this->assertFalse(keyattempts::locked((int) $this->instance->id, (int) $this->applicant->id), "after {$i}");
+            $this->submit_through_the_modal(['groupkey' => 'Turma-Z-2027']);
+        }
+        $this->assertTrue(keyattempts::locked((int) $this->instance->id, (int) $this->applicant->id));
+    }
+
+    /**
+     * Ticking the way out sends an ordinary application for review, with no key recorded and no
+     * try counted.
+     *
+     * @return void
+     */
+    public function test_the_way_out_sends_the_application_for_review(): void {
+        global $DB;
+
+        $this->accept_group_keys();
+
+        $sink = $this->redirectMessages();
+        $result = $this->submit_through_the_modal(['groupkey' => 'Turma-Z-2027', 'withoutkey' => 1]);
+        $sink->close();
+
+        $this->assertTrue($result['submitted']);
+        $this->assertStringContainsString('/enrol/apply/applied.php', json_decode($result['data']));
+        $record = $DB->get_record('enrol_apply_submission', ['userid' => $this->applicant->id], '*', MUST_EXIST);
+        $this->assertSame(submission::KEY_NONE, (int) $record->keyoutcome);
+        $this->assertFalse(is_enrolled(\context_course::instance($this->course->id), $this->applicant, '', true));
+    }
+
+    /**
+     * A valid key goes straight into the course, naming the group, instead of the acknowledgement
+     * page, whose "approved" would claim a review that never happened.
+     *
+     * Changes that must make it fail: routing an admission to applied.php.
+     *
+     * @return void
+     */
+    public function test_a_valid_key_goes_straight_into_the_course(): void {
+        $this->accept_group_keys();
+        \core\notification::fetch();
+
+        $sink = $this->redirectMessages();
+        $result = $this->submit_through_the_modal(['groupkey' => 'Turma-B-2027']);
+        $sink->close();
+
+        $this->assertTrue($result['submitted']);
+        $this->assertStringContainsString('/course/view.php', json_decode($result['data']));
+        $this->assertTrue(is_enrolled(\context_course::instance($this->course->id), $this->applicant, '', true));
+        $notifications = \core\notification::fetch();
+        $this->assertCount(1, $notifications);
+        $this->assertStringContainsString('Turma B', $notifications[0]->get_message());
+    }
+
+    /**
+     * A key with wrapping whitespace is left to the element's own message and costs no try.
+     *
+     * Changes that must make it fail: counting a value the element already refused.
+     *
+     * @return void
+     */
+    public function test_a_key_with_wrapping_whitespace_costs_no_try(): void {
+        $this->accept_group_keys();
+
+        for ($i = 0; $i < keyattempts::LIMIT; $i++) {
+            $result = $this->submit_through_the_modal(['groupkey' => ' Turma-Z-2027 ']);
+            $this->assertFalse($result['submitted']);
+        }
+
+        $this->assertFalse(keyattempts::locked((int) $this->instance->id, (int) $this->applicant->id));
+        $this->assertStringContainsString(get_string('err_wrappingwhitespace', 'core_form'), $result['html']);
     }
 }

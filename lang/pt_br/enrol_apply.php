@@ -25,6 +25,7 @@
 
 defined('MOODLE_INTERNAL') || die();
 
+$string['admittedbykey'] = 'Você está inscrito. Sua chave de grupo foi aceita e você entrou no grupo {$a}. Não foi necessária análise.';
 $string['allowedfields'] = 'Campos de perfil que os cursos podem solicitar';
 $string['allowedfields_desc'] = 'O conjunto de campos de perfil que um curso pode coletar em uma solicitação de matrícula. O professor escolhe nesta lista em cada método de matrícula; desmarcar um campo aqui também o remove de todos os métodos existentes, pois o conjunto escolhido é verificado contra esta lista a cada uso.';
 $string['allowprofilewrite'] = 'Permitir que cursos ofereçam salvar dados do perfil';
@@ -192,7 +193,12 @@ $string['fieldrequired'] = 'Obrigatório';
 $string['gotoprofile'] = 'Ir para o meu perfil';
 $string['group'] = 'Atribuição de grupos';
 $string['group_help'] = 'Você pode atribuir nenhum ou vários grupos. Os membros são adicionados quando a solicitação de matrícula é aprovada.';
+$string['groupkey'] = 'Chave de inscrição do grupo';
+$string['groupkey_help'] = 'Se o seu professor lhe deu uma chave do seu grupo, informe-a para ser inscrito imediatamente e entrar nesse grupo. Sem a chave, sua inscrição passa por análise. A chave é opcional.';
 $string['groupkeyadmitsnobody'] = 'Lotado: a chave não admite ninguém agora';
+$string['groupkeyinvalid'] = 'Esta chave não é válida para este curso. Confira e tente novamente, ou envie sua inscrição para análise abaixo.';
+$string['groupkeylocked'] = 'Muitas chaves incorretas. Tente novamente em alguns minutos ou envie sua inscrição para análise agora.';
+$string['groupkeyoffered'] = 'Tem uma chave de inscrição do grupo? Informe-a no formulário para entrar imediatamente, sem análise.';
 $string['groupkeys'] = 'Aceitar chaves de inscrição de grupo';
 $string['groupkeys_any'] = 'Sim: uma chave válida inscreve sem análise';
 $string['groupkeys_desc'] = 'Se um novo método de inscrição aceita a chave de inscrição de um grupo do curso: o solicitante que informar uma chave válida é inscrito imediatamente e entra nesse grupo, sem aguardar análise.';
@@ -392,4 +398,5 @@ $string['waitmailsubject'] = 'Assunto do e-mail de adiamento';
 $string['waitmailsubject_default'] = 'Sua solicitação de matrícula em {$a} foi adiada';
 $string['waitmailsubject_desc'] = 'Deixe em branco para usar o texto que este plugin já traz.';
 $string['whatyouentered'] = 'O que você informou';
+$string['withoutkey'] = 'Enviar minha inscrição para análise sem a chave';
 $string['youwillchecknddetails'] = 'Você será convidado a conferir alguns dados antes de enviar sua solicitação para análise.';

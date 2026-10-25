@@ -239,6 +239,12 @@ class enrol_apply_plugin extends enrol_plugin {
             $body = get_string('maxenrolledreached', 'enrol_apply');
         } else {
             $body = get_string('youwillchecknddetails', 'enrol_apply');
+            /* Appended rather than merged into that string, so a site that customised it keeps its
+               wording; and only where a key can count, so nobody is told about a key that the
+               method would ignore. */
+            if (\enrol_apply\local\groupkey::enabled($instance)) {
+                $body .= ' ' . get_string('groupkeyoffered', 'enrol_apply');
+            }
             /* The href is the no-JavaScript transport and is a real destination, not a
                placeholder: the AMD module below intercepts the click only when it loads. */
             $buttonurl = new moodle_url('/enrol/apply/apply.php', ['instance' => $instance->id]);
