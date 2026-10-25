@@ -313,7 +313,13 @@ Fourteen gates, KW1&ndash;KW14.
 - `notify_approval` task: skip the "approved" message when `keygroupid` is set and the status
   was decided by the applicant (G8).
 
-### K5. Form
+### K5. Form &mdash; written 2026-10-25
+
+As built: the field has no header of its own (a header stays open over every later element, so
+an instance asking for nothing would have put its questions inside it); an admission goes to
+`course/view.php` with a success message naming the group, not to `applied.php`, whose
+"approved" wording would claim a review until K6 reworks it. Nine gates, KF1&ndash;KF9, and a
+Behat feature (`group_enrolment_key.feature`, page transport) for the two journeys.
 
 - `application_form::definition()`: when `groupkey::enabled()`, a `passwordunmask` element
   `groupkey` directly after the introduction (it decides the route, so it is read first), with

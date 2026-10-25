@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Group enrolment keys: the application form (K5).** With the instance's option on, the form
+  starts with an optional **Group enrolment key**; a valid key enrols the applicant at once and
+  sends them into the course with a message naming the group. A wrong key is refused and counted,
+  and offers **Send my application for review without the key**; after five wrong keys in fifteen
+  minutes the field gives way to a sentence and the application stays possible. A key with
+  wrapping whitespace is left to the field's own message and costs no try. The enrolment page's
+  card mentions the key where one counts. Version 2026102501.
 - **Group enrolment keys: the write door (K4).** `submit_application()` resolves a posted
   `groupkey` itself, inside its lock and after every eligibility check, and admits the applicant at
   once when the key is valid, the method has a place and, with `local_groupdist`, every group the

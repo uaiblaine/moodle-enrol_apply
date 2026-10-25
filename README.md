@@ -82,9 +82,15 @@ An instance can accept the enrolment key of one of the course's groups ("Accept 
 enrolment keys", off by default; the site default for new instances is
 `enrol_apply/groupkeys`). The key is core's own group enrolment key, set on each group's
 settings page, the one `enrol_self` reads; this plugin stores none. The instance form lists
-which groups carry a key, never the keys. The key route on the application form, which
-enrols a key holder at once, is not released yet: today the setting changes nothing an
-applicant sees.
+which groups carry a key, never the keys.
+
+With the option on, the application form starts with an optional **Group enrolment key**. An
+applicant who enters a valid key still fills in every required field and question, and on
+submitting is enrolled at once and joins that group (and the instance's own groups), with no
+review; managers are not asked to decide. The enrolment window, the cohort restriction, the
+applicant limit and the places still apply: with no place left, the application waits for a
+review instead, recorded as such. A wrong key is refused with the choice to send the
+application for review without it.
 
 Wrong keys are counted per applicant and instance in the `keyattempts` application cache,
 for 15 minutes, so the form cannot be used to guess keys without limit.

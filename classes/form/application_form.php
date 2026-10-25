@@ -20,6 +20,8 @@ use context_course;
 use core_form\dynamic_form;
 use enrol_apply\local\answers;
 use enrol_apply\local\fields;
+use enrol_apply\local\groupkey;
+use enrol_apply\local\keyattempts;
 use moodle_url;
 
 /**
@@ -51,6 +53,9 @@ class application_form extends dynamic_form {
 
     /** @var array|null Memoised per-key classification, keyed by field key. */
     protected $states = null;
+
+    /** @var array Memoised group key resolutions: posted key => group id, or null for none. */
+    protected $resolved = [];
 
     /**
      * The enrol instance this form belongs to.
@@ -140,6 +145,8 @@ class application_form extends dynamic_form {
             $mform->addElement('html', format_text($instance->customtext1, FORMAT_HTML));
         }
 
+        $this->add_group_key($instance);
+
         $editable = [];
         $locked = [];
         foreach ($this->get_states() as $key => $state) {
@@ -182,6 +189,115 @@ class application_form extends dynamic_form {
                asks for them explicitly. */
             $this->add_action_buttons(true, get_string('submitapplication', 'enrol_apply'));
         }
+    }
+
+    /**
+     * Offer the group enrolment key, first, since it decides what submitting does.
+     *
+     * Not under a header of its own: a header stays open over every element that follows, and an
+     * instance asking for no fields would then render its questions and comment inside it. After
+     * too many wrong keys the field gives way to a sentence, and the application itself stays
+     * possible; with no field, get_data() carries no key, so a crafted post cannot test one past
+     * the lock either.
+     *
+     * @param \stdClass $instance The {enrol} record.
+     * @return void
+     */
+    protected function add_group_key(\stdClass $instance): void {
+        global $USER;
+
+        if (!groupkey::enabled($instance)) {
+            return;
+        }
+
+        $mform = $this->_form;
+        if (keyattempts::locked((int) $instance->id, (int) $USER->id)) {
+            $mform->addElement(
+                'static',
+                'groupkeylocked',
+                get_string('groupkey', 'enrol_apply'),
+                get_string('groupkeylocked', 'enrol_apply')
+            );
+            return;
+        }
+
+        $mform->addElement('passwordunmask', 'groupkey', get_string('groupkey', 'enrol_apply'));
+        $mform->setType('groupkey', PARAM_RAW);
+        $mform->addHelpButton('groupkey', 'groupkey', 'enrol_apply');
+    }
+
+    /**
+     * After a wrong key, offer the way out: send the application for review without it.
+     *
+     * Added here rather than in definition() so it appears only once a key has failed: this runs
+     * on the submitted data, before validation, on both transports (measured on 5.1 to 5.3, K0.1 in
+     * docs/design/group-enrolment-key.md). Ticking it disables the field, and the write door ignores
+     * a key posted with it either way, because the page transport has no JavaScript to disable
+     * anything.
+     *
+     * @return void
+     */
+    public function definition_after_data() {
+        parent::definition_after_data();
+
+        $mform = $this->_form;
+        if (!$mform->elementExists('groupkey')) {
+            return;
+        }
+        $posted = $this->optional_param('groupkey', '', PARAM_RAW);
+        if (!$this->is_wrong_key(is_string($posted) ? $posted : '')) {
+            return;
+        }
+
+        $box = $mform->createElement('advcheckbox', 'withoutkey', '', get_string('withoutkey', 'enrol_apply'));
+        $next = $this->element_after('groupkey');
+        if ($next === null) {
+            $mform->addElement($box);
+        } else {
+            $mform->insertElementBefore($box, $next);
+        }
+        $mform->disabledIf('groupkey', 'withoutkey', 'checked');
+    }
+
+    /**
+     * Whether a posted value is a key that names no group.
+     *
+     * A value with wrapping whitespace is not judged: the passwordunmask element refuses it with
+     * its own message, and counting it as a wrong key would spend a try on a paste.
+     *
+     * @param string $posted The posted key.
+     * @return bool True for a non-empty key without wrapping whitespace that resolves to nothing.
+     */
+    protected function is_wrong_key(string $posted): bool {
+        if ($posted === '' || $posted !== trim($posted)) {
+            return false;
+        }
+        if (!array_key_exists($posted, $this->resolved)) {
+            $this->resolved[$posted] = groupkey::resolve($this->get_instance(), $posted);
+        }
+
+        return $this->resolved[$posted] === null;
+    }
+
+    /**
+     * The name of the element that follows another in the form, for inserting after it.
+     *
+     * @param string $name The element to insert after.
+     * @return string|null The next element's name, or null when it is the last one.
+     */
+    protected function element_after(string $name): ?string {
+        $found = false;
+        foreach ($this->_form->_elements as $element) {
+            $current = (string) $element->getName();
+            if ($found && $current !== '') {
+                return $current;
+            }
+            if ($current === $name) {
+                $found = true;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -302,6 +418,8 @@ class application_form extends dynamic_form {
      * @return array Errors keyed by element name.
      */
     public function validation($data, $files) {
+        global $USER;
+
         $errors = parent::validation($data, $files);
         $errors = array_merge($errors, answers::validate($this->get_instance(), $data, $files));
         $resolved = fields::resolve($this->get_instance());
@@ -335,6 +453,17 @@ class application_form extends dynamic_form {
             $anyvalue = true;
             if ($confirmeach && empty($data['confirm_' . $key])) {
                 $errors['confirm_' . $key] = get_string('confirmfield', 'enrol_apply', fields::label($key, false));
+            }
+        }
+
+        /* A key that names no group is refused unless the applicant chose to go on without it,
+           and counted: the form answers whether a key exists, and a wrong one costs nothing else.
+           The write door resolves the key again itself; this is the message, not the guard. */
+        if ($this->_form->elementExists('groupkey') && empty($data['withoutkey'])) {
+            $posted = is_string($data['groupkey'] ?? null) ? $data['groupkey'] : '';
+            if ($this->is_wrong_key($posted)) {
+                $errors['groupkey'] = get_string('groupkeyinvalid', 'enrol_apply');
+                keyattempts::record_failure((int) $this->get_instance()->id, (int) $USER->id);
             }
         }
 
@@ -489,6 +618,19 @@ class application_form extends dynamic_form {
             \core\notification::error($result->reason());
 
             return (string) new moodle_url('/enrol/index.php', ['id' => $instance->courseid]);
+        }
+
+        if ($result->was_admitted()) {
+            /* Straight into the course: nobody decided, so the acknowledgement page's "approved"
+               would claim a review that never happened. The group is named in the HTML sink's
+               escaped spelling. */
+            $group = groups_get_group($result->key_group(), 'id, name');
+            \core\notification::success(get_string(
+                'admittedbykey',
+                'enrol_apply',
+                $group ? format_string($group->name, true, ['context' => context_course::instance($instance->courseid)]) : ''
+            ));
+            return (string) new moodle_url('/course/view.php', ['id' => $instance->courseid]);
         }
 
         /* What the applicant typed is carried to the acknowledgement page so it can offer to
