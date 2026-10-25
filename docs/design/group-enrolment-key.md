@@ -281,7 +281,16 @@ vocabulary. Nine gates, KR1&ndash;KR9.
 - Backup: annotate `keygroupid` as a group id and map it on restore (0 when unmapped).
 - Privacy: metadata string for the field; export it as the group's name.
 
-### K4. Write door
+### K4. Write door &mdash; written 2026-10-24
+
+As built: `apply_or_admit()` behind `submit_application()`'s checks; `key_route_groups()` and
+`lock_admission()` (the method's lock, then one per group ascending, 5 s each; the places
+check moved under it after the security read found two key holders could take the last
+place), and `admit()`, one transaction, so a failed activation leaves no "admitted" record
+behind. A lock not obtained records a fifth outcome, `KEY_SEAT_UNCONFIRMED`, rather than
+claiming nothing was left. The result object carries
+the outcome (`created($outcome, $groupid)`, `was_admitted()`), not separate constructors.
+Fourteen gates, KW1&ndash;KW14.
 
 - Extract `activate(stdClass $instance, stdClass $userenrolment): void` from
   `confirm_enrolment()` (dates, `update_user_enrol()`, `complete_approval()`). The gate stays in

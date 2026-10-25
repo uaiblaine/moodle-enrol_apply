@@ -49,24 +49,44 @@ final class application_result {
     /** @var string The reason to show the applicant. Empty unless this is a refusal. */
     private $reason;
 
+    /** @var int What a group enrolment key did, a submission::KEY_ constant. */
+    private $keyoutcome;
+
+    /** @var int The group whose key was presented, 0 for none. */
+    private $keygroupid;
+
     /**
      * Private on purpose: an instance only ever comes from one of the three named constructors.
      *
      * @param string $state One of the three state constants.
      * @param string $reason Reason to show the applicant, empty for the two non-refusals.
+     * @param int $keyoutcome What a group enrolment key did, KEY_NONE outside the created outcome.
+     * @param int $keygroupid The key's group, 0 for none.
      */
-    private function __construct(string $state, string $reason) {
+    private function __construct(
+        string $state,
+        string $reason,
+        int $keyoutcome = submission::KEY_NONE,
+        int $keygroupid = 0
+    ) {
         $this->state = $state;
         $this->reason = $reason;
+        $this->keyoutcome = $keyoutcome;
+        $this->keygroupid = $keygroupid;
     }
 
     /**
      * The application was written by this call.
      *
+     * With a group enrolment key, also what the key did: admitted the applicant at once, or left
+     * the application waiting, and why. The record holds the same two facts.
+     *
+     * @param int $keyoutcome A submission::KEY_ constant; KEY_NONE when no key counted.
+     * @param int $keygroupid The key's group, 0 for none.
      * @return self
      */
-    public static function created(): self {
-        return new self(self::CREATED, '');
+    public static function created(int $keyoutcome = submission::KEY_NONE, int $keygroupid = 0): self {
+        return new self(self::CREATED, '', $keyoutcome, $keygroupid);
     }
 
     /**
@@ -116,6 +136,33 @@ final class application_result {
      */
     public function is_refusal(): bool {
         return $this->state === self::REFUSED;
+    }
+
+    /**
+     * Whether a group enrolment key admitted the applicant without review.
+     *
+     * @return bool True only when this call wrote an application and activated it by key.
+     */
+    public function was_admitted(): bool {
+        return $this->state === self::CREATED && $this->keyoutcome === submission::KEY_ADMITTED;
+    }
+
+    /**
+     * What a group enrolment key did.
+     *
+     * @return int A submission::KEY_ constant; KEY_NONE when no key counted.
+     */
+    public function key_outcome(): int {
+        return $this->keyoutcome;
+    }
+
+    /**
+     * The group whose key was presented.
+     *
+     * @return int The group id, 0 when no key counted.
+     */
+    public function key_group(): int {
+        return $this->keygroupid;
     }
 
     /**

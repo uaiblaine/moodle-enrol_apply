@@ -85,6 +85,9 @@ class submission {
     /** @var int The key was valid, but a group the admission would join had no seat left. */
     public const KEY_GROUP_FULL = 3;
 
+    /** @var int The key was valid, but a place or seat could not be confirmed in time (a lock was held). */
+    public const KEY_SEAT_UNCONFIRMED = 4;
+
     /**
      * Every value keyoutcome may hold.
      *
@@ -95,6 +98,7 @@ class submission {
         self::KEY_ADMITTED,
         self::KEY_NO_PLACE,
         self::KEY_GROUP_FULL,
+        self::KEY_SEAT_UNCONFIRMED,
     ];
 
     /**
@@ -963,6 +967,7 @@ class submission {
             self::KEY_ADMITTED => get_string('keyoutcomeadmitted', 'enrol_apply'),
             self::KEY_NO_PLACE => get_string('keyoutcomenoplace', 'enrol_apply'),
             self::KEY_GROUP_FULL => get_string('keyoutcomegroupfull', 'enrol_apply'),
+            self::KEY_SEAT_UNCONFIRMED => get_string('keyoutcomeseatunconfirmed', 'enrol_apply'),
             default => '',
         };
     }

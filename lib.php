@@ -282,12 +282,24 @@ class enrol_apply_plugin extends enrol_plugin {
      * every row with timeend > 0 AND timeend < now whatever its status, so an application
      * nobody reviewed in time would be deleted instead of decided.
      *
+     * The group key route (submit_application()) passes what the key did, which the record keeps.
+     * Managers are told about a new application only when it waits for them: an admission by key
+     * is not one.
+     *
      * @param stdClass $instance Course enrol instance.
      * @param int $userid Applicant user id.
      * @param stdClass $data Submitted application form data.
-     * @return void
+     * @param int $keygroupid Group whose key was presented and resolved, 0 for none.
+     * @param int $keyoutcome One of the submission::KEY_ constants.
+     * @return array The user enrolment id and the record id, under 'userenrolmentid' and 'submissionid'.
      */
-    protected function apply($instance, $userid, $data) {
+    protected function apply(
+        $instance,
+        $userid,
+        $data,
+        int $keygroupid = 0,
+        int $keyoutcome = \enrol_apply\local\submission::KEY_NONE
+    ): array {
         global $DB;
 
         /* No role: complete_approval() assigns it on approval. A role held while pending would
@@ -314,9 +326,20 @@ class enrol_apply_plugin extends enrol_plugin {
            column on the one above because that one is deleted the moment a decision is
            taken - on approval, on cancellation and in unenrol_user() - and a snapshot there
            would self-destruct exactly when it acquires audit value. */
-        \enrol_apply\local\submission::create($instance, $userid, (int) $userenrolment->id, $data);
+        $submissionid = \enrol_apply\local\submission::create(
+            $instance,
+            $userid,
+            (int) $userenrolment->id,
+            $data,
+            $keygroupid,
+            $keyoutcome
+        );
 
-        $this->send_application_notification($instance, $userid, $data);
+        if ($keyoutcome !== \enrol_apply\local\submission::KEY_ADMITTED) {
+            $this->send_application_notification($instance, $userid, $data);
+        }
+
+        return ['userenrolmentid' => (int) $userenrolment->id, 'submissionid' => $submissionid];
     }
 
     /**
@@ -401,12 +424,206 @@ class enrol_apply_plugin extends enrol_plugin {
                     get_string('maxenrolledreached', 'enrol_apply')
                 );
             }
-            $this->apply($instance, $userid, $data);
+
+            return $this->apply_or_admit($instance, (int) $userid, $data);
         } finally {
             $lock->release();
         }
+    }
 
-        return \enrol_apply\local\application_result::created();
+    /**
+     * Write the application, admitting it at once when it carries a valid group enrolment key.
+     *
+     * Runs inside submit_application()'s lock, after every eligibility check, so a key replaces
+     * the DECISION and nothing else: the window, the cohort, "new enrolments" and the applicant
+     * limit have already refused a key holder like anybody else.
+     *
+     * The key is resolved here, from the database, and never taken from what the form decided
+     * about it: a key rotated, a group deleted or the option switched off after the form was
+     * validated sends the applicant to the queue instead of admitting them on a stale fact. A
+     * ticked "without the key" ignores whatever key was posted with it, because the page
+     * transport, which has no JavaScript to disable the field, posts both.
+     *
+     * A valid key admits only while the method has a place (customint4) and, with
+     * local_groupdist installed, every group the admission would join has a seat. Both are
+     * checked and taken under lock_admission(), because the lock this runs under is per
+     * applicant: two key holders racing for the last seat would otherwise both see it free (the
+     * race was reproduced, docs/design/group-enrolment-key.md K0.5), and the same for the last
+     * place. Whatever stops an admission leaves an ordinary application waiting for a decision,
+     * recorded with why.
+     *
+     * @param stdClass $instance Course enrol instance.
+     * @param int $userid Applicant user id.
+     * @param stdClass $data Submitted application form data.
+     * @return \enrol_apply\local\application_result What was written.
+     */
+    protected function apply_or_admit(stdClass $instance, int $userid, stdClass $data) {
+        // Only a string is a key; anything else a caller posts counts as none.
+        $posted = (isset($data->groupkey) && is_string($data->groupkey)) ? $data->groupkey : '';
+        $keygroupid = empty($data->withoutkey)
+            ? \enrol_apply\local\groupkey::resolve($instance, $posted)
+            : null;
+        if ($keygroupid === null) {
+            $this->apply($instance, $userid, $data);
+            return \enrol_apply\local\application_result::created();
+        }
+
+        $targets = $this->key_route_groups($instance, $keygroupid);
+        $locks = $this->lock_admission($instance, $targets);
+        if ($locks === null) {
+            /* Somebody else held the method or a group for the whole timeout. The place or seat
+               could not be confirmed, which is not the same fact as none being left, and is
+               recorded as such. */
+            $this->apply($instance, $userid, $data, $keygroupid, \enrol_apply\local\submission::KEY_SEAT_UNCONFIRMED);
+            return \enrol_apply\local\application_result::created(
+                \enrol_apply\local\submission::KEY_SEAT_UNCONFIRMED,
+                $keygroupid
+            );
+        }
+
+        try {
+            /* Both capacities are read under the locks, so two key holders cannot both take the
+               last place or the last seat: the method's lock serialises every admission on it,
+               and the group locks those of any method into the same group. */
+            if (\enrol_apply\local\capacity::places_full($instance)) {
+                $this->apply($instance, $userid, $data, $keygroupid, \enrol_apply\local\submission::KEY_NO_PLACE);
+                return \enrol_apply\local\application_result::created(
+                    \enrol_apply\local\submission::KEY_NO_PLACE,
+                    $keygroupid
+                );
+            }
+            if (\enrol_apply\local\groupseats::full($targets)) {
+                $this->apply($instance, $userid, $data, $keygroupid, \enrol_apply\local\submission::KEY_GROUP_FULL);
+                return \enrol_apply\local\application_result::created(
+                    \enrol_apply\local\submission::KEY_GROUP_FULL,
+                    $keygroupid
+                );
+            }
+
+            $this->admit($instance, $userid, $data, $keygroupid, $targets);
+        } finally {
+            foreach ($locks as $lock) {
+                $lock->release();
+            }
+        }
+
+        // After the commit: the cache is not part of the transaction.
+        \enrol_apply\local\keyattempts::clear((int) $instance->id, $userid);
+
+        return \enrol_apply\local\application_result::created(\enrol_apply\local\submission::KEY_ADMITTED, $keygroupid);
+    }
+
+    /**
+     * Write an application a group key admits, and activate it, as one transaction.
+     *
+     * One transaction because the record says "admitted without review" and no manager is told:
+     * an activation that failed half way must not leave that claim behind on an enrolment still
+     * waiting for nobody. The memberships, the role and the queued notification roll back with it.
+     *
+     * @param stdClass $instance Course enrol instance.
+     * @param int $userid Applicant user id.
+     * @param stdClass $data Submitted application form data.
+     * @param int $keygroupid The group the key resolved to.
+     * @param array $targets Groups the admission joins, from key_route_groups().
+     * @return void
+     */
+    protected function admit(stdClass $instance, int $userid, stdClass $data, int $keygroupid, array $targets): void {
+        global $DB;
+
+        $transaction = $DB->start_delegated_transaction();
+        try {
+            $written = $this->apply($instance, $userid, $data, $keygroupid, \enrol_apply\local\submission::KEY_ADMITTED);
+            $userenrolmentid = $written['userenrolmentid'];
+
+            /* Recorded before the enrolment moves, like every decision: the hook pass of
+               complete_approval() joins the groups the record names while activate() runs. */
+            \enrol_apply\local\submission::record_decided_groups($userenrolmentid, $targets);
+            $this->activate($instance, (object) ['id' => $userenrolmentid, 'userid' => $userid]);
+
+            /* complete_approval() stamps whoever is logged in as the decider. On this route the
+               decision was the key's, made by the applicant presenting it (G11), whoever the
+               caller is. */
+            \enrol_apply\local\submission::decide(
+                $userenrolmentid,
+                \enrol_apply\local\submission::STATUS_APPROVED,
+                $userid,
+                true
+            );
+
+            \enrol_apply\event\application_admitted_by_key::create([
+                'objectid' => $written['submissionid'],
+                'context' => context_course::instance($instance->courseid),
+                'relateduserid' => $userid,
+                'other' => ['enrolid' => (int) $instance->id, 'groupid' => $keygroupid],
+            ])->trigger();
+
+            $transaction->allow_commit();
+        } catch (\Throwable $e) {
+            $transaction->rollback($e);
+        }
+    }
+
+    /**
+     * The groups a key admission joins: the key's group and the instance's own list.
+     *
+     * The instance's list means "every admitted applicant joins these", and a key adds one group
+     * to it rather than replacing it (G10). Only groups that still belong to the course count, as
+     * in add_instance_groups().
+     *
+     * @param stdClass $instance Course enrol instance.
+     * @param int $keygroupid The group the key resolved to.
+     * @return array Group ids, ascending, without duplicates.
+     */
+    protected function key_route_groups(stdClass $instance, int $keygroupid): array {
+        global $DB;
+
+        $listed = $DB->get_fieldset_sql(
+            "SELECT g.id
+               FROM {enrol_apply_groups} eag
+               JOIN {groups} g ON g.id = eag.groupid AND g.courseid = :courseid
+              WHERE eag.enrolid = :enrolid",
+            ['courseid' => $instance->courseid, 'enrolid' => $instance->id]
+        );
+
+        $ids = array_values(array_unique(array_merge([$keygroupid], array_map('intval', $listed))));
+        sort($ids);
+
+        return $ids;
+    }
+
+    /**
+     * Take the method's lock, then one lock per group in ascending id order.
+     *
+     * The method's lock serialises the places check of every key admission on it; the group
+     * locks serialise the seats of each group across methods. One order for all of them, the
+     * method first and the groups ascending, is what keeps two admissions with overlapping
+     * groups from waiting on each other for ever. Every lock taken is released if a later one
+     * cannot be.
+     *
+     * @param stdClass $instance Course enrol instance.
+     * @param array $groupids Group ids, ascending.
+     * @return array|null The locks, or null when one was not obtained within the timeout.
+     */
+    protected function lock_admission(stdClass $instance, array $groupids): ?array {
+        $factory = \core\lock\lock_config::get_lock_factory('enrol_apply_keyadmission');
+        $resources = array_merge(
+            ['instance_' . (int) $instance->id],
+            array_map(static fn(int $groupid): string => 'group_' . $groupid, $groupids)
+        );
+
+        $locks = [];
+        foreach ($resources as $resource) {
+            $lock = $factory->get_lock($resource, 5);
+            if (!$lock) {
+                foreach ($locks as $taken) {
+                    $taken->release();
+                }
+                return null;
+            }
+            $locks[] = $lock;
+        }
+
+        return $locks;
     }
 
     /**
@@ -488,6 +705,28 @@ class enrol_apply_plugin extends enrol_plugin {
         }
 
         $instance = $DB->get_record('enrol', ['id' => $userenrolment->enrolid], '*', MUST_EXIST);
+
+        /* An admission by group key announces no approval: nobody approved anything, and the
+           applicant was on the page that told them they are enrolled (G8). Read from the newest
+           record, and only while the key's own decision stands - decided by the applicant. A
+           person approving the same enrolment again later (after a suspension) is a decision,
+           and the message goes out. */
+        $records = $DB->get_records(
+            'enrol_apply_submission',
+            ['userenrolmentid' => $userenrolment->id],
+            'timecreated DESC, id DESC',
+            'id, keyoutcome, decidedby',
+            0,
+            1
+        );
+        $record = reset($records);
+        if (
+            $record
+            && (int) $record->keyoutcome === \enrol_apply\local\submission::KEY_ADMITTED
+            && (int) $record->decidedby === (int) $userenrolment->userid
+        ) {
+            return;
+        }
 
         $this->notify_applicant(
             $instance,
@@ -1068,32 +1307,49 @@ class enrol_apply_plugin extends enrol_plugin {
                 \enrol_apply\local\submission::record_decided_groups((int) $userenrolment->id, $chosen);
             }
 
-            /* The period starts on approval and lasts the method's enrolperiod; it is not the
-               decider's to choose. It is stamped on the enrolment rather than on the record, so
-               the report has one source for the dates, and never before approval (see apply()). */
-            $userenrolment->timestart = time();
-            $userenrolment->timeend = $instance->enrolperiod
-                ? $userenrolment->timestart + $instance->enrolperiod
-                : 0;
-
-            /* update_user_enrol() dispatches before_user_enrolment_updated, so the callback in
-               classes/hook_callbacks.php has usually run complete_approval() already. It is
-               called again below on purpose: it is idempotent, and this method must leave the
-               right state even when the hook is not registered, for instance before the hook
-               cache is rebuilt after an upgrade. */
-            $this->update_user_enrol(
-                $instance,
-                $userenrolment->userid,
-                ENROL_USER_ACTIVE,
-                $userenrolment->timestart,
-                $userenrolment->timeend
-            );
-
-            // The applicant's notification is queued by complete_approval(); see it for why.
-            $this->complete_approval($instance, (int) $userenrolment->userid, (int) $userenrolment->id);
+            $this->activate($instance, $userenrolment);
         }
 
         return $decided;
+    }
+
+    /**
+     * Make an application's enrolment active and apply everything that follows.
+     *
+     * The half of an approval that does not decide anything: the two routes into ACTIVE, a
+     * decider's confirm_enrolment() and a group key's admission in submit_application(), share it
+     * so they cannot drift apart. Each caller makes its own authorisation decision first, and
+     * records what was decided (groups, role, message) before calling, because the hook pass of
+     * complete_approval() acts on the record while this method runs.
+     *
+     * @param stdClass $instance Course enrol instance.
+     * @param stdClass $userenrolment The {user_enrolments} row, with at least id and userid.
+     * @return void
+     */
+    protected function activate(stdClass $instance, stdClass $userenrolment): void {
+        /* The period starts on approval and lasts the method's enrolperiod; it is not the
+           decider's to choose. It is stamped on the enrolment rather than on the record, so
+           the report has one source for the dates, and never before approval (see apply()). */
+        $userenrolment->timestart = time();
+        $userenrolment->timeend = $instance->enrolperiod
+            ? $userenrolment->timestart + $instance->enrolperiod
+            : 0;
+
+        /* update_user_enrol() dispatches before_user_enrolment_updated, so the callback in
+           classes/hook_callbacks.php has usually run complete_approval() already. It is
+           called again below on purpose: it is idempotent, and this method must leave the
+           right state even when the hook is not registered, for instance before the hook
+           cache is rebuilt after an upgrade. */
+        $this->update_user_enrol(
+            $instance,
+            $userenrolment->userid,
+            ENROL_USER_ACTIVE,
+            $userenrolment->timestart,
+            $userenrolment->timeend
+        );
+
+        // The applicant's notification is queued by complete_approval(); see it for why.
+        $this->complete_approval($instance, (int) $userenrolment->userid, (int) $userenrolment->id);
     }
 
     /**

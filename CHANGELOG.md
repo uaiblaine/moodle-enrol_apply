@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Group enrolment keys: the write door (K4).** `submit_application()` resolves a posted
+  `groupkey` itself, inside its lock and after every eligibility check, and admits the applicant at
+  once when the key is valid, the method has a place and, with `local_groupdist`, every group the
+  admission joins (the key's and the instance's own list) has a seat. Places and seats are checked
+  and taken under a lock on the method and one per group, and the admission is one transaction.
+  Otherwise the application waits, recorded with why (no place, group full, or a place or seat that
+  could not be confirmed in time, a new outcome). The approval steps an
+  admission shares with a decider's approval moved into `activate()`. An admission asks no manager
+  to decide, sends no "approved" message, is decided by the applicant, clears the wrong-key count
+  and raises `\enrol_apply\event\application_admitted_by_key`. Version 2026102500 (no upgrade
+  step: new strings and an event class for Moodle to pick up). Nothing posts a key yet: the form is
+  K5.
 - **Group enrolment keys: the record (K3).** `enrol_apply_submission` gains `keygroupid` (the
   group whose key was entered) and `keyoutcome` (admitted without review, valid but no place,
   valid but a group full), written with the record by `submission::create()` and read back by

@@ -608,6 +608,18 @@ backup/                      group mappings, comments and the durable trail, see
   so the two callers cannot produce two messages. It is exactly the kind of sentence a
   reviewer leans on, which is why it is called out rather than quietly corrected.
 
+- **Two routes into ACTIVE share `activate()`: a decider's `confirm_enrolment()` and a group
+  key's admission (`apply_or_admit()`).** Each makes its own authorisation decision and records
+  what was decided before calling it; anything that must follow an activation goes in
+  `complete_approval()`, never in one caller. The key is resolved inside `submit_application()`'s
+  lock from the database, never from what the form concluded, and a ticked `withoutkey` wins over
+  a posted key (the no-JavaScript transport posts both). Places and seats are checked and the
+  admission written under `lock_admission()` (the method, then each group ascending), because the
+  submission lock is per applicant and two key holders racing for one seat both got it without
+  them (measured, K0.5 in `docs/design/group-enrolment-key.md`); no PHPUnit gate can hold that, so
+  keep both checks inside the locks. `admit()` is one transaction: the record claims an admission
+  nobody was told about, so a failed activation must not leave it behind.
+
 - **`enrol_plugin::cron()` is dead.** Core declares it empty and nothing calls it. The
   `expiredaction` setting only works because `classes/task/sync_enrolments.php` calls
   `process_expirations()` on a schedule. If expiry stops working, look at the task, not
