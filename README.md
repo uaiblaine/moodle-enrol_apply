@@ -27,6 +27,8 @@ in `.github/workflows/ci.yml` are updated together with `supported`.
 - A waiting list, distinct from a plain pending application.
 - Groups an applicant automatically joins **once the application is approved**.
 - A cap on the number of applicants per instance.
+- Optionally, core's group enrolment keys: a valid key enrols the applicant at once, without
+  review, in that group (and, with `local_groupdist`, only while every group it joins has a seat).
 - Notifications to course teachers, to a configurable global recipient list, and to
   mentors holding the capability in the applicant's own user context.
 - Enrolment duration with the standard core expiry notifications and expiry action.
@@ -87,17 +89,39 @@ which groups carry a key, never the keys.
 With the option on, the application form starts with an optional **Group enrolment key**. An
 applicant who enters a valid key still fills in every required field and question, and on
 submitting is enrolled at once and joins that group (and the instance's own groups), with no
-review; managers are not asked to decide. The enrolment window, the cohort restriction, the
+review, and goes straight into the course. The enrolment window, the cohort restriction, the
 applicant limit and the places still apply: with no place left, the application waits for a
-review instead, recorded as such. A wrong key is refused with the choice to send the
-application for review without it.
+review instead, and the applicant is told why. A wrong key is refused with the choice to send
+the application for review without it.
 
 Wrong keys are counted per applicant and instance in the `keyattempts` application cache,
-for 15 minutes, so the form cannot be used to guess keys without limit.
+for 15 minutes; after five, the field gives way to a sentence for the rest of that time, so the
+form cannot be used to guess keys without limit. The key is compared as typed, with no
+trimming, and is read again inside the lock that writes the enrolment, so rotating a key on the
+group's page stops it at once.
 
-**Optional: `local_groupdist`.** When it is installed, each group's **Seats** (a group
-custom field it provides) count too: the instance form shows each keyed group's seats and
-marks a full one. Nothing else needs it, and it is not declared as a dependency.
+Who is told what:
+
+- **The applicant** reads "Enrolled with your group key", naming the group, on the
+  acknowledgement page; no "your application was approved" message is sent,
+  since nobody reviewed it. A valid key that could not admit says why: no place left, the group
+  full, or a place that could not be confirmed in time.
+- **Managers** (the same people told about new applications) get an informational notice with
+  its own subject and a link to the applicant. It names the group only to a recipient who may
+  manage applications in the course.
+- **The queue and the review page** mark an application a valid key could not admit. The review
+  page names the group and offers ticked the groups the key would have joined.
+- **The reports** carry an **Admission route** column and filter (review, or what the key did)
+  and the **Group of the enrolment key**.
+
+**Optional: `local_groupdist`.** When it is installed, each group's **Seats** (a group custom
+field it provides; empty means no limit, 0 means full) count too. A key admits only while every
+group the admission joins (the key's and the instance's own) has a seat; otherwise the
+application waits for a review. The instance form shows each keyed group's seats, the approval
+group chooser shows every group's occupancy (a full group can still be chosen: a person decides),
+and an approval that takes a group past its seats is followed by a warning. Occupancy is every
+member of the group, counted as `local_groupdist` counts it. Without it, groups carry no seats
+and nothing above applies. It is not declared as a dependency.
 
 ### Placeholders in the notification mails
 
@@ -146,7 +170,8 @@ department they asked for, add it to *Show user identity*.
 Course → Participants → Enrolment methods carries a report icon beside each Course enrol
 confirmation method, and the course settings navigation carries the same link. It lists
 every application the course has recorded — who applied, when, the comment, the profile
-details submitted, the outcome, who decided it and when — with per-user filters, sorting,
+details submitted, the outcome, whether a group enrolment key admitted it, who decided it and
+when — with per-user filters, sorting,
 paging and a CSV or Excel download.
 
 Where a course carries more than one Course enrol confirmation method, the report opens scoped to
@@ -273,7 +298,7 @@ Five tables. Three hold personal data:
   with the enrolment method and with the course.
 - `enrol_apply_submission` — the durable record of each application: the applicant, the comment,
   the decision, its message to the applicant, the decider's note, the groups and role chosen, who
-  decided and when. Kept for the retention period (`enrol_apply/retentiondays`, 30 days by
+  decided and when, and the group whose enrolment key was entered with what it did (never the key). Kept for the retention period (`enrol_apply/retentiondays`, 30 days by
   default; a record still in the queue is never swept), pseudonymised when the course is deleted,
   and kept when the enrolment or the method is deleted. See "The record of an application" above.
 - `enrol_apply_answer` — what the application submitted: one row per profile field and per

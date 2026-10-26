@@ -103,6 +103,24 @@ class behat_enrol_apply extends behat_base {
     }
 
     /**
+     * Switch an apply enrolment method's group keys off.
+     *
+     * @Given /^the "(?P<shortname_string>(?:[^"]|\\")*)" apply enrolment method accepts no group keys$/
+     * @param string $shortname Course shortname.
+     * @return void
+     */
+    public function the_apply_enrolment_method_accepts_no_group_keys(string $shortname): void {
+        global $DB;
+
+        $DB->set_field(
+            'enrol',
+            'customchar1',
+            \enrol_apply\local\groupkey::MODE_OFF,
+            ['id' => $this->get_instance_id($shortname)]
+        );
+    }
+
+    /**
      * Give an apply enrolment method a question of its own.
      *
      * Core's custom field generator needs the category's itemid, which is the enrol instance id
