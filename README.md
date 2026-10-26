@@ -26,12 +26,72 @@ in `.github/workflows/ci.yml` are updated together with `supported`.
   and ask questions of the method's own (application fields), shown or hidden by an earlier answer.
 - A waiting list, distinct from a plain pending application.
 - Groups an applicant automatically joins **once the application is approved**.
-- A cap on the number of applicants per instance.
+- A cap on the number of applicants per instance, and a number of places that the queue
+  measures approvals against.
 - Optionally, core's group enrolment keys: a valid key enrols the applicant at once, without
   review, in that group (and, with `local_groupdist`, only while every group it joins has a seat).
 - Notifications to course teachers, to a configurable global recipient list, and to
   mentors holding the capability in the applicant's own user context.
 - Enrolment duration with the standard core expiry notifications and expiry action.
+
+## Screenshots
+
+*Moodle 5.1 with the Boost theme and a demo course: one enrolment method asking for two profile
+fields and two questions of its own, three groups (two with an enrolment key) and a dozen
+fictional applicants. `local_groupdist` is installed, so the groups have seats.*
+
+### Applying
+
+<table>
+<tr>
+<td valign="top" width="50%"><img src="docs/screenshots/enrol-page.png" alt="The course's enrolment page: the Apply for a place card, mentioning the group enrolment key, and a Start application button"></td>
+<td valign="top" width="50%"><img src="docs/screenshots/application-form.png" alt="The application form in a modal: group enrolment key, the profile details that travel with the application, the method's own questions and the comment"></td>
+</tr>
+</table>
+
+The enrolment page offers the method as a card. **Start application** opens the form in a
+modal, or on a page of its own without JavaScript: an optional group enrolment key, the profile
+details the teacher asked for, each confirmed as up to date, the method's own questions and the
+comment.
+Editing the details here changes the application, not the profile.
+
+![Enrolled with your group key: the acknowledgement page names the group and offers Go to the course](docs/screenshots/admitted.png)
+
+A valid group key enrols the applicant at once, in that group, with no review.
+
+### Deciding
+
+![The approval queue: places and applications held, filters, and one row per application with the details submitted, the comment and badges for the waiting list, an earlier application and a group key that could not admit; the group chooser below shows each group's seats](docs/screenshots/queue.png)
+
+The queue for one method. The panel at the top counts what awaits a decision, what is deferred,
+the places taken and the applications held. Each row carries what the applicant submitted, the
+comment and a badge where there is something to know: on the waiting list, applied before, or a
+valid group key that found no place or seat. Select rows and decide them together from the bar at
+the foot of the page, choosing the groups and the role an approval gives.
+
+![Reviewing one application: the key's outcome, the details submitted, the capacity panel, the group chooser with seats and the three decisions](docs/screenshots/review.png)
+
+**Review** opens one application, with links to the previous and next. Sofia's weekend cohort key
+was valid, but that group is full: the page says so, and the chooser already selects the groups
+the key would have joined, with each group's occupancy. A full group can still be chosen; the
+page warns after the approval. The message goes to the applicant; the note stays with the record.
+
+### The record
+
+![The applications report, sorted by admission route: status, dates, outcome, admission route, the group of the key and the answers to each question](docs/screenshots/report.png)
+
+Every application the course has recorded, decided ones included, with the outcome of each and
+how it was admitted. It filters, sorts and downloads as CSV or Excel.
+
+### Setting up the method
+
+![The enrolment method's settings: instance name, role, groups, group enrolment keys with the keyed groups and their seats, dates, comment label, maximum applicants and places](docs/screenshots/settings.png)
+
+Per course: whether applications are open, the role and groups an approval gives, whether group
+enrolment keys are accepted (with the groups that carry a key and their seats, never the keys),
+the application window, the comment label, the maximum applicants and the places. Below come the
+profile fields to ask for and who is told of a new application; **Save and edit application
+fields** leads on to the method's own questions.
 
 ## Installation
 
@@ -42,7 +102,7 @@ Site administration → Plugins → Install plugins, then upload the release ZIP
 ### With git
 
 ```sh
-cd /path/to/moodle/public/enrol      # Moodle 5.x; drop "public/" on 4.x layouts
+cd /path/to/moodle/public/enrol      # Moodle 5.1 and later keep plugins under public/
 git clone https://github.com/uaiblaine/moodle-enrol_apply.git apply
 ```
 
@@ -246,11 +306,10 @@ Every application leaves a durable record in `enrol_apply_submission`: what the 
 wrote, the profile details they entered, the decision taken, who took it and when, and, when
 a group enrolment key was entered, which group's key it was and what it did (admitted without
 review, or left the application waiting because no place or seat was left; the key itself is
-never stored). The
-pending comment in `enrol_apply_applicationinfo` is deleted on approval, on cancellation and
-on unenrolment — deferring an application to the waiting list keeps it, because the
-application is still awaiting a decision. This record survives all four, and, from this
-release, **deleting the enrolment method no longer removes it either**.
+never stored). The pending comment in `enrol_apply_applicationinfo` is deleted on approval, on
+cancellation and on unenrolment — deferring an application to the waiting list keeps it, because
+the application is still awaiting a decision. This record survives all four, and **deleting the
+enrolment method does not remove it either**.
 Removing an enrolment method is a change to the course's configuration; the record of who
 applied and what was decided is not part of that configuration.
 
@@ -298,9 +357,10 @@ Five tables. Three hold personal data:
   with the enrolment method and with the course.
 - `enrol_apply_submission` — the durable record of each application: the applicant, the comment,
   the decision, its message to the applicant, the decider's note, the groups and role chosen, who
-  decided and when, and the group whose enrolment key was entered with what it did (never the key). Kept for the retention period (`enrol_apply/retentiondays`, 30 days by
-  default; a record still in the queue is never swept), pseudonymised when the course is deleted,
-  and kept when the enrolment or the method is deleted. See "The record of an application" above.
+  decided and when, and the group whose enrolment key was entered with what it did (never the
+  key). Kept for the retention period (`enrol_apply/retentiondays`, 30 days by default; a record
+  still in the queue is never swept), pseudonymised when the course is deleted, and kept when the
+  enrolment or the method is deleted. See "The record of an application" above.
 - `enrol_apply_answer` — what the application submitted: one row per profile field and per
   question asked, with the question as it read at submission. Removed with its record, by every
   route that removes one.
@@ -333,7 +393,7 @@ the group memberships its approvals add.
 See `CLAUDE.md` for the architecture notes and the local development commands.
 
 ```sh
-mdl ci moodle-enrol_apply          # the full CI pipeline, locally
+mdl ci moodle-enrol_apply --matrix # every CI leg, locally
 mdl phpunit m502 enrol_apply
 mdl behat m502 @enrol_apply
 ```
