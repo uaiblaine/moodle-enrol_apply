@@ -5,7 +5,7 @@ done the same day: no design change, three corrections (no trimming, a lowest-id
 key ignored whenever `withoutkey` is set). The prerequisites, K1 and K2 are written
 (2026-10-23, uncommitted): `\local_groupdist\seats` on groupdist's main, 5.1 and 5.3 branches,
 the `extra_deps_for()` case in moodle-dev, and here the setting, the resolver, the throttle and
-the seats reader. K3 to K6 are written and K3 to K5 merged; K7 and K8 remain. Mockups: [`group-enrolment-key-mockup.html`](group-enrolment-key-mockup.html).
+the seats reader. K1 to K6 are merged (#103 to #107); K7 and K8 close the plan. Mockups: [`group-enrolment-key-mockup.html`](group-enrolment-key-mockup.html).
 Revised the same day for per-group seats from `local_groupdist` (G12&ndash;G15).
 
 ## The request
@@ -371,7 +371,18 @@ seats from K1. Nineteen gates, KS1&ndash;KS19.
 - Report Builder: column "Admission route" (decision / group key) and "Key group".
 - Manager notification with its own subject and body strings (G8).
 
-### K7. Tests and gates
+### K7. Tests and gates &mdash; written 2026-10-25
+
+As built: most of the list landed with the stage that wrote each guard (K1&ndash;K6). An audit
+against it found nine gaps, closed here: the key read again at the write when it was rotated,
+the option switched off or the group deleted after the form checked it; a key holder at the
+applicant limit and outside the cohort; every member taking a seat whatever their role and
+component; a deleted Seats field reading as no seats; a Behat scenario with the option off; and
+gate GK9 for the case-sensitive comparison. Two items stay without a gate on purpose: the
+re-read at the write door (the form passes only the typed key, so there is no stale source to
+mutate towards) and the checks being inside `lock_admission()` (only two concurrent requests
+can show it, K0.5). The groupdist-absent branch of the admission is `groupseats::full()`'s own,
+held by `groupseats_test` through its `available()` seam.
 
 - PHPUnit: resolver (empty stored key never matches, empty submitted key, another course's
   group, option off, no trimming, case-sensitive, two groups sharing a key resolve to the
@@ -396,7 +407,12 @@ seats from K1. Nineteen gates, KS1&ndash;KS19.
   request (credits were exhausted on 2026-10-15).
 - `mdl ci moodle-enrol_apply --matrix --behat`, every leg log read for `: FAILED`.
 
-### K8. Documentation
+### K8. Documentation &mdash; written 2026-10-25
+
+As built: the README's group key section says what each person is told, what the queue, the
+review page and the reports show, and what `local_groupdist` adds and what happens without it;
+the features list and "Data stored" name the key route. `CLAUDE.md` carries the in-lock
+re-resolve (since K4) and now the `customchar1` choice.
 
 - README: the setting, the key route, who is told, the new column, and `local_groupdist` as an
   **optional** dependency (what it adds, what happens without it); directory description in

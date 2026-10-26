@@ -167,6 +167,44 @@ final class groupseats_test extends \advanced_testcase {
     }
 
     /**
+     * Every member takes a seat, whatever their role and whichever component added them, as on
+     * local_groupdist's own bulk edit page (G13).
+     *
+     * @return void
+     */
+    public function test_every_member_takes_a_seat(): void {
+        $this->require_groupdist();
+        $groupid = $this->group(3, 1);
+        $teacher = $this->getDataGenerator()->create_and_enrol($this->course, 'editingteacher');
+        groups_add_member($groupid, $teacher->id);
+        $stamped = $this->getDataGenerator()->create_and_enrol($this->course);
+        groups_add_member($groupid, $stamped->id, 'enrol_apply', 0);
+
+        $this->assertSame(3, groupseats::for_groups([$groupid])[$groupid]->members);
+        $this->assertSame([$groupid], groupseats::full([$groupid]));
+    }
+
+    /**
+     * A Seats field deleted from the site reads as no seats: nothing is full any more.
+     *
+     * @return void
+     */
+    public function test_a_deleted_seats_field_reads_as_no_seats(): void {
+        global $DB;
+
+        $this->require_groupdist();
+        $groupid = $this->group(0, 0);
+        $this->assertSame([$groupid], groupseats::full([$groupid]), 'the precondition: a declared 0 is full');
+
+        $fieldid = (int) $DB->get_field('customfield_field', 'id', ['shortname' => 'groupdist_seats'], MUST_EXIST);
+        \core_customfield\api::delete_field_configuration(\core_customfield\field_controller::create($fieldid));
+        \local_groupdist\local\fields::reset_field_cache();
+
+        $this->assertNull(groupseats::for_groups([$groupid])[$groupid]->seats);
+        $this->assertSame([], groupseats::full([$groupid]));
+    }
+
+    /**
      * An empty list asks nothing and answers nothing.
      *
      * @return void

@@ -45,3 +45,11 @@ Feature: Group enrolment keys
     And I set the field "Send my application for review without the key" to "1"
     And I press "Submit application"
     And I should see "Application submitted"
+
+  Scenario: Without the option, neither the card nor the form mentions a key
+    Given the "C1" apply enrolment method accepts no group keys
+    And I log in as "student1"
+    And I am on "Course 1" course homepage
+    Then I should not see "Have a group enrolment key?"
+    And I press "Start application"
+    And "Group enrolment key" "field" should not exist

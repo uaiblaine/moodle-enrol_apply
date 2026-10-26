@@ -415,6 +415,100 @@ final class key_admission_test extends \advanced_testcase {
     }
 
     /**
+     * What can change between the form's validation and the write, keyed by case name.
+     *
+     * @return array The change, as a case name the test switches on.
+     */
+    public static function stale_key_provider(): array {
+        return [
+            'the key rotated on the group page' => ['rotated'],
+            'the option switched off on the method' => ['off'],
+            'the group deleted' => ['deleted'],
+        ];
+    }
+
+    /**
+     * The write door reads the key again rather than trusting the form: a key that was valid when
+     * the form checked it, and is not any more, leaves an ordinary application waiting.
+     *
+     * The precondition is asserted first: the key resolved to the group before the change, so the
+     * application waits because of the change and not because of the fixture. No gate holds this,
+     * because the write door has no other source to read a stale answer from: the form passes
+     * the typed key, never the group it resolved to.
+     *
+     * @param string $change Which change happens between the two.
+     * @return void
+     */
+    #[DataProvider('stale_key_provider')]
+    public function test_the_key_is_read_again_at_the_write(string $change): void {
+        global $DB;
+
+        $this->assertSame((int) $this->keyed->id, \enrol_apply\local\groupkey::resolve($this->instance, self::KEY));
+        match ($change) {
+            'rotated' => $DB->set_field('groups', 'enrolmentkey', 'Turma-A-2028', ['id' => $this->keyed->id]),
+            'off' => $DB->set_field('enrol', 'customchar1', \enrol_apply\local\groupkey::MODE_OFF, ['id' => $this->instance->id]),
+            'deleted' => groups_delete_group($this->keyed->id),
+        };
+        $this->instance = $DB->get_record('enrol', ['id' => $this->instance->id], '*', MUST_EXIST);
+        $applicant = $this->getDataGenerator()->create_user();
+
+        [$result, $messages] = $this->submit($applicant, ['groupkey' => self::KEY]);
+
+        $this->assertFalse($result->was_admitted());
+        $this->assertSame(submission::KEY_NONE, (int) $this->record($applicant)->keyoutcome);
+        $this->assertFalse(is_enrolled(\context_course::instance($this->course->id), $applicant, '', true));
+        $this->assertSame(1, $this->sent_to($messages, $this->teacher), 'the manager is asked to decide');
+    }
+
+    /**
+     * A key holder meets the applicant limit like anybody else: refused, nothing written.
+     *
+     * The control is the first applicant, admitted to the queue under the same limit.
+     *
+     * @return void
+     */
+    public function test_a_key_holder_meets_the_applicant_limit(): void {
+        global $DB;
+
+        $DB->set_field('enrol', 'customint3', 1, ['id' => $this->instance->id]);
+        $this->instance->customint3 = 1;
+        $first = $this->getDataGenerator()->create_user();
+        [$control] = $this->submit($first, []);
+        $this->assertFalse($control->is_refusal());
+
+        $applicant = $this->getDataGenerator()->create_user();
+        [$result] = $this->submit($applicant, ['groupkey' => self::KEY]);
+
+        $this->assertTrue($result->is_refusal());
+        $this->assertFalse($DB->record_exists('user_enrolments', ['userid' => $applicant->id]));
+        $this->assertFalse($DB->record_exists('enrol_apply_submission', ['userid' => $applicant->id]));
+    }
+
+    /**
+     * A key holder outside the method's cohort is refused, and a member of it is admitted.
+     *
+     * @return void
+     */
+    public function test_a_key_holder_outside_the_cohort_is_refused(): void {
+        global $CFG, $DB;
+
+        require_once($CFG->dirroot . '/cohort/lib.php');
+        $cohort = $this->getDataGenerator()->create_cohort();
+        $member = $this->getDataGenerator()->create_user();
+        cohort_add_member($cohort->id, $member->id);
+        $DB->set_field('enrol', 'customint5', $cohort->id, ['id' => $this->instance->id]);
+        $this->instance->customint5 = $cohort->id;
+
+        $outsider = $this->getDataGenerator()->create_user();
+        [$refused] = $this->submit($outsider, ['groupkey' => self::KEY]);
+        [$admitted] = $this->submit($member, ['groupkey' => self::KEY]);
+
+        $this->assertTrue($refused->is_refusal());
+        $this->assertFalse($DB->record_exists('user_enrolments', ['userid' => $outsider->id]));
+        $this->assertTrue($admitted->was_admitted(), 'the control: a member of the cohort is admitted');
+    }
+
+    /**
      * A key replaces the decision, not the eligibility: with new applications switched off, a
      * key holder is refused like anybody else and nothing is written.
      *

@@ -622,7 +622,15 @@ backup/                      group mappings, comments and the durable trail, see
   admission written under `lock_admission()` (the method, then each group ascending), because the
   submission lock is per applicant and two key holders racing for one seat both got it without
   them (measured, K0.5 in `docs/design/group-enrolment-key.md`); no PHPUnit gate can hold that, so
-  keep both checks inside the locks. `admit()` is one transaction: the record claims an admission
+  keep both checks inside the locks.
+
+  **The option lives in `customchar1`** (`''` off, `'any'` any course group's key, room left for a
+  listed subset) because `customint1`/`customint2` carry legacy meanings `db/upgradelib.php` still
+  reads. It is off by default and per instance on purpose: keys left on groups by an old
+  `enrol_self` setup are inert until a teacher opts in, and switching it on silently would turn
+  each of them into an approval bypass. The key itself is never stored here; it is core's
+  `{groups}.enrolmentkey`, compared as typed (the element refuses wrapping whitespace, so a trim
+  would accept what the group page cannot store). `admit()` is one transaction: the record claims an admission
   nobody was told about, so a failed activation must not leave it behind.
 
 - **`enrol_plugin::cron()` is dead.** Core declares it empty and nothing calls it. The
