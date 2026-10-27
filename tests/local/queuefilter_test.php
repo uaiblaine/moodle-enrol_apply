@@ -153,6 +153,26 @@ final class queuefilter_test extends \advanced_testcase {
     }
 
     /**
+     * The setting offers no field the queue cannot filter by.
+     *
+     * resolve() drops such a field anyway, so a choice for it would be stored, look configured
+     * and change nothing on the queue.
+     *
+     * @return void
+     */
+    public function test_the_setting_offers_no_field_the_queue_cannot_filter_by(): void {
+        $this->custom_field('birthday', 'Birthday', 'datetime');
+        $this->custom_field('cpf', 'Document');
+        set_config('showuseridentity', 'profile_field_birthday,profile_field_cpf');
+
+        $choices = queuefilter::choices();
+
+        $this->assertArrayNotHasKey('profile_field_birthday', $choices);
+        // The control: the text field named beside it is offered.
+        $this->assertArrayHasKey('profile_field_cpf', $choices);
+    }
+
+    /**
      * A menu field becomes a select over its own options, and refuses anything else.
      *
      * The options come from the field's definition, never from the values users hold; see

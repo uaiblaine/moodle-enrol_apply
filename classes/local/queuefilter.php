@@ -100,13 +100,18 @@ class queuefilter {
      * what one reader may see, and get_identity_fields() skips its capability check for a null
      * context while still dropping a custom field that no longer exists.
      *
+     * A field shape() cannot filter by is not offered. resolve() drops it anyway, so ticking it
+     * would be stored, shown as configured and change nothing on the queue: a datetime or a
+     * textarea, or a type of another plugin such as profilefield_brasilufmunicipio, whose
+     * stored shape no control here can ask about.
+     *
      * @return array Identity field name => label, in the ESCAPED spelling the setting's own
      *         template requires.
      */
     public static function choices(): array {
         $choices = [];
         foreach (\core_user\fields::get_identity_fields(null) as $name) {
-            if (self::token($name) === '') {
+            if (self::token($name) === '' || self::shape($name) === null) {
                 continue;
             }
             // The setting's template renders this through a triple stash; see label().

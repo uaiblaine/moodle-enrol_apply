@@ -41,9 +41,13 @@ jobs:
     with:
       runner: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.CI_RUNNER || '' }}
       moodle-core-branch: MOODLE_503_STABLE
-      # Optional: the per-group seats a group enrolment key respects. Each job installs the
-      # local_groupdist branch of its own Moodle version.
-      plugin-dependencies: uaiblaine/moodle-local_groupdist,MOODLE_503_STABLE
+      # Test-only, both optional: the per-group seats a group enrolment key respects (each job
+      # installs the local_groupdist branch of its own Moodle version), and
+      # profilefield_brasilufmunicipio, the profile field type with a shape of its own that
+      # tests/fixtures/municipality_field.php draws, reads and writes. One branch serves all three.
+      plugin-dependencies: |
+        uaiblaine/moodle-local_groupdist,MOODLE_503_STABLE
+        uaiblaine/moodle-profilefield_brasilufmunicipio,main
 
   ci-502:
     name: Moodle 5.02
@@ -52,7 +56,9 @@ jobs:
       runner: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.CI_RUNNER || '' }}
       moodle-core-branch: MOODLE_502_STABLE
       one-db-only: true
-      plugin-dependencies: uaiblaine/moodle-local_groupdist,MOODLE_502_STABLE
+      plugin-dependencies: |
+        uaiblaine/moodle-local_groupdist,MOODLE_502_STABLE
+        uaiblaine/moodle-profilefield_brasilufmunicipio,main
 
   ci-501:
     name: Moodle 5.01
@@ -61,4 +67,6 @@ jobs:
       runner: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.CI_RUNNER || '' }}
       moodle-core-branch: MOODLE_501_STABLE
       one-db-only: true
-      plugin-dependencies: uaiblaine/moodle-local_groupdist,MOODLE_501_STABLE
+      plugin-dependencies: |
+        uaiblaine/moodle-local_groupdist,MOODLE_501_STABLE
+        uaiblaine/moodle-profilefield_brasilufmunicipio,main

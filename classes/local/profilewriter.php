@@ -22,9 +22,9 @@ use context_system;
  * Writes an applicant's own answers back to their profile, when they ask for it.
  *
  * The whole class exists because core will not stop you. user_update_user() consults no
- * capability and no field_lock_* setting, and profile_save_data() performs no authorisation
- * check of any kind - it iterates every field and writes whatever is on the object it is
- * handed. Core's only defence against a forged post is setConstant() winning in
+ * capability and no field_lock_* setting, and neither profile_save_data() nor a field type's
+ * edit_save_data() performs an authorisation check of any kind - they write whatever is on
+ * the object they are handed. Core's only defence against a forged post is setConstant() winning in
  * exportValues(), and this plugin does not even render a locked field as an input, so there
  * is no constant to win. Every guard therefore lives here.
  *
@@ -98,19 +98,25 @@ class profilewriter {
 
         $usernew = (object) ['id' => $user->id];
         $wrotestandard = false;
+        $custom = [];
         foreach ($changes as $change) {
-            $name = fields::form_element_name($change['key']);
-            $usernew->{$name} = $change['after'];
-            if (fields::is_standard($change['key'])) {
-                $wrotestandard = true;
+            if (!fields::is_standard($change['key'])) {
+                $custom[] = $change;
+                continue;
             }
+            foreach ($change['values'] as $name => $value) {
+                $usernew->{$name} = $value;
+            }
+            $wrotestandard = true;
         }
         $usernew->timemodified = time();
 
         /* The order of core's user/edit.php, and each step matters. The auth plugin is told
            first, or an external directory goes stale; user_update_user() is called with
-           $triggerevent = false so the event is not born in the middle of the write;
-           profile_save_data() writes the custom fields; and one event is fired at the end. */
+           $triggerevent = false so the event is not born in the middle of the write; each
+           custom field is written by its own type's edit_save_data(), one field at a time
+           rather than through profile_save_data(), so each type finds its own elements in the
+           request (customfield::save()); and one event is fired at the end. */
         if ($wrotestandard && !$authplugin->user_update($DB->get_record('user', ['id' => $user->id]), $usernew)) {
             throw new \moodle_exception('cannotupdateprofile');
         }
@@ -122,7 +128,12 @@ class profilewriter {
                 user_update_user($usernew, false, false);
             }
         }
-        profile_save_data($usernew);
+        foreach ($custom as $change) {
+            $field = customfield::field((int) fields::key_target($change['key']), (int) $user->id);
+            if ($field !== null) {
+                customfield::save($field, (int) $user->id, $change['values']);
+            }
+        }
 
         /* Ids only, as core's own profile edit fires it: no field value goes into the log. */
         \core\event\user_updated::create_from_userid($user->id)->trigger();

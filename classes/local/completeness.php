@@ -31,11 +31,13 @@ class completeness {
     /**
      * The fields the user currently holds no value for.
      *
-     * Values are read one field at a time through {@see fields::current_value()} rather than
+     * Values are read one field at a time through {@see fields::current_display()} rather than
      * from profile_user_record(). That function defaults $onlyinuserobject to true, and
      * profile_field_textarea::is_user_object_data() returns false, so a textarea custom field
      * is absent from what it returns - it would read as permanently empty, and the applicant
-     * would be told to fill in a field they had already filled in.
+     * would be told to fill in a field they had already filled in. Reading what a custom value
+     * says rather than the stored column is what lets a type's placeholder for "nothing
+     * chosen" count as missing.
      *
      * @param \stdClass $instance Enrol instance.
      * @param \stdClass $user The applicant.
@@ -48,7 +50,7 @@ class completeness {
             if (fields::classify($key, $user) === fields::STATE_ABSENT) {
                 continue;
             }
-            if (trim(fields::current_value($key, $user)) !== '') {
+            if (trim(fields::current_display($key, $user)) !== '') {
                 continue;
             }
             $missing[] = [

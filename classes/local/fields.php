@@ -183,6 +183,10 @@ class fields {
 
         $custom = $DB->get_records('user_info_field', null, 'sortorder ASC, id ASC', 'id, name, shortname, datatype');
         foreach ($custom as $field) {
+            if (!customfield::type_available((string) $field->datatype)) {
+                // A type whose plugin was uninstalled cannot be drawn, so it is not offered.
+                continue;
+            }
             $offerable[self::custom_key((int) $field->id)] = format_string($field->name, true, ['escape' => false]);
         }
 
@@ -309,7 +313,7 @@ class fields {
         }
 
         $field = $DB->get_record('user_info_field', ['id' => (int) self::key_target($key)], '*', IGNORE_MISSING);
-        if (!$field) {
+        if (!$field || !customfield::type_available((string) $field->datatype)) {
             return self::STATE_ABSENT;
         }
         /* PROFILE_VISIBLE_NONE is defined as the STRING '0', so both sides are cast: a
@@ -428,13 +432,17 @@ class fields {
      * rather than the answer in front of them, and would disagree with the standard fields
      * beside it.
      *
-     * The value is returned as the form delivered it, not put through format_string(), whose
-     * strip_tags() deletes everything after a bare "<". Escaping belongs at the sink, and the
-     * sinks escape for themselves: the notification template renders every value through a
+     * A standard value is returned as the form delivered it, not put through format_string(),
+     * whose strip_tags() deletes everything after a bare "<". Escaping belongs at the sink, and
+     * the sinks escape for themselves: the notification template renders every value through a
      * double stash, and a Report Builder cell is raw HTML where escaping is lossless. Only a
      * boundary that requires PARAM_TEXT, such as a web service return, has to strip. The form's
-     * fields are PARAM_TEXT ({@see \enrol_apply\form\application_form}), so formslib has already
-     * removed anything after a bare "<" before this runs.
+     * standard fields are PARAM_TEXT ({@see \enrol_apply\form\application_form}), so formslib has
+     * already removed anything after a bare "<" before this runs.
+     *
+     * A custom value is what its type would store for the submission, said the way the type says
+     * it ({@see customfield::display()}): the snapshot is frozen text, and a type's stored shape -
+     * JSON, a timestamp, a "1" - means nothing to the approver reading it.
      *
      * The field key travels beside the label because the durable snapshot stores both; see
      * {@see submission::snapshot()}.
@@ -446,13 +454,26 @@ class fields {
     public static function submitted_values(\stdClass $instance, \stdClass $data): array {
         $values = [];
         foreach (self::resolve($instance)->keys() as $key) {
+            if (!self::is_standard($key)) {
+                $field = customfield::field((int) self::key_target($key), 0);
+                $value = $field ? customfield::display($field, customfield::stored_value($field, (array) $data)) : '';
+                if ($value !== '') {
+                    $values[] = [
+                        'key' => $key,
+                        'label' => self::label($key, false),
+                        'value' => $value,
+                    ];
+                }
+                continue;
+            }
+
             $property = self::form_element_name($key);
             if (!isset($data->$property)) {
                 continue;
             }
             $raw = $data->$property;
             if (is_array($raw)) {
-                // An editor or a multi-value element; the form never offers one for these keys.
+                // An editor or a multi-value element; the form never offers one for a standard key.
                 continue;
             }
             $value = trim((string) $raw);
@@ -513,6 +534,26 @@ class fields {
         ]);
 
         return $stored === false ? '' : (string) $stored;
+    }
+
+    /**
+     * What a user's value for a field says, as plain text: the plain spelling, for a sink that escapes.
+     *
+     * The column itself for a standard field. For a custom field the stored value is the type's
+     * own shape, so it is said the way the type says it; {@see customfield::display()}.
+     *
+     * @param string $key Field key.
+     * @param \stdClass $user User to read.
+     * @return string The text, or an empty string when there is nothing to show.
+     */
+    public static function current_display(string $key, \stdClass $user): string {
+        if (self::is_standard($key)) {
+            return self::current_value($key, $user);
+        }
+
+        $field = customfield::field((int) self::key_target($key), (int) $user->id);
+
+        return $field ? customfield::display($field, customfield::current($field)) : '';
     }
 
     /**

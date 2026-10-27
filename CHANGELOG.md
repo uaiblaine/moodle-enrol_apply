@@ -75,6 +75,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Custom profile fields are drawn, shown and saved by their own type.** The application form
+  drew every custom field as a text box over its stored column, showed the column as it was and
+  wrote back what was typed over it, which held for the text type only. A type with a shape of its
+  own broke on every surface: `profilefield_brasilufmunicipio` (which stores JSON and draws two
+  selects) showed the applicant and the approver the JSON, and a profile write replaced it with
+  the typed text. The form now draws each custom field with the type's `edit_field_add()`, fills it
+  with `edit_load_user_data()` and runs its `edit_validate_field()`; the snapshot, the notification,
+  the read-only rows, the profile-update offer and the completeness check say what a value means
+  through `display_data()`; and the write goes through the type's own `edit_save_data()`. A type
+  that reads its extra elements from the request (as that one does) finds them there, as the
+  browser posted them, on both transports and on `profile.php`. Dates, checkboxes, menus and textareas read as such in the
+  snapshot instead of as a timestamp, `1`, an option key or markup. A field whose type has been
+  uninstalled is no longer offered or drawn, and the queue's filter setting no longer offers a
+  field the queue cannot filter by. CI installs `profilefield_brasilufmunicipio` as a test
+  dependency; mutation gates `PF1`-`PF16`.
 - **Group memberships an approval adds are covered by the privacy API.** They are written with
   component `enrol_apply`, which core_group's own provider leaves to the component, so no export
   or erasure reached them. The provider now links core_group, lists and deletes those memberships
