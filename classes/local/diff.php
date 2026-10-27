@@ -37,10 +37,19 @@ class diff {
      * on screen at all. Blanking is never a change - see {@see profilewriter::write()} for
      * why an enrolment form may add to a profile but never empty it.
      *
+     * A custom field is compared by what its type says the two values are, not by its stored
+     * shape: two JSON documents naming the same city in a different key order are no change,
+     * and a type's placeholder for "nothing chosen" is a blank, not a value to write.
+     *
+     * Each change carries, under 'values', the submitted elements that produce it, keyed by
+     * element name. The write replays those through the field's own save, because a type that
+     * draws several elements needs all of them; 'before' and 'after' are only what the
+     * applicant is shown.
+     *
      * @param \stdClass $instance Enrol instance the application was submitted to.
      * @param \stdClass $user The applicant, as they currently stand.
      * @param array $submitted Submitted values keyed by form element name.
-     * @return array List of arrays with key, label, before and after.
+     * @return array List of arrays with key, label, before, after and values.
      */
     public static function compute(\stdClass $instance, \stdClass $user, array $submitted): array {
         $changes = [];
@@ -49,28 +58,79 @@ class diff {
             if (fields::classify($key, $user) !== fields::STATE_EDITABLE) {
                 continue;
             }
-            $name = fields::form_element_name($key);
-            if ($name === '' || !array_key_exists($name, $submitted)) {
-                continue;
-            }
 
-            $after = trim((string) $submitted[$name]);
-            if ($after === '') {
-                continue;
+            $change = fields::is_standard($key)
+                ? self::standard_change($key, $user, $submitted)
+                : self::custom_change($key, $user, $submitted);
+            if ($change !== null) {
+                $changes[] = $change;
             }
-            $before = trim(fields::current_value($key, $user));
-            if ($before === $after) {
-                continue;
-            }
-
-            $changes[] = [
-                'key' => $key,
-                'label' => fields::label($key, false),
-                'before' => $before,
-                'after' => $after,
-            ];
         }
 
         return $changes;
+    }
+
+    /**
+     * The change a submission makes to a standard {user} column, or null for none.
+     *
+     * @param string $key Field key.
+     * @param \stdClass $user The applicant.
+     * @param array $submitted Submitted values keyed by form element name.
+     * @return array|null The change, in compute()'s shape.
+     */
+    protected static function standard_change(string $key, \stdClass $user, array $submitted): ?array {
+        $name = fields::form_element_name($key);
+        if ($name === '' || !array_key_exists($name, $submitted)) {
+            return null;
+        }
+
+        $after = trim((string) $submitted[$name]);
+        if ($after === '') {
+            return null;
+        }
+        $before = trim(fields::current_value($key, $user));
+        if ($before === $after) {
+            return null;
+        }
+
+        return [
+            'key' => $key,
+            'label' => fields::label($key, false),
+            'before' => $before,
+            'after' => $after,
+            'values' => [$name => $after],
+        ];
+    }
+
+    /**
+     * The change a submission makes to a custom profile field, or null for none.
+     *
+     * @param string $key Field key.
+     * @param \stdClass $user The applicant.
+     * @param array $submitted Submitted values keyed by form element name.
+     * @return array|null The change, in compute()'s shape.
+     */
+    protected static function custom_change(string $key, \stdClass $user, array $submitted): ?array {
+        $field = customfield::field((int) fields::key_target($key), (int) $user->id);
+        if ($field === null || !array_key_exists($field->inputname, $submitted)) {
+            return null;
+        }
+
+        $after = customfield::display($field, customfield::stored_value($field, $submitted));
+        if ($after === '') {
+            return null;
+        }
+        $before = customfield::display($field, customfield::current($field));
+        if ($before === $after) {
+            return null;
+        }
+
+        return [
+            'key' => $key,
+            'label' => fields::label($key, false),
+            'before' => $before,
+            'after' => $after,
+            'values' => customfield::own_values($field, $submitted),
+        ];
     }
 }

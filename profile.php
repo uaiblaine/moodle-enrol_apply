@@ -56,11 +56,12 @@ if (!$changes) {
     redirect($returnurl);
 }
 
+/* Each change carries the submitted elements that produce it: a custom field type may draw
+   several, and its own save reads all of them. */
 $submitted = [];
 foreach ($changes as $change) {
-    $name = \enrol_apply\local\fields::form_element_name($change['key']);
-    if ($name !== '') {
-        $submitted[$name] = $change['after'];
+    if (is_array($change['values'] ?? null)) {
+        $submitted = array_merge($submitted, $change['values']);
     }
 }
 

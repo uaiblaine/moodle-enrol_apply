@@ -1012,7 +1012,8 @@ backup/                      group mappings, comments and the durable trail, see
   default and with no restore surface, and the instance's `customint8`, which every restore
   zeroes (gate `F5A`) — and then writes only what the applicant accepts on `applied.php`:
   `offer::stash()` keeps the changes at submission, and `profile.php` hands them to
-  `profilewriter::write()` (`user_update_user()` plus `profile_save_data()`). Keep it opt-in: an
+  `profilewriter::write()` (`user_update_user()` plus each custom field type's own
+  `edit_save_data()`). Keep it opt-in: an
   enrolment form that rewrote user records unasked would be a privacy question of its own. The
   guards that write path needs are under "Nothing below the form honours a field lock".
 
@@ -1324,7 +1325,28 @@ backup/                      group mappings, comments and the durable trail, see
   `profile_field_textarea::is_user_object_data()` returns false, so a textarea custom field is
   simply absent from what it returns — it reads as permanently empty, and the applicant is
   told to fill in a field they already filled in, forever, with no way to satisfy the gate.
-  `enrol_gapply` has exactly that defect. Read each field with `fields::current_value()`.
+  `enrol_gapply` has exactly that defect. Read each field with `fields::current_display()`.
+
+- **A custom profile field is its TYPE's, on every surface; never read or write its column as
+  text.** `\enrol_apply\local\customfield` is the one door: the form draws it with
+  `edit_field_add()`, fills it with `edit_load_user_data()` and asks `edit_validate_field()`; the
+  snapshot, the notification, the locked rows, the offer and the completeness check use
+  `customfield::display()`; the write is the type's `edit_save_data()`. The column holds the
+  type's own shape (`profilefield_brasilufmunicipio`: JSON, plus a stored `"1"` for "nothing
+  chosen"), so a plugin-side `trim($data) !== ''` or string compare is wrong for it. Three things
+  bite. **A type may read its extra elements with `optional_param()`** rather than from the value
+  it is handed, and neither the modal (one `formdata` string) nor `profile.php` (instance and
+  sesskey only) puts them in the request, so `customfield::with_request()` does, and puts the
+  request back; the offer therefore carries every element of a change under `values`, never the
+  display text. Those extra elements come from the POSTED values
+  (`application_form::with_posted_extras()`), not from `get_data()`: `MoodleQuickForm_select`
+  exports nothing for a select with no options on the server, which is what the municipality
+  select is until its JavaScript fills it. **"Required" is handed to the type before construction** (`profile_field_menu`
+  builds its "Choose..." option in its constructor), and the type attaches its own rule, so a
+  required error is never put on a hidden element. **`text` and `social` are shown verbatim**,
+  not through `display_data()`, whose `format_string()` strips from a bare `<`. The fixture is
+  `tests/fixtures/municipality_field.php`; ci.yml and `mdl ci` install that plugin, and its tests
+  skip without it. Gates `PF1`-`PF16`.
 
 - **`enrol_apply_submission` is the one table nothing deletes on the way past.** Everything
   else the plugin owns is destroyed exactly when it becomes interesting: the

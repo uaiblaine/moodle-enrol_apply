@@ -37,6 +37,7 @@ defined('MOODLE_INTERNAL') || die();
 
 global $CFG;
 require_once($CFG->dirroot . '/enrol/apply/tests/fixtures/testable_application_form.php');
+require_once($CFG->dirroot . '/enrol/apply/tests/fixtures/municipality_field.php');
 
 /**
  * Tests for the application form and the gates it applies.
@@ -48,6 +49,8 @@ require_once($CFG->dirroot . '/enrol/apply/tests/fixtures/testable_application_f
  */
 #[CoversClass(application_form::class)]
 final class application_form_test extends \advanced_testcase {
+    use \enrol_apply\municipality_field;
+
     /** @var \stdClass Course the instance belongs to. */
     protected $course;
 
@@ -1068,5 +1071,165 @@ final class application_form_test extends \advanced_testcase {
 
         $this->assertFalse(keyattempts::locked((int) $this->instance->id, (int) $this->applicant->id));
         $this->assertStringContainsString(get_string('err_wrappingwhitespace', 'core_form'), $result['html']);
+    }
+
+    /**
+     * Ask for a municipality field, required or not, and return its key.
+     *
+     * @param bool $required Whether the instance requires it.
+     * @param array $extra Further {user_info_field} columns.
+     * @return string The field key.
+     */
+    protected function ask_for_a_municipality(bool $required = false, array $extra = []): string {
+        $field = $this->create_municipality_field('cidade', $extra);
+        $key = fields::custom_key((int) $field->id);
+        $this->ask_for([$key], $required ? [$key] : []);
+
+        return $key;
+    }
+
+    /**
+     * A custom field is drawn by its own type, not as a text box over its stored column.
+     *
+     * @return void
+     */
+    public function test_a_custom_field_is_drawn_by_its_own_type(): void {
+        $key = $this->ask_for_a_municipality();
+        $mform = (new \ReflectionProperty(\moodleform::class, '_form'))->getValue($this->make_form());
+
+        $this->assertSame('hidden', $mform->getElementType('profile_field_cidade'));
+        $this->assertSame('select', $mform->getElementType('profile_field_cidade_uf'));
+        $this->assertSame('select', $mform->getElementType('profile_field_cidade_municipio'));
+        $this->assertTrue($mform->elementExists('confirm_' . $key));
+    }
+
+    /**
+     * The form opens on the applicant's stored municipality, in the type's own elements.
+     *
+     * @return void
+     */
+    public function test_a_custom_field_is_filled_by_its_own_type(): void {
+        $this->ask_for_a_municipality();
+        $field = profile_get_custom_field_data_by_shortname('cidade');
+        $json = $this->municipality_json('SP', self::$saopaulo, 'São Paulo');
+        $this->store_profile_value($field, (int) $this->applicant->id, $json);
+        $form = $this->make_form();
+
+        $form->set_data_for_dynamic_submission();
+
+        $mform = (new \ReflectionProperty(\moodleform::class, '_form'))->getValue($form);
+        $this->assertSame(['SP'], $mform->getElementValue('profile_field_cidade_uf'));
+    }
+
+    /**
+     * A locked custom field shows what its type says, never the JSON behind it.
+     *
+     * @return void
+     */
+    public function test_a_locked_custom_field_shows_what_its_type_says(): void {
+        $key = $this->ask_for_a_municipality(false, ['locked' => 1]);
+        $field = profile_get_custom_field_data_by_shortname('cidade');
+        $json = $this->municipality_json('MG', self::$belohorizonte, 'Belo Horizonte');
+        $this->store_profile_value($field, (int) $this->applicant->id, $json);
+
+        $mform = (new \ReflectionProperty(\moodleform::class, '_form'))->getValue($this->make_form());
+        $html = $mform->getElement('locked_' . $key)->toHtml();
+
+        $this->assertStringContainsString('MG / Belo Horizonte', $html);
+        $this->assertStringNotContainsString('codmunicipio', $html);
+    }
+
+    /**
+     * Submitted through the modal, a municipality reaches the snapshot as its name.
+     *
+     * The modal's request carries the form inside one formdata string, so the type's own read of
+     * its selects with optional_param() finds nothing unless customfield puts them there.
+     *
+     * @return void
+     */
+    public function test_the_modal_snapshots_a_municipality_as_its_name(): void {
+        global $DB;
+
+        $key = $this->ask_for_a_municipality(true);
+
+        $sink = $this->redirectMessages();
+        $result = $this->submit_through_the_modal([
+            'profile_field_cidade' => 1,
+            'profile_field_cidade_uf' => 'MG',
+            'profile_field_cidade_municipio' => self::$belohorizonte,
+            'confirm_' . $key => 1,
+        ]);
+        $sink->close();
+
+        $this->assertTrue($result['submitted']);
+        $submissionid = (int) $DB->get_field('enrol_apply_submission', 'id', [
+            'userid' => $this->applicant->id,
+            'enrolid' => $this->instance->id,
+        ]);
+        $this->assertSame([[
+            'key' => $key,
+            'label' => 'Cidade',
+            'value' => 'MG / Belo Horizonte',
+        ]], submission::read_snapshot($submissionid));
+    }
+
+    /**
+     * A required municipality left unchosen is refused, by the type's own rules on its selects.
+     *
+     * @return void
+     */
+    public function test_a_required_municipality_left_unchosen_is_refused(): void {
+        global $DB;
+
+        $key = $this->ask_for_a_municipality(true);
+
+        $result = $this->submit_through_the_modal([
+            'profile_field_cidade' => 1,
+            'profile_field_cidade_uf' => '',
+            'profile_field_cidade_municipio' => '',
+            'confirm_' . $key => 1,
+        ]);
+
+        $this->assertFalse($result['submitted']);
+        $this->assertFalse($DB->record_exists('user_enrolments', ['userid' => $this->applicant->id]));
+    }
+
+    /**
+     * The required error is never put on a type's hidden element, where nobody would see it.
+     *
+     * The type marks its visible selects required itself; an error on its hidden input would
+     * keep the form from submitting with nothing on screen to say why.
+     *
+     * @return void
+     */
+    public function test_a_required_error_never_lands_on_a_hidden_element(): void {
+        $key = $this->ask_for_a_municipality(true);
+
+        $errors = $this->make_form()->validation([
+            'profile_field_cidade' => 1,
+            'profile_field_cidade_uf' => '',
+            'profile_field_cidade_municipio' => '',
+            'confirm_' . $key => 1,
+        ], []);
+
+        $this->assertArrayNotHasKey('profile_field_cidade', $errors);
+    }
+
+    /**
+     * A municipality outside the states the field allows is refused by the type's own validation.
+     *
+     * @return void
+     */
+    public function test_the_types_own_validation_runs(): void {
+        $key = $this->ask_for_a_municipality(false, ['param1' => 'SP']);
+
+        $errors = $this->make_form()->validation([
+            'profile_field_cidade' => 1,
+            'profile_field_cidade_uf' => 'MG',
+            'profile_field_cidade_municipio' => self::$belohorizonte,
+            'confirm_' . $key => 1,
+        ], []);
+
+        $this->assertArrayHasKey('profile_field_cidade_uf', $errors);
     }
 }

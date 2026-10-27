@@ -24,6 +24,8 @@ in `.github/workflows/ci.yml` are updated together with `supported`.
 - A configurable free-text comment field on the application form.
 - Optionally collect the standard and the custom user profile fields with the application,
   and ask questions of the method's own (application fields), shown or hidden by an earlier answer.
+  A custom profile field is drawn, shown and saved by its own field type, so a type from another
+  plugin (for example a state and municipality picker) works as it does on the profile page.
 - A waiting list, distinct from a plain pending application.
 - Groups an applicant automatically joins **once the application is approved**.
 - A cap on the number of applicants per instance, and a number of places that the queue

@@ -19,6 +19,7 @@ namespace enrol_apply\form;
 use context_course;
 use core_form\dynamic_form;
 use enrol_apply\local\answers;
+use enrol_apply\local\customfield;
 use enrol_apply\local\fields;
 use enrol_apply\local\groupkey;
 use enrol_apply\local\keyattempts;
@@ -361,7 +362,7 @@ class application_form extends dynamic_form {
                 'static',
                 'locked_' . $key,
                 fields::label($key, true),
-                s(fields::current_value($key, $user))
+                s(fields::current_display($key, $user))
             );
         }
     }
@@ -373,12 +374,17 @@ class application_form extends dynamic_form {
      * element-advcheckbox.mustache exposes the text only through aria-describedby, so a shared
      * text would make every confirmation announce identically.
      *
+     * A custom field is drawn by its own type, with the instance's "required" handed to the type
+     * so it marks whichever of its elements it means; see customfield::add_to_form().
+     *
      * @param string $key Field key.
      * @param bool $required Whether an application cannot be submitted without it.
      * @param bool $confirmeach Whether this field carries its own confirmation checkbox.
      * @return void
      */
     protected function add_editable_field(string $key, bool $required, bool $confirmeach): void {
+        global $USER;
+
         $mform = $this->_form;
         $name = fields::form_element_name($key);
         if ($name === '') {
@@ -386,7 +392,13 @@ class application_form extends dynamic_form {
         }
         $label = fields::label($key, true);
 
-        if ($key === fields::standard_key('country')) {
+        if (!fields::is_standard($key)) {
+            $field = customfield::field((int) fields::key_target($key), (int) $USER->id, $required);
+            if ($field === null) {
+                return;
+            }
+            customfield::add_to_form($mform, $field);
+        } else if ($key === fields::standard_key('country')) {
             $countries = ['' => get_string('selectacountry')] + get_string_manager()->get_list_of_countries();
             $mform->addElement('select', $name, $label, $countries);
         } else {
@@ -394,9 +406,10 @@ class application_form extends dynamic_form {
             $mform->setType($name, PARAM_TEXT);
         }
 
-        if ($required) {
+        if ($required && fields::is_standard($key)) {
             /* addRule paints the marker and blocks in the browser; validation() is what makes
-               it stick, because a client-side rule never blocks a POST. */
+               it stick, because a client-side rule never blocks a POST. A custom field's type
+               attached its own in add_to_form(). */
             $mform->addRule($name, get_string('requiredtoapply', 'enrol_apply'), 'required', null, 'client');
         }
 
@@ -423,6 +436,7 @@ class application_form extends dynamic_form {
         $errors = parent::validation($data, $files);
         $errors = array_merge($errors, answers::validate($this->get_instance(), $data, $files));
         $resolved = fields::resolve($this->get_instance());
+        $data = $this->with_posted_extras($data);
 
         $editable = array_keys(array_filter(
             $this->get_states(),
@@ -439,12 +453,27 @@ class application_form extends dynamic_form {
                 continue;
             }
 
-            /* trim() before deciding. $CFG->strictformsrequired defaults to off, and with it
-               off MoodleQuickForm_Rule_Required::validate() does not strip whitespace at all,
-               so a single space satisfies a required field. */
-            $value = trim((string) ($data[$name] ?? ''));
+            if (fields::is_standard($key)) {
+                /* trim() before deciding. $CFG->strictformsrequired defaults to off, and with it
+                   off MoodleQuickForm_Rule_Required::validate() does not strip whitespace at all,
+                   so a single space satisfies a required field. */
+                $value = trim((string) ($data[$name] ?? ''));
+            } else {
+                $field = customfield::field((int) fields::key_target($key), (int) $USER->id, $resolved->is_required($key));
+                if ($field === null) {
+                    continue;
+                }
+                $errors = array_merge($errors, $this->custom_field_errors($field, $data));
+                $value = customfield::display($field, customfield::stored_value($field, $data));
+            }
+
             if ($resolved->is_required($key) && $value === '') {
-                $errors[$name] = get_string('requiredtoapply', 'enrol_apply');
+                /* Never onto a hidden element, where nobody would see why the form will not
+                   submit: a type that draws one beside its visible elements (as
+                   profilefield_brasilufmunicipio does) marks the visible ones required itself. */
+                if ($this->_form->getElementType($name) !== 'hidden') {
+                    $errors[$name] = get_string('requiredtoapply', 'enrol_apply');
+                }
                 continue;
             }
             if ($value === '') {
@@ -472,6 +501,72 @@ class application_form extends dynamic_form {
            nothing filled in. */
         if (!$confirmeach && $anyvalue && empty($data['confirmall'])) {
             $errors['confirmall'] = get_string('confirmalldetails', 'enrol_apply');
+        }
+
+        return $errors;
+    }
+
+    /**
+     * The submitted data, with each custom field's extra elements as the browser posted them.
+     *
+     * A type that draws more than its own element reads the others from the request, raw, on
+     * core's profile page, and formslib's export can lose them: MoodleQuickForm_select exports
+     * nothing for a select that has no options on the server, which is what
+     * profilefield_brasilufmunicipio's municipality select is until its JavaScript fills it. So
+     * the extra elements of each drawn custom field are taken from the submitted values
+     * themselves, on both transports, and the type cleans them as it does on the profile page.
+     *
+     * @param array $data Data as formslib exported it.
+     * @return array The same data, each custom field's extra elements as posted.
+     */
+    protected function with_posted_extras(array $data): array {
+        global $USER;
+
+        $posted = (array) $this->_form->getSubmitValues();
+        if (!$posted) {
+            return $data;
+        }
+        foreach ($this->get_states() as $key => $state) {
+            if ($state !== fields::STATE_EDITABLE || fields::is_standard($key)) {
+                continue;
+            }
+            $field = customfield::field((int) fields::key_target($key), (int) $USER->id);
+            if ($field === null) {
+                continue;
+            }
+            foreach (customfield::own_values($field, $posted) as $name => $value) {
+                if ($name !== $field->inputname) {
+                    $data[$name] = $value;
+                }
+            }
+        }
+
+        return $data;
+    }
+
+    /**
+     * What a custom field's own type says is wrong with a submission.
+     *
+     * Core runs edit_validate_field() for every field from profile_validation(), which also
+     * walks fields this form never drew, so a forceunique field nobody asked for would block it
+     * with an error shown nowhere. Each drawn field is asked on its own instead, and only errors
+     * naming an element on this form are kept.
+     *
+     * @param \profile_field_base $field The field.
+     * @param array $data Submitted data.
+     * @return array Errors keyed by element name.
+     */
+    protected function custom_field_errors(\profile_field_base $field, array $data): array {
+        global $USER;
+
+        $usernew = (object) $data;
+        $usernew->id = $USER->id;
+
+        $errors = [];
+        foreach ($field->edit_validate_field($usernew) as $element => $message) {
+            if ($this->_form->elementExists($element)) {
+                $errors[$element] = $message;
+            }
         }
 
         return $errors;
@@ -584,6 +679,14 @@ class application_form extends dynamic_form {
             if ($state !== fields::STATE_EDITABLE) {
                 continue;
             }
+            if (!fields::is_standard($key)) {
+                // The type fills its own elements, in its own shape.
+                $field = customfield::field((int) fields::key_target($key), (int) $USER->id);
+                if ($field !== null) {
+                    $data = array_merge($data, customfield::form_values($field));
+                }
+                continue;
+            }
             $name = fields::form_element_name($key);
             if ($name !== '') {
                 $data[$name] = fields::current_value($key, $USER);
@@ -609,6 +712,9 @@ class application_form extends dynamic_form {
 
         $instance = $this->get_instance();
         $data = $this->get_data();
+        if ($data) {
+            $data = (object) $this->with_posted_extras((array) $data);
+        }
         $result = $this->get_plugin()->submit_application($instance, $USER->id, $data);
 
         if ($result->is_refusal()) {

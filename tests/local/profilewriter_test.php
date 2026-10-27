@@ -27,6 +27,11 @@ namespace enrol_apply\local;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 
+defined('MOODLE_INTERNAL') || die();
+
+global $CFG;
+require_once($CFG->dirroot . '/enrol/apply/tests/fixtures/municipality_field.php');
+
 /**
  * Tests for the optional write of an application's answers to the applicant's profile.
  *
@@ -43,6 +48,8 @@ use PHPUnit\Framework\Attributes\CoversClass;
 #[CoversClass(diff::class)]
 #[CoversClass(completeness::class)]
 final class profilewriter_test extends \advanced_testcase {
+    use \enrol_apply\municipality_field;
+
     /** @var \stdClass Course the instance belongs to. */
     protected $course;
 
@@ -409,5 +416,112 @@ final class profilewriter_test extends \advanced_testcase {
         ]);
 
         return $DB->get_record('user_info_field', ['id' => $id], '*', MUST_EXIST);
+    }
+
+    /**
+     * Ask for a municipality field on the instance, with the applicant living in São Paulo.
+     *
+     * @return \stdClass The {user_info_field} record.
+     */
+    protected function ask_for_a_municipality(): \stdClass {
+        global $DB;
+
+        $field = $this->create_municipality_field();
+        $key = fields::custom_key((int) $field->id);
+        set_config('allowedfields', $key, 'enrol_apply');
+        $DB->set_field('enrol', 'customtext4', fieldset::from_keys([$key])->to_json(), ['id' => $this->instance->id]);
+        $this->instance = $DB->get_record('enrol', ['id' => $this->instance->id], '*', MUST_EXIST);
+        $this->store_profile_value($field, (int) $this->user->id, $this->municipality_json('SP', self::$saopaulo, 'São Paulo'));
+
+        return $field;
+    }
+
+    /**
+     * A new municipality is offered by name and written as the JSON its type stores.
+     *
+     * The write takes the submitted elements out of the change, as profile.php does, because the
+     * post that accepts the offer carries nothing but the instance and the sesskey.
+     *
+     * @return void
+     */
+    public function test_a_municipality_is_offered_by_name_and_written_by_its_type(): void {
+        global $DB;
+
+        $field = $this->ask_for_a_municipality();
+        $changes = diff::compute($this->instance, $this->user, [
+            'profile_field_cidade' => 1,
+            'profile_field_cidade_uf' => 'MG',
+            'profile_field_cidade_municipio' => self::$belohorizonte,
+        ]);
+
+        $this->assertCount(1, $changes);
+        $this->assertSame('SP / São Paulo', $changes[0]['before']);
+        $this->assertSame('MG / Belo Horizonte', $changes[0]['after']);
+
+        $written = profilewriter::write($this->instance, $this->user, $changes[0]['values']);
+
+        $this->assertCount(1, $written);
+        $stored = $DB->get_field('user_info_data', 'data', ['userid' => $this->user->id, 'fieldid' => $field->id]);
+        $this->assertSame(
+            ['uf' => 'MG', 'codmunicipio' => self::$belohorizonte, 'nome' => 'Belo Horizonte'],
+            json_decode($stored, true)
+        );
+    }
+
+    /**
+     * A municipality left unchosen is no change, and never erases the stored one.
+     *
+     * The type stores a placeholder for a blank submission, so taken at face value this would
+     * offer to replace the applicant's city with nothing.
+     *
+     * @return void
+     */
+    public function test_a_municipality_left_unchosen_never_erases_the_stored_one(): void {
+        global $DB;
+
+        $field = $this->ask_for_a_municipality();
+        $blank = [
+            'profile_field_cidade' => 1,
+            'profile_field_cidade_uf' => '',
+            'profile_field_cidade_municipio' => '',
+        ];
+
+        $this->assertSame([], diff::compute($this->instance, $this->user, $blank));
+        profilewriter::write($this->instance, $this->user, $blank);
+
+        $stored = $DB->get_field('user_info_data', 'data', ['userid' => $this->user->id, 'fieldid' => $field->id]);
+        $this->assertSame('SP', json_decode($stored)->uf);
+    }
+
+    /**
+     * The same municipality stored in another key order is no change.
+     *
+     * @return void
+     */
+    public function test_the_same_municipality_is_no_change(): void {
+        $this->ask_for_a_municipality();
+
+        $this->assertSame([], diff::compute($this->instance, $this->user, [
+            'profile_field_cidade' => 1,
+            'profile_field_cidade_uf' => 'SP',
+            'profile_field_cidade_municipio' => self::$saopaulo,
+        ]));
+    }
+
+    /**
+     * A placeholder stored by an earlier blank submission counts as missing.
+     *
+     * @return void
+     */
+    public function test_a_stored_placeholder_counts_as_missing(): void {
+        global $DB;
+
+        $field = $this->ask_for_a_municipality();
+        $DB->set_field('user_info_data', 'data', '1', ['userid' => $this->user->id, 'fieldid' => $field->id]);
+
+        $this->assertSame(
+            [fields::custom_key((int) $field->id)],
+            array_column(completeness::missing($this->instance, $this->user), 'key')
+        );
     }
 }
