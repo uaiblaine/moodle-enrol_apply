@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Group key only: what the teacher is told (Q3).** Under the setting, key-only mode warns, only
+  while it is selected and only when it holds, that no group of the course has a key (so nobody can
+  enrol), that every keyed group is full (with `local_groupdist`), or that applications made before
+  are still waiting and switching does not decide them. Either key mode warns when the course's self
+  enrolment accepts the same group keys without the questions. The empty queue of a key-only method
+  says nothing waits there. The applicant limit's and the places' help say how they read on a
+  key-only method. Version 2026110302 (no upgrade step).
 - **Group key only: what the applicant sees (Q2).** On a key-only method the enrolment page says a
   key is needed before any form (**Enrol with a key**), and the form comes in two steps: the key
   alone, with **Continue**, then, once the key is valid and a place and its seats are free, "You will

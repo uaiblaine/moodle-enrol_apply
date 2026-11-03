@@ -45,6 +45,9 @@
       names can legitimately hold an EMPTY queue, which is exactly when nothing else explains it
     * closednotice string - the sentence saying so, naming how many of the held applications are
       deferred, because a deferred row is freed by nothing and cancelling those is the way out
+    * haskeyonlynotice boolean - whether this is the empty queue of a method that enrols with a
+      group key only, where nothing ever waits and the emptiness is the method working
+    * keyonlynotice string - the sentence saying so
       Nothing below is gated on the queue having rows any more. It used to be, and an AJAX refresh
       replaces only the table's own region without re-rendering this template - so a queue that
       loaded empty and was then filled by clearing a filter had rows, checkboxes and no bulk bar
@@ -68,6 +71,8 @@
         "placesnotice": "All 20 places on this enrolment method are taken.",
         "hasclosednotice": true,
         "closednotice": "This enrolment method holds 40 of a maximum 40 applications and is accepting no more. 12 of them are deferred; cancelling the ones no longer needed makes room.",
+        "haskeyonlynotice": true,
+        "keyonlynotice": "This method enrols by group key only; nothing waits for a decision.",
         "capacityhtml": "<div class=\"card\"><div class=\"card-body\">12 awaiting decision</div></div>",
         "tablehtml": "<table class=\"generaltable\"><tbody><tr><td>Student 1</td></tr></tbody></table>",
         "filtershtml": "<form method=\"get\"><input type=\"text\" name=\"search\" value=\"\"></form>",
@@ -105,6 +110,9 @@
     {{#hasclosednotice}}
         <div class="alert alert-warning" role="status">{{closednotice}}</div>
     {{/hasclosednotice}}
+    {{#haskeyonlynotice}}
+        <div class="alert alert-info" role="status">{{keyonlynotice}}</div>
+    {{/haskeyonlynotice}}
     {{{capacityhtml}}}
     {{{filtershtml}}}
     <form id="enrol_apply_manage_form" class="enrol_apply-manage" method="post" action="{{formurl}}">
