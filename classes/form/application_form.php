@@ -199,7 +199,8 @@ class application_form extends dynamic_form {
      * instance asking for no fields would then render its questions and comment inside it. After
      * too many wrong keys the field gives way to a sentence, and the application itself stays
      * possible; with no field, get_data() carries no key, so a crafted post cannot test one past
-     * the lock either.
+     * the lock either. On a key-only instance nothing else is possible, so the field is required
+     * and the locked form cannot be submitted at all (see validation()).
      *
      * @param \stdClass $instance The {enrol} record.
      * @return void
@@ -211,20 +212,26 @@ class application_form extends dynamic_form {
             return;
         }
 
+        $required = groupkey::required($instance);
         $mform = $this->_form;
         if (keyattempts::locked((int) $instance->id, (int) $USER->id)) {
             $mform->addElement(
                 'static',
                 'groupkeylocked',
                 get_string('groupkey', 'enrol_apply'),
-                get_string('groupkeylocked', 'enrol_apply')
+                get_string($required ? 'groupkeylocked_required' : 'groupkeylocked', 'enrol_apply')
             );
             return;
         }
 
         $mform->addElement('passwordunmask', 'groupkey', get_string('groupkey', 'enrol_apply'));
         $mform->setType('groupkey', PARAM_RAW);
-        $mform->addHelpButton('groupkey', 'groupkey', 'enrol_apply');
+        if ($required) {
+            $mform->addRule('groupkey', get_string('groupkeyrequired', 'enrol_apply'), 'required', null, 'client');
+            $mform->addHelpButton('groupkey', 'groupkeyonly', 'enrol_apply');
+        } else {
+            $mform->addHelpButton('groupkey', 'groupkey', 'enrol_apply');
+        }
     }
 
     /**
@@ -242,7 +249,8 @@ class application_form extends dynamic_form {
         parent::definition_after_data();
 
         $mform = $this->_form;
-        if (!$mform->elementExists('groupkey')) {
+        // On a key-only instance there is no review to send the application to.
+        if (!$mform->elementExists('groupkey') || groupkey::required($this->get_instance())) {
             return;
         }
         $posted = $this->optional_param('groupkey', '', PARAM_RAW);
@@ -488,12 +496,20 @@ class application_form extends dynamic_form {
         /* A key that names no group is refused unless the applicant chose to go on without it,
            and counted: the form answers whether a key exists, and a wrong one costs nothing else.
            The write door resolves the key again itself; this is the message, not the guard. */
+        /* A key-only form never has the "without the key" element, so formslib exports no such
+           value there and a posted one cannot skip this check. */
+        $required = groupkey::required($this->get_instance());
         if ($this->_form->elementExists('groupkey') && empty($data['withoutkey'])) {
             $posted = is_string($data['groupkey'] ?? null) ? $data['groupkey'] : '';
             if ($this->is_wrong_key($posted)) {
-                $errors['groupkey'] = get_string('groupkeyinvalid', 'enrol_apply');
+                $errors['groupkey'] = get_string($required ? 'groupkeyinvalid_required' : 'groupkeyinvalid', 'enrol_apply');
                 keyattempts::record_failure((int) $this->get_instance()->id, (int) $USER->id);
             }
+        }
+        /* A locked key-only form has nothing it could submit: the write door would refuse it,
+           and this keeps the applicant on the sentence that says why. */
+        if ($required && $this->_form->elementExists('groupkeylocked')) {
+            $errors['groupkeylocked'] = get_string('groupkeylocked_required', 'enrol_apply');
         }
 
         /* One confirmation for the whole block, and only when there is something to confirm -

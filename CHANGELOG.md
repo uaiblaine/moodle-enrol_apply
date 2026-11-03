@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Group key only (Q1 of `docs/design/group-key-only.md`).** A third answer to the instance's
+  group key setting, now called **What a group enrolment key does**: *Key only*. A valid key enrols at
+  once, as before, and nobody can enrol through the method without one. Nothing ever waits for a
+  decision there: no key, a wrong key, no place left, a full group or a seat that could not be
+  confirmed is refused with its reason, and nothing is written (no enrolment, no record, no
+  message). "Without the key" is never offered and is ignored if posted; the key field is required;
+  after five wrong keys the form cannot be submitted until the window passes. **Tell managers about
+  each enrolment with a key** (`customchar2`, shown only in this mode) is off by default; the other
+  mode keeps announcing every admission. An unnamed key-only method is called **Enrolment with a
+  group key**. The site default offers the new mode too. Version 2026110300 (no upgrade step).
 - **Group enrolment keys: what each surface says (K6).** The applicant's three surfaces (the
   enrolment page's card, `applied.php` and the form's refusal) say "Enrolled with your group key"
   after an admission, naming the group, and `applied.php` offers **Go to the course**; a valid key

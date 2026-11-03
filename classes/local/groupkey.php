@@ -36,20 +36,57 @@ class groupkey {
     /** @var string customchar1 value of an instance that accepts the key of any group of its course. */
     public const MODE_ANY = 'any';
 
+    /**
+     * @var string customchar1 value of an instance that enrols only with the key of a group of its
+     *     course: nothing waits for a decision, and without a valid key nothing is written at all.
+     */
+    public const MODE_REQUIRED = 'required';
+
     /** @var array Every value customchar1 may hold. */
-    public const MODES = [self::MODE_OFF, self::MODE_ANY];
+    public const MODES = [self::MODE_OFF, self::MODE_ANY, self::MODE_REQUIRED];
+
+    /** @var string customchar2 value of a key-only instance that tells its managers of each admission. */
+    public const NOTICE_ON = '1';
 
     /**
      * Whether the instance accepts group keys.
      *
      * Strict on purpose: customchar1 travels verbatim through backup and restore, so anything
-     * other than the one known value reads as off rather than as some other mode.
+     * other than the known values reads as off rather than as some other mode.
      *
      * @param stdClass $instance The {enrol} record.
      * @return bool True when a valid key admits without review.
      */
     public static function enabled(stdClass $instance): bool {
-        return ($instance->customchar1 ?? self::MODE_OFF) === self::MODE_ANY;
+        $mode = $instance->customchar1 ?? self::MODE_OFF;
+
+        return $mode === self::MODE_ANY || $mode === self::MODE_REQUIRED;
+    }
+
+    /**
+     * Whether the instance enrols only with a key, so that every route a valid key cannot finish
+     * is refused rather than left waiting for a decision nobody is there to take.
+     *
+     * @param stdClass $instance The {enrol} record.
+     * @return bool True for a key-only instance.
+     */
+    public static function required(stdClass $instance): bool {
+        return ($instance->customchar1 ?? self::MODE_OFF) === self::MODE_REQUIRED;
+    }
+
+    /**
+     * Whether an admission by key on this instance is announced to its managers.
+     *
+     * Always on an instance that also takes applications (G8: whoever would have decided keeps
+     * sight of who came in without them). A key-only instance announces only when its teacher
+     * asked for it, because there every enrolment is an admission and the notice would be one
+     * message per learner. Strict, like customchar1: only the one known value turns it on.
+     *
+     * @param stdClass $instance The {enrol} record.
+     * @return bool True when the managers' notice is sent.
+     */
+    public static function announces_admissions(stdClass $instance): bool {
+        return !self::required($instance) || ($instance->customchar2 ?? '') === self::NOTICE_ON;
     }
 
     /**

@@ -1,2 +1,2 @@
 # KW1: a key posted with "without the key" ticked still admits.
-s#\$keygroupid = empty\(\$data->withoutkey\)\n(\s*)\? #\$keygroupid = true\n${1}? #;
+s#\$keygroupid = \(\$required \|\| empty\(\$data->withoutkey\)\)#\$keygroupid = true#;

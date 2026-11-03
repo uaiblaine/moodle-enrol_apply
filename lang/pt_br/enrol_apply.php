@@ -25,6 +25,8 @@
 
 defined('MOODLE_INTERNAL') || die();
 
+$string['admissionnotice'] = 'Avisar os gestores a cada inscrição com chave';
+$string['admissionnotice_help'] = 'Só para um método que inscreve apenas com a chave de grupo. Com Sim, quem é avisado das novas inscrições deste método também recebe um aviso curto cada vez que alguém se inscreve com uma chave. Desligado por padrão, porque nesse método toda inscrição é uma delas. Um método que também recebe inscrições para análise sempre envia o aviso.';
 $string['admissionroute'] = 'Via de admissão';
 $string['admissionroutereview'] = 'Análise, sem chave de grupo';
 $string['admittedbykey'] = 'Você está inscrito. Sua chave de grupo foi aceita e você entrou no grupo {$a}. Não foi necessária análise.';
@@ -208,13 +210,25 @@ $string['groupkey'] = 'Chave de inscrição do grupo';
 $string['groupkey_help'] = 'Se o seu professor lhe deu uma chave do seu grupo, informe-a para ser inscrito imediatamente e entrar nesse grupo. Sem a chave, sua inscrição passa por análise. A chave é opcional.';
 $string['groupkeyadmitsnobody'] = 'Lotado: a chave não admite ninguém agora';
 $string['groupkeyinvalid'] = 'Esta chave não é válida para este curso. Confira e tente novamente, ou envie sua inscrição para análise abaixo.';
+$string['groupkeyinvalid_required'] = 'Esta chave não é válida para este curso. Confira e tente de novo.';
 $string['groupkeylocked'] = 'Muitas chaves incorretas. Tente novamente em alguns minutos ou envie sua inscrição para análise agora.';
+$string['groupkeylocked_required'] = 'Muitas chaves incorretas. Tente de novo em alguns minutos ou fale com quem lhe passou a chave.';
 $string['groupkeyoffered'] = 'Tem uma chave de inscrição do grupo? Informe-a no formulário para entrar imediatamente, sem análise.';
-$string['groupkeys'] = 'Aceitar chaves de inscrição de grupo';
-$string['groupkeys_any'] = 'Sim: uma chave válida inscreve sem análise';
-$string['groupkeys_desc'] = 'Se um novo método de inscrição aceita a chave de inscrição de um grupo do curso: o solicitante que informar uma chave válida é inscrito imediatamente e entra nesse grupo, sem aguardar análise.';
-$string['groupkeys_help'] = 'Quando ativado, o solicitante que informar a chave de inscrição de um dos grupos do curso é inscrito imediatamente e entra nesse grupo, sem aguardar análise. Os dados obrigatórios e as perguntas continuam sendo pedidos. As chaves são definidas na página de configurações de cada grupo por quem pode gerenciar grupos, então qualquer pessoa que tenha uma chave dispensa a análise. O período de inscrição, a restrição por coorte, o limite de solicitantes e as vagas continuam valendo; quando não há vaga, a inscrição aguarda análise. Sem chave, ou com uma chave errada, a inscrição é analisada normalmente.';
-$string['groupkeys_off'] = 'Não: toda inscrição é analisada';
+$string['groupkeyonly'] = 'Chave de inscrição do grupo';
+$string['groupkeyonly_help'] = 'Digite a chave que seu professor forneceu para o seu grupo, exatamente como recebeu. Ela inscreve você na hora e define o seu grupo. Sem uma chave válida não é possível se inscrever por este método.';
+$string['groupkeyrequired'] = 'Digite a chave de inscrição do grupo para se inscrever.';
+$string['groupkeys'] = 'O que a chave de inscrição do grupo faz';
+$string['groupkeys_any'] = 'Uma chave válida inscreve na hora; sem ela, a inscrição passa por análise';
+$string['groupkeys_desc'] = 'O que a chave de inscrição de um grupo do curso faz num novo método de inscrição: nada, inscrever na hora enquanto as demais inscrições passam por análise, ou inscrever na hora sem que ninguém consiga se inscrever sem ela.';
+$string['groupkeys_help'] = 'As chaves são definidas na página de configurações de cada grupo por quem pode gerenciar grupos, e vale qualquer grupo do curso.
+
+* Nada: toda inscrição passa por análise, e as chaves são ignoradas.
+* Uma chave válida inscreve na hora: o solicitante que informar a chave de um dos grupos do curso é inscrito imediatamente e entra nesse grupo, sem aguardar análise. Sem chave, ou com uma chave errada, a inscrição é analisada normalmente; quando não há vaga, ela aguarda análise.
+* Só com chave: uma chave válida inscreve na hora, e ninguém consegue se inscrever por este método sem ela. Nada fica aguardando decisão: sem uma chave válida, ou sem vaga, a inscrição é recusada e nada é guardado.
+
+Em qualquer modo os dados obrigatórios e as perguntas continuam sendo pedidos, e o período de inscrição, a restrição por coorte, o limite de solicitantes e as vagas continuam valendo. Quem tem uma chave dispensa a análise.';
+$string['groupkeys_off'] = 'Nada: toda inscrição passa por análise';
+$string['groupkeys_required'] = 'Só com chave: uma chave válida inscreve na hora, e ninguém se inscreve sem ela';
 $string['groupkeyshadowed'] = 'Mesma chave de {$a}, que é quem admite.';
 $string['groupkeysingroups'] = 'Grupos com chave de inscrição';
 $string['groupkeysmanage'] = 'Gerenciar grupos e suas chaves';
@@ -226,11 +240,15 @@ $string['groupseatsof'] = '{$a->members} de {$a->seats} vagas ocupadas';
 $string['invalidformaction'] = 'Ação desconhecida solicitada para as inscrições selecionadas.';
 $string['keychipgroup'] = '{$a->outcome}: {$a->group}';
 $string['keygroup'] = 'Grupo da chave de inscrição';
+$string['keygroupfull'] = 'Sua chave do grupo {$a} é válida, mas o grupo não tem mais vagas.';
 $string['keygroupgone'] = 'Um grupo excluído depois';
+$string['keynoplace'] = 'Sua chave é válida, mas o curso não tem mais vagas.';
 $string['keyoutcomeadmitted'] = 'Admitido com chave de grupo, sem análise';
 $string['keyoutcomegroupfull'] = 'Chave de grupo válida, mas um grupo não tinha vaga';
 $string['keyoutcomenoplace'] = 'Chave de grupo válida, mas não havia vaga';
 $string['keyoutcomeseatunconfirmed'] = 'Chave de grupo válida, mas a vaga não pôde ser confirmada a tempo';
+$string['keyseatsfull'] = 'Sua chave é válida, mas um grupo desta inscrição não tem mais vagas.';
+$string['keyseatunconfirmed'] = 'Sua chave é válida, mas não foi possível confirmar a vaga agora. Tente de novo.';
 $string['limitnegative'] = 'Este limite não pode ser negativo. Informe 0 para não haver limite.';
 $string['lockedby'] = 'Dados definidos pela sua instituição';
 $string['mailtoteacher_admitted'] = 'Inscrito com a chave de inscrição do grupo {$a}, sem análise. Nada aguarda decisão.';
@@ -280,6 +298,7 @@ $string['placesfull'] = 'Todas as {$a} vagas deste método de inscrição estão
 $string['placestaken'] = 'Vagas ocupadas: {$a->taken} de {$a->limit}.';
 $string['pluginname'] = 'Inscrição mediante aprovação';
 $string['pluginname_desc'] = 'Com este plugin os usuários podem solicitar inscrição em um curso. Um professor ou gerente do site precisa aprovar a solicitação antes de o usuário ser inscrito.';
+$string['pluginname_keyonly'] = 'Inscrição com chave de grupo';
 $string['privacy:applicationpath'] = 'Solicitação de inscrição';
 $string['privacy:metadata:core_group'] = 'Uma aprovação adiciona o solicitante aos grupos escolhidos para o método de inscrição ou por quem decidiu; o plugin exporta e exclui as participações em grupo que adicionou.';
 $string['privacy:metadata:enrol_apply_answer'] = 'O que o usuário enviou com uma solicitação de inscrição no curso, um valor por campo de perfil e por pergunta feita, como estava no envio.';

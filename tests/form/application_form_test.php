@@ -909,13 +909,14 @@ final class application_form_test extends \advanced_testcase {
     /**
      * Make the instance accept group keys, ask for nothing else, and create a keyed group.
      *
+     * @param string $mode The customchar1 mode: key or review, or key only.
      * @return \stdClass The keyed group.
      */
-    protected function accept_group_keys(): \stdClass {
+    protected function accept_group_keys(string $mode = groupkey::MODE_ANY): \stdClass {
         global $DB;
 
         $this->ask_for([]);
-        $DB->set_field('enrol', 'customchar1', groupkey::MODE_ANY, ['id' => $this->instance->id]);
+        $DB->set_field('enrol', 'customchar1', $mode, ['id' => $this->instance->id]);
         $this->instance = $DB->get_record('enrol', ['id' => $this->instance->id], '*', MUST_EXIST);
 
         return $this->getDataGenerator()->create_group([
@@ -1052,6 +1053,69 @@ final class application_form_test extends \advanced_testcase {
         $notifications = \core\notification::fetch();
         $this->assertCount(1, $notifications);
         $this->assertStringContainsString('Turma B', $notifications[0]->get_message());
+    }
+
+    /**
+     * On a key-only instance the key is required, a wrong one is refused with no way out offered
+     * and counted, and a valid one goes straight into the course.
+     *
+     * Changes that must make it fail: the checkbox added on this mode, the key not required, or
+     * the "send for review" wording kept in the refusal.
+     *
+     * @return void
+     */
+    public function test_a_key_only_form_requires_the_key_and_offers_no_way_out(): void {
+        global $DB;
+
+        $this->accept_group_keys(groupkey::MODE_REQUIRED);
+
+        $empty = $this->submit_through_the_modal([]);
+        $this->assertFalse($empty['submitted']);
+        $this->assertStringContainsString(get_string('groupkeyrequired', 'enrol_apply'), $empty['html']);
+
+        $wrong = $this->submit_through_the_modal(['groupkey' => 'Turma-Z-2027']);
+        $this->assertFalse($wrong['submitted']);
+        $this->assertStringContainsString(get_string('groupkeyinvalid_required', 'enrol_apply'), $wrong['html']);
+        $this->assertStringNotContainsString('name="withoutkey"', $wrong['html']);
+        $ticked = $this->submit_through_the_modal(['groupkey' => 'Turma-Z-2027', 'withoutkey' => 1]);
+        $this->assertFalse($ticked['submitted'], 'a posted "without the key" does not let a wrong key through');
+        $this->assertFalse($DB->record_exists('user_enrolments', ['userid' => $this->applicant->id]));
+
+        $sink = $this->redirectMessages();
+        $valid = $this->submit_through_the_modal(['groupkey' => 'Turma-B-2027']);
+        $sink->close();
+        $this->assertTrue($valid['submitted'], 'the control: a valid key still submits');
+        $this->assertStringContainsString('/course/view.php', json_decode($valid['data']));
+    }
+
+    /**
+     * A locked key-only form cannot be submitted at all: there is no review to fall back on.
+     *
+     * The control is the same locked form on the other mode, which still sends an application.
+     *
+     * Changes that must make it fail: validation not refusing the locked form on this mode.
+     *
+     * @return void
+     */
+    public function test_a_locked_key_only_form_cannot_be_submitted(): void {
+        global $DB;
+
+        $this->accept_group_keys(groupkey::MODE_REQUIRED);
+        for ($i = 0; $i < keyattempts::LIMIT; $i++) {
+            keyattempts::record_failure((int) $this->instance->id, (int) $this->applicant->id);
+        }
+
+        $result = $this->submit_through_the_modal([]);
+
+        $this->assertFalse($result['submitted']);
+        $this->assertStringContainsString(get_string('groupkeylocked_required', 'enrol_apply'), $result['html']);
+        $this->assertFalse($DB->record_exists('user_enrolments', ['userid' => $this->applicant->id]));
+
+        $DB->set_field('enrol', 'customchar1', groupkey::MODE_ANY, ['id' => $this->instance->id]);
+        $sink = $this->redirectMessages();
+        $control = $this->submit_through_the_modal([]);
+        $sink->close();
+        $this->assertTrue($control['submitted'], 'the control: the other mode still takes the application');
     }
 
     /**

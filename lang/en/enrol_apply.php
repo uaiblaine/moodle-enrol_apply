@@ -27,6 +27,8 @@
 
 defined('MOODLE_INTERNAL') || die();
 
+$string['admissionnotice'] = 'Tell managers about each enrolment with a key';
+$string['admissionnotice_help'] = 'Only for a method that enrols with a group key alone. When set to Yes, whoever is told about new applications on this method also gets a short notice each time somebody enrols with a key. Off by default, because on such a method every enrolment is one. A method that also takes applications always sends the notice.';
 $string['admissionroute'] = 'Admission route';
 $string['admissionroutereview'] = 'Review, no group key';
 $string['admittedbykey'] = 'You are enrolled. Your group key was accepted and you have joined {$a}. No review was needed.';
@@ -210,13 +212,25 @@ $string['groupkey'] = 'Group enrolment key';
 $string['groupkey_help'] = 'If your teacher gave you a key for your group, enter it to be enrolled straight away and join that group. Without one, your application is reviewed first. The key is optional.';
 $string['groupkeyadmitsnobody'] = 'Full: its key admits nobody now';
 $string['groupkeyinvalid'] = 'This key is not valid for this course. Check it and try again, or send your application for review below.';
+$string['groupkeyinvalid_required'] = 'This key is not valid for this course. Check it and try again.';
 $string['groupkeylocked'] = 'Too many incorrect keys. You can try again in a few minutes, or send your application for review now.';
+$string['groupkeylocked_required'] = 'Too many incorrect keys. Try again in a few minutes, or ask whoever gave you the key.';
 $string['groupkeyoffered'] = 'Have a group enrolment key? Enter it in the application to join straight away, with no review.';
-$string['groupkeys'] = 'Accept group enrolment keys';
-$string['groupkeys_any'] = 'Yes: a valid key enrols without review';
-$string['groupkeys_desc'] = 'Whether a new enrolment method accepts the enrolment key of a course group: an applicant who enters a valid key is enrolled at once and joins that group, without waiting for a review.';
-$string['groupkeys_help'] = 'When enabled, an applicant who enters the enrolment key of one of the course\'s groups is enrolled at once and joins that group, without waiting for a review. The required details and questions are still asked. Keys are set on each group\'s settings page by whoever may manage groups, so anybody holding one skips the review. The enrolment window, the cohort restriction, the applicant limit and the places still apply; when no place is left, the application waits for a review instead. Without a key, or with a wrong one, the application is reviewed as usual.';
-$string['groupkeys_off'] = 'No: every application is reviewed';
+$string['groupkeyonly'] = 'Group enrolment key';
+$string['groupkeyonly_help'] = 'Enter the key your teacher gave you for your group, exactly as you received it. It enrols you straight away and decides your group. Without a valid key you cannot enrol through this method.';
+$string['groupkeyrequired'] = 'Enter your group enrolment key to enrol.';
+$string['groupkeys'] = 'What a group enrolment key does';
+$string['groupkeys_any'] = 'A valid key enrols at once; without one, the application is reviewed';
+$string['groupkeys_desc'] = 'What the enrolment key of a course group does on a new enrolment method: nothing, enrol at once while every other application is reviewed, or enrol at once with nobody able to enrol without one.';
+$string['groupkeys_help'] = 'Keys are set on each group\'s settings page by whoever may manage groups, and any group of the course counts.
+
+* Nothing: every application is reviewed, and keys are ignored.
+* A valid key enrols at once: an applicant who enters the key of one of the course\'s groups is enrolled straight away and joins that group, without waiting for a review. Without a key, or with a wrong one, the application is reviewed as usual; when no place or seat is left, it waits for a review instead.
+* Key only: a valid key enrols at once, and nobody can enrol through this method without one. Nothing ever waits for a decision: without a valid key, or with no place or seat left, the enrolment is refused and nothing is kept.
+
+In every mode the required details and questions are still asked, and the enrolment window, the cohort restriction, the applicant limit and the places still apply. Anybody holding a key skips the review.';
+$string['groupkeys_off'] = 'Nothing: every application is reviewed';
+$string['groupkeys_required'] = 'Key only: a valid key enrols at once, and nobody can enrol without one';
 $string['groupkeyshadowed'] = 'Same key as {$a}, which admits instead.';
 $string['groupkeysingroups'] = 'Groups with an enrolment key';
 $string['groupkeysmanage'] = 'Manage groups and their keys';
@@ -228,11 +242,15 @@ $string['groupseatsof'] = '{$a->members} of {$a->seats} seats taken';
 $string['invalidformaction'] = 'Unknown action requested for the selected enrolment applications.';
 $string['keychipgroup'] = '{$a->outcome}: {$a->group}';
 $string['keygroup'] = 'Group of the enrolment key';
+$string['keygroupfull'] = 'Your key for {$a} is valid, but that group has no seats left.';
 $string['keygroupgone'] = 'A group deleted since';
+$string['keynoplace'] = 'Your key is valid, but this course has no places left.';
 $string['keyoutcomeadmitted'] = 'Admitted with a group key, without review';
 $string['keyoutcomegroupfull'] = 'Valid group key, but a group had no seat left';
 $string['keyoutcomenoplace'] = 'Valid group key, but no place was left';
 $string['keyoutcomeseatunconfirmed'] = 'Valid group key, but a place or seat could not be confirmed in time';
+$string['keyseatsfull'] = 'Your key is valid, but a group this enrolment joins has no seats left.';
+$string['keyseatunconfirmed'] = 'Your key is valid, but a place could not be confirmed just now. Try again.';
 $string['limitnegative'] = 'This limit cannot be negative. Enter 0 for no limit.';
 $string['lockedby'] = 'Details set by your institution';
 $string['mailtoteacher_admitted'] = 'Enrolled with the enrolment key of the group {$a}, without review. Nothing waits for a decision.';
@@ -282,6 +300,7 @@ $string['placesfull'] = 'All {$a} places on this enrolment method are taken.';
 $string['placestaken'] = 'Places taken: {$a->taken} of {$a->limit}.';
 $string['pluginname'] = 'Course enrol confirmation';
 $string['pluginname_desc'] = 'With this plug-in users can apply to be enrolled in a course. A teacher or site manager will then have to approve the enrolment before the user gets enroled.';
+$string['pluginname_keyonly'] = 'Enrolment with a group key';
 $string['privacy:applicationpath'] = 'Enrolment application';
 $string['privacy:metadata:core_group'] = 'An approval adds the applicant to the groups chosen for the enrolment method or by the decider; the plugin exports and deletes the memberships it added.';
 $string['privacy:metadata:enrol_apply_answer'] = 'What the user submitted with a course enrolment application, one value per profile field and per question asked, as it was at submission.';

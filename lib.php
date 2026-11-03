@@ -88,6 +88,24 @@ class enrol_apply_plugin extends enrol_plugin {
     }
 
     /**
+     * The instance's name, or the name of what it does when the teacher gave it none.
+     *
+     * An unnamed key-only instance is not called after the plugin ("Course enrol confirmation"),
+     * which promises a confirmation nobody gives there. A name the teacher typed always wins.
+     *
+     * @param stdClass $instance Course enrol instance.
+     * @return string The name: a typed one escaped by format_string(), as core's own method returns
+     *     it, or a language string.
+     */
+    public function get_instance_name($instance) {
+        if (empty($instance->name) && \enrol_apply\local\groupkey::required($instance)) {
+            return get_string('pluginname_keyonly', 'enrol_apply');
+        }
+
+        return parent::get_instance_name($instance);
+    }
+
+    /**
      * Check whether the given instance currently accepts applications from a user.
      *
      * The whole eligibility predicate lives here, not in enrol_page_hook(), because the hook
@@ -343,12 +361,10 @@ class enrol_apply_plugin extends enrol_plugin {
             $keyoutcome
         );
 
-        $this->send_application_notification(
-            $instance,
-            $userid,
-            $data,
-            $keyoutcome === \enrol_apply\local\submission::KEY_ADMITTED ? $keygroupid : 0
-        );
+        $admitted = $keyoutcome === \enrol_apply\local\submission::KEY_ADMITTED;
+        if (!$admitted || \enrol_apply\local\groupkey::announces_admissions($instance)) {
+            $this->send_application_notification($instance, $userid, $data, $admitted ? $keygroupid : 0);
+        }
 
         return ['userenrolmentid' => (int) $userenrolment->id, 'submissionid' => $submissionid];
     }
@@ -463,18 +479,30 @@ class enrol_apply_plugin extends enrol_plugin {
      * place. Whatever stops an admission leaves an ordinary application waiting for a decision,
      * recorded with why.
      *
+     * On a key-only instance (groupkey::required()) there is nobody to decide, so each of those
+     * routes is refused instead, and before anything is written: no enrolment, no record, no
+     * answers, no message. "Without the key" means nothing there, so a key posted with it still
+     * counts, and its absence refuses.
+     *
      * @param stdClass $instance Course enrol instance.
      * @param int $userid Applicant user id.
      * @param stdClass $data Submitted application form data.
-     * @return \enrol_apply\local\application_result What was written.
+     * @return \enrol_apply\local\application_result What was written, or why nothing was.
      */
     protected function apply_or_admit(stdClass $instance, int $userid, stdClass $data) {
+        $required = \enrol_apply\local\groupkey::required($instance);
+
         // Only a string is a key; anything else a caller posts counts as none.
         $posted = (isset($data->groupkey) && is_string($data->groupkey)) ? $data->groupkey : '';
-        $keygroupid = empty($data->withoutkey)
+        $keygroupid = ($required || empty($data->withoutkey))
             ? \enrol_apply\local\groupkey::resolve($instance, $posted)
             : null;
         if ($keygroupid === null) {
+            if ($required) {
+                return \enrol_apply\local\application_result::refused(
+                    get_string($posted === '' ? 'groupkeyrequired' : 'groupkeyinvalid_required', 'enrol_apply')
+                );
+            }
             $this->apply($instance, $userid, $data);
             return \enrol_apply\local\application_result::created();
         }
@@ -482,6 +510,9 @@ class enrol_apply_plugin extends enrol_plugin {
         $targets = $this->key_route_groups($instance, $keygroupid);
         $locks = $this->lock_admission($instance, $targets);
         if ($locks === null) {
+            if ($required) {
+                return \enrol_apply\local\application_result::refused(get_string('keyseatunconfirmed', 'enrol_apply'));
+            }
             /* Somebody else held the method or a group for the whole timeout. The place or seat
                could not be confirmed, which is not the same fact as none being left, and is
                recorded as such. */
@@ -497,13 +528,20 @@ class enrol_apply_plugin extends enrol_plugin {
                last place or the last seat: the method's lock serialises every admission on it,
                and the group locks those of any method into the same group. */
             if (\enrol_apply\local\capacity::places_full($instance)) {
+                if ($required) {
+                    return \enrol_apply\local\application_result::refused(get_string('keynoplace', 'enrol_apply'));
+                }
                 $this->apply($instance, $userid, $data, $keygroupid, \enrol_apply\local\submission::KEY_NO_PLACE);
                 return \enrol_apply\local\application_result::created(
                     \enrol_apply\local\submission::KEY_NO_PLACE,
                     $keygroupid
                 );
             }
-            if (\enrol_apply\local\groupseats::full($targets)) {
+            $full = \enrol_apply\local\groupseats::full($targets);
+            if ($full) {
+                if ($required) {
+                    return \enrol_apply\local\application_result::refused($this->group_full_refusal($instance, $keygroupid, $full));
+                }
                 $this->apply($instance, $userid, $data, $keygroupid, \enrol_apply\local\submission::KEY_GROUP_FULL);
                 return \enrol_apply\local\application_result::created(
                     \enrol_apply\local\submission::KEY_GROUP_FULL,
@@ -522,6 +560,35 @@ class enrol_apply_plugin extends enrol_plugin {
         \enrol_apply\local\keyattempts::clear((int) $instance->id, $userid);
 
         return \enrol_apply\local\application_result::created(\enrol_apply\local\submission::KEY_ADMITTED, $keygroupid);
+    }
+
+    /**
+     * Why a key-only instance refused a valid key whose admission would join a full group.
+     *
+     * The key's own group is named, since its holder is about to learn of it anyway (G9). A group
+     * of the instance's own list is not: the applicant has not been told of it, so the sentence
+     * stays general.
+     *
+     * The escaped spelling: the reason is rendered by \core\notification, an HTML sink.
+     *
+     * @param stdClass $instance Course enrol instance.
+     * @param int $keygroupid The group the key resolved to.
+     * @param array $full Ids of the full groups, from groupseats::full().
+     * @return string The reason.
+     */
+    protected function group_full_refusal(stdClass $instance, int $keygroupid, array $full): string {
+        global $DB;
+
+        $name = in_array($keygroupid, $full, true) ? $DB->get_field('groups', 'name', ['id' => $keygroupid]) : false;
+        if ($name === false) {
+            return get_string('keyseatsfull', 'enrol_apply');
+        }
+
+        return get_string(
+            'keygroupfull',
+            'enrol_apply',
+            format_string($name, true, ['context' => context_course::instance($instance->courseid)])
+        );
     }
 
     /**

@@ -2,7 +2,8 @@
 
 Status: **decided 2026-11-03.** The owner accepted every recommendation (D1&ndash;D8) and chose
 D5 explicitly: the managers' notice is off by default in this mode, with a switch on the
-instance. Nothing is written yet; Q0 (spikes) comes first. Mockups:
+instance. **Q0 (spikes) done 2026-11-03**: the two-step form holds on 5.1&ndash;5.3 with one
+change, an in-form "Continue" no-submit button instead of the footer (see Q0). Mockups:
 [`group-key-only-mockup.html`](group-key-only-mockup.html). Builds on
 [`group-enrolment-key.md`](group-enrolment-key.md) (G1&ndash;G15, stages K0&ndash;K8, all
 merged), whose decisions stand unless this file says otherwise.
@@ -124,11 +125,13 @@ panel, a heading-sized label, one sentence on what the key does in this mode, a 
 
 **Key-only mode: two steps in one `dynamic_form`.**
 
-1. Step 1 renders the teacher's introduction and the key block only. The footer button reads
-   "Continue".
-2. A submitted key that resolves makes `definition()` build the whole form: a confirmation line
-   ("You will join **Turma B**"), the key carried as a hidden field, the details, the questions,
-   the comment. The footer button reads "Enrol me".
+1. Step 1 renders the teacher's introduction, the key block and a **"Continue" button inside the
+   form**, registered with `registerNoSubmitButton()`. In the modal, `enrol_page.js` hides the
+   footer's Save button on this step; on `apply.php` the page draws Continue and Cancel only.
+2. Continue with a key that resolves makes `definition()` build the whole form: a confirmation
+   line ("You will join **Turma B**"), the key carried as a hidden field, the details, the
+   questions, the comment. Validation does not run on a no-submit post, so nothing arrives in
+   error. The footer's Save comes back as "Enrol me".
 3. Submitting step 2 runs today's validation and write door unchanged.
 
 The invariant that keeps this safe, and that Q1 tests: **the step is derived from the posted key
@@ -137,12 +140,8 @@ resolves. So there is no request on which a resolving key is validated against a
 its required fields. An instance asking for nothing at all goes from step 1 straight to the
 admission, which is right: there is nothing to ask.
 
-What Q0 has to measure before this is written: how arriving at step 2 avoids showing every
-required field already in error (the rules fire on the same post that carried the key), and
-whether the footer label can follow the step (`core/modal`'s `setButtonText()` from
-`enrol_page.js` on the form's loaded event; the old mockup's note that the footer "cannot change"
-was about the server side). The fallback, if either fails: one form, the key block first,
-nothing else changed.
+Q0 settled both open mechanics; its section below has the measurements and what they require of
+Q1 and Q2.
 
 **Key-or-review mode** keeps one form: the key block with the "optional" label and the
 `withoutkey` escape after a wrong key, exactly as K5 built it. An explicit "I have a key / I do
@@ -156,21 +155,90 @@ touches lang strings, settings or `amd/`. Supported range stays `[501, 503]`. Q1
 `mdl ci moodle-enrol_apply --matrix --behat`, and an MDL Shield review if the month's quota
 allows. Q2 and Q3 are tier 2 unless they touch the door.
 
-### Q0. Spikes
+### Q0. Spikes &mdash; DONE 2026-11-03, nothing committed
 
-Throwaway scripts on m501, m502 and m503, nothing committed.
+Throwaway scripts piped into `docker exec -i -u www-data <stack>-webserver-1 php`, read-only,
+run on **m501 (5.1.8) and m503 (5.3+)**. m502 was down and was not started: `lib/formslib.php`,
+`lib/form/classes/dynamic_form.php`, `lib/form/classes/external/dynamic_form.php`,
+`lib/form/amd/src/modalform.js`, `lib/form/text.php`, `lib/form/passwordunmask.php` and
+`lib/amd/src/modal.js` are byte-identical between the 5.2 and 5.3 checkouts (`cmp`), so 5.2 is
+covered by 5.3. Two harness traps, neither a product fact: on m501 `arg_separator.output` is
+`&amp;`, so `http_build_query()` needs `'&'` passed explicitly; and the web service path needs
+`sesskey` in the request (`$_GET`), because `_process_submission()` calls `confirm_sesskey()`,
+which reads the request and not the form data. One case per process: formslib caches
+`no_submit_button_pressed()` in a function-level `static`.
 
-1. The two-step form through `\core_form\external\dynamic_form::execute()` and through
-   `apply.php`: step 1 to step 2 with no required-field errors shown on arrival; step 2 submits
-   and validates as today; a posted key that stops resolving between the steps sends the form
-   back to step 1 with the field error.
-2. The footer label following the step in the modal (`setButtonText()`, ModalForm events), and
-   what the no-JavaScript page shows instead (its own buttons, from `showbuttons`).
-3. A `text` element with the three attributes on 5.1&ndash;5.3: what formslib posts for a pasted
-   value with wrapping whitespace and a non-breaking space; whether `autocomplete="off"` stops
-   the browser offering the account password, which `passwordunmask` was partly there to prevent.
-4. `validation()` reading `capacity::places_full()` and `groupseats::full()` without the locks:
-   cost per submit, and that the error lands on the key field in both transports.
+1. **The two-step form works, through `\core_form\external\dynamic_form::execute()` and through
+   the page transport alike, identically on 5.1 and 5.3**, once the Continue button is a
+   no-submit button **registered on both steps**. Registered on step 1 only, the post that
+   carries a resolving key builds step 2, which does not know the button, so the post reads as a
+   real submit and step 2 arrives with every required field in error ("You must supply a value
+   here."). That was the first run; registering it in both branches of `definition()` fixed it.
+   A throwaway `dynamic_form` (key, then a required `city`), eight cases, the same rows on both
+   transports and both stacks:
+
+   | Posted | Submitted | Step rendered | Key error | City error |
+   |---|---|---|---|---|
+   | Continue, valid key with wrapping spaces | no | **2** | &mdash; | **none** |
+   | Continue, wrong key | no | 1 | yes (from `definition_after_data()`) | &mdash; |
+   | Continue, empty key | no | 1 | yes (from `definition_after_data()`) | &mdash; |
+   | Footer Save on step 1, valid key | no | 2 | &mdash; | **yes: every required field** |
+   | Footer Save on step 1, wrong key | no | 1 | yes (from `validation()`) | &mdash; |
+   | Step 2, city filled | **yes** | &mdash; | &mdash; | &mdash; |
+   | Step 2, city empty | no | 2 | &mdash; | yes |
+   | Step 2, carried key no longer resolves | no | **1** | yes (from `validation()`) | &mdash; |
+
+   What follows for Q1 and Q2:
+   - **`validation()` does not run on a no-submit post** (`validate_defined_fields()` returns
+     false first), so on Continue the wrong-key message, the throttle count and the capacity
+     check (Q0.4) live in `definition_after_data()`, via `setElementError()`. On the final
+     submit they stay in `validation()`, as today.
+   - **On the web service path the form is built twice per Continue**: `execute()` builds a
+     second instance to render after a no-submit (the log shows `definition`, `dad` twice), so a
+     throttle count in `definition_after_data()` must happen once per request (a request-level
+     guard), or one wrong key costs two tries. The page transport builds it once.
+   - **The footer's Save must not be offered on step 1** (row 4). In the modal `enrol_page.js`
+     hides it; on the page, step 1 draws only Continue and Cancel. Enter in the key field
+     submits through the form's first submit button, which is Continue, and ModalForm catches a
+     click on `input[type=submit][data-no-submit]` (the rendered button carries
+     `data-no-submit="1"` and `data-skip-validation="1"` on both branches).
+   - **The hidden field carries the key as posted, wrapping spaces included**, and the resolver
+     trims nothing, so the trim (D3) is applied where the key leaves the form, in
+     `process_dynamic_submission()` before `submit_application()`, and wherever the form itself
+     resolves it.
+2. **The footer can follow the step, by reading the code; Q2's `@javascript` Behat holds it.**
+   Every body ModalForm shows (the first load, the re-render after a no-submit, the re-render
+   after a server-side validation error) goes through `core/modal`'s `setBodyContent()`, which
+   dispatches a bubbling `core/modal:bodyRendered` DOM event once the body is in place (5.1
+   `modal.js:585-586`, 5.3 `:616-617`). So `enrol_page.js` listens for it, reads
+   `form[data-enrol-apply-step]` (the form attribute the spike rendered), hides the footer's
+   `[data-action='save']` on step 1, and on step 2 shows it and calls
+   `modal.setButtonText('save', ...)`. Hide with the `hidden` attribute, not `disabled`:
+   `enableButtons()` re-enables every `[data-action]` after each re-render.
+   `ModalForm`'s `saveButtonText` is applied only once, when the modal is created, so it cannot
+   follow the step on its own. Not driven in a logged-in browser here (UI checks do not type a
+   password); the Q2 scenario is the proof.
+3. **The `text` element** with `autocomplete="off"`, `spellcheck="false"` and
+   `autocapitalize="off"` renders those attributes as given and hands back the posted value raw
+   (`PARAM_RAW`), on 5.1 and 5.3: `"  turmaB-2027\t"` comes back with its whitespace, an inner
+   space is kept, and nothing refuses a value as `passwordunmask` does. `passwordunmask`'s
+   refusal is `$value !== trim($value)` on both branches, so **PHP's `trim()` is exactly the set
+   the group page already keeps off the ends of every key it stores**: trimming with it cannot
+   change a key typed there. A trailing non-breaking space (U+00A0), common in a key copied
+   from a web page or an e-mail, is **not** in that set and survives `trim()`; it then reads as
+   a wrong key. Recommendation for Q2: a value whose ends are Unicode spaces outside `trim()`'s
+   set gets its own message ("your key starts or ends with an unusual space; type it again")
+   and costs no try, the way K5 treats wrapping whitespace today. The browser's password
+   manager was not measured (the pane holds no saved passwords); a `type="text"` field is not
+   one password managers fill, where `passwordunmask` renders `type="password"`.
+4. **The unlocked capacity pre-check is cheap.** `capacity::places_full()` +
+   `key_route_groups()` + `groupseats::full()` with `local_groupdist` installed, measured with
+   `perf_get_reads()` on a real instance: **4 statements, 0.4&ndash;0.8 ms** warm, and **10
+   statements, 12&ndash;33 ms** the first time in a process (groupdist's custom field lookup
+   warming up), on both stacks. A web request is that first time, so a submit pays about 10
+   statements for the pre-check and the door's locked check adds about 4. The error lands on
+   the key field in both transports by the same mechanism as the wrong key (row 2 on Continue,
+   row 5 on a final submit).
 
 ### Q1. Server: the mode, the door, the notice, the name
 

@@ -214,21 +214,45 @@ final class edit_form_test extends \advanced_testcase {
     }
 
     /**
-     * The group key mode accepts the two known values and nothing else.
+     * The group key mode accepts the three known values and nothing else.
      *
      * @return void
      */
     public function test_the_group_key_mode_is_validated(): void {
         $form = $this->form();
 
-        foreach (['', 'any'] as $mode) {
+        foreach (['', 'any', 'required'] as $mode) {
             $errors = $form->validation($this->submission(['customchar1' => $mode]), []);
             $this->assertArrayNotHasKey('customchar1', $errors, "mode '{$mode}' should be accepted");
         }
-        foreach (['ANY', 'listed'] as $mode) {
+        foreach (['ANY', 'listed', 'Required'] as $mode) {
             $errors = $form->validation($this->submission(['customchar1' => $mode]), []);
             $this->assertArrayHasKey('customchar1', $errors, "mode '{$mode}' should be refused");
         }
+    }
+
+    /**
+     * The admission notice switch accepts "no" and "yes" and nothing else, and a real submission
+     * stores what was chosen.
+     *
+     * @return void
+     */
+    public function test_the_admission_notice_switch_is_validated_and_saved(): void {
+        $form = $this->form();
+
+        foreach (['', '1'] as $value) {
+            $errors = $form->validation($this->submission(['customchar2' => $value]), []);
+            $this->assertArrayNotHasKey('customchar2', $errors, "'{$value}' should be accepted");
+        }
+        foreach (['0', 'yes', '2'] as $value) {
+            $errors = $form->validation($this->submission(['customchar2' => $value]), []);
+            $this->assertArrayHasKey('customchar2', $errors, "'{$value}' should be refused");
+        }
+
+        $data = $this->submit(['customchar1' => 'required', 'customchar2' => '1']);
+        $this->assertNotNull($data);
+        $this->assertSame('required', $data->customchar1);
+        $this->assertSame('1', $data->customchar2);
     }
 
     /**

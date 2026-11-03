@@ -17,8 +17,8 @@ Feature: Group enrolment keys
     And I enable "apply" "enrol" plugin
     And I log in as "admin"
     And I add "Course enrol confirmation" enrolment method in "Course 1" with:
-      | Custom instance name        | Apply for this course                    |
-      | Accept group enrolment keys | Yes: a valid key enrols without review   |
+      | Custom instance name            | Apply for this course                                                 |
+      | What a group enrolment key does | A valid key enrols at once; without one, the application is reviewed |
     And I log out
     # No profile fields: what the key does is the subject here, and the default field set would
     # add required fields and confirmations to every step.
