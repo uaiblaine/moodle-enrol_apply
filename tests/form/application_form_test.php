@@ -1190,10 +1190,15 @@ final class application_form_test extends \advanced_testcase {
         $this->accept_only_group_keys();
         $city = fields::form_element_name(fields::standard_key('city'));
 
-        $names = $this->element_names($this->make_form());
+        $form = $this->make_form();
+        $names = $this->element_names($form);
         $this->assertContains('groupkey', $names);
         $this->assertContains('keybuttons', $names);
         $this->assertNotContains($city, $names);
+        /* Marked required, which draws the required icon and lets the browser check it before
+           posting; the server refuses an empty key on its own (key_error()). */
+        $mform = (new \ReflectionProperty(\moodleform::class, '_form'))->getValue($form);
+        $this->assertTrue($mform->isElementRequired('groupkey'));
 
         $saved = [$_GET, $_POST];
         try {
