@@ -624,14 +624,52 @@ backup/                      group mappings, comments and the durable trail, see
   them (measured, K0.5 in `docs/design/group-enrolment-key.md`); no PHPUnit gate can hold that, so
   keep both checks inside the locks.
 
-  **The option lives in `customchar1`** (`''` off, `'any'` any course group's key, room left for a
-  listed subset) because `customint1`/`customint2` carry legacy meanings `db/upgradelib.php` still
-  reads. It is off by default and per instance on purpose: keys left on groups by an old
-  `enrol_self` setup are inert until a teacher opts in, and switching it on silently would turn
-  each of them into an approval bypass. The key itself is never stored here; it is core's
-  `{groups}.enrolmentkey`, compared as typed (the element refuses wrapping whitespace, so a trim
-  would accept what the group page cannot store). `admit()` is one transaction: the record claims an admission
+  **The option lives in `customchar1`** (`''` off, `'any'` any course group's key beside the
+  review, `'required'` key only, room left for a listed subset) because `customint1`/`customint2`
+  carry legacy meanings `db/upgradelib.php` still reads. It is off by default and per instance on
+  purpose: keys left on groups by an old `enrol_self` setup are inert until a teacher opts in, and
+  switching it on silently would turn each of them into an approval bypass. Both it and
+  `customchar2` (the key-only managers' notice, `'1'` on) are read strictly, because a restore
+  carries them verbatim: an unknown value reads as off. The key itself is never stored here; it
+  is core's `{groups}.enrolmentkey`. The form trims what was typed with `trim()`, which strips
+  exactly what `passwordunmask` refuses on the group page, so no storable key changes; the
+  resolver then compares exactly. `admit()` is one transaction: the record claims an admission
   nobody was told about, so a failed activation must not leave it behind.
+
+  **On a key-only instance every route a valid key cannot finish is a refusal written before
+  anything else**: no key, a wrong key, no place, a full group or a lock not obtained returns
+  `application_result::refused()` from `apply_or_admit()` with no enrolment, no record and no
+  message, and `withoutkey` means nothing there. Gates `KO1`-`KO17`, `KO19`.
+
+- **The key-only form comes in two steps, and the step is derived from the posted key on every
+  request, never from a posted step marker.** `application_form::key_step()` builds step 2 only
+  for a key that resolves now, with a place and its seats free and no throttle lock; anything else
+  is step 1, so no request validates a resolving key against a form missing its required fields.
+  Three things about the mechanics were measured (Q0 in `docs/design/group-key-only.md`) and are
+  easy to undo:
+
+  **Continue is a no-submit button registered on BOTH steps.** The post that carries a resolving
+  key builds step 2; registered on step 1 only, that post reads as a real submission and step 2
+  arrives with every required field in error. The modal needs the registration too:
+  `core_form/modalform` treats only `input[type=submit][data-no-submit]` as no-submit, and a plain
+  submit button inside the form is submitted without its own name.
+
+  **Continue never validates, and the try is counted in `is_validated()`.** Core skips validation
+  on a no-submit post, so the key's message is set in `definition_after_data()` and the wrong key
+  is counted in the `is_validated()` override, which runs once per request. Counting in
+  `definition_after_data()` would cost two tries: on Continue the web service builds the form a
+  second time to render it. The override does not read `no_submit_button_pressed()`, whose answer
+  formslib caches in a function `static` for the whole process. That same cache is why the tests
+  pressing Continue call `settle_the_no_submit_cache()` first, or one of them would fix it at true
+  for every later submission in the PHPUnit run.
+
+  **The key is read from the submission only** (`posted_key()`: the web service's form data or
+  `$_POST`, and only with this form's `_qf__` marker), never through `optional_param()`, which also
+  reads the query string. A link could otherwise build step 2, and so tell a valid key from a wrong
+  one, with no submission and no try spent. Gate `KQ4`. In the modal, `amd/src/enrol_page.js`
+  hides the footer's submit on step 1 and labels it "Enrol me" on step 2, read from the form's
+  `data-enrol-apply-step` on every `core/modal:bodyRendered`; only `tests/behat/key_only.feature`
+  holds that.
 
 - **`enrol_plugin::cron()` is dead.** Core declares it empty and nothing calls it. The
   `expiredaction` setting only works because `classes/task/sync_enrolments.php` calls

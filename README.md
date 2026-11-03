@@ -31,7 +31,8 @@ in `.github/workflows/ci.yml` are updated together with `supported`.
 - A cap on the number of applicants per instance, and a number of places that the queue
   measures approvals against.
 - Optionally, core's group enrolment keys: a valid key enrols the applicant at once, without
-  review, in that group (and, with `local_groupdist`, only while every group it joins has a seat).
+  review, in that group (and, with `local_groupdist`, only while every group it joins has a seat),
+  either beside the review or as the only way in.
 - Notifications to course teachers, to a configurable global recipient list, and to
   mentors holding the capability in the applicant's own user context.
 - Enrolment duration with the standard core expiry notifications and expiry action.
@@ -142,48 +143,76 @@ Every setting is stored per plugin, as `enrol_apply/<name>`:
 
 ### Group enrolment keys
 
-An instance can accept the enrolment key of one of the course's groups ("Accept group
-enrolment keys", off by default; the site default for new instances is
-`enrol_apply/groupkeys`). The key is core's own group enrolment key, set on each group's
-settings page, the one `enrol_self` reads; this plugin stores none. The instance form lists
-which groups carry a key, never the keys.
+An instance decides what the enrolment key of one of the course's groups does ("What a group
+enrolment key does"; the site default for new instances is `enrol_apply/groupkeys`):
 
-With the option on, the application form starts with an optional **Group enrolment key**. An
-applicant who enters a valid key still fills in every required field and question, and on
-submitting is enrolled at once and joins that group (and the instance's own groups), with no
-review, and goes straight into the course. The enrolment window, the cohort restriction, the
-applicant limit and the places still apply: with no place left, the application waits for a
-review instead, and the applicant is told why. A wrong key is refused with the choice to send
-the application for review without it.
+- **Nothing** (the default): every application is reviewed, and keys are ignored.
+- **A valid key enrols at once**: an applicant with a valid key is enrolled straight away, while
+  every other application is reviewed as usual.
+- **Key only**: a valid key enrols at once, and nobody can enrol through the method without one.
+  Nothing ever waits for a decision there.
 
-Wrong keys are counted per applicant and instance in the `keyattempts` application cache,
-for 15 minutes; after five, the field gives way to a sentence for the rest of that time, so the
-form cannot be used to guess keys without limit. The key is compared as typed, with no
-trimming, and is read again inside the lock that writes the enrolment, so rotating a key on the
-group's page stops it at once.
+The key is core's own group enrolment key, set on each group's settings page, the one
+`enrol_self` reads; this plugin stores none. Any group of the course counts. The instance form
+lists which groups carry a key, never the keys.
+
+**A valid key enrols at once.** With this mode, the application form starts with an optional
+**Group enrolment key**, in a block of its own that says what it does. An applicant who enters a
+valid key still fills in every required field and question. On submitting, they are enrolled at
+once and join that group (and the instance's own groups), with no review, and go straight into
+the course. The enrolment window, the cohort restriction, the applicant limit and the places
+still apply: with no place left, the application waits for a review instead, and the applicant
+is told why. A wrong key is refused with the choice to send the application for review without
+it.
+
+**Key only.** The enrolment page says a key is needed before any form, and its button reads
+**Enrol with a key**. The form comes in two steps. The first asks for the key alone, with
+**Continue**. Once the key is valid and a place and every seat it would take are free, the second
+says "You will join *group*" and asks the rest, submitted with **Enrol me**. A wrong key, no place
+left or a full group is said on the first step, so nothing typed is lost, and nothing is ever
+written for a refusal. In the modal, the footer's submit button appears only on the second step.
+Applications made before an instance was switched to key only stay in its queue and can still be
+decided.
+
+On either mode the key is trimmed of the whitespace the group page never stores. A key ending in
+an unusual space, as a copied one often does, gets its own message and costs no try. Wrong keys are
+counted per applicant and instance in the `keyattempts` application cache, for 15 minutes. After
+five, the field gives way to a sentence for the rest of that time, so the form cannot be used to
+guess keys without limit. On a key-only method that also means the form cannot be sent at all
+until then. The count is per account: on a site where anybody may create an account, it does not
+stop somebody with many accounts, so keys there should not be easy to guess. The key is read again
+inside the lock that writes the enrolment, so rotating a key on the group's page stops it at once.
 
 Who is told what:
 
-- **The applicant** reads "Enrolled with your group key", naming the group, on the
-  acknowledgement page; no "your application was approved" message is sent,
-  since nobody reviewed it. A valid key that could not admit says why: no place left, the group
-  full, or a place that could not be confirmed in time.
-- **Managers** (the same people told about new applications) get an informational notice with
-  its own subject and a link to the applicant. It names the group only to a recipient who may
-  manage applications in the course.
+- **The applicant** reads "Enrolled with your group key", naming the group, on the course page
+  they land on. No "your application was approved" message is sent, since nobody reviewed it. On
+  the mode that also takes applications, a valid key that could not admit says why: no place left,
+  the group full, or a place that could not be confirmed in time.
+- **Managers** (the same people told about new applications) get an informational notice with its
+  own subject and a link to the applicant. It names the group only to a recipient who may manage
+  applications in the course. On a key-only method, where every enrolment is one, the notice is
+  sent only when **Tell managers about each enrolment with a key** is set to Yes (off by default).
 - **The queue and the review page** mark an application a valid key could not admit. The review
-  page names the group and offers ticked the groups the key would have joined.
-- **The reports** carry an **Admission route** column and filter (review, or what the key did)
-  and the **Group of the enrolment key**.
+  page names the group and pre-selects the groups the key would have joined. The empty queue of a
+  key-only method says nothing waits there.
+- **The reports** carry an **Admission route** column and filter (review, or what the key did) and
+  the **Group of the enrolment key**.
+- **The teacher configuring a key-only method** is warned, while that mode is selected, when no
+  group of the course has a key, when every keyed group is full, and when applications are still
+  waiting. Either key mode warns when the course's self enrolment accepts the same group keys,
+  which would enrol without these questions.
 
-**Optional: `local_groupdist`.** When it is installed, each group's **Seats** (a group custom
-field it provides; empty means no limit, 0 means full) count too. A key admits only while every
-group the admission joins (the key's and the instance's own) has a seat; otherwise the
-application waits for a review. The instance form shows each keyed group's seats, the approval
-group chooser shows every group's occupancy (a full group can still be chosen: a person decides),
-and an approval that takes a group past its seats is followed by a warning. Occupancy is every
-member of the group, counted as `local_groupdist` counts it. Without it, groups carry no seats
-and nothing above applies. It is not declared as a dependency.
+Two apply methods in one course accept the same keys, whatever their modes.
+
+**Optional: `local_groupdist`.** When it is installed, each group's **Seats** (a group custom field
+it provides; empty means no limit, 0 means full) count too. A key admits only while every group the
+admission joins (the key's and the instance's own) has a seat. Otherwise the application waits for
+a review, or, on a key-only method, the key is refused. The instance form shows each keyed group's
+seats. The approval group chooser shows every group's occupancy (a full group can still be chosen:
+a person decides). An approval that takes a group past its seats is followed by a warning.
+Occupancy is every member of the group, counted as `local_groupdist` counts it. Without it, groups
+carry no seats and nothing above applies. It is not declared as a dependency.
 
 ### Placeholders in the notification mails
 
