@@ -213,9 +213,10 @@ th{font-size:13px;color:var(--muted);font-weight:600}
       <p class="intro">Welcome! This course is for the 2027 leadership groups.</p>
       <div class="kb"><h5>Group enrolment key <span class="tag">Required</span></h5>
         <p>Enter the key your teacher gave you, exactly as you received it. It decides your group.</p>
-        <div class="big ph">Type or paste your key</div></div>
+        <div class="big ph">Type or paste your key</div>
+        <div style="margin-top:10px"><span class="btn pri">Continue</span></div></div>
     </div>
-    <div class="mf"><span class="btn sec">Cancel</span><span class="btn pri">Continue</span></div>
+    <div class="mf"><span class="btn sec">Cancel</span></div>
   </div>
 </div>
 <div>
@@ -228,9 +229,10 @@ th{font-size:13px;color:var(--muted);font-weight:600}
       <div class="kb"><h5>Group enrolment key <span class="tag">Required</span></h5>
         <p>Enter the key your teacher gave you, exactly as you received it. It decides your group.</p>
         <div class="big err">turmaB-2072</div>
-        <div class="ferr">This key is not valid for this course. Check it and try again.</div></div>
+        <div class="ferr">This key is not valid for this course. Check it and try again.</div>
+        <div style="margin-top:10px"><span class="btn pri">Continue</span></div></div>
     </div>
-    <div class="mf"><span class="btn sec">Cancel</span><span class="btn pri">Continue</span></div>
+    <div class="mf"><span class="btn sec">Cancel</span></div>
   </div>
 </div>
 </div>
@@ -256,7 +258,7 @@ th{font-size:13px;color:var(--muted);font-weight:600}
       <div class="big ph">Type or paste your key</div></div>
     <span class="btn pri">Continue</span> <span class="btn sec">Cancel</span>
   </div></div>
-  <div class="note">Same two steps, same form class; the page draws its own buttons (<code>showbuttons</code>). Q0.2 measures how the modal footer follows the step.</div>
+  <div class="note">Same two steps, same form class; on step 1 the page draws Continue and Cancel only. In the modal, Continue is a no-submit button inside the form and the footer's Save is hidden until step 2 (Q0.1, Q0.2).</div>
 </div>
 </div>
 
@@ -291,7 +293,7 @@ th{font-size:13px;color:var(--muted);font-weight:600}
     <div class="ptitle">Leadership 2027</div>
     <div class="card" style="color:var(--muted);font-size:13px">Course page&hellip;</div>
   </div></div>
-  <div class="note">The step is derived from the posted key on every request, never from a posted step marker: no request validates a resolving key against a form missing its required fields. Q0.1 measures how step 2 arrives without every required field already shown in error.</div>
+  <div class="note">The step is derived from the posted key on every request, never from a posted step marker: no request validates a resolving key against a form missing its required fields. Continue is a no-submit post, so validation does not run and step 2 arrives with no field in error (Q0.1).</div>
 </div>
 </div>
 
@@ -306,9 +308,10 @@ th{font-size:13px;color:var(--muted);font-weight:600}
       <div class="kb"><h5>Group enrolment key <span class="tag">Required</span></h5>
         <p>Enter the key your teacher gave you, exactly as you received it. It decides your group.</p>
         <div class="big err">turmaB-2027</div>
-        <div class="ferr">Your key for Turma B is valid, but that group has no seats left.</div></div>
+        <div class="ferr">Your key for Turma B is valid, but that group has no seats left.</div>
+        <div style="margin-top:10px"><span class="btn pri">Continue</span></div></div>
     </div>
-    <div class="mf"><span class="btn sec">Cancel</span><span class="btn pri">Continue</span></div>
+    <div class="mf"><span class="btn sec">Cancel</span></div>
   </div>
 </div>
 <div>

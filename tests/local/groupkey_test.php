@@ -68,30 +68,71 @@ final class groupkey_test extends \advanced_testcase {
     }
 
     /**
-     * Only the one known value turns the option on.
+     * Only the two known values turn the option on, and only one of them makes the key required.
      *
-     * @return array Stored customchar1 value and the expected answer.
+     * @return array Stored customchar1 value, whether keys count, and whether only a key enrols.
      */
     public static function mode_provider(): array {
         return [
-            'any' => ['any', true],
-            'off' => ['', false],
-            'null' => [null, false],
-            'other case' => ['ANY', false],
-            'a mode this build does not know' => ['listed', false],
+            'any' => ['any', true, false],
+            'required' => ['required', true, true],
+            'off' => ['', false, false],
+            'null' => [null, false, false],
+            'other case' => ['ANY', false, false],
+            'other case of required' => ['REQUIRED', false, false],
+            'a mode this build does not know' => ['listed', false, false],
         ];
     }
 
     /**
-     * enabled() is strict, because customchar1 arrives verbatim from a restored archive.
+     * enabled() and required() are strict, because customchar1 arrives verbatim from a restored
+     * archive: an unknown value reads as off, never as a mode that skips the review.
      *
      * @param string|null $stored The stored value.
-     * @param bool $expected Whether the instance accepts keys.
+     * @param bool $enabled Whether the instance accepts keys.
+     * @param bool $required Whether the instance enrols only with a key.
      * @return void
      */
     #[DataProvider('mode_provider')]
-    public function test_only_the_known_mode_enables_keys(?string $stored, bool $expected): void {
-        $this->assertSame($expected, groupkey::enabled((object) ['customchar1' => $stored]));
+    public function test_only_the_known_mode_enables_keys(?string $stored, bool $enabled, bool $required): void {
+        $instance = (object) ['customchar1' => $stored];
+
+        $this->assertSame($enabled, groupkey::enabled($instance));
+        $this->assertSame($required, groupkey::required($instance));
+    }
+
+    /**
+     * The modes and stored switches, with whether an admission is announced.
+     *
+     * @return array customchar1, customchar2 and the expected answer, keyed by case name.
+     */
+    public static function announcement_provider(): array {
+        return [
+            'key or review, switch unset' => ['any', null, true],
+            'key or review, switch off' => ['any', '', true],
+            'key only, switch unset' => ['required', null, false],
+            'key only, switch empty' => ['required', '', false],
+            'key only, switch zero' => ['required', '0', false],
+            'key only, switch on' => ['required', '1', true],
+            'key only, switch with an unknown value' => ['required', 'yes', false],
+        ];
+    }
+
+    /**
+     * A key-only instance announces an admission only when its teacher switched the notice on,
+     * and reads the switch strictly; an instance that also takes applications always announces.
+     *
+     * @param string $mode customchar1.
+     * @param string|null $switch customchar2.
+     * @param bool $expected Whether the managers' notice is sent.
+     * @return void
+     */
+    #[DataProvider('announcement_provider')]
+    public function test_an_admission_is_announced_by_mode_and_switch(string $mode, ?string $switch, bool $expected): void {
+        $this->assertSame(
+            $expected,
+            groupkey::announces_admissions((object) ['customchar1' => $mode, 'customchar2' => $switch])
+        );
     }
 
     /**

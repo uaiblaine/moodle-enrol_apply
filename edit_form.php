@@ -86,9 +86,21 @@ class enrol_apply_edit_form extends moodleform {
         $mform->addElement('select', 'customchar1', get_string('groupkeys', 'enrol_apply'), [
             \enrol_apply\local\groupkey::MODE_OFF => get_string('groupkeys_off', 'enrol_apply'),
             \enrol_apply\local\groupkey::MODE_ANY => get_string('groupkeys_any', 'enrol_apply'),
+            \enrol_apply\local\groupkey::MODE_REQUIRED => get_string('groupkeys_required', 'enrol_apply'),
         ]);
         $mform->setType('customchar1', PARAM_ALPHA);
         $mform->addHelpButton('customchar1', 'groupkeys', 'enrol_apply');
+
+        /* Read only in key-only mode (groupkey::announces_admissions()), so shown only there. A
+           hidden element is not posted on 5.3, and update_instance() writes only what it is
+           given, so switching modes keeps the stored answer. */
+        $mform->addElement('select', 'customchar2', get_string('admissionnotice', 'enrol_apply'), [
+            '' => get_string('no'),
+            \enrol_apply\local\groupkey::NOTICE_ON => get_string('yes'),
+        ]);
+        $mform->setType('customchar2', PARAM_ALPHANUM);
+        $mform->addHelpButton('customchar2', 'admissionnotice', 'enrol_apply');
+        $mform->hideIf('customchar2', 'customchar1', 'neq', \enrol_apply\local\groupkey::MODE_REQUIRED);
         $mform->addElement(
             'static',
             'groupkeysummary',
@@ -327,6 +339,9 @@ class enrol_apply_edit_form extends moodleform {
 
         if (!in_array((string) ($data['customchar1'] ?? ''), \enrol_apply\local\groupkey::MODES, true)) {
             $errors['customchar1'] = get_string('invaliddata', 'error');
+        }
+        if (!in_array((string) ($data['customchar2'] ?? ''), ['', \enrol_apply\local\groupkey::NOTICE_ON], true)) {
+            $errors['customchar2'] = get_string('invaliddata', 'error');
         }
 
         return $errors;

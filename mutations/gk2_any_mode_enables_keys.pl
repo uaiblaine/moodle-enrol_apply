@@ -1,2 +1,2 @@
 # GK2: any stored value other than "off" turns the option on, so a restored unknown mode admits.
-s{=== self::MODE_ANY;}{!== self::MODE_OFF;};
+s#return \$mode === self::MODE_ANY \|\| \$mode === self::MODE_REQUIRED;#return \$mode !== self::MODE_OFF;#;
