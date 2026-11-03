@@ -1,2 +1,2 @@
-# KF4: a wrong key costs no try.
-s#keyattempts::record_failure\(\(int\) \$this->get_instance\(\)->id, \(int\) \$USER->id\);##;
+# KF4: a wrong key costs no try on a submission.
+s#if \(\$this->is_wrong_key\(\$posted\)\) \{\n\s*keyattempts::record_failure\([^\n]*\n\s*\}\n##;

@@ -122,6 +122,26 @@ final class commentlabel_test extends \advanced_testcase {
     }
 
     /**
+     * With nothing set on a key-only instance, the shipped wording addresses the teacher, since
+     * nobody reviews the enrolment; a label the teacher set still wins there.
+     *
+     * Changes that must make it fail: the key-or-review wording on a key-only instance.
+     *
+     * @return void
+     */
+    public function test_a_key_only_instance_with_no_label_asks_for_a_comment_for_the_teacher(): void {
+        $this->resetAfterTest();
+
+        $instance = $this->instance();
+        $instance->customchar1 = \enrol_apply\local\groupkey::MODE_REQUIRED;
+        $this->assertSame(get_string('applycomment_required', 'enrol_apply'), commentlabel::custom($instance));
+
+        $named = $this->instance('Why this course?');
+        $named->customchar1 = \enrol_apply\local\groupkey::MODE_REQUIRED;
+        $this->assertSame('Why this course?', commentlabel::custom($named, false));
+    }
+
+    /**
      * The two spellings really are different, which is what every other test here depends on.
      *
      * @return void

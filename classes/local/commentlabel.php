@@ -76,7 +76,8 @@ final class commentlabel {
         $custom = (string) ($instance->customtext2 ?? '');
 
         if (trim($custom) === '' || self::is_legacy_recipient_list($custom)) {
-            return get_string('applycomment', 'enrol_apply');
+            // Nobody reviews a key-only enrolment: the comment is read later, by the teacher.
+            return get_string(groupkey::required($instance) ? 'applycomment_required' : 'applycomment', 'enrol_apply');
         }
 
         /* The course context and not the page's: this is read on the review page too, where

@@ -405,6 +405,31 @@ final class key_only_test extends \advanced_testcase {
     }
 
     /**
+     * The enrolment page's card says a key is needed before any form, and its button says so; the
+     * other mode keeps its own card.
+     *
+     * Changes that must make it fail: the key-or-review card or button on a key-only instance.
+     *
+     * @return void
+     */
+    public function test_the_card_says_a_key_is_needed(): void {
+        global $PAGE;
+
+        $PAGE->set_url('/enrol/index.php', ['id' => $this->course->id]);
+        $this->setUser($this->getDataGenerator()->create_user());
+
+        $card = (string) $this->plugin->enrol_page_hook($this->instance);
+        $this->assertStringContainsString(s(get_string('keyonlycard', 'enrol_apply')), $card);
+        $this->assertStringContainsString(s(get_string('enrolwithkey', 'enrol_apply')), $card);
+        $this->assertStringNotContainsString(s(get_string('youwillchecknddetails', 'enrol_apply')), $card);
+
+        $this->set_instance('customchar1', groupkey::MODE_ANY);
+        $card = (string) $this->plugin->enrol_page_hook($this->instance);
+        $this->assertStringContainsString(s(get_string('startapplication', 'enrol_apply')), $card, 'the control');
+        $this->assertStringNotContainsString(s(get_string('keyonlycard', 'enrol_apply')), $card);
+    }
+
+    /**
      * The names an instance takes, by mode and by whether the teacher named it.
      *
      * @return array customchar1, the stored name and the expected name's source, keyed by case name.

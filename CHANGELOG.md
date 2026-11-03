@@ -8,6 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Group key only: what the applicant sees (Q2).** On a key-only method the enrolment page says a
+  key is needed before any form (**Enrol with a key**), and the form comes in two steps: the key
+  alone, with **Continue**, then, once the key is valid and a place and its seats are free, "You will
+  join *group*" and the rest, submitted with **Enrol me**. A wrong key, no place or a full group is
+  said on the first step, so nothing typed is lost; Continue never validates the rest, and a wrong
+  key there costs one try. In the modal the footer's submit is hidden on the first step. The key is
+  read only from a real submission, so a link cannot test one. In both key modes the key is a block
+  of its own with one sentence on what it does, a plain text field instead of a password one, and
+  is trimmed (the group page never stores wrapping whitespace); a key ending in an unusual space,
+  as a copied one often does, gets its own message and costs no try. The details and the comment
+  box no longer speak of a reviewer on a key-only method. Version 2026110301 (no upgrade step).
 - **Group key only (Q1 of `docs/design/group-key-only.md`).** A third answer to the instance's
   group key setting, now called **What a group enrolment key does**: *Key only*. A valid key enrols at
   once, as before, and nobody can enrol through the method without one. Nothing ever waits for a
