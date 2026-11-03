@@ -256,12 +256,18 @@ class enrol_apply_plugin extends enrol_plugin {
         } else if (\enrol_apply\local\capacity::applications_closed($instance)) {
             $body = get_string('maxenrolledreached', 'enrol_apply');
         } else {
-            $body = get_string('youwillchecknddetails', 'enrol_apply');
-            /* Appended rather than merged into that string, so a site that customised it keeps its
-               wording; and only where a key can count, so nobody is told about a key that the
-               method would ignore. */
-            if (\enrol_apply\local\groupkey::enabled($instance)) {
-                $body .= ' ' . get_string('groupkeyoffered', 'enrol_apply');
+            $keyonly = \enrol_apply\local\groupkey::required($instance);
+            if ($keyonly) {
+                // Said before any form, so nobody without a key fills one in to find out.
+                $body = get_string('keyonlycard', 'enrol_apply');
+            } else {
+                $body = get_string('youwillchecknddetails', 'enrol_apply');
+                /* Appended rather than merged into that string, so a site that customised it
+                   keeps its wording; and only where a key can count, so nobody is told about a
+                   key that the method would ignore. */
+                if (\enrol_apply\local\groupkey::enabled($instance)) {
+                    $body .= ' ' . get_string('groupkeyoffered', 'enrol_apply');
+                }
             }
             /* The href is the no-JavaScript transport and is a real destination, not a
                placeholder: the AMD module below intercepts the click only when it loads. */
@@ -272,6 +278,7 @@ class enrol_apply_plugin extends enrol_plugin {
                 'data-form' => \enrol_apply\form\application_form::class,
                 'data-title' => $title,
             ];
+            $buttonlabel = $keyonly ? get_string('enrolwithkey', 'enrol_apply') : get_string('startapplication', 'enrol_apply');
             $PAGE->requires->js_call_amd('enrol_apply/enrol_page', 'init', [$instance->id]);
         }
 
@@ -284,7 +291,7 @@ class enrol_apply_plugin extends enrol_plugin {
             body: $OUTPUT->render($notification),
             buttons: $buttonurl ? [new single_button(
                 $buttonurl,
-                get_string('startapplication', 'enrol_apply'),
+                $buttonlabel,
                 'get',
                 single_button::BUTTON_PRIMARY,
                 $buttonattrs
@@ -576,7 +583,7 @@ class enrol_apply_plugin extends enrol_plugin {
      * @param array $full Ids of the full groups, from groupseats::full().
      * @return string The reason.
      */
-    protected function group_full_refusal(stdClass $instance, int $keygroupid, array $full): string {
+    public function group_full_refusal(stdClass $instance, int $keygroupid, array $full): string {
         global $DB;
 
         $name = in_array($keygroupid, $full, true) ? $DB->get_field('groups', 'name', ['id' => $keygroupid]) : false;

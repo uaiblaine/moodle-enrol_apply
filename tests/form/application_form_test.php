@@ -1109,6 +1109,8 @@ final class application_form_test extends \advanced_testcase {
 
         $this->assertFalse($result['submitted']);
         $this->assertStringContainsString(get_string('groupkeylocked_required', 'enrol_apply'), $result['html']);
+        $withkey = $this->submit_through_the_modal(['groupkey' => 'Turma-B-2027']);
+        $this->assertFalse($withkey['submitted'], 'a valid key posted past the lock builds no step 2');
         $this->assertFalse($DB->record_exists('user_enrolments', ['userid' => $this->applicant->id]));
 
         $DB->set_field('enrol', 'customchar1', groupkey::MODE_ANY, ['id' => $this->instance->id]);
@@ -1119,22 +1121,187 @@ final class application_form_test extends \advanced_testcase {
     }
 
     /**
-     * A key with wrapping whitespace is left to the element's own message and costs no try.
+     * A pasted key is trimmed of the whitespace the group page never stores, and one ending in an
+     * unusual space, which trim() leaves, is told apart and costs no try.
      *
-     * Changes that must make it fail: counting a value the element already refused.
+     * Changes that must make it fail: comparing the untrimmed key, or counting a key with an
+     * unusual space as a guess.
      *
      * @return void
      */
-    public function test_a_key_with_wrapping_whitespace_costs_no_try(): void {
+    public function test_a_pasted_key_is_trimmed_and_an_unusual_space_costs_no_try(): void {
         $this->accept_group_keys();
 
         for ($i = 0; $i < keyattempts::LIMIT; $i++) {
-            $result = $this->submit_through_the_modal(['groupkey' => ' Turma-Z-2027 ']);
+            $result = $this->submit_through_the_modal(['groupkey' => "Turma-B-2027\u{00A0}"]);
             $this->assertFalse($result['submitted']);
         }
-
         $this->assertFalse(keyattempts::locked((int) $this->instance->id, (int) $this->applicant->id));
-        $this->assertStringContainsString(get_string('err_wrappingwhitespace', 'core_form'), $result['html']);
+        $this->assertStringContainsString(s(get_string('groupkeyunusualspace', 'enrol_apply')), $result['html']);
+
+        $sink = $this->redirectMessages();
+        $result = $this->submit_through_the_modal(['groupkey' => "  Turma-B-2027\t"]);
+        $sink->close();
+        $this->assertTrue($result['submitted']);
+        $this->assertStringContainsString('/course/view.php', json_decode($result['data']));
+    }
+
+    /**
+     * Make the instance key-only, asking for one required field besides the key.
+     *
+     * @return \stdClass The keyed group.
+     */
+    protected function accept_only_group_keys(): \stdClass {
+        $group = $this->accept_group_keys(groupkey::MODE_REQUIRED);
+        $city = fields::standard_key('city');
+        $this->ask_for([$city], [$city]);
+
+        return $group;
+    }
+
+    /**
+     * Read formslib's process-wide no-submit answer once, on a form that was not submitted.
+     *
+     * moodleform::no_submit_button_pressed() caches its first answer in a function static for the
+     * whole PHP process (Q0.1). The web service consults it after a Continue to decide whether to
+     * rebuild the form, so a test pressing Continue first in a process would otherwise fix it at
+     * true for every later submission. Read here first, it is false for the rest of the run, which
+     * is the real request's answer for every submission but a Continue; the form itself never
+     * relies on it (is_continue()).
+     *
+     * @return void
+     */
+    protected function settle_the_no_submit_cache(): void {
+        $this->make_form()->no_submit_button_pressed();
+    }
+
+    /**
+     * Step 1 of a key-only form asks for the key alone, and a key in the query string reveals
+     * nothing: only a real submission is read.
+     *
+     * The control is the same key posted as a submission, which builds step 2.
+     *
+     * Changes that must make it fail: building the rest on step 1, or reading the key from the
+     * query string.
+     *
+     * @return void
+     */
+    public function test_step_one_asks_for_the_key_alone_and_reads_no_query_string(): void {
+        $this->accept_only_group_keys();
+        $city = fields::form_element_name(fields::standard_key('city'));
+
+        $names = $this->element_names($this->make_form());
+        $this->assertContains('groupkey', $names);
+        $this->assertContains('keybuttons', $names);
+        $this->assertNotContains($city, $names);
+
+        $saved = [$_GET, $_POST];
+        try {
+            $_GET = ['instance' => $this->instance->id, 'groupkey' => 'Turma-B-2027'];
+            $_POST = [];
+            $names = $this->element_names(new application_form(null, ['showbuttons' => true]));
+            $this->assertNotContains($city, $names, 'a key in the query string builds nothing');
+
+            $_POST = [
+                'instance' => $this->instance->id,
+                'groupkey' => 'Turma-B-2027',
+                'sesskey' => sesskey(),
+                '_qf__enrol_apply_form_application_form' => 1,
+            ];
+            $names = $this->element_names(new application_form(null, ['showbuttons' => true]));
+            $this->assertContains($city, $names, 'the control: the same key submitted builds step 2');
+        } finally {
+            [$_GET, $_POST] = $saved;
+        }
+    }
+
+    /**
+     * Continue with a valid key builds step 2 with no field in error, names the group and carries
+     * the key trimmed; nothing is written and no try is spent.
+     *
+     * Changes that must make it fail: validating on Continue, or carrying the key untrimmed.
+     *
+     * @return void
+     */
+    public function test_continue_with_a_valid_key_shows_the_rest_with_no_error(): void {
+        global $DB;
+
+        $this->accept_only_group_keys();
+        $this->settle_the_no_submit_cache();
+
+        $result = $this->submit_through_the_modal(['groupkey' => ' Turma-B-2027 ', 'keycontinue' => 'Continue']);
+
+        $this->assertFalse($result['submitted']);
+        $this->assertStringContainsString('data-enrol-apply-step="2"', $result['html']);
+        $this->assertStringContainsString(s(get_string('keyjoins', 'enrol_apply', 'Turma B')), $result['html']);
+        $city = fields::form_element_name(fields::standard_key('city'));
+        $this->assertStringContainsString('name="' . $city . '"', $result['html']);
+        $this->assertStringNotContainsString(s(get_string('requiredtoapply', 'enrol_apply')), $result['html']);
+        $this->assertStringNotContainsString(get_string('err_required', 'form'), $result['html']);
+        $this->assertMatchesRegularExpression('/<input[^>]*name="groupkey"[^>]*value="Turma-B-2027"/', $result['html']);
+        $this->assertFalse($DB->record_exists('user_enrolments', ['userid' => $this->applicant->id]));
+    }
+
+    /**
+     * Continue with a wrong key stays on step 1 with the message and costs one try per press.
+     *
+     * Changes that must make it fail: not counting on Continue, or counting twice.
+     *
+     * @return void
+     */
+    public function test_continue_with_a_wrong_key_is_refused_and_counted_once(): void {
+        $this->accept_only_group_keys();
+        $this->settle_the_no_submit_cache();
+
+        for ($i = 1; $i < keyattempts::LIMIT; $i++) {
+            $result = $this->submit_through_the_modal(['groupkey' => 'Turma-Z-2027', 'keycontinue' => 'Continue']);
+            $this->assertFalse(keyattempts::locked((int) $this->instance->id, (int) $this->applicant->id), "after {$i}");
+        }
+        $this->assertStringContainsString('data-enrol-apply-step="1"', $result['html']);
+        $this->assertStringContainsString(s(get_string('groupkeyinvalid_required', 'enrol_apply')), $result['html']);
+
+        $this->submit_through_the_modal(['groupkey' => 'Turma-Z-2027', 'keycontinue' => 'Continue']);
+        $this->assertTrue(keyattempts::locked((int) $this->instance->id, (int) $this->applicant->id));
+    }
+
+    /**
+     * Continue with a valid key and no place left stays on step 1 saying why, and costs no try.
+     *
+     * Changes that must make it fail: building step 2 whatever the places.
+     *
+     * @return void
+     */
+    public function test_continue_with_no_place_left_says_why_on_step_one(): void {
+        global $DB;
+
+        $this->accept_only_group_keys();
+        $this->settle_the_no_submit_cache();
+        $DB->set_field('enrol', 'customint4', 1, ['id' => $this->instance->id]);
+        $this->instance->customint4 = 1;
+        enrol_get_plugin('apply')->enrol_user($this->instance, $this->getDataGenerator()->create_user()->id);
+
+        $result = $this->submit_through_the_modal(['groupkey' => 'Turma-B-2027', 'keycontinue' => 'Continue']);
+
+        $this->assertStringContainsString('data-enrol-apply-step="1"', $result['html']);
+        $this->assertStringContainsString(s(get_string('keynoplace', 'enrol_apply')), $result['html']);
+        $this->assertFalse(keyattempts::locked((int) $this->instance->id, (int) $this->applicant->id));
+    }
+
+    /**
+     * Step 2, submitted, enrols; the key it carries is judged again.
+     *
+     * @return void
+     */
+    public function test_step_two_enrols(): void {
+        $this->accept_group_keys(groupkey::MODE_REQUIRED);
+
+        $sink = $this->redirectMessages();
+        $result = $this->submit_through_the_modal(['groupkey' => 'Turma-B-2027']);
+        $sink->close();
+
+        $this->assertTrue($result['submitted']);
+        $this->assertStringContainsString('/course/view.php', json_decode($result['data']));
+        $this->assertTrue(is_enrolled(\context_course::instance($this->course->id), $this->applicant, '', true));
     }
 
     /**

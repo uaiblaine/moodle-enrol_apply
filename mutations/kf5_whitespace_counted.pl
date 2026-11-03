@@ -1,2 +1,2 @@
-# KF5: a value the element already refused for wrapping whitespace is judged and counted.
-s#if \(\$posted === '' \|\| \$posted !== trim\(\$posted\)\) \{#if (\$posted === '') \{#;
+# KF5: a key ending in an unusual space is counted as a guess.
+s#if \(\$posted === '' \|\| \$this->has_unusual_edge\(\$posted\)\) \{#if (\$posted === '') \{#;

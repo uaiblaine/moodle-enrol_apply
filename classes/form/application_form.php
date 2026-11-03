@@ -58,6 +58,12 @@ class application_form extends dynamic_form {
     /** @var array Memoised group key resolutions: posted key => group id, or null for none. */
     protected $resolved = [];
 
+    /** @var int|null Memoised step of a key-only form: 0 for one form, 1 the key, 2 the rest. */
+    protected $keystep = null;
+
+    /** @var int|null The group a key-only form's step 2 joins. */
+    protected $keygroupid = null;
+
     /**
      * The enrol instance this form belongs to.
      *
@@ -146,7 +152,24 @@ class application_form extends dynamic_form {
             $mform->addElement('html', format_text($instance->customtext1, FORMAT_HTML));
         }
 
-        $this->add_group_key($instance);
+        /* A key-only instance asks in two steps (docs/design/group-key-only.md, Q0.1): the key
+           alone, then, once it resolves, the rest. The step is the form attribute enrol_page.js
+           reads to show or hide the modal's own submit button. Continue is a no-submit button
+           on both steps, because the post that carries a resolving key builds step 2. */
+        $step = $this->key_step();
+        if ($step !== 0) {
+            $mform->updateAttributes(['data-enrol-apply-step' => $step]);
+            $mform->registerNoSubmitButton('keycontinue');
+        }
+        if ($step === 1) {
+            $this->add_group_key($instance, true);
+            return;
+        }
+        if ($step === 2) {
+            $this->add_key_confirmation();
+        } else {
+            $this->add_group_key($instance);
+        }
 
         $editable = [];
         $locked = [];
@@ -188,24 +211,232 @@ class application_form extends dynamic_form {
             /* A dynamic_form carries no action buttons of its own, because the modal supplies
                its own Save and Cancel. Rendered on a page, it needs them, so the page transport
                asks for them explicitly. */
-            $this->add_action_buttons(true, get_string('submitapplication', 'enrol_apply'));
+            $this->add_action_buttons(
+                true,
+                $step === 2 ? get_string('enrolme', 'core_enrol') : get_string('submitapplication', 'enrol_apply')
+            );
         }
+    }
+
+    /**
+     * Which step of a key-only form this request builds.
+     *
+     * Step 2 needs a key that resolves now, with a place and every seat it would take free, and
+     * no lock on the applicant's tries: a locked form never shows the rest, whatever it posts.
+     * The key is read from a real submission only (see posted_key()), so a link cannot reveal
+     * whether a key exists without spending a try.
+     *
+     * @return int 0 for an instance that is not key-only, 1 for the key, 2 for the rest.
+     */
+    protected function key_step(): int {
+        global $USER;
+
+        if ($this->keystep === null) {
+            $instance = $this->get_instance();
+            $this->keystep = 0;
+            if (groupkey::required($instance)) {
+                $this->keystep = 1;
+                $groupid = $this->resolve_key($this->posted_key());
+                if (
+                    $groupid !== null
+                    && !keyattempts::locked((int) $instance->id, (int) $USER->id)
+                    && $this->capacity_refusal($groupid) === null
+                ) {
+                    $this->keystep = 2;
+                    $this->keygroupid = $groupid;
+                }
+            }
+        }
+
+        return $this->keystep;
+    }
+
+    /**
+     * The key this request submitted, trimmed, or '' when it is not a submission of this form.
+     *
+     * Read from the submission itself, the web service's form data or the page's POST, and only
+     * when it carries this form's marker: a submission is always validated, which is where a
+     * wrong key is counted. optional_param() would also read the query string, through which a
+     * key could be tested with no submission and so with no try spent.
+     *
+     * trim() strips exactly what passwordunmask refuses on the group page (Q0.3), so no key a
+     * group can store changes here.
+     *
+     * @return string The key.
+     */
+    protected function posted_key(): string {
+        $submission = $this->submission();
+        $key = $submission['groupkey'] ?? '';
+
+        return is_string($key) ? trim($key) : '';
+    }
+
+    /**
+     * This form's submission, as formslib will read it, or an empty array when there is none.
+     *
+     * @return array Submitted values.
+     */
+    protected function submission(): array {
+        $submission = !empty($this->_ajaxformdata) ? (array) $this->_ajaxformdata : $_POST;
+
+        return empty($submission['_qf__' . $this->_formname]) ? [] : $submission;
+    }
+
+    /**
+     * Whether this request is the key-only form's Continue.
+     *
+     * Read from the submission rather than from no_submit_button_pressed(), whose answer core
+     * caches in a static for the whole process.
+     *
+     * @return bool True when Continue was pressed on a key-only form.
+     */
+    protected function is_continue(): bool {
+        $submission = $this->submission();
+
+        return $this->key_step() !== 0 && isset($submission['keycontinue']) && $submission['keycontinue'] !== '';
+    }
+
+    /**
+     * The group a key names, memoised for the request.
+     *
+     * @param string $key The trimmed key.
+     * @return int|null The group id, or null.
+     */
+    protected function resolve_key(string $key): ?int {
+        if (!array_key_exists($key, $this->resolved)) {
+            $this->resolved[$key] = groupkey::resolve($this->get_instance(), $key);
+        }
+
+        return $this->resolved[$key];
+    }
+
+    /**
+     * Why a valid key cannot admit on a key-only instance right now, read without the locks.
+     *
+     * Advisory, so the applicant is told while the form is still open: the write door checks
+     * both again under lock_admission() and refuses in the same words.
+     *
+     * @param int $groupid The group the key resolved to.
+     * @return string|null The reason, or null when a place and every seat are free.
+     */
+    protected function capacity_refusal(int $groupid): ?string {
+        $instance = $this->get_instance();
+        if (\enrol_apply\local\capacity::places_full($instance)) {
+            return get_string('keynoplace', 'enrol_apply');
+        }
+        $plugin = $this->get_plugin();
+        $full = \enrol_apply\local\groupseats::full($plugin->key_route_groups($instance, $groupid));
+
+        return $full ? $plugin->group_full_refusal($instance, $groupid, $full) : null;
+    }
+
+    /**
+     * What is wrong with a submitted key, or null when nothing is.
+     *
+     * @param string $posted The trimmed key.
+     * @param bool $required Whether the instance is key-only, where no key is an error and a
+     *     valid key must also find a place and its seats.
+     * @return string|null The message to show on the key field.
+     */
+    protected function key_error(string $posted, bool $required): ?string {
+        if ($posted === '') {
+            return $required ? get_string('groupkeyrequired', 'enrol_apply') : null;
+        }
+        if ($this->has_unusual_edge($posted)) {
+            return get_string('groupkeyunusualspace', 'enrol_apply');
+        }
+        $groupid = $this->resolve_key($posted);
+        if ($groupid === null) {
+            return get_string($required ? 'groupkeyinvalid_required' : 'groupkeyinvalid', 'enrol_apply');
+        }
+
+        return $required ? $this->capacity_refusal($groupid) : null;
+    }
+
+    /**
+     * Whether a trimmed key still starts or ends with a space trim() does not strip.
+     *
+     * A non-breaking space is what a key copied from a web page or an e-mail usually carries
+     * (Q0.3). It is not a guess at a key, so it is told apart and costs no try.
+     *
+     * @param string $key The trimmed key.
+     * @return bool True for a Unicode space or a zero-width character at either end.
+     */
+    protected function has_unusual_edge(string $key): bool {
+        return (bool) preg_match('/^[\p{Z}\x{200B}\x{FEFF}]|[\p{Z}\x{200B}\x{FEFF}]$/u', $key);
+    }
+
+    /**
+     * Step 2 of a key-only form: the key carried on, and the group it joins said aloud.
+     *
+     * The group is named to the person holding its key (G9). The escaped spelling: an html
+     * element renders raw.
+     *
+     * @return void
+     */
+    protected function add_key_confirmation(): void {
+        $mform = $this->_form;
+        $mform->addElement('hidden', 'groupkey');
+        $mform->setType('groupkey', PARAM_RAW);
+        $mform->setConstant('groupkey', $this->posted_key());
+
+        $group = groups_get_group($this->keygroupid, 'id, name');
+        $name = $group ? (string) $group->name : '';
+        $mform->addElement('html', '<div class="alert alert-success enrol_apply-keyjoins">'
+            . get_string('keyjoins', 'enrol_apply', format_string($name, true, [
+                'context' => context_course::instance($this->get_instance()->courseid),
+            ]))
+            . '</div>');
+    }
+
+    /**
+     * Judge the key on Continue, which never validates.
+     *
+     * Core skips validation on a no-submit post, so the key is judged here: the message is set
+     * by definition_after_data(), which the web service runs again on the copy it renders, and
+     * the try is counted here, which runs once per request.
+     *
+     * @return bool False on Continue; otherwise formslib's answer.
+     */
+    public function is_validated() {
+        global $USER;
+
+        if (!$this->is_continue()) {
+            return parent::is_validated();
+        }
+        if (!$this->_definition_finalized) {
+            $this->_definition_finalized = true;
+            $this->definition_after_data();
+        }
+        if ($this->is_wrong_key($this->posted_key())) {
+            keyattempts::record_failure((int) $this->get_instance()->id, (int) $USER->id);
+        }
+
+        return false;
     }
 
     /**
      * Offer the group enrolment key, first, since it decides what submitting does.
      *
-     * Not under a header of its own: a header stays open over every element that follows, and an
-     * instance asking for no fields would then render its questions and comment inside it. After
-     * too many wrong keys the field gives way to a sentence, and the application itself stays
-     * possible; with no field, get_data() carries no key, so a crafted post cannot test one past
-     * the lock either. On a key-only instance nothing else is possible, so the field is required
-     * and the locked form cannot be submitted at all (see validation()).
+     * A block of its own, opened and closed by html elements rather than a header: a header stays
+     * open over every element that follows, and an instance asking for no fields would then render
+     * its questions and comment inside it. The block carries one sentence saying what the key does
+     * on this instance.
+     *
+     * A plain text field, not passwordunmask: the key is not the applicant's secret but a code
+     * copied from a teacher, and a password field invites the browser to fill in the account's
+     * password. The value is trimmed where it is read (posted_key()).
+     *
+     * After too many wrong keys the field gives way to a sentence, and on the key-or-review mode the
+     * application itself stays possible; with no field, get_data() carries no key, so a crafted
+     * post cannot test one past the lock either. On a key-only instance nothing else is possible,
+     * so the field is required and the locked form cannot be submitted at all (see validation()).
      *
      * @param \stdClass $instance The {enrol} record.
+     * @param bool $continue Whether to end the block with Continue, step 1 of a key-only form.
      * @return void
      */
-    protected function add_group_key(\stdClass $instance): void {
+    protected function add_group_key(\stdClass $instance, bool $continue = false): void {
         global $USER;
 
         if (!groupkey::enabled($instance)) {
@@ -214,6 +445,14 @@ class application_form extends dynamic_form {
 
         $required = groupkey::required($instance);
         $mform = $this->_form;
+        $mform->addElement('html', '<div class="enrol_apply-keyblock">');
+        $mform->addElement(
+            'static',
+            'groupkeyintro',
+            '',
+            get_string($required ? 'groupkeyblock_required' : 'groupkeyblock_any', 'enrol_apply')
+        );
+
         if (keyattempts::locked((int) $instance->id, (int) $USER->id)) {
             $mform->addElement(
                 'static',
@@ -221,10 +460,16 @@ class application_form extends dynamic_form {
                 get_string('groupkey', 'enrol_apply'),
                 get_string($required ? 'groupkeylocked_required' : 'groupkeylocked', 'enrol_apply')
             );
+            $mform->addElement('html', '</div>');
             return;
         }
 
-        $mform->addElement('passwordunmask', 'groupkey', get_string('groupkey', 'enrol_apply'));
+        $mform->addElement('text', 'groupkey', get_string('groupkey', 'enrol_apply'), [
+            'autocomplete' => 'off',
+            'spellcheck' => 'false',
+            'autocapitalize' => 'off',
+            'size' => 40,
+        ]);
         $mform->setType('groupkey', PARAM_RAW);
         if ($required) {
             $mform->addRule('groupkey', get_string('groupkeyrequired', 'enrol_apply'), 'required', null, 'client');
@@ -232,6 +477,17 @@ class application_form extends dynamic_form {
         } else {
             $mform->addHelpButton('groupkey', 'groupkey', 'enrol_apply');
         }
+
+        if ($continue) {
+            /* The first submit button of the form, so Enter in the key field presses it. On the
+               page the form also needs its own way back; in the modal the footer has Cancel. */
+            $buttons = [$mform->createElement('submit', 'keycontinue', get_string('continue'))];
+            if (!empty($this->_customdata['showbuttons'])) {
+                $buttons[] = $mform->createElement('cancel');
+            }
+            $mform->addGroup($buttons, 'keybuttons', '', ' ', false);
+        }
+        $mform->addElement('html', '</div>');
     }
 
     /**
@@ -243,18 +499,29 @@ class application_form extends dynamic_form {
      * a key posted with it either way, because the page transport has no JavaScript to disable
      * anything.
      *
+     * On a key-only instance there is no review to send the application to; instead, on Continue,
+     * this is where the key's message is set (see is_validated()).
+     *
      * @return void
      */
     public function definition_after_data() {
         parent::definition_after_data();
 
         $mform = $this->_form;
-        // On a key-only instance there is no review to send the application to.
-        if (!$mform->elementExists('groupkey') || groupkey::required($this->get_instance())) {
+        if (!$mform->elementExists('groupkey')) {
             return;
         }
-        $posted = $this->optional_param('groupkey', '', PARAM_RAW);
-        if (!$this->is_wrong_key(is_string($posted) ? $posted : '')) {
+        $posted = $this->posted_key();
+        if (groupkey::required($this->get_instance())) {
+            if ($this->is_continue() && $mform->getElementType('groupkey') === 'text') {
+                $error = $this->key_error($posted, true);
+                if ($error !== null) {
+                    $mform->setElementError('groupkey', $error);
+                }
+            }
+            return;
+        }
+        if (!$this->is_wrong_key($posted)) {
             return;
         }
 
@@ -269,23 +536,19 @@ class application_form extends dynamic_form {
     }
 
     /**
-     * Whether a posted value is a key that names no group.
+     * Whether a submitted key is a guess that names no group, the only kind that costs a try.
      *
-     * A value with wrapping whitespace is not judged: the passwordunmask element refuses it with
-     * its own message, and counting it as a wrong key would spend a try on a paste.
+     * A key with an unusual space at either end is not judged: it is a paste, not a guess (Q0.3).
      *
-     * @param string $posted The posted key.
-     * @return bool True for a non-empty key without wrapping whitespace that resolves to nothing.
+     * @param string $posted The trimmed key.
+     * @return bool True for a non-empty key that resolves to nothing.
      */
     protected function is_wrong_key(string $posted): bool {
-        if ($posted === '' || $posted !== trim($posted)) {
+        if ($posted === '' || $this->has_unusual_edge($posted)) {
             return false;
         }
-        if (!array_key_exists($posted, $this->resolved)) {
-            $this->resolved[$posted] = groupkey::resolve($this->get_instance(), $posted);
-        }
 
-        return $this->resolved[$posted] === null;
+        return $this->resolve_key($posted) === null;
     }
 
     /**
@@ -334,9 +597,17 @@ class application_form extends dynamic_form {
         }
 
         $mform = $this->_form;
-        $mform->addElement('header', 'detailsheader', get_string('detailsthattravel', 'enrol_apply'));
+        $keyonly = groupkey::required($this->get_instance());
+        $mform->addElement('header', 'detailsheader', get_string(
+            $keyonly ? 'detailsthattravel_required' : 'detailsthattravel',
+            'enrol_apply'
+        ));
         $mform->setExpanded('detailsheader', true);
-        $mform->addElement('static', 'detailsintro', '', get_string('detailsthattravel_desc', 'enrol_apply'));
+        // Nobody reviews a key-only enrolment: the details are kept with it, not sent to anybody.
+        $mform->addElement('static', 'detailsintro', '', get_string(
+            $keyonly ? 'detailsthattravel_desc_required' : 'detailsthattravel_desc',
+            'enrol_apply'
+        ));
 
         $confirmeach = count($editable) <= self::CONFIRM_EACH_UP_TO;
         foreach ($editable as $key) {
@@ -495,14 +766,19 @@ class application_form extends dynamic_form {
 
         /* A key that names no group is refused unless the applicant chose to go on without it,
            and counted: the form answers whether a key exists, and a wrong one costs nothing else.
-           The write door resolves the key again itself; this is the message, not the guard. */
-        /* A key-only form never has the "without the key" element, so formslib exports no such
-           value there and a posted one cannot skip this check. */
+           On a key-only instance a missing key, or one that finds no place or seat, is refused
+           too. The write door resolves the key again itself; this is the message, not the guard.
+           A key-only form never has the "without the key" element, so formslib exports no such
+           value there and a posted one cannot skip this check. Step 2 carries the key as a
+           hidden field, judged the same way. */
         $required = groupkey::required($this->get_instance());
         if ($this->_form->elementExists('groupkey') && empty($data['withoutkey'])) {
-            $posted = is_string($data['groupkey'] ?? null) ? $data['groupkey'] : '';
+            $posted = is_string($data['groupkey'] ?? null) ? trim($data['groupkey']) : '';
+            $keyerror = $this->key_error($posted, $required);
+            if ($keyerror !== null) {
+                $errors['groupkey'] = $keyerror;
+            }
             if ($this->is_wrong_key($posted)) {
-                $errors['groupkey'] = get_string($required ? 'groupkeyinvalid_required' : 'groupkeyinvalid', 'enrol_apply');
                 keyattempts::record_failure((int) $this->get_instance()->id, (int) $USER->id);
             }
         }
@@ -730,6 +1006,10 @@ class application_form extends dynamic_form {
         $data = $this->get_data();
         if ($data) {
             $data = (object) $this->with_posted_extras((array) $data);
+        }
+        // The door compares keys exactly; the form hands it the key as the applicant meant it.
+        if ($data && isset($data->groupkey) && is_string($data->groupkey)) {
+            $data->groupkey = trim($data->groupkey);
         }
         $result = $this->get_plugin()->submit_application($instance, $USER->id, $data);
 
