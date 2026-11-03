@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Mockups for the key-only mode of enrol_apply: the three-mode setting, the enrolment card, the two-step modal, refusals and the teacher's warnings.">
+<title>Group Key Only</title>
+<style>
+:root{
+  --paper:#e9ecef; --card:#fff; --ink:#1d2125; --muted:#6a737b; --rule:#dee2e6; --soft:#f5f6f7;
+  --primary:#0f6cbf; --primary-wash:#e7f0f9; --ok:#357a32; --ok-wash:#e6f3e5;
+  --warn:#8a5a00; --warn-wash:#fcefdc; --bad:#ca3120; --bad-wash:#fbe9e7; --info-wash:#e8f3f8; --info:#0b5b7a;
+  --note:#6b4c00; --note-bg:#fff8e1; --shadow:0 1px 2px rgba(0,0,0,.06),0 8px 24px -12px rgba(0,0,0,.25);
+  --ui:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#15181b; --card:#1f2327; --ink:#e6e8ea; --muted:#9aa3ab; --rule:#353a40; --soft:#272b30;
+    --primary:#5aa2e6; --primary-wash:#1c2d3d; --ok:#7cc77a; --ok-wash:#1d2e1d;
+    --warn:#e8b45c; --warn-wash:#33281a; --bad:#f08a7c; --bad-wash:#3a201d; --info-wash:#17303a; --info:#7cc4e0;
+    --note:#f0d58a; --note-bg:#2e2817;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.5 var(--ui)}
+.wrap{max-width:1080px;margin:0 auto;padding:32px 16px 64px}
+h1{font-size:28px;margin:0 0 4px}
+h2{font-size:20px;margin:48px 0 6px;padding-top:12px;border-top:1px solid var(--rule)}
+h2 .n{font-family:var(--mono);color:var(--muted);font-weight:500;margin-right:8px}
+.lede{color:var(--muted);max-width:760px}
+.why{max-width:760px;color:var(--muted);margin:0 0 16px}
+.why b{color:var(--ink)}
+.row{display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start}
+.row>*{flex:1 1 45%;min-width:18rem}
+.cap{font-size:13px;color:var(--muted);margin:0 0 6px;font-weight:600}
+.note{background:var(--note-bg);color:var(--note);border-radius:6px;padding:8px 12px;font-size:13px;margin-top:10px}
+.note code,.why code,td code{font-family:var(--mono);font-size:12.5px}
+
+/* Moodle-ish chrome */
+.screen{background:var(--card);border:1px solid var(--rule);border-radius:8px;box-shadow:var(--shadow);overflow:hidden}
+.bar{display:flex;align-items:center;gap:8px;padding:8px 14px;background:var(--soft);border-bottom:1px solid var(--rule);font-size:12px;color:var(--muted)}
+.bar i{width:9px;height:9px;border-radius:50%;background:var(--rule);display:inline-block}
+.page{padding:18px 20px}
+.crumb{font-size:13px;color:var(--primary);margin-bottom:6px}
+.ptitle{font-size:22px;font-weight:600;margin:0 0 14px}
+.card{border:1px solid var(--rule);border-radius:6px;padding:14px 16px;margin-bottom:12px}
+.card h4{margin:0 0 8px;font-size:16px}
+.alert{border-radius:6px;padding:10px 14px;font-size:14px;margin:0 0 10px}
+.alert.info{background:var(--info-wash);color:var(--info)}
+.alert.ok{background:var(--ok-wash);color:var(--ok)}
+.alert.warn{background:var(--warn-wash);color:var(--warn)}
+.alert.bad{background:var(--bad-wash);color:var(--bad)}
+.btn{display:inline-block;border-radius:6px;padding:7px 14px;font-size:14px;border:1px solid transparent;font-weight:500}
+.btn.pri{background:var(--primary);color:#fff}
+.btn.sec{background:var(--soft);border-color:var(--rule);color:var(--ink)}
+.hint{font-size:13px;color:var(--muted);margin-top:8px}
+.hint .k{font-family:var(--mono);background:var(--soft);border:1px solid var(--rule);border-radius:4px;padding:0 4px;font-size:12px}
+
+/* Modal */
+.modal{background:var(--card);border:1px solid var(--rule);border-radius:8px;box-shadow:var(--shadow)}
+.mh{display:flex;justify-content:space-between;align-items:center;padding:12px 18px;border-bottom:1px solid var(--rule);font-weight:600;font-size:17px}
+.mh span{color:var(--muted);font-weight:400}
+.mb{padding:16px 18px}
+.mf{display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--rule)}
+.intro{font-size:14px;margin:0 0 14px;color:var(--ink)}
+.fs{border:1px solid var(--rule);border-radius:6px;margin:0 0 14px}
+.fs .lg{padding:8px 12px;font-weight:600;font-size:14px;border-bottom:1px solid var(--rule);background:var(--soft);display:flex;justify-content:space-between;align-items:center}
+.fs .lg .opt{font-weight:400;color:var(--muted);font-size:12px}
+.fs .in{padding:12px}
+.keyfs{border-color:var(--primary);}
+.keyfs .lg{background:var(--primary-wash)}
+.f{display:grid;grid-template-columns:9.5rem 1fr;gap:6px 12px;align-items:start;margin-bottom:10px;font-size:14px}
+.f label{padding-top:6px}
+.req{color:var(--bad);font-size:12px;margin-left:2px}
+.inp{border:1px solid var(--rule);border-radius:6px;padding:6px 10px;background:var(--card);min-height:34px;display:flex;align-items:center;justify-content:space-between;color:var(--ink)}
+.inp.ph{color:var(--muted)}
+.inp.err{border-color:var(--bad);box-shadow:0 0 0 2px var(--bad-wash)}
+.inp.dis{background:var(--soft);color:var(--muted)}
+.inp .eye{font-size:12px;color:var(--primary)}
+.ferr{color:var(--bad);font-size:13px;margin-top:4px}
+.fhelp{color:var(--muted);font-size:12.5px;margin-top:4px}
+.chk{display:flex;gap:8px;align-items:flex-start;font-size:14px;margin-top:8px;padding:10px 12px;border-radius:6px;background:var(--warn-wash);color:var(--ink)}
+.box{width:16px;height:16px;border:1.5px solid var(--muted);border-radius:3px;flex:0 0 16px;margin-top:2px;background:var(--card)}
+.box.on{background:var(--primary);border-color:var(--primary);position:relative}
+.box.on::after{content:"";position:absolute;left:4px;top:1px;width:4px;height:8px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg)}
+.help{display:inline-flex;width:16px;height:16px;border-radius:50%;background:var(--primary);color:#fff;font-size:11px;align-items:center;justify-content:center;margin-left:4px;vertical-align:middle}
+.dim{opacity:.55}
+
+/* Badges, table */
+.badge{display:inline-block;border-radius:10px;padding:1px 9px;font-size:12px;font-weight:600}
+.b-ok{background:var(--ok);color:#fff}
+.b-warn{background:var(--warn-wash);color:var(--warn);border:1px solid var(--warn)}
+.b-key{background:var(--primary-wash);color:var(--primary);border:1px solid var(--primary)}
+.b-pend{background:var(--soft);color:var(--ink);border:1px solid var(--rule)}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--rule);vertical-align:top}
+th{font-size:13px;color:var(--muted);font-weight:600}
+.who b{display:block}
+.who span{color:var(--muted);font-size:12px}
+
+/* Flow */
+.flow{display:grid;grid-template-columns:repeat(auto-fit,minmax(12rem,1fr));gap:12px;margin-top:12px}
+.step{background:var(--card);border:1px solid var(--rule);border-radius:8px;padding:12px 14px;font-size:13.5px}
+.step b{display:block;margin-bottom:4px}
+.step.ok{border-left:4px solid var(--ok)}
+.step.warn{border-left:4px solid var(--warn)}
+.step.bad{border-left:4px solid var(--bad)}
+.step.pend{border-left:4px solid var(--muted)}
+.toc{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px;margin:14px 0 0;padding:0;list-style:none}
+.toc a{color:var(--primary);text-decoration:none}
+.strings td:first-child{font-family:var(--mono);font-size:12px;white-space:nowrap}
+@media (max-width:600px){ .f{grid-template-columns:1fr} .f label{padding-top:0} }
+/* Key-only additions */
+.kb{border:1.5px solid var(--primary);background:var(--primary-wash);border-radius:8px;padding:14px 16px;margin:0 0 16px}
+.kb h5{margin:0 0 4px;font-size:16px;display:flex;align-items:center;gap:8px}
+.kb p{margin:0 0 10px;font-size:13.5px;color:var(--ink)}
+.kb .big{border:1.5px solid var(--rule);background:var(--card);border-radius:6px;padding:9px 12px;font-size:17px;letter-spacing:.02em;min-height:42px;color:var(--ink)}
+.kb .big.ph{color:var(--muted);font-size:15px;letter-spacing:0}
+.kb .big.err{border-color:var(--bad);box-shadow:0 0 0 2px var(--bad-wash)}
+.kb .opt{font-weight:400;font-size:12px;color:var(--muted);margin-left:auto}
+.kb .tag{font-size:11px;font-weight:600;border-radius:10px;padding:1px 8px;background:var(--primary);color:#fff;margin-left:auto}
+.join{display:flex;gap:10px;align-items:center;background:var(--ok-wash);color:var(--ok);border-radius:6px;padding:10px 14px;margin:0 0 14px;font-size:14px}
+.join b{color:var(--ink)}
+.stepper{display:flex;gap:8px;font-size:12px;color:var(--muted);margin:0 0 12px}
+.stepper span{padding:2px 10px;border-radius:10px;border:1px solid var(--rule)}
+.stepper span.on{background:var(--primary);border-color:var(--primary);color:#fff}
+.sel{border:1px solid var(--rule);border-radius:6px;padding:6px 10px;background:var(--card);font-size:14px}
+.opts{border:1px solid var(--rule);border-radius:6px;background:var(--card);margin-top:4px;font-size:13.5px;overflow:hidden}
+.opts div{padding:6px 10px;border-bottom:1px solid var(--rule)}
+.opts div:last-child{border-bottom:0}
+.opts div.on{background:var(--primary-wash);font-weight:600}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Group key only</h1>
+<p class="lede">Mockups for a third mode of <code>enrol_apply</code>: a valid group key enrols at once, and <b>nobody can enrol without one</b>. No application ever waits for a decision. Plan and decisions: <code>group-key-only.md</code> (D1&ndash;D8, accepted 2026-11-03). Each screen shows the accepted option; wording is the proposed English string.</p>
+<ul class="toc">
+  <li><a href="#modes">0 Three modes</a></li><li><a href="#settings">1 Instance settings</a></li><li><a href="#card">2 Enrolment page</a></li>
+  <li><a href="#step1">3 Modal, step 1</a></li><li><a href="#step2">4 Modal, step 2</a></li><li><a href="#refusals">5 Refusals</a></li>
+  <li><a href="#any">6 Key or review</a></li><li><a href="#queue">7 Queue</a></li>
+</ul>
+
+<h2 id="modes"><span class="n">0</span>Three modes, one setting</h2>
+<p class="why">The existing <code>customchar1</code> gains a third value. The first two behave exactly as they do today. In the third, every route that used to fall back to the queue <b>refuses and writes nothing</b> (D1).</p>
+<div class="flow">
+  <div class="step pend"><b>Nothing (<code>''</code>)</b>Every application is reviewed. Keys are ignored.</div>
+  <div class="step warn"><b>Key or review (<code>'any'</code>)</b>Valid key: enrolled now. No key, a wrong key or a full group: an application waits for a decision.</div>
+  <div class="step ok"><b>Key only (<code>'required'</code>)</b>Valid key with a place and a seat: enrolled now. Anything else: refused, nothing written, nobody to decide.</div>
+</div>
+
+<h2 id="settings"><span class="n">1</span>Instance settings (<code>edit_form.php</code>)</h2>
+<p class="why">One select answers "what does a key do here?" (D2). The managers' notice switch appears only in key-only mode and is <b>off by default</b> (D5). The summary of keyed groups turns into a warning whenever this mode would enrol nobody (P1), and says when applications are still waiting (P2) or when <code>enrol_self</code> accepts the same keys (P7).</p>
+<div class="row">
+<div>
+  <p class="cap">The select, open</p>
+  <div class="screen"><div class="bar"><i></i><i></i><i></i> Edit enrolment method</div><div class="page">
+    <div class="f"><label>What a group enrolment key does <span class="help">?</span></label>
+      <div><div class="sel">Key only: a valid key enrols at once, and nobody can enrol without one &#9662;</div>
+      <div class="opts">
+        <div>Nothing: every application is reviewed</div>
+        <div>A valid key enrols at once; without one, the application is reviewed</div>
+        <div class="on">Key only: a valid key enrols at once, and nobody can enrol without one</div>
+      </div></div></div>
+    <div class="f"><label>Tell managers about each enrolment with a key <span class="help">?</span></label><div><div class="sel" style="display:inline-block">No &#9662;</div><div class="fhelp">Shown only in key-only mode. Key-or-review mode always tells them, as today.</div></div></div>
+  </div></div>
+</div>
+<div>
+  <p class="cap">Groups with an enrolment key: warnings</p>
+  <div class="screen"><div class="bar"><i></i><i></i><i></i> Edit enrolment method</div><div class="page">
+    <div class="alert bad"><b>No group in this course has an enrolment key, so nobody can enrol through this method.</b> <span style="text-decoration:underline">Manage groups and their keys</span></div>
+    <div class="alert warn">12 applications are still waiting for a decision. Switching to key only does not decide them; they stay in the queue.</div>
+    <div class="alert info">This course also has self enrolment with group keys: the same keys enrol there without these questions.</div>
+    <div class="note">The three are independent; each appears only when its fact holds. The "every keyed group is full" variant (P1b) takes the red slot when <code>local_groupdist</code> says so.</div>
+  </div></div>
+</div>
+</div>
+
+<h2 id="card"><span class="n">2</span>Course enrolment page (<code>enrol_page_hook</code>)</h2>
+<p class="why">The applicant learns that a key is needed <b>before</b> opening any form (A2). An unnamed key-only instance takes the mode's name (D6), so the card no longer promises a confirmation nobody gives.</p>
+<div class="row">
+<div>
+  <p class="cap">Key only</p>
+  <div class="screen"><div class="bar"><i></i><i></i><i></i> enrol/index.php</div><div class="page">
+    <div class="crumb">Courses / Leadership 2027</div><div class="ptitle">Enrolment options</div>
+    <div class="card"><h4>Enrolment with a group key</h4>
+      <div class="alert info">This course needs the group enrolment key your teacher gave you.</div>
+      <span class="btn pri">Enrol with a key</span></div>
+  </div></div>
+</div>
+<div>
+  <p class="cap">Key or review (today's card, unchanged)</p>
+  <div class="screen"><div class="bar"><i></i><i></i><i></i> enrol/index.php</div><div class="page">
+    <div class="crumb">Courses / Leadership 2027</div><div class="ptitle">Enrolment options</div>
+    <div class="card"><h4>Course enrol confirmation</h4>
+      <div class="alert info">You will be asked to check a few details before your application is submitted for review. Have a group enrolment key? Enter it in the application to join straight away, with no review.</div>
+      <span class="btn pri">Start application</span></div>
+  </div></div>
+</div>
+</div>
+
+<h2 id="step1"><span class="n">3</span>Modal, step 1: the key alone (key only)</h2>
+<p class="why">The key is a block of its own, not a small inline field (D4): tinted panel, heading-sized label, one sentence, a full-width plain <code>text</code> input that trims what is pasted (D3). Only the key is asked here, so a typo costs nothing. Not a moodleform <code>header</code>: the panel is the key element and an intro, styled by their <code>fitem</code> ids under the plugin's own form class.</p>
+<div class="row">
+<div>
+  <p class="cap">Empty</p>
+  <div class="modal">
+    <div class="mh">Enrolment with a group key <span>&times;</span></div>
+    <div class="mb">
+      <div class="stepper"><span class="on">1 Key</span><span>2 Your details</span></div>
+      <p class="intro">Welcome! This course is for the 2027 leadership groups.</p>
+      <div class="kb"><h5>Group enrolment key <span class="tag">Required</span></h5>
+        <p>Enter the key your teacher gave you, exactly as you received it. It decides your group.</p>
+        <div class="big ph">Type or paste your key</div></div>
+    </div>
+    <div class="mf"><span class="btn sec">Cancel</span><span class="btn pri">Continue</span></div>
+  </div>
+</div>
+<div>
+  <p class="cap">Wrong key: no "send for review" offered</p>
+  <div class="modal">
+    <div class="mh">Enrolment with a group key <span>&times;</span></div>
+    <div class="mb">
+      <div class="stepper"><span class="on">1 Key</span><span>2 Your details</span></div>
+      <p class="intro">Welcome! This course is for the 2027 leadership groups.</p>
+      <div class="kb"><h5>Group enrolment key <span class="tag">Required</span></h5>
+        <p>Enter the key your teacher gave you, exactly as you received it. It decides your group.</p>
+        <div class="big err">turmaB-2072</div>
+        <div class="ferr">This key is not valid for this course. Check it and try again.</div></div>
+    </div>
+    <div class="mf"><span class="btn sec">Cancel</span><span class="btn pri">Continue</span></div>
+  </div>
+</div>
+</div>
+<div class="row" style="margin-top:20px">
+<div>
+  <p class="cap">Throttled (five wrong keys in 15 minutes)</p>
+  <div class="modal">
+    <div class="mh">Enrolment with a group key <span>&times;</span></div>
+    <div class="mb">
+      <div class="kb"><h5>Group enrolment key</h5>
+        <div class="alert bad" style="margin:0">Too many incorrect keys. Try again in a few minutes, or ask whoever gave you the key.</div></div>
+    </div>
+    <div class="mf"><span class="btn sec">Close</span></div>
+  </div>
+  <div class="note">No count of tries left (an oracle). Validation errs on this element, so nothing reaches the write door; the door refuses a keyless post anyway.</div>
+</div>
+<div>
+  <p class="cap">No JavaScript (<code>apply.php</code>)</p>
+  <div class="screen"><div class="bar"><i></i><i></i><i></i> enrol/apply/apply.php</div><div class="page">
+    <div class="ptitle">Enrolment with a group key</div>
+    <div class="kb"><h5>Group enrolment key <span class="tag">Required</span></h5>
+      <p>Enter the key your teacher gave you, exactly as you received it. It decides your group.</p>
+      <div class="big ph">Type or paste your key</div></div>
+    <span class="btn pri">Continue</span> <span class="btn sec">Cancel</span>
+  </div></div>
+  <div class="note">Same two steps, same form class; the page draws its own buttons (<code>showbuttons</code>). Q0.2 measures how the modal footer follows the step.</div>
+</div>
+</div>
+
+<h2 id="step2"><span class="n">4</span>Modal, step 2: the group, then the rest</h2>
+<p class="why">A key that resolves makes the form build in full. The applicant sees which group they are joining before committing (G9 allows it: they hold its key). Wording that spoke of a reviewer is replaced (A9), and the comment is addressed to the teacher (D7).</p>
+<div class="row">
+<div>
+  <p class="cap">Step 2</p>
+  <div class="modal">
+    <div class="mh">Enrolment with a group key <span>&times;</span></div>
+    <div class="mb">
+      <div class="stepper"><span>1 Key</span><span class="on">2 Your details</span></div>
+      <div class="join">&#10003; <span>You will join <b>Turma B</b>.</span></div>
+      <div class="fs"><div class="lg">Your details</div>
+        <div class="in">
+          <p class="fhelp" style="margin:0 0 10px">These details are kept with your enrolment. Editing them here does not change your profile.</p>
+          <div class="f"><label>City/town<span class="req">&#9679;</span></label><div class="inp">Bristol</div></div>
+          <div class="f"><label>Institution</label><div class="inp ph">&nbsp;</div></div>
+          <div class="f"><label></label><div style="display:flex;gap:8px;font-size:14px"><span class="box on"></span>These details are up to date</div></div>
+        </div></div>
+      <div class="fs"><div class="lg">About you</div>
+        <div class="in"><div class="f"><label>How much Python have you written?<span class="req">&#9679;</span></label><div class="inp">Some &#9662;</div></div></div></div>
+      <div class="f"><label>A comment for your teacher</label><div class="inp ph" style="min-height:64px">&nbsp;</div></div>
+    </div>
+    <div class="mf"><span class="btn sec">Cancel</span><span class="btn pri">Enrol me</span></div>
+  </div>
+</div>
+<div>
+  <p class="cap">After "Enrol me" (unchanged from K5)</p>
+  <div class="screen"><div class="bar"><i></i><i></i><i></i> course/view.php</div><div class="page">
+    <div class="alert ok">You are enrolled. Your group key was accepted and you have joined Turma B. No review was needed.</div>
+    <div class="ptitle">Leadership 2027</div>
+    <div class="card" style="color:var(--muted);font-size:13px">Course page&hellip;</div>
+  </div></div>
+  <div class="note">The step is derived from the posted key on every request, never from a posted step marker: no request validates a resolving key against a form missing its required fields. Q0.1 measures how step 2 arrives without every required field already shown in error.</div>
+</div>
+</div>
+
+<h2 id="refusals"><span class="n">5</span>Refusals that used to be applications (D1)</h2>
+<p class="why">A valid key that cannot admit is refused in the <b>form</b> where possible, so nothing typed is lost (A6). The door re-checks under <code>lock_admission()</code>; only a race reaches the refusal on the enrolment page.</p>
+<div class="row">
+<div>
+  <p class="cap">Group full, caught by validation (step 1)</p>
+  <div class="modal">
+    <div class="mh">Enrolment with a group key <span>&times;</span></div>
+    <div class="mb">
+      <div class="kb"><h5>Group enrolment key <span class="tag">Required</span></h5>
+        <p>Enter the key your teacher gave you, exactly as you received it. It decides your group.</p>
+        <div class="big err">turmaB-2027</div>
+        <div class="ferr">Your key for Turma B is valid, but that group has no seats left.</div></div>
+    </div>
+    <div class="mf"><span class="btn sec">Cancel</span><span class="btn pri">Continue</span></div>
+  </div>
+</div>
+<div>
+  <p class="cap">Lost the race at the door</p>
+  <div class="screen"><div class="bar"><i></i><i></i><i></i> enrol/index.php</div><div class="page">
+    <div class="alert bad">Your key is valid, but a place could not be confirmed just now. Try again.</div>
+    <div class="ptitle">Enrolment options</div>
+    <div class="card"><h4>Enrolment with a group key</h4><div class="alert info">This course needs the group enrolment key your teacher gave you.</div><span class="btn pri">Enrol with a key</span></div>
+  </div></div>
+  <div class="note">Nothing written: no <code>{user_enrolments}</code> row, no record, no answers. The same page carries "no places left" and "group full" when the race is on those.</div>
+</div>
+</div>
+
+<h2 id="any"><span class="n">6</span>Key or review: the same block, optional</h2>
+<p class="why">This mode keeps one form and K5's escape after a wrong key. It gains the block styling and the plain trimmed input (D3, D4), so the key no longer reads as a small inline field.</p>
+<div class="row">
+<div>
+  <p class="cap">Key or review</p>
+  <div class="modal">
+    <div class="mh">Apply for a place <span>&times;</span></div>
+    <div class="mb">
+      <div class="kb"><h5>Group enrolment key <span class="opt">Optional</span></h5>
+        <p>Have a key for your group? Enter it to be enrolled straight away. Without one, your application is reviewed.</p>
+        <div class="big ph">Type or paste your key</div></div>
+      <div class="fs dim"><div class="lg">Details that travel with your application</div><div class="in" style="font-size:13px;color:var(--muted)">(today's fields)</div></div>
+    </div>
+    <div class="mf"><span class="btn sec">Cancel</span><span class="btn pri">Submit application</span></div>
+  </div>
+</div>
+<div>
+  <p class="cap">Today, for comparison</p>
+  <div class="modal">
+    <div class="mh">Apply for a place <span>&times;</span></div>
+    <div class="mb">
+      <div class="f"><label>Group enrolment key <span class="help">?</span></label><div><div class="inp ph" style="max-width:14rem">Click to enter text &#9998;</div></div></div>
+      <div class="fs dim"><div class="lg">Details that travel with your application</div><div class="in" style="font-size:13px;color:var(--muted)">(today's fields)</div></div>
+    </div>
+    <div class="mf"><span class="btn sec">Cancel</span><span class="btn pri">Submit application</span></div>
+  </div>
+</div>
+</div>
+
+<h2 id="queue"><span class="n">7</span>Queue of a key-only instance (P9)</h2>
+<div class="row">
+<div>
+  <div class="screen"><div class="bar"><i></i><i></i><i></i> enrol/apply/manage.php?id=&hellip;</div><div class="page">
+    <div class="ptitle">Applications</div>
+    <div class="alert info">This method enrols by group key only; nothing waits for a decision.</div>
+    <div class="note">Shown on an empty queue only. Applications left from before a switch to key only still list and can be decided.</div>
+  </div></div>
+</div>
+<div></div>
+</div>
+
+</div>
+</body>
+</html>
