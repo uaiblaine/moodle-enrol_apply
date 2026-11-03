@@ -66,6 +66,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **The Brazilian Portuguese strings say "inscrição", never "matrícula".** Older strings had drifted
+  to "matrícula", which reads as an administrative registration rather than an application someone
+  approves; every enrolment word in `lang/pt_br` now follows core Moodle's "inscrição", and the
+  plugin is named "Inscrição mediante aprovação". No English string changed.
 - **`lang/pt_br` leaves the release package.** The plugins directory accepts English strings only
   in a package; the Brazilian Portuguese pack stays in the repository and reaches sites through
   AMOS.
