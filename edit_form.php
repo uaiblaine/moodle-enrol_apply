@@ -44,7 +44,7 @@ class enrol_apply_edit_form extends moodleform {
      * @return void
      */
     protected function definition() {
-        global $DB;
+        global $DB, $OUTPUT;
 
         $mform = $this->_form;
 
@@ -108,6 +108,23 @@ class enrol_apply_edit_form extends moodleform {
             $this->group_key_summary((int) $instance->courseid, $context)
         );
         $mform->hideIf('groupkeysummary', 'customchar1', 'eq', \enrol_apply\local\groupkey::MODE_OFF);
+
+        /* What key-only mode would do with this course as it stands: enrol nobody, or leave the
+           applications made earlier waiting. Shown only while that mode is selected, because only
+           it is affected; the facts are read whatever mode is saved, so a teacher switching to it
+           is warned before saving. */
+        $warnings = $this->key_only_warnings($instance);
+        if ($warnings !== '') {
+            $mform->addElement('static', 'keyonlywarnings', '', $warnings);
+            $mform->hideIf('keyonlywarnings', 'customchar1', 'neq', \enrol_apply\local\groupkey::MODE_REQUIRED);
+        }
+        // Self enrolment reads the same keys (G1), so they would enrol there without the questions.
+        if ($this->self_enrolment_takes_group_keys((int) $instance->courseid)) {
+            $mform->addElement('static', 'groupkeyselfkeys', '', $OUTPUT->render_from_template('enrol_apply/groupkey_warnings', [
+                'warnings' => [['danger' => false, 'message' => get_string('groupkeyselfkeys', 'enrol_apply')]],
+            ]));
+            $mform->hideIf('groupkeyselfkeys', 'customchar1', 'eq', \enrol_apply\local\groupkey::MODE_OFF);
+        }
 
         // Enrolment duration.
         $mform->addElement('duration', 'enrolperiod', get_string('defaultperiod', 'enrol_apply'), [
@@ -392,6 +409,70 @@ class enrol_apply_edit_form extends moodleform {
             'groups' => $groups,
             'manageurl' => (new moodle_url('/group/index.php', ['id' => $courseid]))->out(false),
         ]);
+    }
+
+    /**
+     * The warnings key-only mode would give for this course and instance as they stand.
+     *
+     * Three facts, each only when it holds: no group of the course carries a key, so the mode
+     * enrols nobody; every key would join a group with no seat left (local_groupdist), so it
+     * enrols nobody now; applications made before still wait, which the mode does not decide.
+     * A key's own group and the instance's list both count, as at the write door (G14).
+     *
+     * @param \stdClass $instance The instance being edited; id 0 for a new one.
+     * @return string The rendered warnings, or '' when there are none.
+     */
+    protected function key_only_warnings(\stdClass $instance): string {
+        global $DB, $OUTPUT;
+
+        $warnings = [];
+        $keyed = \enrol_apply\local\groupkey::summary((int) $instance->courseid);
+        if (!$keyed) {
+            $warnings[] = ['danger' => true, 'message' => get_string('keyonlynokeys', 'enrol_apply')];
+        } else if (\enrol_apply\local\groupseats::available()) {
+            $plugin = enrol_get_plugin('apply');
+            $admitting = array_filter(
+                array_keys($keyed),
+                static fn(int $groupid): bool => !\enrol_apply\local\groupseats::full(
+                    $plugin->key_route_groups($instance, $groupid)
+                )
+            );
+            if (!$admitting) {
+                $warnings[] = ['danger' => true, 'message' => get_string('keyonlyallfull', 'enrol_apply')];
+            }
+        }
+
+        if (!empty($instance->id)) {
+            [$where, $params] = \enrol_apply\local\queue::awaiting_decision_where();
+            $waiting = $DB->count_records_sql(
+                'SELECT COUNT(1) FROM {user_enrolments} ue WHERE ue.enrolid = :enrolid AND ' . implode(' AND ', $where),
+                $params + ['enrolid' => $instance->id]
+            );
+            if ($waiting) {
+                $warnings[] = ['danger' => false, 'message' => get_string('keyonlypending', 'enrol_apply', $waiting)];
+            }
+        }
+
+        return $warnings ? $OUTPUT->render_from_template('enrol_apply/groupkey_warnings', ['warnings' => $warnings]) : '';
+    }
+
+    /**
+     * Whether an enabled self enrolment method of the course accepts group keys too.
+     *
+     * enrol_self reads group keys only when the instance has a key of its own and its "use group
+     * enrolment keys" option on (enrol/self/lib.php, password && customint1).
+     *
+     * @param int $courseid Course id.
+     * @return bool True when the same keys would enrol through self enrolment.
+     */
+    protected function self_enrolment_takes_group_keys(int $courseid): bool {
+        global $DB;
+
+        return $DB->record_exists_select(
+            'enrol',
+            "courseid = :courseid AND enrol = :self AND status = :enabled AND customint1 = 1 AND password <> ''",
+            ['courseid' => $courseid, 'self' => 'self', 'enabled' => ENROL_INSTANCE_ENABLED]
+        );
     }
 
     /**

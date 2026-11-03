@@ -256,6 +256,96 @@ final class edit_form_test extends \advanced_testcase {
     }
 
     /**
+     * The key-only warnings, read on their own.
+     *
+     * @return string Their HTML, or '' when there are none.
+     */
+    private function key_only_warnings(): string {
+        $method = new \ReflectionMethod(\enrol_apply_edit_form::class, 'key_only_warnings');
+        return $method->invoke($this->form(), $this->instance);
+    }
+
+    /**
+     * Key-only mode is warned about a course whose groups carry no key, and about applications
+     * still waiting on the instance, each only while it holds.
+     *
+     * Changes that must make it fail: warning whatever the groups, or not counting the waiting
+     * applications.
+     *
+     * @return void
+     */
+    public function test_key_only_mode_is_warned_about_no_keys_and_waiting_applications(): void {
+        $nokeys = s(get_string('keyonlynokeys', 'enrol_apply'));
+        $this->assertStringContainsString($nokeys, $this->key_only_warnings());
+
+        $this->getDataGenerator()->create_group(['courseid' => $this->course->id, 'name' => 'A', 'enrolmentkey' => 'Sekret-A1']);
+        $this->assertSame('', $this->key_only_warnings(), 'the control: a keyed group, nothing waiting');
+
+        $this->plugin->enrol_user($this->instance, $this->getDataGenerator()->create_user()->id, null, 0, 0, ENROL_USER_SUSPENDED);
+        $this->plugin->enrol_user($this->instance, $this->getDataGenerator()->create_user()->id, null, 0, 0, ENROL_USER_SUSPENDED);
+        $html = $this->key_only_warnings();
+        $this->assertStringContainsString(s(get_string('keyonlypending', 'enrol_apply', 2)), $html);
+        $this->assertStringNotContainsString($nokeys, $html);
+    }
+
+    /**
+     * With local_groupdist, key-only mode is warned when every keyed group is full, and not while
+     * one still has a seat.
+     *
+     * @return void
+     */
+    public function test_key_only_mode_is_warned_when_every_keyed_group_is_full(): void {
+        if (!class_exists('\local_groupdist\seats')) {
+            $this->markTestSkipped('local_groupdist with \local_groupdist\seats is not installed');
+        }
+        \local_groupdist\local\fields::reset_field_cache();
+        \local_groupdist\local\fields::ensure_fields_exist();
+        \local_groupdist\local\fields::reset_field_cache();
+        $this->setAdminUser();
+        $generator = $this->getDataGenerator();
+        $full = $generator->create_group(['courseid' => $this->course->id, 'name' => 'A', 'enrolmentkey' => 'Sekret-A1']);
+        $open = $generator->create_group(['courseid' => $this->course->id, 'name' => 'B', 'enrolmentkey' => 'Sekret-B1']);
+        $handler = \core_group\customfield\group_handler::create();
+        $handler->instance_form_save((object) ['id' => $full->id, 'customfield_groupdist_seats' => 0]);
+        $allfull = s(get_string('keyonlyallfull', 'enrol_apply'));
+
+        $this->assertStringNotContainsString($allfull, $this->key_only_warnings(), 'the control: B has a seat');
+
+        $handler->instance_form_save((object) ['id' => $open->id, 'customfield_groupdist_seats' => 0]);
+        $this->assertStringContainsString($allfull, $this->key_only_warnings());
+    }
+
+    /**
+     * Whether the course's self enrolment accepts the same group keys, which follows enrol_self's
+     * own rule: an enabled instance with a key of its own and group keys switched on.
+     *
+     * Changes that must make it fail: ignoring the group keys option or the instance's key.
+     *
+     * @return void
+     */
+    public function test_self_enrolment_with_group_keys_is_detected(): void {
+        $method = new \ReflectionMethod(\enrol_apply_edit_form::class, 'self_enrolment_takes_group_keys');
+        $self = enrol_get_plugin('self');
+        $id = $self->add_instance($this->course, [
+            'password' => 'course-key',
+            'customint1' => 0,
+            'status' => ENROL_INSTANCE_ENABLED,
+        ]);
+
+        $this->assertFalse($method->invoke($this->form(), (int) $this->course->id), 'the control: group keys off');
+
+        global $DB;
+        $DB->set_field('enrol', 'customint1', 1, ['id' => $id]);
+        $this->assertTrue($method->invoke($this->form(), (int) $this->course->id));
+
+        $DB->set_field('enrol', 'password', '', ['id' => $id]);
+        $this->assertFalse(
+            $method->invoke($this->form(), (int) $this->course->id),
+            'no key of its own: enrol_self ignores group keys'
+        );
+    }
+
+    /**
      * The summary under the option, read on its own rather than from the whole page: the group
      * chooser above it lists every group name too.
      *

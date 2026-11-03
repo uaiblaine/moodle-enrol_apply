@@ -114,6 +114,14 @@ class enrol_apply_renderer extends plugin_renderer_base {
             ]);
         }
 
+        /* An empty queue on a key-only method is the method working, not a fault: nothing there
+           ever waits for a decision. Said only while it is empty, because applications made
+           before the method was switched to key only still list and can still be decided. */
+        $keyonlynotice = '';
+        if ($instance !== null && \enrol_apply\local\groupkey::required($instance) && $table->scope_total() === 0) {
+            $keyonlynotice = get_string('keyonlyqueue', 'enrol_apply');
+        }
+
         /* Which rows of how many are on screen, which table_sql's paging bar never says.
            Read after capture_table(), which is what populates totalrows and currpage.
 
@@ -152,6 +160,8 @@ class enrol_apply_renderer extends plugin_renderer_base {
             'placesnotice' => $placesnotice,
             'hasclosednotice' => $closednotice !== '',
             'closednotice' => $closednotice,
+            'haskeyonlynotice' => $keyonlynotice !== '',
+            'keyonlynotice' => $keyonlynotice,
         ];
 
         /* Unconditional, like core's own core_table/dynamic init, which

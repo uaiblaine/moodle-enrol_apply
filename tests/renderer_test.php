@@ -1930,6 +1930,36 @@ final class renderer_test extends \advanced_testcase {
     }
 
     /**
+     * The empty queue of a key-only method says why it is empty; the same method with an
+     * application left from before says nothing, and so does an empty queue of the other mode.
+     *
+     * Changes that must make it fail: the notice on every key-only queue, or on none.
+     *
+     * @return void
+     */
+    public function test_an_empty_key_only_queue_says_nothing_waits_there(): void {
+        global $DB, $PAGE;
+
+        $url = new \moodle_url('/enrol/apply/manage.php', ['id' => $this->instance->id]);
+        $PAGE->set_url($url);
+        $PAGE->set_context(\context_course::instance($this->course->id));
+        $renderer = $PAGE->get_renderer('enrol_apply');
+        $notice = get_string('keyonlyqueue', 'enrol_apply');
+        $render = function () use ($DB, $renderer, $url): string {
+            $instance = $DB->get_record('enrol', ['id' => $this->instance->id], '*', MUST_EXIST);
+            return $renderer->manage_form(\enrol_apply\table\applications::for_scope((int) $instance->id), $url, $instance);
+        };
+
+        $this->assertStringNotContainsString($notice, $render(), 'the control: the other mode');
+
+        $DB->set_field('enrol', 'customchar1', \enrol_apply\local\groupkey::MODE_REQUIRED, ['id' => $this->instance->id]);
+        $this->assertStringContainsString($notice, $render());
+
+        $this->plugin->enrol_user($this->instance, $this->getDataGenerator()->create_user()->id, null, 0, 0, ENROL_USER_SUSPENDED);
+        $this->assertStringNotContainsString($notice, $render(), 'an application from before still waits');
+    }
+
+    /**
      * The queue says when the APPLICANT limit is reached, and names the deferred backlog.
      *
      * The other exhausted state: the method refuses new applications, and the rows holding it
