@@ -3,7 +3,13 @@
 Status: **decided 2026-11-03.** The owner accepted every recommendation (D1&ndash;D8) and chose
 D5 explicitly: the managers' notice is off by default in this mode, with a switch on the
 instance. **Q0 (spikes) done 2026-11-03**: the two-step form holds on 5.1&ndash;5.3 with one
-change, an in-form "Continue" no-submit button instead of the footer (see Q0). Mockups:
+change, an in-form "Continue" no-submit button instead of the footer (see Q0). **Q1&ndash;Q4
+written 2026-11-03** as four stacked pull requests, #114 (Q1), #115 (Q2), #116 (Q3) and #117 (Q4),
+each with its gate in its description; not merged (the owner's call). Two departures from this
+plan, both found by the mutation sweeps: no KO18 (a key-only form has no "without the key"
+element, so validation needed no clause for it), and KO16 holds the key field's required mark
+rather than the server's refusal, which `key_error()` makes on its own. The README screenshots
+still show the form before Q2 and need recapturing. Mockups:
 [`group-key-only-mockup.html`](group-key-only-mockup.html). Builds on
 [`group-enrolment-key.md`](group-enrolment-key.md) (G1&ndash;G15, stages K0&ndash;K8, all
 merged), whose decisions stand unless this file says otherwise.
@@ -242,6 +248,8 @@ which reads the request and not the form data. One case per process: formslib ca
 
 ### Q1. Server: the mode, the door, the notice, the name
 
+Delivered in #114.
+
 - `groupkey::MODE_REQUIRED = 'required'`, added to `MODES`; `enabled()` true for both key modes;
   a new `required()`. The site default `enrol_apply/groupkeys` gains the option through `MODES`.
 - `edit_form.php`: the select gains the third option and its help; `customchar2` select (D5),
@@ -260,6 +268,8 @@ which reads the request and not the form data. One case per process: formslib ca
 
 ### Q2. The applicant's surfaces
 
+Delivered in #115.
+
 - Card (`enrol_page_hook()`): key-only body and button label.
 - Form: the key block (both modes), `text` and trimming (D3, both modes), the two-step flow in
   key-only mode, the advisory capacity check in `validation()`, the key-only variants of every
@@ -270,11 +280,15 @@ which reads the request and not the form data. One case per process: formslib ca
 
 ### Q3. The teacher's surfaces
 
+Delivered in #116.
+
 - Edit form summary: the P1/P1b warning, the P2 pending-applications warning, the P7 `enrol_self`
   warning, the P3 help text.
 - Queue: the P9 empty-state sentence for a key-only instance.
 
 ### Q4. Documentation
+
+Delivered in #117, without the screenshots.
 
 README (the three modes, who is told, P6, P8), CHANGELOG, the repo `CLAUDE.md` bullet on
 `customchar1` (three values, `customchar2`, and its "compared as typed" sentence, which D3
