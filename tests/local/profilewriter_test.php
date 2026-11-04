@@ -305,6 +305,117 @@ final class profilewriter_test extends \advanced_testcase {
     }
 
     /**
+     * A unique value somebody else took after the application was submitted is not written.
+     *
+     * The form checked the value when it was submitted; the offer is accepted later, from the
+     * session, and core keeps no unique index on {user_info_data}. The city in the same write is
+     * the control that the write itself ran.
+     *
+     * @return void
+     */
+    public function test_a_unique_value_taken_since_the_submission_is_not_written(): void {
+        global $DB;
+
+        $field = $this->create_custom_field('badge');
+        $DB->set_field('user_info_field', 'forceunique', 1, ['id' => $field->id]);
+        $key = fields::custom_key((int) $field->id);
+        set_config('allowedfields', 's_city,' . $key, 'enrol_apply');
+        $DB->set_field(
+            'enrol',
+            'customtext4',
+            fieldset::from_keys(['s_city', $key])->to_json(),
+            ['id' => $this->instance->id]
+        );
+        $this->instance = $DB->get_record('enrol', ['id' => $this->instance->id], '*', MUST_EXIST);
+
+        // Taken by somebody else between the submission and the accepted offer.
+        $other = $this->getDataGenerator()->create_user();
+        $DB->insert_record('user_info_data', (object) [
+            'userid' => $other->id,
+            'fieldid' => $field->id,
+            'data' => 'XYZ',
+            'dataformat' => FORMAT_MOODLE,
+        ]);
+
+        $written = profilewriter::write($this->instance, $this->user, [
+            'city' => 'Belo Horizonte',
+            'profile_field_badge' => 'XYZ',
+        ]);
+
+        $this->assertFalse($DB->record_exists('user_info_data', [
+            'userid' => $this->user->id,
+            'fieldid' => $field->id,
+        ]));
+        $this->assertSame(['s_city'], array_column($written, 'key'));
+        $this->assertSame('Belo Horizonte', $this->stored()->city);
+    }
+
+    /**
+     * A unique value nobody holds is written: the check refuses only a real conflict.
+     *
+     * @return void
+     */
+    public function test_a_unique_value_nobody_holds_is_written(): void {
+        global $DB;
+
+        $field = $this->create_custom_field('badge');
+        $DB->set_field('user_info_field', 'forceunique', 1, ['id' => $field->id]);
+        $key = fields::custom_key((int) $field->id);
+        set_config('allowedfields', $key, 'enrol_apply');
+        $DB->set_field(
+            'enrol',
+            'customtext4',
+            fieldset::from_keys([$key])->to_json(),
+            ['id' => $this->instance->id]
+        );
+        $this->instance = $DB->get_record('enrol', ['id' => $this->instance->id], '*', MUST_EXIST);
+
+        $written = profilewriter::write($this->instance, $this->user, ['profile_field_badge' => 'XYZ']);
+
+        $this->assertSame([$key], array_column($written, 'key'));
+        $this->assertSame('XYZ', $DB->get_field('user_info_data', 'data', [
+            'userid' => $this->user->id,
+            'fieldid' => $field->id,
+        ]));
+    }
+
+    /**
+     * A write left with nothing to write fires no event and reports nothing written.
+     *
+     * @return void
+     */
+    public function test_a_write_whose_only_change_is_refused_fires_nothing(): void {
+        global $DB;
+
+        $field = $this->create_custom_field('badge');
+        $DB->set_field('user_info_field', 'forceunique', 1, ['id' => $field->id]);
+        $key = fields::custom_key((int) $field->id);
+        set_config('allowedfields', $key, 'enrol_apply');
+        $DB->set_field(
+            'enrol',
+            'customtext4',
+            fieldset::from_keys([$key])->to_json(),
+            ['id' => $this->instance->id]
+        );
+        $this->instance = $DB->get_record('enrol', ['id' => $this->instance->id], '*', MUST_EXIST);
+        $other = $this->getDataGenerator()->create_user();
+        $DB->insert_record('user_info_data', (object) [
+            'userid' => $other->id,
+            'fieldid' => $field->id,
+            'data' => 'XYZ',
+            'dataformat' => FORMAT_MOODLE,
+        ]);
+
+        $sink = $this->redirectEvents();
+        $written = profilewriter::write($this->instance, $this->user, ['profile_field_badge' => 'XYZ']);
+        $events = array_filter($sink->get_events(), static fn($event): bool => $event instanceof \core\event\user_updated);
+        $sink->close();
+
+        $this->assertSame([], $written);
+        $this->assertCount(0, $events);
+    }
+
+    /**
      * Nothing changed means nothing offered, which is what hides the button.
      *
      * @return void

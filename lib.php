@@ -497,6 +497,8 @@ class enrol_apply_plugin extends enrol_plugin {
      * @return \enrol_apply\local\application_result What was written, or why nothing was.
      */
     protected function apply_or_admit(stdClass $instance, int $userid, stdClass $data) {
+        global $DB;
+
         $required = \enrol_apply\local\groupkey::required($instance);
 
         // Only a string is a key; anything else a caller posts counts as none.
@@ -531,6 +533,22 @@ class enrol_apply_plugin extends enrol_plugin {
         }
 
         try {
+            /* The key again, now that the locks are held: taking them can wait seconds, and a key
+               rotated on the group's page meanwhile must not admit anybody. The group page takes
+               none of these locks, so this narrows the gap to the write rather than closing it.
+               A key that now names no group, or another one, reads as a wrong key. The method is
+               read again too, so the option switched off meanwhile is seen. */
+            $current = $DB->get_record('enrol', ['id' => (int) $instance->id]);
+            if (!$current || \enrol_apply\local\groupkey::resolve($current, $posted) !== $keygroupid) {
+                if ($required) {
+                    return \enrol_apply\local\application_result::refused(
+                        get_string('groupkeyinvalid_required', 'enrol_apply')
+                    );
+                }
+                $this->apply($instance, $userid, $data);
+                return \enrol_apply\local\application_result::created();
+            }
+
             /* Both capacities are read under the locks, so two key holders cannot both take the
                last place or the last seat: the method's lock serialises every admission on it,
                and the group locks those of any method into the same group. */

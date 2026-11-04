@@ -30,6 +30,7 @@ use core_customfield\shared;
 use enrol_apply\customfield\application_handler;
 use enrol_apply\local\answers;
 use enrol_apply\local\conditions;
+use enrol_apply\local\fields;
 use enrol_apply\local\submission;
 
 /**
@@ -201,7 +202,17 @@ class restore_enrol_apply_plugin extends restore_enrol_plugin {
         ] + $this->key_fields($data)));
 
         if (isset($data->userinfodata) && is_string($data->userinfodata)) {
-            submission::write_answers($id, submission::parse_envelope($data->userinfodata));
+            $entries = [];
+            foreach (submission::parse_envelope($data->userinfodata) as $entry) {
+                if (!is_array($entry) || !is_scalar($entry['key'] ?? null)) {
+                    continue;
+                }
+                $key = $this->restored_answer_key((string) $entry['key']);
+                if ($key !== null) {
+                    $entries[] = ['key' => $key] + $entry;
+                }
+            }
+            submission::write_answers($id, $entries);
         }
 
         return $id;
@@ -229,9 +240,14 @@ class restore_enrol_apply_plugin extends restore_enrol_plugin {
             return;
         }
 
+        $key = is_scalar($data->fieldkey ?? null) ? $this->restored_answer_key((string) $data->fieldkey) : null;
+        if ($key === null) {
+            return;
+        }
+
         $record = submission::answer_record(
             $submissionid,
-            $data->fieldkey ?? '',
+            $key,
             $data->label ?? '',
             $data->value ?? '',
             (int) ($data->sortorder ?? 0)
@@ -244,6 +260,40 @@ class restore_enrol_apply_plugin extends restore_enrol_plugin {
         }
 
         $DB->insert_record(submission::ANSWER_TABLE, $record);
+    }
+
+    /**
+     * The key a frozen answer takes in the restored course, or null when it must not be kept.
+     *
+     * Both kinds of id in a key are site-local, and readers act on them. An a_<id> key is what
+     * the report's per-question columns and filters look up, and this restore gives every one of
+     * the instance's own questions a new id, so the key follows the mapping; an unmapped one keeps
+     * its id only on the same site, where it names a shared question as {@see restored_field_id()}
+     * says, and is dropped elsewhere, where the same id may name another question. A c_<id> key is
+     * what the report's masking judges against that profile field's visibility on THIS site; on
+     * another site the id names an unrelated field, possibly one everybody may see, and the
+     * archive does not say which field it was, so the answer is dropped rather than shown under
+     * a rule that was never its own. Standard s_ keys name {user} columns and travel as they are.
+     *
+     * @param string $key Field key as the archive carries it.
+     * @return string|null The key to store, or null to skip the answer.
+     */
+    protected function restored_answer_key(string $key): ?string {
+        if (answers::is_answer($key)) {
+            $oldid = substr($key, strlen(answers::SOURCE_ANSWER));
+            $newid = ctype_digit($oldid) ? $this->restored_field_id((int) $oldid) : 0;
+            if (!$newid) {
+                $this->step->log('Answer to application field ' . s($key) . ' not restored', backup::LOG_WARNING);
+                return null;
+            }
+            return answers::key($newid);
+        }
+        if (str_starts_with($key, fields::SOURCE_CUSTOM) && !$this->task->is_samesite()) {
+            $this->step->log('Answer to profile field ' . s($key) . ' from another site not restored', backup::LOG_WARNING);
+            return null;
+        }
+
+        return $key;
     }
 
     /**

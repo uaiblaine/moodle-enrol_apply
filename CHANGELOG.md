@@ -107,6 +107,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **A unique profile value is checked again when the offer is accepted (SEC-01).** The
+  application form validates each custom profile field when it is submitted, but the offer to save
+  the answers to the profile is accepted later, on `profile.php`, from the session. A value the
+  field requires to be unique could be taken by somebody else in between, and core keeps no unique
+  index on `{user_info_data}`, so it was written as a duplicate. `profilewriter::write()` now asks
+  each field's type again (`customfield::errors()`), leaves a refused field out of what it writes
+  and reports, and fires no event when nothing was written. Mutation gates `SR1`-`SR3`.
+- **A group key is read again once the admission locks are held (SEC-02).** The key was resolved
+  before `lock_admission()`, which can wait seconds a lock, so a key rotated or moved, a group
+  deleted or the option switched off during that wait still admitted. It is now resolved again
+  under the locks, against the method read again; a key that no longer names the same group reads
+  as a wrong one. The group page takes none of these locks, so this narrows the window rather than
+  closing it, and the README now says so. Gates `SR4`, `SR4b`.
+- **Restored answers keep pointing at the right question, and nothing at the wrong field
+  (SEC-03, SEC-04).** Answer rows were restored with their archived keys. An `a_<id>` key named
+  the source course's question, so the restored course's report columns and filters for its
+  questions came back empty on every restore; it now follows the restored question, an unmapped
+  one is kept only on the same site, where it can name a shared question. A `c_<id>` key from
+  another site named whatever profile field has that id here, and the report's masking judged the
+  frozen value by that unrelated field's visibility, so a value hidden on the source site could be
+  shown to a teacher; such answers are no longer restored. Old archives' envelopes follow the same
+  rule. Gates `SR5`-`SR8`.
 - **The page form posts back to a clean url.** Without JavaScript, `apply.php` handed its
   `moodle_url` to the form, which escaped it twice, so the browser posted to
   `apply.php?instance=N&amp;id=M` and the course id arrived as `amp;id`. Nothing read that second

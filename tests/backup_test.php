@@ -995,6 +995,181 @@ final class backup_test extends \advanced_testcase {
     }
 
     /**
+     * Give the application's instance a question of its own, answered on the application.
+     *
+     * @param \stdClass $instance The apply instance.
+     * @param \stdClass $user The applicant.
+     * @return int Id of the question in {customfield_field}.
+     */
+    protected function answer_a_question_of_the_instance(\stdClass $instance, \stdClass $user): int {
+        global $DB;
+
+        $generator = $this->getDataGenerator()->get_plugin_generator('core_customfield');
+        $category = $generator->create_category([
+            'name' => 'About you', 'component' => 'enrol_apply', 'area' => 'application', 'itemid' => $instance->id,
+        ]);
+        $field = $generator->create_field([
+            'categoryid' => $category->get('id'), 'type' => 'text', 'shortname' => 'motive', 'name' => 'Motive',
+        ]);
+        $recordid = (int) $DB->get_field('enrol_apply_submission', 'id', ['userid' => $user->id], MUST_EXIST);
+        $DB->insert_record(submission::ANSWER_TABLE, (object) [
+            'submissionid' => $recordid,
+            'fieldkey' => \enrol_apply\local\answers::key((int) $field->get('id')),
+            'label' => 'Motive',
+            'value' => 'Curiosity',
+            'sortorder' => 5,
+        ]);
+
+        return (int) $field->get('id');
+    }
+
+    /**
+     * The id of the question the restored instance asks under a shortname.
+     *
+     * @param int $courseid Restored course id.
+     * @param string $shortname Question shortname.
+     * @return int Id in {customfield_field}.
+     */
+    protected function restored_question(int $courseid, string $shortname): int {
+        global $DB;
+
+        $enrolid = (int) $DB->get_field('enrol', 'id', ['courseid' => $courseid, 'enrol' => 'apply'], MUST_EXIST);
+
+        return (int) $DB->get_field_sql(
+            "SELECT f.id
+               FROM {customfield_field} f
+               JOIN {customfield_category} c ON c.id = f.categoryid
+              WHERE c.component = 'enrol_apply' AND c.area = 'application' AND c.itemid = :enrolid
+                    AND f.shortname = :shortname",
+            ['enrolid' => $enrolid, 'shortname' => $shortname],
+            MUST_EXIST
+        );
+    }
+
+    /**
+     * An answer to one of the instance's own questions follows the question's new id.
+     *
+     * Every restore recreates the instance's questions, so their ids change even on the same
+     * site; the report's per-question columns look answers up by the new key and would otherwise
+     * find nothing. a_7 names no question of the instance, so on the same site it may name a
+     * shared one and keeps its id: the control that only a mapped key moves.
+     *
+     * @return void
+     */
+    public function test_an_answer_follows_its_question_to_the_restored_instance(): void {
+        [$course, $instance, $user] = $this->create_course_with_application();
+        $oldid = $this->answer_a_question_of_the_instance($instance, $user);
+
+        $newcourseid = $this->backup_and_restore($course, true);
+
+        $newid = $this->restored_question($newcourseid, 'motive');
+        $this->assertNotSame($oldid, $newid, 'the premise: the question was given a new id');
+        $snapshot = array_column(submission::read_snapshot((int) $this->restored_record($newcourseid)->id), 'value', 'key');
+        $this->assertSame(
+            ['s_city' => 'Recife', 'a_7' => 'R&D <2>', 'a_' . $newid => 'Curiosity'],
+            $snapshot
+        );
+    }
+
+    /**
+     * From another site, an answer whose key names a site-local id it cannot map is not restored.
+     *
+     * A c_ key is masked by the visibility of the profile field with that id on the restoring
+     * site, which on another site is an unrelated field, so a value hidden where it was given could
+     * be shown. An unmapped a_ key there may name another question. The standard field and the
+     * answer to the instance's own, remapped, question are the control that the record itself
+     * was restored.
+     *
+     * @return void
+     */
+    public function test_answers_naming_another_sites_ids_are_not_restored(): void {
+        global $DB;
+
+        [$course, $instance, $user] = $this->create_course_with_application();
+        $this->answer_a_question_of_the_instance($instance, $user);
+        $profilefield = $this->getDataGenerator()->create_custom_profile_field([
+            'datatype' => 'text', 'shortname' => 'secret', 'name' => 'Secret', 'visible' => PROFILE_VISIBLE_ALL,
+        ]);
+        $recordid = (int) $DB->get_field('enrol_apply_submission', 'id', ['userid' => $user->id], MUST_EXIST);
+        $DB->insert_record(submission::ANSWER_TABLE, (object) [
+            'submissionid' => $recordid,
+            'fieldkey' => 'c_' . $profilefield->id,
+            'label' => 'Secret',
+            'value' => 'hidden where it was given',
+            'sortorder' => 6,
+        ]);
+
+        $newcourseid = $this->backup_and_restore($course, true, true);
+
+        $newid = $this->restored_question($newcourseid, 'motive');
+        $snapshot = array_column(submission::read_snapshot((int) $this->restored_record($newcourseid)->id), 'value', 'key');
+        $this->assertSame(['s_city' => 'Recife', 'a_' . $newid => 'Curiosity'], $snapshot);
+    }
+
+    /**
+     * On the same site a profile field id still names the same field, so its answer is kept.
+     *
+     * @return void
+     */
+    public function test_a_profile_field_answer_is_kept_on_the_same_site(): void {
+        global $DB;
+
+        [$course, , $user] = $this->create_course_with_application();
+        $profilefield = $this->getDataGenerator()->create_custom_profile_field([
+            'datatype' => 'text', 'shortname' => 'secret', 'name' => 'Secret',
+        ]);
+        $recordid = (int) $DB->get_field('enrol_apply_submission', 'id', ['userid' => $user->id], MUST_EXIST);
+        $DB->insert_record(submission::ANSWER_TABLE, (object) [
+            'submissionid' => $recordid,
+            'fieldkey' => 'c_' . $profilefield->id,
+            'label' => 'Secret',
+            'value' => 'Kept',
+            'sortorder' => 6,
+        ]);
+
+        $newcourseid = $this->backup_and_restore($course, true);
+
+        $snapshot = array_column(submission::read_snapshot((int) $this->restored_record($newcourseid)->id), 'value', 'key');
+        $this->assertSame('Kept', $snapshot['c_' . $profilefield->id] ?? null);
+    }
+
+    /**
+     * An old archive's envelope goes through the same key rule as answer rows.
+     *
+     * @return void
+     */
+    public function test_an_old_envelope_from_another_site_drops_what_it_cannot_map(): void {
+        global $DB;
+
+        [$course, , $user] = $this->create_course_with_application();
+        $envelope = json_encode([
+            'version' => submission::SNAPSHOT_VERSION,
+            'fields' => [
+                ['key' => 'a_7', 'label' => 'Why this course?', 'value' => 'To learn'],
+                ['key' => 'c_3', 'label' => 'Secret', 'value' => 'hidden where it was given'],
+                ['key' => 's_city', 'label' => 'City', 'value' => 'Olinda'],
+            ],
+        ]);
+        $downgrade = function (string $basepath) use ($envelope): void {
+            $path = $basepath . '/course/enrolments.xml';
+            $xml = preg_replace(
+                '#<answers>.*?</answers>#s',
+                '<userinfodata>' . htmlspecialchars($envelope, ENT_COMPAT | ENT_XML1) . '</userinfodata>',
+                file_get_contents($path)
+            );
+            file_put_contents($path, $xml);
+        };
+
+        $newcourseid = $this->backup_and_restore($course, true, true, null, backup::ENROL_ALWAYS, $downgrade);
+
+        $row = $DB->get_record('enrol_apply_submission', ['courseid' => $newcourseid, 'userid' => $user->id], '*', MUST_EXIST);
+        $this->assertSame(
+            [['key' => 's_city', 'label' => 'City', 'value' => 'Olinda']],
+            submission::read_snapshot((int) $row->id)
+        );
+    }
+
+    /**
      * Set up a course with an apply instance, one configured group and one application.
      *
      * @param \stdClass|null $decider User to record as having decided the application, null for none.

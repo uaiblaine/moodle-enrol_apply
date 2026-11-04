@@ -276,6 +276,27 @@ class customfield {
     }
 
     /**
+     * What the type's own validation says is wrong with a submission now, keyed by element name.
+     *
+     * The rules the profile page enforces live only in edit_validate_field(): core keeps no
+     * unique index on {user_info_data}, so a forceunique value is unique only while every write
+     * asks first. The application form asks when it is submitted; a write that happens later,
+     * from an offer accepted on profile.php, must ask again, since another user may have taken
+     * the value in between.
+     *
+     * @param \profile_field_base $field The field, from field() with the user's id.
+     * @param int $userid User the value would be written to.
+     * @param array $submitted Submitted values keyed by element name.
+     * @return array Error messages keyed by element name; empty when the value may be written.
+     */
+    public static function errors(\profile_field_base $field, int $userid, array $submitted): array {
+        $own = self::own_values($field, $submitted);
+        $usernew = (object) (['id' => $userid] + $own);
+
+        return (array) self::with_request($own, static fn() => $field->edit_validate_field($usernew));
+    }
+
+    /**
      * Run a call with a field's submitted values in the request, then put the request back.
      *
      * A type is written against core's profile page, where every element it draws arrives in

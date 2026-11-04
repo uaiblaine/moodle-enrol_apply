@@ -185,8 +185,10 @@ guess keys without limit. On a key-only method that also means the form cannot b
 until then. Several sessions of one account are counted together: each request checks the key
 under a lock on the applicant and the method, and one that cannot obtain it within a few seconds
 is treated as locked. The count is per account: on a site where anybody may create an account, it
-does not stop somebody with many accounts, so keys there should not be easy to guess. The key is read again
-inside the lock that writes the enrolment, so rotating a key on the group's page stops it at once.
+does not stop somebody with many accounts, so keys there should not be easy to guess. The key is read
+from the database when the application is written, and again once the locks that admit it are held,
+so a key rotated on the group's page stops admitting from then on; only a request already past that
+second read can still be admitted with the old key.
 
 Who is told what:
 
@@ -408,7 +410,9 @@ the method.
 
 An approval also writes core rows: a role assignment and group memberships stamped with
 `enrol_apply`, and the enrolment itself. The plugin never writes the applicant's profile unless
-the site allows it (`enrol_apply/allowprofilewrite`) and the applicant accepts the offer.
+the site allows it (`enrol_apply/allowprofilewrite`) and the applicant accepts the offer. A custom
+profile field is checked again by its own type when the offer is accepted, so a value that must be
+unique and was taken by somebody else in the meantime is not written.
 
 ## Privacy
 

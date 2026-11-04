@@ -27,6 +27,7 @@ defined('MOODLE_INTERNAL') || die();
 global $CFG;
 // At file scope so the CoversClass target below resolves when PHPUnit reads the attribute.
 require_once($CFG->dirroot . '/enrol/apply/lib.php');
+require_once($CFG->dirroot . '/enrol/apply/tests/fixtures/key_changing_plugin.php');
 
 /**
  * Tests for the write door of a key-only instance (docs/design/group-key-only.md, Q1).
@@ -394,6 +395,28 @@ final class key_only_test extends \advanced_testcase {
         $this->assertTrue($result->is_refusal());
         $this->assertSame(get_string('keyseatunconfirmed', 'enrol_apply'), $result->reason());
         $this->assert_nothing_written($applicant, $messages);
+    }
+
+    /**
+     * A key that stops naming its group while the admission locks are taken is refused as a
+     * wrong key, and nothing is written. The control is the same plugin changing nothing.
+     *
+     * @return void
+     */
+    public function test_a_key_rotated_while_the_locks_are_taken_refuses(): void {
+        $this->plugin = key_changing_plugin::making('rotated', $this->keyed, $this->listed);
+        $applicant = $this->getDataGenerator()->create_user();
+
+        [$result, $messages] = $this->submit($applicant, ['groupkey' => self::KEY]);
+
+        $this->assertTrue($result->is_refusal());
+        $this->assertSame(get_string('groupkeyinvalid_required', 'enrol_apply'), $result->reason());
+        $this->assert_nothing_written($applicant, $messages);
+
+        $this->plugin = key_changing_plugin::making('none', $this->keyed, $this->listed);
+        $control = $this->getDataGenerator()->create_user();
+        [$result] = $this->submit($control, ['groupkey' => self::KEY . '-new']);
+        $this->assertTrue($result->was_admitted());
     }
 
     /**

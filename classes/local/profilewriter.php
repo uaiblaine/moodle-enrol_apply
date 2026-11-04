@@ -99,11 +99,21 @@ class profilewriter {
         $usernew = (object) ['id' => $user->id];
         $wrotestandard = false;
         $custom = [];
+        $written = [];
         foreach ($changes as $change) {
             if (!fields::is_standard($change['key'])) {
-                $custom[] = $change;
+                /* Asked again: the form validated this value when the application was submitted,
+                   and the offer may be accepted much later, after another user took a value the
+                   field requires to be unique. A change its type now refuses is not written and
+                   not reported as written. */
+                $field = customfield::field((int) fields::key_target($change['key']), (int) $user->id);
+                if ($field !== null && !customfield::errors($field, (int) $user->id, $change['values'])) {
+                    $custom[] = [$field, $change];
+                    $written[] = $change;
+                }
                 continue;
             }
+            $written[] = $change;
             foreach ($change['values'] as $name => $value) {
                 $usernew->{$name} = $value;
             }
@@ -128,16 +138,16 @@ class profilewriter {
                 user_update_user($usernew, false, false);
             }
         }
-        foreach ($custom as $change) {
-            $field = customfield::field((int) fields::key_target($change['key']), (int) $user->id);
-            if ($field !== null) {
-                customfield::save($field, (int) $user->id, $change['values']);
-            }
+        foreach ($custom as [$field, $change]) {
+            customfield::save($field, (int) $user->id, $change['values']);
+        }
+        if (!$written) {
+            return [];
         }
 
         /* Ids only, as core's own profile edit fires it: no field value goes into the log. */
         \core\event\user_updated::create_from_userid($user->id)->trigger();
 
-        return $changes;
+        return $written;
     }
 }
