@@ -99,6 +99,8 @@ classes/local/applicantstate.php  what an applicant is told about their OWN appl
 classes/local/applications.php  mentee lookup shared by the queue
 classes/local/capacity.php   the two capacity numbers, and how many deferrals hold one
 classes/local/submission.php the durable application record: constants, writes, reads
+classes/local/keyattempts.php  the wrong-key throttle and its per-applicant request lock
+classes/local/groupvisibility.php  whether a reader may be told a group's name (core's visibility rule)
 classes/observers.php        course_deleted, orphan cleanup for the plugin-disabled case
 classes/privacy/provider.php full provider: three personal-data tables, two personal-data roles
 classes/task/                sync_enrolments, send_expiry_notifications, purge_submissions (scheduled);
@@ -640,6 +642,25 @@ backup/                      group mappings, comments and the durable trail, see
   anything else**: no key, a wrong key, no place, a full group or a lock not obtained returns
   `application_result::refused()` from `apply_or_admit()` with no enrolment, no record and no
   message, and `withoutkey` means nothing there. Gates `KO1`-`KO17`, `KO19`.
+
+  **The wrong-key count is read and written under a per-applicant lock held for the whole
+  request.** `keyattempts::locked()` takes `enrol_apply_keyattempts` on `<instanceid>_<userid>` at
+  its first call and keeps it to the end of the request (`release_all()`, a shutdown function), so
+  parallel sessions of one account cannot each read a count under the limit; a static registry,
+  not the factory, makes later calls of the same request reuse it, because core's factories differ
+  on re-entry in one process. A lock not obtained in time reads as locked (fail closed), and
+  `record_failure()` then writes nothing. Tests that drive the form call `release_all()` between
+  simulated requests and in `tearDown()`, and `tests/fixtures/fake_lock_factory.php` stands in for
+  another request holding the lock. Gates `KA4`-`KA8`.
+
+  **Every group name shown to anybody but the applicant who typed its key goes through
+  `groupvisibility::visible_to()`**, which mirrors `groups_get_all_groups()`'s visibility clause for
+  an explicit reader (a notice is judged per recipient, not for `$USER`): the review chip, the
+  managers' notice, `groupkey::summary()` on the instance form, the seats warning after an approval
+  (`groupseats::overfilled_named_to()`) and the report's `keygroup` column,
+  which selects the group's visibility for it and is not sortable. Stock archetypes holding the
+  plugin's capabilities all hold `moodle/course:viewhiddengroups`, so its tests use a custom role.
+  Gates `GV1`-`GV6`, `GK10`, `GK11`, `KS20`-`KS28`.
 
 - **The key-only form comes in two steps, and the step is derived from the posted key on every
   request, never from a posted step marker.** `application_form::key_step()` builds step 2 only

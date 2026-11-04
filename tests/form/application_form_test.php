@@ -38,6 +38,7 @@ defined('MOODLE_INTERNAL') || die();
 global $CFG;
 require_once($CFG->dirroot . '/enrol/apply/tests/fixtures/testable_application_form.php');
 require_once($CFG->dirroot . '/enrol/apply/tests/fixtures/municipality_field.php');
+require_once($CFG->dirroot . '/enrol/apply/tests/fixtures/fake_lock_factory.php');
 
 /**
  * Tests for the application form and the gates it applies.
@@ -153,6 +154,16 @@ final class application_form_test extends \advanced_testcase {
 
         $this->applicant = $this->getDataGenerator()->create_user(['city' => 'Campinas']);
         $this->setUser($this->applicant);
+    }
+
+    /**
+     * End the simulated request: the throttle's lock is held until then.
+     *
+     * @return void
+     */
+    protected function tearDown(): void {
+        keyattempts::release_all();
+        parent::tearDown();
     }
 
     /**
@@ -1118,6 +1129,80 @@ final class application_form_test extends \advanced_testcase {
         $control = $this->submit_through_the_modal([]);
         $sink->close();
         $this->assertTrue($control['submitted'], 'the control: the other mode still takes the application');
+    }
+
+    /**
+     * While another request of the applicant holds the throttle's lock, the key field gives way to
+     * the locked sentence, and a key-only form refuses even a valid key.
+     *
+     * The control is the same valid key once the lock is free, which enrols.
+     *
+     * Changes that must make it fail: a lock not obtained read as unlocked, or the lock never
+     * asked for.
+     *
+     * @return void
+     */
+    public function test_a_valid_key_is_refused_while_another_request_holds_the_lock(): void {
+        global $DB;
+
+        $this->accept_group_keys(groupkey::MODE_REQUIRED);
+        \enrol_apply\fake_lock_factory::install([keyattempts::LOCK_TYPE]);
+
+        $result = $this->submit_through_the_modal(['groupkey' => 'Turma-B-2027']);
+
+        $this->assertFalse($result['submitted']);
+        $this->assertStringContainsString(get_string('groupkeylocked_required', 'enrol_apply'), $result['html']);
+        $this->assertStringNotContainsString('name="groupkey"', $result['html']);
+        $this->assertFalse($DB->record_exists('user_enrolments', ['userid' => $this->applicant->id]));
+
+        keyattempts::release_all();
+        \enrol_apply\fake_lock_factory::$refused = [];
+        $sink = $this->redirectMessages();
+        $control = $this->submit_through_the_modal(['groupkey' => 'Turma-B-2027']);
+        $sink->close();
+        $this->assertTrue($control['submitted'], 'the control: with the lock free the same key enrols');
+    }
+
+    /**
+     * On the mode that also takes applications the field gives way too, while the lock is held
+     * elsewhere.
+     *
+     * @return void
+     */
+    public function test_the_key_field_gives_way_while_another_request_holds_the_lock(): void {
+        $this->accept_group_keys();
+        \enrol_apply\fake_lock_factory::install([keyattempts::LOCK_TYPE]);
+
+        $names = $this->element_names($this->make_form());
+        $this->assertNotContains('groupkey', $names);
+        $this->assertContains('groupkeylocked', $names);
+
+        keyattempts::release_all();
+        \enrol_apply\fake_lock_factory::$refused = [];
+        $this->assertContains('groupkey', $this->element_names($this->make_form()), 'the control: the lock free');
+    }
+
+    /**
+     * One Continue takes the applicant's lock once, on this instance and applicant, although the
+     * web service builds the form twice and the throttle is read and written more than once.
+     *
+     * Changes that must make it fail: the lock taken on every call instead of once per request.
+     *
+     * @return void
+     */
+    public function test_one_continue_takes_the_lock_once(): void {
+        $this->accept_only_group_keys();
+        $this->settle_the_no_submit_cache();
+        keyattempts::release_all();
+        \enrol_apply\fake_lock_factory::install();
+
+        $result = $this->submit_through_the_modal(['groupkey' => 'Turma-Z-2027', 'keycontinue' => 'Continue']);
+
+        $this->assertStringContainsString(s(get_string('groupkeyinvalid_required', 'enrol_apply')), $result['html']);
+        $this->assertSame(
+            [$this->instance->id . '_' . $this->applicant->id],
+            \enrol_apply\fake_lock_factory::requests_for(keyattempts::LOCK_TYPE)
+        );
     }
 
     /**

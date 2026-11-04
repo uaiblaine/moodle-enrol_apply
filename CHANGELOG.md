@@ -107,6 +107,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **The wrong-key limit holds across several sessions of one account.** The count was read and
+  written with no lock, so parallel logins of the same account each read a count under the limit
+  and got a real answer, and far more than five keys fitted in the 15 minutes. The first read of a
+  request now takes a core lock on the applicant and the method (`enrol_apply_keyattempts`) and
+  keeps it until the request ends, so the count is read and written by one request at a time; a
+  request that cannot obtain it within 5 seconds reads as locked (the field gives way to the
+  locked sentence, and a key-only form cannot be sent). Mutation gates `KA4`-`KA8`. Version
+  2026110303 (no upgrade step).
+- **Group names follow core's group visibility.** The review page's key chip, the managers' notice
+  of an admission, the instance form's list of keyed groups, the warning after an approval takes a
+  group past its seats and the reports' **Group of the enrolment key** read `{groups}` directly and named a group to readers core hides it from: a
+  group whose visibility is not "visible to everyone", shown to somebody without
+  `moodle/course:viewhiddengroups` who is not a member (or, for "hidden", to anybody without it).
+  One helper, `\enrol_apply\local\groupvisibility`, now mirrors `groups_get_all_groups()` and
+  judges each reader, each recipient of the notice included. Where it says no, the chip and the
+  notice say the outcome without the group, the instance form leaves the group out (and the note
+  naming it as the one that admits instead), the seats warning is not shown for it, and the report
+  cell is empty. The report column is
+  no longer sortable, since sorting by name would place a withheld cell among the names around it.
+  Mutation gates `GV1`-`GV6`, `GK10`, `GK11`, `KS20`-`KS28`.
 - **Custom profile fields are drawn, shown and saved by their own type.** The application form
   drew every custom field as a text box over its stored column, showed the column as it was and
   wrote back what was typed over it, which held for the text type only. A type with a shape of its

@@ -129,16 +129,26 @@ class groupkey {
      *
      * The keys themselves are never returned. Each group says whether its key is shadowed by
      * a lower id carrying the same one, and whether the key has wrapping whitespace, which
-     * nobody can type into the application form.
+     * nobody can type into the application form. Every keyed group is returned, so the facts
+     * about the course's keys stay true, but a group the reader may not see carries no name
+     * ({@see groupvisibility::visible_to()}).
      *
      * @param int $courseid Course id.
-     * @return array Group id => object with 'id', 'name' (unformatted), 'shadowedby' (the
-     *     id of the group that admits instead, or null) and 'untypable' (bool), in id order.
+     * @param int|null $readerid The user the names are for; null for the current user.
+     * @return array Group id => object with 'id', 'name' (unformatted, or null when the reader may
+     *     not see the group), 'shadowedby' (the id of the group that admits instead, or null) and
+     *     'untypable' (bool), in id order.
      */
-    public static function summary(int $courseid): array {
-        global $DB;
+    public static function summary(int $courseid, ?int $readerid = null): array {
+        global $DB, $USER;
 
-        $groups = $DB->get_records('groups', ['courseid' => $courseid], 'id ASC', 'id, name, enrolmentkey');
+        $readerid = $readerid ?? (int) $USER->id;
+        $groups = $DB->get_records(
+            'groups',
+            ['courseid' => $courseid],
+            'id ASC',
+            'id, courseid, name, visibility, enrolmentkey'
+        );
 
         $firstbykey = [];
         $result = [];
@@ -150,7 +160,7 @@ class groupkey {
             $id = (int) $group->id;
             $result[$id] = (object) [
                 'id' => $id,
-                'name' => $group->name,
+                'name' => groupvisibility::visible_to($group, $readerid) ? $group->name : null,
                 'shadowedby' => $firstbykey[$stored] ?? null,
                 'untypable' => $stored !== trim($stored),
             ];

@@ -154,7 +154,10 @@ enrolment key does"; the site default for new instances is `enrol_apply/groupkey
 
 The key is core's own group enrolment key, set on each group's settings page, the one
 `enrol_self` reads; this plugin stores none. Any group of the course counts. The instance form
-lists which groups carry a key, never the keys.
+lists which groups carry a key, never the keys. Everywhere but to the applicant who typed it, a
+group is named only to somebody core's group visibility lets see it: a group that is not visible
+to everyone is left unnamed for a reader without `moodle/course:viewhiddengroups` who is not one of
+its members (a hidden one, for anybody without that capability).
 
 **A valid key enrols at once.** With this mode, the application form starts with an optional
 **Group enrolment key**, in a block of its own that says what it does. An applicant who enters a
@@ -179,8 +182,10 @@ an unusual space, as a copied one often does, gets its own message and costs no 
 counted per applicant and instance in the `keyattempts` application cache, for 15 minutes. After
 five, the field gives way to a sentence for the rest of that time, so the form cannot be used to
 guess keys without limit. On a key-only method that also means the form cannot be sent at all
-until then. The count is per account: on a site where anybody may create an account, it does not
-stop somebody with many accounts, so keys there should not be easy to guess. The key is read again
+until then. Several sessions of one account are counted together: each request checks the key
+under a lock on the applicant and the method, and one that cannot obtain it within a few seconds
+is treated as locked. The count is per account: on a site where anybody may create an account, it
+does not stop somebody with many accounts, so keys there should not be easy to guess. The key is read again
 inside the lock that writes the enrolment, so rotating a key on the group's page stops it at once.
 
 Who is told what:
@@ -191,13 +196,14 @@ Who is told what:
   the group full, or a place that could not be confirmed in time.
 - **Managers** (the same people told about new applications) get an informational notice with its
   own subject and a link to the applicant. It names the group only to a recipient who may manage
-  applications in the course. On a key-only method, where every enrolment is one, the notice is
+  applications in the course and may see the group. On a key-only method, where every enrolment is one, the notice is
   sent only when **Tell managers about each enrolment with a key** is set to Yes (off by default).
 - **The queue and the review page** mark an application a valid key could not admit. The review
-  page names the group and pre-selects the groups the key would have joined. The empty queue of a
-  key-only method says nothing waits there.
+  page names the group, to a reader who may see it, and pre-selects the groups the key would have
+  joined. The empty queue of a key-only method says nothing waits there.
 - **The reports** carry an **Admission route** column and filter (review, or what the key did) and
-  the **Group of the enrolment key**.
+  the **Group of the enrolment key**, empty for a reader who may not see that group; that column
+  cannot be sorted.
 - **The teacher configuring a key-only method** is warned, while that mode is selected, when no
   group of the course has a key, when every keyed group is full, and when applications are still
   waiting. Either key mode warns when the course's self enrolment accepts the same group keys,

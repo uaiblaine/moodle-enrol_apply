@@ -275,14 +275,11 @@ if ($formaction !== '' && $userenrolments) {
 
     /* The same for each group an approval took over its seats (local_groupdist), and for the same
        reasons: seats are advisory on this route (G15), and only a re-read after the decision knows
-       which groups were joined. A group is named only to a reader who may see the course's groups,
-       the group chooser's own gate; a mentor's decision joins the method's groups unseen. */
+       which groups were joined. Only the groups this reader may be told about are named
+       (groupseats::overfilled_named_to()). */
     if ($formaction === 'confirm' && $decided > 0) {
-        foreach (\enrol_apply\local\groupseats::overfilled($userenrolments) as $over) {
+        foreach (\enrol_apply\local\groupseats::overfilled_named_to($userenrolments, (int) $USER->id) as $over) {
             $groupcontext = context_course::instance($over->courseid);
-            if (!has_capability('enrol/apply:manageapplications', $groupcontext)) {
-                continue;
-            }
             \core\notification::warning(get_string('groupseatsexceeded', 'enrol_apply', (object) [
                 'group' => format_string($over->name, true, ['context' => $groupcontext]),
                 'members' => $over->members,

@@ -253,6 +253,10 @@ class submission extends base {
             ->set_is_sortable(true)
             ->add_callback([formatter::class, 'admission_route']);
 
+        /* The group whose key was presented, named only to a reader who may see it
+           (formatter::key_group()), so the column carries the group's visibility and course and
+           is not sortable: sorting by the name would place a withheld cell among the names it
+           sits between. */
         $galias = $this->get_table_alias('groups');
         $columns[] = (new column(
             'keygroup',
@@ -266,7 +270,8 @@ class submission extends base {
             ->add_field("{$alias}.keygroupid", 'keygroupid')
             ->add_field("{$alias}.keyoutcome", 'keygroupoutcome')
             ->add_field("{$galias}.courseid", 'keygroupcourseid')
-            ->set_is_sortable(true, ["{$galias}.name"])
+            ->add_field("{$galias}.visibility", 'keygroupvisibility')
+            ->set_is_sortable(false)
             ->add_callback([formatter::class, 'key_group']);
 
         /* The frozen snapshot, as one long-text column that is neither sortable nor filterable.

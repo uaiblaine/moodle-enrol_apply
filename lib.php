@@ -1796,13 +1796,15 @@ class enrol_apply_plugin extends enrol_plugin {
            resolved must not undo the admission over a sentence. The notice then names no group. */
         $admission = null;
         if ($admittedgroupid > 0) {
-            $group = $DB->get_record('groups', ['id' => $admittedgroupid], 'id, name');
+            $group = $DB->get_record('groups', ['id' => $admittedgroupid], 'id, courseid, name, visibility');
             $admission = (object) [
                 // Plain: the template double-stashes it, like the course name.
                 'group' => $group ? format_string($group->name, true, [
                     'context' => context_course::instance($instance->courseid),
                     'escape' => false,
                 ]) : '',
+                // The record, so each recipient is judged by the group's own visibility.
+                'grouprecord' => $group ?: null,
                 'url' => new moodle_url('/user/profile.php', ['id' => $userid]),
             ];
         }
@@ -1902,19 +1904,22 @@ class enrol_apply_plugin extends enrol_plugin {
      * so a mentor holding nothing in the course gets the name fields only and nobody reads a field
      * core would hide from them on the applicant's profile.
      *
+     * The key group of an admission is named the same way: only to a recipient holding the
+     * capability in the course, the gate the review page's group chooser applies, and who may see
+     * the group by core's visibility rule ({@see \enrol_apply\local\groupvisibility::visible_to()}),
+     * judged for the recipient rather than for the applicant whose request sends the notice. A
+     * mentor, who holds the capability in the applicant's user context alone, a site-wide
+     * recipient without it, and a recipient a hidden group is hidden from are told of the
+     * admission without the group, as the page would tell them.
+     *
      * @param stdClass $recipient User the message goes to.
      * @param moodle_url $manageurl Link to the screen where the application can be decided.
      * @param stdClass $course Course applied for.
      * @param stdClass $applicant Applicant.
      * @param string $applydescription Comment submitted with the application.
      * @param array $submitted Key, label and value of every submitted field, in form order.
-     * The key group of an admission is named the same way: only to a recipient holding the
-     * capability in the course, the gate the review page's group chooser applies. A mentor, who
-     * holds it in the applicant's user context alone, and a site-wide recipient without it are
-     * told of the admission without the group, as the page would tell them.
-     *
      * @param stdClass|null $admission For an admission by key: 'group', the key group's plain name
-     *     (empty when the group is gone).
+     *     (empty when the group is gone), and 'grouprecord', its {groups} record or null.
      * @return string Rendered HTML body.
      */
     protected function application_notification_body(
@@ -1945,7 +1950,11 @@ class enrol_apply_plugin extends enrol_plugin {
             match (true) {
                 $admission === null => null,
                 $admission->group !== ''
-                    && has_capability('enrol/apply:manageapplications', $coursecontext, $recipient) => $admission->group,
+                    && has_capability('enrol/apply:manageapplications', $coursecontext, $recipient)
+                    && \enrol_apply\local\groupvisibility::visible_to(
+                        $admission->grouprecord,
+                        (int) $recipient->id
+                    ) => $admission->group,
                 default => '',
             }
         );

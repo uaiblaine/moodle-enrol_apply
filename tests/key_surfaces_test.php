@@ -45,12 +45,16 @@ require_once($CFG->dirroot . '/enrol/apply/lib.php');
 #[CoversClass(formatter::class)]
 #[CoversClass(\enrol_apply_renderer::class)]
 #[CoversClass(\enrol_apply_plugin::class)]
+#[CoversClass(\enrol_apply\local\groupvisibility::class)]
 final class key_surfaces_test extends \advanced_testcase {
     /** @var string The key of the keyed group. */
     private const KEY = 'Turma-A-2027';
 
     /** @var string The keyed group's name, with characters every sink must handle. */
     private const NAME = 'R&D < Team';
+
+    /** @var string The key of a group whose visibility a test chooses (covert_group()). */
+    private const COVERT_KEY = 'Covert-2027';
 
     /** @var \enrol_apply_plugin The plugin. */
     private $plugin;
@@ -151,9 +155,10 @@ final class key_surfaces_test extends \advanced_testcase {
      *
      * @param int $outcome One of the waiting KEY_ outcomes, or KEY_NONE for an application without a key.
      * @param int $status The enrolment status: suspended (pending) or the waiting list.
+     * @param \stdClass|null $group The key group; null for the keyed group of the fixture.
      * @return \stdClass The applicant.
      */
-    private function waiting(int $outcome, int $status = ENROL_USER_SUSPENDED): \stdClass {
+    private function waiting(int $outcome, int $status = ENROL_USER_SUSPENDED, ?\stdClass $group = null): \stdClass {
         global $DB;
 
         $applicant = $this->getDataGenerator()->create_user();
@@ -166,7 +171,7 @@ final class key_surfaces_test extends \advanced_testcase {
             'comment' => '',
             'status' => $status === ENROL_APPLY_USER_WAIT ? submission::STATUS_WAITING : submission::STATUS_PENDING,
             'timecreated' => time(),
-            'keygroupid' => $outcome === submission::KEY_NONE ? 0 : $this->keyed->id,
+            'keygroupid' => $outcome === submission::KEY_NONE ? 0 : ($group ?? $this->keyed)->id,
             'keyoutcome' => $outcome,
         ]);
 
@@ -449,6 +454,202 @@ final class key_surfaces_test extends \advanced_testcase {
     }
 
     /**
+     * A keyed group of the course with the given visibility, named "Covert < Unit".
+     *
+     * @param int $visibility One of the GROUPS_VISIBILITY_ constants.
+     * @return \stdClass The group.
+     */
+    private function covert_group(int $visibility): \stdClass {
+        return $this->getDataGenerator()->create_group([
+            'courseid' => $this->course->id,
+            'name' => 'Covert < Unit',
+            'enrolmentkey' => self::COVERT_KEY,
+            'visibility' => $visibility,
+        ]);
+    }
+
+    /**
+     * A user enrolled in the course with a role of their own that may manage applications and
+     * holds no moodle/course:viewhiddengroups: every stock archetype holding the plugin's
+     * capability also holds that one, so a stock teacher would prove nothing here.
+     *
+     * @return \stdClass The user.
+     */
+    private function clerk(): \stdClass {
+        $roleid = $this->getDataGenerator()->create_role(['shortname' => 'applyclerk']);
+        assign_capability('enrol/apply:manageapplications', CAP_ALLOW, $roleid, \context_system::instance());
+        $clerk = $this->getDataGenerator()->create_user();
+        $this->getDataGenerator()->enrol_user($clerk->id, $this->course->id, 'applyclerk');
+        $this->assertFalse(has_capability(
+            'moodle/course:viewhiddengroups',
+            \context_course::instance($this->course->id),
+            $clerk
+        ));
+
+        return $clerk;
+    }
+
+    /**
+     * The review page's chip naming a group, escaped as the page renders it.
+     *
+     * @param string $name The group's plain name.
+     * @return string The chip as it appears in the markup.
+     */
+    private function chip(string $name): string {
+        return s(get_string('keychipgroup', 'enrol_apply', (object) [
+            'outcome' => get_string('keyoutcomenoplace', 'enrol_apply'),
+            'group' => $name,
+        ]));
+    }
+
+    /**
+     * Visibilities that hide a group from a reader without viewhiddengroups who is not a member.
+     *
+     * @return array Visibility, keyed by case name.
+     */
+    public static function hidden_visibility_provider(): array {
+        return [
+            'none' => [GROUPS_VISIBILITY_NONE],
+            'members, the reader not one' => [GROUPS_VISIBILITY_MEMBERS],
+        ];
+    }
+
+    /**
+     * The review page does not name a key group core hides from its reader; it says the outcome
+     * alone, as to a mentor. A reader holding viewhiddengroups is told the name.
+     *
+     * Changes that must make it fail: the chip naming the group without core's visibility rule.
+     *
+     * @param int $visibility The key group's visibility.
+     * @return void
+     */
+    #[DataProvider('hidden_visibility_provider')]
+    public function test_the_review_page_does_not_name_a_hidden_key_group(int $visibility): void {
+        $covert = $this->covert_group($visibility);
+        $applicant = $this->waiting(submission::KEY_NO_PLACE, ENROL_USER_SUSPENDED, $covert);
+        $this->setUser($this->clerk());
+
+        $html = $this->review($applicant);
+
+        $this->assertStringContainsString(get_string('keyoutcomenoplace', 'enrol_apply'), $html);
+        $this->assertStringNotContainsString('Covert', $html);
+
+        // The control: a reader who may see hidden groups reads the name.
+        $this->setAdminUser();
+        $this->assertStringContainsString($this->chip('Covert < Unit'), $this->review($applicant));
+    }
+
+    /**
+     * The same reader is told the name of a group core shows them: one visible to all, and one
+     * visible to its members when they are one.
+     *
+     * @return void
+     */
+    public function test_the_review_page_names_a_key_group_core_shows_its_reader(): void {
+        $clerk = $this->clerk();
+        $this->setUser($clerk);
+        $this->assertStringContainsString($this->chip('Covert < Unit'), $this->review(
+            $this->waiting(submission::KEY_NO_PLACE, ENROL_USER_SUSPENDED, $this->covert_group(GROUPS_VISIBILITY_ALL))
+        ));
+
+        $members = $this->getDataGenerator()->create_group([
+            'courseid' => $this->course->id,
+            'name' => 'Members < Only',
+            'enrolmentkey' => 'Members-2027',
+            'visibility' => GROUPS_VISIBILITY_MEMBERS,
+        ]);
+        groups_add_member($members->id, $clerk->id);
+        $this->assertStringContainsString($this->chip('Members < Only'), $this->review(
+            $this->waiting(submission::KEY_NO_PLACE, ENROL_USER_SUSPENDED, $members)
+        ));
+    }
+
+    /**
+     * The managers' notice of an admission does not name a key group core hides from its
+     * recipient, judged for each recipient; a teacher holding viewhiddengroups is told the name.
+     *
+     * Changes that must make it fail: the notice naming the group without core's visibility
+     * rule, or judging it for the applicant whose request sends it.
+     *
+     * @param int $visibility The key group's visibility.
+     * @return void
+     */
+    #[DataProvider('hidden_visibility_provider')]
+    public function test_the_admission_notice_does_not_name_a_hidden_key_group(int $visibility): void {
+        $this->covert_group($visibility);
+        $clerk = $this->clerk();
+        $applicant = $this->getDataGenerator()->create_user();
+
+        $messages = $this->submit($applicant, ['groupkey' => self::COVERT_KEY]);
+        $to = static fn(\stdClass $user): array => array_values(array_filter(
+            $messages,
+            static fn($m): bool => (int) $m->useridto === (int) $user->id
+        ));
+
+        $this->assertCount(1, $to($clerk));
+        $this->assertStringContainsString(
+            get_string('mailtoteacher_admittednogroup', 'enrol_apply'),
+            $to($clerk)[0]->fullmessagehtml
+        );
+        $this->assertStringNotContainsString('Covert', $to($clerk)[0]->fullmessagehtml);
+        // The control: a teacher, who holds viewhiddengroups, is told the name.
+        $this->assertStringContainsString('Covert &lt; Unit', $to($this->teacher)[0]->fullmessagehtml);
+    }
+
+    /**
+     * The same recipient is told the name of a group visible to all.
+     *
+     * @return void
+     */
+    public function test_the_admission_notice_names_a_visible_key_group_to_the_same_recipient(): void {
+        $this->covert_group(GROUPS_VISIBILITY_ALL);
+        $clerk = $this->clerk();
+
+        $messages = array_values(array_filter(
+            $this->submit($this->getDataGenerator()->create_user(), ['groupkey' => self::COVERT_KEY]),
+            static fn($m): bool => (int) $m->useridto === (int) $clerk->id
+        ));
+
+        $this->assertCount(1, $messages);
+        $this->assertStringContainsString('Covert &lt; Unit', $messages[0]->fullmessagehtml);
+    }
+
+    /**
+     * The report's key group is empty for a reader core hides the group from, as for no key, and
+     * named where core shows it.
+     *
+     * Changes that must make it fail: the cell naming the group without core's visibility rule.
+     *
+     * @return void
+     */
+    public function test_the_report_withholds_a_hidden_key_group(): void {
+        $clerk = $this->clerk();
+        $hidden = $this->covert_group(GROUPS_VISIBILITY_NONE);
+        $row = static fn(\stdClass $group): \stdClass => (object) [
+            'keygroupid' => $group->id,
+            'keygroupoutcome' => submission::KEY_ADMITTED,
+            'keygroupcourseid' => $group->courseid,
+            'keygroupvisibility' => $group->visibility,
+        ];
+        $this->setUser($clerk);
+
+        $this->assertSame('', formatter::key_group('Covert < Unit', $row($hidden)));
+        $this->assertSame('R&amp;D &lt; Team', formatter::key_group(self::NAME, $row($this->keyed)), 'the control');
+
+        $members = $this->getDataGenerator()->create_group([
+            'courseid' => $this->course->id,
+            'name' => 'Members < Only',
+            'visibility' => GROUPS_VISIBILITY_MEMBERS,
+        ]);
+        $this->assertSame('', formatter::key_group('Members < Only', $row($members)));
+        groups_add_member($members->id, $clerk->id);
+        $this->assertSame('Members &lt; Only', formatter::key_group('Members < Only', $row($members)), 'a member');
+
+        $this->setAdminUser();
+        $this->assertSame('Covert &lt; Unit', formatter::key_group('Covert < Unit', $row($hidden)), 'viewhiddengroups');
+    }
+
+    /**
      * The queue badges an application with what its key ran into, and nothing without a key.
      *
      * Changes that must make it fail: the badge dropped, or the outcome not selected by the query.
@@ -512,7 +713,12 @@ final class key_surfaces_test extends \advanced_testcase {
      * @return void
      */
     public function test_the_report_names_the_key_group(): void {
-        $row = (object) ['keygroupoutcome' => submission::KEY_ADMITTED, 'keygroupcourseid' => $this->course->id];
+        $row = (object) [
+            'keygroupid' => $this->keyed->id,
+            'keygroupoutcome' => submission::KEY_ADMITTED,
+            'keygroupcourseid' => $this->course->id,
+            'keygroupvisibility' => GROUPS_VISIBILITY_ALL,
+        ];
 
         $this->assertSame('R&amp;D &lt; Team', formatter::key_group(self::NAME, $row));
         $this->assertSame(get_string('keygroupgone', 'enrol_apply'), formatter::key_group(null, $row));
@@ -613,6 +819,50 @@ final class key_surfaces_test extends \advanced_testcase {
         $this->assertSame(2, $over[$this->keyed->id]->members);
         $this->assertSame(1, $over[$this->keyed->id]->seats);
         $this->assertSame(self::NAME, $over[$this->keyed->id]->name);
+    }
+
+    /**
+     * The warning after an approval names an overfilled group only to a reader who may manage
+     * applications in its course and may see it by core's group visibility rule.
+     *
+     * The reader is a role of their own without moodle/course:viewhiddengroups; the controls are
+     * the same group visible to all, a member of a MEMBERS group, and a teacher holding
+     * viewhiddengroups.
+     *
+     * Changes that must make it fail: the warning naming the group without the visibility rule,
+     * judging the session user instead of the reader, or dropping the course capability gate.
+     *
+     * @return void
+     */
+    public function test_an_overfilled_group_is_named_only_to_a_reader_who_may_see_it(): void {
+        global $DB;
+
+        $this->require_groupdist();
+        $this->seats($this->keyed, 1);
+        $first = $this->own_row($this->waiting(submission::KEY_NONE))->id;
+        $second = $this->own_row($this->waiting(submission::KEY_NONE))->id;
+        $this->plugin->confirm_enrolment([$first, $second], '', ['groups' => [$this->keyed->id]]);
+        $clerk = $this->clerk();
+        $outsider = $this->getDataGenerator()->create_user();
+        $ids = [$first, $second];
+        $named = fn(int $readerid): array => array_keys(groupseats::overfilled_named_to($ids, $readerid));
+
+        $this->assertSame([(int) $this->keyed->id], $named((int) $clerk->id), 'a group visible to all');
+        $this->assertSame([], $named((int) $outsider->id), 'no capability in the course');
+
+        $DB->set_field('groups', 'visibility', GROUPS_VISIBILITY_NONE, ['id' => $this->keyed->id]);
+        $this->assertSame([], $named((int) $clerk->id), 'a group hidden from everybody');
+        $this->assertSame([(int) $this->keyed->id], $named((int) $this->teacher->id), 'the control: viewhiddengroups');
+
+        $DB->set_field('groups', 'visibility', GROUPS_VISIBILITY_MEMBERS, ['id' => $this->keyed->id]);
+        $this->assertSame([], $named((int) $clerk->id), 'a MEMBERS group, the reader not one');
+        $this->assertTrue(groups_add_member($this->keyed->id, $clerk->id));
+        $this->assertSame([(int) $this->keyed->id], $named((int) $clerk->id), 'a member of a MEMBERS group');
+
+        // The reader is the one asked about, not the session user.
+        $this->setUser($this->teacher);
+        $DB->set_field('groups', 'visibility', GROUPS_VISIBILITY_NONE, ['id' => $this->keyed->id]);
+        $this->assertSame([], $named((int) $clerk->id), 'judged for the reader');
     }
 
     /**
