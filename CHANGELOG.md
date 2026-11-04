@@ -107,6 +107,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **The page form posts back to a clean url.** Without JavaScript, `apply.php` handed its
+  `moodle_url` to the form, which escaped it twice, so the browser posted to
+  `apply.php?instance=N&amp;id=M` and the course id arrived as `amp;id`. Nothing read that second
+  id, so no application went wrong, but the address bar showed the entity after every press of
+  Continue or Enrol me. The form now gets the plain url. `apply.php` requires `config.php` once,
+  so `tests/apply_page_test.php` can run the page under PHPUnit. Mutation gate `AP1`.
 - **The wrong-key limit holds across several sessions of one account.** The count was read and
   written with no lock, so parallel logins of the same account each read a count under the limit
   and got a real answer, and far more than five keys fitted in the 15 minutes. The first read of a
