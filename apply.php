@@ -26,7 +26,8 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-require(__DIR__ . '/../../config.php');
+// Once only: tests/apply_page_test.php runs this script inside a PHPUnit process that has loaded it.
+require_once(__DIR__ . '/../../config.php');
 
 $instanceid = required_param('instance', PARAM_INT);
 
@@ -55,7 +56,11 @@ $PAGE->set_title(get_string('checkyourdetails', 'enrol_apply'));
 $PAGE->set_heading(format_string($course->fullname));
 $PAGE->add_body_class('limitedwidth');
 
-$form = new \enrol_apply\form\application_form($pageurl, ['showbuttons' => true]);
+/* The plain spelling, out(false): dynamic_form types $action as ?string, so a moodle_url
+   object is cast with __toString(), which is out(true), and the form escapes that again on
+   output. The browser then posts to "instance=N&amp;id=M" and the second id arrives as
+   "amp;id". */
+$form = new \enrol_apply\form\application_form($pageurl->out(false), ['showbuttons' => true]);
 
 /* The parent constructor runs this only for the AJAX transport, so the page transport calls
    it here. It covers the log-in-as session, guests, course visibility, an application already
