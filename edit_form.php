@@ -370,26 +370,37 @@ class enrol_apply_edit_form extends moodleform {
      * Names only, never a key. With local_groupdist installed each group also shows its seats,
      * and a full one is marked, because its key currently admits nobody.
      *
+     * A group the teacher may not see by core's visibility rule is left out, and so is the note
+     * naming it as the group that admits instead: the list says what it says when there is no
+     * such group. The sentence saying no group has a key still needs there to be none at all.
+     *
      * @param int $courseid Course id.
      * @param context $context Course context, for formatting the group names.
      * @return string HTML for the static element, which renders it raw.
      */
     protected function group_key_summary(int $courseid, $context): string {
-        global $OUTPUT;
+        global $OUTPUT, $USER;
 
-        $keyed = \enrol_apply\local\groupkey::summary($courseid);
+        $keyed = \enrol_apply\local\groupkey::summary($courseid, (int) $USER->id);
         $seats = \enrol_apply\local\groupseats::for_groups(array_keys($keyed));
         $hasseats = \enrol_apply\local\groupseats::available();
 
         $names = [];
         foreach ($keyed as $id => $group) {
+            if ($group->name === null) {
+                continue;
+            }
             // Plain spelling: every sink in the template is a double stash or a {{#str}} parameter.
             $names[$id] = format_string($group->name, true, ['context' => $context, 'escape' => false]);
         }
 
         $groups = [];
         foreach ($keyed as $id => $group) {
+            if (!isset($names[$id])) {
+                continue;
+            }
             $seat = $seats[$id];
+            $shadowedby = $group->shadowedby !== null && isset($names[$group->shadowedby]) ? $group->shadowedby : null;
             $groups[] = [
                 'name' => $names[$id],
                 'hasseats' => $hasseats,
@@ -398,14 +409,15 @@ class enrol_apply_edit_form extends moodleform {
                 'seats' => (int) $seat->seats,
                 'full' => $seat->seats !== null && (int) $seat->members >= $seat->seats,
                 // A flag beside the name: Mustache reads a group named "0" as false.
-                'isshadowed' => $group->shadowedby !== null,
-                'shadowedby' => $group->shadowedby === null ? '' : $names[$group->shadowedby],
+                'isshadowed' => $shadowedby !== null,
+                'shadowedby' => $shadowedby === null ? '' : $names[$shadowedby],
                 'untypable' => $group->untypable,
             ];
         }
 
         return $OUTPUT->render_from_template('enrol_apply/groupkey_summary', [
             'hasgroups' => (bool) $groups,
+            'haskeys' => (bool) $keyed,
             'groups' => $groups,
             'manageurl' => (new moodle_url('/group/index.php', ['id' => $courseid]))->out(false),
         ]);

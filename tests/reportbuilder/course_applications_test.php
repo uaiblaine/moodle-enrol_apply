@@ -1159,6 +1159,65 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
     }
 
     /**
+     * The key group column names a group only to a reader who may see it by core's visibility
+     * rule, judged in the report itself from the fields the column selects, and it cannot be
+     * sorted, which would place a withheld cell among the names around it.
+     *
+     * The reader is the report's own: a role of their own, holding the report capability and no
+     * moodle/course:viewhiddengroups.
+     *
+     * Changes that must make it fail: the column not selecting the group's visibility, the cell
+     * naming the group without the rule, or the column made sortable by name again.
+     *
+     * @return void
+     */
+    public function test_the_key_group_column_withholds_a_group_the_reader_may_not_see(): void {
+        global $DB;
+
+        $generator = $this->getDataGenerator();
+        $groups = [
+            'open' => $generator->create_group(['courseid' => $this->course->id, 'name' => 'Turma Open']),
+            'covert' => $generator->create_group([
+                'courseid' => $this->course->id,
+                'name' => 'Turma Covert',
+                'visibility' => GROUPS_VISIBILITY_NONE,
+            ]),
+            'members' => $generator->create_group([
+                'courseid' => $this->course->id,
+                'name' => 'Turma Members',
+                'visibility' => GROUPS_VISIBILITY_MEMBERS,
+            ]),
+        ];
+        $applicants = [];
+        foreach ($groups as $label => $group) {
+            $applicants[$label] = $this->seed();
+            $DB->set_field('enrol_apply_submission', 'keygroupid', $group->id, ['userid' => $applicants[$label]->id]);
+            $DB->set_field('enrol_apply_submission', 'keyoutcome', submission::KEY_ADMITTED, ['userid' => $applicants[$label]->id]);
+        }
+        $reader = $this->reader();
+        $this->setUser($reader);
+
+        $cells = function () use ($applicants): array {
+            $byuser = [];
+            foreach ($this->rows() as $row) {
+                $byuser[(int) $row->userid] = (string) $row->{'submission:keygroup'};
+            }
+            return array_map(static fn(\stdClass $user): string => $byuser[(int) $user->id] ?? 'missing', $applicants);
+        };
+
+        $this->assertFalse($this->report()->get_column('submission:keygroup')->get_is_sortable());
+        $this->assertSame(['open' => 'Turma Open', 'covert' => '', 'members' => ''], $cells());
+
+        // Core adds only an enrolled user to a group.
+        $generator->enrol_user($reader->id, $this->course->id, 'student');
+        $this->assertTrue(groups_add_member($groups['members']->id, $reader->id));
+        $this->assertSame('Turma Members', $cells()['members'], 'a member of a MEMBERS group is told its name');
+
+        $this->setAdminUser();
+        $this->assertSame('Turma Covert', $cells()['covert'], 'the control: viewhiddengroups');
+    }
+
+    /**
      * The snapshot shows the fields this reader may see, and omits the ones they may not.
      *
      * Masking in a display callback is sound here only because the column has no filter and no

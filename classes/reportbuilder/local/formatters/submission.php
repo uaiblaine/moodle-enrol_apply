@@ -121,18 +121,33 @@ class submission {
      *
      * Escaped by format_string(), as core's group entity does: a Report Builder cell is raw HTML.
      * A key presented and its group since deleted, or never mapped by a restore (keygroupid 0
-     * with an outcome), says so rather than reading as no key at all.
+     * with an outcome), says so rather than reading as no key at all. A group the reader may not
+     * see by core's visibility rule ({@see \enrol_apply\local\groupvisibility::visible_to()},
+     * judged for $USER in the group's course) leaves the cell empty, as for no key: the admission
+     * route beside it already says a key was used, and nothing more is said.
      *
      * @param mixed $value The group's name, null when the join found nothing.
-     * @param stdClass $row Row being rendered, carrying keygroupid, keygroupoutcome and keygroupcourseid.
-     * @return string The name, a note that the group is gone, or empty when no key was presented.
+     * @param stdClass $row Row being rendered, carrying keygroupid, keygroupoutcome, keygroupcourseid
+     *     and keygroupvisibility.
+     * @return string The name, a note that the group is gone, or empty when no key was presented
+     *     or the reader may not see the group.
      */
     public static function key_group($value, stdClass $row): string {
+        global $USER;
+
         if ((int) ($row->keygroupoutcome ?? 0) === submissionhelper::KEY_NONE) {
             return '';
         }
         if ($value === null || $value === '') {
             return get_string('keygroupgone', 'enrol_apply');
+        }
+        $group = (object) [
+            'id' => $row->keygroupid ?? null,
+            'courseid' => $row->keygroupcourseid ?? null,
+            'visibility' => $row->keygroupvisibility ?? null,
+        ];
+        if (!\enrol_apply\local\groupvisibility::visible_to($group, (int) $USER->id)) {
+            return '';
         }
 
         return format_string((string) $value, true, [

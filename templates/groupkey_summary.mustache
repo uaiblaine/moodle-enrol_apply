@@ -21,15 +21,16 @@
     whether such a key admits without review. The keys themselves are never in the context.
 
     Context variables required for this template:
-    * hasgroups boolean - whether any group of the course carries a key
-    * groups array - one object per keyed group, in id order:
+    * hasgroups boolean - whether any keyed group the reader may see is listed
+    * haskeys boolean - whether any group of the course carries a key, seen by the reader or not
+    * groups array - one object per keyed group the reader may see, in id order:
       * name string - the group name, plain spelling
       * hasseats boolean - whether seats are known (local_groupdist is installed)
       * nolimit boolean - whether the group declares no seats
       * members int - current members
       * seats int - declared seats
       * full boolean - whether no seat is left, so the key admits nobody now
-      * isshadowed boolean - whether another group shares this key and admits instead
+      * isshadowed boolean - whether another group the reader may see shares this key and admits instead
       * shadowedby string - the name of that group, or empty
       * untypable boolean - whether the key starts or ends with a space
     * manageurl string - the course's groups page
@@ -37,6 +38,7 @@
     Example context (json):
     {
         "hasgroups": true,
+        "haskeys": true,
         "groups": [
             {"name": "Turma A", "hasseats": true, "nolimit": false, "members": 12, "seats": 20,
              "full": false, "isshadowed": false, "shadowedby": "", "untypable": false},
@@ -75,8 +77,8 @@
         {{/groups}}
     </ul>
     {{/hasgroups}}
-    {{^hasgroups}}
+    {{^haskeys}}
     <div class="alert alert-warning mb-1">{{#str}} groupkeysnone, enrol_apply {{/str}}</div>
-    {{/hasgroups}}
+    {{/haskeys}}
     <a href="{{manageurl}}">{{#str}} groupkeysmanage, enrol_apply {{/str}}</a>
 </div>

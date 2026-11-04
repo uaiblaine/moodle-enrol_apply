@@ -92,6 +92,16 @@ final class key_admission_test extends \advanced_testcase {
     }
 
     /**
+     * End the simulated request: the wrong-key throttle holds its lock until then.
+     *
+     * @return void
+     */
+    protected function tearDown(): void {
+        keyattempts::release_all();
+        parent::tearDown();
+    }
+
+    /**
      * Submit an application as the admin, the way a caller other than the form would.
      *
      * Run as the admin on purpose: what the route records must not depend on who is logged in.

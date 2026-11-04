@@ -245,6 +245,47 @@ final class groupkey_test extends \advanced_testcase {
     }
 
     /**
+     * The summary keeps every keyed group but names only those the reader may see by core's
+     * visibility rule; a reader holding viewhiddengroups is told every name.
+     *
+     * Changes that must make it fail: the summary naming a group without core's visibility rule.
+     *
+     * @return void
+     */
+    public function test_the_summary_names_only_the_groups_the_reader_may_see(): void {
+        $generator = $this->getDataGenerator();
+        $visible = $generator->create_group(['courseid' => $this->course->id, 'name' => 'Open', 'enrolmentkey' => 'K-1']);
+        $hidden = $generator->create_group([
+            'courseid' => $this->course->id,
+            'name' => 'Secret',
+            'enrolmentkey' => 'K-2',
+            'visibility' => GROUPS_VISIBILITY_NONE,
+        ]);
+        $members = $generator->create_group([
+            'courseid' => $this->course->id,
+            'name' => 'Members',
+            'enrolmentkey' => 'K-3',
+            'visibility' => GROUPS_VISIBILITY_MEMBERS,
+        ]);
+        $roleid = $generator->create_role(['shortname' => 'applyclerk']);
+        assign_capability('enrol/apply:config', CAP_ALLOW, $roleid, \context_system::instance());
+        $clerk = $generator->create_user();
+        $generator->enrol_user($clerk->id, $this->course->id, 'applyclerk');
+
+        $summary = groupkey::summary((int) $this->course->id, (int) $clerk->id);
+        $this->assertSame([(int) $visible->id, (int) $hidden->id, (int) $members->id], array_keys($summary));
+        $this->assertSame('Open', $summary[$visible->id]->name);
+        $this->assertNull($summary[$hidden->id]->name);
+        $this->assertNull($summary[$members->id]->name);
+
+        groups_add_member($members->id, $clerk->id);
+        $this->assertSame('Members', groupkey::summary((int) $this->course->id, (int) $clerk->id)[$members->id]->name);
+
+        $admin = groupkey::summary((int) $this->course->id, (int) get_admin()->id);
+        $this->assertSame('Secret', $admin[$hidden->id]->name, 'the control: viewhiddengroups');
+    }
+
+    /**
      * A new instance takes the site default, and a default this build does not know reads as off.
      *
      * @return void

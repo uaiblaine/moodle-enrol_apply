@@ -387,6 +387,50 @@ final class edit_form_test extends \advanced_testcase {
     }
 
     /**
+     * The summary leaves out a keyed group the reader may not see by core's visibility rule, and
+     * the note naming it as the one that admits instead; a reader holding viewhiddengroups gets
+     * both.
+     *
+     * Changes that must make it fail: listing a group the summary withheld the name of, or naming
+     * a withheld group as the one that admits.
+     *
+     * @return void
+     */
+    public function test_the_summary_leaves_out_a_group_the_reader_may_not_see(): void {
+        $generator = $this->getDataGenerator();
+        $generator->create_group(['courseid' => $this->course->id, 'name' => 'Turma Open', 'enrolmentkey' => 'K-1']);
+        $generator->create_group([
+            'courseid' => $this->course->id,
+            'name' => 'Turma Covert',
+            'enrolmentkey' => 'K-2',
+            'visibility' => GROUPS_VISIBILITY_NONE,
+        ]);
+        $generator->create_group(['courseid' => $this->course->id, 'name' => 'Turma Later', 'enrolmentkey' => 'K-2']);
+        $roleid = $generator->create_role(['shortname' => 'applyclerk']);
+        assign_capability('enrol/apply:config', CAP_ALLOW, $roleid, \context_system::instance());
+        $clerk = $generator->create_user();
+        $generator->enrol_user($clerk->id, $this->course->id, 'applyclerk');
+
+        $form = $this->form();
+        $method = new \ReflectionMethod(\enrol_apply_edit_form::class, 'group_key_summary');
+        $this->setUser($clerk);
+        $html = $method->invoke($form, (int) $this->course->id, \context_course::instance($this->course->id));
+
+        $this->assertStringContainsString('Turma Open', $html);
+        $this->assertStringContainsString('Turma Later', $html);
+        $this->assertStringNotContainsString('Covert', $html);
+        $this->assertSame(2, substr_count($html, '<li'), 'two groups listed, no entry for the withheld one');
+        $this->assertStringNotContainsString(s(get_string('groupkeyshadowed', 'enrol_apply', '')), $html);
+        $this->assertStringNotContainsString(s(get_string('groupkeysnone', 'enrol_apply')), $html);
+
+        // The control: a reader who may see hidden groups reads the group and the note naming it.
+        $this->setAdminUser();
+        $html = $method->invoke($form, (int) $this->course->id, \context_course::instance($this->course->id));
+        $this->assertStringContainsString('Turma Covert', $html);
+        $this->assertStringContainsString(s(get_string('groupkeyshadowed', 'enrol_apply', 'Turma Covert')), $html);
+    }
+
+    /**
      * A group named "0" still shows as the one that admits: the template keys the note on a
      * flag, because Mustache reads the string "0" as false.
      *

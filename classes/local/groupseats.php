@@ -110,8 +110,9 @@ class groupseats {
      * over, and an approval into it is ordinary.
      *
      * @param array $userenrolmentids The user enrolments a decision was asked for.
-     * @return array Group id => object with int 'courseid', string 'name' (raw), int 'members'
-     *     and int 'seats', ascending by id; empty when seats are unknown on this site.
+     * @return array Group id => object with int 'id', int 'courseid', string 'name' (raw), int
+     *     'visibility', int 'members' and int 'seats', ascending by id; empty when seats are
+     *     unknown on this site.
      */
     public static function overfilled(array $userenrolmentids): array {
         global $DB;
@@ -125,7 +126,7 @@ class groupseats {
         $params['component'] = 'enrol_apply';
         $params['active'] = ENROL_USER_ACTIVE;
         $groups = $DB->get_records_sql(
-            "SELECT DISTINCT g.id, g.courseid, g.name
+            "SELECT DISTINCT g.id, g.courseid, g.name, g.visibility
                FROM {groups_members} gm
                JOIN {user_enrolments} ue ON ue.userid = gm.userid AND ue.enrolid = gm.itemid
                JOIN {groups} g ON g.id = gm.groupid
@@ -145,12 +146,39 @@ class groupseats {
                 continue;
             }
             $over[$groupid] = (object) [
+                'id' => (int) $groupid,
                 'courseid' => (int) $groups[$groupid]->courseid,
                 'name' => $groups[$groupid]->name,
+                'visibility' => (int) $groups[$groupid]->visibility,
                 'members' => (int) $seat->members,
                 'seats' => (int) $seat->seats,
             ];
         }
         return $over;
+    }
+
+    /**
+     * The groups these approvals took past their seats that the reader may be told about by name.
+     *
+     * A group is named only to a reader who may manage applications in its course, the group
+     * chooser's own gate, and who may see it by core's group visibility rule
+     * ({@see groupvisibility::visible_to()}); a mentor's decision joins the method's groups unseen.
+     *
+     * @param array $userenrolmentids The user enrolments a decision was asked for.
+     * @param int $readerid The user the warning is shown to.
+     * @return array The subset of overfilled() the reader may be told about, keyed by group id.
+     */
+    public static function overfilled_named_to(array $userenrolmentids, int $readerid): array {
+        $named = [];
+        foreach (static::overfilled($userenrolmentids) as $groupid => $over) {
+            $context = \context_course::instance($over->courseid);
+            if (
+                has_capability('enrol/apply:manageapplications', $context, $readerid)
+                && groupvisibility::visible_to($over, $readerid)
+            ) {
+                $named[$groupid] = $over;
+            }
+        }
+        return $named;
     }
 }

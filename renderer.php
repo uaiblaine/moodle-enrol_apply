@@ -681,8 +681,10 @@ class enrol_apply_renderer extends plugin_renderer_base {
      * What a group key did for this application, for the review page.
      *
      * The chip names the key group only to a reader who may see the course's groups, the gate
-     * the group chooser applies ({@see self::decision_controls_context()}); a mentor reads the
-     * outcome alone, as on the queue. The groups offered ticked are the ones the key would have
+     * the group chooser applies ({@see self::decision_controls_context()}), and who may see that
+     * group by core's visibility rule ({@see \enrol_apply\local\groupvisibility::visible_to()}),
+     * which the chooser's groups_get_all_groups() applies too; anybody else reads the outcome
+     * alone, as on the queue. The groups offered ticked are the ones the key would have
      * joined - its own group and the method's list, key_route_groups() - so approving without
      * touching the chooser does what the key would have done had a place been left. A key group
      * deleted since offers nothing ticked and is not named.
@@ -693,7 +695,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
      * @return array Keys 'chip' (plain spelling, empty when no key was presented) and 'preselected' (group ids).
      */
     protected function key_context($application, $instance, \context_course $coursecontext): array {
-        global $DB;
+        global $DB, $USER;
 
         $key = \enrol_apply\local\submission::key_of((int) $application->id);
         if ($key === null) {
@@ -702,9 +704,17 @@ class enrol_apply_renderer extends plugin_renderer_base {
 
         $label = \enrol_apply\local\submission::key_outcome_label($key->outcome);
         $group = $key->groupid > 0
-            ? $DB->get_record('groups', ['id' => $key->groupid, 'courseid' => $application->courseid], 'id, name')
+            ? $DB->get_record(
+                'groups',
+                ['id' => $key->groupid, 'courseid' => $application->courseid],
+                'id, courseid, name, visibility'
+            )
             : false;
-        if (!$group || !has_capability('enrol/apply:manageapplications', $coursecontext)) {
+        if (
+            !$group
+            || !has_capability('enrol/apply:manageapplications', $coursecontext)
+            || !\enrol_apply\local\groupvisibility::visible_to($group, (int) $USER->id)
+        ) {
             return ['chip' => $label, 'preselected' => []];
         }
 
