@@ -8,6 +8,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Group key only, reviewed (R1 of `docs/design/group-review-scope.md`).** A fourth answer to
+  **What a group enrolment key does**: *Key only, reviewed*. The key is mandatory, as in *Key
+  only*: no key, a wrong key, a locked field, no place left or a full group is refused with the
+  same reasons and nothing is written, and "without the key" is never offered. A valid key does not
+  enrol: it writes an ordinary application waiting for a decision, recording the key's group and
+  the new outcome *Key accepted, sent for review* (`keyoutcome` 5). No admission lock is taken and
+  no admission event is raised. Approved without a group choice (the bulk decision, core's "Edit
+  enrolment"), such an application joins the key's group as well as the method's own list; every
+  other outcome keeps the method's list alone. The managers' new-application notice names the key
+  group to a recipient who may see it, by the admission notice's rule. The applicant is told the
+  key was accepted and the application is waiting for review; the enrolment page's button reads
+  **Apply with a key**, the form's second step says "Your application for *group* will be
+  reviewed", and the page transport submits it with **Submit application**. An unnamed method in this mode is called **Application with a group key**. The
+  site default, the report's admission route filter and the privacy metadata know the new value.
+  Version 2026110500 (no upgrade step: the column's comment only).
 - **Group key only: what the teacher is told (Q3).** Under the setting, key-only mode warns, only
   while it is selected and only when it holds, that no group of the course has a key (so nobody can
   enrol), that every keyed group is full (with `local_groupdist`), or that applications made before

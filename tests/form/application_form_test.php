@@ -1395,6 +1395,95 @@ final class application_form_test extends \advanced_testcase {
     }
 
     /**
+     * On the key-only mode that sends applications for review the form asks in the same two steps,
+     * offers no way out after a wrong key, says on step 2 that the application will be reviewed,
+     * and submitting writes an application waiting for a decision.
+     *
+     * Changes that must make it fail: the steps or the required key read off required() rather than
+     * mandatory(), the "without the key" box offered on this mode, or step 2 promising the group.
+     *
+     * @return void
+     */
+    public function test_a_reviewed_key_only_form_asks_in_two_steps_and_sends_for_review(): void {
+        global $DB;
+
+        $this->accept_group_keys(groupkey::MODE_REVIEW);
+        $city = fields::standard_key('city');
+        $this->ask_for([$city], [$city]);
+        $cityname = fields::form_element_name($city);
+        $this->settle_the_no_submit_cache();
+
+        $form = $this->make_form();
+        $names = $this->element_names($form);
+        $this->assertContains('groupkey', $names);
+        $this->assertContains('keybuttons', $names);
+        $this->assertNotContains($cityname, $names);
+        $mform = (new \ReflectionProperty(\moodleform::class, '_form'))->getValue($form);
+        $this->assertTrue($mform->isElementRequired('groupkey'));
+
+        $wrong = $this->submit_through_the_modal(['groupkey' => 'Turma-Z-2027']);
+        $this->assertFalse($wrong['submitted']);
+        $this->assertStringContainsString(get_string('groupkeyinvalid_required', 'enrol_apply'), $wrong['html']);
+        $this->assertStringNotContainsString('name="withoutkey"', $wrong['html']);
+        $ticked = $this->submit_through_the_modal(['groupkey' => 'Turma-Z-2027', 'withoutkey' => 1]);
+        $this->assertFalse($ticked['submitted'], 'a posted "without the key" does not let a wrong key through');
+        $this->assertFalse($DB->record_exists('user_enrolments', ['userid' => $this->applicant->id]));
+
+        $next = $this->submit_through_the_modal(['groupkey' => 'Turma-B-2027', 'keycontinue' => 'Continue']);
+        $this->assertStringContainsString('data-enrol-apply-step="2"', $next['html']);
+        $this->assertStringContainsString(s(get_string('keyjoinsforreview', 'enrol_apply', 'Turma B')), $next['html']);
+        $this->assertStringNotContainsString(s(get_string('keyjoins', 'enrol_apply', 'Turma B')), $next['html']);
+
+        $sink = $this->redirectMessages();
+        $result = $this->submit_through_the_modal([
+            'groupkey' => 'Turma-B-2027',
+            $cityname => 'Campinas',
+            'confirm_' . $city => 1,
+        ]);
+        $sink->close();
+        $this->assertTrue($result['submitted']);
+        $this->assertStringContainsString('/enrol/apply/applied.php', json_decode($result['data']));
+        $this->assertFalse(is_enrolled(\context_course::instance($this->course->id), $this->applicant, '', true));
+        $record = $DB->get_record('enrol_apply_submission', ['userid' => $this->applicant->id], '*', MUST_EXIST);
+        $this->assertSame(submission::KEY_FOR_REVIEW, (int) $record->keyoutcome);
+    }
+
+    /**
+     * On the page transport, step 2 of the reviewed mode submits an application, not an
+     * enrolment; key-only mode's step 2 keeps "Enrol me" (the control).
+     *
+     * Changes that must make it fail: step 2's button read off the step alone.
+     *
+     * @return void
+     */
+    public function test_step_two_of_the_reviewed_mode_submits_an_application(): void {
+        global $DB;
+
+        $this->accept_group_keys(groupkey::MODE_REVIEW);
+        $saved = [$_GET, $_POST];
+        try {
+            $_GET = [];
+            $_POST = [
+                'instance' => $this->instance->id,
+                'groupkey' => 'Turma-B-2027',
+                'keycontinue' => 'Continue',
+                'sesskey' => sesskey(),
+                '_qf__enrol_apply_form_application_form' => 1,
+            ];
+            $html = (new application_form(null, ['showbuttons' => true]))->render();
+            $this->assertStringContainsString('data-enrol-apply-step="2"', $html);
+            $this->assertStringContainsString(s(get_string('submitapplication', 'enrol_apply')), $html);
+            $this->assertStringNotContainsString(s(get_string('enrolme', 'core_enrol')), $html);
+
+            $DB->set_field('enrol', 'customchar1', groupkey::MODE_REQUIRED, ['id' => $this->instance->id]);
+            $html = (new application_form(null, ['showbuttons' => true]))->render();
+            $this->assertStringContainsString(s(get_string('enrolme', 'core_enrol')), $html, 'the control');
+        } finally {
+            [$_GET, $_POST] = $saved;
+        }
+    }
+
+    /**
      * Ask for a municipality field, required or not, and return its key.
      *
      * @param bool $required Whether the instance requires it.

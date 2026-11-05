@@ -45,8 +45,9 @@ use stdClass;
  *
  * A group enrolment key refines two of the states, and only while the record still says what the
  * key did ({@see submission::key_of()}): an approval the key made with nobody deciding over it
- * since reads as ADMITTED, and a pending application a valid key could not admit says why (no
- * place, a full group, seats not confirmed in time). A deferral is a person's decision and says
+ * since reads as ADMITTED, a pending application a valid key could not admit says why (no
+ * place, a full group, seats not confirmed in time), and one a valid key sent for review says
+ * the key was accepted. A deferral is a person's decision and says
  * so whatever the key did. Each names the group the applicant typed the key for, and only that
  * one: it is the one group they already know. A key group deleted since leaves the plain state,
  * because a sentence about a group that no longer exists would explain nothing.
@@ -83,6 +84,9 @@ final class applicantstate {
 
     /** @var string PENDING because a valid key's place or seat could not be confirmed in time. */
     private const KEY_UNCONFIRMED = 'keyunconfirmed';
+
+    /** @var string PENDING because a valid key sends the application for review on this method. */
+    private const KEY_FOR_REVIEW = 'keyforreview';
 
     /**
      * Heading, body and notification level for one applicant's own application.
@@ -165,6 +169,7 @@ final class applicantstate {
             self::KEY_NO_PLACE => 'applicationkeynoplace_body',
             self::KEY_GROUP_FULL => 'applicationkeygroupfull_body',
             self::KEY_UNCONFIRMED => 'applicationkeyunconfirmed_body',
+            self::KEY_FOR_REVIEW => 'applicationkeyforreview_body',
             default => 'applicationsubmitted_body',
         };
     }
@@ -197,6 +202,7 @@ final class applicantstate {
             $state === self::PENDING && $key->outcome === submission::KEY_NO_PLACE => self::KEY_NO_PLACE,
             $state === self::PENDING && $key->outcome === submission::KEY_GROUP_FULL => self::KEY_GROUP_FULL,
             $state === self::PENDING && $key->outcome === submission::KEY_SEAT_UNCONFIRMED => self::KEY_UNCONFIRMED,
+            $state === self::PENDING && $key->outcome === submission::KEY_FOR_REVIEW => self::KEY_FOR_REVIEW,
             default => null,
         };
         if ($refined === null) {

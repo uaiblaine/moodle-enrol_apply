@@ -1272,8 +1272,11 @@ class enrol_apply_renderer extends plugin_renderer_base {
      * @param moodle_url $manageurl Link to the screen where the application can be decided.
      * @param string $applydescription Comment submitted with the application.
      * @param array $submitted Label and value pairs the applicant typed, from fields::submitted_values().
-     * @param string|null $admittedgroup For an admission by key, the key group's plain name, or empty
-     *     where the recipient may not be told it; null for an application waiting for review.
+     * @param string|null $keygroup For an admission by key, or for an application a valid key sent
+     *     for review, the key group's plain name, or empty where the recipient may not be told it;
+     *     null when no key counted.
+     * @param bool $forreview Whether $keygroup is that of an application sent for review, which is
+     *     still a request to decide, rather than of an admission.
      * @return string Rendered HTML body.
      */
     public function application_notification_mail_body(
@@ -1282,8 +1285,12 @@ class enrol_apply_renderer extends plugin_renderer_base {
         $manageurl,
         $applydescription,
         array $submitted = [],
-        ?string $admittedgroup = null
+        ?string $keygroup = null,
+        bool $forreview = false
     ) {
+        $admittedgroup = $forreview ? null : $keygroup;
+        $reviewgroup = $forreview ? $keygroup : null;
+
         /* Labels and values are both the plain spelling. The template renders each through a
            double stash, so Mustache escapes them exactly once - which is both correct and
            lossless, where stripping them here would delete an applicant's answer from the
@@ -1316,6 +1323,12 @@ class enrol_apply_renderer extends plugin_renderer_base {
                 null => '',
                 '' => get_string('mailtoteacher_admittednogroup', 'enrol_apply'),
                 default => get_string('mailtoteacher_admitted', 'enrol_apply', $admittedgroup),
+            },
+            // One line naming the key group of an application for review; plain, as above.
+            'keyreview' => match ($reviewgroup) {
+                null => '',
+                '' => get_string('mailtoteacher_keyreviewnogroup', 'enrol_apply'),
+                default => get_string('mailtoteacher_keyreview', 'enrol_apply', $reviewgroup),
             },
             'manageurl' => $manageurl->out(false),
             'managelabel' => $admittedgroup === null ? get_string('applymanage', 'enrol_apply') : get_string('viewprofile'),

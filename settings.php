@@ -267,6 +267,7 @@ if ($ADMIN->fulltree) {
             \enrol_apply\local\groupkey::MODE_OFF => get_string('groupkeys_off', 'enrol_apply'),
             \enrol_apply\local\groupkey::MODE_ANY => get_string('groupkeys_any', 'enrol_apply'),
             \enrol_apply\local\groupkey::MODE_REQUIRED => get_string('groupkeys_required', 'enrol_apply'),
+            \enrol_apply\local\groupkey::MODE_REVIEW => get_string('groupkeys_review', 'enrol_apply'),
         ]
     ));
 

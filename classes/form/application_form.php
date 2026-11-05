@@ -213,7 +213,10 @@ class application_form extends dynamic_form {
                asks for them explicitly. */
             $this->add_action_buttons(
                 true,
-                $step === 2 ? get_string('enrolme', 'core_enrol') : get_string('submitapplication', 'enrol_apply')
+                // Where a valid key sends the application for review, step 2 enrols nobody.
+                $step === 2 && groupkey::admits($instance)
+                    ? get_string('enrolme', 'core_enrol')
+                    : get_string('submitapplication', 'enrol_apply')
             );
         }
     }
@@ -226,7 +229,7 @@ class application_form extends dynamic_form {
      * The key is read from a real submission only (see posted_key()), so a link cannot reveal
      * whether a key exists without spending a try.
      *
-     * @return int 0 for an instance that is not key-only, 1 for the key, 2 for the rest.
+     * @return int 0 for an instance where a key is not mandatory, 1 for the key, 2 for the rest.
      */
     protected function key_step(): int {
         global $USER;
@@ -234,7 +237,7 @@ class application_form extends dynamic_form {
         if ($this->keystep === null) {
             $instance = $this->get_instance();
             $this->keystep = 0;
-            if (groupkey::required($instance)) {
+            if (groupkey::mandatory($instance)) {
                 $this->keystep = 1;
                 $groupid = $this->resolve_key($this->posted_key());
                 if (
@@ -311,10 +314,11 @@ class application_form extends dynamic_form {
     }
 
     /**
-     * Why a valid key cannot admit on a key-only instance right now, read without the locks.
+     * Why a valid key cannot be used on a key-only instance right now, read without the locks.
      *
      * Advisory, so the applicant is told while the form is still open: the write door checks
-     * both again under lock_admission() and refuses in the same words.
+     * both again and refuses in the same words, under lock_admission() where the key admits and
+     * in apply_for_review() where it sends the application for review.
      *
      * @param int $groupid The group the key resolved to.
      * @return string|null The reason, or null when a place and every seat are free.
@@ -334,23 +338,23 @@ class application_form extends dynamic_form {
      * What is wrong with a submitted key, or null when nothing is.
      *
      * @param string $posted The trimmed key.
-     * @param bool $required Whether the instance is key-only, where no key is an error and a
-     *     valid key must also find a place and its seats.
+     * @param bool $mandatory Whether the key is mandatory on the instance (groupkey::mandatory()),
+     *     where no key is an error and a valid key must also find a place and its seats.
      * @return string|null The message to show on the key field.
      */
-    protected function key_error(string $posted, bool $required): ?string {
+    protected function key_error(string $posted, bool $mandatory): ?string {
         if ($posted === '') {
-            return $required ? get_string('groupkeyrequired', 'enrol_apply') : null;
+            return $mandatory ? get_string('groupkeyrequired', 'enrol_apply') : null;
         }
         if ($this->has_unusual_edge($posted)) {
             return get_string('groupkeyunusualspace', 'enrol_apply');
         }
         $groupid = $this->resolve_key($posted);
         if ($groupid === null) {
-            return get_string($required ? 'groupkeyinvalid_required' : 'groupkeyinvalid', 'enrol_apply');
+            return get_string($mandatory ? 'groupkeyinvalid_required' : 'groupkeyinvalid', 'enrol_apply');
         }
 
-        return $required ? $this->capacity_refusal($groupid) : null;
+        return $mandatory ? $this->capacity_refusal($groupid) : null;
     }
 
     /**
@@ -367,7 +371,8 @@ class application_form extends dynamic_form {
     }
 
     /**
-     * Step 2 of a key-only form: the key carried on, and the group it joins said aloud.
+     * Step 2 of a key-only form: the key carried on, and the group it joins, or is reviewed for,
+     * said aloud.
      *
      * The group is named to the person holding its key (G9). The escaped spelling: an html
      * element renders raw.
@@ -381,12 +386,14 @@ class application_form extends dynamic_form {
         $mform->setConstant('groupkey', $this->posted_key());
 
         $group = groups_get_group($this->keygroupid, 'id, name');
-        $name = $group ? (string) $group->name : '';
-        $mform->addElement('html', '<div class="alert alert-success enrol_apply-keyjoins">'
-            . get_string('keyjoins', 'enrol_apply', format_string($name, true, [
-                'context' => context_course::instance($this->get_instance()->courseid),
-            ]))
-            . '</div>');
+        $name = format_string($group ? (string) $group->name : '', true, [
+            'context' => context_course::instance($this->get_instance()->courseid),
+        ]);
+        // Where the key sends the application for review, it joins nothing yet.
+        $sentence = groupkey::admits($this->get_instance())
+            ? get_string('keyjoins', 'enrol_apply', $name)
+            : get_string('keyjoinsforreview', 'enrol_apply', $name);
+        $mform->addElement('html', '<div class="alert alert-success enrol_apply-keyjoins">' . $sentence . '</div>');
     }
 
     /**
@@ -443,15 +450,14 @@ class application_form extends dynamic_form {
             return;
         }
 
-        $required = groupkey::required($instance);
+        $required = groupkey::mandatory($instance);
         $mform = $this->_form;
         $mform->addElement('html', '<div class="enrol_apply-keyblock">');
-        $mform->addElement(
-            'static',
-            'groupkeyintro',
-            '',
-            get_string($required ? 'groupkeyblock_required' : 'groupkeyblock_any', 'enrol_apply')
-        );
+        $mform->addElement('static', 'groupkeyintro', '', match (true) {
+            groupkey::required($instance) => get_string('groupkeyblock_required', 'enrol_apply'),
+            $required => get_string('groupkeyblock_review', 'enrol_apply'),
+            default => get_string('groupkeyblock_any', 'enrol_apply'),
+        });
 
         if (keyattempts::locked((int) $instance->id, (int) $USER->id)) {
             $mform->addElement(
@@ -473,7 +479,11 @@ class application_form extends dynamic_form {
         $mform->setType('groupkey', PARAM_RAW);
         if ($required) {
             $mform->addRule('groupkey', get_string('groupkeyrequired', 'enrol_apply'), 'required', null, 'client');
-            $mform->addHelpButton('groupkey', 'groupkeyonly', 'enrol_apply');
+            if (groupkey::admits($instance)) {
+                $mform->addHelpButton('groupkey', 'groupkeyonly', 'enrol_apply');
+            } else {
+                $mform->addHelpButton('groupkey', 'groupkeyreview', 'enrol_apply');
+            }
         } else {
             $mform->addHelpButton('groupkey', 'groupkey', 'enrol_apply');
         }
@@ -499,8 +509,8 @@ class application_form extends dynamic_form {
      * a key posted with it either way, because the page transport has no JavaScript to disable
      * anything.
      *
-     * On a key-only instance there is no review to send the application to; instead, on Continue,
-     * this is where the key's message is set (see is_validated()).
+     * Where the key is mandatory there is no application without it to send for review; instead,
+     * on Continue, this is where the key's message is set (see is_validated()).
      *
      * @return void
      */
@@ -512,7 +522,7 @@ class application_form extends dynamic_form {
             return;
         }
         $posted = $this->posted_key();
-        if (groupkey::required($this->get_instance())) {
+        if (groupkey::mandatory($this->get_instance())) {
             if ($this->is_continue() && $mform->getElementType('groupkey') === 'text') {
                 $error = $this->key_error($posted, true);
                 if ($error !== null) {
@@ -771,7 +781,7 @@ class application_form extends dynamic_form {
            A key-only form never has the "without the key" element, so formslib exports no such
            value there and a posted one cannot skip this check. Step 2 carries the key as a
            hidden field, judged the same way. */
-        $required = groupkey::required($this->get_instance());
+        $required = groupkey::mandatory($this->get_instance());
         if ($this->_form->elementExists('groupkey') && empty($data['withoutkey'])) {
             $posted = is_string($data['groupkey'] ?? null) ? trim($data['groupkey']) : '';
             $keyerror = $this->key_error($posted, $required);

@@ -18,7 +18,8 @@
     @template enrol_apply/application_notification
 
     HTML body of the notification sent when a user applies for a course enrolment, or when a
-    group enrolment key admitted them without review.
+    group enrolment key admitted them without review. An application a valid key sent for review
+    is an ordinary application that also names the key group.
 
     Every label and value arrives in its plain spelling and is output through a double stash,
     so Mustache escapes it exactly once. That escaping is the only protection: the submitted
@@ -37,6 +38,8 @@
     * profile array - list of label and value pairs, in the order the instance asks for them
     * admitted boolean - whether a group key admitted the applicant, so nothing waits for a decision
     * admission string - the sentence saying so, naming the key group; plain spelling
+    * keyreview string - for an application a valid group key sent for review, the sentence naming
+      the key group; empty otherwise; plain spelling
     * manageurl string - link to the screen where the application can be decided, or to the
       applicant's profile for an admission
     * managelabel string - link text
@@ -57,12 +60,14 @@
         ],
         "admitted": true,
         "admission": "Enrolled with the enrolment key of the group Turma B, without review. Nothing waits for a decision.",
+        "keyreview": "",
         "manageurl": "https://example.com/enrol/apply/manage.php?id=7",
         "managelabel": "Manage enrolment applications"
     }
 }}
 <div class="enrol_apply-notification">
     {{#admitted}}<p><strong>{{admission}}</strong></p>{{/admitted}}
+    {{#keyreview}}<p><strong>{{keyreview}}</strong></p>{{/keyreview}}
     <p>{{coursenamelabel}}: {{coursename}}</p>
     <p>{{applicantlabel}}: {{applicant}}</p>
     <p>{{commentlabel}}: {{comment}}</p>
