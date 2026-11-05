@@ -58,6 +58,13 @@ class enrol_apply_renderer extends plugin_renderer_base {
      * @return string Rendered markup.
      */
     public function manage_form($table, $manageurl, $instance = null) {
+        /* A decider narrowed by separate groups who belongs to no group gets core's own notice
+           and no queue, exactly as core's participants page (user/index.php) treats them: no
+           row could be theirs, and an empty table would read as "nothing to decide". */
+        if ($table->not_in_any_group()) {
+            return $this->notification(get_string('notingroup'));
+        }
+
         $tablehtml = $this->capture_table($table);
 
         $actions = [
@@ -590,7 +597,9 @@ class enrol_apply_renderer extends plugin_renderer_base {
      * nothing in the course, and groups_get_all_groups() applies no capability check (unlike
      * get_assignable_roles()), so the group chooser would list every group name in a course they
      * cannot open. The instance's own groups and role still apply to a mentor's decision; they
-     * only cannot override them.
+     * only cannot override them. A decider narrowed by separate groups is offered their own groups
+     * alone (S6), the list confirm_enrolment() allowlists the posted ids against
+     * ({@see \enrol_apply\local\groupscope::choosable_groups()}).
      *
      * With local_groupdist installed, each group that declares seats reads its occupancy, and a
      * full one says so and stays selectable (G15): approving into it is the decider's call, as
@@ -609,7 +618,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
 
         $coursecontext = $instance === null ? null : \context_course::instance($instance->courseid);
         if ($coursecontext && has_capability('enrol/apply:manageapplications', $coursecontext)) {
-            $coursegroups = groups_get_all_groups($instance->courseid);
+            $coursegroups = \enrol_apply\local\groupscope::choosable_groups((int) $instance->courseid);
             $seats = \enrol_apply\local\groupseats::for_groups(array_keys($coursegroups));
 
             /* The plain spelling ('escape' => false), because the template renders the name

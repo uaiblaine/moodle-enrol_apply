@@ -28,6 +28,7 @@ use enrol_apply\local\queue;
 use enrol_apply\local\coursefilter;
 use enrol_apply\local\queuefilter;
 use enrol_apply\local\search;
+use enrol_apply\local\groupscope;
 use enrol_apply\local\submission as submissionrecord;
 use enrol_apply\reportbuilder\local\formatters\submission as submissionformatter;
 use html_writer;
@@ -414,7 +415,30 @@ class applications extends \table_sql implements dynamic_table {
             }
         }
 
+        /* Separate groups: a decider who may not access all groups lists only the applications of
+           their own groups, and none without a key (S1, S3). The ids come from the scope, which
+           queue::listing_scope() derived from the course and $USER on this request, the AJAX
+           refresh included; nothing the client sends reaches them. An operator in no group gets
+           the never-true predicate, and the page its notice (not_in_any_group()). */
+        if ($this->scope->groups !== null) {
+            [$groupwhere, $groupparams] = groupscope::where($this->scope->groups);
+            $wheres[] = $groupwhere;
+            $params += $groupparams;
+        }
+
         return [$wheres, $params];
+    }
+
+    /**
+     * Whether this operator is narrowed by separate groups and belongs to no group they may see.
+     *
+     * Core's participants page shows such a user its "not in any group" notice instead of the
+     * list (user/index.php), and so does the queue (S4).
+     *
+     * @return bool True when the listing is narrowed to no group at all.
+     */
+    public function not_in_any_group(): bool {
+        return $this->scope->groups === [];
     }
 
     /**

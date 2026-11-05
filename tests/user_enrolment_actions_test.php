@@ -340,6 +340,8 @@ final class user_enrolment_actions_test extends \advanced_testcase {
      * @return void
      */
     public function test_a_mentor_is_offered_no_icon_in_the_course(): void {
+        global $DB;
+
         $applicant = $this->applicant();
 
         $context = \context_course::instance($this->course->id);
@@ -364,7 +366,11 @@ final class user_enrolment_actions_test extends \advanced_testcase {
 
         // The precondition: they really are a mentor, so the widened gate would admit them.
         $this->assertTrue(
-            $this->plugin->can_manage_application((int) $this->course->id, (int) $applicant->id),
+            $this->plugin->can_manage_application(
+                (int) $this->course->id,
+                (int) $applicant->id,
+                (int) $DB->get_field('user_enrolments', 'id', ['enrolid' => $this->instance->id, 'userid' => $applicant->id])
+            ),
             'the fixture does not reach can_manage_application(), so this test proves nothing'
         );
 

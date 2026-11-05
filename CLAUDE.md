@@ -519,11 +519,32 @@ backup/                      group mappings, comments and the durable trail, see
   they mentor. Keep the per-row check even when the page-level check looks sufficient:
   the bulk form posts a list of arbitrary ids.
 
+- **Separate groups narrow the COURSE grant, in one helper, and nothing else.**
+  `\enrol_apply\local\groupscope` is core's participants-page rule: `SEPARATEGROUPS` without
+  `moodle/site:accessallgroups` in the course narrows a decider to the applications whose newest
+  record's `keygroupid` is one of their groups (`member_groups()`, core's visibility clause for an
+  explicit reader); keyless ones reach only who sees every group. A system-level grant and the
+  mentor level are never narrowed, so `can_manage_application()` (which takes the user enrolment
+  id for that reason) applies it to its course branch alone. Every reader goes through it: the
+  listing and `scope_total()` (`scope_where()`), `queue::listing_scope()`'s `groups` (derived from
+  the course and `$USER`, never from the request, the AJAX refresh included), `queue::scope()`
+  (instance branch only when the application is in the decider's groups, so the anchor stays in
+  the walk), `neighbour()`, `require_review_access()`'s page context, the choosers and the
+  `confirm_enrolment()` allowlist (`choosable_groups()`), the notice (judged per recipient) and
+  the icon. The bulk menu inherits the per-row check. `hook_callbacks::refuses_approval()` throws
+  from `before_user_enrolment_updated` before `update_user_enrol()` writes (core catches nothing
+  there), judging only holders of `enrol/apply:manage`: a key admission runs as the applicant, a
+  script as the admin or nobody. `allow_unenrol_user()` closes core's unenrol route (screen,
+  participants icon, AJAX) the same way: false for a pending application outside the groups of a
+  holder of `enrol/apply:unenrol`; active enrolments stay core's. `groupscope::where()` and `application_group()` must agree on
+  "newest record"; `test_the_sql_and_the_per_row_check_agree` holds it. Nothing is memoised:
+  PHPUnit resets id sequences, so a static would leak answers between tests. Gates `SC1`-`SC31`.
+
 - **The mentee path is Moodle's mentor pattern, not groups.** With no `id` and no
   `userenrol`, the queue falls back to the users the current user holds a role assignment
   over *in those users' own contexts* — the same enumeration core uses in
-  `blocks/mentees/block_mentees.php`. It has nothing to do with course groups: no query in
-  this plugin has ever filtered the queue by group. That branch deliberately skips the
+  `blocks/mentees/block_mentees.php`. It has nothing to do with course groups, and the
+  separate-groups narrowing (bullet above) never applies to it. That branch deliberately skips the
   system-level `require_capability` when it finds mentees; the table is then filtered to
   exactly those user ids. Do not "simplify" the skip away without also re-scoping the
   table, or you turn a mentor view into a site-wide one.
