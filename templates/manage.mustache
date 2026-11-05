@@ -24,6 +24,10 @@
     role names inside the decision_controls partial; see it.
 
     Context variables required for this template:
+    * candecide boolean - whether this operator may decide from the queue. False for a holder of
+      enrol/apply:viewapplications alone: the table renders without the form, the decision
+      controls and the sticky footer, and the table itself drops its selection column
+    * viewonlynotice string - what such a reader is told above the table
     * descriptiontext string - one sentence under the page heading explaining the queue's badges
     * formurl string - url the decision form posts back to
     * sesskey string - session key guarding the state change
@@ -64,6 +68,8 @@
 
     Example context (json):
     {
+        "candecide": true,
+        "viewonlynotice": "You can view these applications but not decide them.",
         "descriptiontext": "Applications badged as on the waiting list have been deferred.",
         "formurl": "https://example.com/enrol/apply/manage.php?id=7",
         "sesskey": "Ab12Cd34Ef",
@@ -115,13 +121,30 @@
     {{/haskeyonlynotice}}
     {{{capacityhtml}}}
     {{{filtershtml}}}
+    {{!
+        A viewer who may not decide gets the table in a plain container with the form's id, which
+        is how enrol_apply/manage finds the queue to keep its filters, count and address bar
+        live; nothing in it posts. The opening and closing tags are chosen twice by one flag, so
+        each rendering is balanced.
+    }}
+    {{#candecide}}
     <form id="enrol_apply_manage_form" class="enrol_apply-manage" method="post" action="{{formurl}}">
         <input type="hidden" name="sesskey" value="{{sesskey}}">
+    {{/candecide}}
+    {{^candecide}}
+    <div class="alert alert-info" role="status">{{viewonlynotice}}</div>
+    <div id="enrol_apply_manage_form" class="enrol_apply-manage">
+    {{/candecide}}
         <div class="enrol_apply-table">
             {{{tablehtml}}}
         </div>
         <div class="enrol_apply-showing small text-muted mb-3{{^hasshowing}} d-none{{/hasshowing}}" data-region="showing">{{showingtext}}</div>
+    {{#candecide}}
         {{> enrol_apply/decision_controls }}
         {{{stickyfooter}}}
     </form>
+    {{/candecide}}
+    {{^candecide}}
+    </div>
+    {{/candecide}}
 </div>

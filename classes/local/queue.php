@@ -185,6 +185,13 @@ final class queue {
      * inside the set; otherwise the operator reached it through another level (a mentor who also
      * teaches the course) and walks that level's queue.
      *
+     * A holder of enrol/apply:viewapplications without the deciding capability (S5) walks the same
+     * two queues, the instance one under the viewing capability's narrowing and the site-wide one
+     * for a system grant, and every application they can reach is one they may view: the walk
+     * leads to review pages, which are read-only for them. There is no mentee branch for viewing.
+     * Deciding wins when both are held, in the order {@see listing_scope()} lists: a site-wide
+     * decider, then a mentor for the applications of their mentees, then a site-wide viewer.
+     *
      * @param stdClass $application Application as application() returns it.
      * @param stdClass $instance Enrol instance the application under review belongs to.
      * @return stdClass Scope carrying: enrolid, the instance to restrict to or 0 for none;
@@ -204,28 +211,34 @@ final class queue {
            calls before require_capability(): with the default false, is_enrolled() counts a
            suspended or expired enrolment as access, and such a teacher would be sent to a queue
            that bounces them to the course enrolment page. */
+        /* The capability the listing narrows by (groupscope::reader_capability()): deciding
+           where the operator may decide in the course, viewing otherwise (S5), so the walk is the
+           listing's own set. */
+        $capability = groupscope::reader_capability(context_course::instance((int) $instance->courseid));
         if (
-            can_access_course($course, null, 'enrol/apply:manageapplications', true)
-            && groupscope::allows((int) $instance->courseid, (int) $application->id, (int) $USER->id)
+            can_access_course($course, null, $capability, true)
+            && groupscope::allows((int) $instance->courseid, (int) $application->id, (int) $USER->id, $capability)
         ) {
             return (object) [
                 'enrolid' => (int) $instance->id,
                 'mentees' => null,
-                // The listing's own narrowing; null for a decider who sees every group.
-                'groups' => groupscope::narrowed_to((int) $instance->courseid, (int) $USER->id),
+                // The listing's own narrowing; null for a reader who sees every group.
+                'groups' => groupscope::narrowed_to((int) $instance->courseid, (int) $USER->id, $capability),
                 'hasqueue' => true,
                 'url' => new moodle_url('/enrol/apply/manage.php', ['id' => (int) $instance->id]),
             ];
         }
 
-        if (has_capability('enrol/apply:manageapplications', context_system::instance())) {
-            return (object) [
-                'enrolid' => 0,
-                'mentees' => null,
-                'groups' => null,
-                'hasqueue' => true,
-                'url' => new moodle_url('/enrol/apply/manage.php'),
-            ];
+        // Deciding wins, as in listing_scope(): site-wide deciders, then mentors, then site-wide viewers.
+        $sitewide = (object) [
+            'enrolid' => 0,
+            'mentees' => null,
+            'groups' => null,
+            'hasqueue' => true,
+            'url' => new moodle_url('/enrol/apply/manage.php'),
+        ];
+        if (has_capability(groupscope::DECIDE, context_system::instance())) {
+            return $sitewide;
         }
 
         /* Only when this application is one of theirs. Mentoring somebody does not make an
@@ -240,6 +253,11 @@ final class queue {
                 'hasqueue' => true,
                 'url' => new moodle_url('/enrol/apply/manage.php'),
             ];
+        }
+
+        // A site-wide viewer walks the site-wide queue too, read-only, as listing_scope() lists it.
+        if (has_capability(groupscope::VIEW, context_system::instance())) {
+            return $sitewide;
         }
 
         /* No queue at all, which is reachable rather than defensive: the capability held at a
@@ -297,10 +315,16 @@ final class queue {
      * an instance queue that narrows them, null wherever nothing is narrowed (the site-wide and
      * mentee queues, whose delegation does not come from a course).
      *
+     * A holder of enrol/apply:viewapplications without the deciding capability (S5) is allowed
+     * the listing with candecide false: the page then offers no selection, no bulk bar and no
+     * decision controls, and the decision methods refuse their rows anyway. Their narrowing reads
+     * the viewing capability's system exemption ({@see groupscope::reader_capability()}).
+     *
      * @param int $enrolid Enrol instance to list, 0 for every instance this operator may decide in.
      * @return stdClass Object carrying enrolid, instance, context, mentees, groups,
-     *                  identitycontext, allowed and url. See the property comments in the body
-     *                  for each.
+     *                  identitycontext, allowed (may open the listing), candecide (may decide
+     *                  from it: false for a viewer holding enrol/apply:viewapplications alone) and
+     *                  url. See the property comments in the body for each.
      */
     public static function listing_scope(int $enrolid): stdClass {
         global $DB, $USER;
@@ -321,6 +345,11 @@ final class queue {
                 return self::refused();
             }
 
+            /* A viewer (S5) lists the same queue read-only, narrowed by the viewing capability's
+               own system exemption; a decider by the deciding one. */
+            $candecide = has_capability(groupscope::DECIDE, $context);
+            $capability = groupscope::reader_capability($context);
+
             return (object) [
                 'enrolid' => (int) $instance->id,
                 'instance' => $instance,
@@ -329,9 +358,10 @@ final class queue {
                 'mentees' => null,
                 /* Narrowed to the operator's own groups in a separate-groups course they may not
                    see all of; an empty array lists nothing and the page says why (S4). */
-                'groups' => groupscope::narrowed_to((int) $instance->courseid, (int) $USER->id),
+                'groups' => groupscope::narrowed_to((int) $instance->courseid, (int) $USER->id, $capability),
                 'identitycontext' => $context,
-                'allowed' => has_capability('enrol/apply:manageapplications', $context),
+                'allowed' => $candecide || has_capability(groupscope::VIEW, $context),
+                'candecide' => $candecide,
                 'url' => new moodle_url('/enrol/apply/manage.php', ['id' => (int) $instance->id]),
             ];
         }
@@ -339,7 +369,12 @@ final class queue {
         $system = context_system::instance();
         $url = new moodle_url('/enrol/apply/manage.php');
 
-        if (has_capability('enrol/apply:manageapplications', $system)) {
+        /* Deciding wins over looking, so that holding both never costs the queue where the
+           holder decides: a site-wide decider lists the site-wide queue; failing that, a mentor
+           (the deciding capability in user contexts) lists their mentees, deciding; and only
+           then does a site-wide viewer open the site-wide queue read-only, which would
+           otherwise hide the mentee queue of somebody who views site-wide and mentors. */
+        if (has_capability(groupscope::DECIDE, $system)) {
             return (object) [
                 'enrolid' => 0,
                 'instance' => null,
@@ -349,27 +384,59 @@ final class queue {
                 // The system context is the right question for a site-wide capability holder.
                 'identitycontext' => $system,
                 'allowed' => true,
+                'candecide' => true,
                 'url' => $url,
             ];
         }
 
-        /* No site-wide capability, so the mentees. A null restriction means "every application",
-           which is why the capability test has to come first; an empty list is refused rather
-           than listed.
+        /* The mentees. A null restriction means "every application", which is why the system
+           capability test above has to come first; an empty list is refused rather than listed
+           unless the viewer branch below admits them.
 
            The identity context is null: this scope spans courses in a single statement, so no
            one context is the right question for it, and a per-row mask would be unsound for a
            sortable column. */
         $mentees = applications::get_mentees();
+        if ($mentees) {
+            return (object) [
+                'enrolid' => 0,
+                'instance' => null,
+                'context' => $system,
+                'mentees' => $mentees,
+                'identitycontext' => null,
+                'groups' => null,
+                'allowed' => true,
+                // Every mentee listed is one the mentor decides for: get_mentees() asked the capability.
+                'candecide' => true,
+                'url' => $url,
+            ];
+        }
+
+        /* A site-wide viewer opens the site-wide queue read-only: what they may look at is every
+           application, and nothing on the page decides any of it. */
+        if (has_capability(groupscope::VIEW, $system)) {
+            return (object) [
+                'enrolid' => 0,
+                'instance' => null,
+                'context' => $system,
+                'mentees' => null,
+                'groups' => null,
+                'identitycontext' => $system,
+                'allowed' => true,
+                'candecide' => false,
+                'url' => $url,
+            ];
+        }
 
         return (object) [
             'enrolid' => 0,
             'instance' => null,
             'context' => $system,
-            'mentees' => $mentees,
+            'mentees' => [],
             'identitycontext' => null,
             'groups' => null,
-            'allowed' => (bool) $mentees,
+            'allowed' => false,
+            'candecide' => false,
             'url' => $url,
         ];
     }
@@ -391,6 +458,7 @@ final class queue {
             'groups' => null,
             'identitycontext' => null,
             'allowed' => false,
+            'candecide' => false,
             'url' => new moodle_url('/enrol/apply/manage.php'),
         ];
     }
@@ -411,9 +479,18 @@ final class queue {
      * @param int $courseid Course the application under review was made to.
      * @param int $userid The applicant.
      * @param int $excludesubmissionid Record id to leave out, normally the one being reviewed.
+     * @param array|null $reportgroups The groups the reader is narrowed to for the course report
+     *     ({@see groupscope::narrowed_to()} with {@see groupscope::REPORT}), or null for none. Only
+     *     the records {@see groupscope::record_where()} lets through are listed, so this panel
+     *     and the report cannot disagree.
      * @return array Records, newest first, carrying what the outcome formatter needs.
      */
-    public static function prior_applications(int $courseid, int $userid, int $excludesubmissionid): array {
+    public static function prior_applications(
+        int $courseid,
+        int $userid,
+        int $excludesubmissionid,
+        ?array $reportgroups = null
+    ): array {
         global $DB;
 
         if ($userid <= 0) {
@@ -424,22 +501,30 @@ final class queue {
             return [];
         }
 
+        $params = [
+            'courseid' => $courseid,
+            'userid' => $userid,
+            'excludeid' => $excludesubmissionid,
+        ];
+        $scopesql = '1 = 1';
+        if ($reportgroups !== null) {
+            [$scopesql, $scopeparams] = groupscope::record_where('s', $reportgroups, 'priorscope');
+            $params += $scopeparams;
+        }
+
         $sql = "SELECT s.id, s.status, s.timecreated, s.timedecided, s.decidedby,
                        s.userenrolmentid AS outcomeueid,
                        ue.status AS outcomeenrolstatus, ue.timeend AS outcomeenroltimeend
                   FROM {enrol_apply_submission} s
              LEFT JOIN {user_enrolments} ue ON ue.id = s.userenrolmentid
                  WHERE s.courseid = :courseid AND s.userid = :userid AND s.id <> :excludeid
+                       AND {$scopesql}
               ORDER BY s.timecreated DESC, s.id DESC";
 
         /* Bounded, because nothing else bounds it: a determined re-applicant can accumulate
            records without limit, and this renders on a page whose purpose is one decision. The
            newest few are what a decision turns on; the rest is the report's job. */
-        return $DB->get_records_sql($sql, [
-            'courseid' => $courseid,
-            'userid' => $userid,
-            'excludeid' => $excludesubmissionid,
-        ], 0, self::PRIOR_APPLICATIONS_SHOWN);
+        return $DB->get_records_sql($sql, $params, 0, self::PRIOR_APPLICATIONS_SHOWN);
     }
 
     /**
@@ -629,25 +714,30 @@ final class queue {
     /**
      * Refuse anybody who may not decide this application, and say which context let them in.
      *
-     * The gate is the plugin's own can_manage_application(), the predicate every decision
-     * applies to every row, so the people who may act on an application are exactly the people
-     * who may look at one. Nothing new is disclosed: a course teacher already sees every one of
-     * these applications, with the same fields, on the queue.
+     * The gate is the plugin's own can_view_application(): can_manage_application(), the
+     * predicate every decision applies to every row, plus the holders of
+     * enrol/apply:viewapplications in scope (S5). So the people who may look at an application are
+     * the people who may act on it and the viewers the same group narrowing admits; only the
+     * first may decide, which the review page asks can_manage_application() again to know. Nothing
+     * new is disclosed: the same reader already sees every one of these applications, with the
+     * same fields, on the queue.
      *
      * require_login($course) is deliberately not called: a mentor holds no course access at
      * all, which is the point of that delegation level.
      *
      * @param stdClass $application Application as application() returns it.
      * @return context The context that granted access, for the page to sit in.
+     * @throws \required_capability_exception When the current user may neither decide nor view it.
      */
     public static function require_review_access(stdClass $application): context {
         global $USER;
 
         $usercontext = context_user::instance($application->userid, MUST_EXIST);
 
-        /* can_manage_application() itself, not a second copy of its three levels, which would
-           agree only until somebody added an override, a prohibit or a fourth level to one. */
-        $allowed = enrol_get_plugin('apply')->can_manage_application(
+        /* can_view_application() itself, which is can_manage_application() plus the viewers in
+           scope (S5), not a second copy of their levels, which would agree only until somebody
+           added an override, a prohibit or a fourth level to one. */
+        $allowed = enrol_get_plugin('apply')->can_view_application(
             (int) $application->courseid,
             (int) $application->userid,
             (int) $application->id
@@ -665,12 +755,20 @@ final class queue {
            who reached an application outside their groups through the mentor level is a mentor
            here. */
         $coursecontext = context_course::instance($application->courseid, IGNORE_MISSING);
-        if (
-            $coursecontext
-            && has_capability('enrol/apply:manageapplications', $coursecontext)
-            && groupscope::allows((int) $application->courseid, (int) $application->id, (int) $USER->id)
-        ) {
-            return $coursecontext;
+        if (!$coursecontext) {
+            return $usercontext;
+        }
+
+        /* Judged for each capability that can admit a course-level reader, deciding first: a
+           decider narrowed away from this application who also views it site-wide (or in a
+           course they view all groups of) still reads it in the course. */
+        foreach ([groupscope::DECIDE, groupscope::VIEW] as $capability) {
+            if (
+                has_capability($capability, $coursecontext)
+                && groupscope::allows((int) $application->courseid, (int) $application->id, (int) $USER->id, $capability)
+            ) {
+                return $coursecontext;
+            }
         }
 
         return $usercontext;

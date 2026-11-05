@@ -160,6 +160,31 @@ final class groupscope_test extends \advanced_testcase {
     }
 
     /**
+     * The system exemption reads the capability being exercised: a narrowed decider who also
+     * holds enrol/apply:viewapplications at system level is not narrowed when viewing, still is
+     * when deciding, and is when reading the report, which neither grant exempts (S5, S8).
+     *
+     * Changes that must make it fail: the exemption reading the deciding capability whatever is
+     * exercised.
+     *
+     * @return void
+     */
+    public function test_the_system_exemption_reads_the_capability_exercised(): void {
+        [$course] = $this->course(SEPARATEGROUPS);
+        $group = $this->getDataGenerator()->create_group(['courseid' => $course->id]);
+        $teacher = $this->getDataGenerator()->create_and_enrol($course, 'teacher');
+        $this->getDataGenerator()->create_group_member(['groupid' => $group->id, 'userid' => $teacher->id]);
+        $role = $this->getDataGenerator()->create_role(['shortname' => 'siteviewer']);
+        assign_capability(groupscope::VIEW, CAP_ALLOW, $role, \context_system::instance()->id, true);
+        role_assign($role, $teacher->id, \context_system::instance()->id);
+
+        $this->assertNull(groupscope::narrowed_to((int) $course->id, (int) $teacher->id, groupscope::VIEW));
+        $this->assertSame([(int) $group->id], groupscope::narrowed_to((int) $course->id, (int) $teacher->id, groupscope::DECIDE));
+        $this->assertSame([(int) $group->id], groupscope::narrowed_to((int) $course->id, (int) $teacher->id));
+        $this->assertSame([(int) $group->id], groupscope::narrowed_to((int) $course->id, (int) $teacher->id, groupscope::REPORT));
+    }
+
+    /**
      * A holder of the deciding capability through a role assigned at the course CATEGORY is
      * narrowed: only the system level is exempt, a role there does not reach down from the
      * system context.

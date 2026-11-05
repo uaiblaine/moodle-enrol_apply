@@ -21,7 +21,8 @@
  * different page rather than a narrower one:
  *  - userenrol=<ueid>  ONE application, reviewed on a page of its own, open to anybody who
  *                      may decide it - a site administrator, a teacher of the course it was
- *                      made to, or a mentor of the applicant;
+ *                      made to, or a mentor of the applicant - and, read-only, to a holder of
+ *                      enrol/apply:viewapplications who may see it;
  *  - id=<enrolid>      the queue of one course enrolment instance;
  *  - no parameter      every application the current user may decide on, either site-wide or
  *                      for the users they mentor.

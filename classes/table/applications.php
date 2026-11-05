@@ -442,6 +442,20 @@ class applications extends \table_sql implements dynamic_table {
     }
 
     /**
+     * Whether this operator may decide from this listing, rather than only look at it.
+     *
+     * False for a holder of enrol/apply:viewapplications without the deciding capability (S5):
+     * their queue has no selection column, and the page no bulk bar and no decision controls.
+     * Read from the scope, which queue::listing_scope() derived on this request, so the page and
+     * an AJAX refresh draw the same columns.
+     *
+     * @return bool True when the listing offers decisions.
+     */
+    public function can_decide(): bool {
+        return (bool) ($this->scope->candecide ?? false);
+    }
+
+    /**
      * How many applications this operator's queue holds before any filter narrows it.
      *
      * The "M" of the "N of M" count line, and the figure the capacity header's first tile
@@ -914,8 +928,14 @@ class applications extends \table_sql implements dynamic_table {
      * @return void
      */
     protected function define_table_columns(): void {
-        $columns = ['checkboxcolumn'];
-        $headers = [$this->select_all_header()];
+        $columns = [];
+        $headers = [];
+
+        // Only where something can be done with a selection; see can_decide().
+        if ($this->can_decide()) {
+            $columns[] = 'checkboxcolumn';
+            $headers[] = $this->select_all_header();
+        }
 
         /* The course, only for the site-wide and mentee scopes, which span courses; every row of
            an instance-scoped queue belongs to the same course. */

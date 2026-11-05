@@ -67,6 +67,12 @@ class enrol_apply_renderer extends plugin_renderer_base {
 
         $tablehtml = $this->capture_table($table);
 
+        /* A viewer holding enrol/apply:viewapplications alone (S5) gets the same queue with no
+           decision form around it: no selection column (the table drops it), no bulk bar, no
+           decision controls. The decision methods would skip their rows anyway; this only keeps
+           the page from offering what it cannot do. */
+        $candecide = $table->can_decide();
+
         $actions = [
             ['value' => 'confirm', 'label' => get_string('btnconfirm', 'enrol_apply')],
             ['value' => 'wait', 'label' => get_string('btnwait', 'enrol_apply')],
@@ -82,15 +88,18 @@ class enrol_apply_renderer extends plugin_renderer_base {
            justify-content-end is already the default; it is passed through the constructor
            because sticky_footer::add_classes() replaces the classes rather than appending to
            them, so any further class must be passed here too. */
-        $bar = $this->render_from_template('enrol_apply/manage_actions', [
-            'togglegroup' => \enrol_apply\table\applications::TOGGLE_GROUP,
-            'selectedlabel' => get_string('queueselectedonpage', 'enrol_apply', 0),
-            'actionlabel' => get_string('withselectedusers'),
-            'choosedots' => get_string('choosedots'),
-            'golabel' => get_string('go'),
-            'actions' => $actions,
-        ]);
-        $stickyfooter = $this->render(new \core\output\sticky_footer($bar, 'justify-content-end'));
+        $stickyfooter = '';
+        if ($candecide) {
+            $bar = $this->render_from_template('enrol_apply/manage_actions', [
+                'togglegroup' => \enrol_apply\table\applications::TOGGLE_GROUP,
+                'selectedlabel' => get_string('queueselectedonpage', 'enrol_apply', 0),
+                'actionlabel' => get_string('withselectedusers'),
+                'choosedots' => get_string('choosedots'),
+                'golabel' => get_string('go'),
+                'actions' => $actions,
+            ]);
+            $stickyfooter = $this->render(new \core\output\sticky_footer($bar, 'justify-content-end'));
+        }
 
         /* Every place is taken. Shown whether or not applications are still open, and whether
            or not the queue has rows: the state belongs to the method, not to the rows on
@@ -144,7 +153,9 @@ class enrol_apply_renderer extends plugin_renderer_base {
             'total' => (int) $table->totalrows,
         ]);
 
-        $context = $this->decision_controls_context($instance) + [
+        $context = ($candecide ? $this->decision_controls_context($instance) : []) + [
+            'candecide' => $candecide,
+            'viewonlynotice' => get_string('queueviewonly', 'enrol_apply'),
             'descriptiontext' => get_string('confirmusers_desc', 'enrol_apply'),
             'formurl' => $manageurl->out(false),
             'sesskey' => sesskey(),
@@ -601,6 +612,11 @@ class enrol_apply_renderer extends plugin_renderer_base {
      * alone (S6), the list confirm_enrolment() allowlists the posted ids against
      * ({@see \enrol_apply\local\groupscope::choosable_groups()}).
      *
+     * Choosing is a capability of its own, enrol/apply:choosedecision (S5). A course decider
+     * without it gets no chooser and, in its place, what an approval will give, read-only
+     * ({@see self::approval_summary_context()}). That is cosmetic: confirm_enrolment() records an
+     * empty choice for such a decider whatever they post.
+     *
      * With local_groupdist installed, each group that declares seats reads its occupancy, and a
      * full one says so and stays selectable (G15): approving into it is the decider's call, as
      * approving past the course's places is, and manage.php warns after the decision.
@@ -610,14 +626,24 @@ class enrol_apply_renderer extends plugin_renderer_base {
      * @param string $note The decision note they had already typed, empty on the ordinary path.
      * @param array $preselected Group ids to offer ticked: the groups a valid key would have joined,
      *        on the review page of an application the key could not admit. Empty elsewhere.
+     * @param int $userenrolmentid The application on the review page, 0 on the queue; read only by
+     *        the read-only summary, which on the review page names that application's groups.
      * @return array Context for the partial.
      */
-    protected function decision_controls_context($instance, $message = '', $note = '', array $preselected = []): array {
+    protected function decision_controls_context(
+        $instance,
+        $message = '',
+        $note = '',
+        array $preselected = [],
+        int $userenrolmentid = 0
+    ): array {
         $groups = [];
         $roles = [];
 
         $coursecontext = $instance === null ? null : \context_course::instance($instance->courseid);
-        if ($coursecontext && has_capability('enrol/apply:manageapplications', $coursecontext)) {
+        $decides = $coursecontext && has_capability('enrol/apply:manageapplications', $coursecontext);
+        $chooses = $decides && has_capability('enrol/apply:choosedecision', $coursecontext);
+        if ($chooses) {
             $coursegroups = \enrol_apply\local\groupscope::choosable_groups((int) $instance->courseid);
             $seats = \enrol_apply\local\groupseats::for_groups(array_keys($coursegroups));
 
@@ -662,7 +688,11 @@ class enrol_apply_renderer extends plugin_renderer_base {
             }
         }
 
-        return [
+        $summary = $decides && !$chooses
+            ? $this->approval_summary_context($instance, $coursecontext, $userenrolmentid)
+            : ['hassummary' => false];
+
+        return $summary + [
             'messagelabel' => get_string('outcomemessage', 'enrol_apply'),
             'messagehelp' => get_string('outcomemessage_help', 'enrol_apply'),
             /* Non-empty only on the way back from the cancel confirmation. Plain spelling: the
@@ -683,6 +713,67 @@ class enrol_apply_renderer extends plugin_renderer_base {
             'rolehelp' => get_string('decisionrole_help', 'enrol_apply'),
             'roledefault' => get_string('decisionroledefault', 'enrol_apply'),
             'roles' => $roles,
+        ];
+    }
+
+    /**
+     * What an approval will give, for a decider who may not choose it (S5).
+     *
+     * The groups are the approval's own fallback, {@see \enrol_apply_plugin::default_approval_groups()}:
+     * on the review page that application's key route or the instance's list, on the queue the
+     * instance's list with a sentence saying that a keyed application also joins its key group.
+     * The role is the instance's. Read from the same helpers the approval runs, so the summary
+     * cannot promise what the decision then does not do.
+     *
+     * Only a course decider reaches this: the caller's gate is the one the choosers use, so a
+     * mentor is told no group name here either. A group core hides from this reader
+     * ({@see \enrol_apply\local\groupvisibility::visible_to()}) is counted, not named.
+     *
+     * Group names go out plain for a double stash; the role name escaped for a triple stash, as
+     * the role chooser's are, because role_get_name() returns a mixed spelling.
+     *
+     * @param stdClass $instance Enrol instance the decision belongs to.
+     * @param \context_course $coursecontext Its course.
+     * @param int $userenrolmentid The application on the review page, 0 on the queue.
+     * @return array Context for the partial's summary block.
+     */
+    protected function approval_summary_context(stdClass $instance, \context_course $coursecontext, int $userenrolmentid): array {
+        global $DB, $USER;
+
+        $groupids = enrol_get_plugin('apply')->default_approval_groups($instance, $userenrolmentid);
+        $groups = $groupids
+            ? $DB->get_records_list('groups', 'id', $groupids, 'name ASC, id ASC', 'id, courseid, name, visibility')
+            : [];
+
+        $names = [];
+        $hidden = 0;
+        foreach ($groups as $group) {
+            if (\enrol_apply\local\groupvisibility::visible_to($group, (int) $USER->id)) {
+                $names[] = format_string($group->name, true, ['context' => $coursecontext, 'escape' => false]);
+            } else {
+                $hidden++;
+            }
+        }
+        if ($hidden) {
+            $names[] = get_string('decisionsummaryhidden', 'enrol_apply', $hidden);
+        }
+
+        $role = (int) $instance->roleid > 0
+            ? $DB->get_record('role', ['id' => (int) $instance->roleid])
+            : false;
+        $rolename = $role ? role_get_name($role, $coursecontext) : get_string('none');
+
+        $keynote = $userenrolmentid === 0 && $instance->customchar1 === \enrol_apply\local\groupkey::MODE_REVIEW;
+
+        return [
+            'hassummary' => true,
+            'summarygroupslabel' => get_string('decisionsummarygroups', 'enrol_apply'),
+            'summarygroups' => $names ? implode(', ', $names) : get_string('none'),
+            'summaryrolelabel' => get_string('decisionsummaryrole', 'enrol_apply'),
+            'summaryrole' => format_string($rolename, true, ['context' => $coursecontext]),
+            'summaryhelp' => get_string('decisionsummary_help', 'enrol_apply'),
+            'hassummarykeynote' => $keynote,
+            'summarykeynote' => get_string('decisionsummarykey', 'enrol_apply'),
         ];
     }
 
@@ -841,6 +932,10 @@ class enrol_apply_renderer extends plugin_renderer_base {
      * at all rather than an empty one, because a heading that appears only when there is history
      * is itself a disclosure.
      *
+     * A reader the course report narrows to their groups (separate groups, without
+     * moodle/site:accessallgroups, {@see \enrol_apply\local\groupscope::REPORT}) is listed the
+     * records the report would list them, through the same {@see \enrol_apply\local\groupscope::record_where()}.
+     *
      * Each row's wording comes from the report's own outcome formatter rather than the record's
      * bare status, so the two surfaces cannot describe the same record differently: a record says
      * approved for ever, while the enrolment it names may since have been suspended or removed by
@@ -851,6 +946,8 @@ class enrol_apply_renderer extends plugin_renderer_base {
      * @return array Template context: hashistory, its label, and one entry per prior application.
      */
     protected function history_context($application, $coursecontext): array {
+        global $USER;
+
         if (!has_capability('enrol/apply:viewreports', $coursecontext)) {
             return ['hashistory' => false, 'history' => []];
         }
@@ -859,7 +956,13 @@ class enrol_apply_renderer extends plugin_renderer_base {
         $priors = \enrol_apply\local\queue::prior_applications(
             (int) $application->courseid,
             (int) $application->userid,
-            (int) ($application->submissionid ?? 0)
+            (int) ($application->submissionid ?? 0),
+            // The report's own narrowing: a reader the course report narrows sees the same records here.
+            \enrol_apply\local\groupscope::narrowed_to(
+                (int) $application->courseid,
+                (int) $USER->id,
+                \enrol_apply\local\groupscope::REPORT
+            )
         );
 
         $rows = [];
@@ -1053,13 +1156,29 @@ class enrol_apply_renderer extends plugin_renderer_base {
         $coursecontext = \context_course::instance($application->courseid);
         $keyed = $this->key_context($application, $instance, $coursecontext);
 
-        $context = $this->decision_controls_context($instance, $message, $note, $keyed['preselected'])
+        /* A reader the page admits who may not decide (a holder of enrol/apply:viewapplications
+           alone, S5) reads the same panels with no decision form: no hidden contract, no
+           controls, no decisions. Asked of can_manage_application(), the predicate every decision
+           applies, so the form appears exactly where a decision posted from it would be taken. */
+        $candecide = enrol_get_plugin('apply')->can_manage_application(
+            (int) $application->courseid,
+            (int) $application->userid,
+            (int) $application->id
+        );
+
+        $controls = $candecide
+            ? $this->decision_controls_context($instance, $message, $note, $keyed['preselected'], (int) $application->id)
+            : [];
+
+        $context = $controls
             + $this->snapshot_context($application)
             + $this->identity_context($applicant, $coursecontext)
             + $this->history_context($application, $coursecontext)
             + $this->decision_context($application)
             + $this->capacity_context($instance)
             + [
+            'candecide' => $candecide,
+            'viewonlynotice' => get_string('reviewviewonly', 'enrol_apply'),
             'formurl' => $manageurl->out(false),
             'sesskey' => sesskey(),
             'userenrolmentid' => (int) $application->id,
@@ -1119,10 +1238,13 @@ class enrol_apply_renderer extends plugin_renderer_base {
            The spreading class is on the partial's own row, not passed to the footer: the footer
            applies its classes to a content area whose only child is that row, so there it would
            have nothing to spread. */
-        $bar = $this->render_from_template('enrol_apply/review_actions', [
-            'actions' => $context['actions'],
-        ]);
-        $context['stickyfooter'] = $this->render(new \core\output\sticky_footer($bar));
+        $context['stickyfooter'] = '';
+        if ($candecide) {
+            $bar = $this->render_from_template('enrol_apply/review_actions', [
+                'actions' => $context['actions'],
+            ]);
+            $context['stickyfooter'] = $this->render(new \core\output\sticky_footer($bar));
+        }
 
         return $this->render_from_template('enrol_apply/review', $context);
     }

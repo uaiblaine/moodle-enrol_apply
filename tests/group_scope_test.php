@@ -33,8 +33,8 @@ require_once($CFG->dirroot . '/enrol/locallib.php');
  * stage 2, S1-S7).
  *
  * The course is in separate groups mode. The non-editing teacher, who lacks
- * moodle/site:accessallgroups, is made a moderator by granting their role the two capabilities a
- * decision through this plugin and through core's edit-enrolment screen need; they are a member
+ * moodle/site:accessallgroups, is made a moderator by granting their role the capabilities a
+ * decision through this plugin, a choice of groups and core's edit-enrolment screen need; they are a member
  * of one group. The editing teacher holds moodle/site:accessallgroups and is the control that sees
  * everything. Applications are written by the plugin's own apply(), so each carries its record
  * and its comment row and sends its notice.
@@ -94,6 +94,9 @@ final class group_scope_test extends \advanced_testcase {
         $system = \context_system::instance()->id;
         assign_capability('enrol/apply:manageapplications', CAP_ALLOW, $teacher, $system, true);
         assign_capability('enrol/apply:manage', CAP_ALLOW, $teacher, $system, true);
+        /* The moderator here also chooses groups, which is what S1's chooser tests are about; a
+           decider without enrol/apply:choosedecision is decision_capabilities_test's. */
+        assign_capability('enrol/apply:choosedecision', CAP_ALLOW, $teacher, $system, true);
 
         $generator = $this->getDataGenerator();
         $this->course = $generator->create_course(['groupmode' => SEPARATEGROUPS]);

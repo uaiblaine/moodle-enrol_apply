@@ -71,5 +71,10 @@ $report->scope_to_method((int) $instance->id);
 
 echo $OUTPUT->header();
 echo $OUTPUT->heading(get_string('report:course_applications', 'enrol_apply'));
+/* A reader separate groups narrow to no group sees no row (the report's base condition), and is
+   told why with core's own notice, as on the queue and core's participants page (S4, S8). */
+if ($report->narrowed_groups() === []) {
+    echo $OUTPUT->notification(get_string('notingroup'), \core\output\notification::NOTIFY_INFO);
+}
 echo $report->output();
 echo $OUTPUT->footer();

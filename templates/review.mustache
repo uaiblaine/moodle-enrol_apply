@@ -35,6 +35,10 @@
     triple stashes.
 
     Context variables required for this template:
+    * candecide boolean - whether this reader may decide the application. False for a holder of
+      enrol/apply:viewapplications alone: the panels render without the form, the controls and
+      the sticky footer
+    * viewonlynotice string - what a reader who may not decide is told above the panels
     * formurl string - url the decision form posts back to
     * sesskey string - session key guarding the state change
     * userenrolmentid int - the application being decided
@@ -108,6 +112,8 @@
 
     Example context (json):
     {
+        "candecide": true,
+        "viewonlynotice": "You can view this application but not decide it.",
         "formurl": "https://example.com/enrol/apply/manage.php?userenrol=42",
         "sesskey": "Ab12Cd34Ef",
         "userenrolmentid": 42,
@@ -180,9 +186,20 @@
         "stickyfooter": "<div id=\"sticky-footer\"><button type=\"submit\">Confirm</button></div>"
     }
 }}
+{{!
+    The decision form wraps the panels only for a reader who may decide. A viewer reads the same
+    panels inside a plain container instead, so the opening and closing tags are chosen twice, by
+    the same flag; each rendering is balanced.
+}}
+{{#candecide}}
 <form id="enrol_apply_review_form" class="enrol_apply-review" method="post" action="{{formurl}}">
     <input type="hidden" name="sesskey" value="{{sesskey}}">
     <input type="hidden" name="userenrolments[]" value="{{userenrolmentid}}">
+{{/candecide}}
+{{^candecide}}
+<div class="enrol_apply-review">
+    <div class="alert alert-info" role="status">{{viewonlynotice}}</div>
+{{/candecide}}
     <div class="enrol_apply-applicant d-flex flex-wrap align-items-start gap-2 mb-3">
         <div class="flex-grow-1">
             {{#hasidentity}}
@@ -258,6 +275,11 @@
             {{/hashistory}}
         </div>
     </div>
+{{#candecide}}
     {{> enrol_apply/decision_controls }}
     {{{stickyfooter}}}
 </form>
+{{/candecide}}
+{{^candecide}}
+</div>
+{{/candecide}}

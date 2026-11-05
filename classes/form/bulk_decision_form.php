@@ -138,12 +138,28 @@ class bulk_decision_form extends moodleform {
      * role against get_assignable_roles(), per instance, because a forged post never passes
      * through this form at all.
      *
+     * Choosing is enrol/apply:choosedecision's (S5). A decider without it gets, in place of the
+     * choosers, one sentence saying what each approval gives, because the selection can span
+     * several apply methods of the course and each application its own key; confirm_enrolment()
+     * records an empty choice for them whatever is posted, which is the guard.
+     *
      * @param int $courseid Course the selected applications belong to.
      * @return void
      */
     protected function add_decision_controls(int $courseid): void {
         $mform = $this->_form;
         $coursecontext = context_course::instance($courseid);
+
+        if (!has_capability('enrol/apply:choosedecision', $coursecontext)) {
+            $mform->addElement(
+                'static',
+                'decisionsummary',
+                get_string('decisionsummary', 'enrol_apply'),
+                s(get_string('decisionsummarybulk', 'enrol_apply'))
+            );
+
+            return;
+        }
 
         $groups = [];
         foreach (\enrol_apply\local\groupscope::choosable_groups($courseid) as $group) {

@@ -199,10 +199,13 @@ backup/                      group mappings, comments and the durable trail, see
   `enrol/apply:manageapplications` in the course an application was made to fails that check, so
   opening one application threw at them. The gate is now
   `\enrol_apply\local\queue::require_review_access()`, which applies the plugin's own
-  `can_manage_application()` — the same predicate every decision applies to every row, so the
-  people who may act on an application are exactly the people who may look at one. Nothing new
-  is disclosed: a course teacher already sees every one of those applications, with the same
-  fields, on the queue.
+  `can_view_application()`: `can_manage_application()` — the same predicate every decision
+  applies to every row — plus the holders of `enrol/apply:viewapplications` in scope (S5). So the
+  people who may look at an application are the deciders plus the viewers the same group
+  narrowing admits, and only the first get a decision form: `review_form()` asks
+  `can_manage_application()` again, and every decision method asks it per row, so a viewer's
+  forged post decides nothing. Nothing new is disclosed: the same reader already sees every one
+  of those applications, with the same fields, on the queue. A viewer has no mentor level.
 
   `require_login($course)` is deliberately still not called on that path. A mentor holds no
   course access at all, which is the whole point of that delegation level.
@@ -276,7 +279,15 @@ backup/                      group mappings, comments and the durable trail, see
   the course, and `groups_get_all_groups()` applies no capability check of its own — unlike
   `get_assignable_roles()`, which self-gates and would have come back empty for them anyway. So
   without that gate the page listed every group name in a course the reader cannot open. The
-  instance's own groups and role still apply to their decision.
+  instance's own groups and role still apply to their decision. **Choosing is
+  `enrol/apply:choosedecision` (S5), checked in the course on top of that gate**: a course decider
+  without it reads `approval_summary_context()` instead — the groups
+  `enrol_apply_plugin::default_approval_groups()` returns (the approval's own fallback, so the
+  summary and the approval cannot disagree) and the instance's role — and `confirm_enrolment()`
+  records an EMPTY choice for them per application, whatever is posted. Empty rather than
+  skipped: a re-queued application keeps its earlier approval's `decidedgroups`/`decidedrole`,
+  and skipping would let that choice be applied again by somebody who may not choose. Gates
+  `SC32`-`SC37`.
 
 - **The review page's profile snapshot is read frozen, and NOTHING IN THE SNAPSHOT PANEL reads the live
   profile.** It comes from `submission::read_snapshot()` and never from `diff::compute()`, which
@@ -539,6 +550,19 @@ backup/                      group mappings, comments and the durable trail, see
   holder of `enrol/apply:unenrol`; active enrolments stay core's. `groupscope::where()` and `application_group()` must agree on
   "newest record"; `test_the_sql_and_the_per_row_check_agree` holds it. Nothing is memoised:
   PHPUnit resets id sequences, so a static would leak answers between tests. Gates `SC1`-`SC31`.
+
+  **The system exemption reads the capability being exercised** (`narrowed_to()`'s third
+  argument: `DECIDE`, `VIEW`, `REPORT`), so a site-wide viewer is not a site-wide decider. The
+  queue picks it with `reader_capability()` (deciding where the reader may decide in the course,
+  viewing otherwise) in `listing_scope()`, `scope()` and `require_review_access()` alike, so a
+  decider narrowed in the course who also views site-wide lists their groups on the instance queue
+  and walks the rest on the site-wide one, read-only. `listing_scope()` carries `candecide`: false
+  for a viewer, whose table drops the selection column and whose page drops the form, the controls
+  and the sticky footer (S5). The course report narrows a narrowed `viewreports` holder with
+  `record_where()` (S8): key group OR a decided group, matched as `','||decidedgroups||','` LIKE
+  `'%,id,%'` (one placeholder per group, so 1 never matches 11), judged per record rather than per
+  newest record because every record is a report row. The custom-report datasource is
+  deliberately not narrowed (audiences govern it). Gates `SC38`-`SC52`.
 
 - **The mentee path is Moodle's mentor pattern, not groups.** With no `id` and no
   `userenrol`, the queue falls back to the users the current user holds a role assignment

@@ -252,6 +252,8 @@ carry no seats and nothing above applies. It is not declared as a dependency.
 |------------|--------|
 | `enrol/apply:config` | add, edit and remove instances |
 | `enrol/apply:manageapplications` | decide on applications |
+| `enrol/apply:choosedecision` | choose the groups and role an approval gives |
+| `enrol/apply:viewapplications` | view the queue and the review page without deciding; the review page also shows the staff-internal note of the last deferral, so grant it to staff only |
 | `enrol/apply:viewreports` | read the course's report of applications |
 | `enrol/apply:manage` | manage the resulting user enrolments |
 | `enrol/apply:unenrol` | unenrol other users |
@@ -260,6 +262,17 @@ carry no seats and nothing above applies. It is not declared as a dependency.
 `enrol/apply:manageapplications` is honoured at three levels: at system level it covers
 every course, at course level that course, and in a user's own user context it covers
 that user's applications, which is what allows mentor-style delegation.
+
+`enrol/apply:choosedecision` decides whether a decider picks the groups and role of an
+approval. Without it they approve or refuse only: an approval gives what the method gives (the
+key's group and the method's groups for an application a group key sent for review, the method's
+groups otherwise, and the method's role), the screens show those read-only instead of the
+choosers, and the server ignores a posted choice. `enrol/apply:viewapplications` opens the queue
+and the review page read-only, for a coordinator who reads applications and decides none: no
+selection, no bulk bar, no decision form. Granted at system level it opens the site-wide queue
+(`/enrol/apply/manage.php`), read-only; it has no mentor level. Both go to editing teachers and
+managers by default, as `enrol/apply:manageapplications` does, so a site that adds neither to a
+role sees no change.
 
 `enrol/apply:viewreports` is granted to managers only, and deliberately not to editing
 teachers the way the capabilities around it are. The report it opens shows the profile
@@ -303,6 +316,31 @@ their groups. *Visible groups* and *No groups* narrow nobody. A holder of the
 capability at system level and a mentor (the capability in the applicant's own user context) are
 never narrowed, as their delegation does not come from the course.
 
+A holder of `enrol/apply:viewapplications` is narrowed by the same rule, and so is a holder of
+`enrol/apply:viewreports` on the course report: in a separate-groups course, without
+`moodle/site:accessallgroups`, the report lists only the records whose key group is one of
+theirs or whose approval joined one of their groups, and a reader in no group sees no row and
+core's notice. Each capability's own system-level grant lifts its narrowing. The site-wide
+custom-report source is not narrowed: who reads a custom report is decided by its audiences.
+
+### Setting up a group moderator
+
+A moderator decides the applications of their own groups and nobody else's:
+
+1. In the course, set **Group mode** to **Separate groups**, and give the method a mode that
+   records a group: *Key only, reviewed* sends every application through a group key.
+2. **Site administration → Users → Permissions → Define roles → Add a new role**, with
+   **Role archetype** *Non-editing teacher* (which does not hold
+   `moodle/site:accessallgroups`). Allow `enrol/apply:manageapplications`. Allow
+   `enrol/apply:choosedecision` only if the moderators should pick the groups and the role an
+   approval gives (and then they pick among their own groups only). For a read-only coordinator
+   allow `enrol/apply:viewapplications` instead of `enrol/apply:manageapplications`.
+3. Do not allow `moodle/site:accessallgroups`: it is what lifts the narrowing.
+4. `enrol/apply:manage` and `enrol/apply:unenrol` are not needed. Core's **Edit enrolment** and
+   **Unenrol** routes refuse a moderator an application outside their groups anyway, but leaving
+   both out keeps the role to this plugin's own screens.
+5. Assign the role in the course and add each moderator to their groups.
+
 ## The applications report
 
 Course → Participants → Enrolment methods carries a report icon beside each Course enrol
@@ -334,6 +372,10 @@ Two consequences worth knowing before relying on it. A report can be shared with
 wider than the person who built it. And a **scheduled** report is rendered once using its
 creator's permissions and then mailed to every recipient, so what arrives in an inbox reflects
 what the creator may see, not what the reader may.
+
+Nor is this source narrowed by separate groups, as the course report is: it spans courses with
+different group modes, so a site that must keep one group's applications from another group's
+moderator gives such a report no audience that includes them.
 
 This surface follows the site's `Enable custom reports` setting. The course report does not —
 it keeps working when custom reports are switched off.
