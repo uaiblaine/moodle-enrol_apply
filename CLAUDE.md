@@ -619,7 +619,10 @@ backup/                      group mappings, comments and the durable trail, see
   key's admission (`apply_or_admit()`).** Each makes its own authorisation decision and records
   what was decided before calling it; anything that must follow an activation goes in
   `complete_approval()`, never in one caller. The key is resolved inside `submit_application()`'s
-  lock from the database, never from what the form concluded, and a ticked `withoutkey` wins over
+  lock from the database, never from what the form concluded, and resolved again once
+  `lock_admission()` holds its locks (which can take seconds); the group page takes none of them, so
+  that second read narrows the gap to the write without closing it (gate `SR4`). A ticked
+  `withoutkey` wins over
   a posted key (the no-JavaScript transport posts both). Places and seats are checked and the
   admission written under `lock_admission()` (the method, then each group ascending), because the
   submission lock is per applicant and two key holders racing for one seat both got it without
@@ -1390,7 +1393,10 @@ backup/                      group mappings, comments and the durable trail, see
   text.** `\enrol_apply\local\customfield` is the one door: the form draws it with
   `edit_field_add()`, fills it with `edit_load_user_data()` and asks `edit_validate_field()`; the
   snapshot, the notification, the locked rows, the offer and the completeness check use
-  `customfield::display()`; the write is the type's `edit_save_data()`. The column holds the
+  `customfield::display()`; the write is the type's `edit_save_data()`, after
+  `customfield::errors()` asks `edit_validate_field()` again, because an offer accepted on
+  `profile.php` is written long after the form validated it and core keeps no unique index on
+  `{user_info_data}` (gates `SR1`-`SR3`). The column holds the
   type's own shape (`profilefield_brasilufmunicipio`: JSON, plus a stored `"1"` for "nothing
   chosen"), so a plugin-side `trim($data) !== ''` or string compare is wrong for it. Three things
   bite. **A type may read its extra elements with `optional_param()`** rather than from the value
@@ -1559,6 +1565,15 @@ backup/                      group mappings, comments and the durable trail, see
   mapped under that name**, not the parent of this row. A record the restore skips (its applicant
   unmapped, or already in the course) must therefore still call `set_mapping()` — to 0 — or its
   answers attach to whichever applicant was restored before it. Gate `CF5K`.
+
+  **A restored answer's key is translated, because readers act on the id in it.**
+  `restored_answer_key()` maps an `a_<id>` key to the restored question (every restore gives the
+  instance's questions new ids, even on the same site, and the report's per-question columns look
+  answers up by key), keeps an unmapped one only on the same site (a shared question, as
+  `restored_field_id()` says), and drops a `c_<id>` key from another site: the masking judges it
+  against the visibility of whatever profile field has that id HERE, and the archive does not say
+  which field it was. `s_` keys travel as they are. The old envelope goes through the same rule.
+  Gates `SR5`-`SR8`.
 
   **The custom report's snapshot column aggregates the rows in SQL** (`submission::aggregate_sql()`,
   `sql_group_concat()` with two control characters as separators, which `answer_record()` keeps

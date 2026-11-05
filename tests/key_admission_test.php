@@ -26,6 +26,7 @@ defined('MOODLE_INTERNAL') || die();
 global $CFG;
 // At file scope so the CoversClass target below resolves when PHPUnit reads the attribute.
 require_once($CFG->dirroot . '/enrol/apply/lib.php');
+require_once($CFG->dirroot . '/enrol/apply/tests/fixtures/key_changing_plugin.php');
 
 /**
  * Tests for the write door's group key route (docs/design/group-enrolment-key.md, K4).
@@ -468,6 +469,58 @@ final class key_admission_test extends \advanced_testcase {
         $this->assertSame(submission::KEY_NONE, (int) $this->record($applicant)->keyoutcome);
         $this->assertFalse(is_enrolled(\context_course::instance($this->course->id), $applicant, '', true));
         $this->assertSame(1, $this->sent_to($messages, $this->teacher), 'the manager is asked to decide');
+    }
+
+    /**
+     * What can happen to a key while its holder waits for the admission locks, keyed by case name.
+     *
+     * @return array The change, as a case name the test switches on.
+     */
+    public static function key_changed_while_waiting_provider(): array {
+        return [
+            'the key rotated on the group page' => ['rotated'],
+            'the key moved to another group' => ['moved'],
+            'the group deleted' => ['deleted'],
+            'the option switched off on the method' => ['off'],
+        ];
+    }
+
+    /**
+     * A key that stops naming its group while the admission locks are taken admits nobody.
+     *
+     * The change is made from inside lock_admission(), which is where a real request waits up to
+     * five seconds a lock, so the key had resolved before it and the second read is the only one
+     * that can see it. The application then waits like one with a wrong key.
+     *
+     * @param string $change Which change happens while the locks are taken.
+     * @return void
+     */
+    #[DataProvider('key_changed_while_waiting_provider')]
+    public function test_a_key_changed_while_the_locks_are_taken_admits_nobody(string $change): void {
+        $this->plugin = key_changing_plugin::making($change, $this->keyed, $this->listed);
+        $applicant = $this->getDataGenerator()->create_user();
+
+        [$result, $messages] = $this->submit($applicant, ['groupkey' => self::KEY]);
+
+        $this->assertFalse($result->was_admitted());
+        $this->assertSame(submission::KEY_NONE, (int) $this->record($applicant)->keyoutcome);
+        $this->assertFalse(is_enrolled(\context_course::instance($this->course->id), $applicant, '', true));
+        $this->assertSame(1, $this->sent_to($messages, $this->teacher), 'the manager is asked to decide');
+    }
+
+    /**
+     * The control for the test above: the same plugin, with nothing changed, still admits.
+     *
+     * @return void
+     */
+    public function test_a_key_unchanged_while_the_locks_are_taken_still_admits(): void {
+        $this->plugin = key_changing_plugin::making('none', $this->keyed, $this->listed);
+        $applicant = $this->getDataGenerator()->create_user();
+
+        [$result] = $this->submit($applicant, ['groupkey' => self::KEY]);
+
+        $this->assertTrue($result->was_admitted());
+        $this->assertTrue($this->member($this->keyed, $applicant));
     }
 
     /**
