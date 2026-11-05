@@ -1484,6 +1484,67 @@ final class application_form_test extends \advanced_testcase {
     }
 
     /**
+     * The form tells the modal what step 2's submit says, from the mode: "Enrol me" where a valid
+     * key enrols, "Submit application" where it sends the application for review.
+     *
+     * Changes that must make it fail: the attribute read off the step alone, or off the wrong
+     * predicate (required() instead of admits()).
+     *
+     * @return void
+     */
+    public function test_the_form_carries_the_label_of_step_two_by_mode(): void {
+        global $DB;
+
+        $this->accept_group_keys(groupkey::MODE_REVIEW);
+        $saved = [$_GET, $_POST];
+        try {
+            $_GET = [];
+            $_POST = [
+                'instance' => $this->instance->id,
+                'groupkey' => 'Turma-B-2027',
+                'keycontinue' => 'Continue',
+                'sesskey' => sesskey(),
+                '_qf__enrol_apply_form_application_form' => 1,
+            ];
+            $expected = [
+                groupkey::MODE_REVIEW => get_string('submitapplication', 'enrol_apply'),
+                groupkey::MODE_REQUIRED => get_string('enrolme', 'core_enrol'),
+            ];
+            foreach ($expected as $mode => $label) {
+                $DB->set_field('enrol', 'customchar1', $mode, ['id' => $this->instance->id]);
+                $html = (new application_form(null, []))->render();
+                $this->assertStringContainsString('data-enrol-apply-step="2"', $html, $mode);
+                $this->assertStringContainsString('data-enrol-apply-submit="' . s($label) . '"', $html, $mode);
+            }
+        } finally {
+            [$_GET, $_POST] = $saved;
+        }
+    }
+
+    /**
+     * Without a key, the reviewed mode says to enter the key "to apply", and key-only mode keeps
+     * "to enrol".
+     *
+     * Changes that must make it fail: the one sentence used for both modes.
+     *
+     * @return void
+     */
+    public function test_a_missing_key_is_worded_by_what_the_key_does(): void {
+        global $DB;
+
+        $this->accept_group_keys(groupkey::MODE_REVIEW);
+        $empty = $this->submit_through_the_modal([]);
+        $this->assertFalse($empty['submitted']);
+        $this->assertStringContainsString(get_string('groupkeyrequired_review', 'enrol_apply'), $empty['html']);
+        $this->assertStringNotContainsString(get_string('groupkeyrequired', 'enrol_apply'), $empty['html']);
+
+        $DB->set_field('enrol', 'customchar1', groupkey::MODE_REQUIRED, ['id' => $this->instance->id]);
+        $empty = $this->submit_through_the_modal([]);
+        $this->assertStringContainsString(get_string('groupkeyrequired', 'enrol_apply'), $empty['html'], 'the control');
+        $this->assertStringNotContainsString(get_string('groupkeyrequired_review', 'enrol_apply'), $empty['html']);
+    }
+
+    /**
      * Ask for a municipality field, required or not, and return its key.
      *
      * @param bool $required Whether the instance requires it.

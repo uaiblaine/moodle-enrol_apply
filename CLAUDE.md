@@ -705,9 +705,10 @@ backup/                      group mappings, comments and the durable trail, see
   `$_POST`, and only with this form's `_qf__` marker), never through `optional_param()`, which also
   reads the query string. A link could otherwise build step 2, and so tell a valid key from a wrong
   one, with no submission and no try spent. Gate `KQ4`. In the modal, `amd/src/enrol_page.js`
-  hides the footer's submit on step 1 and labels it "Enrol me" on step 2, read from the form's
-  `data-enrol-apply-step` on every `core/modal:bodyRendered`; only `tests/behat/key_only.feature`
-  holds that.
+  hides the footer's submit on step 1 and, on step 2, labels it with the form's own
+  `data-enrol-apply-submit` ("Enrol me" where `groupkey::admits()`, "Submit application" in
+  `'review'`; the script knows no mode), both read from the form on every `core/modal:bodyRendered`;
+  only `tests/behat/key_only.feature` and `key_review.feature` hold that.
 
 - **`enrol_plugin::cron()` is dead.** Core declares it empty and nothing calls it. The
   `expiredaction` setting only works because `classes/task/sync_enrolments.php` calls

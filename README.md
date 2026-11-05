@@ -151,6 +151,8 @@ enrolment key does"; the site default for new instances is `enrol_apply/groupkey
   every other application is reviewed as usual.
 - **Key only**: a valid key enrols at once, and nobody can enrol through the method without one.
   Nothing ever waits for a decision there.
+- **Key only, reviewed**: the key is just as mandatory, but a valid key sends the application for
+  review instead of enrolling: nobody can apply through the method without one.
 
 The key is core's own group enrolment key, set on each group's settings page, the one
 `enrol_self` reads; this plugin stores none. Any group of the course counts. The instance form
@@ -177,7 +179,23 @@ written for a refusal. In the modal, the footer's submit button appears only on 
 Applications made before an instance was switched to key only stay in its queue and can still be
 decided.
 
-On either mode the key is trimmed of the whitespace the group page never stores. A key ending in
+**Key only, reviewed.** The form is the one of *Key only*: the enrolment page says a key is needed
+and its button reads **Apply with a key**, the first step asks for the key alone, and the second
+says "Your application for *group* will be reviewed" and asks the rest, submitted with **Submit
+application** (in the modal the footer's label is chosen by the server from the mode, so it never
+reads "Enrol me" here). No key, a wrong key, a locked field, no place left or a full group is
+refused on the first step and nothing is written. A valid key writes an ordinary application that
+waits in the queue, marked **Key accepted, sent for review**, with the key's group recorded; the
+applicant reads that the key was accepted and the application waits for review, and is not
+enrolled. Three behaviours follow from the record being the promise: approving it (without a group
+choice, as the bulk decision does) joins the key's group as well as the method's own list, even if
+the key was rotated or removed from the group while it waited or the method changed mode; a group
+deleted meanwhile is skipped; and unticking every group in the chooser still applies those
+defaults. Pending applications hold no seat, so a group can draw more keyed applications than it
+has seats: the decider is warned, never blocked. The managers' new-application notice names the
+key's group to a recipient who may see it.
+
+On every mode that reads a key, the key is trimmed of the whitespace the group page never stores. A key ending in
 an unusual space, as a copied one often does, gets its own message and costs no try. Wrong keys are
 counted per applicant and instance in the `keyattempts` application cache, for 15 minutes. After
 five, the field gives way to a sentence for the rest of that time, so the form cannot be used to
@@ -208,7 +226,8 @@ Who is told what:
   cannot be sorted.
 - **The teacher configuring a key-only method** is warned, while that mode is selected, when no
   group of the course has a key, when every keyed group is full, and when applications are still
-  waiting. Either key mode warns when the course's self enrolment accepts the same group keys,
+  waiting; on *Key only, reviewed* the same two warnings read "apply" and the third counts only
+  the applications without a key, which stay in the queue. Either key mode warns when the course's self enrolment accepts the same group keys,
   which would enrol without these questions.
 
 Two apply methods in one course accept the same keys, whatever their modes.

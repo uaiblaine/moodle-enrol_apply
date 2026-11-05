@@ -23,6 +23,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   reviewed", and the page transport submits it with **Submit application**. An unnamed method in this mode is called **Application with a group key**. The
   site default, the report's admission route filter and the privacy metadata know the new value.
   Version 2026110500 (no upgrade step: the column's comment only).
+  R2: the modal's footer on step 2 reads **Submit application** in this mode, where it said
+  "Enrol me": the form carries the label (`data-enrol-apply-submit`, chosen by the server from the
+  mode) and `enrol_page.js` only reads it, so `amd/build` is rebuilt. The teacher's warnings under
+  the setting also show for this mode, worded for applying ("nobody can apply through this
+  method"), and the "applications are still waiting" one counts only the pending applications
+  without a key ("they stay in the queue"). A missing key reads "Enter your group enrolment key
+  to apply." instead of "to enrol." where the key does not enrol. A Behat feature
+  (`tests/behat/key_review.feature`) walks the mode through the modal and the queue. Version
+  2026110501.
 - **Group key only: what the teacher is told (Q3).** Under the setting, key-only mode warns, only
   while it is selected and only when it holds, that no group of the course has a key (so nobody can
   enrol), that every keyed group is full (with `local_groupdist`), or that applications made before

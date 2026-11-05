@@ -119,6 +119,12 @@ class enrol_apply_edit_form extends moodleform {
             $mform->addElement('static', 'keyonlywarnings', '', $warnings);
             $mform->hideIf('keyonlywarnings', 'customchar1', 'neq', \enrol_apply\local\groupkey::MODE_REQUIRED);
         }
+        // The same facts for the mode that sends a keyed application for review, worded for applying.
+        $reviewwarnings = $this->key_only_warnings($instance, true);
+        if ($reviewwarnings !== '') {
+            $mform->addElement('static', 'keyreviewwarnings', '', $reviewwarnings);
+            $mform->hideIf('keyreviewwarnings', 'customchar1', 'neq', \enrol_apply\local\groupkey::MODE_REVIEW);
+        }
         // Self enrolment reads the same keys (G1), so they would enrol there without the questions.
         if ($this->self_enrolment_takes_group_keys((int) $instance->courseid)) {
             $mform->addElement('static', 'groupkeyselfkeys', '', $OUTPUT->render_from_template('enrol_apply/groupkey_warnings', [
@@ -432,16 +438,24 @@ class enrol_apply_edit_form extends moodleform {
      * enrols nobody now; applications made before still wait, which the mode does not decide.
      * A key's own group and the instance's list both count, as at the write door (G14).
      *
+     * For the mode that sends a keyed application for review, the first two read "apply" and the
+     * third counts only the applications without a key, the ones that mode never makes and does
+     * not decide.
+     *
      * @param \stdClass $instance The instance being edited; id 0 for a new one.
+     * @param bool $review True to word and count them for MODE_REVIEW instead of MODE_REQUIRED.
      * @return string The rendered warnings, or '' when there are none.
      */
-    protected function key_only_warnings(\stdClass $instance): string {
+    protected function key_only_warnings(\stdClass $instance, bool $review = false): string {
         global $DB, $OUTPUT;
 
         $warnings = [];
         $keyed = \enrol_apply\local\groupkey::summary((int) $instance->courseid);
         if (!$keyed) {
-            $warnings[] = ['danger' => true, 'message' => get_string('keyonlynokeys', 'enrol_apply')];
+            $warnings[] = [
+                'danger' => true,
+                'message' => get_string($review ? 'keyreviewnokeys' : 'keyonlynokeys', 'enrol_apply'),
+            ];
         } else if (\enrol_apply\local\groupseats::available()) {
             $plugin = enrol_get_plugin('apply');
             $admitting = array_filter(
@@ -451,18 +465,27 @@ class enrol_apply_edit_form extends moodleform {
                 )
             );
             if (!$admitting) {
-                $warnings[] = ['danger' => true, 'message' => get_string('keyonlyallfull', 'enrol_apply')];
+                $warnings[] = [
+                    'danger' => true,
+                    'message' => get_string($review ? 'keyreviewallfull' : 'keyonlyallfull', 'enrol_apply'),
+                ];
             }
         }
 
         if (!empty($instance->id)) {
             [$where, $params] = \enrol_apply\local\queue::awaiting_decision_where();
-            $waiting = $DB->count_records_sql(
-                'SELECT COUNT(1) FROM {user_enrolments} ue WHERE ue.enrolid = :enrolid AND ' . implode(' AND ', $where),
-                $params + ['enrolid' => $instance->id]
-            );
+            $sql = 'SELECT COUNT(1) FROM {user_enrolments} ue WHERE ue.enrolid = :enrolid AND ' . implode(' AND ', $where);
+            if ($review) {
+                // Only the applications made without a key: the keyed ones are what this mode writes.
+                $sql .= ' AND NOT EXISTS (SELECT 1 FROM {enrol_apply_submission} s'
+                    . ' WHERE s.userenrolmentid = ue.id AND s.keygroupid <> 0)';
+            }
+            $waiting = $DB->count_records_sql($sql, $params + ['enrolid' => $instance->id]);
             if ($waiting) {
-                $warnings[] = ['danger' => false, 'message' => get_string('keyonlypending', 'enrol_apply', $waiting)];
+                $warnings[] = [
+                    'danger' => false,
+                    'message' => get_string($review ? 'keyreviewpending' : 'keyonlypending', 'enrol_apply', $waiting),
+                ];
             }
         }
 
