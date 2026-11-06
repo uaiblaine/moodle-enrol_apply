@@ -70,6 +70,18 @@ class bulk_decision_form extends moodleform {
             ));
         }
 
+        /* How many of the selected applications this decider may not decide: said before anything
+           is written, and in the same words for all three decisions. */
+        if (!empty($this->_customdata['outsidenotice'])) {
+            global $OUTPUT;
+
+            $mform->addElement('static', 'bulkoutsidegroups', '', $OUTPUT->notification(
+                $this->_customdata['outsidenotice'],
+                \core\output\notification::NOTIFY_WARNING,
+                false
+            ));
+        }
+
         /* Names go through s() because a static element is rendered by core's own
            element-template.mustache through a triple stash. */
         $names = [];
@@ -124,6 +136,7 @@ class bulk_decision_form extends moodleform {
     /**
      * Add the group and role choosers, each only where it has something to offer.
      *
+     * The group chooser is an autocomplete (RP-D26) with the queue's option text, seats included.
      * Both lists carry the escaped spelling of every name, unlike what the queue's own renderer
      * hands its Mustache template: core renders a select's options through a triple stash in
      * element-select.mustache, while a double stash escapes for itself and needs the plain one.
@@ -161,17 +174,25 @@ class bulk_decision_form extends moodleform {
             return;
         }
 
+        /* The queue's chooser text (RP-D21) and order (RP-D22), read once with the seats
+           ({@see \enrol_apply\local\groupfacts}). An autocomplete renders its options through a
+           triple stash, like a select, so the plain text is escaped here, once. */
         $groups = [];
-        foreach (\enrol_apply\local\groupscope::choosable_groups($courseid) as $group) {
-            $groups[$group->id] = format_string($group->name, true, ['context' => $coursecontext]);
+        foreach (\enrol_apply\local\groupfacts::for_course($courseid, $coursecontext) as $fact) {
+            $groups[$fact->id] = s(\enrol_apply\local\groupfacts::option_text($fact));
         }
         if ($groups) {
+            /* An empty multiple autocomplete posts nothing; the operation reads that as an empty
+               choice, which is the method's own groups. */
             $mform->addElement(
-                'select',
+                'autocomplete',
                 'groups',
                 get_string('decisiongroups', 'enrol_apply'),
                 $groups,
-                ['multiple' => 'multiple', 'size' => min(6, count($groups))]
+                [
+                    'multiple' => true,
+                    'noselectionstring' => get_string('decisiongroupsnone', 'enrol_apply'),
+                ]
             );
             $mform->setType('groups', PARAM_INT);
             $mform->addHelpButton('groups', 'decisiongroups', 'enrol_apply');

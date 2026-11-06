@@ -134,7 +134,10 @@ Feature: Enrolment upon approval
   # with two.
   @javascript
   Scenario: A teacher confirms an application from the course participants page
-    Given I log in as "student1"
+    Given the following "groups" exist:
+      | name    | course | idnumber |
+      | Turma A | C1     | TA       |
+    And I log in as "student1"
     And I am on "Course 1" course homepage
     And I press "Start application"
     And I press "Submit application"
@@ -145,8 +148,11 @@ Feature: Enrolment upon approval
     And I click on "Select 'Student 1'" "checkbox"
     And I choose "Confirm enrolment applications" from the participants page bulk action menu
     Then I should see "Selected applicants"
+    # The group chooser is an autocomplete (RP-D26); the option reads as the queue's does, code included.
+    And I set the field "Groups to join on approval" to "Turma A (TA)"
     And I press "Confirm enrolment applications"
     Then I should see "Enrolment applications decided: 1"
+    And I should see "Turma A" in the "Student 1" "table_row"
     And I log out
     And I log in as "student1"
     And I am on "Course 1" course homepage

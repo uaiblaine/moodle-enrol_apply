@@ -153,6 +153,38 @@ abstract class decision_operation extends enrol_bulk_enrolment_operation {
     }
 
     /**
+     * How many of the selected applications this operator may not decide, which will be left alone.
+     *
+     * The predicate is the one every decision method applies to each row,
+     * {@see \enrol_apply_plugin::can_manage_application()}, over the rows that are awaiting a
+     * decision: a row that is not is counted by the report's other counter. So the number said on
+     * the form is the number the decision then skips for this reason, and the report's
+     * "unchanged" counter holds it among the applications that did not move.
+     *
+     * @param course_enrolment_manager $manager Manager core built for the course.
+     * @param array $users Selected users carrying their user enrolments, keyed by user id.
+     * @return int How many awaiting applications are outside the operator's groups.
+     */
+    public function outside_groups_count(course_enrolment_manager $manager, array $users): int {
+        $courseid = (int) $manager->get_course()->id;
+        $awaiting = array_flip(static::awaiting_decision($users));
+        $outside = 0;
+
+        foreach ($users as $userid => $user) {
+            foreach ($user->enrolments as $enrolment) {
+                if (
+                    isset($awaiting[(int) $enrolment->id])
+                    && !$this->plugin->can_manage_application($courseid, (int) $userid, (int) $enrolment->id)
+                ) {
+                    $outside++;
+                }
+            }
+        }
+
+        return $outside;
+    }
+
+    /**
      * Which of those are actually applications awaiting a decision.
      *
      * The predicate is queue::is_awaiting_decision(), the object-form definition of "awaiting a
@@ -214,6 +246,14 @@ abstract class decision_operation extends enrol_bulk_enrolment_operation {
             is_array($defaultcustomdata) ? ($defaultcustomdata['users'] ?? []) : [],
             'form'
         );
+
+        $outside = $this->outside_groups_count(
+            $this->manager,
+            is_array($defaultcustomdata) ? ($defaultcustomdata['users'] ?? []) : []
+        );
+        $customdata['outsidenotice'] = $outside === 1
+            ? get_string('bulkoutsidegroupsone', 'enrol_apply')
+            : ($outside > 1 ? get_string('bulkoutsidegroups', 'enrol_apply', $outside) : '');
 
         return new bulk_decision_form($defaultaction, $customdata);
     }

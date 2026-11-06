@@ -1103,4 +1103,250 @@ final class operations_test extends \advanced_testcase {
             );
         }
     }
+
+    /**
+     * The confirmation form of a decision, rendered for the current user.
+     *
+     * @param array $applicants The selected applicants.
+     * @param string $class The operation class.
+     * @return string The form's HTML.
+     */
+    private function bulk_form_html(array $applicants, string $class = confirm_operation::class): string {
+        [$manager, $users] = $this->selection($applicants);
+
+        return (new $class($manager, $this->plugin))
+            ->get_form(new \moodle_url('/user/action_redir.php'), ['users' => $users])
+            ->render();
+    }
+
+    /**
+     * The HTML of the bulk form's group chooser, or the empty string when it has none.
+     *
+     * @param string $html The form's HTML.
+     * @return string The select element.
+     */
+    private function groups_chooser(string $html): string {
+        preg_match('/<select[^>]*name="groups\[\]".*?<\/select>/s', $html, $select);
+
+        return $select[0] ?? '';
+    }
+
+    /**
+     * Make the course a separate-groups one and a non-editing teacher its narrowed decider.
+     *
+     * @param bool $chooses Whether the role also holds enrol/apply:choosedecision.
+     * @return array The decider, their own group and another group.
+     */
+    private function narrowed_decider(bool $chooses = true): array {
+        global $DB;
+
+        $DB->set_field('course', 'groupmode', SEPARATEGROUPS, ['id' => $this->course->id]);
+        $role = (int) $DB->get_field('role', 'id', ['shortname' => 'teacher'], MUST_EXIST);
+        $system = \context_system::instance()->id;
+        assign_capability('enrol/apply:manageapplications', CAP_ALLOW, $role, $system, true);
+        if ($chooses) {
+            assign_capability('enrol/apply:choosedecision', CAP_ALLOW, $role, $system, true);
+        }
+
+        $generator = $this->getDataGenerator();
+        $mine = $generator->create_group(['courseid' => $this->course->id, 'name' => 'Own group']);
+        $theirs = $generator->create_group(['courseid' => $this->course->id, 'name' => 'Other group']);
+        $moderator = $generator->create_and_enrol($this->course, 'teacher');
+        $generator->create_group_member(['groupid' => $mine->id, 'userid' => $moderator->id]);
+
+        return [$moderator, $mine, $theirs];
+    }
+
+    /**
+     * An application whose key sent it for review to a group (or to none).
+     *
+     * @param \stdClass|null $group The key's group, null for a keyless application.
+     * @return \stdClass The applicant.
+     */
+    private function applicant_of_group(?\stdClass $group): \stdClass {
+        global $DB;
+
+        $applicant = $this->applicant();
+        $DB->set_field(
+            'enrol_apply_submission',
+            'keygroupid',
+            $group ? (int) $group->id : 0,
+            ['userenrolmentid' => $this->ueid($applicant)]
+        );
+
+        return $applicant;
+    }
+
+    /**
+     * The bulk form offers the groups as the queue does: natural order, the idnumber after the name.
+     *
+     * Changes that must make it fail: the options listed in the database's order, the idnumber
+     * dropped, or the chooser reverting to a plain select.
+     *
+     * @return void
+     */
+    public function test_the_bulk_form_offers_the_groups_in_natural_order_with_their_codes(): void {
+        $generator = $this->getDataGenerator();
+        $generator->create_group(['courseid' => $this->course->id, 'name' => 'Turma 10']);
+        $generator->create_group(['courseid' => $this->course->id, 'name' => 'Turma 2', 'idnumber' => 'T2']);
+        $this->setUser($this->teacher());
+
+        $html = $this->bulk_form_html([$this->applicant()]);
+        $chooser = $this->groups_chooser($html);
+
+        $this->assertNotSame('', $chooser);
+        $this->assertStringContainsString('data-fieldtype="autocomplete"', $html);
+        $this->assertStringContainsString('multiple', $chooser);
+        $this->assertStringContainsString('>Turma 2 (T2)</option>', $chooser);
+        $this->assertLessThan(strpos($chooser, '>Turma 10</option>'), strpos($chooser, '>Turma 2 (T2)</option>'));
+    }
+
+    /**
+     * Seats show in the option text, a full group stays selectable.
+     *
+     * Needs local_groupdist; skipped without it, as the other seat tests are.
+     *
+     * Changes that must make it fail: the seats left out of the text, or a full group disabled.
+     *
+     * @return void
+     */
+    public function test_the_bulk_form_options_carry_the_seats(): void {
+        if (!class_exists('\local_groupdist\seats')) {
+            $this->markTestSkipped('local_groupdist with \local_groupdist\seats is not installed');
+        }
+        \local_groupdist\local\fields::reset_field_cache();
+        \local_groupdist\local\fields::ensure_fields_exist();
+        \local_groupdist\local\fields::reset_field_cache();
+
+        $generator = $this->getDataGenerator();
+        $roomy = $generator->create_group(['courseid' => $this->course->id, 'name' => 'Roomy']);
+        $full = $generator->create_group(['courseid' => $this->course->id, 'name' => 'Packed']);
+        // Enrolled first: groups_add_member() refuses, silently, a user who is not enrolled.
+        $occupant = $generator->create_and_enrol($this->course, 'student');
+        $generator->create_group_member(['groupid' => $full->id, 'userid' => $occupant->id]);
+        $this->assertTrue(groups_is_member((int) $full->id, (int) $occupant->id));
+        $this->setAdminUser();
+        $handler = \core_group\customfield\group_handler::create();
+        $handler->instance_form_save((object) ['id' => $roomy->id, 'customfield_groupdist_seats' => 3]);
+        $handler->instance_form_save((object) ['id' => $full->id, 'customfield_groupdist_seats' => 1]);
+        $this->setUser($this->teacher());
+
+        $chooser = $this->groups_chooser($this->bulk_form_html([$this->applicant()]));
+
+        $roomytext = get_string(
+            'reviewgroupoption',
+            'enrol_apply',
+            (object) ['name' => 'Roomy', 'members' => 0, 'seats' => 3]
+        );
+        $this->assertStringContainsString('>' . $roomytext . '</option>', $chooser);
+        $fulltext = get_string(
+            'reviewgroupoptionfull',
+            'enrol_apply',
+            (object) ['name' => 'Packed', 'members' => 1, 'seats' => 1]
+        );
+        $this->assertStringContainsString('>' . $fulltext . '</option>', $chooser);
+        $this->assertDoesNotMatchRegularExpression('/<option[^>]*disabled[^>]*>' . preg_quote($fulltext, '/') . '/', $chooser);
+    }
+
+    /**
+     * A narrowed decider is offered their own groups alone.
+     *
+     * Changes that must make it fail: the options read from every group of the course.
+     *
+     * @return void
+     */
+    public function test_a_narrowed_decider_is_offered_their_own_groups_in_the_bulk_form(): void {
+        [$moderator] = $this->narrowed_decider();
+        $applicant = $this->applicant();
+        $this->setUser($moderator);
+
+        $chooser = $this->groups_chooser($this->bulk_form_html([$applicant]));
+
+        $this->assertStringContainsString('>Own group</option>', $chooser);
+        $this->assertStringNotContainsString('Other group', $chooser);
+    }
+
+    /**
+     * Without enrol/apply:choosedecision the form says what an approval gives and offers no chooser.
+     *
+     * Changes that must make it fail: the choosers offered to a decider who may not choose.
+     *
+     * @return void
+     */
+    public function test_a_decider_who_may_not_choose_reads_the_summary_sentence_in_the_bulk_form(): void {
+        [$moderator] = $this->narrowed_decider(false);
+        $applicant = $this->applicant();
+        $this->setUser($moderator);
+
+        $html = $this->bulk_form_html([$applicant]);
+
+        $this->assertStringContainsString(s(get_string('decisionsummarybulk', 'enrol_apply')), $html);
+        $this->assertSame('', $this->groups_chooser($html));
+        $this->assertStringNotContainsString('name="roleid"', $html);
+    }
+
+    /**
+     * The form says how many selected applications are outside the decider's groups, and the
+     * decision then leaves exactly those alone, which the report counts as unchanged.
+     *
+     * The control is the decider's own application: decided, so the notice does not simply count
+     * the whole selection. Changes that must make it fail: the count taken from another predicate
+     * than can_manage_application(), or the notice dropped from a decision.
+     *
+     * @return void
+     */
+    public function test_the_outside_groups_count_is_what_the_decision_skips(): void {
+        [$moderator, $mine, $theirs] = $this->narrowed_decider();
+        $own = $this->applicant_of_group($mine);
+        $foreign = $this->applicant_of_group($theirs);
+        $keyless = $this->applicant_of_group(null);
+        $this->setUser($moderator);
+
+        foreach ([confirm_operation::class, wait_operation::class, cancel_operation::class] as $class) {
+            $html = $this->bulk_form_html([$own, $foreign, $keyless], $class);
+            $this->assertStringContainsString(get_string('bulkoutsidegroups', 'enrol_apply', 2), $html, $class);
+        }
+        $this->assertStringContainsString(
+            get_string('bulkoutsidegroupsone', 'enrol_apply'),
+            $this->bulk_form_html([$own, $foreign])
+        );
+        $this->assertStringNotContainsString('outside your groups', $this->bulk_form_html([$own]));
+
+        [$manager, $users] = $this->selection([$own, $foreign, $keyless]);
+        $operation = new confirm_operation($manager, $this->plugin);
+        $this->notifications();
+        $operation->process($manager, $users, (object) ['outcomemessage' => '', 'groups' => [], 'roleid' => 0]);
+        $messages = $this->notifications();
+
+        $this->assertContains(get_string('bulkdecided', 'enrol_apply', 1), $messages);
+        $this->assertContains(get_string('bulkunchanged', 'enrol_apply', 2), $messages);
+        $this->assertSame(ENROL_USER_ACTIVE, $this->enrolment_state($own));
+        $this->assertSame(ENROL_USER_SUSPENDED, $this->enrolment_state($foreign));
+        $this->assertSame(ENROL_USER_SUSPENDED, $this->enrolment_state($keyless));
+    }
+
+    /**
+     * A decider who is not narrowed is told nothing about groups.
+     *
+     * @return void
+     */
+    public function test_an_unnarrowed_decider_sees_no_outside_groups_notice(): void {
+        $this->setUser($this->teacher());
+
+        $html = $this->bulk_form_html([$this->applicant(), $this->applicant()]);
+
+        $this->assertStringNotContainsString('outside your groups', $html);
+    }
+
+    /**
+     * The status of a user's enrolment on the apply instance.
+     *
+     * @param \stdClass $user The user.
+     * @return int The user_enrolments status.
+     */
+    private function enrolment_state(\stdClass $user): int {
+        global $DB;
+
+        return (int) $DB->get_field('user_enrolments', 'status', ['id' => $this->ueid($user)], MUST_EXIST);
+    }
 }
