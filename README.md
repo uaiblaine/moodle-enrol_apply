@@ -64,15 +64,16 @@ A valid group key enrols the applicant at once, in that group, with no review.
 
 ### Deciding
 
-![The approval queue: places and applications held, filters, and one row per application with the details submitted, the comment and badges for the waiting list, an earlier application and a group key that could not admit; the group chooser below shows each group's seats](docs/screenshots/queue.png)
+![The approval queue: applications awaiting a decision, deferred, places taken and applications held; filters by search, status, group and application date; one row per application with its group, the details submitted, the comment and badges for the waiting list and a group key that could not admit; the group chooser below shows each group's seats](docs/screenshots/queue.png)
 
 The queue for one method. The panel at the top counts what awaits a decision, what is deferred,
-the places taken and the applications held. Each row carries what the applicant submitted, the
-comment and a badge where there is something to know: on the waiting list, applied before, or a
-valid group key that found no place or seat. Select rows and decide them together from the bar at
+the places taken and the applications held. Each row carries the group its key named, what the
+applicant submitted, the comment and a badge where there is something to know: on the waiting
+list, applied before, or a valid group key that found no place or seat. The queue filters by group
+too. Select rows and decide them together from the bar at
 the foot of the page, choosing the groups and the role an approval gives.
 
-![Reviewing one application: the key's outcome, the details submitted, the capacity panel, the group chooser with seats and the three decisions](docs/screenshots/review.png)
+![Reviewing one application: the status and key strip, what weighs on the decision with a full group flagged over the limit, the On confirming card with its sentence and the group cards with their occupancy, the comment and details in a column of their own, and the three decisions in the bar at the foot](docs/screenshots/review.png)
 
 **Review** opens one application, with links to the previous and next, and reads top to bottom
 in the order a decision asks its questions:
@@ -103,14 +104,13 @@ The comment, the details submitted and the earlier applications sit in a column 
 which the signals link to. A reader who may only view applications gets the strip and the
 signals without the seats or places, and no decision.
 
-*The screenshot above predates this layout and needs recapturing.*
-
 ### The record
 
-![The applications report, sorted by admission route: status, dates, outcome, admission route, the group of the key and the answers to each question](docs/screenshots/report.png)
+![The applications report, sorted by admission route: status, submission date, outcome, admission route, the group of the key, the groups the approval joined and the answers to each question](docs/screenshots/report.png)
 
 Every application the course has recorded, decided ones included, with the outcome of each and
-how it was admitted. It filters, sorts and downloads as CSV or Excel.
+how it was admitted, the group of the key and the groups the approval joined. It filters (by
+group too), sorts and downloads as CSV or Excel.
 
 ### Setting up the method
 
