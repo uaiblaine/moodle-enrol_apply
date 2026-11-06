@@ -8,6 +8,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **The queue with groups (V2 of `docs/design/group-screens.html`).** A *Group* column names each
+  application's key group (the newest record's, as the separate-groups scope reads it) on the
+  instance and site-wide queues, not on the mentee queue, and not sortable: blank for a group the
+  reader may not see (judged for the whole page in one batch, `groupvisibility::visible_ids()`),
+  *Without a group* for a keyless application, *A group deleted since* for a key whose group is
+  gone; on an instance queue only when the course has a group, and in the card view right under the
+  applicant. A *Group* filter on the instance queue (`\enrol_apply\local\groupfilter`): a group
+  id, `none` and `mine` per RP-D27, the groups in natural order, a plain select up to 8 groups and
+  core's autocomplete above, every value cleaned against what the reader is offered and applied
+  after the separate-groups scope. In a visible-groups course the page defaults it to the
+  reader's own groups as a removable chip (`group=all` is the explicit every-group the page writes
+  once it is removed). The previous/next walk is not narrowed by it, like every other filter. The
+  *Deferred to the waiting list* tile counts the listing's scope, *in your groups* for a narrowed
+  decider, whose capacity meters say *on this method*; a narrowed reader is told *You see the
+  applications of: ...*. New strings `queuegroup`, `queuegroupany`, `queuegroupmine`,
+  `queuegroupnone`, `queueinyourgroups`, `queueonthismethod`, `queuescopegroups`; `amd/build`
+  rebuilt. Version 2026110504.
 - **Decision events (V1 of `docs/design/group-screens.html`).** Three events log each decision in
   the site's log store, with the decider as the user, the applicant as the affected user and the
   application record as the object: `application_approved`, once per approval on every route

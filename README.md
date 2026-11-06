@@ -316,6 +316,17 @@ their groups. *Visible groups* and *No groups* narrow nobody. A holder of the
 capability at system level and a mentor (the capability in the applicant's own user context) are
 never narrowed, as their delegation does not come from the course.
 
+The queue says whose application each row is. A **Group** column names the group of the key the
+applicant typed (or *Without a group*), on a course's queue and on the site-wide one, never on a
+mentor's; a group core hides from the reader leaves the cell blank. A **Group** filter, on a
+course's queue only, offers the groups the reader may see in natural order (a search above eight),
+plus *My groups* and *Without a group* for a reader who sees every group; a narrowed decider is
+offered their own groups and nothing else, and the server ignores any other value they send. A
+narrowed reader is told which groups their queue shows (*You see the applications of: ...*), and
+the *Deferred to the waiting list* tile counts their groups, while the method's places and
+applications held stay the method's and say so. In a *Visible groups* course the filter starts on
+the reader's own groups, as a filter they can remove, never as a restriction.
+
 A holder of `enrol/apply:viewapplications` is narrowed by the same rule, and so is a holder of
 `enrol/apply:viewreports` on the course report: in a separate-groups course, without
 `moodle/site:accessallgroups`, the report lists only the records whose key group is one of

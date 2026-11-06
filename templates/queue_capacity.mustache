@@ -24,8 +24,10 @@
     have an empty queue, which is exactly when these numbers explain something.
 
     Context variables required for this template:
-    * tiles array - the plain counts, each an object with a value and a label
-    * meters array - the counts that have a limit to sit against, each with a value, a label, a
+    * tiles array - the plain counts, each an object with a value, a label and an optional note
+      saying whose count it is ("in your groups" on a queue narrowed to the reader's groups)
+    * meters array - the counts that have a limit to sit against, each with a value, a label, an
+      optional note ("on this method" where the queue is narrowed and the number is not), a
       percentage for the bar's width and a boolean saying whether the bar is at the warning level
     * hasstatus boolean - whether an open/closed state can be reported at all, which needs an
       enrolment method in scope
@@ -41,10 +43,10 @@
     {
         "tiles": [
             {"value": "12", "label": "Awaiting decision"},
-            {"value": "3", "label": "Deferred to the waiting list"}
+            {"value": "3", "label": "Deferred to the waiting list", "note": "in your groups"}
         ],
         "meters": [
-            {"value": "8 of 20", "label": "Places taken (approved)", "percent": 40, "warn": false},
+            {"value": "8 of 20", "label": "Places taken (approved)", "note": "on this method", "percent": 40, "warn": false},
             {"value": "35 of 40", "label": "Applications held", "percent": 88, "warn": true}
         ],
         "hasstatus": true,
@@ -63,12 +65,14 @@
             <div class="enrol_apply-tile">
                 <span class="enrol_apply-tilevalue">{{value}}</span>
                 <span class="enrol_apply-tilelabel">{{label}}</span>
+                {{#note}}<span class="small text-muted">{{note}}</span>{{/note}}
             </div>
         {{/tiles}}
         {{#meters}}
             <div class="enrol_apply-tile enrol_apply-tile-meter">
                 <span class="enrol_apply-tilevalue">{{value}}</span>
                 <span class="enrol_apply-tilelabel">{{label}}</span>
+                {{#note}}<span class="small text-muted">{{note}}</span>{{/note}}
                 <span class="enrol_apply-meter" role="presentation">
                     <span class="enrol_apply-meterfill {{#warn}}enrol_apply-meterfill-warn{{/warn}}"
                           style="width: {{percent}}%"></span>

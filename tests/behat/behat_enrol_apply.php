@@ -266,6 +266,41 @@ class behat_enrol_apply extends behat_base {
     }
 
     /**
+     * Put an application on a course's queue, with the key of one of its groups or with none.
+     *
+     * Through the plugin's own apply(), so the application carries its durable record and its key
+     * group exactly as the key route writes them; driving the applicant's key form for every row a
+     * queue scenario needs would make it long, and tests/behat/key_review.feature drives it once.
+     *
+     * @Given /^"(?P<user_string>[^"]*)" has applied to "(?P<course_string>[^"]*)" with the key of "(?P<group_string>[^"]*)"$/
+     * @param string $username The applicant's username.
+     * @param string $shortname Course shortname.
+     * @param string $groupname The key's group, by name; empty for an application without a key.
+     * @return void
+     */
+    public function user_has_applied_with_the_key_of(string $username, string $shortname, string $groupname): void {
+        global $DB;
+
+        $user = $DB->get_record('user', ['username' => $username], '*', MUST_EXIST);
+        $instance = $DB->get_record('enrol', ['id' => $this->get_instance_id($shortname)], '*', MUST_EXIST);
+        $groupid = $groupname === ''
+            ? 0
+            : (int) $DB->get_field('groups', 'id', ['courseid' => $instance->courseid, 'name' => $groupname], MUST_EXIST);
+
+        // Enrol_get_plugin() loads lib.php, which the autoloader does not; the reflection needs the class first.
+        $plugin = enrol_get_plugin('apply');
+        $method = new \ReflectionMethod(\enrol_apply_plugin::class, 'apply');
+        $method->invoke(
+            $plugin,
+            $instance,
+            (int) $user->id,
+            (object) ['applydescription' => ''],
+            $groupid,
+            $groupid ? \enrol_apply\local\submission::KEY_FOR_REVIEW : \enrol_apply\local\submission::KEY_NONE
+        );
+    }
+
+    /**
      * Return the apply enrolment instance id of the given course.
      *
      * @param string $shortname Course short name.

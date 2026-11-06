@@ -160,4 +160,53 @@ final class groupvisibility_test extends \advanced_testcase {
             (int) $clerk->id
         ));
     }
+
+    /**
+     * The page-at-once answer the queue uses agrees with the single answer on every visibility,
+     * for a member and a non-member, with and without moodle/course:viewhiddengroups.
+     *
+     * Each case of the provider is a group here, so one batch judges them all and its silence on
+     * one of them is visible. The reader without the capability is the plugin's own clerk; the one
+     * with it, an editing teacher.
+     *
+     * Changes that must make it fail: a clause of visible_ids() dropped or changed (the capability,
+     * the membership query, MEMBERS or OWN, NONE hidden from members), the membership judged for
+     * the session's user, or a group answered twice.
+     *
+     * @return void
+     */
+    public function test_the_batch_agrees_with_the_single_answer(): void {
+        $clerk = $this->clerk();
+        $teacher = $this->getDataGenerator()->create_and_enrol($this->course, 'editingteacher');
+
+        $groups = [];
+        foreach (self::visibility_provider() as [$visibility, $member]) {
+            $group = $this->group($visibility);
+            if ($member) {
+                groups_add_member($group->id, $clerk->id);
+                groups_add_member($group->id, $teacher->id);
+            }
+            $groups[] = $group;
+        }
+
+        // The session's user is somebody else, so a batch judging $USER is caught.
+        $this->setAdminUser();
+        foreach ([$clerk, $teacher] as $reader) {
+            $expected = [];
+            foreach ($groups as $group) {
+                if (groupvisibility::visible_to($group, (int) $reader->id)) {
+                    $expected[] = (int) $group->id;
+                }
+            }
+            sort($expected);
+
+            $this->assertSame($expected, groupvisibility::visible_ids($groups, (int) $reader->id));
+        }
+
+        // The precondition: the clerk really is refused some of them, and allowed some through membership.
+        $clerkids = groupvisibility::visible_ids($groups, (int) $clerk->id);
+        $this->assertNotEmpty($clerkids);
+        $this->assertLessThan(count($groups), count($clerkids));
+        $this->assertCount(count($groups), groupvisibility::visible_ids($groups, (int) $teacher->id));
+    }
 }

@@ -52,6 +52,9 @@
     * haskeyonlynotice boolean - whether this is the empty queue of a method that enrols with a
       group key only, where nothing ever waits and the emptiness is the method working
     * keyonlynotice string - the sentence saying so
+    * hasscopeline boolean - whether the queue is narrowed to the reader's own groups by separate
+      groups, which a short queue would not otherwise reveal
+    * scopeline string - the sentence naming those groups, plain spelling
       Nothing below is gated on the queue having rows any more. It used to be, and an AJAX refresh
       replaces only the table's own region without re-rendering this template - so a queue that
       loaded empty and was then filled by clearing a filter had rows, checkboxes and no bulk bar
@@ -79,6 +82,8 @@
         "closednotice": "This enrolment method holds 40 of a maximum 40 applications and is accepting no more. 12 of them are deferred; cancelling the ones no longer needed makes room.",
         "haskeyonlynotice": true,
         "keyonlynotice": "This method enrols by group key only; nothing waits for a decision.",
+        "hasscopeline": true,
+        "scopeline": "You see the applications of: Turma A, Turma B",
         "capacityhtml": "<div class=\"card\"><div class=\"card-body\">12 awaiting decision</div></div>",
         "tablehtml": "<table class=\"generaltable\"><tbody><tr><td>Student 1</td></tr></tbody></table>",
         "filtershtml": "<form method=\"get\"><input type=\"text\" name=\"search\" value=\"\"></form>",
@@ -119,6 +124,9 @@
     {{#haskeyonlynotice}}
         <div class="alert alert-info" role="status">{{keyonlynotice}}</div>
     {{/haskeyonlynotice}}
+    {{#hasscopeline}}
+        <p class="enrol_apply-scopeline">{{scopeline}}</p>
+    {{/hasscopeline}}
     {{{capacityhtml}}}
     {{{filtershtml}}}
     {{!

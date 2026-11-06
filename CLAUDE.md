@@ -101,6 +101,7 @@ classes/local/capacity.php   the two capacity numbers, and how many deferrals ho
 classes/local/submission.php the durable application record: constants, writes, reads
 classes/local/keyattempts.php  the wrong-key throttle and its per-applicant request lock
 classes/local/groupvisibility.php  whether a reader may be told a group's name (core's visibility rule)
+classes/local/groupfilter.php  the queue's group filter: the values each reader is offered, what each selects
 classes/observers.php        course_deleted, orphan cleanup for the plugin-disabled case
 classes/privacy/provider.php full provider: three personal-data tables, two personal-data roles
 classes/task/                sync_enrolments, send_expiry_notifications, purge_submissions (scheduled);
@@ -563,6 +564,23 @@ backup/                      group mappings, comments and the durable trail, see
   `'%,id,%'` (one placeholder per group, so 1 never matches 11), judged per record rather than per
   newest record because every record is a report row. The custom-report datasource is
   deliberately not narrowed (audiences govern it). Gates `SC38`-`SC52`.
+
+  **The queue's group column and filter (V2) read the same "newest record" and add to the scope,
+  never replace it.** The column joins the newest record's key group (the NOT EXISTS shape of
+  `where()`) and judges visibility for the whole page in `groupvisibility::visible_ids()`, which
+  must stay clause for clause with `visible_to()` (`test_the_batch_agrees_with_the_single_answer`).
+  The filter (`\enrol_apply\local\groupfilter`) is an extra AND after `scope_where()`, and its
+  value is cleaned against `offered()` for this reader before it reaches SQL: a narrowed reader is
+  offered their own groups only, never `none` or `mine`. `none` is "no newest record naming a group
+  that exists", so a deleted group's application lands there and every row is reached by exactly
+  one value. **The visible-groups default lives in `request_filters()`, not in the table**: the
+  table never defaults, so an AJAX refresh sends what the control holds, and `group=all` is the
+  explicit every-group that the base url, the chip's remove link and clear-all write wherever a
+  default exists (a url without `group=` would bring it back). **The previous/next walk is not
+  narrowed by the group filter**, like every other operator filter: the review url carries only
+  `userenrol`, and the walk is the scope, which is all the filter can narrow. The deferred tile is
+  `scope_deferred()`, over `scope_where()`, so it agrees with "awaiting decision" beside it.
+  Gates `QG1`-`QG27`.
 
 - **The mentee path is Moodle's mentor pattern, not groups.** With no `id` and no
   `userenrol`, the queue falls back to the users the current user holds a role assignment

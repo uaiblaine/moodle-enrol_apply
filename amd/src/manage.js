@@ -92,6 +92,18 @@ const filterTokens = () => {
     return tokens;
 };
 
+/**
+ * The value of a control that means "not filtered".
+ *
+ * Empty for every control but the group select where the page defaults it to the reader's own
+ * groups: there "every group" is the explicit `all`, carried in data-emptyvalue, because a url
+ * without the parameter would bring the default back.
+ *
+ * @param {HTMLElement} el A filter control.
+ * @return {String} The value meaning "no filter".
+ */
+const emptyValue = (el) => el.dataset.emptyvalue || '';
+
 /** @var {Number} Timer id of the pending debounce, or null. */
 let pending = null;
 
@@ -152,7 +164,7 @@ const currentFilters = () => {
     const fields = [];
     document.querySelectorAll(SELECTORS.FIELD).forEach((el) => {
         const value = el.value.trim();
-        if (value !== '') {
+        if (value !== '' && value !== emptyValue(el)) {
             fields.push({
                 token: el.dataset.filter,
                 value,
@@ -267,6 +279,12 @@ const urlWithout = (drop) => {
             url.searchParams.delete(name);
         }
     });
+    // A control whose "no filter" is a value of its own says so, or the page's default comes back.
+    document.querySelectorAll(SELECTORS.FIELD).forEach((el) => {
+        if ((drop === null || drop === el.dataset.filter) && emptyValue(el) !== '') {
+            url.searchParams.set(el.dataset.filter, emptyValue(el));
+        }
+    });
 
     return url.toString();
 };
@@ -296,7 +314,12 @@ const syncAddressBar = () => {
     }
     /* Every offered token is cleared first and then re-set from the controls, so a field the
        operator has just emptied leaves the url rather than lingering in it. */
-    document.querySelectorAll(SELECTORS.FIELD).forEach((el) => url.searchParams.delete(el.dataset.filter));
+    document.querySelectorAll(SELECTORS.FIELD).forEach((el) => {
+        url.searchParams.delete(el.dataset.filter);
+        if (emptyValue(el) !== '') {
+            url.searchParams.set(el.dataset.filter, emptyValue(el));
+        }
+    });
     fields.forEach((field) => url.searchParams.set(field.token, field.value));
 
     // The table is back on page one; see TABLE_PARAMS.
@@ -431,14 +454,27 @@ const redrawShowing = (tableRoot) => {
 };
 
 /**
- * Drop one filter, or all of them, without a page load.
+ * Drop one filter, or all of them, without a page load where that can be done.
+ *
+ * A control core/form-autocomplete enhances draws its selection from the enhancement, which a
+ * value set from here does not redraw, so the chip would leave the control naming a filter no
+ * longer applied. Dropping one of those follows the link instead, which the server renders right.
  *
  * @param {String|null} drop Filter to remove, or null for every one.
+ * @param {String} href The link's own url, the same listing without that filter.
  * @return {void}
  */
-const removeFilter = (drop) => {
+const removeFilter = (drop, href) => {
     const search = document.querySelector(SELECTORS.SEARCH);
     const status = document.querySelector(SELECTORS.STATUS);
+
+    const reload = Array.from(document.querySelectorAll(SELECTORS.FIELD)).some((el) => el.dataset.reloadonremove
+        && (drop === null || drop === el.dataset.filter)
+        && el.value !== emptyValue(el));
+    if (reload) {
+        window.location.assign(href);
+        return;
+    }
 
     if ((drop === null || drop === 'search') && search) {
         search.value = '';
@@ -448,7 +484,7 @@ const removeFilter = (drop) => {
     }
     document.querySelectorAll(SELECTORS.FIELD).forEach((el) => {
         if (drop === null || drop === el.dataset.filter) {
-            el.value = '';
+            el.value = emptyValue(el);
         }
     });
 
@@ -544,14 +580,14 @@ export const init = (group) => {
         const remove = e.target.closest(SELECTORS.CHIPREMOVE);
         if (remove) {
             e.preventDefault();
-            removeFilter(remove.dataset.filter);
+            removeFilter(remove.dataset.filter, remove.href);
             return;
         }
 
         const clearall = e.target.closest(SELECTORS.CLEARALL);
         if (clearall) {
             e.preventDefault();
-            removeFilter(null);
+            removeFilter(null, clearall.href);
         }
     });
 };

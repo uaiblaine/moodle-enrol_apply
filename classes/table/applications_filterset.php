@@ -78,6 +78,10 @@ class applications_filterset extends filterset {
      * resolves labels through format_string(), which needs a $PAGE context that does not exist
      * yet on the web service path.
      *
+     * The group filter is a string filter because its values are a group id, `none`, `mine` or
+     * `all` (see \enrol_apply\local\groupfilter), declared unconditionally and cleaned per reader
+     * by applications::set_filterset(), like the course.
+     *
      * The dates are two filters because core's table filters express no range. The snapshot is
      * not filterable: it is masked per row, and a filter would let an operator recover a withheld
      * value by counting results.
@@ -95,6 +99,7 @@ class applications_filterset extends filterset {
             'appliedto' => string_filter::class,
             'category' => string_filter::class,
             'course' => string_filter::class,
+            'group' => string_filter::class,
         ];
 
         $names = array_unique(array_merge(\core_user\fields::get_identity_fields(null), queuefilter::pool()));
