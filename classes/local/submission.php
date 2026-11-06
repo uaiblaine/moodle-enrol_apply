@@ -89,6 +89,13 @@ class submission {
     public const KEY_SEAT_UNCONFIRMED = 4;
 
     /**
+     * @var int The key was valid on a method where a key sends the application for review
+     *     (groupkey::MODE_REVIEW): it waits for a decision, as it was meant to, unlike the three
+     *     outcomes above, which are a key that failed to admit.
+     */
+    public const KEY_FOR_REVIEW = 5;
+
+    /**
      * Every value keyoutcome may hold.
      *
      * @var array
@@ -99,6 +106,7 @@ class submission {
         self::KEY_NO_PLACE,
         self::KEY_GROUP_FULL,
         self::KEY_SEAT_UNCONFIRMED,
+        self::KEY_FOR_REVIEW,
     ];
 
     /**
@@ -979,6 +987,7 @@ class submission {
             self::KEY_NO_PLACE => get_string('keyoutcomenoplace', 'enrol_apply'),
             self::KEY_GROUP_FULL => get_string('keyoutcomegroupfull', 'enrol_apply'),
             self::KEY_SEAT_UNCONFIRMED => get_string('keyoutcomeseatunconfirmed', 'enrol_apply'),
+            self::KEY_FOR_REVIEW => get_string('keyoutcomeforreview', 'enrol_apply'),
             default => '',
         };
     }

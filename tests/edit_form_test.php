@@ -221,11 +221,11 @@ final class edit_form_test extends \advanced_testcase {
     public function test_the_group_key_mode_is_validated(): void {
         $form = $this->form();
 
-        foreach (['', 'any', 'required'] as $mode) {
+        foreach (['', 'any', 'required', 'review'] as $mode) {
             $errors = $form->validation($this->submission(['customchar1' => $mode]), []);
             $this->assertArrayNotHasKey('customchar1', $errors, "mode '{$mode}' should be accepted");
         }
-        foreach (['ANY', 'listed', 'Required'] as $mode) {
+        foreach (['ANY', 'listed', 'Required', 'REVIEW'] as $mode) {
             $errors = $form->validation($this->submission(['customchar1' => $mode]), []);
             $this->assertArrayHasKey('customchar1', $errors, "mode '{$mode}' should be refused");
         }

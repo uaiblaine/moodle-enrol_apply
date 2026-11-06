@@ -477,6 +477,7 @@ class submission extends base {
                 submissionhelper::KEY_NO_PLACE => new lang_string('keyoutcomenoplace', 'enrol_apply'),
                 submissionhelper::KEY_GROUP_FULL => new lang_string('keyoutcomegroupfull', 'enrol_apply'),
                 submissionhelper::KEY_SEAT_UNCONFIRMED => new lang_string('keyoutcomeseatunconfirmed', 'enrol_apply'),
+                submissionhelper::KEY_FOR_REVIEW => new lang_string('keyoutcomeforreview', 'enrol_apply'),
             ]);
 
         return $filters;

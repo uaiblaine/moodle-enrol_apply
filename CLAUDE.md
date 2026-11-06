@@ -630,7 +630,8 @@ backup/                      group mappings, comments and the durable trail, see
   keep both checks inside the locks.
 
   **The option lives in `customchar1`** (`''` off, `'any'` any course group's key beside the
-  review, `'required'` key only, room left for a listed subset) because `customint1`/`customint2`
+  review, `'required'` key only, `'review'` key only and every application reviewed, room left
+  for a listed subset) because `customint1`/`customint2`
   carry legacy meanings `db/upgradelib.php` still reads. It is off by default and per instance on
   purpose: keys left on groups by an old `enrol_self` setup are inert until a teacher opts in, and
   switching it on silently would turn each of them into an approval bypass. Both it and
@@ -645,6 +646,19 @@ backup/                      group mappings, comments and the durable trail, see
   anything else**: no key, a wrong key, no place, a full group or a lock not obtained returns
   `application_result::refused()` from `apply_or_admit()` with no enrolment, no record and no
   message, and `withoutkey` means nothing there. Gates `KO1`-`KO17`, `KO19`.
+
+  **Three predicates, because "key only" means two things.** `groupkey::mandatory()` (`'required'`
+  or `'review'`): without a valid key nothing is submitted, so the card, the two-step form, the
+  key block and the door's keyless refusals read it. `groupkey::admits()` (`'any'` or
+  `'required'`): a valid key enrols at once, so the admission path reads it.
+  `groupkey::required()` (`'required'` alone): nothing ever waits, so only the wording that says
+  nobody reviews (details, comment label, the empty-queue sentence, `customchar2`) reads it.
+  Picking the wrong one is silent: `'review'` either admits without a decision or tells the
+  applicant nobody will read the application. On `'review'` a valid key goes to
+  `apply_for_review()`, which refuses on no place or a full group as key-only mode does, takes no
+  admission lock (a pending row takes no place and no seat), and records `KEY_FOR_REVIEW`; an
+  approval with no recorded group choice then joins the key's group too (`add_instance_groups()`),
+  where every other key outcome keeps the instance's list alone. Gates `RV1`-`RV27`.
 
   **The wrong-key count is read and written under a per-applicant lock held for the whole
   request.** `keyattempts::locked()` takes `enrol_apply_keyattempts` on `<instanceid>_<userid>` at

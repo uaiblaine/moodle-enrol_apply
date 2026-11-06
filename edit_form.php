@@ -79,14 +79,15 @@ class enrol_apply_edit_form extends moodleform {
         $groupselect->setMultiple(true);
         $mform->addHelpButton('groupselect', 'group', 'enrol_apply');
 
-        /* Whether a group's enrolment key admits without review. The groups that carry a key are
-           listed beneath it, the keys themselves never; hideIf because the list only matters
-           while the option is on. No header: one opened here would stay open over every element
+        /* What a group's enrolment key does: nothing, admit, or send for review. The groups that
+           carry a key are listed beneath it, the keys themselves never; hideIf because the list
+           only matters while the option is on. No header: one opened here would stay open over every element
            that follows, down to the requested fields. */
         $mform->addElement('select', 'customchar1', get_string('groupkeys', 'enrol_apply'), [
             \enrol_apply\local\groupkey::MODE_OFF => get_string('groupkeys_off', 'enrol_apply'),
             \enrol_apply\local\groupkey::MODE_ANY => get_string('groupkeys_any', 'enrol_apply'),
             \enrol_apply\local\groupkey::MODE_REQUIRED => get_string('groupkeys_required', 'enrol_apply'),
+            \enrol_apply\local\groupkey::MODE_REVIEW => get_string('groupkeys_review', 'enrol_apply'),
         ]);
         $mform->setType('customchar1', PARAM_ALPHA);
         $mform->addHelpButton('customchar1', 'groupkeys', 'enrol_apply');

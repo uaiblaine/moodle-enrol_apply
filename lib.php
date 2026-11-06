@@ -91,7 +91,9 @@ class enrol_apply_plugin extends enrol_plugin {
      * The instance's name, or the name of what it does when the teacher gave it none.
      *
      * An unnamed key-only instance is not called after the plugin ("Course enrol confirmation"),
-     * which promises a confirmation nobody gives there. A name the teacher typed always wins.
+     * which promises a confirmation nobody gives there. The key-only mode that sends applications
+     * for review has a name of its own, which says both that a key is needed and that somebody
+     * decides. A name the teacher typed always wins.
      *
      * @param stdClass $instance Course enrol instance.
      * @return string The name: a typed one escaped by format_string(), as core's own method returns
@@ -100,6 +102,9 @@ class enrol_apply_plugin extends enrol_plugin {
     public function get_instance_name($instance) {
         if (empty($instance->name) && \enrol_apply\local\groupkey::required($instance)) {
             return get_string('pluginname_keyonly', 'enrol_apply');
+        }
+        if (empty($instance->name) && \enrol_apply\local\groupkey::mandatory($instance)) {
+            return get_string('pluginname_keyreview', 'enrol_apply');
         }
 
         return parent::get_instance_name($instance);
@@ -256,7 +261,7 @@ class enrol_apply_plugin extends enrol_plugin {
         } else if (\enrol_apply\local\capacity::applications_closed($instance)) {
             $body = get_string('maxenrolledreached', 'enrol_apply');
         } else {
-            $keyonly = \enrol_apply\local\groupkey::required($instance);
+            $keyonly = \enrol_apply\local\groupkey::mandatory($instance);
             if ($keyonly) {
                 // Said before any form, so nobody without a key fills one in to find out.
                 $body = get_string('keyonlycard', 'enrol_apply');
@@ -278,7 +283,12 @@ class enrol_apply_plugin extends enrol_plugin {
                 'data-form' => \enrol_apply\form\application_form::class,
                 'data-title' => $title,
             ];
-            $buttonlabel = $keyonly ? get_string('enrolwithkey', 'enrol_apply') : get_string('startapplication', 'enrol_apply');
+            $buttonlabel = match (true) {
+                \enrol_apply\local\groupkey::required($instance) => get_string('enrolwithkey', 'enrol_apply'),
+                // A valid key sends this application for review: the button promises no enrolment.
+                $keyonly => get_string('applywithkey', 'enrol_apply'),
+                default => get_string('startapplication', 'enrol_apply'),
+            };
             $PAGE->requires->js_call_amd('enrol_apply/enrol_page', 'init', [$instance->id]);
         }
 
@@ -369,8 +379,9 @@ class enrol_apply_plugin extends enrol_plugin {
         );
 
         $admitted = $keyoutcome === \enrol_apply\local\submission::KEY_ADMITTED;
+        $forreview = $keyoutcome === \enrol_apply\local\submission::KEY_FOR_REVIEW ? $keygroupid : 0;
         if (!$admitted || \enrol_apply\local\groupkey::announces_admissions($instance)) {
-            $this->send_application_notification($instance, $userid, $data, $admitted ? $keygroupid : 0);
+            $this->send_application_notification($instance, $userid, $data, $admitted ? $keygroupid : 0, $forreview);
         }
 
         return ['userenrolmentid' => (int) $userenrolment->id, 'submissionid' => $submissionid];
@@ -486,10 +497,13 @@ class enrol_apply_plugin extends enrol_plugin {
      * place. Whatever stops an admission leaves an ordinary application waiting for a decision,
      * recorded with why.
      *
-     * On a key-only instance (groupkey::required()) there is nobody to decide, so each of those
-     * routes is refused instead, and before anything is written: no enrolment, no record, no
-     * answers, no message. "Without the key" means nothing there, so a key posted with it still
-     * counts, and its absence refuses.
+     * Where a key is mandatory (groupkey::mandatory()) an application without a valid one is
+     * refused, before anything is written: no enrolment, no record, no answers, no message.
+     * "Without the key" means nothing there, so a key posted with it still counts, and its absence
+     * refuses. On the key-only mode that admits (groupkey::required()) there is nobody to decide,
+     * so every route a valid key cannot finish is refused the same way; on the one that does not
+     * admit (groupkey::admits()), a valid key writes an application for review instead
+     * (apply_for_review()).
      *
      * @param stdClass $instance Course enrol instance.
      * @param int $userid Applicant user id.
@@ -499,15 +513,15 @@ class enrol_apply_plugin extends enrol_plugin {
     protected function apply_or_admit(stdClass $instance, int $userid, stdClass $data) {
         global $DB;
 
-        $required = \enrol_apply\local\groupkey::required($instance);
+        $mandatory = \enrol_apply\local\groupkey::mandatory($instance);
 
         // Only a string is a key; anything else a caller posts counts as none.
         $posted = (isset($data->groupkey) && is_string($data->groupkey)) ? $data->groupkey : '';
-        $keygroupid = ($required || empty($data->withoutkey))
+        $keygroupid = ($mandatory || empty($data->withoutkey))
             ? \enrol_apply\local\groupkey::resolve($instance, $posted)
             : null;
         if ($keygroupid === null) {
-            if ($required) {
+            if ($mandatory) {
                 return \enrol_apply\local\application_result::refused(
                     get_string($posted === '' ? 'groupkeyrequired' : 'groupkeyinvalid_required', 'enrol_apply')
                 );
@@ -517,9 +531,13 @@ class enrol_apply_plugin extends enrol_plugin {
         }
 
         $targets = $this->key_route_groups($instance, $keygroupid);
+        if (!\enrol_apply\local\groupkey::admits($instance)) {
+            return $this->apply_for_review($instance, $userid, $data, $keygroupid, $targets);
+        }
+
         $locks = $this->lock_admission($instance, $targets);
         if ($locks === null) {
-            if ($required) {
+            if ($mandatory) {
                 return \enrol_apply\local\application_result::refused(get_string('keyseatunconfirmed', 'enrol_apply'));
             }
             /* Somebody else held the method or a group for the whole timeout. The place or seat
@@ -540,7 +558,7 @@ class enrol_apply_plugin extends enrol_plugin {
                read again too, so the option switched off meanwhile is seen. */
             $current = $DB->get_record('enrol', ['id' => (int) $instance->id]);
             if (!$current || \enrol_apply\local\groupkey::resolve($current, $posted) !== $keygroupid) {
-                if ($required) {
+                if ($mandatory) {
                     return \enrol_apply\local\application_result::refused(
                         get_string('groupkeyinvalid_required', 'enrol_apply')
                     );
@@ -553,7 +571,7 @@ class enrol_apply_plugin extends enrol_plugin {
                last place or the last seat: the method's lock serialises every admission on it,
                and the group locks those of any method into the same group. */
             if (\enrol_apply\local\capacity::places_full($instance)) {
-                if ($required) {
+                if ($mandatory) {
                     return \enrol_apply\local\application_result::refused(get_string('keynoplace', 'enrol_apply'));
                 }
                 $this->apply($instance, $userid, $data, $keygroupid, \enrol_apply\local\submission::KEY_NO_PLACE);
@@ -564,7 +582,7 @@ class enrol_apply_plugin extends enrol_plugin {
             }
             $full = \enrol_apply\local\groupseats::full($targets);
             if ($full) {
-                if ($required) {
+                if ($mandatory) {
                     return \enrol_apply\local\application_result::refused($this->group_full_refusal($instance, $keygroupid, $full));
                 }
                 $this->apply($instance, $userid, $data, $keygroupid, \enrol_apply\local\submission::KEY_GROUP_FULL);
@@ -614,6 +632,48 @@ class enrol_apply_plugin extends enrol_plugin {
             'enrol_apply',
             format_string($name, true, ['context' => context_course::instance($instance->courseid)])
         );
+    }
+
+    /**
+     * Write the application a valid key sends for review, on the key-only mode that admits nobody.
+     *
+     * Refused, with key-only mode's sentences and writing nothing, when the method has no place
+     * or a group the key route would join has no seat: the key promises a seat in that group, and
+     * an application that cannot be honoured would only move the refusal to whoever decides.
+     *
+     * No admission lock is taken. Those locks serialise what an admission takes, a place and
+     * seats, and a pending application takes neither: two key holders who both read the last seat
+     * free both wait for a decision, and the decider sees the count. For the same reason the key is
+     * not resolved again: with no lock to wait for, nothing separates apply_or_admit()'s
+     * resolution from this write.
+     *
+     * @param stdClass $instance Course enrol instance.
+     * @param int $userid Applicant user id.
+     * @param stdClass $data Submitted application form data.
+     * @param int $keygroupid The group the key resolved to.
+     * @param array $targets Groups an approval would join, from key_route_groups().
+     * @return \enrol_apply\local\application_result What was written, or why nothing was.
+     */
+    protected function apply_for_review(
+        stdClass $instance,
+        int $userid,
+        stdClass $data,
+        int $keygroupid,
+        array $targets
+    ): \enrol_apply\local\application_result {
+        if (\enrol_apply\local\capacity::places_full($instance)) {
+            return \enrol_apply\local\application_result::refused(get_string('keynoplace', 'enrol_apply'));
+        }
+        $full = \enrol_apply\local\groupseats::full($targets);
+        if ($full) {
+            return \enrol_apply\local\application_result::refused($this->group_full_refusal($instance, $keygroupid, $full));
+        }
+
+        $this->apply($instance, $userid, $data, $keygroupid, \enrol_apply\local\submission::KEY_FOR_REVIEW);
+        // A valid key ends the tries, as an admission does.
+        \enrol_apply\local\keyattempts::clear((int) $instance->id, $userid);
+
+        return \enrol_apply\local\application_result::created(\enrol_apply\local\submission::KEY_FOR_REVIEW, $keygroupid);
     }
 
     /**
@@ -888,7 +948,11 @@ class enrol_apply_plugin extends enrol_plugin {
      * The decider's choice is read from the stored record because complete_approval() runs
      * twice for a queue approval (see there): memberships from two different lists would
      * accumulate, joining a group the approver had deselected. Where nothing was recorded, the
-     * instance's own list applies.
+     * instance's own list applies, and for an application a valid key sent for review the key's
+     * group too: that applicant was promised it, and an approval with no chooser (the bulk
+     * decision, core's "Edit enrolment") must not drop it. Every other key outcome keeps the
+     * instance's list alone: its key failed to admit, and what it would have joined is offered to
+     * the decider on the review page instead.
      *
      * @param stdClass $instance Course enrol instance.
      * @param int $userid User to add to the groups.
@@ -903,7 +967,16 @@ class enrol_apply_plugin extends enrol_plugin {
         // The decider's choice, read from the record; see the docblock.
         $chosen = \enrol_apply\local\submission::chosen_groups($userenrolmentid);
 
-        if ($chosen === null) {
+        $key = $chosen === null ? \enrol_apply\local\submission::key_of($userenrolmentid) : null;
+        if ($key !== null && $key->outcome === \enrol_apply\local\submission::KEY_FOR_REVIEW && $key->groupid > 0) {
+            /* key_route_groups() checks the instance's list against the course but not the key
+               group, which can have been deleted while the application waited. */
+            $groupids = array_filter(
+                $this->key_route_groups($instance, $key->groupid),
+                fn(int $groupid): bool => $groupid !== $key->groupid
+                    || $DB->record_exists('groups', ['id' => $groupid, 'courseid' => $instance->courseid])
+            );
+        } else if ($chosen === null) {
             /* Only groups that still belong to this course are used: a group deleted after
                the instance was configured leaves its mapping row behind, and groups_add_member()
                throws on an unknown group id. */
@@ -1782,15 +1855,24 @@ class enrol_apply_plugin extends enrol_plugin {
      *
      * The same recipients either way (G8): whoever would have decided the application keeps
      * sight of who came in without them. An admission names its key group and links to the
-     * applicant's profile instead of a queue that holds nothing for it.
+     * applicant's profile instead of a queue that holds nothing for it. An application a valid
+     * key sent for review is an ordinary new application that also names its key group, to the
+     * same recipients and by the same rule as an admission.
      *
      * @param stdClass $instance Course enrol instance.
      * @param int $userid Applicant user id.
      * @param stdClass $data Submitted application form data.
      * @param int $admittedgroupid The key group of an admission by key; 0 for an application waiting for review.
+     * @param int $reviewgroupid The key group of an application a valid key sent for review; 0 otherwise.
      * @return void
      */
-    protected function send_application_notification($instance, $userid, $data, int $admittedgroupid = 0) {
+    protected function send_application_notification(
+        $instance,
+        $userid,
+        $data,
+        int $admittedgroupid = 0,
+        int $reviewgroupid = 0
+    ) {
         global $CFG, $DB;
 
         require_once($CFG->dirroot . '/enrol/apply/notification.php');
@@ -1811,11 +1893,15 @@ class enrol_apply_plugin extends enrol_plugin {
         );
 
         /* Not MUST_EXIST: this runs inside admit()'s transaction, and a group deleted since the key
-           resolved must not undo the admission over a sentence. The notice then names no group. */
+           resolved must not undo the admission over a sentence. The notice then names no group.
+           An application for review carries the same object without a url and is still mailed
+           as an application: only 'admitted' turns it into news. */
         $admission = null;
-        if ($admittedgroupid > 0) {
-            $group = $DB->get_record('groups', ['id' => $admittedgroupid], 'id, courseid, name, visibility');
+        $keygroupid = $admittedgroupid > 0 ? $admittedgroupid : $reviewgroupid;
+        if ($keygroupid > 0) {
+            $group = $DB->get_record('groups', ['id' => $keygroupid], 'id, courseid, name, visibility');
             $admission = (object) [
+                'admitted' => $admittedgroupid > 0,
                 // Plain: the template double-stashes it, like the course name.
                 'group' => $group ? format_string($group->name, true, [
                     'context' => context_course::instance($instance->courseid),
@@ -1823,9 +1909,10 @@ class enrol_apply_plugin extends enrol_plugin {
                 ]) : '',
                 // The record, so each recipient is judged by the group's own visibility.
                 'grouprecord' => $group ?: null,
-                'url' => new moodle_url('/user/profile.php', ['id' => $userid]),
+                'url' => $admittedgroupid > 0 ? new moodle_url('/user/profile.php', ['id' => $userid]) : null,
             ];
         }
+        $admitted = $admission !== null && $admission->admitted;
 
         // Notify users holding the capability in the course context.
         $recipients = $this->get_notifycoursebased_users($instance);
@@ -1848,7 +1935,7 @@ class enrol_apply_plugin extends enrol_plugin {
                     $content,
                     $manageurl,
                     $instance->courseid,
-                    $admission !== null
+                    $admitted
                 );
                 $notified[$user->id] = true;
             }
@@ -1878,7 +1965,7 @@ class enrol_apply_plugin extends enrol_plugin {
                     $content,
                     $manageurl,
                     $instance->courseid,
-                    $admission !== null
+                    $admitted
                 );
                 $notified[$user->id] = true;
             }
@@ -1907,7 +1994,7 @@ class enrol_apply_plugin extends enrol_plugin {
                     $content,
                     $manageurl,
                     $instance->courseid,
-                    $admission !== null
+                    $admitted
                 );
                 $notified[$user->id] = true;
             }
@@ -1922,13 +2009,14 @@ class enrol_apply_plugin extends enrol_plugin {
      * so a mentor holding nothing in the course gets the name fields only and nobody reads a field
      * core would hide from them on the applicant's profile.
      *
-     * The key group of an admission is named the same way: only to a recipient holding the
-     * capability in the course, the gate the review page's group chooser applies, and who may see
-     * the group by core's visibility rule ({@see \enrol_apply\local\groupvisibility::visible_to()}),
-     * judged for the recipient rather than for the applicant whose request sends the notice. A
-     * mentor, who holds the capability in the applicant's user context alone, a site-wide
-     * recipient without it, and a recipient a hidden group is hidden from are told of the
-     * admission without the group, as the page would tell them.
+     * The key group of an admission, or of an application a key sent for review, is named the same
+     * way: only to a recipient holding the capability in the course, the gate the review page's
+     * group chooser applies, and who may see the group by core's visibility rule
+     * ({@see \enrol_apply\local\groupvisibility::visible_to()}), judged for the recipient rather
+     * than for the applicant whose request sends the notice. A mentor, who holds the capability in
+     * the applicant's user context alone, a site-wide recipient without it, and a recipient a
+     * hidden group is hidden from are told of the key without the group, as the page would tell
+     * them.
      *
      * @param stdClass $recipient User the message goes to.
      * @param moodle_url $manageurl Link to the screen where the application can be decided.
@@ -1936,8 +2024,9 @@ class enrol_apply_plugin extends enrol_plugin {
      * @param stdClass $applicant Applicant.
      * @param string $applydescription Comment submitted with the application.
      * @param array $submitted Key, label and value of every submitted field, in form order.
-     * @param stdClass|null $admission For an admission by key: 'group', the key group's plain name
-     *     (empty when the group is gone), and 'grouprecord', its {groups} record or null.
+     * @param stdClass|null $admission For an admission by key, or an application a valid key sent
+     *     for review: 'admitted' (which of the two), 'group', the key group's plain name (empty when
+     *     the group is gone), and 'grouprecord', its {groups} record or null.
      * @return string Rendered HTML body.
      */
     protected function application_notification_body(
@@ -1974,7 +2063,8 @@ class enrol_apply_plugin extends enrol_plugin {
                         (int) $recipient->id
                     ) => $admission->group,
                 default => '',
-            }
+            },
+            $admission !== null && !$admission->admitted
         );
     }
 

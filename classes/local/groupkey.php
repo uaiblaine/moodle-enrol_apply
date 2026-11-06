@@ -42,8 +42,15 @@ class groupkey {
      */
     public const MODE_REQUIRED = 'required';
 
+    /**
+     * @var string customchar1 value of an instance that takes an application only with the key of a
+     *     group of its course, and sends it for review: nobody is admitted by the key, and without
+     *     a valid key nothing is written at all.
+     */
+    public const MODE_REVIEW = 'review';
+
     /** @var array Every value customchar1 may hold. */
-    public const MODES = [self::MODE_OFF, self::MODE_ANY, self::MODE_REQUIRED];
+    public const MODES = [self::MODE_OFF, self::MODE_ANY, self::MODE_REQUIRED, self::MODE_REVIEW];
 
     /** @var string customchar2 value of a key-only instance that tells its managers of each admission. */
     public const NOTICE_ON = '1';
@@ -55,20 +62,50 @@ class groupkey {
      * other than the known values reads as off rather than as some other mode.
      *
      * @param stdClass $instance The {enrol} record.
-     * @return bool True when a valid key admits without review.
+     * @return bool True when a key is read at all: it admits, or it sends the application for review.
      */
     public static function enabled(stdClass $instance): bool {
         $mode = $instance->customchar1 ?? self::MODE_OFF;
 
-        return $mode === self::MODE_ANY || $mode === self::MODE_REQUIRED;
+        return $mode === self::MODE_ANY || $mode === self::MODE_REQUIRED || $mode === self::MODE_REVIEW;
     }
 
     /**
-     * Whether the instance enrols only with a key, so that every route a valid key cannot finish
-     * is refused rather than left waiting for a decision nobody is there to take.
+     * Whether nothing can be submitted on this instance without a valid key: no key, a wrong key
+     * or a locked field is refused, and "without the key" is never offered.
+     *
+     * Strict, like enabled().
      *
      * @param stdClass $instance The {enrol} record.
-     * @return bool True for a key-only instance.
+     * @return bool True for both key-only modes.
+     */
+    public static function mandatory(stdClass $instance): bool {
+        return in_array($instance->customchar1 ?? self::MODE_OFF, [self::MODE_REQUIRED, self::MODE_REVIEW], true);
+    }
+
+    /**
+     * Whether a valid key enrols at once on this instance, without anybody deciding.
+     *
+     * False for MODE_REVIEW, where the same valid key writes an application that waits for a
+     * decision. Strict, like enabled().
+     *
+     * @param stdClass $instance The {enrol} record.
+     * @return bool True when a valid key admits.
+     */
+    public static function admits(stdClass $instance): bool {
+        return in_array($instance->customchar1 ?? self::MODE_OFF, [self::MODE_ANY, self::MODE_REQUIRED], true);
+    }
+
+    /**
+     * Whether nothing ever waits for a decision on this instance: a valid key admits, and every
+     * route a valid key cannot finish is refused rather than left waiting for a decision nobody is
+     * there to take.
+     *
+     * Only MODE_REQUIRED. MODE_REVIEW is just as mandatory ({@see mandatory()}), but everything it
+     * writes waits for a decision.
+     *
+     * @param stdClass $instance The {enrol} record.
+     * @return bool True for the key-only mode that admits.
      */
     public static function required(stdClass $instance): bool {
         return ($instance->customchar1 ?? self::MODE_OFF) === self::MODE_REQUIRED;

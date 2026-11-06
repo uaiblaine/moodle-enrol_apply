@@ -68,37 +68,52 @@ final class groupkey_test extends \advanced_testcase {
     }
 
     /**
-     * Only the two known values turn the option on, and only one of them makes the key required.
+     * The four predicates over every known value and the unknown ones.
      *
-     * @return array Stored customchar1 value, whether keys count, and whether only a key enrols.
+     * @return array Stored customchar1 value, then whether keys count (enabled), whether nothing can
+     *     be submitted without one (mandatory), whether a valid key enrols at once (admits) and
+     *     whether nothing ever waits for a decision (required), keyed by case name.
      */
     public static function mode_provider(): array {
         return [
-            'any' => ['any', true, false],
-            'required' => ['required', true, true],
-            'off' => ['', false, false],
-            'null' => [null, false, false],
-            'other case' => ['ANY', false, false],
-            'other case of required' => ['REQUIRED', false, false],
-            'a mode this build does not know' => ['listed', false, false],
+            'off' => ['', false, false, false, false],
+            'any' => ['any', true, false, true, false],
+            'required' => ['required', true, true, true, true],
+            'review' => ['review', true, true, false, false],
+            'null' => [null, false, false, false, false],
+            'other case' => ['ANY', false, false, false, false],
+            'other case of required' => ['REQUIRED', false, false, false, false],
+            'other case of review' => ['Review', false, false, false, false],
+            'a mode this build does not know' => ['listed', false, false, false, false],
         ];
     }
 
     /**
-     * enabled() and required() are strict, because customchar1 arrives verbatim from a restored
-     * archive: an unknown value reads as off, never as a mode that skips the review.
+     * The predicates are strict, because customchar1 arrives verbatim from a restored archive: an
+     * unknown value reads as off, never as a mode that skips the review or refuses applications.
      *
      * @param string|null $stored The stored value.
      * @param bool $enabled Whether the instance accepts keys.
-     * @param bool $required Whether the instance enrols only with a key.
+     * @param bool $mandatory Whether nothing can be submitted without a valid key.
+     * @param bool $admits Whether a valid key enrols at once.
+     * @param bool $required Whether nothing ever waits for a decision.
      * @return void
      */
     #[DataProvider('mode_provider')]
-    public function test_only_the_known_mode_enables_keys(?string $stored, bool $enabled, bool $required): void {
+    public function test_only_the_known_mode_enables_keys(
+        ?string $stored,
+        bool $enabled,
+        bool $mandatory,
+        bool $admits,
+        bool $required
+    ): void {
         $instance = (object) ['customchar1' => $stored];
 
-        $this->assertSame($enabled, groupkey::enabled($instance));
-        $this->assertSame($required, groupkey::required($instance));
+        $this->assertSame($enabled, groupkey::enabled($instance), 'enabled');
+        $this->assertSame($mandatory, groupkey::mandatory($instance), 'mandatory');
+        $this->assertSame($admits, groupkey::admits($instance), 'admits');
+        $this->assertSame($required, groupkey::required($instance), 'required');
+        $this->assertSame($stored !== null && in_array($stored, groupkey::MODES, true), $enabled || $stored === '');
     }
 
     /**
@@ -294,6 +309,9 @@ final class groupkey_test extends \advanced_testcase {
         // A fresh plugin object per reading: enrol_plugin::get_config() memoises the config.
         set_config('groupkeys', groupkey::MODE_ANY, 'enrol_apply');
         $this->assertSame(groupkey::MODE_ANY, (new \enrol_apply_plugin())->get_instance_defaults()['customchar1']);
+
+        set_config('groupkeys', groupkey::MODE_REVIEW, 'enrol_apply');
+        $this->assertSame(groupkey::MODE_REVIEW, (new \enrol_apply_plugin())->get_instance_defaults()['customchar1']);
 
         set_config('groupkeys', 'listed', 'enrol_apply');
         $this->assertSame(groupkey::MODE_OFF, (new \enrol_apply_plugin())->get_instance_defaults()['customchar1']);
