@@ -390,19 +390,20 @@ final class review_funnel_test extends \advanced_testcase {
     }
 
     /**
-     * A keyless application starts with the method's groups ticked (RP-D19), but only when the
-     * reader may choose every one of them: ticked groups post explicitly and confirm_enrolment()
-     * joins exactly them, so ticking the visible part of the defaults would drop the rest from the
-     * approval.
+     * A keyless application starts with the part of the method's groups the reader may choose
+     * ticked (RP-D19), and the sentence still names the rest: confirm_enrolment() keeps the
+     * method's groups a reader may not choose on top of a ticked choice.
      *
-     * The control is a reader for whom one of the method's two groups is hidden: nothing is
-     * ticked, and the sentence names the visible one and counts the hidden one.
+     * The second reader cannot see one of the method's two groups: the visible one is ticked, the
+     * sentence names it and counts the hidden one, and the line under the cards says the hidden
+     * one stays, without naming it.
      *
-     * Changes that must make it fail: the defaults never ticked, or ticked when one is hidden.
+     * Changes that must make it fail: the defaults ticked only when all can be chosen, the kept
+     * group left out of the sentence or its count, or the line under the cards missing.
      *
      * @return void
      */
-    public function test_a_keyless_application_ticks_the_methods_groups_only_when_all_can_be_chosen(): void {
+    public function test_a_keyless_application_ticks_the_choosable_part_and_keeps_the_rest(): void {
         global $DB;
 
         $this->setAdminUser();
@@ -427,7 +428,11 @@ final class review_funnel_test extends \advanced_testcase {
         $applicant = $this->application(submission::KEY_NONE);
         $html = $this->review_html($applicant);
         $this->assertNull($this->card_ticked($html, (int) $covert->id), 'a hidden group is never a card');
-        $this->assertFalse($this->card_ticked($html, (int) $this->listed->id));
+        $this->assertTrue($this->card_ticked($html, (int) $this->listed->id));
+        $this->assertSame(
+            get_string('reviewkeptgroups', 'enrol_apply', get_string('decisionsummaryhidden', 'enrol_apply', 1)),
+            $this->region($html, 'outcome-kept-line')
+        );
         $this->assertSame(
             get_string('reviewoutcomemany', 'enrol_apply', (object) [
                 'who' => s(fullname($applicant)),
@@ -603,11 +608,11 @@ final class review_funnel_test extends \advanced_testcase {
      * line counts the deferred applications of their groups, labelled so (V-D3).
      *
      * The application's key route holds the listed group, which is not theirs: it gets no card,
-     * and the sentence names the groups an explicit post of their ticks joins, which is theirs
-     * alone (confirm_enrolment() joins exactly what is posted).
+     * and the sentence names it beside their ticked group, because confirm_enrolment() keeps the
+     * method's groups outside a decider's choice; the line under the cards says so.
      *
      * Changes that must make it fail: the deferred count read method-wide for a narrowed reader,
-     * or another group offered to them.
+     * another group offered to them, or the kept group left out of the sentence.
      *
      * @return void
      */
@@ -637,7 +642,16 @@ final class review_funnel_test extends \advanced_testcase {
             get_string('reviewmethoddeferredyours', 'enrol_apply', 1),
             (string) $this->region($html, 'methodline')
         );
-        $this->assertStringNotContainsString('Turma B', (string) $this->region($html, 'outcome-sentence'));
+        // The method's listed group is not theirs to choose, and the approval keeps it.
+        $this->assertSame(
+            get_string('reviewoutcomemany', 'enrol_apply', (object) [
+                'who' => s(fullname($applicant)),
+                'role' => get_string('reviewoutcomerole', 'enrol_apply', 'Student'),
+                'groups' => 'Turma A, Turma B',
+            ]),
+            $this->region($html, 'outcome-sentence')
+        );
+        $this->assertSame(get_string('reviewkeptgroups', 'enrol_apply', 'Turma B'), $this->region($html, 'outcome-kept-line'));
 
         // The control: the editing teacher, not narrowed, counts both on the method.
         $this->setUser($this->getDataGenerator()->create_and_enrol($this->course, 'editingteacher'));

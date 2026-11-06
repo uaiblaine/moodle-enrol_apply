@@ -49,6 +49,9 @@
     * outcomedefaultids string - the default groups' ids, comma separated
     * outcomedefaulthidden int - how many default groups the reader may not see
     * outcomedefaultnames array - the visible default groups, each with name (plain)
+    * outcomekepthidden int - how many of the method's groups kept outside this reader's choice they may not see
+    * outcomekeptnames array - the visible ones, each with name (plain)
+    * haskept boolean, keptgroups string - the line saying they stay, ESCAPED
     * outcomedefaultrole string - the method's role, ESCAPED, triple stashed into a hidden span
       the script reads as text
     * outcomeplaces int, outcomeplacestaken int - the method's places and how many are taken
@@ -90,6 +93,10 @@
         "outcomedefaultids": "3",
         "outcomedefaulthidden": 0,
         "outcomedefaultnames": [{"name": "R&D < Team"}],
+        "outcomekepthidden": 0,
+        "outcomekeptnames": [],
+        "haskept": false,
+        "keptgroups": "",
         "outcomedefaultrole": "Student",
         "outcomeplaces": 0,
         "outcomeplacestaken": 0,
@@ -138,7 +145,7 @@
 }}
 <section class="enrol_apply-outcome card mb-3" aria-labelledby="enrol_apply_outcome_heading" data-region="enrol_apply-outcome"
     data-who="{{outcomewho}}" data-keygroup="{{outcomekeygroup}}" data-defaultids="{{outcomedefaultids}}"
-    data-defaulthidden="{{outcomedefaulthidden}}" data-places="{{outcomeplaces}}" data-placestaken="{{outcomeplacestaken}}">
+    data-defaulthidden="{{outcomedefaulthidden}}" data-kepthidden="{{outcomekepthidden}}" data-places="{{outcomeplaces}}" data-placestaken="{{outcomeplacestaken}}">
     <div class="card-body">
         <h2 class="h5" id="enrol_apply_outcome_heading">{{outcomeheading}}</h2>
         <p class="mb-1" data-region="outcome-sentence">{{{outcomesentence}}}</p>
@@ -148,6 +155,9 @@
         <span data-region="outcome-defaultrole" hidden>{{{outcomedefaultrole}}}</span>
         <ul data-region="outcome-defaults" hidden>
             {{#outcomedefaultnames}}<li>{{name}}</li>{{/outcomedefaultnames}}
+        </ul>
+        <ul data-region="outcome-kept" hidden>
+            {{#outcomekeptnames}}<li>{{name}}</li>{{/outcomekeptnames}}
         </ul>
         {{#hasadjust}}
             <details class="enrol_apply-adjust mt-3" id="enrol_apply_adjust"{{#adjustopen}} open{{/adjustopen}}>
@@ -204,6 +214,7 @@
                                 <div class="form-text" id="enrol_apply_addgroups_help">{{addgrouphelp}}</div>
                             </div>
                         {{/hasaddgroups}}
+                        {{#haskept}}<p class="form-text mb-1" data-region="outcome-kept-line">{{{keptgroups}}}</p>{{/haskept}}
                         <p class="form-text mb-0" data-region="outcome-emptychoice">{{{emptychoice}}}</p>
                     </fieldset>
                 {{/hasgroupchooser}}

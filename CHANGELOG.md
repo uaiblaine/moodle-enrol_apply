@@ -227,6 +227,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **A moderator's approval keeps the method's groups outside their scope.** In a course with
+  separate groups, a decider narrowed to their own groups who ticked a group on the review page,
+  the queue or the participants page's bulk form joined the applicant to the ticked groups alone,
+  so the method's groups outside the moderator's (the key route's listed groups, or the method's
+  own list) were silently left out, while the same approval by a teacher seeing every group, a
+  bulk decision with no choice or core's *Edit enrolment* kept them. `confirm_enrolment()` now adds
+  the method's groups the decider may not choose to a ticked choice, which also covers a group
+  hidden from the reader; an empty choice still means the method's groups, whole. The review page
+  ticks the part of the route the reader may choose (RP-D19 no longer needs every group to be
+  choosable), names the kept groups in the outcome sentence and says under the cards that they
+  stay (new string `reviewkeptgroups`). New Behat step `the "<course>" apply enrolment method also
+  joins "<group>"`.
+
 - **The review page reads as a decision funnel (slice V3, concept A of
   `docs/design/review-page-concepts.html`, RP-D1 to RP-D28).** `manage.php?userenrol=` now answers
   the decider's questions in order. A strip gives the status chip, a short key chip (*Key accepted:

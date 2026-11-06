@@ -293,6 +293,16 @@ backup/                      group mappings, comments and the durable trail, see
   and skipping would let that choice be applied again by somebody who may not choose. Gates
   `SC32`-`SC37`.
 
+  **A choice covers only the groups its decider may choose, and the method's other groups are
+  kept on top of it.** `confirm_enrolment()` adds `default_approval_groups()` minus
+  `choosable_groups()` to a NON-EMPTY allowlisted choice, so a moderator narrowed by separate
+  groups (or a reader who cannot see a hidden group) neither adds nor removes a group they cannot
+  choose; for a decider who may choose every group the set is empty. An empty choice stays empty,
+  so it still means "the method's defaults, whole" (`chosen_groups()` reads it as null). The review
+  page ticks the choosable part of the route, names the kept groups after the ticked ones in its
+  sentence (`enrol_apply/review` does the same from `outcome-kept`), and says under the cards that
+  they stay. Gates `KG1`-`KG5`, `RP7`; `tests/behat/review_moderator.feature` holds the script.
+
 - **The review page's profile snapshot is read frozen, and NOTHING IN THE SNAPSHOT PANEL reads the live
   profile.** It comes from `submission::read_snapshot()` and never from `diff::compute()`, which
   re-resolves the field set from the LIVE instance and re-classifies it against the current user

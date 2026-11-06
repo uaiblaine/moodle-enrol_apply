@@ -121,6 +121,24 @@ class behat_enrol_apply extends behat_base {
     }
 
     /**
+     * Add a group to the ones an apply enrolment method's approvals join.
+     *
+     * What the instance form's group selector writes, without driving core's autocomplete.
+     *
+     * @Given /^the "(?P<shortname_string>(?:[^"]|\\")*)" apply enrolment method also joins "(?P<group_string>(?:[^"]|\\")*)"$/
+     * @param string $shortname Course shortname.
+     * @param string $groupname The group, by name.
+     * @return void
+     */
+    public function the_apply_enrolment_method_also_joins(string $shortname, string $groupname): void {
+        global $DB;
+
+        $instance = $DB->get_record('enrol', ['id' => $this->get_instance_id($shortname)], '*', MUST_EXIST);
+        $groupid = $DB->get_field('groups', 'id', ['courseid' => $instance->courseid, 'name' => $groupname], MUST_EXIST);
+        $DB->insert_record('enrol_apply_groups', (object) ['enrolid' => $instance->id, 'groupid' => (int) $groupid]);
+    }
+
+    /**
      * Give an apply enrolment method a question of its own.
      *
      * Core's custom field generator needs the category's itemid, which is the enrol instance id

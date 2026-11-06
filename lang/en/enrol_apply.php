@@ -476,6 +476,7 @@ $string['reviewgroupoption'] = '{$a->name} · {$a->members} of {$a->seats} seats
 $string['reviewgroupoptionfull'] = '{$a->name} · no seats left, {$a->members} of {$a->seats}';
 $string['reviewhistory'] = 'Earlier applications to this course';
 $string['reviewkeep'] = 'Keep the application';
+$string['reviewkeptgroups'] = 'The method also gives groups you may not choose, and an approval keeps them: {$a}.';
 $string['reviewmethoddeferred'] = '{$a} deferred';
 $string['reviewmethoddeferredyours'] = '{$a} deferred in your groups';
 $string['reviewmethodheld'] = '{$a->taken} of {$a->total} applications held';

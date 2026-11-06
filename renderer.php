@@ -1838,12 +1838,11 @@ class enrol_apply_renderer extends plugin_renderer_base {
      *  - a course decider who may not choose: the read-only summary, approval_summary_context();
      *  - a mentor, who holds nothing in the course: the role only, with no group named.
      *
-     * Ticked as the page loads (RP-D19): the key route for an application whose key group this
-     * reader may see, as before; for any other the method's defaults, but only when every one of
-     * them is a group this reader may choose. Ticked groups post explicitly, and confirm_enrolment()
-     * then joins exactly them, so ticking a visible subset of a route that holds a group the
-     * reader cannot choose would drop that group from the approval; leaving the boxes empty keeps
-     * the defaults whole.
+     * Ticked as the page loads (RP-D19): the part of the key route this reader may choose, for an
+     * application whose key group they may see; for any other the part of the method's defaults
+     * they may choose. The rest of the route is kept: confirm_enrolment() joins the ticked groups
+     * plus the method's groups this reader may not choose, so the sentence names those too, and a
+     * line under the cards says they stay.
      *
      * Above groupfilter::THRESHOLD choosable groups (counted after the reader's narrowing,
      * RP-D18) only the ticked ones are cards and the rest are a search (RP-D20); at or below it
@@ -1880,10 +1879,15 @@ class enrol_apply_renderer extends plugin_renderer_base {
         $defaults = $chooser ? enrol_get_plugin('apply')->default_approval_groups($instance, (int) $application->id) : [];
         [$defaultnames, $defaulthidden] = $this->visible_group_names($defaults, $coursecontext);
 
+        /* The method's groups this reader may not choose, which confirm_enrolment() keeps on top of
+           any ticked choice; empty for a reader who may choose every group. */
+        $kept = $chooser ? array_values(array_map('intval', array_diff($defaults, array_keys($facts)))) : [];
+        [$keptnames, $kepthidden] = $this->visible_group_names($kept, $coursecontext);
+
         $ticked = [];
         if ($chooser) {
             $route = $keygroupid ? $keyed['preselected'] : [];
-            if (!$route && $defaults && !array_diff($defaults, array_keys($facts))) {
+            if (!$route) {
                 $route = $defaults;
             }
             $ticked = array_values(array_intersect(array_keys($facts), array_map('intval', $route)));
@@ -1891,11 +1895,11 @@ class enrol_apply_renderer extends plugin_renderer_base {
 
         // What the approval joins as the page loads, and what this reader may be told of it.
         if ($chooser) {
-            $effective = $ticked ?: $defaults;
+            $effective = $ticked ? array_merge($ticked, $kept) : $defaults;
             $names = $ticked
-                ? array_map(static fn(int $id): string => $facts[$id]->name, $ticked)
+                ? array_merge(array_map(static fn(int $id): string => $facts[$id]->name, $ticked), array_values($keptnames))
                 : array_values($defaultnames);
-            $hidden = $ticked ? 0 : $defaulthidden;
+            $hidden = $ticked ? $kepthidden : $defaulthidden;
         } else if ($coursedecider) {
             // Absent only when the summary was not built, which then names no group.
             $effective = $controls['summaryids'] ?? [];
@@ -2038,6 +2042,16 @@ class enrol_apply_renderer extends plugin_renderer_base {
                     static fn(string $name): array => ['name' => $name],
                     array_values($defaultnames)
                 ),
+                'outcomekepthidden' => $kepthidden,
+                'outcomekeptnames' => array_map(
+                    static fn(string $name): array => ['name' => $name],
+                    array_values($keptnames)
+                ),
+                'haskept' => (bool) $kept,
+                'keptgroups' => $kept ? get_string('reviewkeptgroups', 'enrol_apply', implode(', ', array_merge(
+                    array_map('s', array_values($keptnames)),
+                    $kepthidden ? [get_string('decisionsummaryhidden', 'enrol_apply', $kepthidden)] : []
+                ))) : '',
                 'outcomedefaultrole' => $rolename,
                 'outcomeplaces' => $capacity['hascapacity'] ? $capacity['places'] : 0,
                 'outcomeplacestaken' => $capacity['hascapacity'] ? $capacity['placestaken'] : 0,
