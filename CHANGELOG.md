@@ -4,6 +4,33 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## v2.0.1 (2026110509) - 2026-11-06
+
+### Fixed
+
+- **The applicant's profile is linked only where core would open it.** The review page's "View
+  profile" and the applicant's name in the queue linked `user/view.php?id=&course=` for every
+  reader, and core refuses many of them: a moderator narrowed by separate groups is refused the
+  profile of a pending applicant, who is in no group yet, with "You cannot view the profile of
+  this user". The new `\enrol_apply\local\profilelink` takes user/view.php's decision in its
+  order (the reader's own profile, core's "parent" branch, access to the course as
+  `require_login()` judges it, which refuses a suspended or expired reader, then
+  `\core\user::can_view_profile()` from 5.3 and `user_can_view_profile()` before it); the review
+  page drops the link and the queue shows the name as text where it says no. The queue decides a
+  page at once (`viewable_ids()`, the same steps in a few statements per course, with core's own
+  per-user rule whenever a plugin implements `control_view_profile`), so a page costs the same
+  however many rows it has. Gates `PL1`-`PL21`.
+
+### Changed
+
+- **The review page draws Concept A's boxes.** The summary strip, the signals (one bordered list
+  with a divider per row), the evidence column's comment, submitted details and earlier
+  applications are each a box in the theme's border colour and radius; "On confirming" is a card
+  marked by the primary colour on its leading edge. "Adjust groups and role" and "Write to the
+  applicant or add a note for the record" are Bootstrap accordions, as the theme draws them on
+  course pages, the second with its hint under the title; without JavaScript both stay open. The
+  submitted details' anchor moved from the box to its heading.
+
 ## v2.0 (2026110508) - 2026-11-06
 
 ### Added

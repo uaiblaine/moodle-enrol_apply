@@ -49,7 +49,8 @@
     Context variables required for this template:
     * actions array - one entry per decision, each with:
       * value string - what travels as formaction
-      * label string - the button's text
+      * label string - the button's text, and its accessible name on every width
+      * shortlabel string - one word shown under the icon below the md breakpoint, aria-hidden
       * style string - the Bootstrap button class it carries
       * icon string - the core icon beside the label, decorative
       * consequence string - what the decision does, ESCAPED by the renderer because the
@@ -58,11 +59,11 @@
     Example context (json):
     {
         "actions": [
-            {"value": "cancel", "label": "Cancel this application", "style": "btn-outline-danger", "icon": "e/cancel",
+            {"value": "cancel", "label": "Cancel this application", "shortlabel": "Cancel", "style": "btn-outline-danger", "icon": "e/cancel",
                 "consequence": "Ends the application and removes the enrolment; asks first"},
-            {"value": "wait", "label": "Defer this application", "style": "btn-secondary", "icon": "i/duration",
+            {"value": "wait", "label": "Defer this application", "shortlabel": "Defer", "style": "btn-secondary", "icon": "i/duration",
                 "consequence": "Goes to the waiting list and is notified"},
-            {"value": "confirm", "label": "Confirm this application", "style": "btn-primary", "icon": "t/check",
+            {"value": "confirm", "label": "Confirm this application", "shortlabel": "Confirm", "style": "btn-primary", "icon": "t/check",
                 "consequence": "Joins R&amp;D &lt; Team as Student, and is notified"}
         ]
     }
@@ -72,7 +73,7 @@
         <div class="enrol_apply-reviewaction">
             <button type="submit" name="formaction" value="{{value}}" class="btn {{style}}"
                 aria-describedby="enrol_apply_consequence_{{value}}">
-                {{#pix}}{{icon}}, core{{/pix}}{{label}}
+                {{#pix}}{{icon}}, core{{/pix}}<span class="enrol_apply-actionlabel">{{label}}</span><span class="enrol_apply-actionshort" aria-hidden="true">{{shortlabel}}</span>
             </button>
             <span class="enrol_apply-consequence d-none d-md-block" id="enrol_apply_consequence_{{value}}" data-region="consequence-{{value}}">{{{consequence}}}</span>
         </div>

@@ -105,6 +105,7 @@ classes/local/submission.php the durable application record: constants, writes, 
 classes/local/keyattempts.php  the wrong-key throttle and its per-applicant request lock
 classes/local/groupvisibility.php  whether a reader may be told a group's name (core's visibility rule)
 classes/local/groupfilter.php  the queue's group filter: the values each reader is offered, what each selects
+classes/local/profilelink.php  whether user/view.php would open an applicant's profile for this reader
 classes/observers.php        course_deleted, orphan cleanup for the plugin-disabled case
 classes/privacy/provider.php full provider: three personal-data tables, two personal-data roles
 classes/task/                sync_enrolments, send_expiry_notifications, purge_submissions (scheduled);
@@ -1241,6 +1242,22 @@ backup/                      group mappings, comments and the durable trail, see
   outcome formatter, never the record's bare status: a record says APPROVED for ever while the
   enrolment it names may since have been suspended or removed by a route this plugin never sees.
   Gate `AQ`.
+
+- **The applicant's profile is linked only where `user/view.php` would open it**
+  (`\enrol_apply\local\profilelink`): the review page's "View profile" and the queue's name cell.
+  Core refuses many readers this plugin admits, and the reachable one is the commonest: a
+  moderator narrowed by separate groups, because a pending applicant is in no group yet and
+  `can_view_profile()` hides a user who shares no group with the reader. The helper takes
+  `view.php`'s branches in its order (own profile, the "parent" branch a mentor holding
+  `moodle/user:viewdetails` in the applicant's context takes, the four-argument
+  `can_access_course()` for `require_login($course)` (the three-argument form admits a suspended
+  or expired reader, as the review-page bullet above measured), then core's rule: `\core\user::can_view_profile()` on 5.3,
+  `user_can_view_profile()` before it). The queue judges a page per course in
+  `viewable_ids()`, which asks core's `is_enrolled()` for the page at once and must stay step for
+  step with the single answer
+  (`test_the_batch_agrees_with_the_single_answer`): per row, core's rule is three statements, and
+  `test_the_answers_of_a_whole_page_are_read_in_one_query` counts them. Gates `PL1`-`PL21`; `PL5`
+  holds the 5.3 branch only.
 
 - **Cancelling asks, and button order could never have been the fix.** Confirm was the form's
   first submit and therefore its default, so Enter on either chooser approved the enrolment -

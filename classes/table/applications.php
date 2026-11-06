@@ -28,6 +28,7 @@ use enrol_apply\local\queue;
 use enrol_apply\local\coursefilter;
 use enrol_apply\local\groupfilter;
 use enrol_apply\local\groupvisibility;
+use enrol_apply\local\profilelink;
 use enrol_apply\local\queuefilter;
 use enrol_apply\local\search;
 use enrol_apply\local\groupscope;
@@ -128,6 +129,9 @@ class applications extends \table_sql implements dynamic_table {
 
     /** @var array Group id => true, for the groups on this page the reader may see; see query_db(). */
     protected $visiblegroups = [];
+
+    /** @var array "courseid:userid" => true, for the applicants whose profile opens; see query_db(). */
+    protected $profilelinks = [];
 
     /** @var \stdClass|null The identity SELECT/JOIN, resolved once in set_filterset(). */
     protected $identitysql = null;
@@ -984,7 +988,7 @@ class applications extends \table_sql implements dynamic_table {
            predating the durable record shows no evidence. */
         $fields = "ue.id AS userenrolmentid, ue.status AS enrolstatus, ue.timecreated AS applydate,
                    COALESCE(s.comment, ai.comment) AS applycomment, s.id AS submissionid,
-                   s.keyoutcome,
+                   s.keyoutcome, u.deleted AS userdeleted,
                    c.fullname AS course,
                    c.id AS courseid, {$priorsql}, {$userfields}{$this->identitysql->selects}";
         $from = "{user_enrolments} ue
@@ -1365,11 +1369,14 @@ class applications extends \table_sql implements dynamic_table {
 
         $user = user_picture::unalias($row, ['username'], 'userid');
 
-        $name = html_writer::link(
-            new moodle_url('/user/view.php', ['id' => $user->id, 'course' => $row->courseid]),
-            fullname($user),
-            ['class' => 'enrol_apply-applicantname']
-        );
+        // A link only where user/view.php would open the profile, judged for the page in query_db().
+        $name = isset($this->profilelinks[(int) $row->courseid . ':' . (int) $user->id])
+            ? html_writer::link(
+                new moodle_url('/user/view.php', ['id' => $user->id, 'course' => $row->courseid]),
+                fullname($user),
+                ['class' => 'enrol_apply-applicantname']
+            )
+            : html_writer::span(fullname($user), 'enrol_apply-applicantname');
 
         $badges = '';
         if ($row->enrolstatus == ENROL_APPLY_USER_WAIT) {
@@ -1546,6 +1553,20 @@ class applications extends \table_sql implements dynamic_table {
         parent::query_db($pagesize, $useinitialsbar);
 
         $this->snapshots = submissionrecord::read_snapshots(array_column((array) $this->rawdata, 'submissionid'));
+
+        /* Whose profile user/view.php would open for this reader, judged once per course of the
+           page: per row, core's rule runs three statements. A moderator narrowed by separate
+           groups is refused the profile of an applicant who is in no group yet. */
+        $this->profilelinks = [];
+        $bycourse = [];
+        foreach ((array) $this->rawdata as $row) {
+            $bycourse[(int) $row->courseid][(int) $row->userid] = (int) $row->userdeleted;
+        }
+        foreach ($bycourse as $courseid => $users) {
+            foreach (profilelink::viewable_ids($users, get_course($courseid)) as $userid) {
+                $this->profilelinks[$courseid . ':' . $userid] = true;
+            }
+        }
 
         /* Which of the page's key groups this reader may see, judged once for the page: per row,
            visible_to() would run a membership query for every row of a MEMBERS or OWN group. */

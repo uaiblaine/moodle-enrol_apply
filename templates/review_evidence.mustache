@@ -61,7 +61,7 @@
 }}
 <div class="enrol_apply-evidence">
     <h2 class="h5" id="enrol_apply_review_comment">{{commentlabel}}</h2>
-    <div class="mb-3">
+    <div class="enrol_apply-box mb-3">
         {{#hascomment}}{{{comment}}}{{/hascomment}}
         {{^hascomment}}<span class="text-body-secondary">{{nocomment}}</span>{{/hascomment}}
     </div>
@@ -72,9 +72,9 @@
             non-greedy match up to the first closing div tag, so keep this class first on the div
             and nest no div inside it.
         }}
-        <div class="enrol_apply-snapshot" id="enrol_apply_review_details">
-            <h2 class="h5">{{snapshotlabel}}</h2>
-            <dl class="row">
+        <h2 class="h5" id="enrol_apply_review_details">{{snapshotlabel}}</h2>
+        <div class="enrol_apply-snapshot enrol_apply-box mb-3">
+            <dl class="row mb-0">
                 {{#snapshot}}
                     <dt class="col-sm-5 col-lg-12">{{label}}</dt>
                     <dd class="col-sm-7 col-lg-12 enrol_apply-linebreaks">{{value}}</dd>
@@ -84,7 +84,7 @@
     {{/hassnapshot}}
     {{#hashistory}}
         <h2 class="h5" id="enrol_apply_review_history">{{historylabel}}</h2>
-        <ul class="list-unstyled">
+        <ul class="enrol_apply-box list-unstyled">
             {{#history}}
                 <li class="text-body-secondary">{{applied}} &mdash; {{outcome}}</li>
             {{/history}}

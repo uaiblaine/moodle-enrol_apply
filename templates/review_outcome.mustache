@@ -57,7 +57,7 @@
     * outcomeplaces int, outcomeplacestaken int - the method's places and how many are taken
     * hasadjust boolean - whether this decider may choose groups or a role
     * adjustopen boolean - whether "Adjust" opens as the page loads
-    * adjustlabel string - its summary
+    * adjustlabel string - its accordion's header
     * hasgroupchooser boolean, groupchooserlabel string - the cards' fieldset and its legend
     * haspinnedhelp boolean, pinnedhelp string - the hint above pinned cards, above the threshold
     * hasgroupcards boolean, groupcards array - one card per group, each with id, name (plain),
@@ -74,7 +74,8 @@
       element-select.mustache has it
     * writeopen boolean - whether the message disclosure opens, which it does whenever either box
       holds a value (the way back from the cancel confirmation)
-    * writelabel string, writehelp string - the disclosure's summary and hint
+    * writelabel string, writehelp string - the accordion's header and the hint shown under it, open or
+      closed
     * messagelabel, messagehelp, messagevalue string - the message to the applicant
     * notelabel, notehelp, notevalue string - the decider's note. notevalue is NOT the note
       already stored, which the strip shows: the writer clears on empty, so a pre-filled box would
@@ -160,8 +161,16 @@
             {{#outcomekeptnames}}<li>{{name}}</li>{{/outcomekeptnames}}
         </ul>
         {{#hasadjust}}
-            <details class="enrol_apply-adjust mt-3" id="enrol_apply_adjust"{{#adjustopen}} open{{/adjustopen}}>
-                <summary>{{adjustlabel}}</summary>
+            <div class="accordion enrol_apply-accordion enrol_apply-adjust mt-3" id="enrol_apply_adjust">
+            <div class="accordion-item">
+            <h3 class="accordion-header" id="enrol_apply_adjust_heading">
+                <button class="accordion-button{{^adjustopen}} collapsed{{/adjustopen}}" type="button" data-bs-toggle="collapse"
+                    data-bs-target="#enrol_apply_adjust_body" aria-controls="enrol_apply_adjust_body"
+                    aria-expanded="{{#adjustopen}}true{{/adjustopen}}{{^adjustopen}}false{{/adjustopen}}">{{adjustlabel}}</button>
+            </h3>
+            <div class="accordion-collapse collapse{{#adjustopen}} show{{/adjustopen}}" id="enrol_apply_adjust_body"
+                aria-labelledby="enrol_apply_adjust_heading">
+            <div class="accordion-body">
                 {{#hasgroupchooser}}
                     <fieldset class="enrol_apply-groupchooser mt-2">
                         <legend class="fs-6 fw-semibold">{{groupchooserlabel}}</legend>
@@ -231,14 +240,26 @@
                         <div class="form-text" id="enrol_apply_roleid_help">{{rolehelp}}</div>
                     </div>
                 {{/hasrolechooser}}
-            </details>
+            </div>
+            </div>
+            </div>
+            </div>
         {{/hasadjust}}
     </div>
 </section>
-<details class="enrol_apply-write mb-3"{{#writeopen}} open{{/writeopen}}>
-    <summary>{{writelabel}}</summary>
-    <p class="form-text mt-1 mb-0">{{writehelp}}</p>
-    <div class="enrol_apply-outcomemessage mt-2">
+<div class="accordion enrol_apply-accordion enrol_apply-write mb-3" id="enrol_apply_write">
+<div class="accordion-item">
+<h2 class="accordion-header" id="enrol_apply_write_heading">
+    <button class="accordion-button{{^writeopen}} collapsed{{/writeopen}}" type="button" data-bs-toggle="collapse"
+        data-bs-target="#enrol_apply_write_body" aria-controls="enrol_apply_write_body"
+        aria-expanded="{{#writeopen}}true{{/writeopen}}{{^writeopen}}false{{/writeopen}}">
+        <span class="enrol_apply-accordiontitle">{{writelabel}}<span class="enrol_apply-accordionhint">{{writehelp}}</span></span>
+    </button>
+</h2>
+<div class="accordion-collapse collapse{{#writeopen}} show{{/writeopen}}" id="enrol_apply_write_body"
+    aria-labelledby="enrol_apply_write_heading">
+<div class="accordion-body">
+    <div class="enrol_apply-outcomemessage">
         <label class="form-label" for="enrol_apply_outcomemessage">{{messagelabel}}</label>
         <textarea class="form-control" id="enrol_apply_outcomemessage" name="outcomemessage"
             rows="3" aria-describedby="enrol_apply_outcomemessage_help">{{messagevalue}}</textarea>
@@ -250,4 +271,7 @@
             rows="3" aria-describedby="enrol_apply_decisionnote_help">{{notevalue}}</textarea>
         <div class="form-text" id="enrol_apply_decisionnote_help">{{notehelp}}</div>
     </div>
-</details>
+</div>
+</div>
+</div>
+</div>
