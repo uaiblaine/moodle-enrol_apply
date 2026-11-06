@@ -197,6 +197,40 @@ the owner to approve before code. What it should at least carry:
 | **T3** | Which applicant pages change | None for group scope; they get the R6 wording only. |
 | **T4** | Mockups first | **Yes**, one HTML page under `docs/design/`, before any stage 3 code. |
 
+### T0: the screen review (2026-11-05, decided)
+
+The owner accepted every recommendation of `group-screens.html` (V-D1-V-D14) and of
+[`review-page-concepts.html`](review-page-concepts.html) (RP-D1-RP-D28: the review page becomes
+concept A, the decision funnel, with search past eight choosable groups) on 2026-11-05. Slices in
+order: V1 events, V2 queue, V5 joined groups and the report, V3 the review page as concept A, V4 the
+bulk form; V6 stays optional.
+
+[`group-screens.html`](group-screens.html) is T4's page: mockups of the queue (desktop, phone, the
+viewer and the moderator in no group), the review page (with and without `choosedecision`), the
+participants-page bulk form, the course report and core's log report, read against f9f3981 and core
+5.3. What it found that this plan did not say:
+
+- **The queue's two tiles disagree for a narrowed decider.** "Awaiting decision" is `scope_total()`,
+  narrowed; "Deferred to the waiting list" is `capacity::deferred()`, method-wide
+  (`renderer.php:167`, `:509-513`).
+- **A viewer never sees the key group's name on the review page**: `key_context()` gates it on
+  `manageapplications` (`renderer.php:815`).
+- **`decidedgroups` is the choice, not what was joined.** Empty means the method's defaults, which is
+  what every decider without `choosedecision`, every default approval and core's Edit enrolment record,
+  so S8's narrowing (key group or decided groups) misses an approval the defaults put into a group.
+- **The participants-page bulk route is nearly unreachable for a moderator**: core shows them only
+  members of their groups (`user/index.php:122-146`), and an applicant joins a group on approval.
+- **T1's approved event cannot simply be fired in `complete_approval()`**: it runs twice for a queue
+  approval and again for a key admission. A request-scoped marker in `classes/local/` makes it once.
+- **Core's log report narrows by the acting user's groups** (`report_helper::get_group_filter()`), has
+  no event-name filter, and the log store deletes only rows the subject performed. The course report
+  stays the moderator's surface; the events' `other` carries ids only.
+
+Slices V1 (events, tier 3), V2 (queue column, filter, scoped tiles, tier 3), V3 (review page, tier
+2), V4 (bulk form, tier 2), V5 (`joinedgroups`, report filter and column, tier 3), V6 (optional
+history panel from the log reader). Decisions V-D1 to V-D14 are in the page; V-D5 proposes
+`application_cancelled` for T1's `application_refused`, and V-D9 keeps T2 (no table).
+
 ## Stages
 
 Each stage leaves the plugin releasable, with a version bump and `CHANGELOG.md`. Supported range

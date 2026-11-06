@@ -1,0 +1,1127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Stage 3 of the group review plan for enrol_apply: the approval queue, the review page, the participants-page bulk form, the course report and the audit trail, each with groups in them. Mockups, a costed requirement list, slices V1-V6 and decisions V-D1 to V-D14.">
+<title>Groups On Every Screen</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+<style>
+:root{
+  --paper:#e7eaee; --card:#ffffff; --card-2:#f2f5f8; --inset:#eef1f5;
+  --ink:#13161b; --ink-soft:#525b69; --ink-faint:#6f7986;
+  --rule:#ccd3db; --rule-soft:#e0e5ea;
+  --brass:#8a610f; --brass-wash:#f6efe0;
+  --ok:#186b43; --ok-wash:#e1f1e8;
+  --warn:#845309; --warn-wash:#faeed7;
+  --bad:#992727; --bad-wash:#f8e5e5;
+  --blue:#0f6cbf; --blue-wash:#e6f0f9;
+  --shadow:0 1px 2px rgba(16,20,26,.05), 0 10px 30px -16px rgba(16,20,26,.25);
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --disp:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --serif:"Source Serif 4",Georgia,"Times New Roman",serif;
+  --ui:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --m-bg:#ffffff; --m-fg:#1d2125; --m-muted:#6a737b; --m-border:#dee2e6;
+  --m-primary:#0f6cbf; --m-card:#f8f9fa; --m-shade:#eef1f4;
+  --m-ok:#357a32; --m-okbg:#e8f3e7; --m-warn:#7a5f00; --m-warnbg:#fbf1cf;
+  --m-bad:#a33; --m-badbg:#f9e7e7; --m-onprimary:#ffffff;
+  --m-new:#b7d4ef; --m-newbg:#eaf3fb;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#0f1216; --card:#181c21; --card-2:#1f242a; --inset:#14181d;
+  --ink:#e5e9ed; --ink-soft:#9aa4b1; --ink-faint:#7f8996;
+  --rule:#2b323a; --rule-soft:#222830;
+  --brass:#d3a44e; --brass-wash:#2a2317;
+  --ok:#59c98c; --ok-wash:#13291f;
+  --warn:#dfa848; --warn-wash:#2a2214;
+  --bad:#ef8b8b; --bad-wash:#2c1a1a;
+  --blue:#63a8e2; --blue-wash:#132435;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 12px 34px -18px rgba(0,0,0,.8);
+  --m-bg:#1b1e22; --m-fg:#e9ecef; --m-muted:#a4adb6; --m-border:#343a40;
+  --m-primary:#6ea8dc; --m-card:#23272b; --m-shade:#2a2f34;
+  --m-ok:#79c47a; --m-okbg:#1d2b1d; --m-warn:#dcb84e; --m-warnbg:#2c2716;
+  --m-bad:#e88; --m-badbg:#2e1c1c; --m-onprimary:#10151a;
+  --m-new:#2f5577; --m-newbg:#17293a;
+}}
+:root[data-theme="dark"]{
+  --paper:#0f1216; --card:#181c21; --card-2:#1f242a; --inset:#14181d;
+  --ink:#e5e9ed; --ink-soft:#9aa4b1; --ink-faint:#7f8996;
+  --rule:#2b323a; --rule-soft:#222830;
+  --brass:#d3a44e; --brass-wash:#2a2317;
+  --ok:#59c98c; --ok-wash:#13291f;
+  --warn:#dfa848; --warn-wash:#2a2214;
+  --bad:#ef8b8b; --bad-wash:#2c1a1a;
+  --blue:#63a8e2; --blue-wash:#132435;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 12px 34px -18px rgba(0,0,0,.8);
+  --m-bg:#1b1e22; --m-fg:#e9ecef; --m-muted:#a4adb6; --m-border:#343a40;
+  --m-primary:#6ea8dc; --m-card:#23272b; --m-shade:#2a2f34;
+  --m-ok:#79c47a; --m-okbg:#1d2b1d; --m-warn:#dcb84e; --m-warnbg:#2c2716;
+  --m-bad:#e88; --m-badbg:#2e1c1c; --m-onprimary:#10151a;
+  --m-new:#2f5577; --m-newbg:#17293a;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--serif);
+  font-size:17px;line-height:1.62;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1300px;margin:0 auto;padding:0 24px 96px}
+a{color:var(--brass);text-underline-offset:3px;text-decoration-thickness:1px}
+a:focus-visible,summary:focus-visible{outline:2px solid var(--brass);outline-offset:2px;border-radius:3px}
+h1,h2,h3,h4{font-family:var(--disp);font-weight:700;line-height:1.14;text-wrap:balance;margin:0}
+code,kbd,.mono{font-family:var(--mono);font-size:.855em}
+code{background:var(--inset);border:1px solid var(--rule-soft);border-radius:4px;padding:.06em .34em;color:var(--ink);overflow-wrap:anywhere}
+pre{background:var(--inset);border:1px solid var(--rule-soft);border-radius:8px;padding:12px 14px;
+  font-family:var(--mono);font-size:.8rem;line-height:1.5;overflow-x:auto;margin:16px 0}
+pre code{background:none;border:0;padding:0;font-size:inherit}
+.eyebrow{font-family:var(--disp);font-size:.8rem;font-weight:600;letter-spacing:.02em;color:var(--brass)}
+
+.masthead{border-bottom:1px solid var(--rule);padding:52px 0 30px;margin-bottom:8px}
+.masthead h1{font-size:clamp(2.2rem,6vw,4rem);letter-spacing:-.025em;margin:.18em 0 .3em}
+.stand{font-size:1.2rem;color:var(--ink-soft);max-width:66ch;margin:0}
+.mastmeta{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:26px;font-family:var(--mono);
+  font-size:.78rem;color:var(--ink-faint)}
+.mastmeta b{color:var(--ink-soft);font-weight:500}
+
+.cols{display:flex;flex-wrap:wrap;gap:44px;align-items:flex-start;margin-top:34px}
+.toc{position:sticky;top:20px;flex:0 0 210px;min-width:180px;font-family:var(--disp);font-size:.83rem}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;border-top:1px solid var(--rule-soft)}
+.toc li:first-child{border-top:0}
+.toc a{display:flex;gap:10px;padding:9px 0;color:var(--ink-soft);text-decoration:none;line-height:1.3}
+.toc a::before{content:counter(t,decimal-leading-zero);color:var(--brass);font-family:var(--mono);font-size:.72rem;padding-top:.15em}
+.toc a:hover{color:var(--ink)}
+main{flex:1 1 520px;min-width:0}
+@media (max-width:900px){.toc{display:none}}
+
+section{margin:0 0 68px;scroll-margin-top:16px}
+section>h2{font-size:clamp(1.5rem,3.2vw,2.15rem);letter-spacing:-.018em;margin:.1em 0 .2em}
+.sectnum{font-family:var(--mono);font-size:.78rem;color:var(--brass);display:block;margin-bottom:.5em}
+.quoted{border-left:3px solid var(--brass);background:var(--brass-wash);padding:14px 18px;
+  margin:20px 0;font-size:.95rem;color:var(--ink-soft)}
+.quoted p{margin:0}
+.quoted p+p{margin-top:.6em}
+h3{font-size:1.16rem;margin:34px 0 10px;letter-spacing:-.01em}
+h4{font-size:.97rem;margin:24px 0 8px;font-weight:600}
+p{margin:0 0 1em}
+ul,ol{margin:0 0 1em;padding-left:1.25em}
+li{margin:.3em 0}
+.lede{font-size:1.06rem}
+
+.verdicts{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px;margin:26px 0}
+.vc{background:var(--card);border:1px solid var(--rule);border-radius:10px;padding:15px 16px;box-shadow:var(--shadow)}
+.vc .q{font-family:var(--disp);font-weight:600;font-size:.95rem;line-height:1.3;margin:6px 0 8px}
+.vc .a{font-size:.87rem;color:var(--ink-soft);margin:0}
+.tag{display:inline-flex;align-items:center;gap:6px;font-family:var(--disp);font-size:.74rem;
+  font-weight:600;padding:2px 9px;border-radius:99px;border:1px solid}
+.tag.ok{color:var(--ok);background:var(--ok-wash);border-color:color-mix(in srgb,var(--ok) 30%,transparent)}
+.tag.warn{color:var(--warn);background:var(--warn-wash);border-color:color-mix(in srgb,var(--warn) 30%,transparent)}
+.tag.bad{color:var(--bad);background:var(--bad-wash);border-color:color-mix(in srgb,var(--bad) 30%,transparent)}
+.tag.info{color:var(--blue);background:var(--blue-wash);border-color:color-mix(in srgb,var(--blue) 30%,transparent)}
+
+.note{border:1px solid var(--rule);border-left-width:3px;border-radius:8px;background:var(--card);
+  padding:14px 17px;margin:22px 0;font-size:.94rem}
+.note .lbl{font-family:var(--disp);font-size:.8rem;font-weight:600;display:block;margin-bottom:6px}
+.note.measured{border-left-color:var(--ok)} .note.measured .lbl{color:var(--ok)}
+.note.trap{border-left-color:var(--bad)} .note.trap .lbl{color:var(--bad)}
+.note.think{border-left-color:var(--brass)} .note.think .lbl{color:var(--brass)}
+.note p:last-child{margin-bottom:0}
+
+.tbl{width:100%;border-collapse:collapse;font-family:var(--ui);font-size:.87rem;margin:0}
+.tblwrap{overflow-x:auto;border:1px solid var(--rule);border-radius:10px;background:var(--card);margin:20px 0}
+.tbl th{text-align:left;font-family:var(--disp);font-size:.78rem;color:var(--ink-faint);font-weight:600;
+  padding:11px 14px;border-bottom:1px solid var(--rule);white-space:nowrap}
+.tbl td{padding:11px 14px;border-bottom:1px solid var(--rule-soft);vertical-align:top;color:var(--ink-soft)}
+.tbl tr:last-child td{border-bottom:0}
+.tbl td:first-child{color:var(--ink);font-weight:500}
+.tbl .num{font-variant-numeric:tabular-nums;white-space:nowrap}
+.cost{font-family:var(--disp);font-weight:700;font-size:.8rem}
+.cost.s{color:var(--ok)} .cost.m{color:var(--warn)} .cost.l{color:var(--bad)}
+
+.screen{margin:26px 0 30px;border:1px solid var(--rule);border-radius:12px;overflow:hidden;
+  background:var(--m-bg);box-shadow:var(--shadow)}
+.screencap{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:baseline;background:var(--card-2);
+  border-bottom:1px solid var(--rule);padding:9px 14px;font-family:var(--disp);font-size:.78rem;color:var(--ink-soft)}
+.screencap b{font-weight:600;color:var(--ink);font-size:.84rem}
+.screencap .url{font-family:var(--mono);font-size:.7rem;color:var(--ink-faint)}
+.screenbody{overflow-x:auto}
+.caption{font-size:.85rem;color:var(--ink-faint);margin:-16px 0 30px;font-style:italic}
+.legend{display:flex;flex-wrap:wrap;gap:8px 18px;font-family:var(--ui);font-size:.8rem;color:var(--ink-soft);margin:8px 0 0}
+.legend .sw{display:inline-block;width:12px;height:12px;border-radius:3px;background:var(--m-newbg);border:1.5px dashed var(--m-new);vertical-align:-2px;margin-right:6px}
+</style>
+<style>
+/* Moodle Boost lookalike kit, scoped to .mdl (same kit as applications-desk.html). */
+.mdl{font-family:var(--ui);font-size:14px;line-height:1.5;color:var(--m-fg);background:var(--m-bg);
+  padding:18px 20px 0;min-width:860px}
+.mdl.narrow{min-width:0}
+.mdl *{box-sizing:border-box}
+.mdl .crumb{font-size:12px;color:var(--m-muted);margin-bottom:14px}
+.mdl .crumb span+span::before{content:"/";margin:0 7px;color:var(--m-border)}
+.mdl h1{font-family:var(--ui);font-size:24px;font-weight:700;margin:0 0 2px;letter-spacing:-.01em;color:var(--m-fg)}
+.mdl h2{font-family:var(--ui);font-size:17px;font-weight:700;margin:0 0 8px;color:var(--m-fg)}
+.mdl h3{font-family:var(--ui);font-size:15px;font-weight:700;margin:0 0 6px;color:var(--m-fg)}
+.mdl p{margin:0 0 10px}
+.mdl .sub{color:var(--m-muted);font-size:13px;margin:0 0 16px}
+.mdl .btn{display:inline-flex;align-items:center;gap:6px;font-size:13.5px;font-weight:400;
+  padding:6px 13px;border-radius:8px;border:1px solid transparent;cursor:default;
+  background:transparent;color:var(--m-fg);white-space:nowrap;font-family:var(--ui)}
+.mdl .btn-primary{background:var(--m-primary);border-color:var(--m-primary);color:var(--m-onprimary)}
+.mdl .btn-secondary{background:transparent;border-color:var(--m-primary);color:var(--m-primary)}
+.mdl .btn-outline{background:transparent;border-color:var(--m-border);color:var(--m-fg)}
+.mdl .btn-danger{background:transparent;border-color:var(--m-bad);color:var(--m-bad)}
+.mdl .btn-sm{font-size:12.5px;padding:3px 9px;border-radius:6px}
+.mdl .badge{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;
+  padding:2.5px 9px;border-radius:99px;line-height:1.4}
+.mdl .b-wait{background:var(--m-warnbg);color:var(--m-warn)}
+.mdl .b-key{background:var(--m-primary);color:var(--m-onprimary)}
+.mdl .b-info{background:var(--m-shade);color:var(--m-muted)}
+.mdl .b-ok{background:var(--m-okbg);color:var(--m-ok)}
+.mdl .ctrl{display:inline-flex;align-items:center;gap:7px;background:var(--m-bg);
+  border:1px solid var(--m-border);border-radius:8px;padding:6px 11px;font-size:13.5px;color:var(--m-fg)}
+.mdl .ctrl.muted{color:var(--m-muted)}
+.mdl .caret::after{content:"\2304";font-size:14px;line-height:0;position:relative;top:-3px;color:var(--m-muted);margin-left:4px}
+.mdl .field{display:flex;flex-direction:column;gap:3px;font-size:12.5px;color:var(--m-muted)}
+.mdl .chip{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;background:var(--m-shade);
+  border:1px solid var(--m-border);border-radius:99px;padding:3px 10px;color:var(--m-fg)}
+.mdl .chip .x{color:var(--m-muted);font-size:13px}
+.mdl .av{width:32px;height:32px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;
+  font-size:11.5px;font-weight:700;color:#fff;background:#4a6fa5;flex:0 0 auto;letter-spacing:.02em}
+.mdl .av.a2{background:#7a5aa8}.mdl .av.a3{background:#2f7d68}.mdl .av.a4{background:#a5673f}.mdl .av.a5{background:#8a4a63}
+.mdl table.gt{width:100%;border-collapse:collapse;font-size:13.5px}
+.mdl table.gt th{text-align:left;font-weight:700;font-size:12.5px;color:var(--m-fg);
+  padding:9px 10px;border-bottom:2px solid var(--m-border);white-space:nowrap}
+.mdl table.gt td{padding:10px 10px;border-bottom:1px solid var(--m-border);vertical-align:top}
+.mdl table.gt .sortable::after{content:"\2191";color:var(--m-muted);margin-left:5px;font-size:11px}
+.mdl .cb{width:15px;height:15px;border:1.5px solid var(--m-muted);border-radius:3px;display:inline-block;
+  vertical-align:-2px;background:var(--m-bg)}
+.mdl .cb.on{background:var(--m-primary);border-color:var(--m-primary);position:relative}
+.mdl .cb.on::after{content:"\2713";position:absolute;inset:0;color:#fff;font-size:11px;line-height:12px;text-align:center;font-weight:700}
+.mdl .muted{color:var(--m-muted)}
+.mdl .small{font-size:12.5px}
+.mdl .xs{font-size:11.5px}
+.mdl .idline{color:var(--m-muted);font-size:12px;margin-top:2px;display:flex;flex-wrap:wrap;gap:4px 10px}
+.mdl .link{color:var(--m-primary);text-decoration:underline;text-underline-offset:2px}
+.mdl .kv{display:grid;grid-template-columns:minmax(0,auto) minmax(0,1fr);gap:4px 14px;font-size:13px;margin:0 0 12px}
+.mdl .kv dt{color:var(--m-muted)}
+.mdl .kv dd{margin:0;color:var(--m-fg)}
+.mdl .box{border:1px solid var(--m-border);border-radius:10px;background:var(--m-card);padding:14px 16px}
+.mdl .rowline{display:flex;gap:12px;align-items:flex-start}
+.mdl .stat{display:flex;flex-direction:column;gap:2px;min-width:0}
+.mdl .stat .n{font-size:21px;font-weight:700;line-height:1.1;font-variant-numeric:tabular-nums}
+.mdl .stat .l{font-size:11.5px;color:var(--m-muted)}
+.mdl .meter{height:6px;border-radius:99px;background:var(--m-shade);overflow:hidden;margin-top:6px}
+.mdl .meter i{display:block;height:100%;background:var(--m-primary);border-radius:99px}
+.mdl .meter i.warn{background:var(--m-warn)}
+.mdl .sticky{background:var(--m-card);border-top:1px solid var(--m-border);
+  margin:18px -20px 0;padding:14px 20px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;
+  box-shadow:0 -6px 18px -14px rgba(0,0,0,.6)}
+.mdl .grow{flex:1 1 auto}
+.mdl .toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:12px}
+.mdl .notice{border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:14px}
+.mdl .notice.warn{background:var(--m-warnbg);color:var(--m-warn)}
+.mdl .notice.info{background:var(--m-shade);color:var(--m-fg)}
+.mdl .grid2{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,5fr);gap:22px}
+.mdl .nav2{display:flex;justify-content:space-between;gap:12px;align-items:center;
+  border-bottom:1px solid var(--m-border);padding-bottom:12px;margin-bottom:16px;font-size:13.5px}
+.mdl.phone{max-width:392px;margin:0 auto;min-width:0}
+.mdl .mcard{border:1px solid var(--m-border);border-radius:10px;padding:12px 13px;margin-bottom:10px;background:var(--m-card)}
+.mdl .new{background:var(--m-newbg);outline:1.5px dashed var(--m-new);outline-offset:2px;border-radius:6px}
+.mdl td.new,.mdl th.new{outline-offset:-3px;border-radius:0}
+.mdl .ms{display:flex;flex-direction:column;border:1px solid var(--m-border);border-radius:8px;padding:4px 0;font-size:13px;background:var(--m-bg)}
+.mdl .ms span{padding:3px 11px}
+.mdl .ms span.sel{background:var(--m-primary);color:var(--m-onprimary)}
+.mdl .logrow td{font-size:12.5px}
+@media (max-width:640px){.mdl .grid2{grid-template-columns:minmax(0,1fr)}}
+</style>
+<style>
+main section > p, main section > ul, main section > ol, main section > .quoted,
+main section > .note, main section > h3, main section > h4, .caption{max-width:72ch}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="masthead">
+  <span class="eyebrow">enrol_apply &middot; design review, stage 3 (T0) &middot; 5 November 2026</span>
+  <h1>Groups on every screen</h1>
+  <p class="stand">The queue, the review page, the participants-page bulk form, the course report and the
+  audit trail, reviewed with groups in them. Stages 1 and 2 gave every reviewed application a group and
+  narrowed the deciders to theirs; this page proposes what each screen shows of that, and what the log keeps.
+  Nothing here is built yet. The decisions it asks for are at the foot.</p>
+  <div class="mastmeta">
+    <span><b>repo</b> uaiblaine/moodle-enrol_apply</span>
+    <span><b>at</b> f9f3981 (S2, on PR #125) &middot; version 2026110502</span>
+    <span><b>core read</b> moodle-503</span>
+    <span><b>plan</b> <a href="group-review-scope.md">group-review-scope.md</a>, stage 3, T1&ndash;T4</span>
+    <span><b>nothing changed</b> &mdash; docs only</span>
+  </div>
+</header>
+
+<div class="cols">
+<nav class="toc" aria-label="Sections">
+  <ol>
+    <li><a href="#answers">The answers, first</a></li>
+    <li><a href="#queue">The queue</a></li>
+    <li><a href="#review">The review page</a></li>
+    <li><a href="#bulk">The bulk decision form</a></li>
+    <li><a href="#report">Report and datasource</a></li>
+    <li><a href="#audit">The audit trail</a></li>
+    <li><a href="#cost">Requirements, costed</a></li>
+    <li><a href="#slices">Slices V1&ndash;V6</a></li>
+    <li><a href="#decisions">Decisions to take</a></li>
+    <li><a href="#facts">Appendix: facts checked</a></li>
+  </ol>
+</nav>
+
+<main>
+<section id="answers">
+  <span class="sectnum">&sect;00</span>
+  <h2>The answers, first</h2>
+  <div class="quoted">
+    <p><em>&ldquo;Em seguida vamos rever todas as telas de aprova&ccedil;&atilde;o, an&aacute;lise e logs de auditoria para
+    melhorias e filtros por grupos.&rdquo;</em></p>
+    <p><em>&ldquo;A expectativa &eacute; dar permiss&atilde;o para um moderador no curso, com grupos separados, cuidar das
+    solicita&ccedil;&otilde;es de inscri&ccedil;&atilde;o do seu grupo.&rdquo;</em></p>
+  </div>
+  <p class="lede">Every claim about today's behaviour below was read in the code at f9f3981 or in core
+  5.3, and is cited in the <a href="#facts">appendix</a>. Proposals are marked as proposals. Dashed blue
+  outlines in the mockups mark what is new.</p>
+  <div class="verdicts">
+    <div class="vc"><span class="tag info">add</span>
+      <p class="q">Queue: a group column and a group filter</p>
+      <p class="a">Today the group shows nowhere on the queue: the key badge names the outcome and
+      deliberately not the group. A column (named only where core's visibility rule allows) and a filter
+      intersected with the S1 scope on the server. <a href="#queue">&sect;01</a></p></div>
+    <div class="vc"><span class="tag bad">defect today</span>
+      <p class="q">Queue: two tiles that do not add up</p>
+      <p class="a">For a narrowed decider, "Awaiting decision" counts their groups while "Deferred to the
+      waiting list" counts the whole method, the very impossible pair the renderer's comment warns
+      about. <a href="#queue">&sect;01</a></p></div>
+    <div class="vc"><span class="tag info">add</span>
+      <p class="q">Review page: the key's group, plainly</p>
+      <p class="a">One row naming the group, its seats and whether the approval joins it. Today a reader
+      with <code>viewapplications</code> only never sees the group's name here, though the proposed queue
+      column would show it. <a href="#review">&sect;02</a></p></div>
+    <div class="vc"><span class="tag warn">narrow, do not hide</span>
+      <p class="q">Capacity for a narrowed decider</p>
+      <p class="a">Keep the method's numbers, labelled as the method's; add seats for the key group and
+      the decider's own groups; never other groups' seats. <a href="#review">&sect;02</a></p></div>
+    <div class="vc"><span class="tag ok">mostly right already</span>
+      <p class="q">Participants-page bulk form</p>
+      <p class="a">A narrowed decider can rarely get there: core's participants page shows them members of
+      their groups only, and an applicant joins a group on approval. What they see if they do is already
+      narrowed. <a href="#bulk">&sect;03</a></p></div>
+    <div class="vc"><span class="tag info">add</span>
+      <p class="q">Report: a group filter, a groups-joined column</p>
+      <p class="a">Core's group entity has no group-id filter, so a plugin filter. The record does not
+      say what an approval joined when the decider chose nothing: that is a gap in S8's narrowing as well.
+      <a href="#report">&sect;04</a></p></div>
+    <div class="vc"><span class="tag warn">core's log helps little</span>
+      <p class="q">Audit trail: three events</p>
+      <p class="a">Core's log report narrows by the group of the user who <em>acted</em>, not the applicant,
+      and cannot select an event by name. The events are the durable trail; the course report stays the
+      moderator's surface. <a href="#audit">&sect;05</a></p></div>
+    <div class="vc"><span class="tag bad">trap</span>
+      <p class="q">Where the approved event fires</p>
+      <p class="a"><code>complete_approval()</code> runs twice for a queue approval, and once more for a
+      key admission. Fired there naively, every approval logs twice and every admission logs as an
+      approval. <a href="#audit">&sect;05</a></p></div>
+  </div>
+</section>
+
+<section id="queue">
+  <span class="sectnum">&sect;01 &middot; manage.php?id=</span>
+  <h2>The queue: say whose application it is</h2>
+  <p>What the queue shows today, for the three readers stage 2 created:</p>
+  <ul>
+    <li><b>An unnarrowed decider</b> (editing teacher, manager): every application of the method. A
+    keyed one carries a blue badge with the key's outcome, for instance <em>Key accepted, sent for
+    review</em>, and never the group's name (the cell comment says why: the mentee scope spans courses
+    whose groups a mentor may not see).</li>
+    <li><b>A narrowed decider</b> (separate groups, no <code>moodle/site:accessallgroups</code>): the
+    applications whose newest record's key group is one of theirs, nothing keyless. In no group: core's
+    notice <em>&ldquo;Sorry, but you need to be part of a group to see this page.&rdquo;</em> and no queue.</li>
+    <li><b>A viewer</b> (<code>viewapplications</code> without <code>manageapplications</code>): the same
+    narrowing, no selection column, no decision controls, no sticky footer, and <em>You can view these
+    applications but not decide them.</em></li>
+  </ul>
+  <p>Nothing tells any of them which group a row belongs to, and nothing lets an unnarrowed teacher look
+  at one group at a time. The filter row has search, status, the identity-field filters and the dates;
+  the filterset declares no group filter.</p>
+
+  <h3>Proposed: the narrowed decider's queue</h3>
+  <p>The reader the owner asked for: a moderator in Turma A and Turma B of a separate-groups course, on a
+  method in <em>Key only, reviewed</em>. Three additions: a <b>Group</b> column, a <b>Group</b> filter
+  offering only their groups, and one line saying the queue is narrowed and to what.</p>
+<div class="screen">
+  <div class="screencap"><b>Proposed &mdash; the narrowed decider</b>
+    <span class="url">/enrol/apply/manage.php?id=140</span><span>desktop</span></div>
+  <div class="screenbody"><div class="mdl">
+    <div class="crumb"><span>Formação de moderadores</span><span>Participants</span><span>Enrolment methods</span><span>Course enrol confirmation</span></div>
+    <h1>Course enrol confirmation</h1>
+    <p class="sub">Applications badged as on the waiting list have been deferred.</p>
+    <div class="notice info new">Showing the applications of your groups: Turma A, Turma B.</div>
+    <div class="box" style="margin-bottom:14px">
+      <div style="display:flex;flex-wrap:wrap;gap:22px 38px;align-items:flex-start">
+        <div class="stat"><span class="n">6</span><span class="l">Awaiting decision</span></div>
+        <div class="stat new" style="padding:2px 6px"><span class="n">1</span><span class="l">Deferred to the waiting list</span><span class="xs muted">in your groups</span></div>
+        <div class="stat" style="min-width:160px"><span class="n">31 <span class="muted" style="font-size:14px;font-weight:400">of 40</span></span>
+          <span class="l">Places taken (approved) <span class="new" style="padding:0 3px">on this method</span></span><span class="meter"><i style="width:77%"></i></span></div>
+        <div class="stat new" style="min-width:150px;padding:2px 6px"><span class="n">18 <span class="muted" style="font-size:14px;font-weight:400">of 20</span></span>
+          <span class="l">Seats taken in Turma A</span><span class="meter"><i class="warn" style="width:90%"></i></span></div>
+        <div class="stat new" style="min-width:150px;padding:2px 6px"><span class="n">7 <span class="muted" style="font-size:14px;font-weight:400">of 20</span></span>
+          <span class="l">Seats taken in Turma B</span><span class="meter"><i style="width:35%"></i></span></div>
+        <div class="stat"><span class="l">Status</span><span><span class="badge b-ok">Open</span> <span class="small muted">closes 30 November 2026</span></span></div>
+      </div>
+    </div>
+    <div class="toolbar">
+      <label class="field">Search<span class="ctrl" style="min-width:200px">&nbsp;</span></label>
+      <label class="field">Application status<span class="ctrl caret">Any status</span></label>
+      <label class="field new" style="padding:2px 4px">Group<span class="ctrl caret">Turma A</span></label>
+      <label class="field">Applied from<span class="ctrl muted">dd/mm/yyyy</span></label>
+      <label class="field">Applied to<span class="ctrl muted">dd/mm/yyyy</span></label>
+      <span class="btn btn-secondary">Apply filters</span>
+    </div>
+    <div class="toolbar" style="align-items:center">
+      <span class="chip new"><b>Group</b> Turma A <span class="x" aria-hidden="true">&#10005;</span></span>
+      <span class="small link">Clear all</span><span class="grow"></span>
+      <span class="small muted">4 of 6 applications</span>
+    </div>
+    <table class="gt">
+      <thead><tr><th style="width:28px"><span class="cb"></span></th><th>Name</th><th class="new" style="width:130px">Group</th>
+        <th class="sortable" style="width:130px">Application date</th><th style="width:230px">Submitted with the application</th><th>Comment</th><th style="width:76px"></th></tr></thead>
+      <tbody>
+        <tr><td><span class="cb on"></span></td>
+          <td><div class="rowline"><span class="av">LM</span><div><span class="link" style="font-weight:600">Larissa Moura</span>
+            <span class="badge b-key">Key accepted, sent for review</span><div class="idline"><span>lmoura</span><span>2026-0311</span></div></div></div></td>
+          <td class="new">Turma A</td><td class="small">03/11/26, 09:14</td>
+          <td class="small"><span class="muted">City/town</span> Mariana</td><td class="small muted">&mdash;</td>
+          <td><span class="btn btn-secondary btn-sm">Review</span></td></tr>
+        <tr><td><span class="cb on"></span></td>
+          <td><div class="rowline"><span class="av a2">TR</span><div><span class="link" style="font-weight:600">Tiago Rezende</span>
+            <span class="badge b-key">Key accepted, sent for review</span><span class="badge b-info">Applied before</span><div class="idline"><span>trezende</span><span>2026-0290</span></div></div></div></td>
+          <td class="new">Turma A</td><td class="small">03/11/26, 10:02</td>
+          <td class="small"><span class="muted">City/town</span> Ouro Preto</td><td class="small">&ldquo;Moderei o semestre passado.&rdquo;</td>
+          <td><span class="btn btn-secondary btn-sm">Review</span></td></tr>
+        <tr><td><span class="cb"></span></td>
+          <td><div class="rowline"><span class="av a3">BC</span><div><span class="link" style="font-weight:600">Bianca Coelho</span>
+            <span class="badge b-wait">Waiting list</span><span class="badge b-key">Key accepted, sent for review</span><div class="idline"><span>bcoelho</span></div></div></div></td>
+          <td class="new">Turma A</td><td class="small">29/10/26, 16:40</td>
+          <td class="small"><span class="muted">City/town</span> Itabirito</td><td class="small muted">&mdash;</td>
+          <td><span class="btn btn-secondary btn-sm">Review</span></td></tr>
+      </tbody>
+    </table>
+    <div class="small muted" style="margin:10px 0 0">Showing 1-3 of 4</div>
+    <div class="sticky"><span class="small"><b>2 selected on this page</b></span><span class="grow"></span>
+      <span class="ctrl caret small">With selected users...</span><span class="btn btn-primary btn-sm">Go</span></div>
+  </div></div>
+</div>
+  <p class="caption">The method's own meter is kept and labelled as the method's; the seats are only
+  for the decider's own groups (V-D3). "Without a group" is not offered: this reader never sees a keyless
+  application (S3), so offering it would be a control that can only return nothing.</p>
+
+  <h3>How the column and the filter work</h3>
+  <div class="tblwrap"><table class="tbl">
+    <thead><tr><th>Piece</th><th>Proposal</th></tr></thead>
+    <tbody>
+      <tr><td>Which group</td><td>The key group of the application's <b>newest record</b>, the one
+        <code>groupscope::where()</code> and <code>application_group()</code> already agree on. A pending
+        application has no decided groups, so this is the only group fact the queue needs.</td></tr>
+      <tr><td>Cell</td><td>The group's name, plain spelling, only when <code>groupvisibility::visible_to($group, $USER)</code>,
+        exactly as the report's <code>keygroup</code> cell. A keyless row says <em>Without a group</em>
+        (new string). A group the reader may not see leaves the cell blank, as the report does; the key
+        badge beside the name already says a key was used. A group deleted since reads <em>A group deleted
+        since</em> (<code>keygroupgone</code>, reused).</td></tr>
+      <tr><td>Where</td><td>Instance queue and site-wide queue. <b>Not on the mentee queue</b>: a mentor
+        holds nothing in the course, the same line the review chip and the choosers draw today.</td></tr>
+      <tr><td>Sorting</td><td>Not sortable, as the report column is not: sorting by name would place a
+        withheld cell among the names around it. The filter stands in for it.</td></tr>
+      <tr><td>Cost of the gate</td><td>Select <code>g.id, g.courseid, g.visibility, g.name</code> in the
+        listing (one LEFT JOIN on the newest record's key group) and judge visibility for the page in one
+        batch, as <code>query_db()</code> already batches the snapshots. Per-row
+        <code>visible_to()</code> runs a membership query for each MEMBERS/OWN group.</td></tr>
+      <tr><td>Filter name and type</td><td><code>group</code>, a <code>string_filter</code> (the module sends
+        every filter-bar control as a string, as for <code>course</code>), value a group id or
+        <code>none</code>. Declared unconditionally in <code>get_optional_filters()</code>; read only when
+        offered.</td></tr>
+      <tr><td>Options</td><td>Narrowed reader: <code>groupscope::narrowed_to()</code>'s list, named. Anyone else:
+        <code>groups_get_all_groups($courseid)</code> as <code>$USER</code> sees it, plus <em>Without a
+        group</em>. Site-wide and mentee queues: no group filter (groups belong to one course; the
+        site-wide queue already offers a course filter first, so V-D2 can extend it later).</td></tr>
+      <tr><td>On the server</td><td>An extra <code>AND</code> after the scope, never instead of it:
+        <code>scope_where()</code> still narrows to the reader's groups, and the filter value is cleaned
+        against the offered list before it reaches SQL, the way <code>set_filterset()</code> keeps "one
+        entry per field this reader is offered, never per filter the request carried". A forged
+        <code>group=</code> of another group therefore narrows to nothing rather than widening anything.
+        <code>none</code> is <code>NOT EXISTS</code> a newest record with <code>keygroupid &gt; 0</code>.</td></tr>
+      <tr><td>Count line, chips</td><td>The group counts as a filter in <code>is_narrowed()</code>, so
+        <code>scope_total()</code> keeps reporting "N of M"; its chip goes through
+        <code>queue_chip.mustache</code> unchanged.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>The unnarrowed teacher, and visible groups</h3>
+  <p>An editing teacher (or anybody with <code>accessallgroups</code>) sees every group and <em>Without a
+  group</em> in the filter, and no scope line. In a <b>visible groups</b> course S2 decided that nobody is
+  narrowed and that the filter "defaults to the viewer's group, as the participants page does". Core does
+  default that page to the viewer's groups there, as a removable filter, and forces it only in separate
+  groups (<code>user/index.php:122-146</code>, <code>participants_search.php:423-437</code>). V-D2 keeps
+  S2's default as a chip the reader can remove, never a forced scope.</p>
+
+  <h3>Phone width</h3>
+<div class="screen">
+  <div class="screencap"><b>Proposed &mdash; the same queue at 375px</b>
+    <span class="url">/enrol/apply/manage.php?id=140</span><span>one card per application</span></div>
+  <div class="screenbody"><div class="mdl narrow phone" style="padding:14px 14px 0">
+    <h1 style="font-size:19px">Course enrol confirmation</h1>
+    <div class="notice info new" style="font-size:12.5px">Showing the applications of your groups: Turma A, Turma B.</div>
+    <div class="box" style="padding:10px 12px;margin-bottom:12px">
+      <div style="display:flex;gap:16px;flex-wrap:wrap">
+        <div class="stat"><span class="n" style="font-size:17px">6</span><span class="l">Awaiting decision</span></div>
+        <div class="stat new" style="padding:1px 4px"><span class="n" style="font-size:17px">1</span><span class="l">Deferred, your groups</span></div>
+        <div class="stat new" style="padding:1px 4px"><span class="n" style="font-size:17px">18/20</span><span class="l">Seats, Turma A</span></div>
+      </div>
+    </div>
+    <div class="toolbar" style="flex-direction:column;align-items:stretch;gap:8px">
+      <span class="ctrl">Search</span>
+      <span class="ctrl caret new">Group: Turma A</span>
+    </div>
+    <div class="toolbar" style="align-items:center"><span class="chip new"><b>Group</b> Turma A <span class="x">&#10005;</span></span><span class="grow"></span><span class="small muted">4 of 6</span></div>
+    <div class="mcard">
+      <div class="rowline"><span class="cb on" style="margin-top:8px"></span><span class="av">LM</span>
+        <div style="min-width:0"><span class="link" style="font-weight:600">Larissa Moura</span>
+          <div style="margin-top:3px"><span class="badge b-key">Key accepted, sent for review</span></div>
+          <div class="idline"><span>lmoura</span><span>2026-0311</span></div></div></div>
+      <dl class="kv" style="margin:10px 0 8px">
+        <dt class="new" style="padding:0 3px">Group</dt><dd class="new" style="padding:0 3px">Turma A</dd>
+        <dt>Application date</dt><dd>03/11/26, 09:14</dd>
+        <dt>Submitted with the application</dt><dd>City/town: Mariana</dd>
+      </dl>
+      <span class="btn btn-secondary btn-sm">Review</span>
+    </div>
+    <div class="mcard">
+      <div class="rowline"><span class="cb" style="margin-top:8px"></span><span class="av a3">BC</span>
+        <div style="min-width:0"><span class="link" style="font-weight:600">Bianca Coelho</span>
+          <div style="margin-top:3px"><span class="badge b-wait">Waiting list</span> <span class="badge b-key">Key accepted, sent for review</span></div></div></div>
+      <dl class="kv" style="margin:10px 0 8px">
+        <dt class="new" style="padding:0 3px">Group</dt><dd class="new" style="padding:0 3px">Turma A</dd>
+        <dt>Application date</dt><dd>29/10/26, 16:40</dd>
+      </dl>
+      <span class="btn btn-secondary btn-sm">Review</span>
+    </div>
+    <div class="sticky" style="margin:12px -14px 0;padding:10px 14px"><span class="small"><b>1 selected</b></span><span class="grow"></span><span class="btn btn-primary btn-sm">Go</span></div>
+  </div></div>
+</div>
+  <p class="caption">The card is the queue's existing card layout (each cell carries its own label, see
+  <code>card_label()</code>); the group simply becomes one more labelled cell. The seat meters collapse
+  to "18/20" tiles and only the group the filter names is shown, so the row of tiles stays one line.</p>
+
+  <h3>The viewer, and the moderator in no group</h3>
+<div class="screen">
+  <div class="screencap"><b>Proposed &mdash; viewer (viewapplications) and narrowed decider in no group</b>
+    <span class="url">/enrol/apply/manage.php?id=140</span><span>two readers, side by side</span></div>
+  <div class="screenbody"><div class="mdl">
+    <div class="grid2">
+      <div>
+        <div class="notice info">You can view these applications but not decide them.</div>
+        <div class="notice info new" style="margin-top:-6px">Showing the applications of your groups: Turma B.</div>
+        <table class="gt">
+          <thead><tr><th>Name</th><th class="new">Group</th><th class="sortable">Application date</th><th></th></tr></thead>
+          <tbody>
+            <tr><td><span class="link" style="font-weight:600">Rafael Pimenta</span> <span class="badge b-key">Key accepted, sent for review</span></td><td class="new">Turma B</td><td class="small">04/11/26, 08:30</td><td><span class="btn btn-secondary btn-sm">Review</span></td></tr>
+            <tr><td><span class="link" style="font-weight:600">Júlia Amaral</span> <span class="badge b-key">Key accepted, sent for review</span></td><td class="new">Turma B</td><td class="small">04/11/26, 11:05</td><td><span class="btn btn-secondary btn-sm">Review</span></td></tr>
+          </tbody>
+        </table>
+        <p class="xs muted" style="margin-top:8px">No selection column, no decision controls, no sticky footer: unchanged from S5.</p>
+      </div>
+      <div>
+        <h3>Course enrol confirmation</h3>
+        <div class="notice info">Sorry, but you need to be part of a group to see this page.</div>
+        <p class="small muted">Core's own string (<code>notingroup</code>), as the participants page shows it;
+        no capacity box, no filters, no table (S4, unchanged).</p>
+      </div>
+    </div>
+    <div style="height:18px"></div>
+  </div></div>
+</div>
+  <p class="caption">The scope line is shown to every narrowed reader, decider or viewer, and to nobody
+  else. It names the groups the queue is narrowed to, which are the reader's own groups: nothing they do
+  not already know.</p>
+</section>
+
+<section id="review">
+  <span class="sectnum">&sect;02 &middot; manage.php?userenrol=</span>
+  <h2>The review page: the key's group, its seats, and what the approval does with it</h2>
+  <p><b>Reading order redesigned separately:</b> concepts A&ndash;E for the whole page, with mockups and decisions RP-D1&ndash;RP-D16, are in <a href="review-page-concepts.html">review-page-concepts.html</a>.</p>
+  <p>Today the group appears in one place: the blue chip beside the status, <em>Key accepted, sent for
+  review: Turma A</em>. Three things about it were checked in the renderer:</p>
+  <ul>
+    <li>The chip names the group only to a reader holding <code>manageapplications</code> in the course
+    and allowed to see the group. A <b>viewer</b> (S5) reads <em>Key accepted, sent for review</em> with
+    no name, so the proposed queue column would tell them more than the review page does.</li>
+    <li>Seats appear only inside the group chooser's options (<em>Turma A (18 of 20 seats taken)</em>),
+    so a decider <b>without <code>choosedecision</code></b>, who gets the read-only summary instead,
+    never sees a seat count.</li>
+    <li>Whether the approval joins the key group is said twice and differently: the chooser offers the
+    key route ticked; the summary lists the groups an approval joins. Neither says it next to the group.</li>
+  </ul>
+
+<div class="screen">
+  <div class="screencap"><b>Proposed &mdash; the review page, decider with choosedecision</b>
+    <span class="url">/enrol/apply/manage.php?userenrol=8812</span><span>desktop</span></div>
+  <div class="screenbody"><div class="mdl">
+    <div class="crumb"><span>Formação de moderadores</span><span>Course enrol confirmation</span><span>Larissa Moura</span></div>
+    <h1>Larissa Moura - Formação de moderadores</h1>
+    <div class="nav2"><span class="link">&#8249; Previous: Tiago Rezende</span><span class="link">All applications</span><span class="link">Next: Bianca Coelho &#8250;</span></div>
+    <div class="rowline" style="justify-content:space-between;margin-bottom:14px">
+      <div><div class="idline" style="margin:0 0 4px"><span>Username: lmoura</span><span>ID number: 2026-0311</span></div>
+        <p style="margin:0">Status: <b>Awaiting a decision</b> <span class="badge b-key">Key accepted, sent for review: Turma A</span>
+        <span class="muted">&middot; Application date 03/11/26, 09:14</span></p></div>
+      <span class="btn btn-outline btn-sm">View profile</span>
+    </div>
+    <div class="grid2">
+      <div>
+        <h2>Comment</h2><p class="muted">The applicant did not write anything.</p>
+        <h2>Details submitted with this application</h2>
+        <dl class="kv"><dt>City/town</dt><dd>Mariana</dd><dt>Registration number</dt><dd>2026-0311</dd></dl>
+      </div>
+      <div>
+        <h2>Course</h2><p><span class="link">Formação de moderadores</span></p>
+        <h2>Where this lands</h2>
+        <dl class="kv">
+          <dt class="new" style="padding:0 3px">Group of the enrolment key</dt><dd class="new" style="padding:0 3px"><b>Turma A</b> &middot; 18 of 20 seats taken</dd>
+          <dt class="new" style="padding:0 3px">On approval</dt><dd class="new" style="padding:0 3px">Joins Turma A, as ticked below</dd>
+          <dt>Places <span class="new" style="padding:0 3px">on this method</span></dt><dd>31 of 40</dd>
+          <dt>Applications held <span class="new" style="padding:0 3px">on this method</span></dt><dd>52 of 60</dd>
+          <dt>Deferred <span class="new" style="padding:0 3px">on this method</span></dt><dd>4</dd>
+        </dl>
+        <h2>Earlier applications to this course</h2>
+        <p class="small muted">04/06/26, 11:02 &mdash; Cancelled</p>
+      </div>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:18px;margin-top:6px">
+      <label class="field" style="flex:1 1 240px">Groups to join on approval
+        <span class="ms"><span class="sel">Turma A (18 of 20 seats taken)</span><span>Turma B (7 of 20 seats taken)</span></span>
+        <span class="xs">The approved applicants join these groups. Leave it empty to use the groups configured on the enrolment method.</span></label>
+      <label class="field" style="flex:1 1 240px">Role to assign on approval<span class="ctrl caret">Use the role set on the enrolment method</span></label>
+    </div>
+    <div class="sticky"><span class="btn btn-danger btn-sm">Cancel this application</span><span class="grow"></span>
+      <span class="btn btn-outline btn-sm">Defer this application</span><span class="btn btn-primary btn-sm">Confirm this application</span></div>
+  </div></div>
+</div>
+  <p class="caption">The moderator's chooser lists only Turma A and Turma B (S6, unchanged). The two new
+  rows say in words what the ticked option already implies. "On approval" follows the chooser's
+  preselection on this page, and the summary's list where there is no chooser, so it is read from the same
+  helpers the approval runs (<code>key_route_groups()</code>, <code>default_approval_groups()</code>).</p>
+
+  <h3>The read-only variant (no <code>choosedecision</code>)</h3>
+<div class="screen">
+  <div class="screencap"><b>Proposed &mdash; decider without choosedecision, and a viewer</b>
+    <span class="url">/enrol/apply/manage.php?userenrol=8812</span><span>right-hand panel and decision area only</span></div>
+  <div class="screenbody"><div class="mdl">
+    <div class="grid2">
+      <div>
+        <h3>Decider without choosedecision</h3>
+        <dl class="kv">
+          <dt class="new" style="padding:0 3px">Group of the enrolment key</dt><dd class="new" style="padding:0 3px"><b>Turma A</b> &middot; 18 of 20 seats taken</dd>
+          <dt class="new" style="padding:0 3px">On approval</dt><dd class="new" style="padding:0 3px">Joins Turma A</dd>
+        </dl>
+        <div class="box" style="padding:10px 12px">
+          <dl class="kv" style="margin:0 0 6px"><dt>Groups an approval joins</dt><dd>Turma A</dd><dt>Role an approval assigns</dt><dd>Student</dd></dl>
+          <span class="xs muted">Set by the enrolment method: you can approve or refuse this application, but not change them.</span>
+        </div>
+      </div>
+      <div>
+        <h3>Viewer (viewapplications only)</h3>
+        <div class="notice info">You can view this application but not decide it.</div>
+        <p class="small">Status: <b>Awaiting a decision</b> <span class="badge b-key new">Key accepted, sent for review: Turma B</span></p>
+        <p class="xs muted">Today this reader gets the outcome without the group's name. Proposed: the name too
+        (V-D4), under the same visibility rule. No capacity panel and no seats, as today: the capacity panel is a
+        decider's.</p>
+      </div>
+    </div>
+    <div style="height:18px"></div>
+  </div></div>
+</div>
+
+  <h3>The capacity panel for a narrowed decider</h3>
+  <p>Today <code>capacity_context()</code> shows three method-wide numbers to anybody holding
+  <code>manageapplications</code> in the course, narrowed or not: places taken, applications held, deferred.
+  They are counts over the whole method, not facts about any group, and a moderator needs them: "31 of 40
+  places" is what tells them an approval may overbook the course. Seats are different: "Turma B: 7 of 20"
+  is a fact about a group the moderator does not moderate.</p>
+  <div class="tblwrap"><table class="tbl">
+    <thead><tr><th>Row</th><th>Unnarrowed decider</th><th>Narrowed decider</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Group of the enrolment key, with seats</td><td>Shown</td><td>Shown (the application is in one of their groups by construction)</td><td>The one group fact the decision turns on.</td></tr>
+      <tr><td>On approval</td><td>Shown</td><td>Shown</td><td>Says what the decision will do, before it is done.</td></tr>
+      <tr><td>Places / applications held / deferred</td><td>As today</td><td>As today, labelled <em>on this method</em></td><td>Method numbers, not group data; without the label they read as the group's.</td></tr>
+      <tr><td>Seats of other groups</td><td>In the chooser, as today</td><td><b>Never</b></td><td>Their chooser lists only their groups already, so this is consistent.</td></tr>
+      <tr><td>Without local_groupdist</td><td colspan="2">The key group row drops its seats; nothing else changes</td><td><code>groupseats::for_groups()</code> answers seats null.</td></tr>
+    </tbody>
+  </table></div>
+  <p>The queue's tiles get the same rule, and one fix. The <em>Awaiting decision</em> tile is
+  <code>scope_total()</code>, narrowed; the <em>Deferred to the waiting list</em> tile is
+  <code>capacity::deferred($instance)</code>, method-wide. A moderator sees "6 awaiting" beside "4 deferred"
+  of which three are in other groups and cannot be found in their queue. Proposed: count the deferred tile
+  over the same scope (<code>scope_where()</code> plus the waiting status) for a narrowed reader, and say
+  "in your groups".</p>
+
+  <h3>Earlier applications</h3>
+  <p>Already narrowed: the panel is gated on <code>viewreports</code> and lists only the records
+  <code>groupscope::record_where()</code> lets through for the report capability. No change, except that
+  V5's groups-joined record (V-D10) would make that narrowing see approvals that joined a group by the
+  method's defaults.</p>
+</section>
+
+<section id="bulk">
+  <span class="sectnum">&sect;03 &middot; user/action_redir.php &rarr; bulk_decision_form</span>
+  <h2>The participants-page bulk form: narrowed already, and hard to reach</h2>
+  <p>The form lists the selected applicants, the message and note boxes, and either the two choosers or,
+  without <code>choosedecision</code>, one sentence: <em>Each approval gives what its enrolment method sets:
+  its groups (and the key's group, for an application a group key sent for review) and its role. You can
+  approve or refuse, but not change them.</em> Its group chooser is <code>choosable_groups()</code>, so a
+  moderator is offered only their groups, and every row is re-checked by <code>can_manage_application()</code>
+  inside the decision methods.</p>
+  <p>How a moderator gets here at all is the real finding. In a separate-groups course core's participants
+  page shows a user without <code>accessallgroups</code> only the members of their own groups. An applicant
+  joins a group on approval, never on application, so a pending applicant is in no group and does not appear
+  on that page for the moderator. Only an applicant who is already a member of one of their groups (through
+  another enrolment) can be selected there.</p>
+<div class="screen">
+  <div class="screencap"><b>Proposed &mdash; the bulk form, moderator with choosedecision</b>
+    <span class="url">/user/action_redir.php</span><span>Confirm enrolment applications</span></div>
+  <div class="screenbody"><div class="mdl narrow" style="min-width:0;padding-bottom:18px">
+    <h2>Confirm enrolment applications</h2>
+    <p class="small">The applications listed below will be confirmed and the applicants enrolled. Anybody in the selection who is not waiting for a decision is left alone.</p>
+    <dl class="kv"><dt>Selected applicants</dt><dd>Tiago Rezende, Ana Lacerda</dd></dl>
+    <label class="field" style="max-width:420px;margin-bottom:10px">Groups to join on approval
+      <span class="ms"><span>Turma A <span class="new" style="padding:0 3px">(18 of 20 seats taken)</span></span><span>Turma B <span class="new" style="padding:0 3px">(7 of 20 seats taken)</span></span></span></label>
+    <label class="field" style="max-width:420px;margin-bottom:14px">Role to assign on approval<span class="ctrl caret">Use the role set on the enrolment method</span></label>
+    <span class="btn btn-primary">Confirm enrolment applications</span> <span class="btn btn-outline">Cancel</span>
+    <div class="notice warn new" style="margin:16px 0 0">After the decision: Enrolment applications decided: 1 &middot; Applications outside your groups, left alone: 1</div>
+  </div></div>
+</div>
+  <ul>
+    <li><b>Seats in the options</b>, as on the queue and the review page (today the bulk chooser prints the bare
+    name). The form renders through core's <code>element-select</code>, so the escaped spelling.</li>
+    <li><b>A count of its own for rows outside the reader's groups.</b> Today they fall into
+    <em>Applications whose enrolment did not change</em>, which is true and unhelpful. The operation can ask
+    <code>groupscope::allows()</code> before delegating, only to sort the counts; the decision methods stay
+    the guard.</li>
+    <li><b>README:</b> the moderator recipe says to decide from the queue; the participants page is the
+    teacher's route.</li>
+  </ul>
+</section>
+
+<section id="report">
+  <span class="sectnum">&sect;04 &middot; report.php and the custom-report source</span>
+  <h2>The report: filter by group, and say what an approval joined</h2>
+  <p>The course report already carries <em>Admission route</em> (with <em>Key accepted, sent for review</em>
+  among its filter options, added in R1: checked) and <em>Group of the enrolment key</em> (named only where
+  visible, not sortable). A narrowed <code>viewreports</code> holder already reads only the records whose key
+  group or decided groups are theirs (S8). Missing: a way to pick a group, and the groups a decision joined.</p>
+
+  <div class="note trap"><span class="lbl">What "decided groups" records is not what was joined</span>
+  <p><code>decidedgroups</code> holds the decider's <em>choice</em>; empty means the method's defaults were
+  used. A decider without <code>choosedecision</code> always records it empty, as does every approval left on
+  the defaults and every approval from core's Edit enrolment screen. So for those approvals the record says
+  nothing about the groups joined, and S8's narrowing (key group or decided groups) misses a keyless
+  application the defaults put into Turma A. A column fed from this field would print an empty cell for most
+  approvals. V-D10 proposes recording what <code>add_instance_groups()</code> actually joined.</p></div>
+
+<div class="screen">
+  <div class="screencap"><b>Proposed &mdash; the course report, narrowed reader</b>
+    <span class="url">/enrol/apply/report.php?id=140</span><span>Report Builder system report</span></div>
+  <div class="screenbody"><div class="mdl">
+    <h1>Enrolment applications</h1>
+    <p class="sub">Formação de moderadores</p>
+    <div class="toolbar"><span class="btn btn-outline btn-sm">Filters (1)</span><span class="grow"></span><span class="btn btn-outline btn-sm">Download table data as CSV</span></div>
+    <div class="box new" style="max-width:520px;margin-bottom:14px;padding:10px 12px">
+      <div class="small" style="font-weight:600;margin-bottom:6px">Group</div>
+      <div style="display:flex;gap:8px"><span class="ctrl caret small">Is equal to</span><span class="ctrl caret small" style="flex:1">Turma A</span></div>
+      <div class="xs muted" style="margin-top:6px">Matches the group of the enrolment key or a group the approval joined. Options: your groups only.</div>
+    </div>
+    <table class="gt">
+      <thead><tr><th>Full name with link</th><th>Status</th><th>Outcome</th><th>Admission route</th><th>Group of the enrolment key</th><th class="new">Groups joined</th><th>Decided by</th><th>Decided on</th></tr></thead>
+      <tbody>
+        <tr><td><span class="link">Larissa Moura</span></td><td>Pending</td><td>Awaiting a decision</td><td>Key accepted, sent for review</td><td>Turma A</td><td class="new muted">&mdash;</td><td></td><td></td></tr>
+        <tr><td><span class="link">Caio Fontes</span></td><td>Approved</td><td>Approved, enrolled</td><td>Key accepted, sent for review</td><td>Turma A</td><td class="new">Turma A, Monitoria</td><td>Marta Lins</td><td>01/11/26, 15:20</td></tr>
+        <tr><td><span class="link">Elisa Prado</span></td><td>Approved</td><td>Approved, enrolled</td><td>Review, no group key</td><td></td><td class="new">Turma A</td><td>Paulo Viana</td><td>28/10/26, 09:02</td></tr>
+        <tr><td><span class="link">Davi Lopes</span></td><td>Cancelled</td><td>Cancelled</td><td>Key accepted, sent for review</td><td>Turma A</td><td class="new muted">&mdash;</td><td>Marta Lins</td><td>27/10/26, 17:45</td></tr>
+      </tbody>
+    </table>
+    <div style="height:18px"></div>
+  </div></div>
+</div>
+  <p class="caption">Elisa Prado's row is the case today's narrowing misses: a keyless application approved
+  by an editing teacher onto the method's defaults, which joined Turma A. With the joined groups recorded it
+  is listed to the Turma A reader and filtered in by <em>Group = Turma A</em>.</p>
+
+  <div class="tblwrap"><table class="tbl">
+    <thead><tr><th>Piece</th><th>Course report</th><th>Custom-report source</th></tr></thead>
+    <tbody>
+      <tr><td>Group filter</td><td>A plugin filter class (core's <code>core_group</code> entity has only name,
+        idnumber, visibility, participation and time created). A <code>select</code> subclass whose SQL is
+        <code>groupscope::record_where()</code>'s shape for the one chosen group. Options: the reader's narrowed
+        groups, or every group of the course they may see, plus <em>Without a group</em> (no key group and no
+        joined group) for an unnarrowed reader only.</td>
+        <td><b>None</b> (V-D11). A select of every group of the site is unbounded; a name text filter would let
+        a reader find a hidden group's applications by its name, past the masking the <code>keygroup</code>
+        cell applies. Course filter plus admission route covers "this course's keyed applications".</td></tr>
+      <tr><td>Groups-joined column</td><td>From the entity, so it arrives with <code>add_columns_from_entity()</code>.
+        Names gated by <code>visible_to()</code>, hidden ones counted ("1 more you cannot see", the existing
+        <code>decisionsummaryhidden</code>), not sortable.</td><td>Same column, same gate (judged for
+        <code>$USER</code> in each row's course).</td></tr>
+      <tr><td>Admission route, <code>KEY_FOR_REVIEW</code></td><td colspan="2">Already an option of the filter
+        (R1). No change.</td></tr>
+      <tr><td>Defaults</td><td>Unchanged: every entity column, initial sort by date. The group filter is
+        offered, not applied.</td><td>Unchanged (name, course, status, date; course, status, date filters).</td></tr>
+      <tr><td>Narrowing</td><td>S8 base condition, now also matching joined groups.</td><td>Not narrowed, by
+        S8: audiences govern it.</td></tr>
+      <tr><td>Link to the logs</td><td colspan="2">No (V-D8; see &sect;05).</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="audit">
+  <span class="sectnum">&sect;05 &middot; T1</span>
+  <h2>The audit trail: three events, fired once each</h2>
+  <p>Today a decision leaves only core's events (<code>user_enrolment_updated</code>, <code>role_assigned</code>,
+  <code>group_member_added</code>, and <code>user_enrolment_deleted</code> for a cancellation), none of which says
+  "approved", "deferred" or by which method's rules; the record keeps the last decision only and is swept after
+  30 days by default. The plugin fires one event of its own, <code>application_admitted_by_key</code>.</p>
+
+  <h3>The events</h3>
+  <div class="tblwrap"><table class="tbl">
+    <thead><tr><th>Class</th><th>Name (lang/en)</th><th>crud</th><th>edulevel</th><th>Fired from</th><th><code>other</code></th></tr></thead>
+    <tbody>
+      <tr><td><code>application_approved</code></td><td>Enrolment application approved</td><td>u</td><td>teaching</td>
+        <td><code>complete_approval()</code>, once per approval (below), after the role and groups are written</td>
+        <td><code>enrolid</code>, <code>groups</code> (ids actually joined), <code>roleid</code> (assigned, 0 for none),
+        <code>chosen</code> (bool: the decider chose, or the method's defaults applied), <code>keygroupid</code></td></tr>
+      <tr><td><code>application_deferred</code></td><td>Enrolment application deferred</td><td>u</td><td>teaching</td>
+        <td><code>wait_enrolment()</code>, per row reached</td>
+        <td><code>enrolid</code>, <code>moved</code> (false: an earlier deferral's reason corrected), <code>keygroupid</code></td></tr>
+      <tr><td><code>application_refused</code> (V-D5: <code>application_cancelled</code>)</td><td>Enrolment application cancelled</td><td>u</td><td>teaching</td>
+        <td><code>cancel_enrolment()</code>, per row, after <code>unenrol_user()</code></td>
+        <td><code>enrolid</code>, <code>keygroupid</code></td></tr>
+    </tbody>
+  </table></div>
+  <p>Common to all three: <code>objecttable</code> <code>enrol_apply_submission</code>, <code>objectid</code> the
+  newest record of the user enrolment (it survives the unenrolment, which is why "cancelled" updates rather
+  than deletes it), <code>relateduserid</code> the applicant, <code>context</code> the course,
+  <code>validate_data()</code> refusing a missing <code>relateduserid</code> or <code>enrolid</code>, and
+  <code>get_other_mapping()</code> mapping <code>enrolid</code> to <code>enrol</code>, <code>keygroupid</code> to
+  <code>group</code>, <code>roleid</code> to <code>role</code>, and <code>groups</code> to <code>NOT_MAPPED</code>:
+  core's log restore passes each <code>other</code> value to <code>get_mappingid()</code> as a scalar, so an array
+  cannot be mapped. Descriptions, unlocalised as core's are:</p>
+<pre><code>The user with id '12' approved the enrolment application of the user with id '345' to the
+enrolment method with id '140'; the applicant joined the groups with ids '31, 36' and was
+given the role with id '5'.
+
+The user with id '12' deferred the enrolment application of the user with id '345' to the
+enrolment method with id '140'.            (moved false: "... corrected the reason of the deferral ...")
+
+The user with id '12' cancelled the enrolment application of the user with id '345' to the
+enrolment method with id '140'.</code></pre>
+
+  <div class="note trap"><span class="lbl">Why "fire it in complete_approval()" is not enough on its own</span>
+  <p><code>complete_approval()</code> is the one place every route into active passes, and the Edit enrolment
+  route reaches it only through the hook, so the event belongs there. But it runs <b>twice</b> for a queue
+  approval (the hook pass inside <code>update_user_enrol()</code>, then <code>activate()</code>'s own call), and
+  it also runs for a <b>key admission</b>, which already logs <code>application_admitted_by_key</code>. Fired
+  naively it logs every queue approval twice and every admission as an approval. Three routes, one event each:</p>
+  <ul>
+    <li>Queue, review page, bulk: <code>activate()</code>'s own pass fires; the nested hook pass does not.</li>
+    <li>Core's Edit enrolment: the hook pass is not nested in <code>activate()</code>, so it fires.</li>
+    <li>Key admission: <code>admit()</code> suppresses it; its own event stands.</li>
+  </ul>
+  <p>The marker must be request state, because <code>enrol_get_plugin()</code> returns a new object each call, so
+  the hook's plugin is not <code>activate()</code>'s. It goes in <code>classes/local/</code>, not on the plugin
+  class: <code>validate</code> fatals on a two-modifier member in <code>lib.php</code> on the 5.2 leg. It is set
+  and cleared in <code>finally</code>, so no test inherits it.</p></div>
+<pre><code>// Sketch, classes/local/decisionlog.php (proposal).
+final class decisionlog {
+    /** @var array User enrolment ids whose approval event is owed by an outer caller. */
+    private static array $owed = [];
+    public static function defer(int $ueid, callable $run): void {
+        self::$owed[$ueid] = true;
+        try { $run(); } finally { unset(self::$owed[$ueid]); }
+    }
+    public static function is_owed(int $ueid): bool { return isset(self::$owed[$ueid]); }
+}
+// activate():  decisionlog::defer($ue->id, fn() =&gt; $this-&gt;update_user_enrol(...));
+//              $this-&gt;complete_approval(...);                // fires, unless admit() wraps it
+// admit():     decisionlog::defer($ueid, fn() =&gt; $this-&gt;activate(...));
+// complete_approval(), after the writes: if (!decisionlog::is_owed($ueid)) { approved::create(...)-&gt;trigger(); }</code></pre>
+  <p>One consequence stays: on the Edit enrolment route the event is triggered from a hook that runs
+  <em>before</em> core writes the row, so a failed write would leave an "approved" log line behind. The
+  notification already lives with the same order (its task re-reads the enrolment); the README says so.</p>
+
+  <h3>How the events appear in core's log report, and whether that helps a moderator</h3>
+<div class="screen">
+  <div class="screencap"><b>Proposed events in core's log report</b>
+    <span class="url">/report/log/index.php?id=88&amp;chooselog=1</span><span>report_log, unchanged core screen</span></div>
+  <div class="screenbody"><div class="mdl">
+    <div class="toolbar"><span class="ctrl caret small">Formação de moderadores</span><span class="ctrl caret small">Turma A</span><span class="ctrl caret small">All participants</span><span class="ctrl caret small">All days</span><span class="ctrl caret small">All activities</span><span class="ctrl caret small">All actions</span><span class="btn btn-primary btn-sm">Get these logs</span></div>
+    <table class="gt logrow">
+      <thead><tr><th>Time</th><th>User full name</th><th>Affected user</th><th>Event context</th><th>Component</th><th>Event name</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td>05/11/26, 10:31</td><td>Marta Lins</td><td>Larissa Moura</td><td>Course: Formação de moderadores</td><td>Course enrol confirmation</td><td class="new">Enrolment application approved</td><td class="small">The user with id '12' approved the enrolment application of the user with id '345' ...</td></tr>
+        <tr><td>05/11/26, 10:31</td><td>Marta Lins</td><td>Larissa Moura</td><td>Course: Formação de moderadores</td><td>System</td><td>User enrolment updated</td><td class="small">The user with id '12' updated the enrolment for the user with id '345' ...</td></tr>
+        <tr><td>04/11/26, 16:02</td><td>Marta Lins</td><td>Rafael Pimenta</td><td>Course: Formação de moderadores</td><td>Course enrol confirmation</td><td class="new">Enrolment application deferred</td><td class="small">The user with id '12' deferred the enrolment application of the user with id '351' ...</td></tr>
+      </tbody>
+    </table>
+    <div style="height:18px"></div>
+  </div></div>
+</div>
+  <p>The group menu of <code>report_log</code> filters on the group membership of the user who <b>acted</b>
+  (<code>userid</code>), never of the affected user, and in separate groups a reader without
+  <code>accessallgroups</code> is forced to the members of their own groups (or, in no group, to users in no
+  group). For a moderator of Turma A that means:</p>
+  <ul>
+    <li>A decision on a Turma A applicant taken by an editing teacher who is in no group is <b>not shown</b> to
+    them. Applicants are no help either: they join the group only on approval.</li>
+    <li>A decision on a Turma B applicant taken by a colleague who moderates both A and B <b>is shown</b>, with
+    the applicant's name in "Affected user". That is core's rule for every event; it is why the description
+    carries ids and never a group name.</li>
+    <li>There is no event-name filter (the page takes course, group, user, date, activity, action, education
+    level and origin), so the decisions cannot be listed alone; <em>All changes</em> plus <em>Teaching</em>
+    narrows to them and much else.</li>
+  </ul>
+  <p>So the log report does not help a moderator audit their group, and the course report remains their
+  surface (V-D8: no link from the report to the logs). The events are the durable trail for an administrator
+  and for anybody reading the log store through Report Builder, an export or a tool.</p>
+
+  <h3>Privacy</h3>
+  <ul>
+    <li><b>Nothing to declare in the plugin's provider.</b> The log store owns its table and declares it, with
+    <code>relateduserid</code> and <code>other</code> among the fields; plugins that fire events (core's own
+    enrol plugins included) declare nothing for them.</li>
+    <li><b>But the events outlive the plugin's own record.</b> Core's standard log store exports rows where the
+    subject acted or was affected, and on an erasure request deletes only the rows where the subject
+    <em>acted</em>. An applicant's erasure therefore deletes their record and keeps the log lines about them, and
+    the log's lifetime (<code>logstore_standard | loglifetime</code>, never by default) governs them, not
+    <em>Keep application records for</em>. Core's own <code>user_enrolment_updated</code> already behaves exactly
+    so, which is what makes it acceptable.</li>
+    <li>Hence <code>other</code> carries <b>ids only</b>: never the message to the applicant, the decision note, a
+    group name or a role name. The README's privacy section gains one paragraph saying all of the above.</li>
+  </ul>
+
+  <h3>T2: is a history table still unnecessary?</h3>
+  <p>For the audit, yes: the events record every decision, re-decisions included, with who, when, groups and
+  role. What they do not give is a history <em>on screen</em>: no core page lists log rows by affected user and
+  event. If the owner wants "decisions on this application" on the review page, the plugin can read its own
+  events through core's log reader (<code>\core\log\sql_reader::get_events_select()</code>,
+  <code>relateduserid</code> + <code>objectid</code>), with no table. It degrades to nothing when the standard log
+  store is disabled or has purged the rows, and the panel would have to say so. A table only if that is not
+  acceptable (V-D9).</p>
+</section>
+
+<section id="cost">
+  <span class="sectnum">&sect;06</span>
+  <h2>Requirements, costed</h2>
+  <p>S under a day with its tests, M a few days, L a week or more. Each line names the slice that carries it.</p>
+  <div class="tblwrap"><table class="tbl">
+    <thead><tr><th>Requirement</th><th>Cost</th><th>Slice</th><th>Mechanism and its traps</th></tr></thead>
+    <tbody>
+      <tr><td>Three decision events</td><td><span class="cost m">M</span></td><td>V1</td><td>Classes, triggers,
+        lang strings, <code>decisionlog</code> marker, event-sink tests per route (queue, review, bulk, Edit enrolment,
+        key admission: none), a mutation per trigger and per suppression.</td></tr>
+      <tr><td>Privacy paragraph and README audit section</td><td><span class="cost s">S</span></td><td>V1</td><td>Prose;
+        the marketplace readiness test is unaffected (no table).</td></tr>
+      <tr><td>Queue group column</td><td><span class="cost m">M</span></td><td>V2</td><td>One LEFT JOIN on the newest
+        record's group (the NOT EXISTS shape of <code>groupscope::where()</code>), batch visibility per page, a cell for
+        keyless and for a deleted group, card label, not sortable; renderer test with a custom role lacking
+        <code>viewhiddengroups</code> (stock archetypes all hold it).</td></tr>
+      <tr><td>Queue group filter</td><td><span class="cost m">M</span></td><td>V2</td><td>Filterset entry, offered
+        options per reader, server-side cleaning, chip, <code>is_narrowed()</code>; Behat for the AJAX refresh
+        (nothing else runs <code>amd/src</code>).</td></tr>
+      <tr><td>Scope line on the queue</td><td><span class="cost s">S</span></td><td>V2</td><td>One string, names
+        plain spelling, double stash.</td></tr>
+      <tr><td>Deferred tile in scope</td><td><span class="cost s">S</span></td><td>V2</td><td>A COUNT over
+        <code>scope_where()</code> plus the waiting status; "in your groups" only when narrowed.</td></tr>
+      <tr><td>VISIBLEGROUPS default chip</td><td><span class="cost s">S</span></td><td>V2</td><td>A default filter value,
+        never a forced scope; the url without <code>group=</code> must still be reachable (an explicit "Any group").</td></tr>
+      <tr><td>Review page key-group and "on approval" rows</td><td><span class="cost s">S</span></td><td>V3</td><td>Read from
+        <code>key_route_groups()</code> / <code>default_approval_groups()</code> and <code>groupseats::for_groups()</code>;
+        nothing new in SQL.</td></tr>
+      <tr><td>Chip names the group to a viewer</td><td><span class="cost s">S</span></td><td>V3</td><td><code>key_context()</code>'s
+        gate becomes DECIDE or VIEW in the course; the mentor still gets no name.</td></tr>
+      <tr><td>Capacity labels, own-group seats</td><td><span class="cost s">S</span></td><td>V3</td><td>Strings and one
+        seats row per own group on the queue tile row; never other groups'.</td></tr>
+      <tr><td>Bulk form seats and "outside your groups" count</td><td><span class="cost s">S</span></td><td>V4</td><td>Escaped
+        spelling for <code>element-select</code>; count sorted by <code>groupscope::allows()</code>, the methods stay the guard.</td></tr>
+      <tr><td>Record what an approval joined</td><td><span class="cost m">M</span></td><td>V5</td><td>New nullable
+        <code>joinedgroups</code> on <code>enrol_apply_submission</code>, written by <code>add_instance_groups()</code>
+        (idempotent across the double pass), upgrade step, backup and restore (group ids mapped like
+        <code>decidedgroups</code>), privacy export, <code>record_where()</code> reading it. Old rows: null, no backfill
+        (the past is not knowable).</td></tr>
+      <tr><td>Report group filter</td><td><span class="cost m">M</span></td><td>V5</td><td>Plugin filter class, options per
+        reader, one placeholder per LIKE (named placeholders appear once per statement), both DB families.</td></tr>
+      <tr><td>Groups-joined column (report and source)</td><td><span class="cost s">S</span></td><td>V5</td><td>Formatter
+        with the visibility gate, not sortable.</td></tr>
+      <tr><td>Decision history panel from the log reader</td><td><span class="cost m">M</span></td><td>V6, only on V-D9 yes</td><td>Reader
+        lookup, "the site's log does not keep these" state, narrowing already given by the page gate.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="slices">
+  <span class="sectnum">&sect;07</span>
+  <h2>Slices V1&ndash;V6</h2>
+  <p>Each slice is releasable on its own, with a version bump and <code>CHANGELOG.md</code>, and is gated by the
+  tier of its highest path (fleet <code>CLAUDE.md</code>, section 4). Order: V1 first because it is the owner's
+  "logs de auditoria" and touches the state machine; V2 and V3 are what the moderator sees; V5 changes the
+  schema and waits for V-D10.</p>
+  <div class="tblwrap"><table class="tbl">
+    <thead><tr><th>Slice</th><th>Content</th><th>Tier</th><th>Gate on the PR's head</th></tr></thead>
+    <tbody>
+      <tr><td>V1</td><td>Events: three classes, <code>decisionlog</code>, triggers in <code>complete_approval()</code>,
+        <code>wait_enrolment()</code>, <code>cancel_enrolment()</code>, suppression in <code>admit()</code>, strings,
+        README audit and privacy paragraphs, <code>mutations/gates.conf</code> lines.</td><td>3 (state machine, privacy)</td>
+        <td><code>mdl ci moodle-enrol_apply --matrix</code>; <code>security-diff-read</code> first; an MDL Shield review only if the owner asks.</td></tr>
+      <tr><td>V2</td><td>Queue: group column, group filter, scope line, deferred tile in scope, VISIBLEGROUPS default, strings, Behat.</td>
+        <td>3 (SQL)</td><td><code>mdl ci moodle-enrol_apply --matrix --behat</code></td></tr>
+      <tr><td>V3</td><td>Review page: key-group and "on approval" rows, viewer chip, capacity labels and own-group seats on
+        the review page and the queue tiles, strings, renderer tests.</td><td>2</td><td><code>mdl ci moodle-enrol_apply --branch MOODLE_503_STABLE --behat</code></td></tr>
+      <tr><td>V4</td><td>Bulk form: seats in the options, the "outside your groups" count, README moderator note.</td><td>2</td>
+        <td><code>mdl ci moodle-enrol_apply --branch MOODLE_503_STABLE --behat</code></td></tr>
+      <tr><td>V5</td><td><code>joinedgroups</code> (install.xml, upgrade, backup, privacy), <code>record_where()</code>
+        over it, report group filter, groups-joined column in the report and the source.</td><td>3 (schema, upgrade, privacy, SQL)</td>
+        <td><code>mdl ci moodle-enrol_apply --matrix --behat</code>; <code>security-diff-read</code> (report narrowing).</td></tr>
+      <tr><td>V6</td><td>Optional, on V-D9: "Decisions on this application" from the log reader.</td><td>3 (reads personal data)</td>
+        <td><code>mdl ci moodle-enrol_apply --matrix</code></td></tr>
+    </tbody>
+  </table></div>
+  <p>V3 and V4 do not depend on V1 or V2 and can run in parallel with them. V5's filter can ship without
+  <code>joinedgroups</code> if V-D10 is declined, matching key group and <code>decidedgroups</code> only, with the
+  gap documented.</p>
+</section>
+
+<section id="decisions">
+  <span class="sectnum">&sect;08</span>
+  <h2>Decisions to take</h2>
+  <p class="lede">Each has a recommendation. Nothing in V1&ndash;V6 is started until these are answered.</p>
+  <div class="tblwrap"><table class="tbl">
+    <thead><tr><th style="width:4.5em">#</th><th style="width:30%">Question</th><th>Recommendation</th></tr></thead>
+    <tbody>
+      <tr><td>V-D1</td><td>Group column and filter: where, and with what default?</td><td><b>Column on the instance and
+        site-wide queues, not the mentee queue; not sortable. Filter on the instance queue only, applied by nobody by
+        default</b> except S2's visible-groups default (V-D2). A queue is a to-do list; a default that hides rows hides work.</td></tr>
+      <tr><td>V-D2</td><td>Visible groups: does an unnarrowed teacher's filter offer other groups, and what is the default?</td>
+        <td><b>Every group they may see, plus "Without a group"</b>, since they may decide all of them. S2's default to the
+        viewer's own groups stays, <b>as a removable chip</b>, never a scope; a viewer in no group gets no default.</td></tr>
+      <tr><td>V-D3</td><td>Capacity for a narrowed decider</td><td><b>Keep the method's numbers, labelled "on this method";
+        add seats for the key group and the decider's own groups; never another group's seats. Count the queue's deferred
+        tile over the reader's scope.</b> The method numbers are what tell a moderator they are about to overbook.</td></tr>
+      <tr><td>V-D4</td><td>Does a viewer (viewapplications) see the key group's name on the review page?</td><td><b>Yes</b>,
+        under the visibility rule, gated on DECIDE or VIEW in the course. Otherwise the queue column says what the
+        review page withholds. Mentors still see no group name anywhere.</td></tr>
+      <tr><td>V-D5</td><td>Event class for a cancellation: T1's <code>application_refused</code>, or <code>application_cancelled</code>?</td>
+        <td><b><code>application_cancelled</code></b>, named "Enrolment application cancelled": the button, the record status
+        (<code>STATUS_CANCELLED</code>), the method (<code>cancel_enrolment()</code>) and the report all say cancel. A
+        deviation in wording from T1, not in substance.</td></tr>
+      <tr><td>V-D6</td><td>Where the approved event fires</td><td><b>In <code>complete_approval()</code>, once per approval
+        through the <code>decisionlog</code> marker</b> (queue and review pages: <code>activate()</code>'s pass; Edit
+        enrolment: the hook pass; key admission: none). Accept that the Edit-enrolment event precedes core's write.</td></tr>
+      <tr><td>V-D7</td><td>The events' <code>other</code>, and privacy</td><td><b>Ids only</b> (<code>enrolid</code>,
+        <code>groups</code>, <code>roleid</code>, <code>chosen</code>, <code>keygroupid</code>, <code>moved</code>);
+        never the message, the note or a name. <b>Nothing declared in the provider</b> (the log store's); one README
+        paragraph on log lifetime and erasure.</td></tr>
+      <tr><td>V-D8</td><td>A link from the course report to the logs?</td><td><b>No.</b> <code>report_log</code> cannot
+        select these events, and its group filter narrows by the actor, so for a moderator the link leads to the wrong
+        rows. The README tells administrators where the events are.</td></tr>
+      <tr><td>V-D9</td><td>T2 once events exist: still no history table?</td><td><b>Still no table.</b> If the owner wants the
+        history on screen, V6 reads it from the log reader on the review page; otherwise the events are the trail and
+        V6 is dropped.</td></tr>
+      <tr><td>V-D10</td><td>Record the groups an approval actually joined?</td><td><b>Yes, <code>joinedgroups</code> on the
+        record</b>, written by <code>add_instance_groups()</code>. It feeds the column, the filter and S8's narrowing,
+        which today misses every approval left on the method's defaults. Not a history table: one value per record,
+        the last approval's. Old rows stay null.</td></tr>
+      <tr><td>V-D11</td><td>A group filter on the custom-report source?</td><td><b>No, the column only.</b> Site-wide
+        options are unbounded and a name filter would bypass the cell's visibility masking; revisit if a site asks.</td></tr>
+      <tr><td>V-D12</td><td>Participants-page bulk decisions for a moderator</td><td><b>Accept that they are rarely
+        reachable</b> (core shows the moderator only group members, and applicants join on approval); add seats and the
+        "outside your groups" count; the README sends moderators to the queue.</td></tr>
+      <tr><td>V-D13</td><td>A group the reader may not see, in the queue's cell</td><td><b>Blank, as the report's
+        cell</b>; "Without a group" only for a keyless row. The key badge already says a key was used.</td></tr>
+      <tr><td>V-D14</td><td>A scope line on the narrowed queue ("Showing the applications of your groups: ...")</td>
+        <td><b>Yes</b>, for every narrowed reader, decider or viewer. Without it a moderator cannot tell a narrowed
+        queue from a short one.</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note think"><span class="lbl">Not changed by this stage</span>
+  <p>T3 stands: the applicant's pages keep R6's wording and nothing else. The mentor path stays without group
+  names. The custom-report source stays unnarrowed (S8). Deferral, role and enrolment-period rules are untouched.</p></div>
+</section>
+
+<section id="facts">
+  <span class="sectnum">&sect;09</span>
+  <h2>Appendix: facts checked, with where</h2>
+  <p>Plugin lines at f9f3981; core lines in <code>~/dev/moodle-503/public</code>.</p>
+  <div class="tblwrap"><table class="tbl">
+    <thead><tr><th>Fact</th><th>Where</th></tr></thead>
+    <tbody>
+      <tr><td>Narrowing rule: SEPARATEGROUPS without <code>accessallgroups</code>; system holder of the capability exempt</td><td><code>classes/local/groupscope.php:80-94</code>, <code>:111-121</code></td></tr>
+      <tr><td>Application's group = key group of the newest record; SQL twin</td><td><code>groupscope.php:191-205</code>, <code>:264-289</code></td></tr>
+      <tr><td>Report narrowing = key group OR decided groups (LIKE per group)</td><td><code>groupscope.php:314-333</code></td></tr>
+      <tr><td>Choosers offer <code>choosable_groups()</code>: own groups when narrowed</td><td><code>groupscope.php:347-357</code>; <code>renderer.php:645-662</code>; <code>classes/form/bulk_decision_form.php</code> <code>add_decision_controls()</code></td></tr>
+      <tr><td>Visibility rule for an explicit reader</td><td><code>classes/local/groupvisibility.php:48-73</code></td></tr>
+      <tr><td>Filterset has no group filter</td><td><code>classes/table/applications_filterset.php:87-109</code></td></tr>
+      <tr><td>Queue SQL narrows by groups after the mentee clause</td><td><code>classes/table/applications.php:393-431</code> (groups at <code>:424</code>)</td></tr>
+      <tr><td>Unoffered filter values are never read</td><td><code>applications.php:262-271</code></td></tr>
+      <tr><td>Key badge shows the outcome, never the group name</td><td><code>applications.php:1165-1171</code></td></tr>
+      <tr><td>Queue columns: checkbox (deciders only), course (site-wide/mentee), name, date, snapshot (not mentee), comment, review</td><td><code>applications.php:930-1000</code></td></tr>
+      <tr><td>No-group reader gets core's notice and no queue</td><td><code>renderer.php:64-66</code>; string <code>lang/en/moodle.php:1595</code></td></tr>
+      <tr><td>Awaiting tile is <code>scope_total()</code>; deferred tile is method-wide</td><td><code>renderer.php:167</code>, <code>:509-513</code></td></tr>
+      <tr><td>Viewer gets no form, footer or controls</td><td><code>renderer.php:74</code>, <code>templates/manage.mustache</code> (<code>candecide</code> branches)</td></tr>
+      <tr><td>Key chip names the group only with <code>manageapplications</code> in the course and visibility</td><td><code>renderer.php:797-850</code> (gate <code>:815</code>)</td></tr>
+      <tr><td>Seats only in chooser option labels</td><td><code>renderer.php:650-662</code>; strings <code>decisiongroupseats</code>/<code>decisiongroupfull</code> <code>lang/en/enrol_apply.php:163-166</code></td></tr>
+      <tr><td>Read-only summary from <code>default_approval_groups()</code>; hidden groups counted</td><td><code>renderer.php:740-795</code>; <code>lib.php:1049-1075</code></td></tr>
+      <tr><td>Capacity panel: method-wide, gated on <code>manageapplications</code> in the course</td><td><code>renderer.php:1001-1058</code> (gate <code>:1003</code>)</td></tr>
+      <tr><td>Earlier applications gated on <code>viewreports</code>, narrowed by REPORT</td><td><code>renderer.php:948-999</code> (narrowing <code>:961</code>)</td></tr>
+      <tr><td>Review form decides via <code>can_manage_application()</code></td><td><code>renderer.php:1153-1260</code>; <code>lib.php:1486-1507</code></td></tr>
+      <tr><td>Bulk menu gated on the course capability; per-row check inherited</td><td><code>lib.php:1151-1170</code>; <code>classes/bulk/decision_operation.php:229-283</code></td></tr>
+      <tr><td>Out-of-scope rows reported as "did not change"</td><td><code>decision_operation.php:283</code>; <code>lang/en/enrol_apply.php:96</code></td></tr>
+      <tr><td>Participants page forces own-group members in separate groups; defaults in visible groups</td><td><code>user/index.php:122-146</code>; <code>user/classes/table/participants_search.php:423-437</code></td></tr>
+      <tr><td>Groups joined on approval only, from the record or the defaults</td><td><code>lib.php:1010-1031</code></td></tr>
+      <tr><td><code>decidedgroups</code> empty means defaults; read as null</td><td><code>db/install.xml:28</code>; <code>classes/local/submission.php:805-824</code></td></tr>
+      <tr><td>Course report base condition, S8 narrowing, columns from the entity, method filter</td><td><code>classes/reportbuilder/local/systemreports/course_applications.php:101-118</code>, <code>:171-198</code>, <code>:303-350</code></td></tr>
+      <tr><td><code>admissionroute</code> filter includes <code>KEY_FOR_REVIEW</code></td><td><code>classes/reportbuilder/local/entities/submission.php:466-481</code></td></tr>
+      <tr><td><code>keygroup</code> column: visibility fields, not sortable</td><td><code>entities/submission.php:261-275</code>; formatter <code>formatters/submission.php:135</code></td></tr>
+      <tr><td>Datasource not narrowed; defaults</td><td><code>classes/reportbuilder/datasource/applications.php:42-46</code>, <code>:235-278</code></td></tr>
+      <tr><td>Core group entity filters: name, idnumber, visibility, participation, time created</td><td><code>group/classes/reportbuilder/local/entities/group.php:238-293</code></td></tr>
+      <tr><td><code>complete_approval()</code> writes role, groups, decision, queues the notice</td><td><code>lib.php:860-900</code></td></tr>
+      <tr><td>Queue approval runs it twice: hook pass and <code>activate()</code></td><td><code>lib.php:1663-1687</code> (call <code>:1686</code>); <code>classes/hook_callbacks.php:61-89</code></td></tr>
+      <tr><td>Hook pass requires the application info row; dispatched before the write</td><td><code>hook_callbacks.php:77-79</code>; <code>lib/enrollib.php:2252-2262</code></td></tr>
+      <tr><td>Key admission goes through <code>activate()</code> and fires its own event</td><td><code>lib.php:741-775</code> (event <code>:764-769</code>)</td></tr>
+      <tr><td><code>enrol_get_plugin()</code> returns a new object</td><td><code>lib/enrollib.php:165</code></td></tr>
+      <tr><td><code>decide()</code> and its fresh-decision exception</td><td><code>submission.php:315-339</code></td></tr>
+      <tr><td><code>report_log</code> narrows by the acting user's groups; no-group reader sees users without group</td><td><code>lib/classes/report_helper.php:104-159</code>; <code>report/log/classes/table_log.php:445-453</code>, <code>:515-521</code></td></tr>
+      <tr><td><code>report_log</code> parameters (no event-name filter)</td><td><code>report/log/index.php:33-49</code></td></tr>
+      <tr><td><code>report/log:view</code> to teacher, editing teacher, manager</td><td><code>report/log/db/access.php</code></td></tr>
+      <tr><td>Log store declares <code>relateduserid</code> and <code>other</code>; exports actor or affected rows; deletes actor rows only</td><td><code>admin/tool/log/store/standard/classes/privacy/provider.php:53-64</code>; <code>admin/tool/log/classes/local/privacy/moodle_database_export_and_delete.php:65</code>, <code>:120</code>, <code>:135</code></td></tr>
+      <tr><td>Log lifetime defaults to never</td><td><code>admin/tool/log/store/standard/settings.php:50-52</code></td></tr>
+      <tr><td>Log restore maps each <code>other</code> value as a scalar</td><td><code>admin/tool/log/backup/moodle2/restore_tool_log_logstore_subplugin.class.php:118-140</code></td></tr>
+      <tr><td>Log reader API</td><td><code>lib/classes/log/sql_reader.php:52</code></td></tr>
+      <tr><td>Two-modifier members fatal <code>validate</code> in <code>lib.php</code> (5.2 leg)</td><td>fleet <code>~/dev/CLAUDE.md</code>, section 2, XMLDB/upgrades</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note think"><span class="lbl">Not verified</span>
+  <p>Whether the standard log store writes an event triggered inside a request whose later write throws (the
+  Edit-enrolment ordering above): not measured. Every mockup's numbers and names are invented; the strings are
+  the plugin's own <code>lang/en</code> where they exist, and the new ones (<em>Group</em>, <em>Without a group</em>,
+  <em>Showing the applications of your groups</em>, <em>on this method</em>, <em>Group of the enrolment key</em> as
+  a row label, <em>On approval</em>, <em>Groups joined</em>, the three event names, <em>Applications outside your
+  groups, left alone</em>) are proposals.</p></div>
+</section>
+
+<footer style="border-top:1px solid var(--rule);padding-top:22px;margin-top:20px;font-family:var(--mono);font-size:.74rem;color:var(--ink-faint)">
+  <p style="margin:0">Read against f9f3981 (version 2026110502) and core 5.3. Nothing in the repository's code or on
+  any stack was modified.</p>
+</footer>
+</main>
+</div>
+</div>
+</body>
+</html>
