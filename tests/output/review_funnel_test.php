@@ -197,6 +197,27 @@ final class review_funnel_test extends \advanced_testcase {
     }
 
     /**
+     * Whether one of the page's two accordions ("adjust" or "write") opens as the page loads.
+     *
+     * The panel's show class and its button's aria-expanded must say the same thing: the first is
+     * what is drawn, the second what a screen reader is told.
+     *
+     * @param string $html The review page.
+     * @param string $name The accordion: adjust or write.
+     * @return bool True when it opens.
+     */
+    private function accordion_open(string $html, string $name): bool {
+        $panel = '~class="accordion-collapse collapse( show)?" id="enrol_apply_' . $name . '_body"~';
+        $this->assertSame(1, preg_match($panel, $html, $m), "no {$name} accordion");
+        $open = ($m[1] ?? '') !== '';
+        $button = '~data-bs-target="#enrol_apply_' . $name . '_body"[^>]*aria-expanded="(true|false)"~';
+        $this->assertSame(1, preg_match($button, $html, $b), "no {$name} accordion button");
+        $this->assertSame($open ? 'true' : 'false', $b[1], "the {$name} button and its panel disagree");
+
+        return $open;
+    }
+
+    /**
      * Whether the card of a group is ticked.
      *
      * @param string $html The review page.
@@ -286,7 +307,7 @@ final class review_funnel_test extends \advanced_testcase {
             'id="enrol_apply_signals_heading"',
             'id="enrol_apply_outcome_heading"',
             'id="enrol_apply_adjust"',
-            'class="enrol_apply-write',
+            'enrol_apply-write',
             'class="enrol_apply-evidence"',
             'value="cancel"',
             'value="wait"',
@@ -309,7 +330,7 @@ final class review_funnel_test extends \advanced_testcase {
         $this->assertTrue($this->card_ticked($html, (int) $this->keyed->id));
         $this->assertTrue($this->card_ticked($html, (int) $this->listed->id));
         $this->assertFalse($this->card_ticked($html, (int) $this->other->id));
-        $this->assertMatchesRegularExpression('~<details class="enrol_apply-adjust[^"]*" id="enrol_apply_adjust">~', $html);
+        $this->assertFalse($this->accordion_open($html, 'adjust'));
     }
 
     /**
@@ -378,7 +399,7 @@ final class review_funnel_test extends \advanced_testcase {
         $html = $this->review_html($applicant);
 
         $this->assertSame(s(get_string('reviewemptychoicenone', 'enrol_apply')), $this->region($html, 'outcome-emptychoice'));
-        $this->assertMatchesRegularExpression('~<details class="enrol_apply-adjust[^"]*" id="enrol_apply_adjust" open>~', $html);
+        $this->assertTrue($this->accordion_open($html, 'adjust'));
         $this->assertStringContainsString(
             get_string('reviewoutcomenone', 'enrol_apply', (object) [
                 'who' => s(fullname($applicant)),
@@ -955,7 +976,7 @@ final class review_funnel_test extends \advanced_testcase {
     }
 
     /**
-     * The message disclosure opens whenever either box holds a value, which is the way back from
+     * The message accordion opens whenever either box holds a value, which is the way back from
      * the cancel confirmation, and stays folded otherwise (RP-D7).
      *
      * @return void
@@ -964,15 +985,9 @@ final class review_funnel_test extends \advanced_testcase {
         $this->setAdminUser();
         $applicant = $this->application(submission::KEY_NONE);
 
-        $this->assertMatchesRegularExpression('~<details class="enrol_apply-write mb-3">~', $this->review_html($applicant));
-        $this->assertMatchesRegularExpression(
-            '~<details class="enrol_apply-write mb-3" open>~',
-            $this->review_html($applicant, '', 'Checking with the registry.')
-        );
-        $this->assertMatchesRegularExpression(
-            '~<details class="enrol_apply-write mb-3" open>~',
-            $this->review_html($applicant, 'Please resend your transcript.')
-        );
+        $this->assertFalse($this->accordion_open($this->review_html($applicant), 'write'));
+        $this->assertTrue($this->accordion_open($this->review_html($applicant, '', 'Checking with the registry.'), 'write'));
+        $this->assertTrue($this->accordion_open($this->review_html($applicant, 'Please resend your transcript.'), 'write'));
     }
 
     /**

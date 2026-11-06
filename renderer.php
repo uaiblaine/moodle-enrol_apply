@@ -1394,13 +1394,16 @@ class enrol_apply_renderer extends plugin_renderer_base {
 
                Each carries its consequence (RP-D8), escaped for a triple stash because the
                approval's names it; beside the button, never inside it, so the button's accessible
-               name and the Behat presses that drive it stay the label alone. Re-deferring an
+               name and the Behat presses that drive it stay the label alone. The short label is
+               what a phone shows under the icon, hidden from assistive technology (the full label
+               stays the name). Re-deferring an
                application already deferred notifies only when a message is written (gates BI, BJ),
                so its line says so. */
             'actions' => [
                 [
                     'value' => 'cancel',
                     'label' => get_string('reviewcancel', 'enrol_apply'),
+                    'shortlabel' => get_string('reviewcancelshort', 'enrol_apply'),
                     'style' => 'btn-outline-danger',
                     'icon' => 'e/cancel',
                     'consequence' => s(get_string('reviewcancelconsequence', 'enrol_apply')),
@@ -1408,6 +1411,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
                 [
                     'value' => 'wait',
                     'label' => get_string('reviewwait', 'enrol_apply'),
+                    'shortlabel' => get_string('reviewwaitshort', 'enrol_apply'),
                     'style' => 'btn-secondary',
                     'icon' => 'i/duration',
                     'consequence' => s(get_string(
@@ -1418,6 +1422,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
                 [
                     'value' => 'confirm',
                     'label' => get_string('reviewconfirm', 'enrol_apply'),
+                    'shortlabel' => get_string('reviewconfirmshort', 'enrol_apply'),
                     'style' => 'btn-primary',
                     'icon' => 't/check',
                     'consequence' => $outcome['confirm'],
@@ -1494,6 +1499,12 @@ class enrol_apply_renderer extends plugin_renderer_base {
         $methodname = trim((string) $instance->name) !== ''
             ? format_string($instance->name, true, ['context' => $coursecontext, 'escape' => false])
             : enrol_get_plugin('apply')->get_instance_name($instance);
+        // Offered only where user/view.php would open it: a moderator narrowed by separate groups
+        // is refused the profile of an applicant who is in no group yet.
+        $profileurl = \enrol_apply\local\profilelink::url(
+            \core_user::get_user((int) $application->userid, 'id, deleted', MUST_EXIST),
+            get_course((int) $application->courseid)
+        );
 
         return [
             'readonly' => !$candecide,
@@ -1519,10 +1530,8 @@ class enrol_apply_renderer extends plugin_renderer_base {
             ]),
             'courseurl' => (new moodle_url('/course/view.php', ['id' => $application->courseid]))->out(false),
             // No e-mail row: the address is one identity field among the rest. See identity_context().
-            'profileurl' => (new moodle_url('/user/view.php', [
-                'id' => (int) $application->userid,
-                'course' => (int) $application->courseid,
-            ]))->out(false),
+            'hasprofile' => $profileurl !== null,
+            'profileurl' => $profileurl ? $profileurl->out(false) : '',
             'profilelabel' => get_string('viewprofile'),
         ];
     }

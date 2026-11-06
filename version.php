@@ -26,8 +26,8 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'enrol_apply';
-$plugin->version = 2026110508;
+$plugin->version = 2026110509;
 $plugin->requires = 2025100600;
 $plugin->supported = [501, 503];
 $plugin->maturity = MATURITY_STABLE;
-$plugin->release = 'v2.0';
+$plugin->release = 'v2.0.1';

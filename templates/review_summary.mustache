@@ -46,7 +46,8 @@
     * identity array - one entry per identity field the site named and this reader may see, each
       carrying a label and a value, both in the PLAIN spelling; the e-mail address is one of
       these when showuseridentity names it and absent when it does not
-    * profileurl string - the applicant's profile in this course
+    * hasprofile boolean - whether user/view.php would open the applicant's profile for this reader
+    * profileurl string - the applicant's profile in this course, empty without hasprofile
     * profilelabel string - text of the profile link, a plain link rather than a button: the
       heaviest control in the first block should not be the one that leaves the page
     * hasdecision boolean - whether a colleague has already decided this one, which today means
@@ -84,6 +85,7 @@
             {"label": "Username", "value": "jsa"},
             {"label": "ID number", "value": "2026-0071"}
         ],
+        "hasprofile": true,
         "profileurl": "https://example.com/user/view.php?id=5&course=7",
         "profilelabel": "View profile",
         "hasdecision": true,
@@ -96,7 +98,7 @@
         "decisionnote": "Second intake opens in September."
     }
 }}
-<div class="enrol_apply-reviewstrip mb-3">
+<div class="enrol_apply-reviewstrip enrol_apply-box mb-3">
     <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
         {{#readonly}}<span class="badge bg-secondary text-dark enrol_apply-chip-readonly">{{#pix}}t/hide, core{{/pix}}{{readonlylabel}}</span>{{/readonly}}
         <span class="badge {{statuschipclass}} enrol_apply-statuschip">{{^iswaiting}}<span class="enrol_apply-statusdot"></span>{{/iswaiting}}{{#iswaiting}}{{#pix}}i/duration, core{{/pix}}{{/iswaiting}}<span class="visually-hidden">{{statuslabel}}: </span>{{status}}</span>
@@ -113,7 +115,7 @@
                 {{/identity}}
             {{/hasidentity}}
         </dl>
-        <a class="small" href="{{profileurl}}">{{profilelabel}}</a>
+        {{#hasprofile}}<a class="small" href="{{profileurl}}">{{profilelabel}}</a>{{/hasprofile}}
     </div>
     {{#hasdecision}}
         <div class="alert alert-info mt-2 mb-0" role="status">

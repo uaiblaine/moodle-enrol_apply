@@ -199,8 +199,8 @@
    The queue is operable without JavaScript, so the two rules below put the footer on screen in
    exactly that case and give the page the bottom margin core's layout.scss adds alongside the
    class. body.jsenabled is written by page_requirements_manager, so :not(.jsenabled) holds only
-   when no script ran; both selectors outrank core's, and this stylesheet is served after the
-   theme's. No test renders CSS, and the non-JavaScript Behat driver applies no styles. */
+   when no script ran; both selectors outrank core's, which is what wins: this stylesheet is
+   compiled before the theme's. No test renders CSS, and the non-JavaScript Behat driver applies no styles. */
 body.path-enrol-apply:not(.jsenabled) .stickyfooter {
     bottom: 0;
 }
@@ -248,6 +248,47 @@ body.path-enrol-apply:not(.jsenabled) #page.drawers {
     --enrol-apply-focus: var(--bs-focus-ring-color, var(--enrol-apply-fill));
 }
 
+/* On wide screens the button reads its full label; the one-word label is the phone's. */
+.enrol_apply-actionshort {
+    display: none;
+}
+
+/* Below the md breakpoint each decision is an icon over one word (Cancel, Defer, Confirm), which
+   three of fit a phone's width inside the bar's 80px. The full label stays the button's name for
+   assistive technology, hidden by the visually-hidden technique; the word is aria-hidden. */
+@media (max-width: 767.98px) {
+    .enrol_apply-reviewaction .btn {
+        align-items: center;
+        display: flex;
+        flex-direction: column;
+        font-size: 0.8125rem;
+        gap: 0.15rem;
+        line-height: 1.2;
+        min-width: 5.5rem;
+        padding: 0.35rem 0.75rem;
+    }
+
+    .enrol_apply-reviewaction .btn .icon {
+        margin: 0;
+    }
+
+    .enrol_apply-reviewaction .enrol_apply-actionlabel {
+        border: 0;
+        clip-path: inset(50%);
+        height: 1px;
+        margin: -1px;
+        overflow: hidden;
+        padding: 0;
+        position: absolute;
+        white-space: nowrap;
+        width: 1px;
+    }
+
+    .enrol_apply-reviewaction .enrol_apply-actionshort {
+        display: block;
+    }
+}
+
 /* A button and its consequence, stacked: one button line and one small line fit the bar's 80px. */
 .enrol_apply-reviewaction {
     align-items: flex-start;
@@ -281,17 +322,67 @@ body.path-enrol-apply:not(.jsenabled) #page.drawers {
     width: 0.5rem;
 }
 
-/* One signal per row: icon, what is measured, its state word. Only attention and over the limit
-   are tinted, with Bootstrap's subtle utilities in the markup; the edge is the state's own mark,
-   drawn beside the icon and the word, never instead of them. */
+/* Each block of the funnel and of the evidence column is a box of its own (Concept A): the theme's
+   border colour and radius, so the page reads as the course pages around it do. */
+.enrol_apply-review .enrol_apply-box {
+    background-color: var(--bs-body-bg, #fff);
+    border: 1px solid var(--enrol-apply-line);
+    color: var(--bs-body-color, #212529);
+    border-radius: var(--bs-border-radius-lg, 0.5rem);
+    padding: 0.75rem 1rem;
+}
+
+/* "On confirming" is the card that says what the decision does, marked by the theme's primary
+   colour on its leading edge. Two classes, because .card is compiled after this sheet. */
+.enrol_apply-review .enrol_apply-outcome {
+    border-left: 0.25rem solid var(--enrol-apply-fill);
+}
+
+/* The two accordions take Bootstrap's own look from the theme; only the header's weight and the
+   hint under the message accordion's title are this plugin's. */
+.enrol_apply-review .enrol_apply-accordion .accordion-button {
+    font-weight: 600;
+}
+
+.enrol_apply-accordiontitle {
+    display: block;
+}
+
+.enrol_apply-accordionhint {
+    color: var(--enrol-apply-muted);
+    display: block;
+    font-size: 0.8125rem;
+    font-weight: 400;
+    margin-top: 0.15rem;
+}
+
+/* Without JavaScript nothing can open a collapse, so both accordions stay open and every field
+   of the decision form can still be reached. body.jsenabled: see the sticky footer above. */
+body.path-enrol-apply:not(.jsenabled) .enrol_apply-accordion .collapse {
+    display: block;
+}
+
+/* One signal per row of a bordered list: icon, what is measured, its state word. Only attention
+   and over the limit are tinted, with Bootstrap's subtle utilities in the markup; the edge is the
+   state's own mark, drawn beside the icon and the word, never instead of them. */
+.enrol_apply-signallist {
+    border: 1px solid var(--enrol-apply-line);
+    border-radius: var(--bs-border-radius-lg, 0.5rem);
+    overflow: hidden;
+}
+
 .enrol_apply-signal {
     align-items: baseline;
     border-left: 0.2rem solid transparent;
-    border-radius: 0.25rem;
+    border-top: 1px solid var(--enrol-apply-line);
     display: flex;
     gap: 0.5rem;
-    margin-bottom: 0.25rem;
-    padding: 0.35rem 0.5rem;
+    margin: 0;
+    padding: 0.5rem 0.75rem;
+}
+
+.enrol_apply-signal:first-child {
+    border-top: 0;
 }
 
 .enrol_apply-signal.bg-warning-subtle {
@@ -313,11 +404,6 @@ body.path-enrol-apply:not(.jsenabled) #page.drawers {
 
 .enrol_apply-signalstate {
     flex: 0 0 auto;
-}
-
-.enrol_apply-review summary {
-    cursor: pointer;
-    font-weight: 600;
 }
 
 /* The group cards: two to a row where there is room, one on a phone. */
