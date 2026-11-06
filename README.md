@@ -338,7 +338,11 @@ in one of their groups. They get the decision icon on the participants page only
 decider in no group gets core's "you need to be part of a group" notice instead of a queue. Core's
 **Edit enrolment** screen (`enrol/apply:manage`) is refused to them too when it would approve an
 application outside their groups, and so is core's **Unenrol** route for a pending application outside
-their groups. *Visible groups* and *No groups* narrow nobody. A holder of the
+their groups. A moderator in separate groups should decide from the approval queue, not from the
+participants page: core lists a separate-groups teacher only the members of their own groups, and
+an applicant joins a group only when approved, so an applicant is rarely listed there for them. When
+they do reach the bulk decision, its confirmation says how many of the selected applications are
+outside their groups and will be left alone. *Visible groups* and *No groups* narrow nobody. A holder of the
 capability at system level and a mentor (the capability in the applicant's own user context) are
 never narrowed, as their delegation does not come from the course.
 

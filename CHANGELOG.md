@@ -8,6 +8,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **The participants page's bulk decision chooses groups like the queue (V4 of
+  `docs/design/group-screens.html`, V-D12, RP-D21, RP-D22, RP-D26).** The group chooser of the
+  confirmation form is now moodleform's `autocomplete` (multiple) instead of a plain select, with
+  the queue's option text (`{name} · {m} of {s} seats`, `no seats left, {m} of {s}` when full,
+  the idnumber in parentheses, the name alone without seats) in natural order. The read of the
+  choosable groups with their seats moved from the renderer to
+  `\enrol_apply\local\groupfacts`, which the queue, the review page and this form all use. A
+  decider narrowed by separate groups is told, on the confirmation form of all three decisions,
+  how many of the selected applications are outside their groups and will be left alone, counted
+  with the predicate the decision applies per row (`can_manage_application()`), so it agrees with
+  the report's *unchanged* counter. The README sends a moderator to the queue. New strings
+  `bulkoutsidegroups`, `bulkoutsidegroupsone` and `decisiongroupsnone`.
+
 - **The groups an approval joined (V5 of `docs/design/group-screens.html`, V-D10, V-D11, V-D13).**
   A new nullable column, `enrol_apply_submission.joinedgroups`, records the groups the applicant is
   a member of through the method once an approval has run (the memberships stamped `enrol_apply`

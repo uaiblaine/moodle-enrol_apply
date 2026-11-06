@@ -834,23 +834,9 @@ class enrol_apply_renderer extends plugin_renderer_base {
     /**
      * The groups this reader may choose on an approval, with their seats, in natural order.
      *
-     * One read for every surface that offers groups - the queue's chooser and the review page's
-     * cards and search - so the two decision surfaces cannot classify a group differently. The
-     * list is {@see \enrol_apply\local\groupscope::choosable_groups()}, which confirm_enrolment()
-     * allowlists the posted ids against and which narrows a decider in separate groups to their
-     * own (S6), so a narrowed reader is never told another group's seats (V-D3).
-     *
-     * Natural order (RP-D22): groups_get_all_groups() sorts by name in the database's collation,
-     * which puts "Turma 10" before "Turma 2".
-     *
-     * A full group is one whose members reach its seats (members >= seats), the rule the queue's
-     * chooser always used; it stays selectable (G15, R5): seats warn, they never block. A group
-     * declaring no seats, or every group without local_groupdist, has hasseats false.
-     *
-     * The name is the plain spelling ('escape' => false), because every template here double
-     * stashes it; with format_string()'s default a group named "R&D < Team" would read
-     * "R&amp;D &lt; Team". edit_form.php's call keeps the escaped spelling because a moodleform
-     * select renders its options through a triple stash.
+     * The read itself is {@see \enrol_apply\local\groupfacts::for_course()}, shared with the
+     * participants page's bulk form; the plain spelling of the name is why every template here
+     * can double stash it.
      *
      * @param stdClass $instance Enrol instance the decision belongs to.
      * @param \context_course $coursecontext Its course.
@@ -858,30 +844,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
      *     full and percent (whole, clamped to the bar).
      */
     protected function group_facts(stdClass $instance, \context_course $coursecontext): array {
-        $coursegroups = \enrol_apply\local\groupscope::choosable_groups((int) $instance->courseid);
-        \core_collator::asort_objects_by_property($coursegroups, 'name', \core_collator::SORT_NATURAL);
-        $seats = \enrol_apply\local\groupseats::for_groups(array_keys($coursegroups));
-
-        $facts = [];
-        foreach ($coursegroups as $group) {
-            $seat = $seats[(int) $group->id] ?? null;
-            $hasseats = $seat !== null && $seat->seats !== null;
-            $members = $hasseats ? (int) $seat->members : 0;
-            $total = $hasseats ? (int) $seat->seats : 0;
-            $facts[(int) $group->id] = (object) [
-                'id' => (int) $group->id,
-                'name' => format_string($group->name, true, ['context' => $coursecontext, 'escape' => false]),
-                'idnumber' => trim((string) ($group->idnumber ?? '')),
-                'hasseats' => $hasseats,
-                'members' => $members,
-                'seats' => $total,
-                'full' => $hasseats && $members >= $total,
-                // A group declaring no seat at all is full from its first member.
-                'percent' => $total > 0 ? self::meter_percent($members, $total) : 100,
-            ];
-        }
-
-        return $facts;
+        return \enrol_apply\local\groupfacts::for_course((int) $instance->courseid, $coursecontext);
     }
 
     /**
@@ -2174,19 +2137,10 @@ class enrol_apply_renderer extends plugin_renderer_base {
      * @return array Template context for one option.
      */
     protected function group_option(stdClass $fact, array $groupingids): array {
-        $label = $fact->idnumber !== ''
-            ? get_string('reviewgroupidnumber', 'enrol_apply', (object) ['name' => $fact->name, 'idnumber' => $fact->idnumber])
-            : $fact->name;
-        $a = (object) ['name' => $label, 'members' => $fact->members, 'seats' => $fact->seats];
-
         return [
             'id' => $fact->id,
             'name' => $fact->name,
-            'text' => match (true) {
-                !$fact->hasseats => $label,
-                $fact->full => get_string('reviewgroupoptionfull', 'enrol_apply', $a),
-                default => get_string('reviewgroupoption', 'enrol_apply', $a),
-            },
+            'text' => \enrol_apply\local\groupfacts::option_text($fact),
             'hasseats' => $fact->hasseats,
             'members' => $fact->members,
             'seats' => $fact->seats,

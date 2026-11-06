@@ -1030,6 +1030,19 @@ backup/                      group mappings, comments and the durable trail, see
   approval and cancellation use, which is what lets a decider correct the REASON on a deferred
   application (gate `BF`).
 
+- **The bulk form's group chooser and the "outside your groups" count (V4).** The chooser is an
+  `autocomplete` (multiple) named `groups`, fed by `local\groupfacts::for_course()` (the same read
+  the queue's chooser and the review page use, choosable groups narrowed for a narrowed decider,
+  natural order) and `groupfacts::option_text()` (RP-D21), escaped once with `s()` because the
+  element renders options through a triple stash. An empty multiple autocomplete posts nothing and
+  the operation still passes `groups => []`, which `confirm_enrolment()` reads as an empty choice
+  (its gate is `array_key_exists`, so keep passing the key). `decision_operation::outside_groups_count()`
+  asks `can_manage_application()` of every awaiting row, the predicate the decision methods apply,
+  so the form's notice and the report's `bulkunchanged` counter agree
+  (`operations_test::test_the_outside_groups_count_is_what_the_decision_skips`). A moderator in
+  separate groups rarely reaches this form (core lists them only members of their own groups, and
+  an applicant joins a group on approval): the README sends them to the queue (V-D12).
+
 - **Core's own bulk form cannot be reused, and the one line worth copying from it is invisible.**
   `enrol_bulk_enrolment_change_form` indexes an options array whose only keys are `-1`, `0` and `1`
   by the row's own status with no `isset()` guard (`enrol/bulkchange_forms.php:57-61` and `:84`),
