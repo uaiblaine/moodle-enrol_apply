@@ -237,27 +237,50 @@ final class backup_test extends \advanced_testcase {
     }
 
     /**
-     * The classes this file declares as coverage targets are loaded before any test runs.
+     * Every test file naming a backup class as a coverage target loads that class itself.
      *
-     * Kept first in the file and checked with `class_exists(..., false)`, so it passes only when
-     * the file-scope requires above loaded the classes, not autoloading or an earlier restore. No
-     * other test file in this plugin loads either class, so nothing earlier in a full-suite run
-     * can satisfy it by accident. Under a randomised order a restoring test could run first, which
-     * is why the fix is the require rather than the ordering.
+     * The two classes are not autoloadable (see the requires at the top of this file), so a file
+     * whose CoversClass names one must require it at file scope, or running that file alone warns
+     * that the target is not valid for code coverage, and the warning fails a coverage run.
+     * class_exists() cannot see this: PHPUnit includes every test file of the suite before it runs
+     * a test, so another file's requires satisfy it whichever file lost its own, which is how the
+     * check this replaced stayed green with the requires deleted. The file is read instead.
      *
-     * Changes that must make it fail: deleting the file-scope requires.
+     * The control: the scan finds this file and tests/backup_fields_test.php, so it is not
+     * vacuous.
+     *
+     * Changes that must make it fail: deleting the file-scope requires of either file.
      *
      * @return void
      */
-    public function test_the_declared_coverage_targets_are_loaded(): void {
-        $this->assertTrue(
-            class_exists(\backup_enrol_apply_plugin::class, false),
-            'the CoversClass target is unresolvable, which fails the run under --coverage'
-        );
-        $this->assertTrue(
-            class_exists(\restore_enrol_apply_plugin::class, false),
-            'the CoversClass target is unresolvable, which fails the run under --coverage'
-        );
+    public function test_every_file_covering_a_backup_class_requires_it(): void {
+        global $CFG;
+
+        $classes = [
+            'backup_enrol_apply_plugin' => '/enrol/apply/backup/moodle2/backup_enrol_apply_plugin.class.php',
+            'restore_enrol_apply_plugin' => '/enrol/apply/backup/moodle2/restore_enrol_apply_plugin.class.php',
+        ];
+        $scanned = [];
+        $files = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($CFG->dirroot . '/enrol/apply/tests'));
+        foreach ($files as $file) {
+            if (!$file->isFile() || !str_ends_with($file->getFilename(), '_test.php')) {
+                continue;
+            }
+            $source = file_get_contents($file->getPathname());
+            foreach ($classes as $class => $path) {
+                if (!str_contains($source, '#[CoversClass(\\' . $class . '::class)]')) {
+                    continue;
+                }
+                $scanned[$file->getFilename()] = true;
+                $this->assertMatchesRegularExpression(
+                    '~^require_once\(\$CFG->dirroot \. \'' . preg_quote($path, '~') . '\'\);$~m',
+                    $source,
+                    $file->getFilename() . ' names ' . $class . ' as a coverage target and does not load it'
+                );
+            }
+        }
+
+        $this->assertEqualsCanonicalizing(['backup_test.php', 'backup_fields_test.php'], array_keys($scanned));
     }
 
     /**
