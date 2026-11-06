@@ -7,4 +7,7 @@
 # pattern named the five-clause body and stopped matching the moment a sixth arrived - the same
 # way it happened to AD, CD and CH. The full --dry-run is what catches it, in the change that
 # causes it rather than three slices later.
-s{        return \$this->search !== ''\n            \|\| \$this->status !== null\n            \|\| \$this->fieldfilters !== \[\]\n            \|\| \$this->appliedfrom !== null\n            \|\| \$this->appliedto !== null\n            \|\| \$this->categoryfilter !== null\n            \|\| \$this->coursefilter !== null;}{        return \$this->search !== '' || \$this->status !== null;}s;
+#
+# Ends before the group filter's clause (V2), which it leaves standing: the clauses this gate is
+# about are the ones before it.
+s{        return \$this->search !== ''\n            \|\| \$this->status !== null\n            \|\| \$this->fieldfilters !== \[\]\n            \|\| \$this->appliedfrom !== null\n            \|\| \$this->appliedto !== null\n            \|\| \$this->categoryfilter !== null\n            \|\| \$this->coursefilter !== null}{        return \$this->search !== '' || \$this->status !== null}s;

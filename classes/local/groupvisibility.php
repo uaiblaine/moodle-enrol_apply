@@ -71,4 +71,68 @@ class groupvisibility {
            notice. */
         return $DB->record_exists('groups_members', ['groupid' => (int) $group->id, 'userid' => $readerid]);
     }
+
+    /**
+     * Which of these groups the reader may see, judged for a whole page at once.
+     *
+     * The same rule as {@see visible_to()}, clause for clause, for a listing that names a group on
+     * every row: the capability is asked once per course and the memberships in one query, where
+     * visible_to() would run a membership query per row of a MEMBERS or OWN group. Keep the two in
+     * step; test_the_batch_agrees_with_the_single_answer holds them together.
+     *
+     * @param array $groups The {groups} records, each carrying at least id, courseid and visibility.
+     * @param int $readerid The user the names would be shown to.
+     * @return array The ids of the groups the reader may see, ascending.
+     */
+    public static function visible_ids(array $groups, int $readerid): array {
+        global $DB;
+
+        $visible = [];
+        $members = [];
+        $seehidden = [];
+        foreach ($groups as $group) {
+            if (!isset($group->id, $group->courseid, $group->visibility)) {
+                continue;
+            }
+            $id = (int) $group->id;
+            $visibility = (int) $group->visibility;
+            if ($visibility === GROUPS_VISIBILITY_ALL) {
+                $visible[$id] = $id;
+                continue;
+            }
+
+            $courseid = (int) $group->courseid;
+            if (!array_key_exists($courseid, $seehidden)) {
+                $context = \context_course::instance($courseid, IGNORE_MISSING);
+                // Null for a course that no longer exists: hidden, as in visible_to().
+                $seehidden[$courseid] = $context
+                    ? has_capability('moodle/course:viewhiddengroups', $context, $readerid)
+                    : null;
+            }
+            if ($seehidden[$courseid] === null) {
+                continue;
+            }
+            if ($seehidden[$courseid]) {
+                $visible[$id] = $id;
+                continue;
+            }
+            if ($visibility === GROUPS_VISIBILITY_MEMBERS || $visibility === GROUPS_VISIBILITY_OWN) {
+                $members[$id] = $id;
+            }
+        }
+
+        // The memberships, in one query rather than one per group; get_in_or_equal() throws on [].
+        if ($members) {
+            [$insql, $params] = $DB->get_in_or_equal(array_values($members), SQL_PARAMS_NAMED, 'visgroup');
+            $params['visreader'] = $readerid;
+            $joined = $DB->get_fieldset_select('groups_members', 'groupid', "groupid {$insql} AND userid = :visreader", $params);
+            foreach ($joined as $groupid) {
+                $visible[(int) $groupid] = (int) $groupid;
+            }
+        }
+
+        ksort($visible);
+
+        return array_values($visible);
+    }
 }

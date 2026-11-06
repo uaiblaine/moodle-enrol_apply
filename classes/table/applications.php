@@ -26,6 +26,8 @@ use enrol_apply\local\commentlabel;
 use enrol_apply\local\identity;
 use enrol_apply\local\queue;
 use enrol_apply\local\coursefilter;
+use enrol_apply\local\groupfilter;
+use enrol_apply\local\groupvisibility;
 use enrol_apply\local\queuefilter;
 use enrol_apply\local\search;
 use enrol_apply\local\groupscope;
@@ -111,6 +113,21 @@ class applications extends \table_sql implements dynamic_table {
 
     /** @var array Token => field object, the filters THIS reader is offered; see queuefilter. */
     protected $offeredfilters = [];
+
+    /** @var array The group filter's values this reader may send; see groupfilter::offered(). */
+    protected $groupoffered = [];
+
+    /** @var string|null The group filter applied: a group id, none or mine; null for none. */
+    protected $groupfilter = null;
+
+    /** @var string|null What the group filter holds when a page names none; see groupfilter. */
+    protected $groupdefault = null;
+
+    /** @var bool Whether the listing carries the key group's column; see set_filterset(). */
+    protected $groupcolumn = false;
+
+    /** @var array Group id => true, for the groups on this page the reader may see; see query_db(). */
+    protected $visiblegroups = [];
 
     /** @var \stdClass|null The identity SELECT/JOIN, resolved once in set_filterset(). */
     protected $identitysql = null;
@@ -200,6 +217,8 @@ class applications extends \table_sql implements dynamic_table {
      * @return void
      */
     public function set_filterset(filterset $filterset): void {
+        global $DB;
+
         $filterset->check_validity();
 
         /* check_validity() proves the filter is present, not that it holds a value. A filter
@@ -275,6 +294,28 @@ class applications extends \table_sql implements dynamic_table {
 
         $this->appliedfrom = $this->date_filter($filterset, 'appliedfrom');
         $this->appliedto = $this->date_filter($filterset, 'appliedto');
+
+        /* The group filter, on the instance queue only, cleaned against what THIS reader is offered
+           (groupfilter::offered(), derived from the scope and $USER): a narrowed reader posting
+           another group's id, `none` or `mine` gets no filter, and their scope still holds. The
+           default (V-D2) is not applied here but where the page reads its request, so an AJAX
+           refresh sends whatever the control holds, `all` included, and is never re-defaulted. */
+        $this->groupoffered = groupfilter::offered($this->scope);
+        $this->groupdefault = groupfilter::default_value($this->scope, $this->groupoffered);
+        $this->groupfilter = null;
+        if ($this->groupoffered && $filterset->has_filter(groupfilter::NAME)) {
+            $this->groupfilter = groupfilter::clean(
+                $this->groupoffered,
+                (string) $filterset->get_filter(groupfilter::NAME)->current()
+            );
+        }
+
+        /* The key group's column (V-D1): on the instance and site-wide queues, never on the
+           mentee queue, whose mentor holds nothing in the course; and on an instance queue only
+           when its course has a group, where every row would otherwise read "Without a group". */
+        $this->groupcolumn = $this->scope->mentees === null
+            && ($this->scope->instance === null
+                || $DB->record_exists('groups', ['courseid' => (int) $this->scope->instance->courseid]));
 
         parent::set_filterset($filterset);
 
@@ -486,9 +527,48 @@ class applications extends \table_sql implements dynamic_table {
     }
 
     /**
+     * How many applications of this operator's queue are deferred to the waiting list.
+     *
+     * The capacity header's second tile, counted over the same scope as scope_total() beside it
+     * (V-D3): a decider narrowed to their groups is told how many of THEIR applications wait,
+     * never the method's figure, which could exceed the "awaiting decision" tile it sits next to.
+     * For a reader who is not narrowed this is capacity::deferred(), whose predicate it repeats
+     * through scope_where(): the waiting status inside "awaiting a decision".
+     *
+     * @return int Deferred applications in scope, unfiltered.
+     */
+    public function scope_deferred(): int {
+        global $CFG, $DB;
+
+        // ENROL_APPLY_USER_WAIT lives in the plugin's lib.php, which is not autoloaded.
+        require_once($CFG->dirroot . '/enrol/apply/lib.php');
+
+        [$wheres, $params] = $this->scope_where();
+        $wheres[] = 'ue.status = :deferredstatus';
+        $params['deferredstatus'] = ENROL_APPLY_USER_WAIT;
+
+        return (int) $DB->count_records_sql(
+            'SELECT COUNT(1)
+               FROM {user_enrolments} ue
+               JOIN {enrol} e ON e.id = ue.enrolid
+              WHERE ' . implode(' AND ', $wheres),
+            $params
+        );
+    }
+
+    /**
+     * The groups this operator's instance queue is narrowed to by separate groups.
+     *
+     * @return array|null Group ids, empty for a narrowed reader in no group; null when not narrowed.
+     */
+    public function scope_groups(): ?array {
+        return $this->scope->groups;
+    }
+
+    /**
      * Whether the operator has narrowed this listing at all.
      *
-     * @return bool True when a search term, status, field, date, course or category filter is applied.
+     * @return bool True when a search term, status, field, date, group, course or category filter is applied.
      */
     public function is_narrowed(): bool {
         return $this->search !== ''
@@ -497,7 +577,8 @@ class applications extends \table_sql implements dynamic_table {
             || $this->appliedfrom !== null
             || $this->appliedto !== null
             || $this->categoryfilter !== null
-            || $this->coursefilter !== null;
+            || $this->coursefilter !== null
+            || $this->groupfilter !== null;
     }
 
     /**
@@ -583,6 +664,13 @@ class applications extends \table_sql implements dynamic_table {
         if ($this->status !== null) {
             $params['status'] = $this->status;
         }
+        /* An applied group, or `all` where the page would otherwise apply its default: without it
+           a page turn or a removed chip would bring the reader's own groups back. */
+        if ($this->groupfilter !== null) {
+            $params[groupfilter::NAME] = $this->groupfilter;
+        } else if ($this->groupdefault !== null) {
+            $params[groupfilter::NAME] = groupfilter::ANY;
+        }
         foreach ($this->fieldfilters as $token => $value) {
             $params[$token] = $value;
         }
@@ -639,6 +727,78 @@ class applications extends \table_sql implements dynamic_table {
     }
 
     /**
+     * The group filter applied.
+     *
+     * @return string|null A group id, none or mine; null when no group filter is applied.
+     */
+    public function get_group_filter(): ?string {
+        return $this->groupfilter;
+    }
+
+    /**
+     * What the group filter holds when a page names none (V-D2).
+     *
+     * @return string|null groupfilter::MINE in a visible-groups course for a member; null elsewhere.
+     */
+    public function get_group_default(): ?string {
+        return $this->groupdefault;
+    }
+
+    /**
+     * The group filter's options, labelled, in the order the control lists them.
+     *
+     * The labels are the PLAIN spelling, for a double stash and for a chip; the group names go
+     * through format_string() in the course's context with escape off. Resolved here rather than
+     * in set_filterset(), which the web service reaches before any page context exists.
+     *
+     * @return array Value => label: mine and none first where offered, then the groups in natural
+     *     order; empty when the filter is not offered.
+     */
+    public function get_group_choices(): array {
+        if (!$this->groupoffered) {
+            return [];
+        }
+
+        $choices = [];
+        if (in_array(groupfilter::MINE, $this->groupoffered, true)) {
+            $choices[groupfilter::MINE] = get_string('queuegroupmine', 'enrol_apply');
+        }
+        if (in_array(groupfilter::NONE, $this->groupoffered, true)) {
+            $choices[groupfilter::NONE] = get_string('queuegroupnone', 'enrol_apply');
+        }
+
+        $context = context_course::instance((int) $this->scope->instance->courseid);
+        foreach (groupfilter::groups($this->scope) as $id => $group) {
+            $choices[(string) $id] = format_string($group->name, true, ['context' => $context, 'escape' => false]);
+        }
+
+        return $choices;
+    }
+
+    /**
+     * The names of the groups a narrowed reader's queue is limited to, for the line saying so (V-D14).
+     *
+     * Their own groups, which they may see by construction (groupscope::member_groups()), in
+     * natural order and in the PLAIN spelling: the line is a lang-string parameter in a double
+     * stash.
+     *
+     * @return array The names; empty for a reader who is not narrowed, or narrowed to no group.
+     */
+    public function scope_group_names(): array {
+        if (!$this->scope->groups || $this->scope->instance === null) {
+            return [];
+        }
+
+        $context = context_course::instance((int) $this->scope->instance->courseid);
+        $names = [];
+        foreach (groupfilter::groups($this->scope) as $group) {
+            $names[] = format_string($group->name, true, ['context' => $context, 'escape' => false]);
+        }
+
+        return $names;
+    }
+
+    /**
      * Whether this scope offers the course and category controls at all.
      *
      * @return bool True on the site-wide queue and nowhere else.
@@ -680,6 +840,23 @@ class applications extends \table_sql implements dynamic_table {
             $category = coursefilter::clean_category(optional_param('category', 0, PARAM_INT));
             if ($category !== null) {
                 $filters['category'] = $category;
+            }
+        }
+
+        /* The group filter, with its visible-groups default (V-D2) applied here, where a page
+           without a group parameter is told apart from one carrying `all`; the table never
+           defaults, so an AJAX refresh shows what the control holds. A value this reader was not
+           offered is no filter, as in set_filterset(), and where a default exists the page then
+           says `all` in its url so that no later link brings the default back. */
+        $groupoffered = groupfilter::offered($listing);
+        if ($groupoffered) {
+            $groupdefault = groupfilter::default_value($listing, $groupoffered);
+            $raw = optional_param(groupfilter::NAME, null, PARAM_ALPHANUM);
+            $group = $raw === null ? $groupdefault : groupfilter::clean($groupoffered, (string) $raw);
+            if ($group !== null) {
+                $filters[groupfilter::NAME] = $group;
+            } else if ($groupdefault !== null) {
+                $filters[groupfilter::NAME] = groupfilter::ANY;
             }
         }
 
@@ -818,6 +995,26 @@ class applications extends \table_sql implements dynamic_table {
                  JOIN {course} c ON c.id = e.courseid
                  {$this->identitysql->joins}";
 
+        /* The key group of the application's NEWEST record, the one groupscope::where() and
+           application_group() read, so the column names the group the scope and the group filter
+           judge the row by. Two LEFT joins, the first restricted to the newest record by the NOT
+           EXISTS shape of groupscope::where(), so neither can add or remove a row. Only where the
+           column is shown; the visibility of each group is judged per page in query_db(). */
+        if ($this->groupcolumn) {
+            $fields .= ", kgs.keygroupid AS keygroupid, kgs.keyoutcome AS keygroupoutcome,
+                       kg.name AS keygroupname, kg.courseid AS keygroupcourseid, kg.visibility AS keygroupvisibility";
+            $from .= "
+            LEFT JOIN {enrol_apply_submission} kgs ON kgs.userenrolmentid = ue.id
+                      AND NOT EXISTS (
+                          SELECT 1
+                            FROM {enrol_apply_submission} kgnewer
+                           WHERE kgnewer.userenrolmentid = kgs.userenrolmentid
+                             AND (kgnewer.timecreated > kgs.timecreated
+                                  OR (kgnewer.timecreated = kgs.timecreated AND kgnewer.id > kgs.id))
+                      )
+            LEFT JOIN {groups} kg ON kg.id = kgs.keygroupid";
+        }
+
         /* The operator's own filters, last: everything above is the scope, everything below the
            narrowing, which is the split scope_total() counts across. */
         if ($this->search !== '') {
@@ -833,6 +1030,15 @@ class applications extends \table_sql implements dynamic_table {
         if ($this->status !== null) {
             $wheres[] = 'ue.status = :statusfilter';
             $params['statusfilter'] = $this->status;
+        }
+
+        /* The group filter, AFTER the scope's own group narrowing and never instead of it: the
+           value was cleaned against what this reader is offered, and even a value that got
+           through could only narrow a narrowed reader's listing further. */
+        if ($this->groupfilter !== null) {
+            [$groupwhere, $groupparams] = groupfilter::where($this->scope, $this->groupfilter);
+            $wheres[] = $groupwhere;
+            $params += $groupparams;
         }
 
         /* One predicate per applied field filter, over the expression core's identity mapping
@@ -948,6 +1154,13 @@ class applications extends \table_sql implements dynamic_table {
         // The heading of a column named 'fullname' is filled in by table_sql itself.
         $headers[] = 'fullname';
 
+        /* The key group, right after the applicant so that the card view, which stacks the cells,
+           shows it under the name like the identity line. See set_filterset() for where. */
+        if ($this->groupcolumn) {
+            $columns[] = 'keygroup';
+            $headers[] = get_string('queuegroup', 'enrol_apply');
+        }
+
         /* The identity fields are not columns: they form a second line inside the applicant's
            cell, so a variable, capability-gated field list fits the table. They lose sortability;
            the field filters stand in for it. */
@@ -992,6 +1205,11 @@ class applications extends \table_sql implements dynamic_table {
         $this->no_sorting('snapshot');
         $this->no_sorting('applycomment');
         $this->no_sorting('review');
+        /* Not sortable, as the report's column is not (V-D1): an order by name would place a cell
+           withheld from this reader among the names around it. The group filter stands in. */
+        if ($this->groupcolumn) {
+            $this->no_sorting('keygroup');
+        }
         $this->sortable(true, 'applydate', SORT_ASC);
     }
 
@@ -1199,6 +1417,40 @@ class applications extends \table_sql implements dynamic_table {
     }
 
     /**
+     * The group of the application's key, as far as this reader may be told it.
+     *
+     * The rules of the course report's cell (submission formatter key_group()): a group the
+     * reader may not see by core's visibility rule leaves the cell blank, card label included
+     * (V-D13), since the key badge in the applicant's cell already says a key was used; a key
+     * whose group is gone, or was never mapped by a restore, says so; and an application made
+     * without a key says it has no group.
+     *
+     * An escaping boundary: flexible_table writes the cell unescaped, so the name goes out in the
+     * ESCAPED spelling format_string() gives by default.
+     *
+     * @param stdClass $row Row data carrying keygroupid, keygroupoutcome, keygroupname,
+     *     keygroupcourseid and keygroupvisibility, null where the joins found nothing.
+     * @return string Rendered cell.
+     */
+    public function col_keygroup($row) {
+        $label = $this->card_label(s(get_string('queuegroup', 'enrol_apply')));
+
+        if ((int) ($row->keygroupoutcome ?? 0) === submissionrecord::KEY_NONE && (int) ($row->keygroupid ?? 0) <= 0) {
+            return $label . s(get_string('queuegroupnone', 'enrol_apply'));
+        }
+        if (($row->keygroupcourseid ?? null) === null) {
+            return $label . s(get_string('keygroupgone', 'enrol_apply'));
+        }
+        if (empty($this->visiblegroups[(int) $row->keygroupid])) {
+            return '';
+        }
+
+        return $label . format_string($row->keygroupname, true, [
+            'context' => context_course::instance((int) $row->keygroupcourseid),
+        ]);
+    }
+
+    /**
      * The door to this one application.
      *
      * @param stdClass $row Row data.
@@ -1281,16 +1533,38 @@ class applications extends \table_sql implements dynamic_table {
      * answers keep their structure (key, label, value), which the per-row masking in col_snapshot()
      * matches on, and the listing's count and narrowing queries stay free of a subquery per row.
      * One extra statement per page, whatever its size;
-     * test_the_answers_of_a_whole_page_are_read_in_one_query holds that.
+     * test_the_answers_of_a_whole_page_are_read_in_one_query holds that. The key groups the page
+     * names are judged for visibility the same way, at most one membership query per page.
      *
      * @param int $pagesize Rows per page.
      * @param bool $useinitialsbar Passed through to core.
      * @return void
      */
     public function query_db($pagesize, $useinitialsbar = true) {
+        global $USER;
+
         parent::query_db($pagesize, $useinitialsbar);
 
         $this->snapshots = submissionrecord::read_snapshots(array_column((array) $this->rawdata, 'submissionid'));
+
+        /* Which of the page's key groups this reader may see, judged once for the page: per row,
+           visible_to() would run a membership query for every row of a MEMBERS or OWN group. */
+        $this->visiblegroups = [];
+        if ($this->groupcolumn) {
+            $groups = [];
+            foreach ((array) $this->rawdata as $row) {
+                if (($row->keygroupcourseid ?? null) !== null) {
+                    $groups[(int) $row->keygroupid] = (object) [
+                        'id' => $row->keygroupid,
+                        'courseid' => $row->keygroupcourseid,
+                        'visibility' => $row->keygroupvisibility,
+                    ];
+                }
+            }
+            if ($groups) {
+                $this->visiblegroups = array_fill_keys(groupvisibility::visible_ids($groups, (int) $USER->id), true);
+            }
+        }
     }
 
     /**

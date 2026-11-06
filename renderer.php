@@ -138,6 +138,13 @@ class enrol_apply_renderer extends plugin_renderer_base {
             $keyonlynotice = get_string('keyonlyqueue', 'enrol_apply');
         }
 
+        /* Which groups a narrowed reader's queue is limited to (V-D14), so that a queue narrowed to
+           two groups does not read as a short one. Every narrowed reader, decider or viewer, and
+           nobody else; the names are their own groups, which they already know. The plain spelling:
+           a lang-string parameter in a double stash. */
+        $scopenames = $table->scope_group_names();
+        $scopeline = $scopenames ? get_string('queuescopegroups', 'enrol_apply', implode(', ', $scopenames)) : '';
+
         /* Which rows of how many are on screen, which table_sql's paging bar never says.
            Read after capture_table(), which is what populates totalrows and currpage.
 
@@ -161,10 +168,16 @@ class enrol_apply_renderer extends plugin_renderer_base {
             'sesskey' => sesskey(),
             'capacityhtml' => $this->render_from_template(
                 'enrol_apply/queue_capacity',
-                /* The scope's total, never the filtered one: the deferral tile beside it is read
-                   from \enrol_apply\local\capacity and ignores the filters, so a filtered count
-                   would render impossible pairs such as "4 awaiting decision" beside "12 deferred". */
-                $this->queue_capacity_context($instance, $table->scope_total())
+                /* The scope's totals, never the filtered ones, and both over the same scope: the
+                   waiting count and the deferred count beside it ignore the filters, so a filtered
+                   count would render impossible pairs such as "4 awaiting decision" beside "12
+                   deferred", and a narrowed decider's deferred count is their groups' (V-D3). */
+                $this->queue_capacity_context(
+                    $instance,
+                    $table->scope_total(),
+                    $instance !== null ? $table->scope_deferred() : null,
+                    $table->scope_groups() !== null
+                )
             ),
             'filtershtml' => $this->render_from_template(
                 'enrol_apply/queue_filters',
@@ -180,6 +193,8 @@ class enrol_apply_renderer extends plugin_renderer_base {
             'closednotice' => $closednotice,
             'haskeyonlynotice' => $keyonlynotice !== '',
             'keyonlynotice' => $keyonlynotice,
+            'hasscopeline' => $scopeline !== '',
+            'scopeline' => $scopeline,
         ];
 
         /* Unconditional, like core's own core_table/dynamic init, which
@@ -281,6 +296,66 @@ class enrol_apply_renderer extends plugin_renderer_base {
                 $statuses[$status] ?? (string) $status,
                 $without('status')
             );
+        }
+
+        /* The group filter, on the instance queue alone and with the values this reader is offered
+           (\enrol_apply\local\groupfilter). Where the page defaults it to the reader's own groups
+           (V-D2), "Any group" is the explicit `all` and removing the chip writes it, so the default
+           cannot come back on the next link; elsewhere "Any group" is the empty value, as for the
+           status. Above the threshold (RP-D18) core's autocomplete searches the same select. */
+        $groupchoices = $table->get_group_choices();
+        $groupapplied = $table->get_group_filter();
+        $groupdefault = $table->get_group_default();
+        $groupany = $groupdefault !== null ? \enrol_apply\local\groupfilter::ANY : '';
+        $groupoptions = [];
+        $groupsearch = false;
+        if ($groupchoices) {
+            $groupoptions[] = [
+                'value' => $groupany,
+                'label' => get_string('queuegroupany', 'enrol_apply'),
+                'selected' => $groupapplied === null,
+            ];
+            foreach ($groupchoices as $value => $label) {
+                $groupoptions[] = [
+                    'value' => (string) $value,
+                    'label' => $label,
+                    'selected' => $groupapplied === (string) $value,
+                ];
+            }
+
+            if ($groupapplied !== null) {
+                $removeparams = $params;
+                if ($groupdefault !== null) {
+                    $removeparams[\enrol_apply\local\groupfilter::NAME] = \enrol_apply\local\groupfilter::ANY;
+                } else {
+                    unset($removeparams[\enrol_apply\local\groupfilter::NAME]);
+                }
+                $chips[] = $this->queue_filter_chip(
+                    \enrol_apply\local\groupfilter::NAME,
+                    get_string('queuegroup', 'enrol_apply'),
+                    $groupchoices[$groupapplied] ?? $groupapplied,
+                    (new moodle_url('/enrol/apply/manage.php', $removeparams))->out(false)
+                );
+            }
+
+            // Counted over the groups alone, after the reader's narrowing; mine and none are extras.
+            $groupcount = count(array_diff_key($groupchoices, array_flip([
+                \enrol_apply\local\groupfilter::MINE,
+                \enrol_apply\local\groupfilter::NONE,
+            ])));
+            $groupsearch = $groupcount > \enrol_apply\local\groupfilter::THRESHOLD;
+            if ($groupsearch) {
+                $this->page->requires->js_call_amd('core/form-autocomplete', 'enhance', [
+                    '#enrol_apply_filter_group',
+                    false,
+                    false,
+                    get_string('search'),
+                    false,
+                    true,
+                    '',
+                    true,
+                ]);
+            }
         }
 
         /* One control and, where applied, one chip per field this reader is offered: the
@@ -424,6 +499,11 @@ class enrol_apply_renderer extends plugin_renderer_base {
             'groupheading' => get_string('queuefiltersgroup', 'enrol_apply'),
             'hasfields' => (bool) $fields,
             'fields' => $fields,
+            'hasgroupfilter' => (bool) $groupoptions,
+            'grouplabel' => get_string('queuegroup', 'enrol_apply'),
+            'groupoptions' => $groupoptions,
+            'groupemptyvalue' => $groupany,
+            'groupsearch' => $groupsearch,
             'hascoursefilters' => $hascourse,
             'categorylabel' => get_string('queuefiltercategory', 'enrol_apply'),
             'categoryoptions' => $categoryoptions,
@@ -435,7 +515,14 @@ class enrol_apply_renderer extends plugin_renderer_base {
             'tovalue' => $appliedto ?? '',
             'haschips' => (bool) $chips,
             'chips' => $chips,
-            'clearurl' => $base($scoped ? ['id'] : []),
+            /* Every filter off, the group default included: where the page would apply it again,
+               the url says `all` instead. */
+            'clearurl' => $groupdefault !== null
+                ? (new moodle_url('/enrol/apply/manage.php', [
+                    'id' => $params['id'],
+                    \enrol_apply\local\groupfilter::NAME => \enrol_apply\local\groupfilter::ANY,
+                ]))->out(false)
+                : $base($scoped ? ['id'] : []),
             'clearlabel' => get_string('queueclearfilters', 'enrol_apply'),
             'counttext' => get_string('queuefiltercount', 'enrol_apply', (object) [
                 'matched' => (int) $table->totalrows,
@@ -486,11 +573,18 @@ class enrol_apply_renderer extends plugin_renderer_base {
      * The counts come from \enrol_apply\local\capacity, as on every other surface, so the queue
      * header and the review page cannot report different numbers.
      *
+     * A decider narrowed by separate groups (V-D3) is told the deferred count of their own groups,
+     * like the waiting count, and keeps the method's capacity numbers, labelled as the method's:
+     * those are what tell a moderator they are about to overbook.
+     *
      * @param stdClass|null $instance Enrol instance the queue is scoped to, null when it spans them.
      * @param int $awaiting How many applications the queue is listing.
+     * @param int|null $deferred How many of them are deferred, over the same scope; null for the
+     *     method's own figure, capacity::deferred().
+     * @param bool $narrowed Whether the queue is narrowed to the reader's groups.
      * @return array Context for the enrol_apply/queue_capacity template.
      */
-    protected function queue_capacity_context($instance, int $awaiting): array {
+    protected function queue_capacity_context($instance, int $awaiting, ?int $deferred = null, bool $narrowed = false): array {
         $capacity = \enrol_apply\local\capacity::class;
 
         $context = [
@@ -509,9 +603,12 @@ class enrol_apply_renderer extends plugin_renderer_base {
         }
 
         $context['tiles'][] = [
-            'value' => (string) $capacity::deferred($instance),
+            'value' => (string) ($deferred ?? $capacity::deferred($instance)),
             'label' => get_string('queuedeferred', 'enrol_apply'),
+            'note' => $narrowed ? get_string('queueinyourgroups', 'enrol_apply') : '',
         ];
+        // The method's numbers below are not the queue's when the queue is narrowed; say whose.
+        $methodnote = $narrowed ? get_string('queueonthismethod', 'enrol_apply') : '';
 
         $places = $capacity::places($instance);
         if ($places > 0) {
@@ -522,6 +619,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
                     'total' => $places,
                 ]),
                 'label' => get_string('queueplacestaken', 'enrol_apply'),
+                'note' => $methodnote,
                 'percent' => self::meter_percent($taken, $places),
                 'warn' => false,
             ];
@@ -537,6 +635,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
                     'total' => $limit,
                 ]),
                 'label' => get_string('reviewapplicants', 'enrol_apply'),
+                'note' => $methodnote,
                 'percent' => self::meter_percent($held, $limit),
                 /* Warned at four fifths, so it is seen before the limit stops the method
                    accepting applications. */

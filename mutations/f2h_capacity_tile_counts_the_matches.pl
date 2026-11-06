@@ -1,2 +1,4 @@
 # F2H: count the filtered rows in the capacity header's first tile instead of the whole scope.
-s#\$this->queue_capacity_context\(\$instance, \$table->scope_total\(\)\)#\$this->queue_capacity_context(\$instance, (int) \$table->totalrows)#s;
+#
+# Repointed in V2, when the call grew the deferred count and the narrowing as further arguments.
+s#(\$this->queue_capacity_context\(\n\s*\$instance,\n\s*)\$table->scope_total\(\),#${1}(int) \$table->totalrows,#s;

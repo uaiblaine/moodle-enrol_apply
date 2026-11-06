@@ -40,6 +40,12 @@
     * data-region="filterfield" on every per-field and date control, each carrying data-filter
       (the token the query string and the filterset both use) and data-filterlabel (the wording a
       chip repeats), so the module needs no second copy of either.
+    * data-emptyvalue on the group select, the value that means "every group": `all` where the page
+      would otherwise apply its default, so the module writes it into the url instead of dropping
+      the parameter; absent elsewhere, where the empty value means the same.
+    * data-reloadonremove on the group select when core/form-autocomplete enhances it: its
+      displayed selection is the enhancement's, which a value set from script does not redraw, so
+      removing that filter follows the chip's link instead.
     * data-region="chiprow" on the chip row, which the module empties and refills.
     * data-region="clearall" on the clear-all link, hidden with d-none when nothing is applied
       rather than omitted, so the module has a node to unhide instead of one to invent.
@@ -56,6 +62,13 @@
     * searchhelp string - rendered help icon for the search field
     * statuslabel string - visible label for the status select
     * statusoptions array - value, label and selected for each option
+    * hasgroupfilter bool - whether the group filter is offered: the instance queue, to a reader
+      who may pick at least one group; see enrol_apply\local\groupfilter
+    * grouplabel string - its label
+    * groupoptions array - value, label and selected for each option, "Any group" first; the
+      labels are the plain spelling
+    * groupemptyvalue string - the value of "Any group": `all` where a default applies, else empty
+    * groupsearch bool - whether core/form-autocomplete enhances the select (above 8 groups)
     * hascoursefilters bool - true on the site-wide queue, which is the only scope offering the
       course and category controls; see enrol_apply\local\coursefilter
     * categorylabel, courselabel string - the two labels
@@ -81,6 +94,16 @@
         "searchvalue": "goncalves",
         "searchhelp": "",
         "statuslabel": "Application status",
+        "hasgroupfilter": true,
+        "grouplabel": "Group",
+        "groupoptions": [
+            {"value": "all", "label": "Any group", "selected": false},
+            {"value": "mine", "label": "My groups", "selected": false},
+            {"value": "none", "label": "Without a group", "selected": false},
+            {"value": "12", "label": "Turma A", "selected": true}
+        ],
+        "groupemptyvalue": "all",
+        "groupsearch": false,
         "hascoursefilters": true,
         "categorylabel": "Course category",
         "categoryoptions": [
@@ -157,6 +180,19 @@
                 {{/statusoptions}}
             </select>
         </div>
+        {{#hasgroupfilter}}
+            <div class="enrol_apply-filterfield">
+                <label class="form-label" for="enrol_apply_filter_group">{{grouplabel}}</label>
+                <select class="form-select" id="enrol_apply_filter_group" name="group"
+                        data-region="filterfield" data-filter="group" data-filterlabel="{{grouplabel}}"
+                        {{#groupemptyvalue}}data-emptyvalue="{{groupemptyvalue}}"{{/groupemptyvalue}}
+                        {{#groupsearch}}data-reloadonremove="1"{{/groupsearch}}>
+                    {{#groupoptions}}
+                        <option value="{{value}}" {{#selected}}selected{{/selected}}>{{label}}</option>
+                    {{/groupoptions}}
+                </select>
+            </div>
+        {{/hasgroupfilter}}
         {{#hascoursefilters}}
             <div class="enrol_apply-filterfield">
                 <label class="form-label" for="enrol_apply_category">{{categorylabel}}</label>
