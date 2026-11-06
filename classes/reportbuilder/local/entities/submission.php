@@ -274,6 +274,23 @@ class submission extends base {
             ->set_is_sortable(false)
             ->add_callback([formatter::class, 'key_group']);
 
+        /* The groups the last approval left the applicant in (joinedgroups, V-D10), named only to
+           a reader who may see each one (formatter::joined_groups()). Not sortable and no filter
+           in the entity, for the key group's reason: sorting by names would place withheld cells
+           among them. The course report adds a group filter of its own, offered per reader; the
+           custom-report source gets none (V-D11). Read from one aggregating subquery, so a page
+           of rows costs no query per cell. */
+        $columns[] = (new column(
+            'joinedgroups',
+            new lang_string('joinedgroups', 'enrol_apply'),
+            $this->get_entity_name()
+        ))
+            ->add_joins($this->get_joins())
+            ->set_type(column::TYPE_TEXT)
+            ->add_field(submissionhelper::joined_groups_sql($alias), 'joinedgroups')
+            ->set_is_sortable(false)
+            ->add_callback([formatter::class, 'joined_groups']);
+
         /* The frozen snapshot, as one long-text column that is neither sortable nor filterable.
            Built from the record's rows in SQL (submission::aggregate_sql()), because a display
            callback sees one row and could only read them with a query per row.

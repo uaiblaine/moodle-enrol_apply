@@ -422,6 +422,60 @@ final class backup_test extends \advanced_testcase {
     }
 
     /**
+     * The groups an approval joined survive a restore, translated to the new course's ids, and
+     * an id that did not travel is dropped, as for the decided groups.
+     *
+     * Changes that must make it fail: the column left out of the backup element, or copied
+     * through without the mapping.
+     *
+     * @return void
+     */
+    public function test_the_joined_groups_survive_a_restore(): void {
+        global $DB;
+
+        [$course, , $applicant] = $this->create_course_with_application();
+        $joined = $this->getDataGenerator()->create_group(['courseid' => $course->id, 'name' => 'Joined on approval']);
+        $elsewhere = $this->getDataGenerator()->create_course();
+        $foreign = $this->getDataGenerator()->create_group(['courseid' => $elsewhere->id, 'name' => 'Another course']);
+        $DB->set_field_select(
+            'enrol_apply_submission',
+            'joinedgroups',
+            $foreign->id . ',' . $joined->id,
+            'courseid = :courseid AND userid = :userid',
+            ['courseid' => $course->id, 'userid' => $applicant->id]
+        );
+
+        $newcourseid = $this->backup_and_restore($course, true);
+        $restored = $this->restored_record($newcourseid);
+
+        $newgroupid = (int) $DB->get_field(
+            'groups',
+            'id',
+            ['courseid' => $newcourseid, 'name' => 'Joined on approval'],
+            MUST_EXIST
+        );
+        $this->assertNotEquals((int) $joined->id, $newgroupid, 'the premise: the group really was re-created');
+        $this->assertSame((string) $newgroupid, (string) $restored->joinedgroups);
+    }
+
+    /**
+     * Groups joined that are not known stay not known through a restore, rather than becoming
+     * "joined none": the archive cannot tell the two apart, and "none" would be the false one.
+     *
+     * @return void
+     */
+    public function test_joined_groups_not_known_stay_not_known(): void {
+        [$course] = $this->create_course_with_application();
+
+        $newcourseid = $this->backup_and_restore($course, true);
+        $restored = $this->restored_record($newcourseid);
+
+        // The control: the record itself travelled.
+        $this->assertSame('I would like to join this course', $restored->comment);
+        $this->assertNull($restored->joinedgroups);
+    }
+
+    /**
      * Stamp a group key route on the only applicant's record.
      *
      * @param \stdClass $course Course the application belongs to.

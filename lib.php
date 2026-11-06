@@ -879,6 +879,16 @@ class enrol_apply_plugin extends enrol_plugin {
         // Group membership follows approval, never the bare application.
         $groupids = $this->add_instance_groups($instance, $userid, (int) $userenrolmentid);
 
+        /* What the applicant is a member of through this method now, not what this pass's
+           groups_add_member() calls accepted: the two passes then write one answer, a group core
+           refused (a user who is not enrolled) is never recorded, and a membership the applicant
+           held before by another route, which this approval did not join, is not claimed. The
+           report's narrowing, group filter and column read it (V-D10). */
+        \enrol_apply\local\submission::record_joined_groups(
+            (int) $userenrolmentid,
+            \enrol_apply\local\submission::stamped_groups((int) $instance->courseid, (int) $instance->id, (int) $userid)
+        );
+
         /* Stamped here rather than in confirm_enrolment() so that an approval made from
            core's "Edit enrolment" screen records its decider too: that route reaches this
            method through the before_user_enrolment_updated hook and never touches

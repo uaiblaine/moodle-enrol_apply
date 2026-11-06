@@ -613,6 +613,68 @@ class submission {
     }
 
     /**
+     * SQL giving the groups a record's joinedgroups names, as one string, for a report column.
+     *
+     * A correlated scalar subquery over {groups}, aggregated with sql_group_concat() and the same
+     * two control characters as {@see aggregate_sql()}, so a display callback gets every group of
+     * the row without a query of its own. Each group is "id, course, visibility, name", the name
+     * last so that a separator inside it cannot shift the other parts. A group is found by
+     * ",<id>," inside ",<ids>,", the separators {@see groupscope::record_where()} matches with, so
+     * group 1 never matches a list naming 11. sql_position() rather than sql_like(): the needle is
+     * built from the group's own id, with no parameter, which keeps the column usable in a custom
+     * report's GROUP BY, and sql_like() reports a pattern that is not a placeholder as an
+     * injection. Only groups of the record's own course, and only those that still exist: a
+     * deleted group leaves its id behind and nothing to name, so it drops out here.
+     *
+     * @param string $alias Alias of {enrol_apply_submission} in the outer query.
+     * @return string A scalar subquery, NULL when the record names no group that exists.
+     */
+    public static function joined_groups_sql(string $alias): string {
+        global $DB;
+
+        $unit = "'" . self::AGGREGATE_UNIT . "'";
+        $entry = $DB->sql_concat('eajg.id', $unit, 'eajg.courseid', $unit, 'eajg.visibility', $unit, 'eajg.name');
+        $list = $DB->sql_concat("','", "COALESCE({$alias}.joinedgroups, '')", "','");
+        $needle = $DB->sql_concat("','", 'eajg.id', "','");
+
+        return "(SELECT " . $DB->sql_group_concat($entry, self::AGGREGATE_RECORD, 'eajg.id') . "
+                   FROM {groups} eajg
+                  WHERE eajg.courseid = {$alias}.courseid
+                    AND " . $DB->sql_position($needle, $list) . " > 0)";
+    }
+
+    /**
+     * Split what joined_groups_sql() produced back into group records.
+     *
+     * A part whose id, course or visibility is not a number is dropped, which is what a row cut by
+     * MySQL's group_concat_max_len, or a name carrying the record separator, looks like.
+     *
+     * @param string|null $aggregate The aggregated string, null when the record names no group.
+     * @return array The {groups} records, each carrying id, courseid, visibility and name, keyed by id.
+     */
+    public static function parse_joined_groups(?string $aggregate): array {
+        if ($aggregate === null || $aggregate === '') {
+            return [];
+        }
+
+        $groups = [];
+        foreach (explode(self::AGGREGATE_RECORD, $aggregate) as $row) {
+            $parts = explode(self::AGGREGATE_UNIT, $row, 4);
+            if (count($parts) !== 4 || !ctype_digit($parts[0]) || !ctype_digit($parts[1]) || !ctype_digit($parts[2])) {
+                continue;
+            }
+            $groups[(int) $parts[0]] = (object) [
+                'id' => (int) $parts[0],
+                'courseid' => (int) $parts[1],
+                'visibility' => (int) $parts[2],
+                'name' => $parts[3],
+            ];
+        }
+
+        return $groups;
+    }
+
+    /**
      * Split what aggregate_sql() produced back into entries.
      *
      * A row that does not split into exactly three parts is dropped, which is what a row cut by
@@ -821,6 +883,85 @@ class submission {
         $ids = array_values(array_filter(array_map('intval', explode(',', (string) $row->decidedgroups))));
 
         return $ids ?: null;
+    }
+
+    /**
+     * Record the groups an approval left the applicant in (V-D10).
+     *
+     * Apart from decidedgroups, which is the decider's choice and empty whenever the method's
+     * defaults applied (a decider without enrol/apply:choosedecision, every approval left on the
+     * defaults, core's "Edit enrolment"): this is what the course report's narrowing, its group
+     * filter and its "Groups joined" column read, so an approval the defaults put into a group is
+     * found by that group's moderator.
+     *
+     * Written on the NEWEST record of the user enrolment only, the one chosen_groups() reads:
+     * every record is a row of the report, judged by its own columns, and an older record's
+     * approval is not this one. An empty list is written as the empty string ("joined none") and
+     * replaces an earlier value, so an application re-queued and approved again says what the
+     * second approval left, never the first's list.
+     *
+     * The caller passes {@see stamped_groups()}, what the applicant IS a member of through the
+     * method once the approval has run, rather than what one call of groups_add_member() returned:
+     * complete_approval() runs twice for a queue approval, and both passes read the same
+     * memberships and converge on one answer.
+     *
+     * @param int $userenrolmentid User enrolment the approval is for.
+     * @param array $groupids Group ids, as stamped_groups() returns them.
+     * @return void
+     */
+    public static function record_joined_groups(int $userenrolmentid, array $groupids): void {
+        global $DB;
+
+        $rows = $DB->get_records(
+            'enrol_apply_submission',
+            ['userenrolmentid' => $userenrolmentid],
+            'timecreated DESC, id DESC',
+            'id',
+            0,
+            1
+        );
+        $row = reset($rows);
+        if (!$row) {
+            return;
+        }
+
+        $clean = array_values(array_unique(array_filter(array_map('intval', $groupids))));
+        sort($clean);
+        $DB->set_field('enrol_apply_submission', 'joinedgroups', implode(',', $clean), ['id' => $row->id]);
+    }
+
+    /**
+     * The groups of a course a user is a member of through one enrolment method.
+     *
+     * The memberships enrol_apply_plugin::add_instance_groups() writes are stamped with component
+     * enrol_apply and the method's id as itemid, which is what core's unenrol_user() removes them
+     * by; a user holds one enrolment per method, so these are exactly the memberships that
+     * enrolment gave. A membership the user already held by another route is not among them:
+     * groups_add_member() leaves an existing row alone, so that approval did not join it.
+     * Only groups that still belong to the course count.
+     *
+     * The upgrade's backfill (enrol_apply_backfill_joined_groups() in db/upgradelib.php) reads the
+     * same evidence in one query; keep the two in step.
+     *
+     * @param int $courseid Course the method belongs to.
+     * @param int $enrolid The enrolment method.
+     * @param int $userid The member.
+     * @return array Group ids, ascending.
+     */
+    public static function stamped_groups(int $courseid, int $enrolid, int $userid): array {
+        global $DB;
+
+        // DISTINCT: {groups_members} carries no unique key on (groupid, userid).
+        $ids = $DB->get_fieldset_sql(
+            "SELECT DISTINCT g.id
+               FROM {groups_members} gm
+               JOIN {groups} g ON g.id = gm.groupid AND g.courseid = :courseid
+              WHERE gm.userid = :userid AND gm.component = :component AND gm.itemid = :enrolid
+           ORDER BY g.id",
+            ['courseid' => $courseid, 'userid' => $userid, 'component' => 'enrol_apply', 'enrolid' => $enrolid]
+        );
+
+        return array_map('intval', $ids);
     }
 
     /**

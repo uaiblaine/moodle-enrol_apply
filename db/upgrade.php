@@ -494,5 +494,26 @@ function xmldb_enrol_apply_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026102400, 'enrol', 'apply');
     }
 
+    if ($oldversion < 2026110505) {
+        // Required by this step, as in the 2026083104 step above.
+        require_once($CFG->dirroot . '/enrol/apply/db/upgradelib.php');
+
+        /* The groups an approval actually joined (docs/design/group-screens.html, V-D10), apart
+           from decidedgroups, which holds the decider's choice and is empty whenever the method's
+           defaults applied. Nullable: NULL is "not known", which is what a record decided before
+           this step says unless the backfill below finds the memberships. */
+        $table = new xmldb_table('enrol_apply_submission');
+        $field = new xmldb_field('joinedgroups', XMLDB_TYPE_TEXT, null, null, null, null, null, 'decidedgroups');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        /* Idempotent per record, which the DDL guard above is not: see
+           enrol_apply_backfill_joined_groups(). */
+        enrol_apply_backfill_joined_groups();
+
+        upgrade_plugin_savepoint(true, 2026110505, 'enrol', 'apply');
+    }
+
     return true;
 }

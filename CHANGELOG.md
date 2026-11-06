@@ -8,6 +8,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **The groups an approval joined (V5 of `docs/design/group-screens.html`, V-D10, V-D11, V-D13).**
+  A new nullable column, `enrol_apply_submission.joinedgroups`, records the groups the applicant is
+  a member of through the method once an approval has run (the memberships stamped `enrol_apply`
+  with the method's id), on the application's newest record, on every route: the queue and the
+  review page, the participants page's bulk operation, core's *Edit enrolment* and a key
+  admission. Both passes of `complete_approval()` read the memberships, so they write one answer;
+  a group core refused to join, and a membership the applicant already held by another route, are
+  not recorded; a second approval replaces the first one's list. `decidedgroups` stays the
+  decider's choice. The upgrade adds the column and fills it for approved records whose
+  enrolment still exists, from their stamped memberships in the record's course
+  (`enrol_apply_backfill_joined_groups()`, idempotent per record); the rest stay NULL, not known.
+  The course report's separate-groups narrowing and the review page's earlier applications
+  (`groupscope::record_where()`) now read the key group or the groups joined, falling back to the
+  decided groups only where the groups joined are not known, so an approval left on the method's
+  defaults reaches the moderator of the group it joined. The course report gains a **Groups
+  joined** column (names gated by the group visibility rule for the reader, hidden and deleted
+  groups left out, natural order, not sortable) and a **Group (enrolment key or joined)** filter
+  (`\enrol_apply\reportbuilder\local\filters\group`): the groups the reader may see, their own
+  only when narrowed, a value outside them ignored. The custom-report source gets the column and no
+  group filter. The column travels in backups (group ids mapped, unmapped ones dropped, an empty
+  value restored as not known) and in the privacy export, and is declared in the metadata. New
+  strings `joinedgroups`, `reportgroup`, `privacy:metadata:enrol_apply_submission:joinedgroups`.
+  Version 2026110505.
 - **The queue with groups (V2 of `docs/design/group-screens.html`).** A *Group* column names each
   application's key group (the newest record's, as the separate-groups scope reads it) on the
   instance and site-wide queues, not on the mentee queue, and not sortable: blank for a group the

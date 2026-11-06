@@ -44,7 +44,7 @@ use context_system;
  * decision and of the review page), can_view_application(), the queue's listing, its
  * previous/next walk, the group choosers and their allowlist, the managers' notice, the
  * participants page icon, the hook that guards core's edit-enrolment screen and the course
- * report's base condition ({@see record_where()}).
+ * report's base condition and its group filter ({@see record_where()}).
  *
  * Nothing is memoised. PHPUnit resets the database sequences between tests, so a static keyed
  * on course and user ids would hand one test another test's answer, and the answer depends on
@@ -291,17 +291,26 @@ final class groupscope {
     /**
      * The SQL form of the report's narrowing (S8), over the durable record aliased $alias.
      *
-     * A record belongs to a group by its key while it waits and, once decided, also by the groups
-     * the decider chose: true when keygroupid is one of the groups, or when the comma-separated
-     * decidedgroups names one ({@see submission::record_decided_groups()} writes it). Unlike
-     * {@see where()} every record of the course is a row of the report, so each is judged by its
-     * own columns rather than by the newest record of its user enrolment.
+     * A record belongs to a group by its key while it waits and, once approved, also by the groups
+     * the approval left the applicant in: true when keygroupid is one of the groups, or when the
+     * comma-separated joinedgroups names one ({@see submission::record_joined_groups()} writes it).
+     * That is what joined, defaults included, where decidedgroups is only the decider's choice and
+     * is empty for every approval left on the method's defaults, which a moderator of the group the
+     * defaults joined would otherwise never see (V-D10). Unlike {@see where()} every record of the
+     * course is a row of the report, so each is judged by its own columns rather than by the newest
+     * record of its user enrolment.
+     *
+     * Where joinedgroups is NULL - not known: a record approved before the column whose
+     * memberships the upgrade could not find, or one never approved - decidedgroups is read
+     * instead, which is what this narrowing read before the column existed, so a record a reader
+     * was shown then is not withdrawn by the upgrade. It never applies once an approval has written
+     * joinedgroups, the empty string ("joined none") included: COALESCE picks the first non-NULL.
      *
      * The list is matched as ",<ids>," against "%,<id>,%", one LIKE per group, so that group 1
      * never matches a list naming 11 or 21. Portable on purpose: sql_concat() and sql_like() rather
      * than FIND_IN_SET or a family branch, and each LIKE takes a placeholder of its own, because a
-     * named placeholder may appear once per statement. COALESCE keeps a NULL list (a record older
-     * than the column) from making the whole disjunct unknown on one family and false on another.
+     * named placeholder may appear once per statement. The final '' keeps a record with neither
+     * list from making the whole disjunct unknown on one family and false on another.
      *
      * get_in_or_equal() throws on an empty array, so a reader in no group gets a never-true
      * predicate rather than a query, and the report shows core's notice (S4).
@@ -321,10 +330,10 @@ final class groupscope {
 
         [$insql, $params] = $DB->get_in_or_equal($groupids, SQL_PARAMS_NAMED, $prefix . 'key');
 
-        $list = $DB->sql_concat("','", "COALESCE({$alias}.decidedgroups, '')", "','");
+        $list = $DB->sql_concat("','", "COALESCE({$alias}.joinedgroups, {$alias}.decidedgroups, '')", "','");
         $likes = [];
         foreach ($groupids as $index => $groupid) {
-            $name = $prefix . 'decided' . $index;
+            $name = $prefix . 'joined' . $index;
             $likes[] = $DB->sql_like($list, ':' . $name);
             $params[$name] = '%,' . $groupid . ',%';
         }

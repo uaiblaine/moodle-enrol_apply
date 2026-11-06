@@ -1073,6 +1073,7 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
             'submission:outcome',
             'submission:admissionroute',
             'submission:keygroup',
+            'submission:joinedgroups',
             'submission:snapshot',
             'submission:s_city',
             'applydecider:fullname',

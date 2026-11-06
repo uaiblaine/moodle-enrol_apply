@@ -195,6 +195,13 @@ class restore_enrol_apply_plugin extends restore_enrol_plugin {
             /* Without the ??, mapped_groups() would get NULL for its string parameter, and the
                TypeError would abort the restore. */
             'decidedgroups' => $this->mapped_groups($data->decidedgroups ?? ''),
+            /* Mapped like the decided groups, an id that did not travel dropped. An empty or absent
+               element is NULL, "not known": the archive cannot tell a NULL from an approval that
+               joined none (both parse back as null), and claiming "none" for every record decided
+               before the column would be the false one of the two. */
+            'joinedgroups' => trim((string) ($data->joinedgroups ?? '')) === ''
+                ? null
+                : $this->mapped_groups((string) $data->joinedgroups),
             'decidedrole' => (int) $this->get_mappingid('role', $data->decidedrole ?? 0),
             'timecreated' => (int) $data->timecreated,
             'timedecided' => (int) $data->timedecided,
