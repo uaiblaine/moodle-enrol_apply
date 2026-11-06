@@ -133,8 +133,10 @@ class bulk_decision_form extends moodleform {
      * format_string() is idempotent on the half that is already escaped.
      *
      * Nothing here is a security boundary. confirm_enrolment() allowlists the posted group ids
-     * against the course's own groups and the posted role against get_assignable_roles(), per
-     * instance, because a forged post never passes through this form at all.
+     * against the same list this form offers (every group of the course, or a decider's own under
+     * separate groups, {@see \enrol_apply\local\groupscope::choosable_groups()}) and the posted
+     * role against get_assignable_roles(), per instance, because a forged post never passes
+     * through this form at all.
      *
      * @param int $courseid Course the selected applications belong to.
      * @return void
@@ -144,7 +146,7 @@ class bulk_decision_form extends moodleform {
         $coursecontext = context_course::instance($courseid);
 
         $groups = [];
-        foreach (groups_get_all_groups($courseid) as $group) {
+        foreach (\enrol_apply\local\groupscope::choosable_groups($courseid) as $group) {
             $groups[$group->id] = format_string($group->name, true, ['context' => $coursecontext]);
         }
         if ($groups) {

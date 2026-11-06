@@ -1,0 +1,2 @@
+# SC17: the refusal is thrown after complete_approval() has joined the groups and stamped the record.
+s#(// Before anything is written, so a refusal leaves the application exactly as it was\.\n)(\s*if \(self::refuses_approval\(\$hook->enrolinstance, \$userenrolment\)\) \{\n\s*throw new \\moodle_exception\('groupscopeapprovalrefused', 'enrol_apply'\);\n\s*\}\n)\n(\s*\$plugin = enrol_get_plugin\('apply'\);\n\s*\$plugin->complete_approval\(\$hook->enrolinstance, \(int\) \$userenrolment->userid, \(int\) \$userenrolment->id\);\n)#${1}${3}${2}#;

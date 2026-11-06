@@ -79,6 +79,42 @@ class enrol_apply_plugin extends enrol_plugin {
     }
 
     /**
+     * Whether this user enrolment may be unenrolled, refusing a pending application outside the
+     * acting user's groups.
+     *
+     * Core asks here before it offers or runs the unenrol screen (enrol/unenroluser.php), the
+     * participants page's icon and its AJAX route. Unenrolling a pending application is a
+     * refusal by another name, so a decider narrowed by separate groups
+     * ({@see \enrol_apply\local\groupscope}) gets false for an application that is not theirs
+     * to decide, keyless ones included. Only holders of enrol/apply:unenrol in the course are
+     * judged, as the edit-enrolment hook judges only holders of enrol/apply:manage
+     * ({@see \enrol_apply\hook_callbacks}): core requires that capability on every one of
+     * these routes, and the others (a cron run, a script, the applicant) are not deciders. An
+     * active enrolment is core's business: the participants page already limits a
+     * separate-groups teacher to the members of their groups. Every other answer is the
+     * parent's.
+     *
+     * @param stdClass $instance Course enrol instance.
+     * @param stdClass $ue The user enrolment row.
+     * @return bool False for a narrowed actor and a pending application outside their groups.
+     */
+    public function allow_unenrol_user(stdClass $instance, stdClass $ue) {
+        global $USER;
+
+        $allowed = parent::allow_unenrol_user($instance, $ue);
+        if (!$allowed || !\enrol_apply\local\queue::is_awaiting_decision($ue)) {
+            return $allowed;
+        }
+
+        $context = context_course::instance((int) $instance->courseid, IGNORE_MISSING);
+        if (!$context || !has_capability('enrol/apply:unenrol', $context)) {
+            return $allowed;
+        }
+
+        return \enrol_apply\local\groupscope::allows((int) $instance->courseid, (int) $ue->id, (int) $USER->id);
+    }
+
+    /**
      * Roles assigned by this plugin may be tweaked afterwards.
      *
      * @return bool Always false.
@@ -381,7 +417,14 @@ class enrol_apply_plugin extends enrol_plugin {
         $admitted = $keyoutcome === \enrol_apply\local\submission::KEY_ADMITTED;
         $forreview = $keyoutcome === \enrol_apply\local\submission::KEY_FOR_REVIEW ? $keygroupid : 0;
         if (!$admitted || \enrol_apply\local\groupkey::announces_admissions($instance)) {
-            $this->send_application_notification($instance, $userid, $data, $admitted ? $keygroupid : 0, $forreview);
+            $this->send_application_notification(
+                $instance,
+                $userid,
+                $data,
+                $admitted ? $keygroupid : 0,
+                $forreview,
+                max(0, $keygroupid)
+            );
         }
 
         return ['userenrolmentid' => (int) $userenrolment->id, 'submissionid' => $submissionid];
@@ -1075,6 +1118,11 @@ class enrol_apply_plugin extends enrol_plugin {
      * can_manage_application(): a mentor holding it only in an applicant's user context is
      * offered nothing here, and manage.php serves that scope.
      *
+     * A decider narrowed by separate groups ({@see \enrol_apply\local\groupscope}) is offered
+     * the menu like any course decider. The menu is one for the whole selection, so the group
+     * check is the per-row one the decision methods inherit from can_manage_application(): a
+     * selected application outside the decider's groups is skipped and reported as left alone.
+     *
      * @param course_enrolment_manager $manager Manager core built for the course.
      * @return array Operation identifier => enrol_bulk_enrolment_operation.
      */
@@ -1157,7 +1205,10 @@ class enrol_apply_plugin extends enrol_plugin {
      *
      * The capability is read in the course, as get_bulk_operations() reads it, so a mentor
      * holding it only in an applicant's user context is offered neither; manage.php with no
-     * parameter serves them. test_a_mentor_is_offered_no_icon_in_the_course holds this.
+     * parameter serves them. test_a_mentor_is_offered_no_icon_in_the_course holds this. In a
+     * course in separate groups mode it is narrowed as can_manage_application() narrows the
+     * course grant: a decider without moodle/site:accessallgroups gets the icon only on an
+     * application of one of their groups.
      *
      * The plugin's site-wide enabled state is deliberately not checked: core renders its own
      * Edit and Unenrol icons on a disabled plugin's rows and manage.php still works, unlike
@@ -1168,10 +1219,12 @@ class enrol_apply_plugin extends enrol_plugin {
      * @return array Core's own actions, plus this plugin's where it applies.
      */
     public function get_user_enrolment_actions(course_enrolment_manager $manager, $ue) {
+        global $USER;
+
         /* The standard Edit and Unenrol icons come first and stay as core builds them. The
            parent method gates each on its capability, the first also on allow_manage() and the
-           second on allow_unenrol_user(), which simply asks allow_unenrol(), and this plugin
-           always answers that with true. */
+           second on allow_unenrol_user(), which this plugin answers true except for a pending
+           application outside a narrowed decider's groups. */
         $actions = parent::get_user_enrolment_actions($manager, $ue);
 
         if (!\enrol_apply\local\queue::is_awaiting_decision($ue)) {
@@ -1179,6 +1232,15 @@ class enrol_apply_plugin extends enrol_plugin {
         }
 
         if (!has_capability('enrol/apply:manageapplications', $manager->get_context())) {
+            return $actions;
+        }
+
+        /* The course grant narrowed by separate groups, as can_manage_application() narrows it,
+           so the icon is offered only on an application its page would let this operator
+           decide. The bulk menu carries no such check: it is one menu for the whole selection,
+           and the decision methods it delegates to skip a row outside the operator's groups
+           through can_manage_application(). */
+        if (!\enrol_apply\local\groupscope::allows((int) $manager->get_course()->id, (int) $ue->id, (int) $USER->id)) {
             return $actions;
         }
 
@@ -1383,21 +1445,34 @@ class enrol_apply_plugin extends enrol_plugin {
      *
      * Three delegation levels are accepted, in order of decreasing scope:
      *  - the capability held at system level, which covers every course;
-     *  - the capability held in the course the application belongs to;
+     *  - the capability held in the course the application belongs to, narrowed in a course
+     *    in separate groups mode to the applications of the decider's own groups
+     *    ({@see \enrol_apply\local\groupscope}): only this level comes from the course, so
+     *    only this level is narrowed;
      *  - the capability held in the applicant's own user context, which lets a
      *    mentor decide for the users assigned to them regardless of the course.
      *
+     * The user enrolment is what names the application: one applicant can hold an application
+     * on each of two apply instances of a course, and each carries its own key group.
+     *
      * @param int $courseid Course the application belongs to.
      * @param int $userid Applicant user id.
+     * @param int $userenrolmentid User enrolment the application belongs to.
      * @return bool True when the current user may confirm, defer or cancel the application.
      */
-    public function can_manage_application($courseid, $userid) {
+    public function can_manage_application($courseid, $userid, int $userenrolmentid) {
+        global $USER;
+
         if (has_capability('enrol/apply:manageapplications', context_system::instance())) {
             return true;
         }
 
         $coursecontext = context_course::instance($courseid, IGNORE_MISSING);
-        if ($coursecontext && has_capability('enrol/apply:manageapplications', $coursecontext)) {
+        if (
+            $coursecontext
+            && has_capability('enrol/apply:manageapplications', $coursecontext)
+            && \enrol_apply\local\groupscope::allows((int) $courseid, $userenrolmentid, (int) $USER->id)
+        ) {
             return true;
         }
 
@@ -1436,7 +1511,7 @@ class enrol_apply_plugin extends enrol_plugin {
 
             $instance = $DB->get_record('enrol', ['id' => $userenrolment->enrolid, 'enrol' => 'apply'], '*', MUST_EXIST);
 
-            if (!$this->can_manage_application($instance->courseid, $userenrolment->userid)) {
+            if (!$this->can_manage_application($instance->courseid, $userenrolment->userid, (int) $userenrolment->id)) {
                 continue;
             }
 
@@ -1474,14 +1549,16 @@ class enrol_apply_plugin extends enrol_plugin {
             }
 
             /* Allowlisted per instance rather than once for the batch, because the posted batch
-               can span courses. groups_get_all_groups() is keyed by group id, hence
+               can span courses. The list is the one the choosers offer: every group of the
+               course, or a decider narrowed by separate groups their own alone (S6), so a forged
+               post naming another group joins nothing. It is keyed by group id, hence
                array_key_exists.
 
                The gate is array_key_exists and not !empty, so an empty posted list reaches the
                writer and clears an earlier choice; a caller with nothing to say about the groups
                omits the key. */
             if ($decision !== null && array_key_exists('groups', $decision)) {
-                $allowed = groups_get_all_groups($instance->courseid);
+                $allowed = \enrol_apply\local\groupscope::choosable_groups((int) $instance->courseid);
                 $chosen = array_values(array_filter(
                     array_map('intval', (array) $decision['groups']),
                     static function (int $groupid) use ($allowed): bool {
@@ -1565,7 +1642,7 @@ class enrol_apply_plugin extends enrol_plugin {
 
             $instance = $DB->get_record('enrol', ['id' => $userenrolment->enrolid, 'enrol' => 'apply'], '*', MUST_EXIST);
 
-            if (!$this->can_manage_application($instance->courseid, $userenrolment->userid)) {
+            if (!$this->can_manage_application($instance->courseid, $userenrolment->userid, (int) $userenrolment->id)) {
                 continue;
             }
 
@@ -1647,7 +1724,7 @@ class enrol_apply_plugin extends enrol_plugin {
 
             $instance = $DB->get_record('enrol', ['id' => $userenrolment->enrolid, 'enrol' => 'apply'], '*', MUST_EXIST);
 
-            if (!$this->can_manage_application($instance->courseid, $userenrolment->userid)) {
+            if (!$this->can_manage_application($instance->courseid, $userenrolment->userid, (int) $userenrolment->id)) {
                 continue;
             }
 
@@ -1864,11 +1941,18 @@ class enrol_apply_plugin extends enrol_plugin {
      * key sent for review is an ordinary new application that also names its key group, to the
      * same recipients and by the same rule as an admission.
      *
+     * A course recipient narrowed by separate groups ({@see \enrol_apply\local\groupscope}) is
+     * told only of an application whose key group is one of theirs, judged for the recipient and
+     * never for the applicant whose request sends the notice: the queue would show them nothing
+     * else. The mentors and the site-wide recipients are not narrowed, as their delegation does
+     * not come from the course.
+     *
      * @param stdClass $instance Course enrol instance.
      * @param int $userid Applicant user id.
      * @param stdClass $data Submitted application form data.
      * @param int $admittedgroupid The key group of an admission by key; 0 for an application waiting for review.
      * @param int $reviewgroupid The key group of an application a valid key sent for review; 0 otherwise.
+     * @param int $keygroupid The group recorded on the application, whatever the key did; 0 for none.
      * @return void
      */
     protected function send_application_notification(
@@ -1876,7 +1960,8 @@ class enrol_apply_plugin extends enrol_plugin {
         $userid,
         $data,
         int $admittedgroupid = 0,
-        int $reviewgroupid = 0
+        int $reviewgroupid = 0,
+        int $keygroupid = 0
     ) {
         global $CFG, $DB;
 
@@ -1902,9 +1987,9 @@ class enrol_apply_plugin extends enrol_plugin {
            An application for review carries the same object without a url and is still mailed
            as an application: only 'admitted' turns it into news. */
         $admission = null;
-        $keygroupid = $admittedgroupid > 0 ? $admittedgroupid : $reviewgroupid;
-        if ($keygroupid > 0) {
-            $group = $DB->get_record('groups', ['id' => $keygroupid], 'id, courseid, name, visibility');
+        $namedgroupid = $admittedgroupid > 0 ? $admittedgroupid : $reviewgroupid;
+        if ($namedgroupid > 0) {
+            $group = $DB->get_record('groups', ['id' => $namedgroupid], 'id, courseid, name, visibility');
             $admission = (object) [
                 'admitted' => $admittedgroupid > 0,
                 // Plain: the template double-stashes it, like the course name.
@@ -1925,6 +2010,11 @@ class enrol_apply_plugin extends enrol_plugin {
         if ($recipients) {
             $manageurl = $admission->url ?? new moodle_url('/enrol/apply/manage.php', ['id' => $instance->id]);
             foreach ($recipients as $user) {
+                /* Not marked as notified: a recipient narrowed out here who also mentors the
+                   applicant is still told below, by the level that is theirs. */
+                if (!\enrol_apply\local\groupscope::allows_group((int) $instance->courseid, $keygroupid, (int) $user->id)) {
+                    continue;
+                }
                 $content = $this->application_notification_body(
                     $user,
                     $manageurl,

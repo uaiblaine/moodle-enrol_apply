@@ -125,6 +125,21 @@ class enrol_apply_edit_form extends moodleform {
             $mform->addElement('static', 'keyreviewwarnings', '', $reviewwarnings);
             $mform->hideIf('keyreviewwarnings', 'customchar1', 'neq', \enrol_apply\local\groupkey::MODE_REVIEW);
         }
+        /* In a separate-groups course an application without a key belongs to no group, so it
+           reaches only those who can access all groups (S3). Shown while the selected mode lets
+           such an application in; the two key-only modes never make one. */
+        if ($this->separate_groups((int) $instance->courseid)) {
+            $mform->addElement('static', 'groupscopekeyless', '', $OUTPUT->render_from_template('enrol_apply/groupkey_warnings', [
+                'warnings' => [['danger' => false, 'message' => get_string('groupscopekeyless', 'enrol_apply')]],
+            ]));
+            $mform->hideIf(
+                'groupscopekeyless',
+                'customchar1',
+                'in',
+                \enrol_apply\local\groupkey::MODE_REQUIRED . '|' . \enrol_apply\local\groupkey::MODE_REVIEW
+            );
+        }
+
         // Self enrolment reads the same keys (G1), so they would enrol there without the questions.
         if ($this->self_enrolment_takes_group_keys((int) $instance->courseid)) {
             $mform->addElement('static', 'groupkeyselfkeys', '', $OUTPUT->render_from_template('enrol_apply/groupkey_warnings', [
@@ -490,6 +505,20 @@ class enrol_apply_edit_form extends moodleform {
         }
 
         return $warnings ? $OUTPUT->render_from_template('enrol_apply/groupkey_warnings', ['warnings' => $warnings]) : '';
+    }
+
+    /**
+     * Whether the course is in separate groups mode, the one mode that narrows deciders.
+     *
+     * @param int $courseid Course id.
+     * @return bool True for SEPARATEGROUPS.
+     */
+    protected function separate_groups(int $courseid): bool {
+        global $DB;
+
+        $course = $DB->get_record('course', ['id' => $courseid], 'id, groupmode', IGNORE_MISSING);
+
+        return $course && (int) groups_get_course_groupmode($course) === SEPARATEGROUPS;
     }
 
     /**

@@ -8,6 +8,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Deciders scoped by separate groups (S1 of `docs/design/group-review-scope.md`).** In a course
+  in *Separate groups* mode, a decider without `moodle/site:accessallgroups` (the stock non-editing
+  teacher given `enrol/apply:manageapplications`) decides only the applications whose enrolment key
+  named one of their groups (`enrol_apply_submission.keygroupid`); an application without a key
+  reaches only those who can access all groups. One rule, `\enrol_apply\local\groupscope`, is
+  read by `can_manage_application()` (which now takes the user enrolment id, so every decision, the
+  bulk operations and the review page skip or refuse a row outside the decider's groups), the
+  queue's listing and count, its previous/next walk, the group choosers of the queue, the review
+  page and the participants page's bulk form and the allowlist in `confirm_enrolment()` (own
+  groups only), the managers' new-application notice (judged per recipient) and the participants
+  page's decision icon. A decider in no group sees core's "you need to be part of a group" notice
+  instead of the queue. Core's **Edit enrolment** route is refused to such a decider for an
+  application outside their groups: the `before_user_enrolment_updated` callback throws before the
+  enrolment is written (new string `groupscopeapprovalrefused`). Core's **Unenrol** route (the screen, the
+  participants icon, its AJAX call) is closed the same way: `allow_unenrol_user()` answers false for
+  a pending application outside the group of a decider holding `enrol/apply:unenrol`. The instance form of a
+  separate-groups course warns, while the mode lets keyless applications in, that they reach only
+  those who can access all groups (`groupscopekeyless`). *Visible groups* and *No groups* narrow
+  nobody; a holder of the capability at system level and a mentor are never narrowed. No version
+  bump: nothing in `db/` changed.
 - **Group key only, reviewed (R1 of `docs/design/group-review-scope.md`).** A fourth answer to
   **What a group enrolment key does**: *Key only, reviewed*. The key is mandatory, as in *Key
   only*: no key, a wrong key, a locked field, no place left or a full group is refused with the

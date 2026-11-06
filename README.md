@@ -283,6 +283,26 @@ as the city or country, needs `moodle/course:viewhiddenuserfields`; and a custom
 whose visibility is private or nobody needs `moodle/user:viewalldetails`. To let approvers read a
 department they asked for, add it to *Show user identity*.
 
+### Separate groups
+
+In a course whose group mode is **Separate groups**, a decider who lacks
+`moodle/site:accessallgroups` there (the stock *Non-editing teacher*, given
+`enrol/apply:manageapplications`) decides only the applications of their own groups. This is
+core's rule for the participants page, so nothing extra is configured. An application belongs to
+the group whose enrolment key the applicant typed. One made without a key belongs to no group and
+reaches only those who can access all groups. The instance form says so in such a course while
+the mode lets keyless applications in: *Nothing* and *A valid key enrols at once*. Such a decider
+sees only their groups' applications in the queue and in the previous/next links. The review page
+of any other application is refused to them, and they cannot approve, defer or cancel one. Only
+their own groups are offered to choose from. They are told of a new application only when it is
+in one of their groups. They get the decision icon on the participants page only for those. A
+decider in no group gets core's "you need to be part of a group" notice instead of a queue. Core's
+**Edit enrolment** screen (`enrol/apply:manage`) is refused to them too when it would approve an
+application outside their groups, and so is core's **Unenrol** route for a pending application outside
+their groups. *Visible groups* and *No groups* narrow nobody. A holder of the
+capability at system level and a mentor (the capability in the applicant's own user context) are
+never narrowed, as their delegation does not come from the course.
+
 ## The applications report
 
 Course → Participants → Enrolment methods carries a report icon beside each Course enrol

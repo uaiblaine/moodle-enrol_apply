@@ -178,14 +178,24 @@ final class queue {
      * The same answer decides where a decision sends the operator back to, so that redirect never
      * lands on a queue that would refuse them.
      *
+     * In a course in separate groups mode the instance queue of a decider without
+     * moodle/site:accessallgroups holds only the applications of their own groups
+     * ({@see groupscope}), as the listing does, and the walk is narrowed with it. That branch is
+     * taken only when the application under review is one of those, which keeps the anchor
+     * inside the set; otherwise the operator reached it through another level (a mentor who also
+     * teaches the course) and walks that level's queue.
+     *
      * @param stdClass $application Application as application() returns it.
      * @param stdClass $instance Enrol instance the application under review belongs to.
      * @return stdClass Scope carrying: enrolid, the instance to restrict to or 0 for none;
-     *                  mentees, applicant ids to restrict to or null for none; hasqueue, whether
+     *                  mentees, applicant ids to restrict to or null for none; groups, the group
+     *                  ids the instance queue is narrowed to or null for none; hasqueue, whether
      *                  url names a queue this operator may actually open; and url, that queue's
      *                  own page, or the home page for an operator who may open none.
      */
     public static function scope(stdClass $application, stdClass $instance): stdClass {
+        global $USER;
+
         $course = get_course($instance->courseid);
 
         /* All four arguments matter. The capability keeps out a mentor who is merely enrolled
@@ -194,10 +204,15 @@ final class queue {
            calls before require_capability(): with the default false, is_enrolled() counts a
            suspended or expired enrolment as access, and such a teacher would be sent to a queue
            that bounces them to the course enrolment page. */
-        if (can_access_course($course, null, 'enrol/apply:manageapplications', true)) {
+        if (
+            can_access_course($course, null, 'enrol/apply:manageapplications', true)
+            && groupscope::allows((int) $instance->courseid, (int) $application->id, (int) $USER->id)
+        ) {
             return (object) [
                 'enrolid' => (int) $instance->id,
                 'mentees' => null,
+                // The listing's own narrowing; null for a decider who sees every group.
+                'groups' => groupscope::narrowed_to((int) $instance->courseid, (int) $USER->id),
                 'hasqueue' => true,
                 'url' => new moodle_url('/enrol/apply/manage.php', ['id' => (int) $instance->id]),
             ];
@@ -207,6 +222,7 @@ final class queue {
             return (object) [
                 'enrolid' => 0,
                 'mentees' => null,
+                'groups' => null,
                 'hasqueue' => true,
                 'url' => new moodle_url('/enrol/apply/manage.php'),
             ];
@@ -220,6 +236,7 @@ final class queue {
             return (object) [
                 'enrolid' => 0,
                 'mentees' => $mentees,
+                'groups' => null,
                 'hasqueue' => true,
                 'url' => new moodle_url('/enrol/apply/manage.php'),
             ];
@@ -238,6 +255,7 @@ final class queue {
         return (object) [
             'enrolid' => 0,
             'mentees' => [],
+            'groups' => null,
             'hasqueue' => false,
             'url' => destination::home_page_url(),
         ];
@@ -274,12 +292,18 @@ final class queue {
      * Folding it in here would duplicate a check one caller has already made and the other
      * cannot skip.
      *
+     * The group narrowing of separate groups ({@see groupscope}) is derived here too, from the
+     * course and $USER, and never from the request: `groups` is the operator's own group ids on
+     * an instance queue that narrows them, null wherever nothing is narrowed (the site-wide and
+     * mentee queues, whose delegation does not come from a course).
+     *
      * @param int $enrolid Enrol instance to list, 0 for every instance this operator may decide in.
-     * @return stdClass Object carrying enrolid, instance, context, mentees, identitycontext,
-     *                  allowed and url. See the property comments in the body for each.
+     * @return stdClass Object carrying enrolid, instance, context, mentees, groups,
+     *                  identitycontext, allowed and url. See the property comments in the body
+     *                  for each.
      */
     public static function listing_scope(int $enrolid): stdClass {
-        global $DB;
+        global $DB, $USER;
 
         if ($enrolid) {
             $instance = $DB->get_record('enrol', ['id' => $enrolid, 'enrol' => 'apply']);
@@ -303,6 +327,9 @@ final class queue {
                 'context' => $context,
                 // One instance, so no mentee restriction and one course to judge identity in.
                 'mentees' => null,
+                /* Narrowed to the operator's own groups in a separate-groups course they may not
+                   see all of; an empty array lists nothing and the page says why (S4). */
+                'groups' => groupscope::narrowed_to((int) $instance->courseid, (int) $USER->id),
                 'identitycontext' => $context,
                 'allowed' => has_capability('enrol/apply:manageapplications', $context),
                 'url' => new moodle_url('/enrol/apply/manage.php', ['id' => (int) $instance->id]),
@@ -318,6 +345,7 @@ final class queue {
                 'instance' => null,
                 'context' => $system,
                 'mentees' => null,
+                'groups' => null,
                 // The system context is the right question for a site-wide capability holder.
                 'identitycontext' => $system,
                 'allowed' => true,
@@ -340,6 +368,7 @@ final class queue {
             'context' => $system,
             'mentees' => $mentees,
             'identitycontext' => null,
+            'groups' => null,
             'allowed' => (bool) $mentees,
             'url' => $url,
         ];
@@ -359,6 +388,7 @@ final class queue {
             'instance' => null,
             'context' => context_system::instance(),
             'mentees' => [],
+            'groups' => null,
             'identitycontext' => null,
             'allowed' => false,
             'url' => new moodle_url('/enrol/apply/manage.php'),
@@ -552,6 +582,14 @@ final class queue {
             $params += $inparams;
         }
 
+        /* The listing's group narrowing, from the same helper, so the walk never reaches an
+           application the operator may not decide. An empty list is the never-true predicate. */
+        if ($scope->groups !== null) {
+            [$groupwhere, $groupparams] = groupscope::where($scope->groups);
+            $wheres[] = $groupwhere;
+            $params += $groupparams;
+        }
+
         /* Strictly past the current row in the pinned order, which needs the timestamp twice -
            once against the timestamp and once inside the tie-break. Two NAMES bound to the one
            value, never one name used twice: fix_sql_params() counts occurrences with
@@ -603,22 +641,35 @@ final class queue {
      * @return context The context that granted access, for the page to sit in.
      */
     public static function require_review_access(stdClass $application): context {
+        global $USER;
+
         $usercontext = context_user::instance($application->userid, MUST_EXIST);
 
         /* can_manage_application() itself, not a second copy of its three levels, which would
            agree only until somebody added an override, a prohibit or a fourth level to one. */
-        if (!enrol_get_plugin('apply')->can_manage_application((int) $application->courseid, (int) $application->userid)) {
+        $allowed = enrol_get_plugin('apply')->can_manage_application(
+            (int) $application->courseid,
+            (int) $application->userid,
+            (int) $application->id
+        );
+        if (!$allowed) {
             // Reported exactly as every other refusal in this plugin is.
             require_capability('enrol/apply:manageapplications', $usercontext);
         }
 
         /* Which context the PAGE then sits in is a rendering question, not an authorisation
-           one - the decision has already been taken. The course context where the operator
-           holds the capability there, because that is where the group and role choosers, the
-           filters and the file serving belong; the applicant's own context otherwise, which
-           is the only one a mentor has. */
+           one - the decision has already been taken. The course context where the course
+           grant is what admits the operator, because that is where the group and role
+           choosers, the filters and the file serving belong; the applicant's own context
+           otherwise, which is the only one a mentor has. A decider narrowed by separate groups
+           who reached an application outside their groups through the mentor level is a mentor
+           here. */
         $coursecontext = context_course::instance($application->courseid, IGNORE_MISSING);
-        if ($coursecontext && has_capability('enrol/apply:manageapplications', $coursecontext)) {
+        if (
+            $coursecontext
+            && has_capability('enrol/apply:manageapplications', $coursecontext)
+            && groupscope::allows((int) $application->courseid, (int) $application->id, (int) $USER->id)
+        ) {
             return $coursecontext;
         }
 

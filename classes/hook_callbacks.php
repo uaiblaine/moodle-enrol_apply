@@ -47,8 +47,16 @@ class hook_callbacks {
      * and custom data while the task is queued, so a queue approval, which reaches
      * complete_approval() both directly and through this hook, still sends one message.
      *
+     * It is also the one place that can refuse that route to a decider narrowed by separate
+     * groups (docs/design/group-review-scope.md, S7). The hook is not stoppable, but
+     * enrol_plugin::update_user_enrol() dispatches it before its own write, and neither the hook
+     * manager nor enrol/editenrolment.php catches what a callback throws, so the exception
+     * aborts the update with the row unchanged. Both of core's routes here, the page and
+     * core_enrol_submit_user_enrolment_form, need enrol/apply:manage; see refuses_approval().
+     *
      * @param before_user_enrolment_updated $hook The dispatched hook.
      * @return void
+     * @throws \moodle_exception When the acting user may not approve an application outside their groups.
      */
     public static function before_user_enrolment_updated(before_user_enrolment_updated $hook): void {
         global $DB;
@@ -71,8 +79,55 @@ class hook_callbacks {
             return;
         }
 
+        // Before anything is written, so a refusal leaves the application exactly as it was.
+        if (self::refuses_approval($hook->enrolinstance, $userenrolment)) {
+            throw new \moodle_exception('groupscopeapprovalrefused', 'enrol_apply');
+        }
+
         $plugin = enrol_get_plugin('apply');
         $plugin->complete_approval($hook->enrolinstance, (int) $userenrolment->userid, (int) $userenrolment->id);
+    }
+
+    /**
+     * Whether the acting user is a decider narrowed by separate groups approving an application
+     * outside their groups.
+     *
+     * The acting user is $USER, and only somebody holding enrol/apply:manage in the course is
+     * judged at all, because that is what both of core's routes into this hook require. The
+     * other callers are not deciders and must pass: a group key's admission runs as the
+     * applicant, who is in no group yet, and a CLI script or a task runs as the administrator,
+     * who may access all groups, or as nobody. The plugin's own confirm_enrolment() reaches this
+     * hook too, after can_manage_application() has applied the same group check to the row, so
+     * it passes.
+     *
+     * The group check is {@see \enrol_apply\local\groupscope::allows()}, the one the course
+     * grant is narrowed by. A narrowed user who also mentors the applicant may still approve,
+     * because the mentor level is not narrowed: can_manage_application() decides that, exactly
+     * as it does on the queue.
+     *
+     * @param \stdClass $instance The apply instance.
+     * @param \stdClass $userenrolment The user enrolment about to become active.
+     * @return bool True when the update must be refused.
+     */
+    private static function refuses_approval(\stdClass $instance, \stdClass $userenrolment): bool {
+        global $USER;
+
+        /* No separate check for a run with no user: nobody holds the capability then, so the
+           line below already lets it through. */
+        $context = \context_course::instance((int) $instance->courseid, IGNORE_MISSING);
+        if (!$context || !has_capability('enrol/apply:manage', $context)) {
+            return false;
+        }
+
+        if (local\groupscope::allows((int) $instance->courseid, (int) $userenrolment->id, (int) $USER->id)) {
+            return false;
+        }
+
+        return !enrol_get_plugin('apply')->can_manage_application(
+            (int) $instance->courseid,
+            (int) $userenrolment->userid,
+            (int) $userenrolment->id
+        );
     }
 
     /**
