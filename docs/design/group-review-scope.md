@@ -1,7 +1,10 @@
 # Group keys that send for review, and a queue scoped by separate groups
 
 Status: **decided 2026-11-05.** The owner accepted every recommendation (R1-R8, S1-S9, T1-T4)
-as written. Stage 1 (R1, R2) in progress. Builds on [`group-enrolment-key.md`](group-enrolment-key.md) (G1-G15, K0-K8) and
+as written. **Delivered 2026-11-06**, every stage merged: R1 #122, R2 #123, S1 #124, S2 #125, T0 #126,
+V1 #127, V2 #128, V5 #129, V3 #130, V4 #131 (V6, the decision history read from the log, stays optional).
+Open for the owner: a narrowed moderator approving with the pre-ticked key route drops the method's
+groups outside their scope (see #130), and the README screenshots need recapturing. Builds on [`group-enrolment-key.md`](group-enrolment-key.md) (G1-G15, K0-K8) and
 [`group-key-only.md`](group-key-only.md) (D1-D8, Q0-Q4), whose decisions stand unless this file
 says otherwise. Every `file:line` is at `origin/master` a9a49f6.
 
