@@ -474,6 +474,7 @@ $string['reviewgroupoption'] = '{$a->name} · {$a->members} de {$a->seats} vagas
 $string['reviewgroupoptionfull'] = '{$a->name} · sem vagas, {$a->members} de {$a->seats}';
 $string['reviewhistory'] = 'Solicitações anteriores a este curso';
 $string['reviewkeep'] = 'Manter a solicitação';
+$string['reviewkeptgroups'] = 'O método também dá grupos que você não pode escolher, e a aprovação os mantém: {$a}.';
 $string['reviewmethoddeferred'] = '{$a} adiadas';
 $string['reviewmethoddeferredyours'] = '{$a} adiadas nos seus grupos';
 $string['reviewmethodheld'] = '{$a->taken} de {$a->total} solicitações em andamento';

@@ -24,7 +24,9 @@
  *
  * An empty choice is not "no group": confirm_enrolment() records it and the approval falls back to
  * the method's defaults, which the server lists in the card, so with nothing ticked the sentence
- * names those, the ones this reader may not see counted.
+ * names those, the ones this reader may not see counted. A ticked choice joins the method's groups
+ * this reader may not choose as well (confirm_enrolment() keeps them), so the sentence adds those,
+ * listed in the card the same way.
  *
  * Above the threshold it also narrows the search's suggestions by grouping, through the
  * data-enabled="disabled" attribute core's autocomplete documents for leaving an option out; the
@@ -46,6 +48,7 @@ const SELECTORS = {
     NOTKEY: '[data-region="outcome-notkey"]',
     DEFAULTROLE: '[data-region="outcome-defaultrole"]',
     DEFAULTNAMES: '[data-region="outcome-defaults"] li',
+    KEPTNAMES: '[data-region="outcome-kept"] li',
     CARDS: 'input[type="checkbox"][name="groups[]"]',
     ADDED: 'select[name="groups[]"]',
     ROLE: 'select[name="roleid"]',
@@ -148,8 +151,10 @@ const update = async(form, outcome) => {
         const keyGroup = parseInt(outcome.dataset.keygroup, 10) || 0;
 
         // With nothing ticked the approval falls back to the method's defaults; see the module's docblock.
-        let names = picked.map((group) => group.name);
-        let hidden = 0;
+        // A choice keeps the method's groups this reader may not choose; see the module's docblock.
+        let names = picked.map((group) => group.name)
+            .concat(Array.from(outcome.querySelectorAll(SELECTORS.KEPTNAMES)).map((node) => node.textContent.trim()));
+        let hidden = parseInt(outcome.dataset.kepthidden, 10) || 0;
         let joined = picked;
         if (!picked.length) {
             names = Array.from(outcome.querySelectorAll(SELECTORS.DEFAULTNAMES)).map((node) => node.textContent.trim());

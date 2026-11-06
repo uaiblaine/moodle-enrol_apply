@@ -452,6 +452,55 @@ final class group_scope_test extends \advanced_testcase {
     }
 
     /**
+     * A moderator's choice keeps the method's groups outside their scope, and only theirs is a
+     * choice: the key route here is their group plus the method's listed group, which they may not
+     * choose.
+     *
+     * The controls: the editing teacher, who may choose every group, ticking the same one group
+     * gets that group alone; and the moderator ticking nothing gets the method's defaults whole,
+     * their own group included.
+     *
+     * Changes that must make it fail: the kept groups dropped, or added to an empty choice too.
+     *
+     * @return void
+     */
+    public function test_a_moderators_choice_keeps_the_methods_groups_outside_their_scope(): void {
+        global $DB;
+
+        $DB->insert_record('enrol_apply_groups', (object) ['enrolid' => $this->instance->id, 'groupid' => $this->theirs->id]);
+        $member = static fn(\stdClass $group, \stdClass $user): bool => $DB->record_exists(
+            'groups_members',
+            ['groupid' => $group->id, 'userid' => $user->id, 'component' => 'enrol_apply']
+        );
+        $approve = function (int $ueid, array $groups): void {
+            $sink = $this->redirectMessages();
+            $this->assertSame(1, $this->plugin->confirm_enrolment([$ueid], '', ['groups' => $groups]));
+            $sink->close();
+        };
+
+        [$ticked, $applicant] = $this->apply_for($this->mine);
+        [$empty, $other] = $this->apply_for($this->mine);
+        [$control, $third] = $this->apply_for($this->mine);
+
+        $this->setUser($this->moderator);
+        $approve($ticked, [(int) $this->mine->id]);
+        $this->assertEqualsCanonicalizing([(int) $this->mine->id, (int) $this->theirs->id], submission::chosen_groups($ticked));
+        $this->assertTrue($member($this->mine, $applicant));
+        $this->assertTrue($member($this->theirs, $applicant), 'the method\'s group outside the moderator\'s is kept');
+
+        $approve($empty, []);
+        $this->assertNull(submission::chosen_groups($empty), 'an empty choice still reads as the defaults');
+        $this->assertTrue($member($this->mine, $other));
+        $this->assertTrue($member($this->theirs, $other));
+
+        $this->setUser($this->editing);
+        $approve($control, [(int) $this->mine->id]);
+        $this->assertSame([(int) $this->mine->id], submission::chosen_groups($control));
+        $this->assertTrue($member($this->mine, $third));
+        $this->assertFalse($member($this->theirs, $third), 'a decider who may choose it leaves it out');
+    }
+
+    /**
      * The managers' notice reaches the moderator for an application of their group only, judged
      * for them; the editing teacher is told of all three.
      *

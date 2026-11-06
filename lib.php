@@ -1676,7 +1676,14 @@ class enrol_apply_plugin extends enrol_plugin {
 
                The gate is array_key_exists and not !empty, so an empty posted list reaches the
                writer and clears an earlier choice; a caller with nothing to say about the groups
-               omits the key. */
+               omits the key.
+
+               A choice covers only the groups this decider may choose, so the method's own groups
+               outside them (default_approval_groups(): the key route, or the instance's list) are
+               kept on top of it: a moderator narrowed by separate groups, or a reader who cannot see
+               a hidden group, neither adds nor removes a group they cannot choose. For a decider who
+               may choose every group the set is empty. An empty choice is left empty, so it still
+               reads as "the method's defaults", whole. */
             if ($rowdecision !== null && array_key_exists('groups', $rowdecision)) {
                 $allowed = \enrol_apply\local\groupscope::choosable_groups((int) $instance->courseid);
                 $chosen = array_values(array_filter(
@@ -1685,6 +1692,10 @@ class enrol_apply_plugin extends enrol_plugin {
                         return array_key_exists($groupid, $allowed);
                     }
                 ));
+                if ($chosen) {
+                    $kept = array_diff($this->default_approval_groups($instance, (int) $userenrolment->id), array_keys($allowed));
+                    $chosen = array_values(array_unique(array_merge($chosen, array_map('intval', $kept))));
+                }
                 \enrol_apply\local\submission::record_decided_groups((int) $userenrolment->id, $chosen);
             }
 
