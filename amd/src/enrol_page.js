@@ -40,7 +40,8 @@ const SELECTORS = {
  *
  * Step 1 asks for the key alone and moves on with Continue, a button inside the form; the footer's
  * submit would send the key as a real submission and arrive at step 2 with every required field in
- * error, so it is hidden there. Step 2 shows it again as "Enrol me". Hidden rather than disabled:
+ * error, so it is hidden there. Step 2 shows it again, labelled with what the form says it does
+ * (data-enrol-apply-submit, chosen by the server from the mode). Hidden rather than disabled:
  * ModalForm re-enables every action button after each re-render. A form with no step (any other
  * mode) is left alone.
  *
@@ -61,7 +62,9 @@ const followKeyStep = (event) => {
         return;
     }
     save.hidden = false;
-    modal.setButtonText('save', getString('enrolme', 'core_enrol'));
+    if (form.dataset.enrolApplySubmit) {
+        modal.setButtonText('save', form.dataset.enrolApplySubmit);
+    }
 };
 
 /**
@@ -70,9 +73,8 @@ const followKeyStep = (event) => {
  * @param {Number} instanceId Enrol instance the card belongs to.
  */
 export function init(instanceId) {
-    // The modal's title comes from the button's data-title; these are the footer's labels.
+    // The modal's title comes from the button's data-title; this is the footer's first label.
     prefetchStrings('enrol_apply', ['submitapplication']);
-    prefetchStrings('core_enrol', ['enrolme']);
 
     const button = document.querySelector(SELECTORS.button(instanceId));
     if (!button) {

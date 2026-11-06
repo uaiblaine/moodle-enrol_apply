@@ -158,7 +158,10 @@ class application_form extends dynamic_form {
            on both steps, because the post that carries a resolving key builds step 2. */
         $step = $this->key_step();
         if ($step !== 0) {
-            $mform->updateAttributes(['data-enrol-apply-step' => $step]);
+            $mform->updateAttributes([
+                'data-enrol-apply-step' => $step,
+                'data-enrol-apply-submit' => $this->step_two_label($instance),
+            ]);
             $mform->registerNoSubmitButton('keycontinue');
         }
         if ($step === 1) {
@@ -213,12 +216,25 @@ class application_form extends dynamic_form {
                asks for them explicitly. */
             $this->add_action_buttons(
                 true,
-                // Where a valid key sends the application for review, step 2 enrols nobody.
-                $step === 2 && groupkey::admits($instance)
-                    ? get_string('enrolme', 'core_enrol')
-                    : get_string('submitapplication', 'enrol_apply')
+                $step === 2 ? $this->step_two_label($instance) : get_string('submitapplication', 'enrol_apply')
             );
         }
+    }
+
+    /**
+     * What the submit button of step 2 says: the decision the mode makes, so the modal's script
+     * never has to know the modes.
+     *
+     * Where a valid key admits, step 2 enrols the applicant; where it sends the application for
+     * review (groupkey::admits() is false), it enrols nobody.
+     *
+     * @param \stdClass $instance Course enrol instance.
+     * @return string The button label.
+     */
+    protected function step_two_label(\stdClass $instance): string {
+        return groupkey::admits($instance)
+            ? get_string('enrolme', 'core_enrol')
+            : get_string('submitapplication', 'enrol_apply');
     }
 
     /**
@@ -335,6 +351,17 @@ class application_form extends dynamic_form {
     }
 
     /**
+     * The sentence for a missing key, worded for what the key does on this instance.
+     *
+     * @return string The message.
+     */
+    protected function key_required_message(): string {
+        return \enrol_apply\local\groupkey::admits($this->get_instance())
+            ? get_string('groupkeyrequired', 'enrol_apply')
+            : get_string('groupkeyrequired_review', 'enrol_apply');
+    }
+
+    /**
      * What is wrong with a submitted key, or null when nothing is.
      *
      * @param string $posted The trimmed key.
@@ -344,7 +371,7 @@ class application_form extends dynamic_form {
      */
     protected function key_error(string $posted, bool $mandatory): ?string {
         if ($posted === '') {
-            return $mandatory ? get_string('groupkeyrequired', 'enrol_apply') : null;
+            return $mandatory ? $this->key_required_message() : null;
         }
         if ($this->has_unusual_edge($posted)) {
             return get_string('groupkeyunusualspace', 'enrol_apply');
@@ -478,7 +505,7 @@ class application_form extends dynamic_form {
         ]);
         $mform->setType('groupkey', PARAM_RAW);
         if ($required) {
-            $mform->addRule('groupkey', get_string('groupkeyrequired', 'enrol_apply'), 'required', null, 'client');
+            $mform->addRule('groupkey', $this->key_required_message(), 'required', null, 'client');
             if (groupkey::admits($instance)) {
                 $mform->addHelpButton('groupkey', 'groupkeyonly', 'enrol_apply');
             } else {

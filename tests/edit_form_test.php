@@ -258,11 +258,12 @@ final class edit_form_test extends \advanced_testcase {
     /**
      * The key-only warnings, read on their own.
      *
+     * @param bool $review Whether to read them as the reviewed key-only mode would.
      * @return string Their HTML, or '' when there are none.
      */
-    private function key_only_warnings(): string {
+    private function key_only_warnings(bool $review = false): string {
         $method = new \ReflectionMethod(\enrol_apply_edit_form::class, 'key_only_warnings');
-        return $method->invoke($this->form(), $this->instance);
+        return $method->invoke($this->form(), $this->instance, $review);
     }
 
     /**
@@ -286,6 +287,87 @@ final class edit_form_test extends \advanced_testcase {
         $html = $this->key_only_warnings();
         $this->assertStringContainsString(s(get_string('keyonlypending', 'enrol_apply', 2)), $html);
         $this->assertStringNotContainsString($nokeys, $html);
+    }
+
+    /**
+     * The reviewed mode is warned about no keys, worded for applying, and counts only the waiting
+     * applications that have no key.
+     *
+     * Changes that must make it fail: the "enrol" wording kept for this mode, or the keyed
+     * applications counted among the ones the mode does not decide.
+     *
+     * @return void
+     */
+    public function test_reviewed_key_only_mode_is_warned_in_words_of_applying(): void {
+        global $DB;
+
+        $nokeys = s(get_string('keyreviewnokeys', 'enrol_apply'));
+        $html = $this->key_only_warnings(true);
+        $this->assertStringContainsString($nokeys, $html);
+        $this->assertStringNotContainsString(s(get_string('keyonlynokeys', 'enrol_apply')), $html);
+
+        $group = $this->getDataGenerator()->create_group([
+            'courseid' => $this->course->id,
+            'name' => 'A',
+            'enrolmentkey' => 'Sekret-A1',
+        ]);
+        $this->assertSame('', $this->key_only_warnings(true), 'the control: a keyed group, nothing waiting');
+
+        $keyless = $this->getDataGenerator()->create_user();
+        $keyed = $this->getDataGenerator()->create_user();
+        foreach ([$keyless, $keyed] as $user) {
+            $this->plugin->enrol_user($this->instance, $user->id, null, 0, 0, ENROL_USER_SUSPENDED);
+        }
+        \enrol_apply\local\submission::create(
+            $this->instance,
+            (int) $keyed->id,
+            (int) $DB->get_field(
+                'user_enrolments',
+                'id',
+                ['enrolid' => $this->instance->id, 'userid' => $keyed->id],
+                MUST_EXIST
+            ),
+            (object) [],
+            (int) $group->id,
+            \enrol_apply\local\submission::KEY_FOR_REVIEW
+        );
+
+        $html = $this->key_only_warnings(true);
+        $this->assertStringContainsString(s(get_string('keyreviewpending', 'enrol_apply', 1)), $html, 'only the keyless one');
+        $this->assertStringNotContainsString(s(get_string('keyreviewpending', 'enrol_apply', 2)), $html);
+        $this->assertStringNotContainsString(s(get_string('keyonlypending', 'enrol_apply', 1)), $html);
+        $this->assertStringContainsString(
+            s(get_string('keyonlypending', 'enrol_apply', 2)),
+            $this->key_only_warnings(),
+            'the control: key only counts every waiting application'
+        );
+    }
+
+    /**
+     * The reviewed mode is warned when every keyed group is full, worded for applying.
+     *
+     * @return void
+     */
+    public function test_reviewed_key_only_mode_is_warned_when_every_keyed_group_is_full(): void {
+        if (!class_exists('\local_groupdist\seats')) {
+            $this->markTestSkipped('local_groupdist with \local_groupdist\seats is not installed');
+        }
+        \local_groupdist\local\fields::reset_field_cache();
+        \local_groupdist\local\fields::ensure_fields_exist();
+        \local_groupdist\local\fields::reset_field_cache();
+        $group = $this->getDataGenerator()->create_group([
+            'courseid' => $this->course->id,
+            'name' => 'A',
+            'enrolmentkey' => 'Sekret-A1',
+        ]);
+        $allfull = s(get_string('keyreviewallfull', 'enrol_apply'));
+        $this->assertStringNotContainsString($allfull, $this->key_only_warnings(true), 'the control: it has a seat');
+
+        $handler = \core_group\customfield\group_handler::create();
+        $handler->instance_form_save((object) ['id' => $group->id, 'customfield_groupdist_seats' => 0]);
+        $html = $this->key_only_warnings(true);
+        $this->assertStringContainsString($allfull, $html);
+        $this->assertStringNotContainsString(s(get_string('keyonlyallfull', 'enrol_apply')), $html);
     }
 
     /**

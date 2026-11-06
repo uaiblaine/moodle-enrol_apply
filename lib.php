@@ -522,9 +522,14 @@ class enrol_apply_plugin extends enrol_plugin {
             : null;
         if ($keygroupid === null) {
             if ($mandatory) {
-                return \enrol_apply\local\application_result::refused(
-                    get_string($posted === '' ? 'groupkeyrequired' : 'groupkeyinvalid_required', 'enrol_apply')
-                );
+                if ($posted !== '') {
+                    $refusal = get_string('groupkeyinvalid_required', 'enrol_apply');
+                } else if (\enrol_apply\local\groupkey::admits($instance)) {
+                    $refusal = get_string('groupkeyrequired', 'enrol_apply');
+                } else {
+                    $refusal = get_string('groupkeyrequired_review', 'enrol_apply');
+                }
+                return \enrol_apply\local\application_result::refused($refusal);
             }
             $this->apply($instance, $userid, $data);
             return \enrol_apply\local\application_result::created();

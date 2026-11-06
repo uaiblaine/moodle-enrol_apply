@@ -263,15 +263,15 @@ final class key_review_test extends \advanced_testcase {
      */
     public static function no_key_provider(): array {
         return [
-            'no key' => [[], 'groupkeyrequired'],
-            'an empty key' => [['groupkey' => ''], 'groupkeyrequired'],
-            'a key that is not a string' => [['groupkey' => [self::KEY]], 'groupkeyrequired'],
+            'no key' => [[], 'groupkeyrequired_review'],
+            'an empty key' => [['groupkey' => ''], 'groupkeyrequired_review'],
+            'a key that is not a string' => [['groupkey' => [self::KEY]], 'groupkeyrequired_review'],
             'a wrong key' => [['groupkey' => 'Turma-Z-2027'], 'groupkeyinvalid_required'],
             'a wrong key with "without the key" ticked' => [
                 ['groupkey' => 'Turma-Z-2027', 'withoutkey' => 1],
                 'groupkeyinvalid_required',
             ],
-            'no key with "without the key" ticked' => [['withoutkey' => 1], 'groupkeyrequired'],
+            'no key with "without the key" ticked' => [['withoutkey' => 1], 'groupkeyrequired_review'],
         ];
     }
 
