@@ -237,6 +237,153 @@ body.path-enrol-apply:not(.jsenabled) #page.drawers {
     overflow-x: auto;
 }
 
+/* The review page, read as a decision funnel. Its tokens are declared on its own root, which is
+   the only root it paints: the sticky footer stays inside the form and the cancel confirmation is
+   a page of its own. */
+.enrol_apply-review {
+    --enrol-apply-line: var(--bs-border-color, #dee2e6);
+    --enrol-apply-muted: var(--bs-secondary-color, #6c757d);
+    --enrol-apply-fill: var(--bs-primary, var(--primary, #0f6cbf));
+    --enrol-apply-warn: var(--bs-warning, var(--warning, #f0ad4e));
+    --enrol-apply-focus: var(--bs-focus-ring-color, var(--enrol-apply-fill));
+}
+
+/* A button and its consequence, stacked: one button line and one small line fit the bar's 80px. */
+.enrol_apply-reviewaction {
+    align-items: flex-start;
+    display: flex;
+    flex: 0 0 auto;
+    flex-direction: column;
+}
+
+.enrol_apply-reviewaction:last-child {
+    align-items: flex-end;
+}
+
+.enrol_apply-consequence {
+    color: var(--enrol-apply-muted);
+    font-size: 0.75rem;
+    line-height: 1.2;
+    margin-top: 0.2rem;
+    white-space: nowrap;
+}
+
+/* The awaiting chip's dot: the shape that tells it from the deferred chip's hourglass. It takes
+   the chip's own text colour, so it follows the chip in both colour modes. */
+.enrol_apply-statusdot {
+    background-color: currentcolor;
+    border-radius: 50%;
+    color: inherit;
+    display: inline-block;
+    height: 0.5rem;
+    margin-right: 0.35rem;
+    vertical-align: middle;
+    width: 0.5rem;
+}
+
+/* One signal per row: icon, what is measured, its state word. Only attention and over the limit
+   are tinted, with Bootstrap's subtle utilities in the markup; the edge is the state's own mark,
+   drawn beside the icon and the word, never instead of them. */
+.enrol_apply-signal {
+    align-items: baseline;
+    border-left: 0.2rem solid transparent;
+    border-radius: 0.25rem;
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.25rem;
+    padding: 0.35rem 0.5rem;
+}
+
+.enrol_apply-signal.bg-warning-subtle {
+    border-left-color: var(--enrol-apply-warn);
+}
+
+.enrol_apply-signal.bg-danger-subtle {
+    border-left-color: var(--bs-danger, var(--danger, #ca3120));
+}
+
+.enrol_apply-signaltext {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.enrol_apply-signallabel {
+    font-variant-numeric: tabular-nums;
+}
+
+.enrol_apply-signalstate {
+    flex: 0 0 auto;
+}
+
+.enrol_apply-review summary {
+    cursor: pointer;
+    font-weight: 600;
+}
+
+/* The group cards: two to a row where there is room, one on a phone. */
+.enrol_apply-groupcards {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.enrol_apply-groupcard {
+    align-items: flex-start;
+    border: 1px solid var(--enrol-apply-line);
+    border-radius: 0.5rem;
+    display: flex;
+    flex: 1 1 45%;
+    gap: 0.5rem;
+    min-width: 14rem;
+    padding: 0.5rem 0.75rem;
+    position: relative;
+    transition: border-color 150ms ease-in-out;
+}
+
+.enrol_apply-groupcard:focus-within {
+    border-color: var(--enrol-apply-focus);
+}
+
+.enrol_apply-groupcardbody {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 0;
+}
+
+.enrol_apply-groupcardhead {
+    align-items: baseline;
+    display: flex;
+    gap: 0.5rem;
+    justify-content: space-between;
+}
+
+/* The name's label covers the whole card, so a click anywhere on it ticks the box, while the
+   checkbox keeps a label of the group's name and badges alone. */
+.enrol_apply-groupcardname {
+    font-weight: 600;
+    margin-bottom: 0;
+}
+
+.enrol_apply-groupcardname::after {
+    content: "";
+    inset: 0;
+    position: absolute;
+}
+
+/* Above the label's cover, so a click on the box itself reaches the box and not the label. */
+.enrol_apply-groupcard .form-check-input {
+    flex: 0 0 auto;
+    margin-top: 0.2rem;
+    position: relative;
+    z-index: 1;
+}
+
+.enrol_apply-groupbar {
+    height: 0.35rem;
+}
+
 /* The per-cell heading the card view shows. It is real text in the markup rather than
    content: attr(...), because generated content is announced inconsistently and turning rows
    and cells into blocks costs the table its semantics, so the heading has to sit inside the

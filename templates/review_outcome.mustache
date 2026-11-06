@@ -1,0 +1,242 @@
+{{!
+    This file is part of Moodle - http://moodle.org/
+
+    Moodle is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Moodle is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+}}
+{{!
+    @template enrol_apply/review_outcome
+
+    "On confirming": what an approval does, stated as a sentence, with the adjustments folded
+    under it, and one disclosure for the message to the applicant and the note for the record.
+    Rendered for a reader who may decide, inside the review form.
+
+    The sentence, the line after it and the empty-choice line name the groups the approval really
+    joins, read from the helpers the approval runs; with no group ticked that is the method's
+    default, which for an application a group key sent for review includes the key's group, so
+    unticking every box is never "no group" and the line under the cards says what it is. They
+    arrive ESCAPED from the renderer, which builds them from escaped names, and are triple
+    stashed; enrol_apply/review rewrites them with textContent when a tick or the role changes,
+    from the plain names in the data attributes.
+
+    The cards are real checkboxes named groups[], and "Add another group" is a plain multiple
+    select named groups[] that core's autocomplete enhances above the threshold; without
+    JavaScript it is a native multi-select and both post together, allowlisted as before. Its
+    wrapper carries data-fieldtype autocomplete so Behat drives it as core's control. The
+    grouping filter needs the script, so it is hidden until the script shows it.
+
+    Disclosures are native details elements, open in the server's markup when they must be.
+
+    Context variables required for this template:
+    * outcomeheading string - the card's heading
+    * outcomesentence string - who joins which groups with which role, ESCAPED, triple stashed
+    * hasoutcomeafter boolean, outcomeafter string - the counts after the decision, ESCAPED
+    * outcomenotkey boolean - whether the approval leaves out the key's group as the page loads
+    * outcomenotkeytext string - the sentence saying so, ESCAPED
+    * outcomereadonly boolean, outcomereadonlyhelp string - for a decider who may not choose
+    * outcomewho string - the applicant's name, plain, for the script
+    * outcomekeygroup int - the key's group when the reader may see it, 0 otherwise
+    * outcomedefaultids string - the default groups' ids, comma separated
+    * outcomedefaulthidden int - how many default groups the reader may not see
+    * outcomedefaultnames array - the visible default groups, each with name (plain)
+    * outcomedefaultrole string - the method's role, ESCAPED, triple stashed into a hidden span
+      the script reads as text
+    * outcomeplaces int, outcomeplacestaken int - the method's places and how many are taken
+    * hasadjust boolean - whether this decider may choose groups or a role
+    * adjustopen boolean - whether "Adjust" opens as the page loads
+    * adjustlabel string - its summary
+    * hasgroupchooser boolean, groupchooserlabel string - the cards' fieldset and its legend
+    * haspinnedhelp boolean, pinnedhelp string - the hint above pinned cards, above the threshold
+    * hasgroupcards boolean, groupcards array - one card per group, each with id, name (plain),
+      checked, iskey, keybadge, ismethod, methodbadge, hasseats, members, seats, percent,
+      barclass, barlabel and seatstext
+    * hasaddgroups boolean - whether the other groups are searched
+    * addgrouplabel, addgroupcount, addgrouphelp string - the search's label, count and hint
+    * addgroups array - one option per other group, each with id, text, name, hasseats, members,
+      seats and groupings (comma delimited grouping ids)
+    * hasgroupings boolean, groupinglabel, groupingall string, groupings array (id, name plain)
+    * emptychoice string - what an approval with no group ticked joins, ESCAPED
+    * hasrolechooser boolean, rolelabel, rolehelp string, roledefaultoption string (ESCAPED, it
+      names the method's role), roles array - id and name pairs, the name ESCAPED, as core's
+      element-select.mustache has it
+    * writeopen boolean - whether the message disclosure opens, which it does whenever either box
+      holds a value (the way back from the cancel confirmation)
+    * writelabel string, writehelp string - the disclosure's summary and hint
+    * messagelabel, messagehelp, messagevalue string - the message to the applicant
+    * notelabel, notehelp, notevalue string - the decider's note. notevalue is NOT the note
+      already stored, which the strip shows: the writer clears on empty, so a pre-filled box would
+      carry one decision's reason silently into the next
+
+    Example context (json):
+    {
+        "outcomeheading": "On confirming",
+        "outcomesentence": "Ana Souza joins the course as Student and the group R&amp;D &lt; Team, and is notified of the approval.",
+        "hasoutcomeafter": true,
+        "outcomeafter": "Afterwards: R&amp;D &lt; Team with 19 of 20 seats taken.",
+        "outcomenotkey": false,
+        "outcomenotkeytext": "Does not join R&amp;D &lt; Team, the key's group.",
+        "outcomewho": "Ana Souza",
+        "outcomekeygroup": 3,
+        "outcomedefaultids": "3",
+        "outcomedefaulthidden": 0,
+        "outcomedefaultnames": [{"name": "R&D < Team"}],
+        "outcomedefaultrole": "Student",
+        "outcomeplaces": 0,
+        "outcomeplacestaken": 0,
+        "hasadjust": true,
+        "adjustopen": false,
+        "adjustlabel": "Adjust groups and role",
+        "hasgroupchooser": true,
+        "groupchooserlabel": "Groups to join on approval",
+        "haspinnedhelp": true,
+        "pinnedhelp": "Ticked: the groups this approval uses by default.",
+        "hasgroupcards": true,
+        "groupcards": [
+            {
+                "id": 3, "name": "R&D < Team", "checked": true, "iskey": true, "keybadge": "Key group",
+                "hasseats": true, "members": 18, "seats": 20, "percent": 90, "barclass": "bg-warning text-dark",
+                "barlabel": "R&D < Team: 18 of 20 seats taken", "seatstext": "18 of 20 seats taken, 2 left"
+            }
+        ],
+        "hasaddgroups": true,
+        "addgrouplabel": "Add another group",
+        "addgroupcount": "12 groups to choose from",
+        "addgrouphelp": "Type part of the group's name or code.",
+        "addgroups": [
+            {"id": 4, "text": "Turma 8 · 15 of 20 seats", "name": "Turma 8", "hasseats": true, "members": 15, "seats": 20, "groupings": ",1,"}
+        ],
+        "hasgroupings": true,
+        "groupinglabel": "Grouping",
+        "groupingall": "All groupings",
+        "groupings": [{"id": 1, "name": "Evening"}],
+        "emptychoice": "With no group ticked, the approval uses the default groups: R&amp;D &lt; Team.",
+        "hasrolechooser": true,
+        "rolelabel": "Role to assign on approval",
+        "rolehelp": "Leave it alone to use the role configured on the enrolment method.",
+        "roledefaultoption": "Use the role set on the enrolment method (Student)",
+        "roles": [{"id": 5, "name": "Student"}],
+        "writeopen": false,
+        "writelabel": "Write to the applicant or add a note for the record",
+        "writehelp": "Optional.",
+        "messagelabel": "Message to the applicant",
+        "messagehelp": "Included in the message they receive.",
+        "messagevalue": "",
+        "notelabel": "Note for the record",
+        "notehelp": "The applicant never sees it.",
+        "notevalue": ""
+    }
+}}
+<section class="enrol_apply-outcome card mb-3" aria-labelledby="enrol_apply_outcome_heading" data-region="enrol_apply-outcome"
+    data-who="{{outcomewho}}" data-keygroup="{{outcomekeygroup}}" data-defaultids="{{outcomedefaultids}}"
+    data-defaulthidden="{{outcomedefaulthidden}}" data-places="{{outcomeplaces}}" data-placestaken="{{outcomeplacestaken}}">
+    <div class="card-body">
+        <h2 class="h5" id="enrol_apply_outcome_heading">{{outcomeheading}}</h2>
+        <p class="mb-1" data-region="outcome-sentence">{{{outcomesentence}}}</p>
+        <p class="small mb-1" data-region="outcome-notkey"{{^outcomenotkey}} hidden{{/outcomenotkey}}>{{{outcomenotkeytext}}}</p>
+        <p class="small text-body-secondary mb-0" data-region="outcome-after"{{^hasoutcomeafter}} hidden{{/hasoutcomeafter}}>{{{outcomeafter}}}</p>
+        {{#outcomereadonly}}<p class="form-text mb-0">{{outcomereadonlyhelp}}</p>{{/outcomereadonly}}
+        <span data-region="outcome-defaultrole" hidden>{{{outcomedefaultrole}}}</span>
+        <ul data-region="outcome-defaults" hidden>
+            {{#outcomedefaultnames}}<li>{{name}}</li>{{/outcomedefaultnames}}
+        </ul>
+        {{#hasadjust}}
+            <details class="enrol_apply-adjust mt-3" id="enrol_apply_adjust"{{#adjustopen}} open{{/adjustopen}}>
+                <summary>{{adjustlabel}}</summary>
+                {{#hasgroupchooser}}
+                    <fieldset class="enrol_apply-groupchooser mt-2">
+                        <legend class="fs-6 fw-semibold">{{groupchooserlabel}}</legend>
+                        {{#haspinnedhelp}}<p class="form-text mt-0">{{pinnedhelp}}</p>{{/haspinnedhelp}}
+                        {{#hasgroupcards}}
+                            <div class="enrol_apply-groupcards">
+                                {{#groupcards}}
+                                    <div class="enrol_apply-groupcard">
+                                        <input class="form-check-input" type="checkbox" id="enrol_apply_group_{{id}}" name="groups[]"
+                                            value="{{id}}" data-name="{{name}}" data-hasseats="{{#hasseats}}1{{/hasseats}}{{^hasseats}}0{{/hasseats}}"
+                                            data-members="{{members}}" data-seats="{{seats}}" aria-describedby="enrol_apply_group_{{id}}_seats"{{#checked}} checked{{/checked}}>
+                                        <div class="enrol_apply-groupcardbody">
+                                            <div class="enrol_apply-groupcardhead">
+                                                <label class="enrol_apply-groupcardname" for="enrol_apply_group_{{id}}">{{name}}{{#iskey}} <span class="badge bg-primary text-white">{{keybadge}}</span>{{/iskey}}{{#ismethod}} <span class="badge bg-secondary text-dark">{{methodbadge}}</span>{{/ismethod}}</label>
+                                                {{#hasseats}}<span class="small">{{percent}}%</span>{{/hasseats}}
+                                            </div>
+                                            {{#hasseats}}
+                                                <div class="progress enrol_apply-groupbar" role="progressbar" aria-label="{{barlabel}}"
+                                                    aria-valuenow="{{members}}" aria-valuemin="0" aria-valuemax="{{seats}}">
+                                                    <div class="progress-bar {{barclass}}" style="width: {{percent}}%"></div>
+                                                </div>
+                                            {{/hasseats}}
+                                            <span class="small text-body-secondary" id="enrol_apply_group_{{id}}_seats">{{seatstext}}</span>
+                                        </div>
+                                    </div>
+                                {{/groupcards}}
+                            </div>
+                        {{/hasgroupcards}}
+                        {{#hasaddgroups}}
+                            <div class="enrol_apply-addgroups mt-3">
+                                {{#hasgroupings}}
+                                    <div class="enrol_apply-groupingfilter mb-2" data-region="groupingfilter" hidden>
+                                        <label class="form-label" for="enrol_apply_grouping">{{groupinglabel}}</label>
+                                        <select class="form-select" id="enrol_apply_grouping" data-region="groupingselect">
+                                            <option value="0">{{groupingall}}</option>
+                                            {{#groupings}}<option value="{{id}}">{{name}}</option>{{/groupings}}
+                                        </select>
+                                    </div>
+                                {{/hasgroupings}}
+                                <label class="form-label" for="enrol_apply_addgroups">{{addgrouplabel}}</label>
+                                <span class="small text-body-secondary ms-2">{{addgroupcount}}</span>
+                                <div data-fieldtype="autocomplete">
+                                    <select class="form-select" id="enrol_apply_addgroups" name="groups[]" multiple
+                                        aria-describedby="enrol_apply_addgroups_help">
+                                        {{#addgroups}}
+                                            <option value="{{id}}" data-name="{{name}}" data-hasseats="{{#hasseats}}1{{/hasseats}}{{^hasseats}}0{{/hasseats}}" data-members="{{members}}" data-seats="{{seats}}" data-groupings="{{groupings}}">{{text}}</option>
+                                        {{/addgroups}}
+                                    </select>
+                                </div>
+                                <div class="form-text" id="enrol_apply_addgroups_help">{{addgrouphelp}}</div>
+                            </div>
+                        {{/hasaddgroups}}
+                        <p class="form-text mb-0" data-region="outcome-emptychoice">{{{emptychoice}}}</p>
+                    </fieldset>
+                {{/hasgroupchooser}}
+                {{#hasrolechooser}}
+                    <div class="enrol_apply-decisionrole mt-3">
+                        <label class="form-label" for="enrol_apply_roleid">{{rolelabel}}</label>
+                        <select class="form-select" id="enrol_apply_roleid" name="roleid"
+                            aria-describedby="enrol_apply_roleid_help">
+                            <option value="0">{{{roledefaultoption}}}</option>
+                            {{#roles}}
+                                <option value="{{id}}">{{{name}}}</option>
+                            {{/roles}}
+                        </select>
+                        <div class="form-text" id="enrol_apply_roleid_help">{{rolehelp}}</div>
+                    </div>
+                {{/hasrolechooser}}
+            </details>
+        {{/hasadjust}}
+    </div>
+</section>
+<details class="enrol_apply-write mb-3"{{#writeopen}} open{{/writeopen}}>
+    <summary>{{writelabel}}</summary>
+    <p class="form-text mt-1 mb-0">{{writehelp}}</p>
+    <div class="enrol_apply-outcomemessage mt-2">
+        <label class="form-label" for="enrol_apply_outcomemessage">{{messagelabel}}</label>
+        <textarea class="form-control" id="enrol_apply_outcomemessage" name="outcomemessage"
+            rows="3" aria-describedby="enrol_apply_outcomemessage_help">{{messagevalue}}</textarea>
+        <div class="form-text" id="enrol_apply_outcomemessage_help">{{messagehelp}}</div>
+    </div>
+    <div class="enrol_apply-decisionnote mt-3">
+        <label class="form-label" for="enrol_apply_decisionnote">{{notelabel}}</label>
+        <textarea class="form-control" id="enrol_apply_decisionnote" name="decisionnote"
+            rows="3" aria-describedby="enrol_apply_decisionnote_help">{{notevalue}}</textarea>
+        <div class="form-text" id="enrol_apply_decisionnote_help">{{notehelp}}</div>
+    </div>
+</details>

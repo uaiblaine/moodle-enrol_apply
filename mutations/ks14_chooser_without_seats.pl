@@ -1,2 +1,3 @@
-# KS14: the group chooser stops reading seats, so a decider approves into a full group unaware.
-s|                if \(\$seat !== null && \$seat->seats !== null\) \{|                if (false) {|;
+# KS14: the group facts stop reading seats, so a decider approves into a full group unaware. The
+# queue's chooser and the review page's cards both read group_facts() (repointed for slice V3).
+s|            \$hasseats = \$seat !== null && \$seat->seats !== null;|            \$hasseats = false;|;

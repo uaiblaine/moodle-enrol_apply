@@ -387,9 +387,10 @@ final class decision_capabilities_test extends \advanced_testcase {
         $this->assertStringNotContainsString('name="roleid"', $html);
         // They decide, so the form is there; only the choosers are not.
         $this->assertStringContainsString('enrol_apply_review_form', $html);
+        // The outcome sentence names what the approval gives, read-only.
         $this->assertSame(
             1,
-            preg_match('~<div class="enrol_apply-decisionsummary[^"]*">(.*?)</dl>~s', $html, $summary),
+            preg_match('~data-region="outcome-sentence">(.*?)</p>~s', $html, $summary),
             $html
         );
         $this->assertStringContainsString('Own group', $summary[1]);
@@ -397,12 +398,14 @@ final class decision_capabilities_test extends \advanced_testcase {
         $this->assertStringNotContainsString('Other group', $summary[1]);
         $student = $DB->get_record('role', ['id' => $this->studentrole], '*', MUST_EXIST);
         $this->assertStringContainsString(role_get_name($student, $this->context), $summary[1]);
+        $readonly = get_string('decisionsummary_help', 'enrol_apply');
+        $this->assertStringContainsString($readonly, $html);
 
-        // The control: who may choose gets the choosers and no summary.
+        // The control: who may choose gets the choosers and not the read-only line.
         $this->editing_may_choose(true);
         $html = $this->review_html($ueid);
         $this->assertStringContainsString('name="groups[]"', $html);
-        $this->assertStringNotContainsString('enrol_apply-decisionsummary', $html);
+        $this->assertStringNotContainsString($readonly, $html);
     }
 
     /**

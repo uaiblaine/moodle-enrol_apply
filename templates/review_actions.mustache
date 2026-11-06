@@ -19,9 +19,15 @@
 
     The three decisions, rendered into a core sticky footer by the renderer.
 
-    Only the decisions live here: a core sticky footer is a fixed box, 80px at default font
-    sizes, whose content area clips with no scrollbar, so the message box and the two choosers
-    stay in the page body, as on the queue.
+    Only the decisions and their one-line consequences live here: a core sticky footer is a fixed
+    box, 80px at default font sizes, whose content area clips with no scrollbar, so the message
+    box and the choosers stay in the page body, as on the queue. The consequence sits BESIDE its
+    button, never inside it, so the button's accessible name and every Behat press that drives it
+    stay the label alone. Below the md breakpoint it is hidden and enrol_apply/review lists the
+    three lines in the page body above the bar instead; the button's aria-describedby keeps
+    pointing here, which a hidden element still serves, and that body list is aria-hidden so a
+    screen reader does not hear each line twice. The id stays in this partial because the
+    template lint renders each partial alone.
 
     Each button carries name formaction and its own value, so the button pressed is the decision
     taken and manage.php reads it with optional_param. It must stay a named form control: the
@@ -45,20 +51,30 @@
       * value string - what travels as formaction
       * label string - the button's text
       * style string - the Bootstrap button class it carries
+      * icon string - the core icon beside the label, decorative
+      * consequence string - what the decision does, ESCAPED by the renderer because the
+        approval's line names groups and a role, hence the triple stash
 
     Example context (json):
     {
         "actions": [
-            {"value": "cancel", "label": "Cancel this application", "style": "btn-outline-danger"},
-            {"value": "wait", "label": "Defer this application", "style": "btn-secondary"},
-            {"value": "confirm", "label": "Confirm this application", "style": "btn-primary"}
+            {"value": "cancel", "label": "Cancel this application", "style": "btn-outline-danger", "icon": "e/cancel",
+                "consequence": "Ends the application and removes the enrolment; asks first"},
+            {"value": "wait", "label": "Defer this application", "style": "btn-secondary", "icon": "i/duration",
+                "consequence": "Goes to the waiting list and is notified"},
+            {"value": "confirm", "label": "Confirm this application", "style": "btn-primary", "icon": "t/check",
+                "consequence": "Joins R&amp;D &lt; Team as Student, and is notified"}
         ]
     }
 }}
 <div class="enrol_apply-reviewactions d-flex flex-nowrap justify-content-between align-items-center gap-2 w-100">
     {{#actions}}
-        <button type="submit" name="formaction" value="{{value}}" class="btn {{style}}">
-            {{label}}
-        </button>
+        <div class="enrol_apply-reviewaction">
+            <button type="submit" name="formaction" value="{{value}}" class="btn {{style}}"
+                aria-describedby="enrol_apply_consequence_{{value}}">
+                {{#pix}}{{icon}}, core{{/pix}}{{label}}
+            </button>
+            <span class="enrol_apply-consequence d-none d-md-block" id="enrol_apply_consequence_{{value}}" data-region="consequence-{{value}}">{{{consequence}}}</span>
+        </div>
     {{/actions}}
 </div>

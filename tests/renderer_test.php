@@ -971,8 +971,9 @@ final class renderer_test extends \advanced_testcase {
     /**
      * The review page offers the same three decision controls the queue does.
      *
-     * They come from one partial precisely so the two surfaces cannot offer different things;
-     * this asserts the review page really renders it rather than a copy that has drifted.
+     * They come from one context builder precisely so the two surfaces cannot offer different
+     * things; the review page renders the groups as checkbox cards rather than the queue's select,
+     * under the same name.
      *
      * @return void
      */
@@ -981,7 +982,7 @@ final class renderer_test extends \advanced_testcase {
 
         $html = $this->render_review();
 
-        $this->assertMatchesRegularExpression('~<select[^>]*name="groups\[\]"~', $html, $html);
+        $this->assertMatchesRegularExpression('~<input[^>]*type="checkbox"[^>]*name="groups\[\]"~', $html, $html);
         $this->assertMatchesRegularExpression('~<select[^>]*name="roleid"~', $html, $html);
         $this->assertMatchesRegularExpression('~<textarea[^>]*name="outcomemessage"~', $html, $html);
     }
@@ -1003,10 +1004,10 @@ final class renderer_test extends \advanced_testcase {
 
         $html = $this->render_review();
 
-        $this->assertSame(1, preg_match('~<select[^>]*name="groups\[\]".*?</select>~s', $html, $select), $html);
-        $this->assertStringContainsString(self::ESCAPED_ONCE, $select[0]);
-        $this->assertStringNotContainsString(self::ESCAPED_TWICE, $select[0]);
-        $this->assertStringNotContainsString(self::AWKWARD_NAME, $select[0]);
+        $this->assertSame(1, preg_match('~<div class="enrol_apply-groupcards">.*?</fieldset>~s', $html, $cards), $html);
+        $this->assertStringContainsString(self::ESCAPED_ONCE, $cards[0]);
+        $this->assertStringNotContainsString(self::ESCAPED_TWICE, $cards[0]);
+        $this->assertStringNotContainsString(self::AWKWARD_NAME, $cards[0]);
     }
 
     /**
@@ -1087,6 +1088,9 @@ final class renderer_test extends \advanced_testcase {
         $this->setAdminUser();
         $html = $this->render_review('Please let me in', ENROL_USER_SUSPENDED, '', [], $applicant);
         $this->assertStringContainsString(get_string('reviewhistory', 'enrol_apply'), $html);
+        // The signal that links to it goes with the panel, never on its own.
+        $signal = get_string('reviewsignalhistory', 'enrol_apply', 1);
+        $this->assertStringContainsString($signal, $html);
 
         /* A teacher holds manageapplications and opens this page, and does NOT hold viewreports
            by archetype - which is the whole point of the second capability. */
@@ -1094,14 +1098,15 @@ final class renderer_test extends \advanced_testcase {
         $this->setUser($teacher);
         $html = $this->render_review('Please let me in', ENROL_USER_SUSPENDED, '', [], $applicant);
         $this->assertStringNotContainsString(get_string('reviewhistory', 'enrol_apply'), $html);
+        $this->assertStringNotContainsString($signal, $html);
     }
 
     /**
-     * The capacity panel reports both numbers, and says so when there is no limit.
+     * The places signal and the method line report the two capacity numbers, each its own.
      *
      * @return void
      */
-    public function test_the_capacity_panel_reports_both_numbers(): void {
+    public function test_the_signals_and_the_method_line_report_both_numbers(): void {
         global $DB;
 
         $this->setAdminUser();
@@ -1119,36 +1124,34 @@ final class renderer_test extends \advanced_testcase {
 
         $html = $this->render_review();
 
-        $this->assertStringContainsString(get_string('reviewcapacity', 'enrol_apply'), $html);
-
-        /* Each value asserted inside its own row. A page-wide match cannot see the two numbers
-           swapped - both strings are still present, just against the other label. */
-        $this->assertSame(
-            get_string('reviewofmany', 'enrol_apply', (object) ['taken' => 1, 'total' => 20]),
-            $this->capacity_row($html, get_string('places', 'enrol_apply')),
+        /* Each number asserted in the sentence that labels it. A page-wide match on the bare
+           counts cannot see the two numbers swapped - both are still present, just against the
+           other label. */
+        $this->assertStringContainsString(
+            get_string('reviewsignalplaces', 'enrol_apply', (object) ['taken' => 1, 'total' => 20]),
+            $html,
             'places must count the ACTIVE enrolment only, against customint4'
         );
-        $this->assertSame(
-            get_string('reviewofmany', 'enrol_apply', (object) ['taken' => 2, 'total' => 30]),
-            $this->capacity_row($html, get_string('reviewapplicants', 'enrol_apply')),
+        $this->assertStringContainsString(
+            get_string('reviewmethodheld', 'enrol_apply', (object) ['taken' => 2, 'total' => 30]),
+            $this->method_line($html),
             'applicants must count every non-expired row, against customint3'
         );
     }
 
     /**
-     * The capacity panel reports how many of those applications are deferred.
+     * The method line reports how many of those applications are deferred.
      *
-     * A third row, and it is a subset of the applicants row rather than a limit of its own. A
-     * deferred application counts against the applicant cap until it is cancelled, since no
-     * expiry reaches it, so this is what explains a method refusing new applications with an
-     * empty queue.
+     * A subset of the applications held rather than a limit of its own. A deferred application
+     * counts against the applicant cap until it is cancelled, since no expiry reaches it, so this
+     * is what explains a method refusing new applications with an empty queue.
      *
-     * The three rows carry three different values on this fixture, and each is asserted inside
-     * its own row, because swapped numbers stay on the page.
+     * The three numbers carry three different values on this fixture, and each is asserted in the
+     * sentence that labels it, because swapped numbers stay on the page.
      *
      * @return void
      */
-    public function test_the_capacity_panel_reports_the_deferred_count(): void {
+    public function test_the_method_line_reports_the_deferred_count(): void {
         global $DB;
 
         $this->setAdminUser();
@@ -1165,32 +1168,32 @@ final class renderer_test extends \advanced_testcase {
         // Adds a third, still awaiting a decision.
         $html = $this->render_review();
 
-        $this->assertSame(
-            '1',
-            $this->capacity_row($html, get_string('reviewdeferred', 'enrol_apply')),
-            'the deferred row must count the deferred row and nothing else'
+        $line = $this->method_line($html);
+        $this->assertStringContainsString(
+            get_string('reviewmethoddeferred', 'enrol_apply', 1),
+            $line,
+            'the deferred count must count the deferred row and nothing else'
         );
-        $this->assertSame(
-            get_string('reviewofmany', 'enrol_apply', (object) ['taken' => 1, 'total' => 20]),
-            $this->capacity_row($html, get_string('places', 'enrol_apply')),
+        $this->assertStringContainsString(
+            get_string('reviewsignalplaces', 'enrol_apply', (object) ['taken' => 1, 'total' => 20]),
+            $html,
             'places must still count the ACTIVE enrolment only'
         );
-        $this->assertSame(
-            get_string('reviewofmany', 'enrol_apply', (object) ['taken' => 3, 'total' => 30]),
-            $this->capacity_row($html, get_string('reviewapplicants', 'enrol_apply')),
+        $this->assertStringContainsString(
+            get_string('reviewmethodheld', 'enrol_apply', (object) ['taken' => 3, 'total' => 30]),
+            $line,
             'applicants must still count all three'
         );
     }
 
     /**
-     * The value rendered against one label of the capacity panel.
+     * The method line of a rendered review page, which holds the numbers a decision does not move.
      *
      * @param string $html The rendered review page.
-     * @param string $label The row's label.
-     * @return string The value beside it, or the empty string when the row is absent.
+     * @return string The line's text, or the empty string when the reader is given none.
      */
-    private function capacity_row(string $html, string $label): string {
-        $pattern = '~<dt[^>]*>' . preg_quote($label, '~') . '</dt>\s*<dd[^>]*>(.*?)</dd>~s';
+    private function method_line(string $html): string {
+        $pattern = '~<p[^>]*data-region="methodline"[^>]*>(.*?)</p>~s';
 
         return preg_match($pattern, $html, $m) ? trim($m[1]) : '';
     }
@@ -1232,18 +1235,18 @@ final class renderer_test extends \advanced_testcase {
         $this->setUser($mentor);
         $html = $this->render_review('Please let me in', ENROL_USER_SUSPENDED, '', [], $applicant);
 
-        $this->assertStringNotContainsString(get_string('reviewcapacity', 'enrol_apply'), $html);
+        $this->assertSame('', $this->method_line($html));
         $this->assertStringNotContainsString('of 20', $html);
         // The control: they are seeing the page, and the course it belongs to.
         $this->assertStringContainsString($this->course->fullname, $html);
     }
 
     /**
-     * An uncapped number says so rather than showing a bare zero.
+     * An uncapped number says so rather than showing a bare zero, and gives no signal row.
      *
      * @return void
      */
-    public function test_the_capacity_panel_says_when_there_is_no_limit(): void {
+    public function test_the_method_line_says_when_there_is_no_limit(): void {
         global $DB;
 
         $this->setAdminUser();
@@ -1254,7 +1257,10 @@ final class renderer_test extends \advanced_testcase {
 
         $html = $this->render_review();
 
-        $this->assertStringContainsString(get_string('reviewnolimit', 'enrol_apply'), $html);
+        // No places signal at all, and the line says neither number has a limit.
+        $line = $this->method_line($html);
+        $this->assertStringContainsString(get_string('reviewmethodheldnolimit', 'enrol_apply'), $line);
+        $this->assertStringContainsString(get_string('reviewmethodnoplaces', 'enrol_apply'), $line);
         $this->assertStringNotContainsString('of 0', $html);
     }
 
@@ -1301,9 +1307,9 @@ final class renderer_test extends \advanced_testcase {
     }
 
     /**
-     * Both decision surfaces offer the note box, because both read one partial.
+     * Both decision surfaces offer the note box, because both read one context builder.
      *
-     * The queue and the review page share enrol_apply/decision_controls precisely so that they
+     * The queue and the review page share decision_controls_context() precisely so that they
      * cannot offer different things, and a field present on one and silently absent on the other
      * is how two surfaces come to describe the same record differently.
      *
@@ -1754,6 +1760,11 @@ final class renderer_test extends \advanced_testcase {
         $this->assertStringContainsString('Ann', $html);
         $this->assertStringNotContainsString('Ouro Preto', $html);
         $this->assertStringNotContainsString('City/town', $html);
+        // The details signal counts the rows this reader sees, so the withheld one changes nothing.
+        $this->assertStringContainsString(
+            get_string('reviewsignaldetails', 'enrol_apply', (object) ['filled' => 1, 'total' => 1]),
+            $html
+        );
     }
 
     /**
@@ -1770,6 +1781,10 @@ final class renderer_test extends \advanced_testcase {
 
         $this->assertStringContainsString('Ann', $html);
         $this->assertStringContainsString('Ouro Preto', $html);
+        $this->assertStringContainsString(
+            get_string('reviewsignaldetails', 'enrol_apply', (object) ['filled' => 2, 'total' => 2]),
+            $html
+        );
     }
 
     /**

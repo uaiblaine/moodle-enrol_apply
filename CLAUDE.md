@@ -91,9 +91,12 @@ classes/local/queue.php      "awaiting a decision", the review lookup, the scope
 classes/bulk/                the participants page's three bulk decisions
 report.php, classes/reportbuilder/  the course report and a custom-report datasource, both over the durable record
 renderer.php                 page rendering plus the notification e-mail body
-templates/                   manage, manage_actions, queue_capacity, queue_chip, queue_filters, review,
-                             review_actions, decision_controls, application_navigation,
-                             application_notification, profile_offer, profile_missing
+templates/                   manage, manage_actions, queue_capacity, queue_chip, queue_filters, review
+                             (the funnel: review_summary, review_signals, review_outcome,
+                             review_evidence), review_actions, decision_controls (the queue's),
+                             application_navigation, application_notification, profile_offer,
+                             profile_missing
+amd/src/review.js            keeps the review page's outcome sentence in step with the ticks
 classes/hook_callbacks.php   reconciles approvals made outside confirm_enrolment()
 classes/local/applicantstate.php  what an applicant is told about their OWN application
 classes/local/applications.php  mentee lookup shared by the queue
