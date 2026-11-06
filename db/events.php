@@ -41,4 +41,10 @@ $observers = [
         'eventname' => '\core_customfield\event\field_deleted',
         'callback' => '\enrol_apply\observers::field_deleted',
     ],
+    [
+        /* Logs an approval made on core's "Edit enrolment" once core has written the row: the
+           hook that reaches the approval runs before the write, and core has no hook after it. */
+        'eventname' => '\core\event\user_enrolment_updated',
+        'callback' => '\enrol_apply\observers::user_enrolment_updated',
+    ],
 ];

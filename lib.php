@@ -749,7 +749,12 @@ class enrol_apply_plugin extends enrol_plugin {
             /* Recorded before the enrolment moves, like every decision: the hook pass of
                complete_approval() joins the groups the record names while activate() runs. */
             \enrol_apply\local\submission::record_decided_groups($userenrolmentid, $targets);
-            $this->activate($instance, (object) ['id' => $userenrolmentid, 'userid' => $userid]);
+            /* Deferred so that neither pass of complete_approval() logs an approval: nobody
+               decided, and application_admitted_by_key below says so. */
+            \enrol_apply\local\decisionlog::defer(
+                $userenrolmentid,
+                fn() => $this->activate($instance, (object) ['id' => $userenrolmentid, 'userid' => $userid])
+            );
 
             /* complete_approval() stamps whoever is logged in as the decider. On this route the
                decision was the key's, made by the applicant presenting it (G11), whoever the
@@ -852,19 +857,27 @@ class enrol_apply_plugin extends enrol_plugin {
      * idempotent: role_assign() and groups_add_member() do not duplicate an existing row, the
      * delete matches nothing the second time, and the notification task is deduplicated.
      *
+     * It logs application_approved once per approval, always after the row is active
+     * ({@see \enrol_apply\local\decisionlog}): activate()'s own pass, which passes $written, on the
+     * queue, the review page and the bulk operations; on core's "Edit enrolment", the only route
+     * that runs just the hook pass, before core writes the row, the event is parked and
+     * \enrol_apply\observers::user_enrolment_updated() fires it once core has written; none for a
+     * key admission.
+     *
      * @param stdClass $instance Course enrol instance.
      * @param int $userid Applicant user id.
      * @param int $userenrolmentid User enrolment the application belongs to.
+     * @param bool $written True when the caller has already written the active row.
      * @return void
      */
-    public function complete_approval($instance, $userid, $userenrolmentid) {
+    public function complete_approval($instance, $userid, $userenrolmentid, bool $written = false) {
         global $DB, $USER;
 
         // The role follows approval, never the bare application. See assign_decided_role().
-        $this->assign_decided_role($instance, (int) $userid, (int) $userenrolmentid);
+        $roleid = $this->assign_decided_role($instance, (int) $userid, (int) $userenrolmentid);
 
         // Group membership follows approval, never the bare application.
-        $this->add_instance_groups($instance, $userid, (int) $userenrolmentid);
+        $groupids = $this->add_instance_groups($instance, $userid, (int) $userenrolmentid);
 
         /* Stamped here rather than in confirm_enrolment() so that an approval made from
            core's "Edit enrolment" screen records its decider too: that route reaches this
@@ -889,6 +902,21 @@ class enrol_apply_plugin extends enrol_plugin {
         $task->set_component('enrol_apply');
         $task->set_custom_data(['userenrolmentid' => (int) $userenrolmentid]);
         \core\task\manager::queue_adhoc_task($task, true);
+
+        if (!\enrol_apply\local\decisionlog::is_owed((int) $userenrolmentid)) {
+            $event = \enrol_apply\event\application_approved::for_application((int) $userenrolmentid, $instance, (int) $userid, [
+                'groups' => $groupids,
+                'roleid' => $roleid,
+                'chosen' => \enrol_apply\local\submission::chosen_groups((int) $userenrolmentid) !== null
+                    || \enrol_apply\local\submission::chosen_role((int) $userenrolmentid) !== null,
+            ]);
+            if ($written) {
+                $event->trigger();
+            } else {
+                // The hook pass runs before core's write; see decisionlog.
+                \enrol_apply\local\decisionlog::park((int) $userenrolmentid, $event);
+            }
+        }
     }
 
     /**
@@ -971,19 +999,21 @@ class enrol_apply_plugin extends enrol_plugin {
      * @param stdClass $instance Course enrol instance.
      * @param int $userid Applicant user id.
      * @param int $userenrolmentid User enrolment whose recorded choice wins, 0 for none.
-     * @return void
+     * @return int The role assigned, 0 for none.
      */
-    protected function assign_decided_role($instance, int $userid, int $userenrolmentid) {
+    protected function assign_decided_role($instance, int $userid, int $userenrolmentid): int {
         $roleid = \enrol_apply\local\submission::chosen_role($userenrolmentid) ?? (int) $instance->roleid;
 
         /* An instance can carry roleid 0 (the column defaults to 0, and a restore writes 0 when
            the archived role is not mapped to a role here), and role_assign(0, ...) throws, so
            this skip is required. */
         if ($roleid <= 0) {
-            return;
+            return 0;
         }
 
         role_assign($roleid, $userid, context_course::instance($instance->courseid)->id, 'enrol_apply', $instance->id);
+
+        return $roleid;
     }
 
     /**
@@ -1005,9 +1035,9 @@ class enrol_apply_plugin extends enrol_plugin {
      * @param stdClass $instance Course enrol instance.
      * @param int $userid User to add to the groups.
      * @param int $userenrolmentid User enrolment whose recorded choice wins.
-     * @return void
+     * @return array Ids of the groups the user is a member of through this call, ascending.
      */
-    protected function add_instance_groups($instance, $userid, int $userenrolmentid) {
+    protected function add_instance_groups($instance, $userid, int $userenrolmentid): array {
         global $CFG, $DB;
 
         require_once($CFG->dirroot . '/group/lib.php');
@@ -1025,9 +1055,16 @@ class enrol_apply_plugin extends enrol_plugin {
             $groupids = array_keys($DB->get_records_select('groups', "courseid = :courseid AND id {$insql}", $params));
         }
 
+        $joined = [];
         foreach ($groupids as $groupid) {
-            groups_add_member($groupid, $userid, 'enrol_apply', $instance->id);
+            // True for an existing membership too, which the second pass of an approval meets.
+            if (groups_add_member($groupid, $userid, 'enrol_apply', $instance->id)) {
+                $joined[] = (int) $groupid;
+            }
         }
+        sort($joined);
+
+        return $joined;
     }
 
     /**
@@ -1673,17 +1710,26 @@ class enrol_apply_plugin extends enrol_plugin {
            classes/hook_callbacks.php has usually run complete_approval() already. It is
            called again below on purpose: it is idempotent, and this method must leave the
            right state even when the hook is not registered, for instance before the hook
-           cache is rebuilt after an upgrade. */
-        $this->update_user_enrol(
-            $instance,
-            $userenrolment->userid,
-            ENROL_USER_ACTIVE,
-            $userenrolment->timestart,
-            $userenrolment->timeend
+           cache is rebuilt after an upgrade.
+
+           Deferred so that the hook pass, which runs before core writes the row, does not log
+           the approval: the pass below does, once the enrolment is active. */
+        /* A parked event of an earlier Edit enrolment attempt in this request is dropped first:
+           the write below would trigger the observer that fires it, and this method fires its own. */
+        \enrol_apply\local\decisionlog::clear((int) $userenrolment->id);
+        \enrol_apply\local\decisionlog::defer(
+            (int) $userenrolment->id,
+            fn() => $this->update_user_enrol(
+                $instance,
+                $userenrolment->userid,
+                ENROL_USER_ACTIVE,
+                $userenrolment->timestart,
+                $userenrolment->timeend
+            )
         );
 
         // The applicant's notification is queued by complete_approval(); see it for why.
-        $this->complete_approval($instance, (int) $userenrolment->userid, (int) $userenrolment->id);
+        $this->complete_approval($instance, (int) $userenrolment->userid, (int) $userenrolment->id, true);
     }
 
     /**
@@ -1760,8 +1806,10 @@ class enrol_apply_plugin extends enrol_plugin {
 
             /* Notified when the enrolment moved, or when the decider typed a message for the
                applicant, which must never be dropped silently; not when only the internal note
-               was corrected. */
-            if ($moved || trim($message) !== '') {
+               was corrected. The log follows the same rule: a note corrected in silence is no
+               decision. */
+            $withmessage = trim($message) !== '';
+            if ($moved || $withmessage) {
                 $this->notify_applicant(
                     $instance,
                     $userenrolment,
@@ -1769,6 +1817,13 @@ class enrol_apply_plugin extends enrol_plugin {
                     get_config('enrol_apply', 'waitmailsubject'),
                     get_config('enrol_apply', 'waitmailcontent')
                 );
+
+                \enrol_apply\event\application_deferred::for_application(
+                    (int) $userenrolment->id,
+                    $instance,
+                    (int) $userenrolment->userid,
+                    ['moved' => $moved, 'withmessage' => $withmessage]
+                )->trigger();
             }
         }
 
@@ -1824,6 +1879,14 @@ class enrol_apply_plugin extends enrol_plugin {
 
             $this->unenrol_user($instance, $userenrolment->userid);
             $DB->delete_records('enrol_apply_applicationinfo', ['userenrolmentid' => $userenrolment->id]);
+
+            // After the unenrolment; its object, the record stamped above, survives it.
+            \enrol_apply\event\application_cancelled::for_application(
+                (int) $userenrolment->id,
+                $instance,
+                (int) $userenrolment->userid,
+                []
+            )->trigger();
 
             $this->notify_applicant(
                 $instance,
