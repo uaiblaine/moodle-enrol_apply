@@ -32,15 +32,19 @@ use context_system;
  * only when that group is one of theirs, so an application without a key reaches only those
  * who can access all groups (S3).
  *
- * Only the COURSE-level grant of enrol/apply:manageapplications is narrowed. A holder of the
- * capability at system level is never narrowed, even inside a course, and the mentor level (the
- * capability in the applicant's user context) does not come from the course at all, so
- * {@see \enrol_apply_plugin::can_manage_application()} applies this to its course branch alone.
+ * Only a COURSE-level grant is narrowed, and the rule asks about the capability actually being
+ * exercised: enrol/apply:manageapplications for deciding, enrol/apply:viewapplications for
+ * looking without deciding (S5), enrol/apply:viewreports for the course report (S8). A holder of
+ * that capability at system level is never narrowed, even inside a course, and the mentor level
+ * (manageapplications in the applicant's user context) does not come from the course at all, so
+ * {@see \enrol_apply_plugin::can_manage_application()} and
+ * {@see \enrol_apply_plugin::can_view_application()} apply this to their course branch alone.
  *
  * Every reader of the rule comes here: can_manage_application() (the per-row backstop of every
- * decision and of the review page), the queue's listing, its previous/next walk, the group
- * choosers and their allowlist, the managers' notice, the participants page icon and the hook
- * that guards core's edit-enrolment screen.
+ * decision and of the review page), can_view_application(), the queue's listing, its
+ * previous/next walk, the group choosers and their allowlist, the managers' notice, the
+ * participants page icon, the hook that guards core's edit-enrolment screen and the course
+ * report's base condition ({@see record_where()}).
  *
  * Nothing is memoised. PHPUnit resets the database sequences between tests, so a static keyed
  * on course and user ids would hand one test another test's answer, and the answer depends on
@@ -52,6 +56,15 @@ use context_system;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 final class groupscope {
+    /** @var string The capability a decision exercises. */
+    public const DECIDE = 'enrol/apply:manageapplications';
+
+    /** @var string The capability looking at applications without deciding exercises (S5). */
+    public const VIEW = 'enrol/apply:viewapplications';
+
+    /** @var string The capability the course report exercises (S8). */
+    public const REPORT = 'enrol/apply:viewreports';
+
     /**
      * Whether core's separate-groups rule narrows this user in this course.
      *
@@ -81,19 +94,22 @@ final class groupscope {
     }
 
     /**
-     * The groups this user decides for in this course, or null when they are not narrowed.
+     * The groups this user decides for (or looks at) in this course, or null when not narrowed.
      *
-     * Null for a holder of enrol/apply:manageapplications at system level, whose site-wide
-     * delegation does not come from the course, and for anybody {@see is_scoped()} does not
-     * narrow. An empty array is a narrowed user in no group they may see: they decide nothing
-     * here, and the queue says so with core's own notice (S4).
+     * Null for a holder of $capability at system level, whose site-wide delegation does not come
+     * from the course, and for anybody {@see is_scoped()} does not narrow. The exemption reads the
+     * capability being exercised and no other: a site-wide viewer is not thereby a site-wide
+     * decider, and a site-wide decider's exemption says nothing about the report. An empty array is
+     * a narrowed user in no group they may see: they decide (or see) nothing here, and the queue
+     * and the report say so with core's own notice (S4).
      *
      * @param int $courseid Course id.
-     * @param int $userid The decider, or the recipient of a notice.
+     * @param int $userid The decider, the viewer, or the recipient of a notice.
+     * @param string $capability The capability exercised: {@see DECIDE}, {@see VIEW} or {@see REPORT}.
      * @return array|null Group ids, ascending; null when every application of the course is theirs.
      */
-    public static function narrowed_to(int $courseid, int $userid): ?array {
-        if (has_capability('enrol/apply:manageapplications', context_system::instance(), $userid)) {
+    public static function narrowed_to(int $courseid, int $userid, string $capability = self::DECIDE): ?array {
+        if (has_capability($capability, context_system::instance(), $userid)) {
             return null;
         }
 
@@ -102,6 +118,23 @@ final class groupscope {
         }
 
         return self::member_groups($courseid, $userid);
+    }
+
+    /**
+     * The capability the current user exercises when they read applications in a context.
+     *
+     * Deciding when they hold enrol/apply:manageapplications there, looking without deciding
+     * otherwise. The queue's listing ({@see queue::listing_scope()}), its walk ({@see queue::scope()})
+     * and the review page's context ({@see queue::require_review_access()}) all narrow by the
+     * answer, so the three agree on which system exemption applies: a decider narrowed in the
+     * course who also views site-wide lists their own groups on the instance queue and reaches the
+     * rest through the site-wide one, read-only.
+     *
+     * @param \context $context The course context, or the system context for the site-wide queue.
+     * @return string {@see DECIDE} or {@see VIEW}.
+     */
+    public static function reader_capability(\context $context): string {
+        return has_capability(self::DECIDE, $context) ? self::DECIDE : self::VIEW;
     }
 
     /**
@@ -177,10 +210,11 @@ final class groupscope {
      * @param int $courseid Course id.
      * @param int $groupid The group, 0 for an application without one.
      * @param int $userid The decider, or the recipient of a notice.
+     * @param string $capability The capability exercised, see {@see narrowed_to()}.
      * @return bool True when the user is not narrowed, or the group is one of theirs.
      */
-    public static function allows_group(int $courseid, int $groupid, int $userid): bool {
-        $groups = self::narrowed_to($courseid, $userid);
+    public static function allows_group(int $courseid, int $groupid, int $userid, string $capability = self::DECIDE): bool {
+        $groups = self::narrowed_to($courseid, $userid, $capability);
         if ($groups === null) {
             return true;
         }
@@ -190,17 +224,18 @@ final class groupscope {
     }
 
     /**
-     * Whether the course-level grant lets this user see and decide this application.
+     * Whether the course-level grant lets this user see and decide (or only see) this application.
      *
-     * Only the group half: the caller has checked the capability in the course.
+     * Only the group half: the caller has checked $capability in the course.
      *
      * @param int $courseid Course the application belongs to.
      * @param int $userenrolmentid User enrolment the application belongs to.
-     * @param int $userid The decider.
+     * @param int $userid The decider or viewer.
+     * @param string $capability The capability exercised, see {@see narrowed_to()}.
      * @return bool True when the user is not narrowed, or the application's group is theirs.
      */
-    public static function allows(int $courseid, int $userenrolmentid, int $userid): bool {
-        $groups = self::narrowed_to($courseid, $userid);
+    public static function allows(int $courseid, int $userenrolmentid, int $userid, string $capability = self::DECIDE): bool {
+        $groups = self::narrowed_to($courseid, $userid, $capability);
         if ($groups === null) {
             return true;
         }
@@ -251,6 +286,50 @@ final class groupscope {
             )",
             $params,
         ];
+    }
+
+    /**
+     * The SQL form of the report's narrowing (S8), over the durable record aliased $alias.
+     *
+     * A record belongs to a group by its key while it waits and, once decided, also by the groups
+     * the decider chose: true when keygroupid is one of the groups, or when the comma-separated
+     * decidedgroups names one ({@see submission::record_decided_groups()} writes it). Unlike
+     * {@see where()} every record of the course is a row of the report, so each is judged by its
+     * own columns rather than by the newest record of its user enrolment.
+     *
+     * The list is matched as ",<ids>," against "%,<id>,%", one LIKE per group, so that group 1
+     * never matches a list naming 11 or 21. Portable on purpose: sql_concat() and sql_like() rather
+     * than FIND_IN_SET or a family branch, and each LIKE takes a placeholder of its own, because a
+     * named placeholder may appear once per statement. COALESCE keeps a NULL list (a record older
+     * than the column) from making the whole disjunct unknown on one family and false on another.
+     *
+     * get_in_or_equal() throws on an empty array, so a reader in no group gets a never-true
+     * predicate rather than a query, and the report shows core's notice (S4).
+     *
+     * @param string $alias Alias of {enrol_apply_submission} in the caller's query.
+     * @param array $groupids The reader's groups, as {@see narrowed_to()} returns them.
+     * @param string $prefix Prefix for the placeholder names, unique in the caller's statement.
+     * @return array Two elements: the where fragment and its named parameters.
+     */
+    public static function record_where(string $alias, array $groupids, string $prefix): array {
+        global $DB;
+
+        $groupids = array_values(array_map('intval', $groupids));
+        if (!$groupids) {
+            return ['1 = 0', []];
+        }
+
+        [$insql, $params] = $DB->get_in_or_equal($groupids, SQL_PARAMS_NAMED, $prefix . 'key');
+
+        $list = $DB->sql_concat("','", "COALESCE({$alias}.decidedgroups, '')", "','");
+        $likes = [];
+        foreach ($groupids as $index => $groupid) {
+            $name = $prefix . 'decided' . $index;
+            $likes[] = $DB->sql_like($list, ':' . $name);
+            $params[$name] = '%,' . $groupid . ',%';
+        }
+
+        return ["({$alias}.keygroupid {$insql} OR " . implode(' OR ', $likes) . ')', $params];
     }
 
     /**

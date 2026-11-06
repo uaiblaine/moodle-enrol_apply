@@ -1015,27 +1015,8 @@ class enrol_apply_plugin extends enrol_plugin {
         // The decider's choice, read from the record; see the docblock.
         $chosen = \enrol_apply\local\submission::chosen_groups($userenrolmentid);
 
-        $key = $chosen === null ? \enrol_apply\local\submission::key_of($userenrolmentid) : null;
-        if ($key !== null && $key->outcome === \enrol_apply\local\submission::KEY_FOR_REVIEW && $key->groupid > 0) {
-            /* key_route_groups() checks the instance's list against the course but not the key
-               group, which can have been deleted while the application waited. */
-            $groupids = array_filter(
-                $this->key_route_groups($instance, $key->groupid),
-                fn(int $groupid): bool => $groupid !== $key->groupid
-                    || $DB->record_exists('groups', ['id' => $groupid, 'courseid' => $instance->courseid])
-            );
-        } else if ($chosen === null) {
-            /* Only groups that still belong to this course are used: a group deleted after
-               the instance was configured leaves its mapping row behind, and groups_add_member()
-               throws on an unknown group id. */
-            $groups = $DB->get_records_sql(
-                "SELECT g.id
-                   FROM {enrol_apply_groups} eag
-                   JOIN {groups} g ON g.id = eag.groupid AND g.courseid = :courseid
-                  WHERE eag.enrolid = :enrolid",
-                ['courseid' => $instance->courseid, 'enrolid' => $instance->id]
-            );
-            $groupids = array_keys($groups);
+        if ($chosen === null) {
+            $groupids = $this->default_approval_groups($instance, $userenrolmentid);
         } else {
             // Re-checked against the course even though the caller validated: the record can be
             // older than the group it names, and groups_add_member() throws on an unknown id.
@@ -1047,6 +1028,47 @@ class enrol_apply_plugin extends enrol_plugin {
         foreach ($groupids as $groupid) {
             groups_add_member($groupid, $userid, 'enrol_apply', $instance->id);
         }
+    }
+
+    /**
+     * The groups an approval joins when the decider chose none.
+     *
+     * The key route for an application a valid key sent for review, the instance's own list
+     * otherwise; see add_instance_groups() for why. Also what the review page and the queue show,
+     * read-only, to a decider who may not choose (S5), so the summary and the approval cannot
+     * disagree.
+     *
+     * Only groups that still belong to the course: a group deleted after the instance was
+     * configured, or while the application waited, leaves its id behind, and groups_add_member()
+     * throws on an unknown group id.
+     *
+     * @param stdClass $instance Course enrol instance.
+     * @param int $userenrolmentid User enrolment the approval is for, 0 for none (the instance's list).
+     * @return array Group ids.
+     */
+    public function default_approval_groups(stdClass $instance, int $userenrolmentid): array {
+        global $DB;
+
+        $key = $userenrolmentid ? \enrol_apply\local\submission::key_of($userenrolmentid) : null;
+        if ($key !== null && $key->outcome === \enrol_apply\local\submission::KEY_FOR_REVIEW && $key->groupid > 0) {
+            /* key_route_groups() checks the instance's list against the course but not the key
+               group, which can have been deleted while the application waited. */
+            return array_values(array_filter(
+                $this->key_route_groups($instance, $key->groupid),
+                fn(int $groupid): bool => $groupid !== $key->groupid
+                    || $DB->record_exists('groups', ['id' => $groupid, 'courseid' => $instance->courseid])
+            ));
+        }
+
+        $groups = $DB->get_records_sql(
+            "SELECT g.id
+               FROM {enrol_apply_groups} eag
+               JOIN {groups} g ON g.id = eag.groupid AND g.courseid = :courseid
+              WHERE eag.enrolid = :enrolid",
+            ['courseid' => $instance->courseid, 'enrolid' => $instance->id]
+        );
+
+        return array_map('intval', array_keys($groups));
     }
 
     /**
@@ -1286,7 +1308,8 @@ class enrol_apply_plugin extends enrol_plugin {
             );
         }
 
-        if (has_capability('enrol/apply:manageapplications', $context)) {
+        // A viewer (S5) reaches the same queue, read-only.
+        if (has_any_capability(['enrol/apply:manageapplications', 'enrol/apply:viewapplications'], $context)) {
             $managelink = new moodle_url('/enrol/apply/manage.php', ['id' => $instance->id]);
             $icons[] = $OUTPUT->action_icon(
                 $managelink,
@@ -1485,6 +1508,39 @@ class enrol_apply_plugin extends enrol_plugin {
     }
 
     /**
+     * Whether the current user may look at an application: decide it, or view it read-only.
+     *
+     * Everybody can_manage_application() admits, plus a holder of enrol/apply:viewapplications
+     * (S5) in the course the application belongs to, under the same group narrowing a decider
+     * gets there ({@see \enrol_apply\local\groupscope}). A system-level grant reaches the course
+     * by inheritance and is never narrowed, because the narrowing reads the viewing capability's
+     * own system exemption. There is no user-context level: viewing is a coordinator's
+     * delegation, and a mentor decides through manageapplications.
+     *
+     * Nothing decides on this answer. Every decision method keeps asking
+     * can_manage_application(), so a viewer posting a decision is skipped row by row.
+     *
+     * @param int $courseid Course the application belongs to.
+     * @param int $userid Applicant user id.
+     * @param int $userenrolmentid User enrolment the application belongs to.
+     * @return bool True when the current user may open the application's review page.
+     */
+    public function can_view_application($courseid, $userid, int $userenrolmentid): bool {
+        global $USER;
+
+        if ($this->can_manage_application($courseid, $userid, $userenrolmentid)) {
+            return true;
+        }
+
+        $view = \enrol_apply\local\groupscope::VIEW;
+        $coursecontext = context_course::instance($courseid, IGNORE_MISSING);
+
+        return $coursecontext
+            && has_capability($view, $coursecontext)
+            && \enrol_apply\local\groupscope::allows((int) $courseid, $userenrolmentid, (int) $USER->id, $view);
+    }
+
+    /**
      * Confirm the given applications, activating the enrolments.
      *
      * Every id is looked up and authorised individually: one that is not an application of
@@ -1530,6 +1586,23 @@ class enrol_apply_plugin extends enrol_plugin {
 
             $this->record_decision_note($userenrolment, $decision);
 
+            /* Choosing the groups and the role is a capability of its own (S5), judged in this
+               application's course because a site-wide batch can span courses. Without it the
+               approval gives what the method gives - the key route for an application a key sent
+               for review, the instance's list otherwise, and the instance's role - whatever the
+               post carries. The choosers on screen are cosmetic; this is the guard.
+
+               Recorded as an empty choice rather than skipped: a re-queued application keeps the
+               record of its earlier approval, and skipping would let that earlier choice be
+               applied again by a decider who may not choose at all. The override is per row
+               ($rowdecision): a batch spanning courses must not carry one course's refusal into
+               the next. */
+            if (!has_capability('enrol/apply:choosedecision', context_course::instance($instance->courseid))) {
+                $rowdecision = array_merge((array) $decision, ['groups' => [], 'roleid' => 0]);
+            } else {
+                $rowdecision = $decision;
+            }
+
             /* The chosen role is allowlisted per instance, as enrol/manual/externallib.php does:
                role_assign() performs no assignability check, so this is the only thing between
                a posted role id and a role assignment. get_assignable_roles() is keyed by role id
@@ -1539,9 +1612,9 @@ class enrol_apply_plugin extends enrol_plugin {
                queue, and the approval proceeds with the instance's own role. That fallback is
                deliberately not allowlisted: filtering it would stop an instance configured with a
                role its teacher may not assign from granting any role at all. */
-            if ($decision !== null && array_key_exists('roleid', $decision)) {
+            if ($rowdecision !== null && array_key_exists('roleid', $rowdecision)) {
                 $assignable = get_assignable_roles(context_course::instance($instance->courseid));
-                $chosenrole = (int) $decision['roleid'];
+                $chosenrole = (int) $rowdecision['roleid'];
                 \enrol_apply\local\submission::record_decided_role(
                     (int) $userenrolment->id,
                     array_key_exists($chosenrole, $assignable) ? $chosenrole : 0
@@ -1557,10 +1630,10 @@ class enrol_apply_plugin extends enrol_plugin {
                The gate is array_key_exists and not !empty, so an empty posted list reaches the
                writer and clears an earlier choice; a caller with nothing to say about the groups
                omits the key. */
-            if ($decision !== null && array_key_exists('groups', $decision)) {
+            if ($rowdecision !== null && array_key_exists('groups', $rowdecision)) {
                 $allowed = \enrol_apply\local\groupscope::choosable_groups((int) $instance->courseid);
                 $chosen = array_values(array_filter(
-                    array_map('intval', (array) $decision['groups']),
+                    array_map('intval', (array) $rowdecision['groups']),
                     static function (int $groupid) use ($allowed): bool {
                         return array_key_exists($groupid, $allowed);
                     }

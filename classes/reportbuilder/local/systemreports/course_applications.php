@@ -27,6 +27,7 @@ use core_reportbuilder\system_report;
 use core_reportbuilder\system_report_factory;
 use enrol_apply\local\answers;
 use enrol_apply\local\fields;
+use enrol_apply\local\groupscope;
 use enrol_apply\reportbuilder\local\entities\submission;
 use enrol_apply\reportbuilder\local\formatters\submission as formatter;
 
@@ -104,6 +105,18 @@ class course_applications extends system_report {
             $courseid => $this->get_context()->instanceid,
         ]);
 
+        /* Separate groups narrow the report as they narrow the queue (S8): a reader the rule
+           scopes, judged for this report's own capability and its own system exemption, reads the
+           records of their groups alone, by key group or by decided groups; none in no group, and
+           report.php says why. Derived from the context and $USER on every request, so a sort,
+           a page turn or a download through core_table_get_dynamic_table_content is narrowed the
+           same way as the first render. */
+        $groups = $this->narrowed_groups();
+        if ($groups !== null) {
+            [$groupwhere, $groupparams] = groupscope::record_where($alias, $groups, database::generate_param_name());
+            $this->add_base_condition_sql($groupwhere, $groupparams);
+        }
+
         /* Pseudonymised records (what a deleted course leaves behind) carry userid 0 and
            describe nobody. The INNER join below is what excludes them, as no user has id 0;
            making it a LEFT join needs a "userid <> 0" base condition, as in the datasource.
@@ -133,6 +146,21 @@ class course_applications extends system_report {
         $this->set_initial_sort_column('submission:timecreated', SORT_DESC);
         $this->set_default_per_page(30);
         $this->set_downloadable(true, get_string('report:course_applications', 'enrol_apply'));
+    }
+
+    /**
+     * The groups this reader's view of the report is narrowed to, or null when it is not narrowed.
+     *
+     * {@see groupscope::narrowed_to()} for the report capability, in the report's course and for
+     * the current user. Public so that report.php can tell a narrowed reader in no group why the
+     * report is empty, with core's notice (S4).
+     *
+     * @return array|null Group ids; an empty array for a narrowed reader in no group.
+     */
+    public function narrowed_groups(): ?array {
+        global $USER;
+
+        return groupscope::narrowed_to((int) $this->get_context()->instanceid, (int) $USER->id, groupscope::REPORT);
     }
 
     /**

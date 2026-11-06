@@ -1,2 +1,2 @@
 # SC5: listing_scope() does not derive the narrowing, so the listing and the AJAX refresh see every group.
-s#(/\* Narrowed to the operator's own groups in a separate-groups course they may not\n\s*see all of; an empty array lists nothing and the page says why \(S4\)\. \*/\n\s*)'groups' => groupscope::narrowed_to\(\(int\) \$instance->courseid, \(int\) \$USER->id\),#${1}'groups' => null,#;
+s#(/\* Narrowed to the operator's own groups in a separate-groups course they may not\n\s*see all of; an empty array lists nothing and the page says why \(S4\)\. \*/\n\s*)'groups' => groupscope::narrowed_to\(\(int\) \$instance->courseid, \(int\) \$USER->id, \$capability\),#${1}'groups' => null,#;

@@ -25,6 +25,18 @@
     page renders the other, so the fixed element ids below never appear twice on a page.
 
     Context variables required for this template:
+    * hassummary boolean - whether to show, read-only, what an approval gives instead of the
+      choosers: a course decider without enrol/apply:choosedecision. Never true together with
+      hasgroups or hasroles
+    * summarygroupslabel string - label of the groups an approval joins
+    * summarygroups string - those groups, plain spelling, comma separated, ending with a count of
+      the ones this reader may not see; or the word for none
+    * summaryrolelabel string - label of the role an approval assigns
+    * summaryrole string - that role, ESCAPED spelling, hence the triple stash (see roles below)
+    * summaryhelp string - why the values cannot be changed here
+    * hassummarykeynote boolean - whether to add that a keyed application also joins its key group
+      (the queue of a method in the reviewed key mode)
+    * summarykeynote string - that sentence
     * hasgroups boolean - whether the course has any group to offer
     * grouplabel string - label of the group chooser
     * grouphelp string - hint explaining what choosing nothing does
@@ -55,6 +67,14 @@
 
     Example context (json):
     {
+        "hassummary": true,
+        "summarygroupslabel": "Groups an approval joins",
+        "summarygroups": "Tutorial A, R&D < Team, 1 more you cannot see",
+        "summaryrolelabel": "Role an approval assigns",
+        "summaryrole": "R&amp;D &lt; Team",
+        "summaryhelp": "Set by the enrolment method: you can approve or refuse, not change them.",
+        "hassummarykeynote": true,
+        "summarykeynote": "An application a group key sent for review also joins the key's group.",
         "hasgroups": true,
         "grouplabel": "Groups to join on approval",
         "grouphelp": "Leave empty to use the groups configured on the enrolment method.",
@@ -78,6 +98,17 @@
         "notevalue": ""
     }
 }}
+{{#hassummary}}
+    <div class="enrol_apply-decisionsummary mt-3">
+        <dl class="row mb-0">
+            <dt class="col-sm-4">{{summarygroupslabel}}</dt>
+            <dd class="col-sm-8">{{summarygroups}}</dd>
+            <dt class="col-sm-4">{{summaryrolelabel}}</dt>
+            <dd class="col-sm-8">{{{summaryrole}}}</dd>
+        </dl>
+        <div class="form-text">{{summaryhelp}}{{#hassummarykeynote}} {{summarykeynote}}{{/hassummarykeynote}}</div>
+    </div>
+{{/hassummary}}
 {{#hasgroups}}
     <div class="enrol_apply-decisiongroups mt-3">
         <label class="form-label" for="enrol_apply_groups">{{grouplabel}}</label>

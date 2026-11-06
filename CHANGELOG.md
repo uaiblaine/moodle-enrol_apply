@@ -8,6 +8,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Two capabilities and the report's group scope (S5 and S8 of `docs/design/group-review-scope.md`).**
+  `enrol/apply:choosedecision` (*Choose the groups and role an approval gives*): without it a
+  decider approves or refuses only. The review page, the queue and the participants page's bulk
+  form show what an approval gives read-only (the key route for an application a group key sent
+  for review, the method's groups otherwise, and the method's role) instead of the choosers, and
+  `confirm_enrolment()` records an empty choice for such a decider whatever is posted, judged in
+  each application's course. `enrol/apply:viewapplications` (*View enrolment applications
+  without deciding*, `RISK_PERSONAL`): opens the queue and the review page read-only, with no
+  selection column, bulk bar, decision form or decision controls, narrowed by separate groups
+  exactly as a decider is; granted at system level it opens the site-wide queue, read-only. The
+  enrolment methods page's queue icon is offered to it too. Deciding still needs
+  `enrol/apply:manageapplications` on every path. Both capabilities go to the editing teacher and
+  manager archetypes, so nothing changes on an existing site. The separate-groups rule's system
+  exemption now reads the capability being exercised (`groupscope::narrowed_to()` takes it).
+  The course report narrows a holder of `enrol/apply:viewreports` whom separate groups scope to
+  the records whose key group, or one of whose decided groups, is theirs; a reader in no group sees
+  no row and core's "not a member of any group" notice. The custom-report source stays site-wide.
+  New strings `apply:choosedecision`, `apply:viewapplications`, `decisionsummary*`,
+  `queueviewonly`, `reviewviewonly`. Version 2026110502.
 - **Deciders scoped by separate groups (S1 of `docs/design/group-review-scope.md`).** In a course
   in *Separate groups* mode, a decider without `moodle/site:accessallgroups` (the stock non-editing
   teacher given `enrol/apply:manageapplications`) decides only the applications whose enrolment key

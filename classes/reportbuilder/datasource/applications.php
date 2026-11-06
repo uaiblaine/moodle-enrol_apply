@@ -39,6 +39,12 @@ use enrol_apply\reportbuilder\local\formatters\submission as formatter;
  * applicant submitted - the snapshot column, the answer entity and the shared questions' columns -
  * is gated separately, in restrict_submitted_data().
  *
+ * Nor is it narrowed by separate groups, as the course report is (S8,
+ * {@see \enrol_apply\local\groupscope::record_where()}): the source is site-wide by nature, a
+ * report built on it spans courses with different group modes, and who reads it is decided by
+ * the report's audiences. A site that must keep a group's applications from another group's
+ * moderator gives such a report no audience that includes them.
+ *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later

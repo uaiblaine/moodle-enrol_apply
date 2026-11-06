@@ -61,6 +61,51 @@ $capabilities = [
         ],
     ],
 
+    /* Choose the groups and the role an approval gives.
+     * Without it a holder of enrol/apply:manageapplications approves or refuses only: the approval
+     * gives the key route for an application a group key sent for review, the instance's groups
+     * otherwise, and the instance's role, and the review page, the queue and the participants
+     * page's bulk form show them read-only. confirm_enrolment() ignores a posted choice from a
+     * user lacking it, judged in each application's course, which is the guard; the screens are
+     * cosmetic. In a course with separate groups a holder narrowed to their own groups chooses
+     * among those alone (docs/design/group-review-scope.md, S5 and S6).
+     *
+     * Nothing changes on an existing site: on upgrade core copies every permission, override and
+     * prohibit of manageapplications onto it (update_capabilities() reads clonepermissionsfrom
+     * only when the source already exists, and then ignores the archetypes), so a custom role
+     * that decides today keeps its choosers. A fresh install takes the archetypes. A moderator
+     * role built for groups is where a site leaves it out. */
+    'enrol/apply:choosedecision' => [
+        'captype' => 'write',
+        'contextlevel' => CONTEXT_COURSE,
+        'clonepermissionsfrom' => 'enrol/apply:manageapplications',
+        'archetypes' => [
+            'editingteacher' => CAP_ALLOW,
+            'manager' => CAP_ALLOW,
+        ],
+    ],
+
+    /* View enrolment applications without deciding them.
+     * Opens the queue (manage.php?id=) and the review page (?userenrol=) read-only: no selection,
+     * no bulk bar, no decision form. Deciding still needs enrol/apply:manageapplications on every
+     * path. In a course with separate groups a holder without moodle/site:accessallgroups sees
+     * the applications of their own groups only, as a decider does; granted at system level it
+     * opens the site-wide queue, read-only, and is never narrowed. There is no mentor level: it
+     * is not evaluated in the applicant's user context (S5).
+     *
+     * RISK_PERSONAL: the queue and the review page show what every applicant submitted, and the
+     * review page shows a viewer the staff-internal note of the last deferral too. That is kept
+     * on purpose: viewers are staff who already read the applicant's data. */
+    'enrol/apply:viewapplications' => [
+        'riskbitmask' => RISK_PERSONAL,
+        'captype' => 'read',
+        'contextlevel' => CONTEXT_COURSE,
+        'archetypes' => [
+            'editingteacher' => CAP_ALLOW,
+            'manager' => CAP_ALLOW,
+        ],
+    ],
+
     /* Manage the enrolments of users. */
     'enrol/apply:manage' => [
         'captype' => 'write',
