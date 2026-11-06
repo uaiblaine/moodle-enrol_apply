@@ -214,6 +214,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **The review page reads as a decision funnel (slice V3, concept A of
+  `docs/design/review-page-concepts.html`, RP-D1 to RP-D28).** `manage.php?userenrol=` now answers
+  the decider's questions in order. A strip gives the status chip, a short key chip (*Key accepted:
+  Turma A* in the reviewed key mode, the other outcomes keep their wording), how long the
+  application has waited, the method, the course and the identity line. *What weighs on the
+  decision* lists one signal per row, each with an icon, its number and a state word: the seats of
+  each group the approval joins that declares seats (key group first), the method's places, the
+  earlier applications (with `enrol/apply:viewreports` only; *Read*, never red), the submitted
+  details counted over the rows the reader may see, and the comment; attention from four fifths of
+  a limit, over the limit at it, no row where no limit is set, and nothing ever disabled. An
+  attention line counts the flagged signals and names the worst, never a verdict, and a method line
+  gives the applications held and the deferred count, over the reader's own groups for a decider
+  narrowed by separate groups (V-D3). *On confirming* states in a sentence who joins the course
+  with which role and groups and that they are notified, with the counts afterwards; with no group
+  ticked it names the method's default groups (the key's group included for an application a key
+  sent for review), and says so under the cards. *Adjust groups and role*, collapsed unless a ticked
+  group is over its seats or the method gives no group, holds the groups as checkbox cards named
+  `groups[]` with an occupancy bar, and the role; above eight choosable groups (after the reader's
+  narrowing) only the groups of the approval are cards and the rest are a multiple select named
+  `groups[]`, enhanced by core's autocomplete, with natural order, the seats and the idnumber in
+  each option and a grouping filter. A keyless application now starts with the method's groups
+  ticked when the reader may choose every one of them (RP-D19), so the record names them. The
+  message and the note share one disclosure, open whenever either holds a value. Each decision
+  button has its consequence beside it; the button labels, the cancel confirmation and the form's
+  post are unchanged. A viewer gets a *Read only* chip, the key group's name (V-D4, under the
+  visibility rule), no seats, places or method line, no outcome and no bar; a mentor gets the role
+  only. A new module, `enrol_apply/review`, keeps the sentence in step with the ticks; the plugin
+  maps an icon of its own to `fa-key`, because core's `i/key` is deprecated on 5.3. The queue's
+  group chooser lists groups in natural order too. Strings added (`keyoutcomeforreviewshort` and
+  the `review*` set of this page) and removed (`reviewcapacity`, `reviewdeferred`,
+  `reviewnolimit`). Version 2026110506.
 - **The Brazilian Portuguese strings say "inscrição", never "matrícula".** Older strings had drifted
   to "matrícula", which reads as an administrative registration rather than an application someone
   approves; every enrolment word in `lang/pt_br` now follows core Moodle's "inscrição", and the

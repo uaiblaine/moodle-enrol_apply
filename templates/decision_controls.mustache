@@ -20,9 +20,11 @@
     What a decider may say about an application: which groups the applicant joins, which role
     they are given, what to tell them, and a note for whoever reads the application next.
 
-    Rendered by both decision surfaces - the queue, which decides several applications at
-    once, and the single-application review page - so that the two cannot drift. Neither
-    page renders the other, so the fixed element ids below never appear twice on a page.
+    Rendered by the queue, which decides several applications at once. The single-application
+    review page reads the same context builder and renders it through enrol_apply/review_outcome
+    instead, as group cards and a search, so the two surfaces still offer the same groups and
+    roles. Neither page renders the other's partial, so the fixed element ids below never appear
+    twice on a page.
 
     Context variables required for this template:
     * hassummary boolean - whether to show, read-only, what an approval gives instead of the

@@ -17,7 +17,14 @@
 {{!
     @template enrol_apply/review
 
-    One enrolment application, with the controls to decide it.
+    One enrolment application, read as a decision funnel, with the controls to decide it.
+
+    The reading order is the order of the decider's questions: the strip (who, in what state, how
+    and through which method), what weighs on the decision, what confirming does with the
+    adjustments folded under it, the message and the note, then the decision bar. The evidence -
+    comment, submitted details, earlier applications - is a quieter column after the funnel in
+    source order, beside it on wide screens and below it on narrow ones, reached through the
+    signals' links. Focus order follows source order.
 
     The form posts the queue's own contract - a formaction naming the decision, a non-empty
     userenrolments array and the session key - so every guard manage.php applies to a queue
@@ -27,88 +34,26 @@
     own formaction value, so the button pressed is the decision taken.
 
     Values arrive in their plain spelling and are output through double stashes, which escape
-    each exactly once; the renderer asks format_string() for the plain course name because its
-    escape flag defaults to true. The triple-stashed exceptions are the comment, the decision
-    message and the decision note, which arrive already escaped from format_text(FORMAT_PLAIN)
-    so their line breaks survive; the sticky footer, which the renderer has already rendered;
-    and the role names inside the included partial, which core's element-select.mustache also
-    triple stashes.
+    each exactly once. The triple-stashed exceptions each say why in the partial that holds them.
 
     Context variables required for this template:
     * candecide boolean - whether this reader may decide the application. False for a holder of
-      enrol/apply:viewapplications alone: the panels render without the form, the controls and
-      the sticky footer
-    * viewonlynotice string - what a reader who may not decide is told above the panels
+      enrol/apply:viewapplications alone: the funnel renders without the outcome, the form, the
+      controls and the sticky footer
+    * viewonlynotice string - what a reader who may not decide is told above the funnel
     * formurl string - url the decision form posts back to
     * sesskey string - session key guarding the state change
     * userenrolmentid int - the application being decided
-    * courselabel string - label of the course row
-    * coursename string - full name of the course applied for, plain spelling
-    * courseurl string - link to the course
-    * hasidentity boolean - whether this reader may see any identifying detail of the applicant
-    * identity array - one entry per identity field the site named and this reader may see, each
-      carrying a label and a value, both in the PLAIN spelling. They are labelled because they
-      run together on one line and several are opaque without one. There is no e-mail row of its
-      own any more:
-      the address is one of these when showuseridentity names it and absent when it does not,
-      which is what stops this panel and the snapshot below it disagreeing about the same reader
-    * profileurl string - the applicant's profile in this course
-    * profilelabel string - text of the profile link
-    * hascapacity boolean - whether this reader may see the method's own limits and counts. A
-      mentor reaches this page through the applicant's user context and holds nothing in the
-      course, so they are shown the course but not its enrolment numbers - the same line the
-      group and role choosers draw
-    * capacitylabel string - heading of the panel saying where the application lands
-    * placeslabel string - label of the places row
-    * places string - places taken against the limit, already formatted, or the no-limit wording
-    * applicantslabel string - label of the applicants row
-    * applicants string - applications held against the limit, or the no-limit wording
-    * deferredlabel string - label of the deferred row
-    * deferred string - how many of those applications are deferred. A bare count and not "n of
-      m": it is a subset of the applicants row rather than a limit of its own, and it is here
-      because nothing ever frees a deferred row from the applicant cap
-    * hasdecision boolean - whether a colleague has already decided this one, which today means
-      it was deferred; a pending application has no decision to describe, and the page is not
-      reachable at all for the other two states
-    * decisionlabel string - heading of that panel
-    * decision string - who deferred it and when, plain spelling
-    * hasdecisionmessage boolean - whether they wrote anything to the applicant
-    * decisionmessage string - what they wrote, ALREADY escaped with its line breaks converted,
-      which is why it is triple stashed
-    * hasdecisionnote boolean - whether they left a note for whoever reads this next
-    * decisionnotelabel string - label of that note
-    * decisionnote string - the note, ALREADY escaped with its line breaks converted, hence the
-      triple stash. It is shown here and deliberately NOT pre-filled into the note box below,
-      because that writer clears on empty and a pre-filled box would carry one decision's reason
-      into the next
-    * hashistory boolean - whether this reader may see earlier applications AND there are any
-    * historylabel string - heading of the earlier-applications list
-    * history array - one entry per earlier application, each with the date it was submitted and
-      the outcome as the report's own formatter words it
-    * appliedlabel string - label of the application date row
-    * applied string - when the application was submitted, already formatted
-    * statuslabel string - label of the state row
-    * status string - whether the application is pending or on the waiting list
-    * haskeychip boolean - whether the applicant presented a group enrolment key
-    * keychip string - what that key did, naming its group to a reader who may see the course's
-      groups; plain spelling, escaped by the double stash
-    * commentlabel string - label of the applicant's comment
-    * hascomment boolean - whether the applicant wrote one
-    * comment string - what the applicant wrote, ALREADY escaped and with its line breaks
-      converted by format_text(FORMAT_PLAIN), which is why it is triple stashed
-    * nocomment string - what to say when they wrote nothing
-    * hassnapshot boolean - whether the applicant submitted any profile detail this reader may see
-    * snapshotlabel string - heading of the submitted-details list
-    * snapshot array - one entry per submitted field the reader may see, each with the label and
-      the value as they were submitted, both the PLAIN spelling and output through double
-      stashes. A value can hold newlines, because a textarea custom field is offerable, so the
-      cell carries the same white-space rule the report's own free-text cells do rather than
-      converting them to markup
-    * everything enrol_apply/decision_controls requires
+    * actions array - the three decisions, each with value, label and consequence (ESCAPED, hence
+      the triple stash); listed here again, in the page body, for narrow screens where the bar
+      has room for the buttons alone. aria-hidden, because each button's aria-describedby points
+      at its own line in the bar (enrol_apply/review_actions)
     * stickyfooter string - the three decisions, already rendered into a core sticky footer by
       the renderer and interpolated INSIDE this form. The footer is never moved in the DOM -
       its placement is CSS - so the submits inside it post with the rest of the form, exactly as
       the queue's own bar does
+    * everything enrol_apply/review_summary, enrol_apply/review_signals,
+      enrol_apply/review_outcome and enrol_apply/review_evidence require
 
     Example context (json):
     {
@@ -117,78 +62,38 @@
         "formurl": "https://example.com/enrol/apply/manage.php?userenrol=42",
         "sesskey": "Ab12Cd34Ef",
         "userenrolmentid": 42,
+        "status": "Awaiting a decision",
+        "statuslabel": "Status",
+        "statuschipclass": "bg-warning text-dark",
+        "methodlabel": "Method",
+        "methodname": "Application with a group key",
         "courselabel": "Course",
         "coursename": "R&D < Team induction",
         "courseurl": "https://example.com/course/view.php?id=7",
-        "hasidentity": true,
-        "identity": [
-            {"label": "Username", "value": "jsa"},
-            {"label": "ID number", "value": "2026-0071"}
-        ],
         "profileurl": "https://example.com/user/view.php?id=5&course=7",
         "profilelabel": "View profile",
-        "hascapacity": true,
-        "capacitylabel": "Where this lands",
-        "placeslabel": "Places",
-        "places": "8 of 20",
-        "applicantslabel": "Maximum applicants",
-        "applicants": "35 of 40",
-        "deferredlabel": "Deferred",
-        "deferred": "12",
-        "hasdecision": true,
-        "decisionlabel": "The decision so far",
-        "decision": "Deferred by Ana Souza on 10/08/26, 14:02.",
-        "hasdecisionmessage": true,
-        "decisionmessage": "Waiting for the second group to open.",
-        "hasdecisionnote": true,
-        "decisionnotelabel": "Note for the record",
-        "decisionnote": "Second intake opens in September; hold until the registrar confirms.",
-        "hashistory": true,
-        "historylabel": "Earlier applications to this course",
-        "history": [
-            {"applied": "04/06/26, 11:02", "outcome": "Cancelled"}
+        "signalsheading": "What weighs on the decision",
+        "attention": "Nothing is over a limit. The decision is still yours.",
+        "signals": [
+            {"label": "No comment from the applicant", "isnone": true}
         ],
-        "appliedlabel": "Application date",
-        "applied": "25/08/26, 09:14",
-        "statuslabel": "Status",
-        "haskeychip": true,
-        "keychip": "Valid group key, but a group had no seat left: Turma B",
-        "status": "Awaiting a decision",
-        "commentlabel": "Comment",
-        "hascomment": true,
-        "comment": "I would like to join this course.",
-        "nocomment": "The applicant did not write anything.",
-        "hassnapshot": true,
-        "snapshotlabel": "Details submitted with this application",
-        "snapshot": [
-            {"label": "City/town", "value": "Ouro Preto"},
-            {"label": "Registration number", "value": "2026-0042"}
-        ],
-        "hasgroups": true,
-        "grouplabel": "Groups to join on approval",
-        "grouphelp": "Leave empty to use the groups configured on the enrolment method.",
-        "groups": [
-            {"id": 3, "name": "Tutorial A"}
-        ],
-        "hasroles": true,
-        "rolelabel": "Role to assign on approval",
-        "rolehelp": "Leave it alone to use the role configured on the enrolment method.",
-        "roledefault": "Use the enrolment method's role",
-        "roles": [
-            {"id": 5, "name": "Student"}
-        ],
+        "outcomeheading": "On confirming",
+        "outcomesentence": "Ana Souza joins the course as Student, without a group, and is notified of the approval.",
+        "writelabel": "Write to the applicant or add a note for the record",
         "messagelabel": "Message to the applicant",
-        "messagehelp": "Included in the message they receive. Optional.",
-        "messagevalue": "",
         "notelabel": "Note for the record",
-        "notehelp": "Kept with the application for whoever looks at it next. The applicant never sees it.",
-        "notevalue": "",
+        "commentlabel": "Comment",
+        "nocomment": "The applicant did not write anything.",
+        "actions": [
+            {"value": "cancel", "label": "Cancel this application", "consequence": "Ends the application"},
+            {"value": "confirm", "label": "Confirm this application", "consequence": "Joins the course"}
+        ],
         "stickyfooter": "<div id=\"sticky-footer\"><button type=\"submit\">Confirm</button></div>"
     }
 }}
 {{!
-    The decision form wraps the panels only for a reader who may decide. A viewer reads the same
-    panels inside a plain container instead, so the opening and closing tags are chosen twice, by
+    The decision form wraps the funnel only for a reader who may decide. A viewer reads the same
+    blocks inside a plain container instead, so the opening and closing tags are chosen twice, by
     the same flag; each rendering is balanced.
 }}
 {{#candecide}}
@@ -200,83 +105,24 @@
 <div class="enrol_apply-review">
     <div class="alert alert-info" role="status">{{viewonlynotice}}</div>
 {{/candecide}}
-    <div class="enrol_apply-applicant d-flex flex-wrap align-items-start gap-2 mb-3">
-        <div class="flex-grow-1">
-            {{#hasidentity}}
-                <dl class="enrol_apply-identity small text-muted mb-1 d-flex flex-wrap gap-3">
-                    {{#identity}}
-                        <div><dt class="d-inline fw-normal">{{label}}:</dt>
-                            <dd class="d-inline ms-1">{{value}}</dd></div>
-                    {{/identity}}
-                </dl>
-            {{/hasidentity}}
-            <p class="mb-0">{{statuslabel}}: <strong>{{status}}</strong>
-                {{#haskeychip}}<span class="badge bg-primary text-white ms-1">{{keychip}}</span>{{/haskeychip}}
-                <span class="text-muted">&middot; {{appliedlabel}} {{applied}}</span></p>
-        </div>
-        <a class="btn btn-outline-secondary btn-sm" href="{{profileurl}}">{{profilelabel}}</a>
-    </div>
-
+    {{> enrol_apply/review_summary }}
     <div class="row">
-        <div class="col-lg-7">
-            {{#hasdecision}}
-                <div class="alert alert-info" role="status">
-                    <strong>{{decisionlabel}}</strong> {{decision}}
-                    {{#hasdecisionmessage}}<div class="mt-1">{{{decisionmessage}}}</div>{{/hasdecisionmessage}}
-                    {{#hasdecisionnote}}
-                        <div class="mt-1"><strong>{{decisionnotelabel}}:</strong> {{{decisionnote}}}</div>
-                    {{/hasdecisionnote}}
-                </div>
-            {{/hasdecision}}
-            <h2 class="h5">{{commentlabel}}</h2>
-            <div class="mb-3">
-                {{#hascomment}}{{{comment}}}{{/hascomment}}
-                {{^hascomment}}<span class="text-muted">{{nocomment}}</span>{{/hascomment}}
-            </div>
-            {{#hassnapshot}}
-                {{!
-                    renderer_test scopes its snapshot assertions to this wrapper, because the page
-                    shows identifying values elsewhere (the identity line). It extracts the panel
-                    with a non-greedy match up to the first closing div tag, so keep this class
-                    first on the div and nest no div inside it.
-                }}
-                <div class="enrol_apply-snapshot">
-                    <h2 class="h5">{{snapshotlabel}}</h2>
-                    <dl class="row">
-                        {{#snapshot}}
-                            <dt class="col-sm-4">{{label}}</dt>
-                            <dd class="col-sm-8 enrol_apply-linebreaks">{{value}}</dd>
-                        {{/snapshot}}
-                    </dl>
-                </div>
-            {{/hassnapshot}}
+        <div class="col-lg-8 enrol_apply-reviewfunnel">
+            {{> enrol_apply/review_signals }}
+            {{#candecide}}
+                {{> enrol_apply/review_outcome }}
+            {{/candecide}}
         </div>
-        <div class="col-lg-5">
-            <h2 class="h5">{{courselabel}}</h2>
-            <p><a href="{{courseurl}}">{{coursename}}</a></p>
-            {{#hascapacity}}
-                <h2 class="h5">{{capacitylabel}}</h2>
-                <dl class="row">
-                    <dt class="col-6">{{placeslabel}}</dt>
-                    <dd class="col-6">{{places}}</dd>
-                    <dt class="col-6">{{applicantslabel}}</dt>
-                    <dd class="col-6">{{applicants}}</dd>
-                    <dt class="col-6">{{deferredlabel}}</dt>
-                    <dd class="col-6">{{deferred}}</dd>
-                </dl>
-            {{/hascapacity}}
-            {{#hashistory}}
-                <h2 class="h5">{{historylabel}}</h2>
-                <ul class="list-unstyled">
-                    {{#history}}
-                        <li class="text-muted">{{applied}} &mdash; {{outcome}}</li>
-                    {{/history}}
-                </ul>
-            {{/hashistory}}
+        <div class="col-lg-4 enrol_apply-reviewevidence">
+            {{> enrol_apply/review_evidence }}
         </div>
     </div>
 {{#candecide}}
-    {{> enrol_apply/decision_controls }}
+    <ul class="enrol_apply-consequences list-unstyled small d-md-none" aria-hidden="true">
+        {{#actions}}
+            <li>{{label}}: <span data-region="consequence-{{value}}">{{{consequence}}}</span></li>
+        {{/actions}}
+    </ul>
     {{{stickyfooter}}}
 </form>
 {{/candecide}}

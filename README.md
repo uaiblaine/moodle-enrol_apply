@@ -74,10 +74,36 @@ the foot of the page, choosing the groups and the role an approval gives.
 
 ![Reviewing one application: the key's outcome, the details submitted, the capacity panel, the group chooser with seats and the three decisions](docs/screenshots/review.png)
 
-**Review** opens one application, with links to the previous and next. Sofia's weekend cohort key
-was valid, but that group is full: the page says so, and the chooser already selects the groups
-the key would have joined, with each group's occupancy. A full group can still be chosen; the
-page warns after the approval. The message goes to the applicant; the note stays with the record.
+**Review** opens one application, with links to the previous and next, and reads top to bottom
+in the order a decision asks its questions:
+
+1. **Who, and how.** A strip with the status, what the group key did (*Key accepted: Turma A*),
+   how long the application has waited, the method, the course and the applicant's identity line.
+2. **What weighs on the decision.** One line per signal, each with an icon, its number and a word:
+   the seats of each group the approval joins that declares seats (with `local_groupdist`), the
+   places on the method, the earlier applications to the course (for a holder of
+   `enrol/apply:viewreports` only), the details submitted and the comment. A count needs
+   *attention* from four fifths of its limit and is *over the limit* at it; a limit that is not set
+   gives no line. Nothing here blocks a decision: a full group or method is warned, and the
+   decision is yours. A line under them gives the applications held on the method and how many
+   are deferred (in your groups, for a decider narrowed by separate groups).
+3. **On confirming.** A sentence says who joins the course with which role and in which groups,
+   and that they are told, with the seats and places afterwards. **Adjust groups and role** opens
+   the groups as cards to tick, with each group's occupancy, and the role. With no group ticked the
+   approval uses the method's groups, and for an application a key sent for review the key's group
+   too; the page names them. In a course with more than eight groups you may choose, only the
+   approval's own groups are cards and the others are found by typing part of a name or code,
+   optionally within one grouping.
+4. **A message to the applicant or a note for the record**, behind one disclosure: the message goes
+   to the applicant with the decision, the note stays with the record.
+5. **The decision**, in the bar at the foot of the page, each button with what it does beside it.
+   Cancelling asks first.
+
+The comment, the details submitted and the earlier applications sit in a column of their own,
+which the signals link to. A reader who may only view applications gets the strip and the
+signals without the seats or places, and no decision.
+
+*The screenshot above predates this layout and needs recapturing.*
 
 ### The record
 
@@ -219,8 +245,8 @@ Who is told what:
   applications in the course and may see the group. On a key-only method, where every enrolment is one, the notice is
   sent only when **Tell managers about each enrolment with a key** is set to Yes (off by default).
 - **The queue and the review page** mark an application a valid key could not admit. The review
-  page names the group, to a reader who may see it, and pre-selects the groups the key would have
-  joined. The empty queue of a key-only method says nothing waits there.
+  page names the group to a decider or a viewer who may see it, and ticks the groups the key would
+  have joined. The empty queue of a key-only method says nothing waits there.
 - **The reports** carry an **Admission route** column and filter (review, or what the key did) and
   the **Group of the enrolment key**, empty for a reader who may not see that group; that column
   cannot be sorted.

@@ -413,9 +413,12 @@ final class key_surfaces_test extends \advanced_testcase {
     public function test_the_review_page_names_the_key_group_and_ticks_its_groups(): void {
         $this->setAdminUser();
 
-        // Control first: an application without a key ticks nothing and shows no chip.
+        /* Control first: an application without a key shows no chip, and ticks the method's own
+           list alone (RP-D19), which is exactly what an empty choice would join. */
         $plain = $this->review($this->waiting(submission::KEY_NONE));
-        $this->assertStringNotContainsString(' selected>', $plain);
+        $this->assertFalse($this->card_ticked($plain, (int) $this->keyed->id));
+        $this->assertTrue($this->card_ticked($plain, (int) $this->listed->id));
+        $this->assertFalse($this->card_ticked($plain, (int) $this->other->id));
         $this->assertStringNotContainsString(get_string('keyoutcomenoplace', 'enrol_apply'), $plain);
 
         $html = $this->review($this->waiting(submission::KEY_NO_PLACE));
@@ -425,9 +428,37 @@ final class key_surfaces_test extends \advanced_testcase {
             'group' => self::NAME,
         ]);
         $this->assertStringContainsString(s($chip), $html);
-        $this->assertStringContainsString('<option value="' . $this->keyed->id . '" selected>', $html);
-        $this->assertStringContainsString('<option value="' . $this->listed->id . '" selected>', $html);
-        $this->assertStringContainsString('<option value="' . $this->other->id . '">', $html);
+        $this->assertTrue($this->card_ticked($html, (int) $this->keyed->id));
+        $this->assertTrue($this->card_ticked($html, (int) $this->listed->id));
+        $this->assertFalse($this->card_ticked($html, (int) $this->other->id));
+    }
+
+    /**
+     * Whether the review page's card for a group is ticked.
+     *
+     * @param string $html The review page.
+     * @param int $groupid The group.
+     * @return bool|null True when ticked, false when offered unticked, null when not offered.
+     */
+    private function card_ticked(string $html, int $groupid): ?bool {
+        if (!preg_match('~<input[^>]*\bid="enrol_apply_group_' . $groupid . '"[^>]*>~s', $html, $m)) {
+            return null;
+        }
+
+        return (bool) preg_match('~\schecked>$~', $m[0]);
+    }
+
+    /**
+     * The seats line of the review page's card for a group.
+     *
+     * @param string $html The review page.
+     * @param int $groupid The group.
+     * @return string The line, or the empty string when the group has no card.
+     */
+    private function card_seats(string $html, int $groupid): string {
+        $pattern = '~id="enrol_apply_group_' . $groupid . '_seats">(.*?)</span>~s';
+
+        return preg_match($pattern, $html, $m) ? trim($m[1]) : '';
     }
 
     /**
@@ -774,9 +805,9 @@ final class key_surfaces_test extends \advanced_testcase {
     }
 
     /**
-     * The group chooser reads each group's seats, says when one is full, and keeps it selectable.
+     * The group cards read each group's seats, say when one is full, and keep it tickable.
      *
-     * Changes that must make it fail: the seats left out of the option, or the full wording given
+     * Changes that must make it fail: the seats left out of the card, or the full wording given
      * to a group with seats left.
      *
      * @return void
@@ -789,11 +820,17 @@ final class key_surfaces_test extends \advanced_testcase {
 
         $html = $this->review($this->waiting(submission::KEY_NONE));
 
-        $full = get_string('decisiongroupfull', 'enrol_apply', (object) ['name' => self::NAME, 'members' => 1, 'seats' => 1]);
-        $left = get_string('decisiongroupseats', 'enrol_apply', (object) ['name' => 'Everyone', 'members' => 0, 'seats' => 5]);
-        $this->assertStringContainsString('<option value="' . $this->keyed->id . '">' . s($full) . '</option>', $html);
-        $this->assertStringContainsString('<option value="' . $this->listed->id . '">' . s($left) . '</option>', $html);
-        $this->assertStringContainsString('<option value="' . $this->other->id . '">Elsewhere</option>', $html);
+        $full = get_string('reviewgroupcardfull', 'enrol_apply', (object) ['members' => 1, 'seats' => 1]);
+        $left = get_string('reviewgroupcardseats', 'enrol_apply', (object) ['members' => 0, 'seats' => 5, 'left' => 5]);
+        $this->assertSame(s($full), $this->card_seats($html, (int) $this->keyed->id));
+        $this->assertSame(s($left), $this->card_seats($html, (int) $this->listed->id));
+        $this->assertSame(
+            s(get_string('reviewgroupcardnolimit', 'enrol_apply')),
+            $this->card_seats($html, (int) $this->other->id)
+        );
+        // The bar reads seats, not percent, and the full group is still offered: seats never block.
+        $this->assertMatchesRegularExpression('~aria-valuenow="1"[^>]*aria-valuemin="0"[^>]*aria-valuemax="1"~', $html);
+        $this->assertFalse($this->card_ticked($html, (int) $this->keyed->id));
     }
 
     /**

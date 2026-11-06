@@ -34,6 +34,21 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class enrol_apply_renderer extends plugin_renderer_base {
+    /** @var string A signal within its limit: below four fifths of it. */
+    public const SIGNAL_OK = 'ok';
+
+    /** @var string A signal at four fifths of its limit or more, and below it. */
+    public const SIGNAL_WARN = 'warn';
+
+    /** @var string A signal at or over its limit: confirming overbooks, and is still allowed. */
+    public const SIGNAL_OVER = 'over';
+
+    /** @var string Something the plugin cannot judge and the decider should read. */
+    public const SIGNAL_READ = 'read';
+
+    /** @var string A plain fact with no state of its own. */
+    public const SIGNAL_NONE = 'none';
+
     /**
      * Render the page listing the applications awaiting a decision.
      *
@@ -738,32 +753,28 @@ class enrol_apply_renderer extends plugin_renderer_base {
     ): array {
         $groups = [];
         $roles = [];
+        $facts = [];
 
         $coursecontext = $instance === null ? null : \context_course::instance($instance->courseid);
         $decides = $coursecontext && has_capability('enrol/apply:manageapplications', $coursecontext);
         $chooses = $decides && has_capability('enrol/apply:choosedecision', $coursecontext);
         if ($chooses) {
-            $coursegroups = \enrol_apply\local\groupscope::choosable_groups((int) $instance->courseid);
-            $seats = \enrol_apply\local\groupseats::for_groups(array_keys($coursegroups));
+            $facts = $this->group_facts($instance, $coursecontext);
 
-            /* The plain spelling ('escape' => false), because the template renders the name
-               through a double stash; with format_string()'s default a group named "R&D < Team"
-               would read "R&amp;D &lt; Team". edit_form.php's call keeps the escaped spelling
-               because a moodleform select renders its options through a triple stash. The seats
-               suffix keeps the same spelling: get_string() substitutes without escaping. */
-            foreach ($coursegroups as $group) {
-                $name = format_string($group->name, true, ['context' => $coursecontext, 'escape' => false]);
-                $seat = $seats[(int) $group->id] ?? null;
-                if ($seat !== null && $seat->seats !== null) {
-                    $a = (object) ['name' => $name, 'members' => (int) $seat->members, 'seats' => (int) $seat->seats];
-                    $name = (int) $seat->members >= $seat->seats
+            /* The seats suffix keeps the plain spelling of group_facts(): get_string() substitutes
+               without escaping, and the template double stashes the option text. */
+            foreach ($facts as $fact) {
+                $name = $fact->name;
+                if ($fact->hasseats) {
+                    $a = (object) ['name' => $name, 'members' => $fact->members, 'seats' => $fact->seats];
+                    $name = $fact->full
                         ? get_string('decisiongroupfull', 'enrol_apply', $a)
                         : get_string('decisiongroupseats', 'enrol_apply', $a);
                 }
                 $groups[] = [
-                    'id' => $group->id,
+                    'id' => $fact->id,
                     'name' => $name,
-                    'selected' => in_array((int) $group->id, $preselected, true),
+                    'selected' => in_array($fact->id, $preselected, true),
                 ];
             }
 
@@ -792,6 +803,11 @@ class enrol_apply_renderer extends plugin_renderer_base {
             : ['hassummary' => false];
 
         return $summary + [
+            /* Read by the review page's funnel, which renders the same facts differently (cards,
+               a search, signals); the queue's template ignores them. */
+            'coursedecider' => $decides,
+            'chooser' => $chooses,
+            'groupfacts' => $facts,
             'messagelabel' => get_string('outcomemessage', 'enrol_apply'),
             'messagehelp' => get_string('outcomemessage_help', 'enrol_apply'),
             /* Non-empty only on the way back from the cancel confirmation. Plain spelling: the
@@ -813,6 +829,59 @@ class enrol_apply_renderer extends plugin_renderer_base {
             'roledefault' => get_string('decisionroledefault', 'enrol_apply'),
             'roles' => $roles,
         ];
+    }
+
+    /**
+     * The groups this reader may choose on an approval, with their seats, in natural order.
+     *
+     * One read for every surface that offers groups - the queue's chooser and the review page's
+     * cards and search - so the two decision surfaces cannot classify a group differently. The
+     * list is {@see \enrol_apply\local\groupscope::choosable_groups()}, which confirm_enrolment()
+     * allowlists the posted ids against and which narrows a decider in separate groups to their
+     * own (S6), so a narrowed reader is never told another group's seats (V-D3).
+     *
+     * Natural order (RP-D22): groups_get_all_groups() sorts by name in the database's collation,
+     * which puts "Turma 10" before "Turma 2".
+     *
+     * A full group is one whose members reach its seats (members >= seats), the rule the queue's
+     * chooser always used; it stays selectable (G15, R5): seats warn, they never block. A group
+     * declaring no seats, or every group without local_groupdist, has hasseats false.
+     *
+     * The name is the plain spelling ('escape' => false), because every template here double
+     * stashes it; with format_string()'s default a group named "R&D < Team" would read
+     * "R&amp;D &lt; Team". edit_form.php's call keeps the escaped spelling because a moodleform
+     * select renders its options through a triple stash.
+     *
+     * @param stdClass $instance Enrol instance the decision belongs to.
+     * @param \context_course $coursecontext Its course.
+     * @return array Group id => object with id, name (plain), idnumber, hasseats, members, seats,
+     *     full and percent (whole, clamped to the bar).
+     */
+    protected function group_facts(stdClass $instance, \context_course $coursecontext): array {
+        $coursegroups = \enrol_apply\local\groupscope::choosable_groups((int) $instance->courseid);
+        \core_collator::asort_objects_by_property($coursegroups, 'name', \core_collator::SORT_NATURAL);
+        $seats = \enrol_apply\local\groupseats::for_groups(array_keys($coursegroups));
+
+        $facts = [];
+        foreach ($coursegroups as $group) {
+            $seat = $seats[(int) $group->id] ?? null;
+            $hasseats = $seat !== null && $seat->seats !== null;
+            $members = $hasseats ? (int) $seat->members : 0;
+            $total = $hasseats ? (int) $seat->seats : 0;
+            $facts[(int) $group->id] = (object) [
+                'id' => (int) $group->id,
+                'name' => format_string($group->name, true, ['context' => $coursecontext, 'escape' => false]),
+                'idnumber' => trim((string) ($group->idnumber ?? '')),
+                'hasseats' => $hasseats,
+                'members' => $members,
+                'seats' => $total,
+                'full' => $hasseats && $members >= $total,
+                // A group declaring no seat at all is full from its first member.
+                'percent' => $total > 0 ? self::meter_percent($members, $total) : 100,
+            ];
+        }
+
+        return $facts;
     }
 
     /**
@@ -866,6 +935,10 @@ class enrol_apply_renderer extends plugin_renderer_base {
 
         return [
             'hassummary' => true,
+            // The parts the review page's outcome sentence is built from, read by nothing else.
+            'summaryids' => array_map('intval', array_keys($groups)),
+            'summarynames' => array_slice($names, 0, count($names) - ($hidden ? 1 : 0)),
+            'summaryhidden' => $hidden,
             'summarygroupslabel' => get_string('decisionsummarygroups', 'enrol_apply'),
             'summarygroups' => $names ? implode(', ', $names) : get_string('none'),
             'summaryrolelabel' => get_string('decisionsummaryrole', 'enrol_apply'),
@@ -879,11 +952,11 @@ class enrol_apply_renderer extends plugin_renderer_base {
     /**
      * What a group key did for this application, for the review page.
      *
-     * The chip names the key group only to a reader who may see the course's groups, the gate
-     * the group chooser applies ({@see self::decision_controls_context()}), and who may see that
-     * group by core's visibility rule ({@see \enrol_apply\local\groupvisibility::visible_to()}),
-     * which the chooser's groups_get_all_groups() applies too; anybody else reads the outcome
-     * alone, as on the queue. The groups offered ticked are the ones the key would have
+     * The chip names the key group only to a decider or viewer in the course
+     * ({@see self::reads_course_groups()}, V-D4) who may see that group by core's visibility rule
+     * ({@see \enrol_apply\local\groupvisibility::visible_to()}), which the chooser's
+     * groups_get_all_groups() applies too; anybody else, a mentor included, reads the outcome
+     * alone. The groups offered ticked are the ones the key would have
      * joined - its own group and the method's list, key_route_groups() - so approving without
      * touching the chooser does what the key would have done had a place been left. A key group
      * deleted since offers nothing ticked and is not named.
@@ -891,17 +964,23 @@ class enrol_apply_renderer extends plugin_renderer_base {
      * @param stdClass $application Application as \enrol_apply\local\queue::application() returns it.
      * @param stdClass|null $instance Enrol instance the application belongs to.
      * @param \context_course $coursecontext Course the application was made to.
-     * @return array Keys 'chip' (plain spelling, empty when no key was presented) and 'preselected' (group ids).
+     * @return array Keys 'chip' (plain spelling, empty when no key was presented), 'preselected'
+     *     (group ids) and 'keygroupid' (the key group when the chip names it, 0 otherwise).
      */
     protected function key_context($application, $instance, \context_course $coursecontext): array {
         global $DB, $USER;
 
         $key = \enrol_apply\local\submission::key_of((int) $application->id);
         if ($key === null) {
-            return ['chip' => '', 'preselected' => []];
+            return ['chip' => '', 'preselected' => [], 'keygroupid' => 0];
         }
 
-        $label = \enrol_apply\local\submission::key_outcome_label($key->outcome);
+        /* The strip's short form for the reviewed key mode (RP-D10): the status chip beside it
+           already says the application awaits a decision, so "sent for review" says it twice. The
+           other outcomes keep their own wording, because each names what the key ran into. */
+        $label = $key->outcome === \enrol_apply\local\submission::KEY_FOR_REVIEW
+            ? get_string('keyoutcomeforreviewshort', 'enrol_apply')
+            : \enrol_apply\local\submission::key_outcome_label($key->outcome);
         $group = $key->groupid > 0
             ? $DB->get_record(
                 'groups',
@@ -911,10 +990,10 @@ class enrol_apply_renderer extends plugin_renderer_base {
             : false;
         if (
             !$group
-            || !has_capability('enrol/apply:manageapplications', $coursecontext)
+            || !self::reads_course_groups($coursecontext)
             || !\enrol_apply\local\groupvisibility::visible_to($group, (int) $USER->id)
         ) {
-            return ['chip' => $label, 'preselected' => []];
+            return ['chip' => $label, 'preselected' => [], 'keygroupid' => 0];
         }
 
         return [
@@ -926,7 +1005,24 @@ class enrol_apply_renderer extends plugin_renderer_base {
             'preselected' => $instance === null
                 ? []
                 : enrol_get_plugin('apply')->key_route_groups($instance, (int) $group->id),
+            'keygroupid' => (int) $group->id,
         ];
+    }
+
+    /**
+     * Whether this reader may be told the names of the course's groups on the review page.
+     *
+     * A decider or a viewer in the course (V-D4): the queue's group column already names the key
+     * group to both, so the review page withholding it from a viewer told them less than the
+     * list they came from. A mentor holds neither in the course and is told no group name
+     * anywhere. Each name is still judged by core's visibility rule on top of this.
+     *
+     * @param \context_course $coursecontext The course the application was made to.
+     * @return bool True when the reader may see the course's group names here.
+     */
+    protected static function reads_course_groups(\context_course $coursecontext): bool {
+        return has_capability('enrol/apply:manageapplications', $coursecontext)
+            || has_capability('enrol/apply:viewapplications', $coursecontext);
     }
 
     /**
@@ -1080,24 +1176,29 @@ class enrol_apply_renderer extends plugin_renderer_base {
     }
 
     /**
-     * How much room the enrolment method has left.
+     * How much room the enrolment method has left, as numbers for the signals and the method line.
      *
      * The numbers answer two different questions and must never be mixed: applicants counts every
      * non-expired row - pending, deferred and approved alike - while places counts active rows
      * only. The gap between them is overbooking, which is legitimate where approval is
      * discretionary. See \enrol_apply\local\capacity.
      *
-     * Shown as a neutral readout rather than the queue's warning, because a single decision
-     * wants the number whatever it is.
-     *
      * Gated on the course capability, which is stricter than the page, for the same reason as
      * the group and role choosers ({@see self::decision_controls_context()}): a mentor, trusted
-     * with one applicant, is not told the method's limits or its enrolment counts.
+     * with one applicant, is not told the method's limits or its enrolment counts. A viewer never
+     * reaches this (RP-D12): capacity stays a decider's.
+     *
+     * The deferred count is the reader's scope (V-D3): for a decider narrowed by separate groups it
+     * is the queue tile's own scope_deferred(), so the review page and the queue they came from
+     * cannot disagree; for everybody else the method's figure, capacity::deferred(). Each number is
+     * counted only where its limit is set, since a method without one gets no row and no count.
      *
      * @param stdClass $instance Enrol instance the application belongs to.
-     * @return array Template context for the capacity panel.
+     * @return array hascapacity, and with it places, placestaken, limit, held, deferred and narrowed.
      */
     protected function capacity_context($instance): array {
+        global $USER;
+
         $coursecontext = \context_course::instance($instance->courseid);
         if (!has_capability('enrol/apply:manageapplications', $coursecontext)) {
             return ['hascapacity' => false];
@@ -1106,33 +1207,18 @@ class enrol_apply_renderer extends plugin_renderer_base {
         $capacity = \enrol_apply\local\capacity::class;
         $places = $capacity::places($instance);
         $limit = $capacity::applicant_limit($instance);
-        $nolimit = get_string('reviewnolimit', 'enrol_apply');
+        $narrowed = \enrol_apply\local\groupscope::narrowed_to((int) $instance->courseid, (int) $USER->id) !== null;
 
         return [
             'hascapacity' => true,
-            'capacitylabel' => get_string('reviewcapacity', 'enrol_apply'),
-            'placeslabel' => get_string('places', 'enrol_apply'),
-            'places' => $places > 0
-                ? get_string('reviewofmany', 'enrol_apply', (object) [
-                    'taken' => $capacity::places_taken($instance),
-                    'total' => $places,
-                ])
-                : $nolimit,
-            /* Not the setting's own label: "Maximum applicants: 35 of 40" reads as though 35
-               were the maximum, while this row reports how many the method holds against it. */
-            'applicantslabel' => get_string('reviewapplicants', 'enrol_apply'),
-            'applicants' => $limit > 0
-                ? get_string('reviewofmany', 'enrol_apply', (object) [
-                    'taken' => $capacity::applicants($instance),
-                    'total' => $limit,
-                ])
-                : $nolimit,
-            /* How many of those applications are deferred: a subset of the applicants row, not
-               another limit, so a bare count. A deferred row holds its place against the
-               applicant limit until cancelled (see capacity::deferred()), which is what explains a
-               method refusing new applications with an empty queue. */
-            'deferredlabel' => get_string('reviewdeferred', 'enrol_apply'),
-            'deferred' => (string) $capacity::deferred($instance),
+            'places' => $places,
+            'placestaken' => $places > 0 ? $capacity::places_taken($instance) : 0,
+            'limit' => $limit,
+            'held' => $limit > 0 ? $capacity::applicants($instance) : 0,
+            'deferred' => $narrowed
+                ? \enrol_apply\table\applications::for_scope((int) $instance->id)->scope_deferred()
+                : $capacity::deferred($instance),
+            'narrowed' => $narrowed,
         ];
     }
 
@@ -1233,12 +1319,19 @@ class enrol_apply_renderer extends plugin_renderer_base {
     }
 
     /**
-     * The single-application decision form.
+     * The single-application decision form, read as a decision funnel (concept A, RP-D1).
      *
      * The POST carries the queue's own contract - formaction, userenrolments[] and the session
      * key - so every guard manage.php applies to a queue decision applies here unchanged. The one
      * branch manage.php adds for this page is the confirmation before a cancellation, and the
      * confirmed request arrives on the same contract and passes the same guards.
+     *
+     * The page answers the decider's questions in the order they are asked: who and how (the
+     * strip), what weighs (the signals), what confirming does (the outcome card, with the
+     * adjustments folded under it), then the decision bar with each button's consequence. The
+     * evidence - comment, submitted details, earlier applications - is a column of its own that
+     * the signals link into. Every block reads a helper that already existed; the new code
+     * classifies and words, and adds no query.
      *
      * @param stdClass $application Application as \enrol_apply\local\queue::application() returns it.
      * @param stdClass $applicant Applicant user record.
@@ -1268,44 +1361,56 @@ class enrol_apply_renderer extends plugin_renderer_base {
         $controls = $candecide
             ? $this->decision_controls_context($instance, $message, $note, $keyed['preselected'], (int) $application->id)
             : [];
+        /* The seats of the groups an approval joins are a decider's (V-D3): read for a course
+           decider who may not choose as well, whose chooser never ran, and for nobody else. */
+        if ($controls && !$controls['groupfacts'] && $controls['coursedecider']) {
+            $controls['groupfacts'] = $this->group_facts($instance, $coursecontext);
+        }
+        $capacity = $candecide ? $this->capacity_context($instance) : ['hascapacity' => false];
+
+        $snapshot = $this->snapshot_context($application);
+        $history = $this->history_context($application, $coursecontext);
+        $hascomment = trim((string) $application->applycomment) !== '';
+
+        $outcome = $candecide
+            ? $this->review_outcome_context($application, $applicant, $instance, $coursecontext, $controls, $keyed, $capacity)
+            : ['effective' => [], 'context' => [], 'confirm' => ''];
 
         $context = $controls
-            + $this->snapshot_context($application)
+            + $outcome['context']
+            + $this->review_signals_context(
+                $controls['groupfacts'] ?? [],
+                $outcome['effective'],
+                $keyed['keygroupid'],
+                $capacity,
+                $history,
+                $snapshot,
+                (string) $application->applycomment
+            )
+            + $snapshot
             + $this->identity_context($applicant, $coursecontext)
-            + $this->history_context($application, $coursecontext)
+            + $history
             + $this->decision_context($application)
-            + $this->capacity_context($instance)
+            + $this->review_summary_context($application, $instance, $coursecontext, $candecide)
             + [
             'candecide' => $candecide,
             'viewonlynotice' => get_string('reviewviewonly', 'enrol_apply'),
             'formurl' => $manageurl->out(false),
             'sesskey' => sesskey(),
             'userenrolmentid' => (int) $application->id,
-            'courselabel' => get_string('course'),
-            // Plain, for the same reason as the group names: the template double-stashes it.
-            'coursename' => format_string($application->coursename, true, [
-                'context' => \context_course::instance($application->courseid),
-                'escape' => false,
-            ]),
-            'courseurl' => (new moodle_url('/course/view.php', ['id' => $application->courseid]))->out(false),
-            // No e-mail row: the address is one identity field among the rest. See identity_context().
-            'profileurl' => (new moodle_url('/user/view.php', [
-                'id' => (int) $applicant->id,
-                'course' => (int) $application->courseid,
-            ]))->out(false),
-            'profilelabel' => get_string('viewprofile'),
-            'appliedlabel' => get_string('applydate', 'enrol_apply'),
-            'applied' => userdate((int) $application->applydate, get_string('strftimedatetimeshort', 'langconfig')),
             'haskeychip' => $keyed['chip'] !== '',
             'keychip' => $keyed['chip'],
             'statuslabel' => get_string('submissionstatus', 'enrol_apply'),
             'status' => $waiting
                 ? get_string('outcomewaiting', 'enrol_apply')
                 : get_string('outcomeawaiting', 'enrol_apply'),
-            /* Plain, not escaped: review.mustache renders this through a double stash. The
-               label's other two sinks render raw, which is why the helper takes a flag. */
+            'iswaiting' => $waiting,
+            // Literal class pairs, so the badge scan sees each background with its text colour.
+            'statuschipclass' => $waiting ? 'bg-info text-white' : 'bg-warning text-dark',
+            /* Plain, not escaped: review_evidence.mustache renders this through a double stash.
+               The label's other two sinks render raw, which is why the helper takes a flag. */
             'commentlabel' => \enrol_apply\local\commentlabel::custom($instance, false),
-            'hascomment' => trim((string) $application->applycomment) !== '',
+            'hascomment' => $hascomment,
             /* Escaped once with the applicant's line breaks kept, as in the queue's own cell:
                format_text(FORMAT_PLAIN) escapes and converts newlines and nothing else, so the
                template triple stashes it, as it does the decision message and note.
@@ -1322,17 +1427,46 @@ class enrol_apply_renderer extends plugin_renderer_base {
                where the eye finishes. Cancel gets its own style because it is the only
                irreversible one: cancel_enrolment() unenrols, taking the row and the applicant's
                comment with it. See enrol_apply/review_actions for why its being the default
-               submit is safe. */
+               submit is safe.
+
+               Each carries its consequence (RP-D8), escaped for a triple stash because the
+               approval's names it; beside the button, never inside it, so the button's accessible
+               name and the Behat presses that drive it stay the label alone. Re-deferring an
+               application already deferred notifies only when a message is written (gates BI, BJ),
+               so its line says so. */
             'actions' => [
-                ['value' => 'cancel', 'label' => get_string('reviewcancel', 'enrol_apply'), 'style' => 'btn-outline-danger'],
-                ['value' => 'wait', 'label' => get_string('reviewwait', 'enrol_apply'), 'style' => 'btn-secondary'],
-                ['value' => 'confirm', 'label' => get_string('reviewconfirm', 'enrol_apply'), 'style' => 'btn-primary'],
+                [
+                    'value' => 'cancel',
+                    'label' => get_string('reviewcancel', 'enrol_apply'),
+                    'style' => 'btn-outline-danger',
+                    'icon' => 'e/cancel',
+                    'consequence' => s(get_string('reviewcancelconsequence', 'enrol_apply')),
+                ],
+                [
+                    'value' => 'wait',
+                    'label' => get_string('reviewwait', 'enrol_apply'),
+                    'style' => 'btn-secondary',
+                    'icon' => 'i/duration',
+                    'consequence' => s(get_string(
+                        $waiting ? 'reviewwaitagainconsequence' : 'reviewwaitconsequence',
+                        'enrol_apply'
+                    )),
+                ],
+                [
+                    'value' => 'confirm',
+                    'label' => get_string('reviewconfirm', 'enrol_apply'),
+                    'style' => 'btn-primary',
+                    'icon' => 't/check',
+                    'consequence' => $outcome['confirm'],
+                ],
             ],
         ];
 
         /* The decisions go into a core sticky footer interpolated inside the form, as on the
-           queue (see manage_form()): only the buttons, because the footer's content area clips
-           with no scrollbar.
+           queue (see manage_form()): only the buttons and their one-line consequences, because
+           the footer's content area clips with no scrollbar. Below the md breakpoint the
+           consequences move into the page body above the bar, where the buttons'
+           aria-describedby always point.
 
            The spreading class is on the partial's own row, not passed to the footer: the footer
            applies its classes to a content area whose only child is that row, so there it would
@@ -1345,7 +1479,720 @@ class enrol_apply_renderer extends plugin_renderer_base {
             $context['stickyfooter'] = $this->render(new \core\output\sticky_footer($bar));
         }
 
+        /* The search over the groups that are not pinned (RP-D20): core's own autocomplete,
+           client side, with no ajax module, enhancing a plain multiple select that posts groups[]
+           without JavaScript. The selection stays open on a pick, as core keeps it for a multiple
+           select, so several groups can be added in one pass. */
+        if (!empty($context['hasaddgroups'])) {
+            $this->page->requires->js_call_amd('core/form-autocomplete', 'enhance', [
+                '#enrol_apply_addgroups',
+                false,
+                false,
+                get_string('reviewaddgroupsearch', 'enrol_apply'),
+                false,
+                true,
+                get_string('reviewaddgroupnone', 'enrol_apply'),
+                false,
+            ]);
+        }
+        // The outcome follows the ticks only where somebody may tick; the page is right without it.
+        if (!empty($context['chooser'])) {
+            $this->page->requires->js_call_amd('enrol_apply/review', 'init', ['#enrol_apply_review_form']);
+        }
+
         return $this->render_from_template('enrol_apply/review', $context);
+    }
+
+    /**
+     * The strip that opens the funnel: who applied, how, through which method and how long ago.
+     *
+     * The status and key chips are built in review_form(), beside the decision they belong to;
+     * this adds the waiting time (RP-D11), the method and the course, and the read-only chip of a
+     * reader who may not decide (RP-D12).
+     *
+     * The method's name is the plain spelling, for a double stash: a typed name through
+     * format_string() with 'escape' => false, the unnamed fallbacks as the language strings
+     * get_instance_name() returns them.
+     *
+     * @param stdClass $application Application as \enrol_apply\local\queue::application() returns it.
+     * @param stdClass $instance Enrol instance the application belongs to.
+     * @param \context_course $coursecontext The course it was made to.
+     * @param bool $candecide Whether this reader may decide it.
+     * @return array Template context for enrol_apply/review_summary.
+     */
+    protected function review_summary_context(
+        $application,
+        stdClass $instance,
+        \context_course $coursecontext,
+        bool $candecide
+    ): array {
+        $applied = (int) $application->applydate;
+        $when = $applied > 0 ? userdate($applied, get_string('strftimedatetimeshort', 'langconfig')) : '';
+        $methodname = trim((string) $instance->name) !== ''
+            ? format_string($instance->name, true, ['context' => $coursecontext, 'escape' => false])
+            : enrol_get_plugin('apply')->get_instance_name($instance);
+
+        return [
+            'readonly' => !$candecide,
+            'readonlylabel' => get_string('reviewreadonly', 'enrol_apply'),
+            'haswaited' => $applied > 0,
+            /* format_time() reads under a minute as "now", which "Applied now ago" cannot carry,
+               so the first minute has a sentence of its own. */
+            'waited' => match (true) {
+                $applied <= 0 => '',
+                time() - $applied < MINSECS => get_string('reviewwaitedjustnow', 'enrol_apply', $when),
+                default => get_string('reviewwaited', 'enrol_apply', (object) [
+                    'ago' => format_time(time() - $applied),
+                    'when' => $when,
+                ]),
+            },
+            'methodlabel' => get_string('reviewmethodlabel', 'enrol_apply'),
+            'methodname' => $methodname,
+            'courselabel' => get_string('course'),
+            // Plain, for the same reason as the group names: the template double-stashes it.
+            'coursename' => format_string($application->coursename, true, [
+                'context' => $coursecontext,
+                'escape' => false,
+            ]),
+            'courseurl' => (new moodle_url('/course/view.php', ['id' => $application->courseid]))->out(false),
+            // No e-mail row: the address is one identity field among the rest. See identity_context().
+            'profileurl' => (new moodle_url('/user/view.php', [
+                'id' => (int) $application->userid,
+                'course' => (int) $application->courseid,
+            ]))->out(false),
+            'profilelabel' => get_string('viewprofile'),
+        ];
+    }
+
+    /**
+     * How full a count is against its limit, by the queue meter's rule (RP-D3).
+     *
+     * Attention from four fifths, so a limit is seen before it is reached (the queue's applicant
+     * meter warns there, queue_capacity_context()); over from the limit itself, members >= seats,
+     * which is the chooser's full rule ({@see self::group_facts()}). Advisory: no state disables a
+     * decision (R5, capacity::places_full()).
+     *
+     * @param int $taken How many the limit already holds.
+     * @param int $total The limit, greater than zero.
+     * @return string One of the SIGNAL_ constants: ok, warn or over.
+     */
+    protected static function signal_state(int $taken, int $total): string {
+        if ($taken >= $total) {
+            return self::SIGNAL_OVER;
+        }
+
+        return $taken * 5 >= $total * 4 ? self::SIGNAL_WARN : self::SIGNAL_OK;
+    }
+
+    /**
+     * One row of "What weighs on the decision".
+     *
+     * Every state has an icon of its own shape and a word, so colour is never alone; only the two
+     * that need attention are tinted, with Bootstrap's subtle backgrounds, which follow the dark
+     * colour mode by themselves. The class names are literal so the Bootstrap scans see them.
+     *
+     * @param string $state One of the SIGNAL_ constants.
+     * @param string $label What is measured, with its number, plain spelling.
+     * @param string $detail What the number means for this decision, plain; empty for none.
+     * @param string $href Anchor into the evidence column, empty for none.
+     * @param string $linktext Text of that link.
+     * @return array Template context for one signal.
+     */
+    protected static function signal_row(
+        string $state,
+        string $label,
+        string $detail = '',
+        string $href = '',
+        string $linktext = ''
+    ): array {
+        return [
+            'label' => $label,
+            'hasdetail' => $detail !== '',
+            'detail' => $detail,
+            'haslink' => $href !== '',
+            'href' => $href,
+            'linktext' => $linktext,
+            'state' => $state,
+            'isok' => $state === self::SIGNAL_OK,
+            'iswarn' => $state === self::SIGNAL_WARN,
+            'isover' => $state === self::SIGNAL_OVER,
+            'isread' => $state === self::SIGNAL_READ,
+            'isnone' => $state === self::SIGNAL_NONE,
+            'rowclass' => match ($state) {
+                self::SIGNAL_WARN => 'bg-warning-subtle',
+                self::SIGNAL_OVER => 'bg-danger-subtle',
+                default => '',
+            },
+            'hasstateword' => $state !== self::SIGNAL_NONE,
+            'stateword' => match ($state) {
+                self::SIGNAL_OK => get_string('reviewstateok', 'enrol_apply'),
+                self::SIGNAL_WARN => get_string('reviewstatewarn', 'enrol_apply'),
+                self::SIGNAL_OVER => get_string('reviewstateover', 'enrol_apply'),
+                self::SIGNAL_READ => get_string('reviewstateread', 'enrol_apply'),
+                default => '',
+            },
+        ];
+    }
+
+    /**
+     * "What weighs on the decision": the signals, the attention line and the method line.
+     *
+     * In the order RP-D2 sets: the seats of each group the approval joins that declares seats,
+     * the key group first; the method's places; the earlier applications, only for a holder of
+     * enrol/apply:viewreports and absent rather than empty otherwise (the panel's own gate,
+     * history_context()); the submitted details, counted over the rows the reader may see, so a
+     * withheld field changes no count (no presence oracle); and the comment. A limit that is not
+     * set gives no row. Earlier applications are "read", never red: the plugin cannot judge them.
+     *
+     * Seats come only from $facts, which only a course decider gets and which name only the
+     * groups this reader may choose (V-D3); places and the method line only from $capacity,
+     * gated the same way. So a viewer reads history, details and comment, and a mentor details
+     * and comment.
+     *
+     * The attention line (concept E) counts and names the worst signal and never says what to
+     * do (RP-D14).
+     *
+     * @param array $facts Group facts, as group_facts() returns them; empty when not a course decider.
+     * @param array $effective Group ids the approval joins as the page loads.
+     * @param int $keygroupid The key group when this reader may be told it, 0 otherwise.
+     * @param array $capacity As capacity_context() returns it.
+     * @param array $history As history_context() returns it.
+     * @param array $snapshot As snapshot_context() returns it.
+     * @param string $comment The applicant's comment, raw.
+     * @return array Template context for enrol_apply/review_signals.
+     */
+    protected function review_signals_context(
+        array $facts,
+        array $effective,
+        int $keygroupid,
+        array $capacity,
+        array $history,
+        array $snapshot,
+        string $comment
+    ): array {
+        $signals = [];
+
+        $seated = [];
+        foreach ($effective as $groupid) {
+            if (isset($facts[$groupid]) && $facts[$groupid]->hasseats) {
+                $seated[$groupid] = $facts[$groupid];
+            }
+        }
+        if ($keygroupid && isset($seated[$keygroupid])) {
+            $seated = [$keygroupid => $seated[$keygroupid]] + $seated;
+        }
+        foreach ($seated as $fact) {
+            $state = self::signal_state($fact->members, $fact->seats);
+            $left = $fact->seats - $fact->members;
+            $signals[] = self::signal_row(
+                $state,
+                get_string('reviewsignalseats', 'enrol_apply', (object) [
+                    'name' => $fact->name,
+                    'members' => $fact->members,
+                    'seats' => $fact->seats,
+                ]),
+                match (true) {
+                    $state === self::SIGNAL_OVER => get_string('reviewsignalseatsover', 'enrol_apply', (object) [
+                        'after' => $fact->members + 1,
+                        'seats' => $fact->seats,
+                    ]),
+                    $fact->id === $keygroupid => get_string('reviewsignalseatsleftkey', 'enrol_apply', $left),
+                    default => get_string('reviewsignalseatsleft', 'enrol_apply', $left),
+                }
+            );
+        }
+
+        if ($capacity['hascapacity'] && $capacity['places'] > 0) {
+            $state = self::signal_state($capacity['placestaken'], $capacity['places']);
+            $signals[] = self::signal_row(
+                $state,
+                get_string('reviewsignalplaces', 'enrol_apply', (object) [
+                    'taken' => $capacity['placestaken'],
+                    'total' => $capacity['places'],
+                ]),
+                $state === self::SIGNAL_OVER
+                    ? get_string('reviewsignalplacesover', 'enrol_apply', (object) [
+                        'after' => $capacity['placestaken'] + 1,
+                        'total' => $capacity['places'],
+                    ])
+                    : get_string('reviewsignalplacesleft', 'enrol_apply', $capacity['places'] - $capacity['placestaken'])
+            );
+        }
+
+        if (!empty($history['hashistory'])) {
+            // Newest first, as queue::prior_applications() orders them.
+            $last = reset($history['history']);
+            $signals[] = self::signal_row(
+                self::SIGNAL_READ,
+                get_string('reviewsignalhistory', 'enrol_apply', count($history['history'])),
+                get_string('reviewsignalhistorylast', 'enrol_apply', (object) [
+                    'outcome' => $last['outcome'],
+                    'applied' => $last['applied'],
+                ]),
+                '#enrol_apply_review_history',
+                get_string('reviewsignalhistorylink', 'enrol_apply')
+            );
+        }
+
+        if (!empty($snapshot['hassnapshot'])) {
+            $total = count($snapshot['snapshot']);
+            $filled = count(array_filter(
+                $snapshot['snapshot'],
+                static fn(array $row): bool => trim((string) $row['value']) !== ''
+            ));
+            $signals[] = self::signal_row(
+                $filled === $total ? self::SIGNAL_OK : self::SIGNAL_READ,
+                get_string('reviewsignaldetails', 'enrol_apply', (object) ['filled' => $filled, 'total' => $total]),
+                '',
+                '#enrol_apply_review_details',
+                get_string('reviewsignaldetailslink', 'enrol_apply')
+            );
+        }
+
+        $signals[] = trim($comment) !== ''
+            ? self::signal_row(
+                self::SIGNAL_READ,
+                get_string('reviewsignalcomment', 'enrol_apply'),
+                '',
+                '#enrol_apply_review_comment',
+                get_string('reviewsignalcommentlink', 'enrol_apply')
+            )
+            : self::signal_row(self::SIGNAL_NONE, get_string('reviewsignalnocomment', 'enrol_apply'));
+
+        $over = array_values(array_filter($signals, static fn(array $row): bool => $row['isover']));
+        $warn = array_values(array_filter($signals, static fn(array $row): bool => $row['iswarn']));
+        $flagged = count($over) + count($warn);
+        $worst = $flagged ? ($over ?: $warn)[0]['label'] : '';
+
+        $methodline = '';
+        if ($capacity['hascapacity']) {
+            $parts = [
+                $capacity['limit'] > 0
+                    ? get_string('reviewmethodheld', 'enrol_apply', (object) [
+                        'taken' => $capacity['held'],
+                        'total' => $capacity['limit'],
+                    ])
+                    : get_string('reviewmethodheldnolimit', 'enrol_apply'),
+                get_string(
+                    $capacity['narrowed'] ? 'reviewmethoddeferredyours' : 'reviewmethoddeferred',
+                    'enrol_apply',
+                    $capacity['deferred']
+                ),
+            ];
+            if ($capacity['places'] <= 0) {
+                $parts[] = get_string('reviewmethodnoplaces', 'enrol_apply');
+            }
+            $methodline = get_string('reviewmethodline', 'enrol_apply', implode('; ', $parts));
+        }
+
+        return [
+            'signalsheading' => get_string('reviewsignals', 'enrol_apply'),
+            'signals' => $signals,
+            'attentionflagged' => $flagged > 0,
+            'attention' => match (true) {
+                $flagged === 0 => get_string('reviewattentionnone', 'enrol_apply'),
+                $flagged === 1 => get_string('reviewattentionone', 'enrol_apply', $worst),
+                default => get_string('reviewattentionmany', 'enrol_apply', (object) [
+                    'count' => $flagged,
+                    'worst' => $worst,
+                ]),
+            },
+            'hasmethodline' => $methodline !== '',
+            'methodline' => $methodline,
+        ];
+    }
+
+    /**
+     * Names of the given groups this reader may see, and how many they may not.
+     *
+     * The rule of approval_summary_context(): a group core hides from this reader
+     * ({@see \enrol_apply\local\groupvisibility::visible_to()}) is counted, never named.
+     *
+     * @param array $groupids Group ids.
+     * @param \context_course $coursecontext The course they belong to.
+     * @return array Two elements: group id => plain name, natural order; and the hidden count.
+     */
+    protected function visible_group_names(array $groupids, \context_course $coursecontext): array {
+        global $DB, $USER;
+
+        $groups = $groupids
+            ? $DB->get_records_list('groups', 'id', $groupids, 'id ASC', 'id, courseid, name, visibility')
+            : [];
+        \core_collator::asort_objects_by_property($groups, 'name', \core_collator::SORT_NATURAL);
+
+        $names = [];
+        $hidden = 0;
+        foreach ($groups as $group) {
+            if (\enrol_apply\local\groupvisibility::visible_to($group, (int) $USER->id)) {
+                $names[(int) $group->id] = format_string($group->name, true, ['context' => $coursecontext, 'escape' => false]);
+            } else {
+                $hidden++;
+            }
+        }
+
+        return [$names, $hidden];
+    }
+
+    /**
+     * The sentence that says what confirming does, in its escaped spelling.
+     *
+     * One string per count of groups, none of them inflected for the applicant's gender: pt_br
+     * cannot put an article before an arbitrary group name, and "recebe o aviso" fits anybody.
+     * Every parameter arrives escaped; the strings' own text holds no markup, so the result is
+     * escaped exactly once and the template triple stashes it.
+     *
+     * @param string $who The applicant's name, escaped.
+     * @param string $role The role phrase, escaped ("as Student", "with no role").
+     * @param array $names Group names, escaped.
+     * @param int $hidden How many more groups the reader may not see.
+     * @return string The sentence.
+     */
+    protected static function outcome_sentence(string $who, string $role, array $names, int $hidden): string {
+        $items = array_values($names);
+        if ($hidden) {
+            $items[] = get_string('decisionsummaryhidden', 'enrol_apply', $hidden);
+        }
+        $a = (object) ['who' => $who, 'role' => $role, 'groups' => implode(', ', $items)];
+        $count = count($names) + $hidden;
+
+        return match (true) {
+            $count === 0 => get_string('reviewoutcomenone', 'enrol_apply', $a),
+            $count === 1 => get_string('reviewoutcomeone', 'enrol_apply', $a),
+            default => get_string('reviewoutcomemany', 'enrol_apply', $a),
+        };
+    }
+
+    /**
+     * "On confirming": what an approval does, the adjustments under it, and the message and note.
+     *
+     * The groups it names are the ones the approval really joins, from the helpers the approval
+     * runs, so the sentence cannot promise what the decision does not do:
+     *  - a decider who may choose: the groups ticked as the page loads, or, with none ticked,
+     *    {@see \enrol_apply_plugin::default_approval_groups()}, because confirm_enrolment()
+     *    records an empty choice and add_instance_groups() then falls back to it. An empty
+     *    choice is not "no group": for an application a group key sent for review it is the key's
+     *    group plus the method's, and the sentence under the cards says so;
+     *  - a course decider who may not choose: the read-only summary, approval_summary_context();
+     *  - a mentor, who holds nothing in the course: the role only, with no group named.
+     *
+     * Ticked as the page loads (RP-D19): the key route for an application whose key group this
+     * reader may see, as before; for any other the method's defaults, but only when every one of
+     * them is a group this reader may choose. Ticked groups post explicitly, and confirm_enrolment()
+     * then joins exactly them, so ticking a visible subset of a route that holds a group the
+     * reader cannot choose would drop that group from the approval; leaving the boxes empty keeps
+     * the defaults whole.
+     *
+     * Above groupfilter::THRESHOLD choosable groups (counted after the reader's narrowing,
+     * RP-D18) only the ticked ones are cards and the rest are a search (RP-D20); at or below it
+     * every choosable group is a card. "Adjust" is open as the page loads only when a ticked group
+     * is over its seats, or when the method gives no group and there are groups to choose (RP-D5).
+     *
+     * @param stdClass $application Application as \enrol_apply\local\queue::application() returns it.
+     * @param stdClass $applicant Applicant user record.
+     * @param stdClass $instance Enrol instance the application belongs to.
+     * @param \context_course $coursecontext The course it was made to.
+     * @param array $controls As decision_controls_context() returns it, with groupfacts filled in.
+     * @param array $keyed As key_context() returns it.
+     * @param array $capacity As capacity_context() returns it.
+     * @return array Keys 'effective' (group ids joined as the page loads), 'confirm' (Confirm's
+     *     consequence, escaped) and 'context' (template context for enrol_apply/review_outcome).
+     */
+    protected function review_outcome_context(
+        $application,
+        $applicant,
+        stdClass $instance,
+        \context_course $coursecontext,
+        array $controls,
+        array $keyed,
+        array $capacity
+    ): array {
+        global $DB;
+
+        $facts = $controls['groupfacts'];
+        $chooser = $controls['chooser'];
+        $coursedecider = $controls['coursedecider'];
+        $keygroupid = $keyed['keygroupid'];
+
+        // The approval's own fallback, read from the helper add_instance_groups() runs.
+        $defaults = $chooser ? enrol_get_plugin('apply')->default_approval_groups($instance, (int) $application->id) : [];
+        [$defaultnames, $defaulthidden] = $this->visible_group_names($defaults, $coursecontext);
+
+        $ticked = [];
+        if ($chooser) {
+            $route = $keygroupid ? $keyed['preselected'] : [];
+            if (!$route && $defaults && !array_diff($defaults, array_keys($facts))) {
+                $route = $defaults;
+            }
+            $ticked = array_values(array_intersect(array_keys($facts), array_map('intval', $route)));
+        }
+
+        // What the approval joins as the page loads, and what this reader may be told of it.
+        if ($chooser) {
+            $effective = $ticked ?: $defaults;
+            $names = $ticked
+                ? array_map(static fn(int $id): string => $facts[$id]->name, $ticked)
+                : array_values($defaultnames);
+            $hidden = $ticked ? 0 : $defaulthidden;
+        } else if ($coursedecider) {
+            // Absent only when the summary was not built, which then names no group.
+            $effective = $controls['summaryids'] ?? [];
+            $names = $controls['summarynames'] ?? [];
+            $hidden = $controls['summaryhidden'] ?? 0;
+        } else {
+            $effective = [];
+            $names = [];
+            $hidden = 0;
+        }
+        $escapednames = array_map('s', $names);
+
+        /* The role: the instance's, which is what the chooser's default and the summary both give;
+           a role name has no single spelling (role_get_name()), so it is normalised to the escaped
+           one, as the chooser's are. */
+        $role = (int) $instance->roleid > 0 ? $DB->get_record('role', ['id' => (int) $instance->roleid]) : false;
+        $rolename = $role ? format_string(role_get_name($role, $coursecontext), true, ['context' => $coursecontext]) : '';
+        $rolephrase = $rolename !== ''
+            ? get_string('reviewoutcomerole', 'enrol_apply', $rolename)
+            : get_string('reviewoutcomenorole', 'enrol_apply');
+
+        $who = s(fullname($applicant));
+        $sentence = $coursedecider
+            ? self::outcome_sentence($who, $rolephrase, $escapednames, $hidden)
+            : get_string('reviewoutcomenogroupinfo', 'enrol_apply', (object) ['who' => $who, 'role' => $rolephrase]);
+
+        // Afterwards: each joined group that declares seats, then the method's places.
+        $after = [];
+        $overfact = null;
+        foreach ($effective as $groupid) {
+            $fact = $facts[$groupid] ?? null;
+            if ($fact === null || !$fact->hasseats) {
+                continue;
+            }
+            $after[] = get_string('reviewafterseats', 'enrol_apply', (object) [
+                'name' => s($fact->name),
+                'members' => $fact->members + 1,
+                'seats' => $fact->seats,
+            ]);
+            if ($overfact === null && $fact->full) {
+                $overfact = $fact;
+            }
+        }
+        if ($capacity['hascapacity'] && $capacity['places'] > 0) {
+            $after[] = get_string('reviewafterplaces', 'enrol_apply', (object) [
+                'taken' => $capacity['placestaken'] + 1,
+                'total' => $capacity['places'],
+            ]);
+        }
+
+        $items = $escapednames;
+        if ($hidden) {
+            $items[] = get_string('decisionsummaryhidden', 'enrol_apply', $hidden);
+        }
+        $confirm = match (true) {
+            $overfact !== null => get_string('reviewconfirmoverbook', 'enrol_apply', (object) [
+                'name' => s($overfact->name),
+                'after' => $overfact->members + 1,
+                'seats' => $overfact->seats,
+            ]),
+            $coursedecider && (bool) $items => get_string('reviewconfirmconsequencegroups', 'enrol_apply', (object) [
+                'groups' => implode(', ', $items),
+                'role' => $rolephrase,
+            ]),
+            default => get_string('reviewconfirmconsequencecourse', 'enrol_apply', $rolephrase),
+        };
+
+        // The cards, and the search over the rest.
+        $searched = count($facts) > \enrol_apply\local\groupfilter::THRESHOLD;
+        $ingroupings = [];
+        $groupings = [];
+        if ($searched) {
+            $coursedata = groups_get_course_data((int) $instance->courseid);
+            foreach ($coursedata->mappings as $mapping) {
+                $ingroupings[(int) $mapping->groupid][] = (int) $mapping->groupingid;
+            }
+        }
+        $cards = [];
+        $options = [];
+        foreach ($facts as $fact) {
+            $checked = in_array($fact->id, $ticked, true);
+            if (!$searched || $checked) {
+                $cards[] = $this->group_card($fact, $checked, $fact->id === $keygroupid, in_array($fact->id, $defaults, true));
+                continue;
+            }
+            $options[] = $this->group_option($fact, $ingroupings[$fact->id] ?? []);
+            foreach ($ingroupings[$fact->id] ?? [] as $groupingid) {
+                $groupings[$groupingid] = true;
+            }
+        }
+        $groupingoptions = [];
+        if ($groupings) {
+            foreach ($coursedata->groupings as $grouping) {
+                if (isset($groupings[(int) $grouping->id])) {
+                    $groupingoptions[(int) $grouping->id] = (object) [
+                        'id' => (int) $grouping->id,
+                        'name' => format_string($grouping->name, true, ['context' => $coursecontext, 'escape' => false]),
+                    ];
+                }
+            }
+            \core_collator::asort_objects_by_property($groupingoptions, 'name', \core_collator::SORT_NATURAL);
+        }
+
+        $defaultitems = array_map('s', array_values($defaultnames));
+        if ($defaulthidden) {
+            $defaultitems[] = get_string('decisionsummaryhidden', 'enrol_apply', $defaulthidden);
+        }
+
+        $roledefault = $rolename !== ''
+            ? get_string('reviewroledefaultnamed', 'enrol_apply', $rolename)
+            : s(get_string('decisionroledefault', 'enrol_apply'));
+
+        $hasgroups = $chooser && (bool) $facts;
+        $hasroles = $chooser && !empty($controls['roles']);
+        $anyfull = (bool) array_filter($ticked, static fn(int $id): bool => $facts[$id]->full);
+        $message = (string) ($controls['messagevalue'] ?? '');
+        $note = (string) ($controls['notevalue'] ?? '');
+
+        return [
+            'effective' => array_values(array_map('intval', $effective)),
+            'confirm' => $confirm,
+            'context' => [
+                'outcomeheading' => get_string('reviewoutcome', 'enrol_apply'),
+                'outcomesentence' => $sentence,
+                'hasoutcomeafter' => (bool) $after,
+                'outcomeafter' => $after ? get_string('reviewoutcomeafter', 'enrol_apply', implode('; ', $after)) : '',
+                'outcomenotkey' => $chooser && $keygroupid && isset($facts[$keygroupid])
+                    && !in_array($keygroupid, $effective, true),
+                'outcomenotkeytext' => $keygroupid && isset($facts[$keygroupid])
+                    ? get_string('reviewoutcomenotkey', 'enrol_apply', s($facts[$keygroupid]->name))
+                    : '',
+                'outcomereadonly' => $coursedecider && !$chooser,
+                'outcomereadonlyhelp' => get_string('decisionsummary_help', 'enrol_apply'),
+                // What the AMD module rebuilds the sentence from; plain spellings for attributes.
+                'outcomewho' => fullname($applicant),
+                'outcomekeygroup' => $keygroupid,
+                'outcomedefaultids' => implode(',', array_map('intval', $defaults)),
+                'outcomedefaulthidden' => $defaulthidden,
+                'outcomedefaultnames' => array_map(
+                    static fn(string $name): array => ['name' => $name],
+                    array_values($defaultnames)
+                ),
+                'outcomedefaultrole' => $rolename,
+                'outcomeplaces' => $capacity['hascapacity'] ? $capacity['places'] : 0,
+                'outcomeplacestaken' => $capacity['hascapacity'] ? $capacity['placestaken'] : 0,
+                'hasadjust' => $hasgroups || $hasroles,
+                'adjustopen' => $anyfull || ($hasgroups && !$ticked && !$defaults),
+                'adjustlabel' => get_string('reviewadjust', 'enrol_apply'),
+                'hasgroupchooser' => $hasgroups,
+                'groupchooserlabel' => get_string('decisiongroups', 'enrol_apply'),
+                'haspinnedhelp' => $searched,
+                'pinnedhelp' => get_string('reviewpinnedhelp', 'enrol_apply'),
+                'groupcards' => $cards,
+                'hasgroupcards' => (bool) $cards,
+                'hasaddgroups' => (bool) $options,
+                'addgrouplabel' => get_string('reviewaddgroup', 'enrol_apply'),
+                'addgroupcount' => get_string('reviewaddgroupcount', 'enrol_apply', count($facts)),
+                'addgrouphelp' => get_string('reviewaddgrouphelp', 'enrol_apply'),
+                'addgroups' => $options,
+                'hasgroupings' => (bool) $groupingoptions,
+                'groupinglabel' => get_string('reviewgrouping', 'enrol_apply'),
+                'groupingall' => get_string('reviewgroupingall', 'enrol_apply'),
+                'groupings' => array_values($groupingoptions),
+                'emptychoice' => $defaultitems
+                    ? get_string('reviewemptychoice', 'enrol_apply', implode(', ', $defaultitems))
+                    : s(get_string('reviewemptychoicenone', 'enrol_apply')),
+                'hasrolechooser' => $hasroles,
+                'roledefaultoption' => $roledefault,
+                // One disclosure for both boxes, open whenever either holds a value (RP-D7).
+                'writeopen' => trim($message) !== '' || trim($note) !== '',
+                'writelabel' => get_string('reviewwrite', 'enrol_apply'),
+                'writehelp' => get_string('reviewwritehelp', 'enrol_apply'),
+            ],
+        ];
+    }
+
+    /**
+     * One group as a checkbox card of "Adjust" (RP-D6).
+     *
+     * The occupancy bar is decoration beside the text that says the same thing: a progressbar
+     * whose values are seats, not percent, labelled with the seats sentence. A full group says
+     * "no seats left" in words and stays tickable (R5).
+     *
+     * @param stdClass $fact As group_facts() returns one.
+     * @param bool $checked Whether it is ticked as the page loads.
+     * @param bool $iskey Whether it is the key's group.
+     * @param bool $ismethod Whether the approval's defaults name it.
+     * @return array Template context for one card.
+     */
+    protected function group_card(stdClass $fact, bool $checked, bool $iskey, bool $ismethod): array {
+        $state = $fact->hasseats ? self::signal_state($fact->members, $fact->seats) : self::SIGNAL_OK;
+
+        return [
+            'id' => $fact->id,
+            'name' => $fact->name,
+            'checked' => $checked,
+            'iskey' => $iskey,
+            'keybadge' => get_string('reviewgroupkey', 'enrol_apply'),
+            'ismethod' => $ismethod && !$iskey,
+            'methodbadge' => get_string('reviewgroupmethod', 'enrol_apply'),
+            'hasseats' => $fact->hasseats,
+            'members' => $fact->members,
+            'seats' => $fact->seats,
+            'percent' => $fact->percent,
+            'barclass' => match ($state) {
+                self::SIGNAL_OVER => 'bg-danger text-white',
+                self::SIGNAL_WARN => 'bg-warning text-dark',
+                default => 'bg-success text-white',
+            },
+            'barlabel' => get_string('reviewsignalseats', 'enrol_apply', (object) [
+                'name' => $fact->name,
+                'members' => $fact->members,
+                'seats' => $fact->seats,
+            ]),
+            'seatstext' => match (true) {
+                !$fact->hasseats => get_string('reviewgroupcardnolimit', 'enrol_apply'),
+                $fact->full => get_string('reviewgroupcardfull', 'enrol_apply', (object) [
+                    'members' => $fact->members,
+                    'seats' => $fact->seats,
+                ]),
+                default => get_string('reviewgroupcardseats', 'enrol_apply', (object) [
+                    'members' => $fact->members,
+                    'seats' => $fact->seats,
+                    'left' => $fact->seats - $fact->members,
+                ]),
+            },
+        ];
+    }
+
+    /**
+     * One group as an option of "Add another group" (RP-D21).
+     *
+     * Plain text, because core's autocomplete matches the option's visible text and renders it in
+     * the chip and the announcement: the idnumber in parentheses makes the code searchable, and
+     * the seat state is words, never colour. A full group stays selectable (R5).
+     *
+     * @param stdClass $fact As group_facts() returns one.
+     * @param array $groupingids The groupings that hold it.
+     * @return array Template context for one option.
+     */
+    protected function group_option(stdClass $fact, array $groupingids): array {
+        $label = $fact->idnumber !== ''
+            ? get_string('reviewgroupidnumber', 'enrol_apply', (object) ['name' => $fact->name, 'idnumber' => $fact->idnumber])
+            : $fact->name;
+        $a = (object) ['name' => $label, 'members' => $fact->members, 'seats' => $fact->seats];
+
+        return [
+            'id' => $fact->id,
+            'name' => $fact->name,
+            'text' => match (true) {
+                !$fact->hasseats => $label,
+                $fact->full => get_string('reviewgroupoptionfull', 'enrol_apply', $a),
+                default => get_string('reviewgroupoption', 'enrol_apply', $a),
+            },
+            'hasseats' => $fact->hasseats,
+            'members' => $fact->members,
+            'seats' => $fact->seats,
+            // Comma-delimited on both sides, so the narrowing never matches grouping 1 inside 11.
+            'groupings' => ',' . implode(',', $groupingids) . ',',
+        ];
     }
 
     /**

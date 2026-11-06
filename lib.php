@@ -2574,3 +2574,19 @@ class enrol_apply_plugin extends enrol_plugin {
         return $this->lasternoller;
     }
 }
+
+/**
+ * The plugin's own icons, mapped to Font Awesome.
+ *
+ * The review page's key chip needs a key, and core's i/key is listed in
+ * icon_system_fontawesome::get_deprecated_icons() on 5.3, so the chip names an icon of its own.
+ * There is no pix/ file behind it: every theme this plugin supports renders icons through Font
+ * Awesome.
+ *
+ * @return array Icon name => Font Awesome classes.
+ */
+function enrol_apply_get_fontawesome_icon_map() {
+    return [
+        'enrol_apply:key' => 'fa-key',
+    ];
+}

@@ -1,0 +1,127 @@
+{{!
+    This file is part of Moodle - http://moodle.org/
+
+    Moodle is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Moodle is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+}}
+{{!
+    @template enrol_apply/review_summary
+
+    The strip that opens the review page: who applied, in what state, how, through which method
+    and how long ago. It answers the decider's first question before any sentence is read.
+
+    Every chip carries text beside its colour and icon; the status chip's label is visually
+    hidden so a screen reader hears "Status: Deferred" and the eye reads the chip. The label and
+    the value stay on one line of this template, because a Behat "I should see" matches the raw
+    text.
+
+    Context variables required for this template:
+    * readonly boolean - whether the reader may only look, which earns the read-only chip
+    * readonlylabel string - that chip's text
+    * statuslabel string - the visually hidden label of the status chip
+    * status string - whether the application is pending or on the waiting list
+    * iswaiting boolean - whether it is on the waiting list, which picks the chip's icon
+    * statuschipclass string - the chip's background and text colour classes, a literal pair
+    * haskeychip boolean - whether the applicant presented a group enrolment key
+    * keychip string - what that key did, naming its group to a reader who may see it; plain
+      spelling, escaped by the double stash
+    * haswaited boolean - whether the application date is known
+    * waited string - how long it has waited, with the date
+    * methodlabel string - label of the enrolment method
+    * methodname string - the method's name, plain spelling
+    * courselabel string - label of the course
+    * coursename string - full name of the course applied for, plain spelling
+    * courseurl string - link to the course
+    * hasidentity boolean - whether this reader may see any identifying detail of the applicant
+    * identity array - one entry per identity field the site named and this reader may see, each
+      carrying a label and a value, both in the PLAIN spelling; the e-mail address is one of
+      these when showuseridentity names it and absent when it does not
+    * profileurl string - the applicant's profile in this course
+    * profilelabel string - text of the profile link, a plain link rather than a button: the
+      heaviest control in the first block should not be the one that leaves the page
+    * hasdecision boolean - whether a colleague has already decided this one, which today means
+      it was deferred
+    * decisionlabel string - heading of that line
+    * decision string - who deferred it and when, plain spelling
+    * hasdecisionmessage boolean - whether they wrote anything to the applicant
+    * decisionmessage string - what they wrote, ALREADY escaped with its line breaks converted,
+      which is why it is triple stashed
+    * hasdecisionnote boolean - whether they left a note for whoever reads this next
+    * decisionnotelabel string - label of that note
+    * decisionnote string - the note, ALREADY escaped with its line breaks converted, hence the
+      triple stash. Shown here and deliberately NOT pre-filled into the note box, because that
+      writer clears on empty and a pre-filled box would carry one decision's reason into the next
+
+    Example context (json):
+    {
+        "readonly": true,
+        "readonlylabel": "Read only",
+        "statuslabel": "Status",
+        "status": "Deferred",
+        "iswaiting": true,
+        "statuschipclass": "bg-info text-white",
+        "haskeychip": true,
+        "keychip": "Key accepted: Turma A",
+        "haswaited": true,
+        "waited": "Applied 2 days 3 hours ago (03/11/26, 09:14)",
+        "methodlabel": "Method",
+        "methodname": "Application with a group key",
+        "courselabel": "Course",
+        "coursename": "R&D < Team induction",
+        "courseurl": "https://example.com/course/view.php?id=7",
+        "hasidentity": true,
+        "identity": [
+            {"label": "Username", "value": "jsa"},
+            {"label": "ID number", "value": "2026-0071"}
+        ],
+        "profileurl": "https://example.com/user/view.php?id=5&course=7",
+        "profilelabel": "View profile",
+        "hasdecision": true,
+        "decisionlabel": "The decision so far",
+        "decision": "Deferred by Ana Souza on 10/08/26, 14:02.",
+        "hasdecisionmessage": true,
+        "decisionmessage": "Waiting for the second group to open.",
+        "hasdecisionnote": true,
+        "decisionnotelabel": "Note for the record",
+        "decisionnote": "Second intake opens in September."
+    }
+}}
+<div class="enrol_apply-reviewstrip mb-3">
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+        {{#readonly}}<span class="badge bg-secondary text-dark enrol_apply-chip-readonly">{{#pix}}t/hide, core{{/pix}}{{readonlylabel}}</span>{{/readonly}}
+        <span class="badge {{statuschipclass}} enrol_apply-statuschip">{{^iswaiting}}<span class="enrol_apply-statusdot"></span>{{/iswaiting}}{{#iswaiting}}{{#pix}}i/duration, core{{/pix}}{{/iswaiting}}<span class="visually-hidden">{{statuslabel}}: </span>{{status}}</span>
+        {{#haskeychip}}<span class="badge bg-primary text-white enrol_apply-keychip">{{#pix}}key, enrol_apply{{/pix}}{{keychip}}</span>{{/haskeychip}}
+        {{#haswaited}}<span class="small text-body-secondary">{{waited}}</span>{{/haswaited}}
+    </div>
+    <div class="d-flex flex-wrap align-items-baseline gap-3">
+        <dl class="enrol_apply-identity small text-body-secondary mb-0 d-flex flex-wrap gap-3">
+            <div><dt class="d-inline fw-normal">{{methodlabel}}:</dt> <dd class="d-inline ms-1">{{methodname}}</dd></div>
+            <div><dt class="d-inline fw-normal">{{courselabel}}:</dt> <dd class="d-inline ms-1"><a href="{{courseurl}}">{{coursename}}</a></dd></div>
+            {{#hasidentity}}
+                {{#identity}}
+                    <div><dt class="d-inline fw-normal">{{label}}:</dt> <dd class="d-inline ms-1">{{value}}</dd></div>
+                {{/identity}}
+            {{/hasidentity}}
+        </dl>
+        <a class="small" href="{{profileurl}}">{{profilelabel}}</a>
+    </div>
+    {{#hasdecision}}
+        <div class="alert alert-info mt-2 mb-0" role="status">
+            <strong>{{decisionlabel}}</strong> {{decision}}
+            {{#hasdecisionmessage}}<div class="mt-1">{{{decisionmessage}}}</div>{{/hasdecisionmessage}}
+            {{#hasdecisionnote}}
+                <div class="mt-1"><strong>{{decisionnotelabel}}:</strong> {{{decisionnote}}}</div>
+            {{/hasdecisionnote}}
+        </div>
+    {{/hasdecision}}
+</div>
