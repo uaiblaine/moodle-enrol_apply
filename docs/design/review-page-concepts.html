@@ -1,0 +1,1496 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="A design brainstorm for enrol_apply's one-application review page (manage.php?userenrol=): the decider's five questions, today's page mapped against them, concepts A to E (decision funnel, master-detail, refined dossier, inline triage, attention line) with desktop and phone mockups, role variants, A at the scale of a course with about 100 groups, a visual-language spec, a comparison and decisions RP-D1 to RP-D28. The owner chose concept A on 5 November 2026.">
+<title>Review Page Concepts</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+<style>
+:root{
+  --paper:#e7eaee; --card:#ffffff; --card-2:#f2f5f8; --inset:#eef1f5;
+  --ink:#13161b; --ink-soft:#525b69; --ink-faint:#6f7986;
+  --rule:#ccd3db; --rule-soft:#e0e5ea;
+  --brass:#8a610f; --brass-wash:#f6efe0;
+  --ok:#186b43; --ok-wash:#e1f1e8;
+  --warn:#845309; --warn-wash:#faeed7;
+  --bad:#992727; --bad-wash:#f8e5e5;
+  --blue:#0f6cbf; --blue-wash:#e6f0f9;
+  --shadow:0 1px 2px rgba(16,20,26,.05), 0 10px 30px -16px rgba(16,20,26,.25);
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --disp:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --serif:"Source Serif 4",Georgia,"Times New Roman",serif;
+  --ui:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --m-bg:#ffffff; --m-fg:#1d2125; --m-muted:#6a737b; --m-border:#dee2e6;
+  --m-primary:#0f6cbf; --m-card:#f8f9fa; --m-shade:#eef1f4;
+  --m-ok:#357a32; --m-okbg:#e8f3e7; --m-warn:#7a5f00; --m-warnbg:#fbf1cf;
+  --m-bad:#a33; --m-badbg:#f9e7e7; --m-onprimary:#ffffff;
+  --m-wsolid:#f0ad4e; --m-onwarn:#1d2125; --m-isolid:#008196; --m-ssolid:#ced4da;
+  --m-new:#b7d4ef; --m-newbg:#eaf3fb;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#0f1216; --card:#181c21; --card-2:#1f242a; --inset:#14181d;
+  --ink:#e5e9ed; --ink-soft:#9aa4b1; --ink-faint:#7f8996;
+  --rule:#2b323a; --rule-soft:#222830;
+  --brass:#d3a44e; --brass-wash:#2a2317;
+  --ok:#59c98c; --ok-wash:#13291f;
+  --warn:#dfa848; --warn-wash:#2a2214;
+  --bad:#ef8b8b; --bad-wash:#2c1a1a;
+  --blue:#63a8e2; --blue-wash:#132435;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 12px 34px -18px rgba(0,0,0,.8);
+  --m-bg:#1b1e22; --m-fg:#e9ecef; --m-muted:#a4adb6; --m-border:#343a40;
+  --m-primary:#6ea8dc; --m-card:#23272b; --m-shade:#2a2f34;
+  --m-ok:#79c47a; --m-okbg:#1d2b1d; --m-warn:#dcb84e; --m-warnbg:#2c2716;
+  --m-bad:#e88; --m-badbg:#2e1c1c; --m-onprimary:#10151a;
+  --m-wsolid:#e0a64a; --m-onwarn:#16181b; --m-isolid:#1f8fa3; --m-ssolid:#9aa3ab;
+  --m-new:#2f5577; --m-newbg:#17293a;
+}}
+:root[data-theme="dark"]{
+  --paper:#0f1216; --card:#181c21; --card-2:#1f242a; --inset:#14181d;
+  --ink:#e5e9ed; --ink-soft:#9aa4b1; --ink-faint:#7f8996;
+  --rule:#2b323a; --rule-soft:#222830;
+  --brass:#d3a44e; --brass-wash:#2a2317;
+  --ok:#59c98c; --ok-wash:#13291f;
+  --warn:#dfa848; --warn-wash:#2a2214;
+  --bad:#ef8b8b; --bad-wash:#2c1a1a;
+  --blue:#63a8e2; --blue-wash:#132435;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 12px 34px -18px rgba(0,0,0,.8);
+  --m-bg:#1b1e22; --m-fg:#e9ecef; --m-muted:#a4adb6; --m-border:#343a40;
+  --m-primary:#6ea8dc; --m-card:#23272b; --m-shade:#2a2f34;
+  --m-ok:#79c47a; --m-okbg:#1d2b1d; --m-warn:#dcb84e; --m-warnbg:#2c2716;
+  --m-bad:#e88; --m-badbg:#2e1c1c; --m-onprimary:#10151a;
+  --m-wsolid:#e0a64a; --m-onwarn:#16181b; --m-isolid:#1f8fa3; --m-ssolid:#9aa3ab;
+  --m-new:#2f5577; --m-newbg:#17293a;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--serif);
+  font-size:17px;line-height:1.62;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1300px;margin:0 auto;padding:0 24px 96px}
+a{color:var(--brass);text-underline-offset:3px;text-decoration-thickness:1px}
+a:focus-visible,summary:focus-visible{outline:2px solid var(--brass);outline-offset:2px;border-radius:3px}
+h1,h2,h3,h4{font-family:var(--disp);font-weight:700;line-height:1.14;text-wrap:balance;margin:0}
+code,kbd,.mono{font-family:var(--mono);font-size:.855em}
+code{background:var(--inset);border:1px solid var(--rule-soft);border-radius:4px;padding:.06em .34em;color:var(--ink);overflow-wrap:anywhere}
+kbd{background:var(--card);border:1px solid var(--rule);border-bottom-width:2px;border-radius:4px;padding:0 .36em}
+.eyebrow{font-family:var(--disp);font-size:.8rem;font-weight:600;letter-spacing:.02em;color:var(--brass)}
+.masthead{border-bottom:1px solid var(--rule);padding:52px 0 30px;margin-bottom:8px}
+.masthead h1{font-size:3.4rem;letter-spacing:-.025em;margin:.18em 0 .3em}
+@media (max-width:640px){.masthead h1{font-size:2.3rem}}
+.stand{font-size:1.2rem;color:var(--ink-soft);max-width:66ch;margin:0}
+.mastmeta{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:26px;font-family:var(--mono);font-size:.78rem;color:var(--ink-faint)}
+.mastmeta b{color:var(--ink-soft);font-weight:500}
+.cols{display:flex;flex-wrap:wrap;gap:44px;align-items:flex-start;margin-top:34px}
+.toc{position:sticky;top:20px;flex:0 0 210px;min-width:180px;font-family:var(--disp);font-size:.83rem}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t;border-top:1px solid var(--rule-soft)}
+.toc li:first-child{border-top:0}
+.toc a{display:flex;gap:10px;padding:9px 0;color:var(--ink-soft);text-decoration:none;line-height:1.3}
+.toc a::before{content:counter(t,decimal-leading-zero);color:var(--brass);font-family:var(--mono);font-size:.72rem;padding-top:.15em}
+.toc a:hover{color:var(--ink)}
+main{flex:1 1 520px;min-width:0}
+@media (max-width:900px){.toc{display:none}}
+section{margin:0 0 68px;scroll-margin-top:16px}
+section>h2{font-size:2.05rem;letter-spacing:-.018em;margin:.1em 0 .2em}
+@media (max-width:640px){section>h2{font-size:1.5rem}}
+.sectnum{font-family:var(--mono);font-size:.78rem;color:var(--brass);display:block;margin-bottom:.5em}
+.quoted{border-left:3px solid var(--brass);background:var(--brass-wash);padding:14px 18px;margin:20px 0;font-size:.95rem;color:var(--ink-soft)}
+.quoted p{margin:0}
+.quoted .who{display:block;margin-top:8px;font-family:var(--disp);font-size:.78rem;color:var(--brass)}
+h3{font-size:1.16rem;margin:34px 0 10px;letter-spacing:-.01em}
+h4{font-size:.97rem;margin:24px 0 8px;font-weight:600}
+p{margin:0 0 1em}
+ul,ol{margin:0 0 1em;padding-left:1.25em}
+li{margin:.3em 0}
+.verdicts{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px;margin:26px 0}
+.vc{background:var(--card);border:1px solid var(--rule);border-radius:10px;padding:15px 16px;box-shadow:var(--shadow)}
+.vc .q{font-family:var(--disp);font-weight:600;font-size:.95rem;line-height:1.3;margin:6px 0 8px}
+.vc .a{font-size:.87rem;color:var(--ink-soft);margin:0}
+.tag{display:inline-flex;align-items:center;gap:6px;font-family:var(--disp);font-size:.74rem;font-weight:600;padding:2px 9px;border-radius:99px;border:1px solid}
+.tag.ok{color:var(--ok);background:var(--ok-wash);border-color:var(--ok)}
+.tag.warn{color:var(--warn);background:var(--warn-wash);border-color:var(--warn)}
+.tag.bad{color:var(--bad);background:var(--bad-wash);border-color:var(--bad)}
+.tag.info{color:var(--blue);background:var(--blue-wash);border-color:var(--blue)}
+.note{border:1px solid var(--rule);border-left-width:3px;border-radius:8px;background:var(--card);padding:14px 17px;margin:22px 0;font-size:.94rem}
+.note .lbl{font-family:var(--disp);font-size:.8rem;font-weight:600;display:block;margin-bottom:6px}
+.note.measured{border-left-color:var(--ok)} .note.measured .lbl{color:var(--ok)}
+.note.trap{border-left-color:var(--bad)} .note.trap .lbl{color:var(--bad)}
+.note.think{border-left-color:var(--brass)} .note.think .lbl{color:var(--brass)}
+.note p:last-child{margin-bottom:0}
+.tbl{width:100%;border-collapse:collapse;font-family:var(--ui);font-size:.87rem;margin:0}
+.tblwrap{overflow-x:auto;border:1px solid var(--rule);border-radius:10px;background:var(--card);margin:20px 0}
+.tbl th{text-align:left;font-family:var(--disp);font-size:.78rem;color:var(--ink-faint);font-weight:600;padding:11px 14px;border-bottom:1px solid var(--rule);white-space:nowrap}
+.tbl td{padding:11px 14px;border-bottom:1px solid var(--rule-soft);vertical-align:top;color:var(--ink-soft)}
+.tbl tr:last-child td{border-bottom:0}
+.tbl td:first-child{color:var(--ink);font-weight:500}
+.tbl .num{font-variant-numeric:tabular-nums;white-space:nowrap}
+.tbl tr.rec td{background:var(--ok-wash)}
+.cost{font-family:var(--disp);font-weight:700;font-size:.8rem}
+.cost.s{color:var(--ok)} .cost.m{color:var(--warn)} .cost.l{color:var(--bad)}
+.screen{margin:26px 0 30px;border:1px solid var(--rule);border-radius:12px;overflow:hidden;background:var(--m-bg);box-shadow:var(--shadow)}
+.screencap{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:baseline;background:var(--card-2);border-bottom:1px solid var(--rule);padding:9px 14px;font-family:var(--disp);font-size:.78rem;color:var(--ink-soft)}
+.screencap b{font-weight:600;color:var(--ink);font-size:.84rem}
+.screencap .url{font-family:var(--mono);font-size:.7rem;color:var(--ink-faint)}
+.screenbody{overflow-x:auto}
+.caption{font-size:.85rem;color:var(--ink-faint);margin:-16px 0 30px;font-style:italic}
+.phones{display:flex;flex-wrap:wrap;gap:22px;justify-content:center;padding:20px 12px;background:var(--card-2)}
+.pframe{width:360px;max-width:100%;border:1px solid var(--rule);border-radius:26px;overflow:hidden;background:var(--m-bg);box-shadow:var(--shadow);display:flex;flex-direction:column}
+.pframe .plabel{font-family:var(--disp);font-size:.74rem;color:var(--ink-faint);text-align:center;padding:7px 0 0}
+.ic{width:14px;height:14px;flex:0 0 auto;vertical-align:-2px}
+.legend{display:flex;flex-wrap:wrap;gap:8px 18px;font-family:var(--ui);font-size:.8rem;color:var(--ink-soft);margin:8px 0 0}
+.legend .sw{display:inline-block;width:12px;height:12px;border-radius:3px;background:var(--m-newbg);border:1.5px dashed var(--m-new);vertical-align:-2px;margin-right:6px}
+main section > p, main section > ul, main section > ol, main section > .quoted,
+main section > .note, main section > h3, main section > h4, .caption{max-width:74ch}
+</style>
+<style>
+/* Moodle Boost lookalike kit, scoped to .mdl (the kit of applications-desk.html and group-screens.html, plus the review pieces). */
+.mdl{font-family:var(--ui);font-size:14px;line-height:1.5;color:var(--m-fg);background:var(--m-bg);padding:18px 20px 0;min-width:900px}
+.mdl.phone{min-width:0;padding:14px 14px 0;flex:1 1 auto}
+.mdl.frag{min-width:0;padding:14px 16px 14px}
+.mdl *{box-sizing:border-box}
+.mdl .crumb{font-size:12px;color:var(--m-muted);margin-bottom:12px}
+.mdl .crumb span+span::before{content:"/";margin:0 7px;color:var(--m-border)}
+.mdl h1{font-family:var(--ui);font-size:23px;font-weight:700;margin:0 0 6px;letter-spacing:-.01em;color:var(--m-fg)}
+.mdl.phone h1{font-size:19px}
+.mdl h2{font-family:var(--ui);font-size:16px;font-weight:700;margin:0 0 8px;color:var(--m-fg)}
+.mdl h3{font-family:var(--ui);font-size:14.5px;font-weight:700;margin:0 0 6px;color:var(--m-fg)}
+.mdl p{margin:0 0 10px}
+.mdl .btn{display:inline-flex;align-items:center;gap:6px;font-size:13.5px;font-weight:400;padding:6px 13px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--m-fg);white-space:nowrap;font-family:var(--ui)}
+.mdl .btn-primary{background:var(--m-primary);border-color:var(--m-primary);color:var(--m-onprimary)}
+.mdl .btn-secondary{background:transparent;border-color:var(--m-primary);color:var(--m-primary)}
+.mdl .btn-outline{background:transparent;border-color:var(--m-border);color:var(--m-fg)}
+.mdl .btn-danger{background:transparent;border-color:var(--m-bad);color:var(--m-bad)}
+.mdl .btn-sm{font-size:12.5px;padding:3px 9px;border-radius:6px}
+.mdl .badge{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;padding:2.5px 9px;border-radius:99px;line-height:1.4;white-space:nowrap}
+.mdl .st-await{background:var(--m-wsolid);color:var(--m-onwarn)}
+.mdl .st-defer{background:var(--m-isolid);color:#fff}
+.mdl .st-key{background:var(--m-primary);color:var(--m-onprimary)}
+.mdl .st-ro{background:var(--m-ssolid);color:var(--m-onwarn)}
+.mdl .st-soft{background:var(--m-shade);color:var(--m-muted)}
+.mdl .st-okb{background:var(--m-okbg);color:var(--m-ok)}
+.mdl .st-warnb{background:var(--m-warnbg);color:var(--m-warn)}
+.mdl .st-badb{background:var(--m-badbg);color:var(--m-bad)}
+.mdl .dot{width:7px;height:7px;border-radius:50%;background:currentColor;display:inline-block}
+.mdl .ctrl{display:inline-flex;align-items:center;gap:7px;background:var(--m-bg);border:1px solid var(--m-border);border-radius:8px;padding:6px 11px;font-size:13.5px;color:var(--m-fg)}
+.mdl .ctrl.wide{display:flex;width:100%}
+.mdl .ctrl.area{min-height:52px;align-items:flex-start;color:var(--m-muted)}
+.mdl .caret::after{content:"\2304";font-size:14px;line-height:0;position:relative;top:-3px;color:var(--m-muted);margin-left:auto;padding-left:6px}
+.mdl .field{display:flex;flex-direction:column;gap:3px;font-size:12.5px;color:var(--m-muted)}
+.mdl .field b{color:var(--m-fg);font-weight:600;font-size:13px}
+.mdl .chip{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;background:var(--m-shade);border:1px solid var(--m-border);border-radius:99px;padding:3px 10px;color:var(--m-fg)}
+.mdl .cb{width:15px;height:15px;border:1.5px solid var(--m-muted);border-radius:3px;display:inline-block;vertical-align:-2px;background:var(--m-bg);flex:0 0 auto}
+.mdl .cb.on{background:var(--m-primary);border-color:var(--m-primary);position:relative}
+.mdl .cb.on::after{content:"\2713";position:absolute;inset:0;color:var(--m-onprimary);font-size:11px;line-height:12px;text-align:center;font-weight:700}
+.mdl .rad{width:15px;height:15px;border:1.5px solid var(--m-muted);border-radius:50%;display:inline-block;vertical-align:-2px}
+.mdl .rad.on{border:4.5px solid var(--m-primary)}
+.mdl .muted{color:var(--m-muted)}
+.mdl .small{font-size:12.5px}
+.mdl .xs{font-size:11.5px}
+.mdl .num{font-variant-numeric:tabular-nums}
+.mdl .idline{color:var(--m-muted);font-size:12px;display:flex;flex-wrap:wrap;gap:4px 12px}
+.mdl .link{color:var(--m-primary);text-decoration:underline;text-underline-offset:2px}
+.mdl .kv{display:grid;grid-template-columns:minmax(0,auto) minmax(0,1fr);gap:4px 14px;font-size:13px;margin:0 0 12px}
+.mdl .kv dt{color:var(--m-muted)}
+.mdl .kv dd{margin:0;color:var(--m-fg)}
+.mdl .box{border:1px solid var(--m-border);border-radius:10px;background:var(--m-card);padding:12px 14px}
+.mdl .rowline{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.mdl .grow{flex:1 1 auto}
+.mdl .notice{border-radius:8px;padding:9px 13px;font-size:13px;margin-bottom:12px}
+.mdl .notice.warn{background:var(--m-warnbg);color:var(--m-warn)}
+.mdl .notice.bad{background:var(--m-badbg);color:var(--m-bad)}
+.mdl .notice.info{background:var(--m-shade);color:var(--m-fg)}
+.mdl .nav2{display:flex;justify-content:space-between;gap:12px;align-items:center;border-bottom:1px solid var(--m-border);padding-bottom:10px;margin-bottom:14px;font-size:13.5px}
+.mdl .grid2{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,5fr);gap:22px}
+.mdl .grid84{display:grid;grid-template-columns:minmax(0,8fr) minmax(0,4fr);gap:24px}
+.mdl .ms{display:flex;flex-direction:column;border:1px solid var(--m-border);border-radius:8px;padding:4px 0;font-size:13px;background:var(--m-bg)}
+.mdl .ms span{padding:3px 11px}
+.mdl .ms span.sel{background:var(--m-primary);color:var(--m-onprimary)}
+.mdl .new{background:var(--m-newbg);outline:1.5px dashed var(--m-new);outline-offset:2px;border-radius:6px}
+.mdl .sticky{background:var(--m-card);border-top:1px solid var(--m-border);margin:16px -20px 0;padding:12px 20px;display:flex;flex-wrap:nowrap;gap:10px;align-items:center;box-shadow:0 -6px 18px -14px rgba(0,0,0,.6)}
+.mdl.phone .sticky{margin:14px -14px 0;padding:10px 14px}
+.mdl.frag .sticky{margin:14px -16px -14px;padding:10px 16px}
+/* The review pieces. */
+.mdl .strip{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border:1px solid var(--m-border);border-radius:10px;background:var(--m-card);margin-bottom:14px}
+.mdl .strip .when{font-size:12.5px;color:var(--m-muted)}
+.mdl .sechead{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin:0 0 7px}
+.mdl .sechead h2{margin:0}
+.mdl .sechead .muted{font-size:12.5px}
+.mdl .sigs{list-style:none;margin:0 0 6px;padding:0;border:1px solid var(--m-border);border-radius:10px;overflow:hidden}
+.mdl .sigs li{display:grid;grid-template-columns:18px minmax(0,1fr) auto;gap:9px;align-items:start;padding:8px 12px;border-top:1px solid var(--m-border);margin:0}
+.mdl .sigs li:first-child{border-top:0}
+.mdl .sigs .si{margin-top:2px}
+.mdl .sigs .s-ok .si{color:var(--m-ok)}
+.mdl .sigs .s-warn{background:var(--m-warnbg)} .mdl .sigs .s-warn .si{color:var(--m-warn)}
+.mdl .sigs .s-bad{background:var(--m-badbg)} .mdl .sigs .s-bad .si{color:var(--m-bad)}
+.mdl .sigs .s-info .si{color:var(--m-muted)}
+.mdl .sigs .sub{display:block;font-size:12px;color:var(--m-muted)}
+.mdl .sigs .stw{font-size:11.5px;font-weight:600;white-space:nowrap}
+.mdl .sigs .s-ok .stw{color:var(--m-ok)} .mdl .sigs .s-warn .stw{color:var(--m-warn)} .mdl .sigs .s-bad .stw{color:var(--m-bad)} .mdl .sigs .s-info .stw{color:var(--m-muted)}
+.mdl .method{font-size:12px;color:var(--m-muted);margin:0 0 14px}
+.mdl .outc{border:1px solid var(--m-border);border-left:4px solid var(--m-primary);border-radius:10px;padding:12px 15px;background:var(--m-bg);margin-bottom:14px}
+.mdl .outc .ohead{font-size:12.5px;font-weight:700;color:var(--m-primary);margin:0 0 3px}
+.mdl .outc .lead{font-size:15.5px;line-height:1.45;margin:0 0 4px}
+.mdl .outc.ro{border-left-color:var(--m-muted)}
+.mdl .outc.ro .ohead{color:var(--m-muted)}
+.mdl .outc.alarm{border-left-color:var(--m-bad)}
+.mdl .disc{border-top:1px solid var(--m-border);margin-top:10px;padding-top:8px}
+.mdl .disc .sum{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--m-primary);font-weight:600}
+.mdl .disc .sum::before{content:"\25B8";font-size:11px}
+.mdl .disc.open .sum::before{content:"\25BE"}
+.mdl .gcards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:8px 0 10px}
+.mdl.phone .gcards,.mdl.frag .gcards{grid-template-columns:minmax(0,1fr)}
+.mdl .gcard{display:grid;grid-template-columns:16px minmax(0,1fr) auto;gap:3px 9px;align-items:center;border:1px solid var(--m-border);border-radius:9px;padding:9px 11px;background:var(--m-bg)}
+.mdl .gcard.on{border-color:var(--m-primary);box-shadow:inset 0 0 0 1px var(--m-primary)}
+.mdl .gcard .gname{font-weight:600;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.mdl .gcard .pct{font-size:12px;font-weight:600}
+.mdl .gcard .gmeta{grid-column:2 / 4;font-size:12px;color:var(--m-muted)}
+.mdl .bar{grid-column:2 / 4;display:block;height:6px;background:var(--m-shade);border-radius:99px;overflow:hidden}
+.mdl .bar i{display:block;height:100%;border-radius:99px}
+.mdl .bar i.ok{background:var(--m-ok)} .mdl .bar i.warn{background:var(--m-wsolid)} .mdl .bar i.bad{background:var(--m-bad)}
+.mdl .pct.ok{color:var(--m-ok)} .mdl .pct.warn{color:var(--m-warn)} .mdl .pct.bad{color:var(--m-bad)}
+.mdl .act{display:flex;flex-direction:column;gap:2px;min-width:0}
+.mdl .act .why{font-size:11px;color:var(--m-muted);white-space:nowrap}
+.mdl .act.end{align-items:flex-end;text-align:right}
+.mdl .cons{list-style:none;margin:0;padding:8px 10px;border:1px dashed var(--m-border);border-radius:8px;font-size:12px;color:var(--m-muted)}
+.mdl .cons li{margin:2px 0}
+.mdl .cons b{color:var(--m-fg);font-weight:600}
+.mdl .ev h3{font-size:13.5px;margin-top:2px}
+.mdl .ev .box{margin-bottom:10px}
+.mdl .anchor{font-size:12px;color:var(--m-primary);text-decoration:underline;text-underline-offset:2px;white-space:nowrap}
+/* Concept B, C, D. */
+.mdl .md{display:grid;grid-template-columns:minmax(0,300px) minmax(0,1fr);border:1px solid var(--m-border);border-radius:10px;overflow:hidden}
+.mdl .md .list{background:var(--m-card);border-right:1px solid var(--m-border)}
+.mdl .md .lf{padding:10px 12px;border-bottom:1px solid var(--m-border);display:flex;flex-wrap:wrap;gap:6px}
+.mdl .md .li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 8px;padding:9px 12px;border-bottom:1px solid var(--m-border)}
+.mdl .md .li.sel{background:var(--m-bg);box-shadow:inset 3px 0 0 var(--m-primary)}
+.mdl .md .li .nm{font-weight:600}
+.mdl .md .li .meta{grid-column:1 / 3;display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--m-muted)}
+.mdl .md .pane{padding:14px 16px 0;background:var(--m-bg);min-width:0}
+.mdl .kb{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:11.5px;color:var(--m-muted);padding:8px 12px;border-top:1px solid var(--m-border);background:var(--m-card)}
+.mdl kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--m-border);border-bottom-width:2px;border-radius:4px;padding:0 4px;background:var(--m-bg);color:var(--m-fg)}
+.mdl .hcard{border:1px solid var(--m-border);border-radius:12px;padding:16px 18px;margin-bottom:14px;background:var(--m-bg)}
+.mdl .hcard .big{font-size:24px;font-weight:700;letter-spacing:-.01em}
+.mdl .lcard{border:1px solid var(--m-border);border-top:4px solid var(--m-primary);border-radius:12px;padding:14px 16px;background:var(--m-bg)}
+.mdl .scard{border:1px solid var(--m-border);border-radius:12px;padding:11px 14px;background:var(--m-card);margin-bottom:10px;font-size:13px}
+.mdl .scard h3{font-size:13px;color:var(--m-muted);font-weight:600}
+.mdl .scard.badtone{background:var(--m-badbg);border-color:var(--m-bad)}
+.mdl table.gt{width:100%;border-collapse:collapse;font-size:13px}
+.mdl table.gt th{text-align:left;font-weight:700;font-size:12.5px;padding:8px 9px;border-bottom:2px solid var(--m-border);white-space:nowrap}
+.mdl table.gt td{padding:9px 9px;border-bottom:1px solid var(--m-border);vertical-align:top}
+.mdl table.gt tr.open td{background:var(--m-card);border-bottom:0}
+.mdl table.gt td.tri{background:var(--m-card);padding:4px 12px 14px 38px}
+.mdl .tripanel{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr) auto;gap:14px;align-items:start;border:1px solid var(--m-border);border-radius:10px;background:var(--m-bg);padding:11px 13px}
+.mdl .chev{color:var(--m-primary);font-size:12px}
+.mdl .eye{display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:50%;background:var(--brass);color:#fff;font:700 10.5px/1 var(--ui);flex:0 0 auto;vertical-align:1px}
+.mdl .strike{text-decoration:line-through;text-decoration-thickness:2px;opacity:.75}
+/* Many groups: core's autocomplete, drawn. */
+.mdl .addg{border-top:1px dashed var(--m-border);margin-top:4px;padding-top:9px}
+.mdl .acsel{display:flex;flex-wrap:wrap;gap:4px;margin:0 0 6px}
+.mdl .acchip{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;background:var(--m-shade);color:var(--m-fg);border:1px solid var(--m-border);border-radius:6px;padding:2px 8px;max-width:100%}
+.mdl .acin{display:flex;align-items:center;gap:8px;border:1px solid var(--m-primary);border-radius:8px;padding:6px 10px;font-size:13.5px;background:var(--m-bg);box-shadow:0 0 0 3px var(--m-newbg)}
+.mdl .acin .acdown{margin-left:auto;font-size:10px;color:var(--m-muted)}
+.mdl .acsug{list-style:none;margin:3px 0 0;padding:4px 0;border:1px solid var(--m-border);border-radius:8px;background:var(--m-bg);box-shadow:0 8px 20px -12px rgba(0,0,0,.45);font-size:13px}
+.mdl .acsug li{padding:5px 12px;margin:0}
+.mdl .acsug li.act{background:var(--m-primary);color:var(--m-onprimary)}
+.mdl .acsug li.more{color:var(--m-muted);font-size:12px;font-style:italic}
+@media (max-width:640px){.mdl .grid2,.mdl .grid84{grid-template-columns:minmax(0,1fr)}}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-check" viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 16 16"><path d="M8 1.8 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v3.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="8" cy="11.8" r="1" fill="currentColor"/></symbol>
+  <symbol id="i-x" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-block" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.4" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+  <symbol id="i-info" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.4" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 7v4.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="8" cy="4.8" r="1" fill="currentColor"/></symbol>
+  <symbol id="i-key" viewBox="0 0 16 16"><circle cx="5" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h7M12.5 8v2.6M14.6 8v1.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.4" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 4.5V8l2.5 1.6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-hour" viewBox="0 0 16 16"><path d="M4 1.8h8M4 14.2h8M5 2c0 3.5 6 3.5 6 6s-6 2.5-6 6M11 2c0 3.5-6 3.5-6 6s6 2.5 6 6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+  <symbol id="i-users" viewBox="0 0 16 16"><circle cx="6" cy="5.5" r="2.4" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M1.6 13.5c.5-2.6 2.3-4 4.4-4s3.9 1.4 4.4 4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="11.3" cy="6" r="1.9" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M11.6 9.6c1.6.2 2.6 1.4 3 3.4" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></symbol>
+  <symbol id="i-user" viewBox="0 0 16 16"><circle cx="8" cy="5.4" r="2.7" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M2.8 14c.6-3 2.7-4.6 5.2-4.6s4.6 1.6 5.2 4.6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 16 16"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="2" fill="none" stroke="currentColor" stroke-width="1.4"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 16 16"><rect x="1.8" y="3.5" width="12.4" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M2.4 4.4 8 8.8l5.6-4.4" fill="none" stroke="currentColor" stroke-width="1.4"/></symbol>
+  <symbol id="i-doc" viewBox="0 0 16 16"><path d="M4 1.8h5.5L12.5 5v9.2H4z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M6 8h4.5M6 10.6h4.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></symbol>
+  <symbol id="i-left" viewBox="0 0 16 16"><path d="M10 3 5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-right" viewBox="0 0 16 16"><path d="M6 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</svg>
+<div class="wrap">
+<header class="masthead">
+  <span class="eyebrow">enrol_apply &middot; design brainstorm &middot; the review page &middot; 5 November 2026</span>
+  <h1>One application, read in order</h1>
+  <p class="stand">The single-application review page holds every fact a decider needs and says none of them
+  in the order the decision asks for them. This page diagnoses that order, proposes five concepts with desktop
+  and phone mockups, and recommends one to build now and one to keep for later. Nothing here is built.</p>
+  <div class="mastmeta">
+    <span><b>repo</b> uaiblaine/moodle-enrol_apply</span>
+    <span><b>branch</b> docs/group-screens-t0, on PR #125 &middot; version 2026110502</span>
+    <span><b>supported</b> Moodle 5.1&ndash;5.3 (<code>$plugin-&gt;supported = [501, 503]</code>)</span>
+    <span><b>companion</b> <a href="group-screens.html#review">group-screens.html &sect;02</a></span>
+    <span><b>decided</b> concept A (owner, 2026-11-05, RP-D1)</span>
+    <span><b>nothing changed</b> &mdash; docs only</span>
+  </div>
+</header>
+
+<div class="cols">
+<nav class="toc" aria-label="Sections">
+  <ol>
+    <li><a href="#words">The request, and the answers</a></li>
+    <li><a href="#reference">The owner's reference mockup</a></li>
+    <li><a href="#diagnosis">Diagnosis: five questions</a></li>
+    <li><a href="#contracts">Contracts no concept may break</a></li>
+    <li><a href="#a">A. Decision funnel</a></li>
+    <li><a href="#variants">A for every reader</a></li>
+    <li><a href="#many">A with dozens of groups</a></li>
+    <li><a href="#b">B. Master-detail</a></li>
+    <li><a href="#c">C. Refined dossier</a></li>
+    <li><a href="#d">D. Inline triage</a></li>
+    <li><a href="#e">E. Attention line</a></li>
+    <li><a href="#visual">Visual language</a></li>
+    <li><a href="#compare">Comparison</a></li>
+    <li><a href="#recommend">Recommendation</a></li>
+    <li><a href="#decisions">Decisions to take</a></li>
+    <li><a href="#facts">Appendix: facts checked</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<section id="words">
+  <span class="sectnum">&sect;00 &middot; the request</span>
+  <h2>The request, and the answers first</h2>
+  <div class="quoted">
+    <p>&ldquo;Es página é a que menos me agrada em todo o projeto, em termos de informações todas são pertinentes, mas a hierarquia da informação na deixa claro por onde começo a ler seu conteúdo, o que pesa na decisão sobre o que fazer, qual o resultado da ação que escolher fazer, o que posso escolher ajustar. A página tem que ter uma leitura rápida, elementos de status e auxiliar na tomada de decisão. Faça um brainstorm, proponha alternativa, conceito de "master-detail", "funil de decisão, outras abordagens. Adicionei uma captura de tela de outro mockup, não estou 100% de acordo com ele, mas a organização e cores tonou o processo de leitura mais célere e agradável.&rdquo;</p>
+    <span class="who">The owner, 5 November 2026</span>
+  </div>
+  <p>The owner names four questions the page does not answer in order: where to start reading, what weighs on the
+  decision, what each action results in, and what can be adjusted. Those four, plus the act itself, are the spine of
+  every concept below.</p>
+  <div class="verdicts">
+    <div class="vc"><span class="tag ok">Chosen (owner, 2026-11-05)</span><p class="q">A. Decision funnel</p>
+      <p class="a">One column of falling weight: who and how, then what weighs (traffic-light signals with numbers),
+      then what confirming does, in words, then the decision bar. Adjustments fold away. Same form, same POST contract.
+      One slice, tier 2 with Behat.</p></div>
+    <div class="vc"><span class="tag info">Later, maybe</span><p class="q">B. Master-detail</p>
+      <p class="a">The queue on the left, A's funnel on the right. Fast for a batch, expensive in Moodle, and it reopens
+      two settled decisions (where a decision lands, and the walk). Phase 2, built around A's pane, only if usage asks.</p></div>
+    <div class="vc"><span class="tag warn">Take the colours, not the layout</span><p class="q">C. The reference mockup, fixed</p>
+      <p class="a">Its chips, bars and tinted history card read fast and carry straight into A. Its equal-weight cards do
+      not tell the eye where to start, which is the owner's first complaint.</p></div>
+    <div class="vc"><span class="tag bad">Not now</span><p class="q">D. Inline triage in the queue</p>
+      <p class="a">Good for clean, keyed batches, but it collides with the queue's bulk form and with the review page's
+      cancel confirmation. If ever built: confirm and defer only, cancel stays on the full page.</p></div>
+    <div class="vc"><span class="tag ok">Fold into A</span><p class="q">E. An attention line, never a verdict</p>
+      <p class="a">One line that counts the signals and names the worst one. Never "ready to confirm": the plugin cannot
+      see what the decider is judging, and a verdict invites rubber-stamping.</p></div>
+  </div>
+</section>
+
+<section id="reference">
+  <span class="sectnum">&sect;01 &middot; the owner's screenshot</span>
+  <h2>The reference mockup: what it does well, and where it slips</h2>
+  <p>The owner attached a screenshot of another mockup of this page (not stored in the repository, on purpose). It
+  shows Larissa Moura's keyed application to <em>Formação de moderadores</em>: the walk across the top
+  (<em>Anterior: Tiago Rezende &middot; Todas as inscrições &middot; Próximo: Bianca Coelho</em>); a header card with an
+  amber <em>Aguardando decisão</em> chip carrying a dot, a blue <em>Chave aceita: Turma A</em> chip with a key icon, the
+  submission time, the name set large beside the course, username and id number, and a <em>Ver perfil completo</em>
+  button. Below, a left column of three cards (comment, submitted details, earlier applications in this course, the last
+  tinted red for a cancelled one) and a right column with one large card: three capacity tiles (method places 31 / 40,
+  applications 52 / 60, &ldquo;Sob análise 4 pendentes&rdquo;), the groups as radio cards with an occupancy bar and a
+  percentage (Turma A 90 % amber with a <em>Recomendado pela chave</em> badge and <em>Restam 2 vagas!</em>; Turma B 35 %
+  green with <em>13 vagas livres</em>), a footnote, and the role select. A bottom bar holds three icon buttons: cancel on
+  the left, defer and confirm on the right.</p>
+
+  <div class="tblwrap"><table class="tbl">
+    <thead><tr><th>What it does well</th><th>Why it speeds reading</th><th>Kept in</th></tr></thead>
+    <tbody>
+      <tr><td>Status and key as colour chips with an icon</td><td>The state is read before any sentence; the dot and the key glyph mean colour is never alone.</td><td>A, C</td></tr>
+      <tr><td>The name large, the course beside it</td><td>Answers "who" at a glance.</td><td>A (core's <code>&lt;h1&gt;</code> already does this), C</td></tr>
+      <tr><td>One card per topic</td><td>Each answer has an edge; the eye can skip a card whole.</td><td>C; A uses fewer, heavier blocks</td></tr>
+      <tr><td>Occupancy bar and percentage inside each group</td><td>The seat fact sits on the thing it constrains.</td><td>A's <em>Ajustar</em>, C</td></tr>
+      <tr><td>The key's group marked, with a scarcity warning</td><td>Says why a group is preselected and what is at stake.</td><td>A, C (reworded)</td></tr>
+      <tr><td>Buttons with icons, cancel isolated on the far edge</td><td>Shape before word; the destructive one is away from the others, as today.</td><td>A, C</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="tblwrap"><table class="tbl">
+    <thead><tr><th>Where the owner is likely not 100 % with it</th><th>Why it matters</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr><td>Uppercase section labels (<em>COMENTÁRIO / MENSAGEM</em>, <em>SELECIONAR TURMA&hellip;</em>)</td><td>The owner avoids uppercase and small caps in labels; uppercase also reads slower.</td><td>Sentence case everywhere.</td></tr>
+      <tr><td>Mixed-language labels (<em>&hellip;(GROUPS TO JOIN ON APPROVAL)</em>, <em>Course enrol confirmation</em>)</td><td>An English gloss in a pt_br page is noise, and a sign the strings were not the plugin's.</td><td>The plugin's own pt_br strings.</td></tr>
+      <tr><td>"matrícula", "matriculada"</td><td>This plugin's pt_br says <em>inscrição</em>, never <em>matrícula</em>; the record is a <em>solicitação</em>.</td><td><em>Solicitação</em> for the record, <em>inscrição</em> for the enrolment.</td></tr>
+      <tr><td>Radio buttons for groups</td><td>The decision takes several groups (<code>groups[]</code>, the key's group plus the method's); a radio cannot say that.</td><td>Checkbox cards posting the same <code>groups[]</code>.</td></tr>
+      <tr><td>Every card the same weight</td><td>The owner's first complaint survives: the eye still does not know where to start.</td><td>One lead block; evidence visibly secondary.</td></tr>
+      <tr><td>Capacity tiles disconnected from the decision</td><td>"31 / 40" does not say whether this approval is a problem.</td><td>Signals with a state and the number, and the outcome stating the after-count.</td></tr>
+      <tr><td>The result of each button never stated</td><td>The owner's third question goes unanswered; cancel's unenrolment is discovered on the confirmation page.</td><td>An outcome card and a consequence line per button.</td></tr>
+      <tr><td>"Sob análise 4 pendentes"</td><td>The 4 is <code>capacity::deferred()</code>: applications deferred to the waiting list, not pending ones.</td><td>"4 adiadas", in a method line.</td></tr>
+      <tr><td>"Recomendado pela chave", "Restam 2 vagas!"</td><td>The key does not recommend; it routed the application. An exclamation mark escalates a fact into an alarm.</td><td>"Grupo da chave"; "restam 2 vagas" in the signal's state colour.</td></tr>
+      <tr><td>A "Ver perfil completo" primary-looking button in the header</td><td>The heaviest control in the first block is the one that leaves the page.</td><td>A plain link beside the identity line.</td></tr>
+      <tr><td>No message to the applicant and no note</td><td>Both exist today and matter (the deferral reason); the mockup drops them.</td><td>Kept, behind one disclosure.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="diagnosis">
+  <span class="sectnum">&sect;02 &middot; why the page reads slowly</span>
+  <h2>Diagnosis: the decider's five questions, and where today's page answers them</h2>
+  <p>A decider opening one application asks, in this order:</p>
+  <ol>
+    <li><b>Who is this, in what state, and how did they arrive?</b> Status, the key and its group, how long it has
+    waited, through which method.</li>
+    <li><b>Can I approve?</b> The signals that weigh: seats left in the target group, places left on the method, earlier
+    applications to this course, whether the details the method asked for are there, and any warning. Each is pass,
+    attention or over the limit.</li>
+    <li><b>What happens if I choose each action?</b> Confirm: who joins which group with which role, and that the
+    applicant is told. Defer: the waiting list, which keeps holding a place against the applications limit. Cancel: the
+    application ends and the enrolment is removed, after a confirmation.</li>
+    <li><b>What can I adjust?</b> Groups, role, a message to the applicant, a note for the record. Most decisions
+    adjust nothing, so this is disclosed, not shown.</li>
+    <li><b>Act.</b></li>
+  </ol>
+
+  <div class="screen">
+    <div class="screencap"><b>Today, with the reading path numbered</b><span class="url">/enrol/apply/manage.php?userenrol=8812</span><span>reconstructed from templates/review.mustache and decision_controls.mustache, pt_br strings</span></div>
+    <div class="screenbody"><div class="mdl">
+      <div class="crumb"><span>Formação de moderadores</span><span>Confirmar inscrições</span><span>Larissa Moura</span></div>
+      <h1>Larissa Moura - Formação de moderadores</h1>
+      <div class="nav2"><span class="link">&#8249; Anterior: Tiago Rezende</span><span class="link">Todas as solicitações</span><span class="link">Próxima: Bianca Coelho &#8250;</span></div>
+      <div class="rowline" style="justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+        <div><div class="idline" style="margin:0 0 4px"><span>Nome de usuário: lmoura</span><span>Número de identificação: 2026-0311</span></div>
+          <p style="margin:0"><span class="eye">1</span> Situação: <b>Aguardando decisão</b> <span class="badge st-key">Chave aceita, enviada para análise: Turma A</span>
+          <span class="muted">&middot; Data da solicitação 03/11/26, 09:14</span></p></div>
+        <span class="btn btn-outline btn-sm">Ver perfil</span>
+      </div>
+      <div class="grid2">
+        <div>
+          <h2><span class="eye">5</span> Comentário</h2><p class="muted">O solicitante não escreveu nada.</p>
+          <h2><span class="eye">6</span> Dados enviados com esta solicitação</h2>
+          <dl class="kv"><dt>Cidade</dt><dd>Mariana</dd><dt>Número de registro</dt><dd>2026-0311</dd></dl>
+        </div>
+        <div>
+          <h2>Curso</h2><p><span class="link">Formação de moderadores</span></p>
+          <h2><span class="eye">3</span> Onde esta solicitação entra</h2>
+          <dl class="kv"><dt>Vagas</dt><dd>31 de 40</dd><dt>Solicitações em andamento</dt><dd>52 de 60</dd><dt>Adiadas</dt><dd>4</dd></dl>
+          <h2><span class="eye">4</span> Solicitações anteriores a este curso</h2>
+          <p class="small muted">04/06/26, 11:02 &mdash; Cancelado</p>
+        </div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:18px;margin-top:4px">
+        <label class="field" style="flex:1 1 260px"><span><span class="eye">2</span> Grupos para ingressar na aprovação</span>
+          <span class="ms"><span class="sel">Turma A (18 de 20 vagas ocupadas)</span><span>Turma B (7 de 20 vagas ocupadas)</span></span>
+          <span class="xs">Os solicitantes aprovados entram nestes grupos. Deixe em branco para usar os grupos configurados no método de inscrição.</span></label>
+        <label class="field" style="flex:1 1 260px"><span><span class="eye">7</span> Papel a atribuir na aprovação</span><span class="ctrl caret">Usar o papel definido no método de inscrição</span></label>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:18px;margin-top:12px">
+        <label class="field" style="flex:1 1 260px"><span><span class="eye">8</span> Mensagem ao solicitante</span><span class="ctrl area"></span></label>
+        <label class="field" style="flex:1 1 260px">Anotação para o registro<span class="ctrl area"></span></label>
+      </div>
+      <div class="sticky"><span class="eye">9</span><span class="btn btn-danger btn-sm">Cancelar esta solicitação</span><span class="grow"></span>
+        <span class="btn btn-secondary btn-sm">Adiar esta solicitação</span><span class="btn btn-primary btn-sm">Confirmar esta solicitação</span></div>
+    </div></div>
+  </div>
+  <p class="caption">The numbers follow the five questions, not the layout: to know whether to approve, the eye goes
+  from the status line (1) to the bottom chooser for the seats (2), up to the right column (3, 4), across to the left
+  (5, 6), and back down past four controls (7, 8) to the buttons (9).</p>
+
+  <div class="tblwrap"><table class="tbl">
+    <thead><tr><th>Question</th><th>Where today's page answers it</th><th>Stated, or left to the reader</th><th class="num">Zones visited</th></tr></thead>
+    <tbody>
+      <tr><td>1. Who, what state, how</td><td>Identity line and status line, top left; the key chip names the group (deciders only)</td><td>Stated, except how long it has waited (only a date) and which method (not shown)</td><td class="num">1</td></tr>
+      <tr><td>2. Can I approve</td><td>Key group seats only inside the chooser's option text (bottom); places and applications in the right column; history right column, bottom; details left column</td><td>Left to the reader: "18 of 20" is never called close to full, "31 of 40" never related to this approval</td><td class="num">4</td></tr>
+      <tr><td>3. What each action does</td><td>Confirm: implied by the chooser's preselection (with <code>choosedecision</code>) or the summary (without). Defer: nowhere. Cancel: on the confirmation page, after pressing</td><td>Mostly unstated; the notification to the applicant is never mentioned</td><td class="num">2</td></tr>
+      <tr><td>4. What can I adjust</td><td>Four always-open controls between the evidence and the buttons; the groups as a native multi-select (control-click to add)</td><td>Stated, but always open, so the common case reads past four controls it does not use</td><td class="num">1</td></tr>
+      <tr><td>5. Act</td><td>Sticky footer, three buttons</td><td>Labels say the action, not the consequence</td><td class="num">1</td></tr>
+      <tr><td>Total</td><td colspan="2">Nine zones, eight jumps, three crossings between the columns, and question 3 mostly unanswered</td><td class="num">9</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note think"><span class="lbl">How the counts were made</span>
+  <p>Zones and jumps are counted on these mockups by following the five questions in order, not measured with users.
+  They compare concepts with each other; they are not reading times.</p></div>
+</section>
+
+<section id="contracts">
+  <span class="sectnum">&sect;03 &middot; read from the repo's CLAUDE.md and the code</span>
+  <h2>Contracts no concept may break</h2>
+  <ul>
+    <li><b>The form posts the queue's own contract:</b> <code>formaction</code>, a non-empty <code>userenrolments[]</code>,
+    <code>sesskey</code>; <code>groups[]</code>, <code>roleid</code>, <code>outcomemessage</code>, <code>decisionnote</code>
+    beside them. <code>manage.php</code> has no branch of its own for this page, and must not grow one.</li>
+    <li><b>Cancel is first in source order, and that is why cancel asks.</b> The first submit is the form's default for
+    Enter; <code>manage.php:224</code> intercepts <code>cancel</code> from this page without <code>confirmed</code> and
+    asks. Reordering the buttons without moving the interception would let Enter in a chooser enrol the applicant. Visual
+    order may differ from source order only through the row's own flex layout, as today.</li>
+    <li><b>The sticky footer is a fixed box (about 80 px) whose content clips with no scrollbar, and the row does not
+    wrap.</b> Only the buttons go in it; a second line per button must fit, and on a phone it must not.</li>
+    <li><b>Message and note never blur.</b> <code>outcomemessage</code> reaches the applicant; <code>decisionnote</code>
+    never does. The stored note is shown, never pre-filled into the box (an empty box clears it on the next decision).
+    Coming back from the cancel confirmation, both boxes carry what was typed.</li>
+    <li><b>One identity rule</b> through <code>\enrol_apply\local\identity</code> (the e-mail address only when the site's
+    <code>showuseridentity</code> names it); the snapshot is read frozen and never from the live profile; withheld fields are
+    dropped whether or not they hold a value, because a marker that appears only where there is data is a presence oracle.</li>
+    <li><b>Gates per panel:</b> earlier applications on <code>viewreports</code>, with no empty heading for a reader without it;
+    capacity on <code>manageapplications</code> in the course; the key group's name only to a reader allowed to see that
+    group; choosers on <code>choosedecision</code>, the role list on what the reader may assign; a mentor sees no group name.</li>
+    <li><b>The walk comes from <code>queue::scope()</code>,</b> never from the request, and visits exactly what the queue
+    lists, in its order. The wrapper shows on <code>hasnav</code>, not on the neighbours.</li>
+    <li><b>A decision lands on the queue,</b> all three alike, because two of them leave this url with nothing to decide.</li>
+    <li><b>Seats and places warn, never block</b> (R5, <code>places_full()</code> advisory). A red signal never disables
+    Confirm.</li>
+    <li><b>An empty group choice is not "no group".</b> <code>record_decided_groups()</code> writes the empty choice and
+    <code>chosen_groups()</code> reads it back as "no choice", so <code>add_instance_groups()</code> falls back to
+    <code>default_approval_groups()</code>: for a keyed application, the key's group plus the method's. Any chooser that
+    lets every box be unticked must say so where the boxes are.</li>
+  </ul>
+  <div class="note trap"><span class="lbl">Found on the way, and true of today's page too</span>
+  <p>Deselecting every option in today's multi-select reads as "join no group" and does the opposite for a keyed
+  application: the approval joins the key's group anyway (<code>lib.php:1016&ndash;1019</code>,
+  <code>classes/local/submission.php:775&ndash;778</code>). Today's help text says "Deixe em branco para usar os grupos
+  configurados no método de inscrição", which omits the key's group. Concept A's outcome sentence names the fallback
+  groups whenever nothing is ticked.</p></div>
+</section>
+
+<section id="a">
+  <span class="sectnum">&sect;04 &middot; chosen by the owner, 5 November 2026</span>
+  <h2>Concept A: the decision funnel</h2>
+  <p>One column whose weight falls as the questions do. The first block says who and how. The second says what
+  weighs, one line per signal with its number and a state word. The third says what confirming does, as a sentence,
+  with the adjustments folded under it. The bar at the bottom says, under each button, what it does. The evidence
+  (comment, submitted details, earlier applications) is a quieter column on the right that every signal links into.</p>
+
+  <div class="screen">
+    <div class="screencap"><b>Concept A &mdash; decider with choosedecision, "Ajustar" opened</b><span class="url">/enrol/apply/manage.php?userenrol=8812</span><span>desktop</span></div>
+    <div class="screenbody"><div class="mdl">
+      <div class="crumb"><span>Formação de moderadores</span><span>Confirmar inscrições</span><span>Larissa Moura</span></div>
+      <h1>Larissa Moura - Formação de moderadores</h1>
+      <div class="nav2"><span class="link"><svg class="ic" aria-hidden="true"><use href="#i-left"/></svg> Anterior: Tiago Rezende</span><span class="link">Todas as solicitações</span><span class="link">Próxima: Bianca Coelho <svg class="ic" aria-hidden="true"><use href="#i-right"/></svg></span></div>
+      <div class="grid84">
+        <div>
+          <div class="strip">
+            <div class="rowline">
+              <span class="badge st-await"><span class="dot"></span>Aguardando decisão</span>
+              <span class="badge st-key"><svg class="ic" aria-hidden="true"><use href="#i-key"/></svg>Chave aceita: Turma A</span>
+              <span class="when"><svg class="ic" aria-hidden="true"><use href="#i-clock"/></svg> Solicitada há 2 dias (03/11/26, 09:14)</span>
+            </div>
+            <div class="rowline" style="justify-content:space-between">
+              <div class="idline"><span>Método: Inscrição com chave de grupo e análise</span><span>Nome de usuário: lmoura</span><span>Número de identificação: 2026-0311</span></div>
+              <span class="link small">Ver perfil</span>
+            </div>
+          </div>
+
+          <div class="sechead"><h2>O que pesa na decisão</h2><span class="muted">1 ponto de atenção, nenhum acima do limite</span></div>
+          <ul class="sigs">
+            <li class="s-warn"><svg class="ic si" aria-hidden="true"><use href="#i-warn"/></svg><span><b>Turma A: 18 de 20 vagas ocupadas</b><span class="sub">Restam 2 vagas no grupo da chave.</span></span><span class="stw">Atenção</span></li>
+            <li class="s-ok"><svg class="ic si" aria-hidden="true"><use href="#i-check"/></svg><span>Vagas do método: 31 de 40 ocupadas<span class="sub">Restam 9.</span></span><span class="stw">Ok</span></li>
+            <li class="s-info"><svg class="ic si" aria-hidden="true"><use href="#i-info"/></svg><span>Solicitação anterior cancelada em 04/06/26 <span class="anchor">ver histórico</span></span><span class="stw">Leia</span></li>
+            <li class="s-ok"><svg class="ic si" aria-hidden="true"><use href="#i-check"/></svg><span>Dados do formulário completos: 2 de 2 <span class="anchor">ver dados</span></span><span class="stw">Ok</span></li>
+            <li class="s-info"><svg class="ic si" aria-hidden="true"><use href="#i-doc"/></svg><span>Sem comentário do solicitante</span><span class="stw">&nbsp;</span></li>
+          </ul>
+          <p class="method">Neste método: 52 de 60 solicitações em andamento, 4 delas adiadas.</p>
+
+          <div class="outc">
+            <p class="ohead">Ao confirmar</p>
+            <p class="lead">Larissa entra no curso como <b>Estudante</b> e no grupo <b>Turma A</b>, e recebe o aviso da aprovação.</p>
+            <p class="small muted" style="margin:0">Depois: Turma A com 19 de 20 vagas ocupadas; vagas do método, 32 de 40.</p>
+            <div class="disc open">
+              <span class="sum">Ajustar grupos e papel</span>
+              <div class="gcards">
+                <div class="gcard on"><span class="cb on"></span><span class="gname">Turma A <span class="badge st-key"><svg class="ic" aria-hidden="true"><use href="#i-key"/></svg>Grupo da chave</span></span><span class="pct warn">90 %</span>
+                  <span class="gmeta">18 de 20 vagas ocupadas &middot; restam 2</span>
+                  <span class="bar" role="progressbar" aria-label="Turma A: 18 de 20 vagas ocupadas" aria-valuenow="18" aria-valuemin="0" aria-valuemax="20"><i class="warn" style="width:90%"></i></span></div>
+                <div class="gcard"><span class="cb"></span><span class="gname">Turma B</span><span class="pct ok">35 %</span>
+                  <span class="gmeta">7 de 20 vagas ocupadas &middot; restam 13</span>
+                  <span class="bar" role="progressbar" aria-label="Turma B: 7 de 20 vagas ocupadas" aria-valuenow="7" aria-valuemin="0" aria-valuemax="20"><i class="ok" style="width:35%"></i></span></div>
+              </div>
+              <p class="xs muted" style="margin:0 0 10px">Sem nenhum grupo marcado, a aprovação usa os grupos padrão: Turma A, pela chave.</p>
+              <label class="field" style="max-width:420px"><b>Papel a atribuir na aprovação</b><span class="ctrl wide caret">Usar o papel definido no método de inscrição (Estudante)</span></label>
+            </div>
+          </div>
+
+          <div class="box" style="background:var(--m-bg);margin-bottom:4px">
+            <div class="disc" style="border:0;margin:0;padding:0"><span class="sum">Escrever ao solicitante ou anotar para o registro</span>
+            <span class="xs muted" style="display:block;margin-left:17px">Opcional. A mensagem vai para Larissa com a decisão; a anotação fica só no registro.</span></div>
+          </div>
+        </div>
+
+        <aside class="ev" aria-label="Evidências">
+          <h3>Comentário</h3>
+          <div class="box small muted">O solicitante não escreveu nada.</div>
+          <h3>Dados enviados com esta solicitação</h3>
+          <div class="box"><dl class="kv" style="margin:0"><dt>Cidade</dt><dd>Mariana</dd><dt>Número de registro</dt><dd>2026-0311</dd></dl></div>
+          <h3>Solicitações anteriores a este curso</h3>
+          <div class="box small">04/06/26, 11:02 &mdash; <span class="badge st-badb">Cancelado</span></div>
+        </aside>
+      </div>
+      <div class="sticky">
+        <span class="act"><span class="btn btn-danger btn-sm"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg>Cancelar esta solicitação</span><span class="why">Encerra e remove a inscrição; pede confirmação</span></span>
+        <span class="grow"></span>
+        <span class="act"><span class="btn btn-secondary btn-sm"><svg class="ic" aria-hidden="true"><use href="#i-hour"/></svg>Adiar esta solicitação</span><span class="why">Vai para a lista de espera e recebe o aviso</span></span>
+        <span class="act end"><span class="btn btn-primary btn-sm"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>Confirmar esta solicitação</span><span class="why">Turma A, como Estudante, e recebe o aviso</span></span>
+      </div>
+    </div></div>
+  </div>
+  <p class="caption">The first block answers question 1, the list question 2, the outcome card question 3, its disclosure
+  question 4, the bar question 5. Four zones, three jumps, all downward; the evidence column is read only when a signal
+  sends the eye there.</p>
+
+  <h3>How each block is built, and what it reads</h3>
+  <div class="tblwrap"><table class="tbl">
+    <thead><tr><th>Block</th><th>Reads (existing helpers)</th><th>New</th></tr></thead>
+    <tbody>
+      <tr><td>Summary strip</td><td>The status the renderer already chooses; <code>key_context()</code>; <code>applydate</code>; <code>identity_context()</code>; <code>get_instance_name()</code> (which already returns <em>Inscrição com chave de grupo e análise</em> in key-review mode)</td><td>A short key chip (RP-D10) and a waiting time (RP-D11)</td></tr>
+      <tr><td>What weighs</td><td><code>groupseats::for_groups()</code> for the preselected groups; <code>capacity::places()</code>, <code>places_taken()</code>; <code>history_context()</code> rows; the snapshot rows already filtered by <code>visible_keys()</code></td><td>A <code>signals_context()</code> that only classifies (RP-D2, RP-D3); no new SQL</td></tr>
+      <tr><td>Method line</td><td><code>capacity::applicants()</code>, <code>applicant_limit()</code>, <code>deferred()</code></td><td>Replaces the "Onde esta solicitação entra" panel; fixes the deferred label</td></tr>
+      <tr><td>Outcome card</td><td><code>key_route_groups()</code>/<code>default_approval_groups()</code> (the helpers the approval runs), the instance role, <code>decisionsummaryhidden</code> for groups the reader may not see</td><td>An <code>outcome_context()</code>; a small AMD module keeping the sentence in step with ticks (RP-D5)</td></tr>
+      <tr><td>Ajustar</td><td><code>decision_controls_context()</code> unchanged in data</td><td>Checkbox cards instead of a <code>select multiple</code>, same <code>groups[]</code> name (RP-D6)</td></tr>
+      <tr><td>Message and note</td><td>Unchanged fields</td><td>One disclosure, open whenever either holds a value (RP-D7)</td></tr>
+      <tr><td>Decision bar</td><td>The three actions, same values, same order</td><td>A consequence line beside each button (RP-D8)</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Phone width</h3>
+  <div class="phones">
+    <div class="pframe"><div class="plabel">Concept A, phone, above the fold</div><div class="mdl phone">
+      <div class="crumb"><span>Formação de moderadores</span><span>Larissa Moura</span></div>
+      <h1>Larissa Moura - Formação de moderadores</h1>
+      <div class="nav2 small"><span class="link">&#8249; Anterior</span><span class="link">Todas</span><span class="link">Próxima &#8250;</span></div>
+      <div class="strip">
+        <div class="rowline"><span class="badge st-await"><span class="dot"></span>Aguardando decisão</span><span class="badge st-key"><svg class="ic" aria-hidden="true"><use href="#i-key"/></svg>Chave aceita: Turma A</span></div>
+        <span class="when">Solicitada há 2 dias &middot; Inscrição com chave de grupo e análise</span>
+      </div>
+      <div class="sechead"><h2>O que pesa na decisão</h2></div>
+      <ul class="sigs">
+        <li class="s-warn"><svg class="ic si" aria-hidden="true"><use href="#i-warn"/></svg><span><b>Turma A: 18 de 20 vagas</b><span class="sub">Restam 2.</span></span><span class="stw">Atenção</span></li>
+        <li class="s-ok"><svg class="ic si" aria-hidden="true"><use href="#i-check"/></svg><span>Vagas do método: 31 de 40</span><span class="stw">Ok</span></li>
+        <li class="s-info"><svg class="ic si" aria-hidden="true"><use href="#i-info"/></svg><span>Cancelada antes, em 04/06/26</span><span class="stw">Leia</span></li>
+        <li class="s-ok"><svg class="ic si" aria-hidden="true"><use href="#i-check"/></svg><span>Dados completos: 2 de 2</span><span class="stw">Ok</span></li>
+      </ul>
+      <div class="outc" style="margin-top:10px">
+        <p class="ohead">Ao confirmar</p>
+        <p class="lead" style="font-size:14.5px">Larissa entra como <b>Estudante</b> no grupo <b>Turma A</b> e recebe o aviso.</p>
+        <div class="disc"><span class="sum">Ajustar grupos e papel</span></div>
+      </div>
+      <div class="box" style="background:var(--m-bg);margin-bottom:10px"><div class="disc" style="border:0;margin:0;padding:0"><span class="sum">Mensagem e anotação</span></div></div>
+      <div class="box" style="background:var(--m-bg);margin-bottom:10px"><div class="disc" style="border:0;margin:0;padding:0"><span class="sum">Comentário, dados e histórico</span></div></div>
+      <ul class="cons"><li><b>Confirmar:</b> entra na Turma A como Estudante.</li><li><b>Adiar:</b> vai para a lista de espera.</li><li><b>Cancelar:</b> encerra a solicitação; pede confirmação.</li></ul>
+      <div class="sticky"><span class="btn btn-danger btn-sm"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg>Cancelar</span><span class="grow"></span><span class="btn btn-secondary btn-sm"><svg class="ic" aria-hidden="true"><use href="#i-hour"/></svg>Adiar</span><span class="btn btn-primary btn-sm"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>Confirmar</span></div>
+    </div></div>
+    <div class="pframe"><div class="plabel">Concept A, phone, "Ajustar" opened</div><div class="mdl phone">
+      <div class="outc">
+        <p class="ohead">Ao confirmar</p>
+        <p class="lead" style="font-size:14.5px">Larissa entra como <b>Estudante</b> nos grupos <b>Turma A</b> e <b>Turma B</b> e recebe o aviso.</p>
+        <div class="disc open"><span class="sum">Ajustar grupos e papel</span>
+          <div class="gcards">
+            <div class="gcard on"><span class="cb on"></span><span class="gname">Turma A <span class="badge st-key">Grupo da chave</span></span><span class="pct warn">90 %</span><span class="gmeta">18 de 20 &middot; restam 2</span><span class="bar" role="progressbar" aria-label="Turma A: 18 de 20 vagas ocupadas" aria-valuenow="18" aria-valuemin="0" aria-valuemax="20"><i class="warn" style="width:90%"></i></span></div>
+            <div class="gcard on"><span class="cb on"></span><span class="gname">Turma B</span><span class="pct ok">35 %</span><span class="gmeta">7 de 20 &middot; restam 13</span><span class="bar" role="progressbar" aria-label="Turma B: 7 de 20 vagas ocupadas" aria-valuenow="7" aria-valuemin="0" aria-valuemax="20"><i class="ok" style="width:35%"></i></span></div>
+          </div>
+          <label class="field"><b>Papel a atribuir na aprovação</b><span class="ctrl wide caret">Usar o papel do método (Estudante)</span></label>
+        </div>
+      </div>
+      <ul class="cons"><li><b>Confirmar:</b> entra nas Turmas A e B como Estudante.</li><li><b>Adiar:</b> vai para a lista de espera.</li><li><b>Cancelar:</b> encerra a solicitação; pede confirmação.</li></ul>
+      <div class="sticky"><span class="btn btn-danger btn-sm">Cancelar</span><span class="grow"></span><span class="btn btn-secondary btn-sm">Adiar</span><span class="btn btn-primary btn-sm">Confirmar</span></div>
+    </div></div>
+  </div>
+  <p class="caption" style="margin-top:8px">On a phone the bar keeps short labels (the footer does not wrap and clips),
+  and the consequences move into the page body just above it, where the buttons' <code>aria-describedby</code> point.
+  The evidence collapses below the funnel.</p>
+  <div class="note think"><span class="lbl">A pt_br wording constraint</span>
+  <p>The outcome strings must not inflect for gender: "recebe o aviso" and "entra no curso" work for any applicant,
+  "é avisada" does not. One string per count of groups ("no grupo {$a}", "nos grupos {$a}", none), because pt_br
+  cannot prefix an article to an arbitrary group name ("na Turma A" in the mockup's prose only).</p></div>
+</section>
+
+<section id="variants">
+  <span class="sectnum">&sect;05 &middot; the same funnel, per reader</span>
+  <h2>Concept A for every reader the page admits</h2>
+  <p>The funnel keeps its order for everybody; what changes is which blocks a reader gets, and every change is one
+  the current gates already make.</p>
+
+  <div class="screen">
+    <div class="screencap"><b>Variants of concept A</b><span>the funnel only; navigation and evidence as in the main mockup</span></div>
+    <div class="screenbody" style="background:var(--card-2)"><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px;padding:14px">
+
+      <div class="mdl frag" style="border:1px solid var(--m-border);border-radius:10px">
+        <p class="xs muted" style="margin:0 0 8px"><b>1. Decider without choosedecision</b> &mdash; outcome read-only, no "Ajustar"</p>
+        <div class="strip"><div class="rowline"><span class="badge st-await"><span class="dot"></span>Aguardando decisão</span><span class="badge st-key"><svg class="ic" aria-hidden="true"><use href="#i-key"/></svg>Chave aceita: Turma A</span></div></div>
+        <ul class="sigs"><li class="s-warn"><svg class="ic si" aria-hidden="true"><use href="#i-warn"/></svg><span><b>Turma A: 18 de 20 vagas ocupadas</b></span><span class="stw">Atenção</span></li><li class="s-ok"><svg class="ic si" aria-hidden="true"><use href="#i-check"/></svg><span>Vagas do método: 31 de 40 ocupadas</span><span class="stw">Ok</span></li></ul>
+        <div class="outc ro" style="margin-top:10px"><p class="ohead">Ao confirmar</p><p class="lead" style="font-size:14.5px">Larissa entra no curso como <b>Estudante</b> e no grupo <b>Turma A</b>, e recebe o aviso da aprovação.</p>
+          <p class="xs muted" style="margin:0"><svg class="ic" aria-hidden="true"><use href="#i-info"/></svg> Definido pelo método de inscrição: você pode aprovar ou recusar esta solicitação, mas não alterá-los.</p></div>
+        <div class="sticky"><span class="btn btn-danger btn-sm">Cancelar esta solicitação</span><span class="grow"></span><span class="btn btn-secondary btn-sm">Adiar</span><span class="btn btn-primary btn-sm">Confirmar</span></div>
+      </div>
+
+      <div class="mdl frag" style="border:1px solid var(--m-border);border-radius:10px">
+        <p class="xs muted" style="margin:0 0 8px"><b>2. Viewer (viewapplications only)</b> &mdash; no outcome, no bar, no seats</p>
+        <div class="strip"><div class="rowline"><span class="badge st-ro"><svg class="ic" aria-hidden="true"><use href="#i-eye"/></svg>Somente leitura</span><span class="badge st-await"><span class="dot"></span>Aguardando decisão</span><span class="badge st-key new"><svg class="ic" aria-hidden="true"><use href="#i-key"/></svg>Chave aceita: Turma A</span></div>
+          <span class="when">Você pode ver esta solicitação, mas não decidi-la.</span></div>
+        <ul class="sigs"><li class="s-info"><svg class="ic si" aria-hidden="true"><use href="#i-info"/></svg><span>Solicitação anterior cancelada em 04/06/26</span><span class="stw">Leia</span></li><li class="s-ok"><svg class="ic si" aria-hidden="true"><use href="#i-check"/></svg><span>Dados do formulário completos: 2 de 2</span><span class="stw">Ok</span></li></ul>
+        <p class="xs muted" style="margin:8px 0 0">No seat, place or method rows: capacity stays a decider's panel (V-D3). The group's name in the chip is V-D4's proposal (dashed). The history row needs <code>viewreports</code>, as today.</p>
+        <div style="height:12px"></div>
+      </div>
+
+      <div class="mdl frag" style="border:1px solid var(--m-border);border-radius:10px">
+        <p class="xs muted" style="margin:0 0 8px"><b>3. Moderator narrowed to Turma A</b> &mdash; only their groups, method numbers labelled</p>
+        <ul class="sigs"><li class="s-warn"><svg class="ic si" aria-hidden="true"><use href="#i-warn"/></svg><span><b>Turma A: 18 de 20 vagas ocupadas</b></span><span class="stw">Atenção</span></li><li class="s-ok"><svg class="ic si" aria-hidden="true"><use href="#i-check"/></svg><span>Vagas neste método: 31 de 40 ocupadas</span><span class="stw">Ok</span></li></ul>
+        <div class="outc" style="margin-top:10px"><p class="ohead">Ao confirmar</p><p class="lead" style="font-size:14.5px">Larissa entra no curso como <b>Estudante</b> e no grupo <b>Turma A</b> e em mais 1 que você não pode ver, e recebe o aviso.</p>
+          <div class="disc open"><span class="sum">Ajustar grupos e papel</span><div class="gcards"><div class="gcard on"><span class="cb on"></span><span class="gname">Turma A <span class="badge st-key">Grupo da chave</span></span><span class="pct warn">90 %</span><span class="bar" role="progressbar" aria-label="Turma A: 18 de 20 vagas ocupadas" aria-valuenow="18" aria-valuemin="0" aria-valuemax="20"><i class="warn" style="width:90%"></i></span></div></div>
+          <p class="xs muted" style="margin:0">Turma B is not offered and its seats are never shown (S6, V-D3). "Mais 1 que você não pode ver" is <code>decisionsummaryhidden</code>, already shipped.</p></div></div>
+      </div>
+
+      <div class="mdl frag" style="border:1px solid var(--m-border);border-radius:10px">
+        <p class="xs muted" style="margin:0 0 8px"><b>4. An application without a key</b></p>
+        <div class="strip"><div class="rowline"><span class="badge st-await"><span class="dot"></span>Aguardando decisão</span><span class="when">Solicitada há 5 horas</span></div><span class="when">Método: Inscrição mediante aprovação</span></div>
+        <ul class="sigs"><li class="s-ok"><svg class="ic si" aria-hidden="true"><use href="#i-check"/></svg><span>Vagas do método: 31 de 40 ocupadas</span><span class="stw">Ok</span></li><li class="s-info"><svg class="ic si" aria-hidden="true"><use href="#i-doc"/></svg><span>Comentário: 3 linhas <span class="anchor">ler</span></span><span class="stw">Leia</span></li></ul>
+        <div class="outc" style="margin-top:10px"><p class="ohead">Ao confirmar</p><p class="lead" style="font-size:14.5px">Bianca entra no curso como <b>Estudante</b>, sem grupo, e recebe o aviso da aprovação.</p>
+          <p class="xs muted" style="margin:0">O método não define grupos. Para incluir Bianca em um, use "Ajustar".</p>
+          <div class="disc"><span class="sum">Ajustar grupos e papel</span></div></div>
+      </div>
+
+      <div class="mdl frag" style="border:1px solid var(--m-border);border-radius:10px">
+        <p class="xs muted" style="margin:0 0 8px"><b>5. The key's group is full</b> &mdash; red, warned, never blocked (R5)</p>
+        <div class="sechead"><h2 style="font-size:14px">O que pesa na decisão</h2><span class="muted">1 acima do limite</span></div>
+        <ul class="sigs"><li class="s-bad"><svg class="ic si" aria-hidden="true"><use href="#i-block"/></svg><span><b>Turma A lotada: 20 de 20 vagas ocupadas</b><span class="sub">Confirmar deixa o grupo com 21 de 20.</span></span><span class="stw">Lotado</span></li><li class="s-ok"><svg class="ic si" aria-hidden="true"><use href="#i-check"/></svg><span>Vagas do método: 31 de 40 ocupadas</span><span class="stw">Ok</span></li></ul>
+        <div class="outc alarm" style="margin-top:10px"><p class="ohead">Ao confirmar</p><p class="lead" style="font-size:14.5px">Larissa entra no grupo <b>Turma A</b>, que passa a ter 21 membros para 20 vagas.</p>
+          <p class="xs muted" style="margin:0">O plugin avisa, mas não bloqueia: a decisão é sua. Turma B tem 13 vagas livres.</p>
+          <div class="disc open"><span class="sum">Ajustar grupos e papel</span><div class="gcards"><div class="gcard on"><span class="cb on"></span><span class="gname">Turma A <span class="badge st-key">Grupo da chave</span></span><span class="pct bad">100 %</span><span class="bar" role="progressbar" aria-label="Turma A: 20 de 20 vagas ocupadas, lotado" aria-valuenow="20" aria-valuemin="0" aria-valuemax="20"><i class="bad" style="width:100%"></i></span></div><div class="gcard"><span class="cb"></span><span class="gname">Turma B</span><span class="pct ok">35 %</span><span class="bar" role="progressbar" aria-label="Turma B: 7 de 20 vagas ocupadas" aria-valuenow="7" aria-valuemin="0" aria-valuemax="20"><i class="ok" style="width:35%"></i></span></div></div></div></div>
+        <div class="sticky"><span class="btn btn-danger btn-sm">Cancelar</span><span class="grow"></span><span class="btn btn-secondary btn-sm">Adiar</span><span class="act end"><span class="btn btn-primary btn-sm">Confirmar esta solicitação</span><span class="why">Turma A ficará com 21 de 20</span></span></div>
+      </div>
+
+      <div class="mdl frag" style="border:1px solid var(--m-border);border-radius:10px">
+        <p class="xs muted" style="margin:0 0 8px"><b>6. Already deferred once</b> &mdash; the stored note shown, the box empty</p>
+        <div class="strip"><div class="rowline"><span class="badge st-defer"><svg class="ic" aria-hidden="true"><use href="#i-hour"/></svg>Adiada</span><span class="badge st-key"><svg class="ic" aria-hidden="true"><use href="#i-key"/></svg>Chave aceita: Turma A</span></div>
+          <span class="when">Adiada por Ana Prado em 28/10/26, 16:40.</span>
+          <span class="small"><b>Anotação para o registro:</b> aguardando a abertura da Turma C.</span></div>
+        <ul class="sigs"><li class="s-ok"><svg class="ic si" aria-hidden="true"><use href="#i-check"/></svg><span>Turma A: 12 de 20 vagas ocupadas</span><span class="stw">Ok</span></li></ul>
+        <div class="sticky"><span class="btn btn-danger btn-sm">Cancelar</span><span class="grow"></span><span class="act"><span class="btn btn-secondary btn-sm">Adiar esta solicitação</span><span class="why">Continua na lista; avisa só se houver mensagem</span></span><span class="btn btn-primary btn-sm">Confirmar</span></div>
+      </div>
+    </div></div>
+  </div>
+  <p class="caption">Variant 6 states what the code does: re-deferring an application that is already deferred notifies the
+  applicant only when the decider writes a message (<code>lib.php:1764</code>, gates BI and BJ). The stored note is shown in
+  the strip and never pre-filled, because an empty box clears it.</p>
+
+  <div class="note think"><span class="lbl">The mentor</span>
+  <p>A decider at the mentor (user-context) level holds nothing in the course: no capacity rows, no group names, no
+  history without <code>viewreports</code>, and the snapshot masks identity fields. Their funnel is the strip, the details
+  signal, the read-only outcome naming the role only, and the bar. Nothing new is disclosed to them.</p></div>
+</section>
+
+<section id="many">
+  <span class="sectnum">&sect;05b &middot; the chosen concept, at course scale</span>
+  <h2>A with dozens of groups</h2>
+  <div class="quoted">
+    <p>&ldquo;Realmente gostei mais da opção A, o que faltou agora é quando há dezenas de grupos. Por exemplo, tenho caso com quase 100 grupos no curso. Como isso pode ser tratado no design?&rdquo;</p>
+    <span class="who">The owner, 5 November 2026</span>
+  </div>
+  <p>Concept A as drawn above shows every group the reader may choose as a card. Today's chooser does the same in a
+  <code>select multiple</code>: <code>decision_controls_context()</code> offers every group
+  <code>groupscope::choosable_groups()</code> returns (<code>renderer.php:647</code>). With 96 groups that is 96 cards, or a
+  native list a decider scrolls with control-click. The answer below keeps the funnel exactly as it is and changes one
+  thing: <b>the groups the approval will join stay as cards, and every other group is reached by searching</b>.</p>
+
+  <h3>Where the many groups actually are</h3>
+  <p>Most decisions never open "Ajustar". The outcome card already names the destination (the key's group, the method's
+  groups), and Confirm does exactly that. So a course of 100 groups changes nothing in the strip, the signals, the outcome
+  card or the bar. The count matters in three places only:</p>
+  <ul>
+    <li><b>"Ajustar grupos e papel"</b> on the review page, when the decider adds or moves a group.</li>
+    <li><b>The participants page's bulk decision form</b> (<code>classes/form/bulk_decision_form.php</code>), whose group
+    field is a moodleform <code>select</code> of every choosable group today (<code>bulk_decision_form.php:165&ndash;176</code>).</li>
+    <li><b>The queue's group filter</b>, proposed in V2 of <a href="group-screens.html">group-screens.html</a> and not yet
+    built.</li>
+  </ul>
+  <p>All three get the same control and the same option list, so a decider learns it once.</p>
+
+  <div class="screen">
+    <div class="screencap"><b>Concept A, 96 groups in three groupings &mdash; decider with choosedecision, "Ajustar" opened, searching</b><span class="url">/enrol/apply/manage.php?userenrol=8812</span><span>desktop</span></div>
+    <div class="screenbody"><div class="mdl">
+      <div class="crumb"><span>Formação de moderadores</span><span>Confirmar inscrições</span><span>Larissa Moura</span></div>
+      <h1>Larissa Moura - Formação de moderadores</h1>
+      <div class="nav2"><span class="link"><svg class="ic" aria-hidden="true"><use href="#i-left"/></svg> Anterior: Tiago Rezende</span><span class="link">Todas as solicitações</span><span class="link">Próxima: Bianca Coelho <svg class="ic" aria-hidden="true"><use href="#i-right"/></svg></span></div>
+      <div class="grid84">
+        <div>
+          <div class="strip">
+            <div class="rowline">
+              <span class="badge st-await"><span class="dot"></span>Aguardando decisão</span>
+              <span class="badge st-key"><svg class="ic" aria-hidden="true"><use href="#i-key"/></svg>Chave aceita: Turma 37</span>
+              <span class="when"><svg class="ic" aria-hidden="true"><use href="#i-clock"/></svg> Solicitada há 2 dias (03/11/26, 09:14)</span>
+            </div>
+            <div class="idline"><span>Método: Inscrição com chave de grupo e análise</span><span>Nome de usuário: lmoura</span></div>
+          </div>
+
+          <div class="sechead"><h2>O que pesa na decisão</h2><span class="muted">1 ponto de atenção, nenhum acima do limite</span></div>
+          <ul class="sigs">
+            <li class="s-warn"><svg class="ic si" aria-hidden="true"><use href="#i-warn"/></svg><span><b>Turma 37: 18 de 20 vagas ocupadas</b><span class="sub">Restam 2 vagas no grupo da chave.</span></span><span class="stw">Atenção</span></li>
+            <li class="s-ok"><svg class="ic si" aria-hidden="true"><use href="#i-check"/></svg><span>Vagas do método: 31 de 40 ocupadas<span class="sub">Restam 9.</span></span><span class="stw">Ok</span></li>
+            <li class="s-ok"><svg class="ic si" aria-hidden="true"><use href="#i-check"/></svg><span>Dados do formulário completos: 2 de 2 <span class="anchor">ver dados</span></span><span class="stw">Ok</span></li>
+          </ul>
+          <p class="method">Neste método: 52 de 60 solicitações em andamento, 4 delas adiadas. O curso tem 96 grupos; aqui aparecem só os que esta aprovação usa.</p>
+
+          <div class="outc">
+            <p class="ohead">Ao confirmar</p>
+            <p class="lead">Larissa entra no curso como <b>Estudante</b> e nos grupos <b>Turma 37</b>, <b>Moderadores 2026</b> e <b>Turma 41</b>, e recebe o aviso da aprovação.</p>
+            <p class="small muted" style="margin:0">Depois: Turma 37 com 19 de 20 vagas ocupadas; Turma 41 com 10 de 20; vagas do método, 32 de 40.</p>
+            <div class="disc open">
+              <span class="sum">Ajustar grupos e papel</span>
+              <p class="xs muted" style="margin:8px 0 0"><b style="color:var(--m-fg)">Grupos desta aprovação</b> &middot; definidos pela chave e pelo método</p>
+              <div class="gcards">
+                <div class="gcard on"><span class="cb on"></span><span class="gname">Turma 37 <span class="badge st-key"><svg class="ic" aria-hidden="true"><use href="#i-key"/></svg>Grupo da chave</span></span><span class="pct warn">90 %</span>
+                  <span class="gmeta">18 de 20 vagas ocupadas &middot; restam 2</span>
+                  <span class="bar" role="progressbar" aria-label="Turma 37: 18 de 20 vagas ocupadas" aria-valuenow="18" aria-valuemin="0" aria-valuemax="20"><i class="warn" style="width:90%"></i></span></div>
+                <div class="gcard on"><span class="cb on"></span><span class="gname">Moderadores 2026 <span class="badge st-soft">Do método</span></span><span class="pct"></span>
+                  <span class="gmeta">Sem limite de vagas &middot; 214 membros</span></div>
+              </div>
+              <div class="addg">
+                <div class="rowline" style="justify-content:space-between;align-items:baseline">
+                  <label class="field" style="flex:1 1 auto"><b>Adicionar outro grupo</b></label>
+                  <span class="xs muted">96 grupos neste curso</span>
+                </div>
+                <div class="rowline" style="margin:4px 0 6px;gap:8px">
+                  <span class="xs muted">Agrupamento</span><span class="ctrl caret small" style="padding:3px 9px">Todos os agrupamentos</span>
+                </div>
+                <div class="acsel" role="listbox" aria-label="Grupos adicionados">
+                  <span class="acchip"><span aria-hidden="true">&times;</span>Turma 41 &middot; 9 de 20 vagas</span>
+                </div>
+                <div class="acin"><span>turma 8</span><span class="acdown" aria-hidden="true">&#9660;</span></div>
+                <ul class="acsug" aria-label="Sugestões">
+                  <li class="act">Turma 8 &middot; 15 de 20 vagas</li>
+                  <li>Turma 80 &middot; 11 de 20 vagas</li>
+                  <li>Turma 81 &middot; sem vagas, 20 de 20</li>
+                  <li>Turma 82 (NOT-82) &middot; 6 de 20 vagas</li>
+                  <li>Turma 83 &middot; 17 de 20 vagas</li>
+                  <li class="more">&hellip; até Turma 89; a lista rola a partir de 20em, como no core</li>
+                </ul>
+                <p class="xs muted" style="margin:6px 0 0">Digite parte do nome ou do código do grupo. Grupos sem vagas aparecem e podem ser escolhidos: o plugin avisa, mas a decisão é sua.</p>
+              </div>
+              <p class="xs muted" style="margin:8px 0 10px">Sem nenhum grupo marcado, a aprovação usa os grupos padrão: Turma 37, pela chave, e Moderadores 2026, pelo método.</p>
+              <label class="field" style="max-width:420px"><b>Papel a atribuir na aprovação</b><span class="ctrl wide caret">Usar o papel definido no método de inscrição (Estudante)</span></label>
+            </div>
+          </div>
+        </div>
+
+        <aside class="ev" aria-label="Evidências">
+          <h3>Comentário</h3>
+          <div class="box small muted">O solicitante não escreveu nada.</div>
+          <h3>Dados enviados com esta solicitação</h3>
+          <div class="box"><dl class="kv" style="margin:0"><dt>Cidade</dt><dd>Mariana</dd><dt>Número de registro</dt><dd>2026-0311</dd></dl></div>
+        </aside>
+      </div>
+      <div class="sticky">
+        <span class="act"><span class="btn btn-danger btn-sm"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg>Cancelar esta solicitação</span><span class="why">Encerra e remove a inscrição; pede confirmação</span></span>
+        <span class="grow"></span>
+        <span class="act"><span class="btn btn-secondary btn-sm"><svg class="ic" aria-hidden="true"><use href="#i-hour"/></svg>Adiar esta solicitação</span><span class="why">Vai para a lista de espera e recebe o aviso</span></span>
+        <span class="act end"><span class="btn btn-primary btn-sm"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>Confirmar esta solicitação</span><span class="why">Turma 37, Moderadores 2026 e Turma 41, como Estudante</span></span>
+      </div>
+    </div></div>
+  </div>
+  <p class="caption">The signals still list the key's group only (the method's group declares no seats, so it has no row,
+  RP-D3). The two pinned cards are the route Confirm takes; the search adds to it. The chip above the input is core's
+  selection list, which core's layout template places before the input; the suggestions are core's listbox, plain text
+  per option, so the seat state is words and never colour (RP-D28).</p>
+
+  <h3>How "Ajustar" is built at scale</h3>
+  <div class="tblwrap"><table class="tbl">
+    <thead><tr><th>Piece</th><th>What it is</th><th>Reads (existing)</th></tr></thead>
+    <tbody>
+      <tr><td>Threshold</td><td>Up to 8 choosable groups: every one is a card, as in &sect;04. Above 8: pinned cards plus the
+        search (RP-D18). The count is of <em>choosable</em> groups, after the reader's narrowing, so a moderator in 1 to 3
+        groups keeps cards in a course of 100.</td><td><code>groupscope::choosable_groups()</code>, which already intersects with
+        <code>narrowed_to()</code> (<code>groupscope.php:347&ndash;357</code>)</td></tr>
+      <tr><td>Pinned cards</td><td>The groups the approval will join and this reader may see, ticked, with the occupancy bar;
+        unticking allowed. A group the reader may not see stays counted in the outcome sentence
+        (<code>decisionsummaryhidden</code>), never pinned (RP-D19).</td><td><code>key_route_groups()</code> for a keyed
+        application, <code>default_approval_groups()</code> otherwise, intersected with the choosable set</td></tr>
+      <tr><td>"Adicionar outro grupo"</td><td>A plain <code>&lt;select multiple name="groups[]"&gt;</code> in a wrapper of its own,
+        holding every choosable group <em>except</em> the pinned ones, enhanced by <code>core/form-autocomplete</code>'s
+        <code>enhance()</code>. Without JavaScript it is a native multi-select and the form still posts
+        <code>groups[]</code>: PHP merges the cards' and the select's values into one array, which
+        <code>optional_param_array('groups', [], PARAM_INT)</code> reads as today (<code>manage.php:210</code>) and
+        <code>confirm_enrolment()</code> allowlists as today (RP-D20).</td><td>The same group list the cards read</td></tr>
+      <tr><td>Option text</td><td>"Turma 37 &middot; 12 de 20 vagas"; the group's <code>idnumber</code> in parentheses when it has
+        one ("Turma 82 (NOT-82) &middot; &hellip;"); "Turma 81 &middot; sem vagas, 20 de 20" for a full group, selectable; a group
+        without declared seats is the name alone. Typing matches the name and the code because core matches the option's
+        visible text (RP-D21).</td><td><code>groupseats::for_groups()</code> over the same ids, already called for every choosable
+        group (<code>renderer.php:648</code>)</td></tr>
+      <tr><td>Order</td><td>Natural: Turma 2 before Turma 10. <code>groups_get_all_groups()</code> returns <code>name ASC</code> by the
+        database's collation, which puts Turma 10 first, so the renderer re-sorts with
+        <code>core_collator::asort_objects_by_property($groups, 'name', core_collator::SORT_NATURAL)</code> (RP-D22).</td>
+        <td><code>lib/grouplib.php:367</code> and the cache loader's <code>'name ASC'</code> (<code>:1545</code>);
+        <code>lib/classes/collator.php:47, 258</code></td></tr>
+      <tr><td>Groupings</td><td>A small "Agrupamento" select above the search, shown only when the course has a grouping holding a
+        choosable group; choosing one narrows the suggestions to its groups. A group in several groupings is one option, found
+        through any of them (RP-D23).</td><td><code>groups_get_course_data()</code>'s <code>mappings</code>, from the same MUC
+        entry <code>groups_get_all_groups()</code> reads</td></tr>
+      <tr><td>Outcome sentence</td><td>The &sect;04 AMD module listens to the cards' change and to the select's
+        <code>change</code> event, which core dispatches as a bubbling native event on every add and remove
+        (<code>form-autocomplete.js:206&ndash;208</code>), and rewrites the sentence, the "Depois" line and Confirm's
+        consequence from the seat data the server wrote into the markup.</td><td>Nothing new on the server</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note trap"><span class="lbl">Where the code said otherwise</span>
+  <ul style="margin:0;padding-left:1.1em">
+    <li><b>Optgroups per grouping do not work with core's autocomplete.</b> It reads <code>originalSelect.children('option')</code>
+    everywhere (<code>form-autocomplete.js:155, 231, 516, 604&ndash;607, 662&ndash;665, 719, 1229</code>), so an option inside an
+    <code>&lt;optgroup&gt;</code> is absent from the suggestions, the chips and the sync back to the select. A select cannot hold one
+    option in two optgroups anyway, and a duplicated option posts its id twice. Core's own heading pattern is a disabled
+    <code>&lt;option class="suggestions-heading"&gt;</code> (report builder, <code>reportbuilder/templates/local/settings/conditions.mustache:46&ndash;55</code>),
+    which still cannot list a group under two groupings. Hence the separate "Agrupamento" select, which narrows by setting
+    <code>data-enabled="disabled"</code> on the other options: the attribute core documents for leaving an option out of the
+    suggestions (<code>form-autocomplete.js:494, 516</code>).</li>
+    <li><b><code>groups_get_all_groups()</code> is not in natural order</b>: <code>ORDER BY g.name ASC</code> on the direct path and
+    <code>'name ASC'</code> in the cache loader, so the database's collation decides and "Turma 10" sorts before "Turma 2".
+    <code>core_collator::SORT_NATURAL</code> exists on 5.1 to 5.3 and fixes it in PHP.</li>
+    <li><b>"Lotada" inflects.</b> The owner's example reads "Turma 81 &middot; lotada", which agrees with <em>turma</em> and
+    disagrees with a group named "Grupo 3". The page's own pt_br rule (&sect;04) forbids an inflected word next to an arbitrary
+    name, and the shipped <code>decisiongroupfull</code> says "lotado". Proposed: "sem vagas", which agrees with anything.</li>
+    <li><b>Search matches the visible text, digits included.</b> Core filters on <code>node.text()</code>
+    (<code>form-autocomplete.js:540&ndash;547</code>), a substring match, with no ranking. Typing "37" also shows any group whose
+    seat text reads "37 de 40". That is the cost of putting the seats in the option, which the owner asked for; typing "turma 37"
+    removes the noise. Moving the seats into a <code>data-html</code> label would not help: core searches the rendered label
+    either way.</li>
+  </ul></div>
+
+  <div class="note think"><span class="lbl">Reads, estimated from the code (not measured)</span>
+  <p>No new query. The review page already reads the seats of every choosable group in one call
+  (<code>renderer.php:647&ndash;648</code>), and <code>\local_groupdist\seats::for_groups()</code> is two statements for any N:
+  one <code>{customfield_data}</code> read with <code>instanceid IN (&hellip;)</code> and one <code>{groups_members}</code>
+  <code>GROUP BY groupid</code> with the same <code>IN</code> (<code>local_groupdist/classes/local/fields.php:419&ndash;504</code>,
+  identical on the 501 and 503 branches), plus the Seats field lookup, cached for the request (<code>fields.php:164</code>).
+  <code>groups_get_all_groups()</code> serves an unnarrowed reader from the <code>groupdata</code> cache (no query once warm, three
+  on a cold course: groups, groupings, mappings); the groupings and their mappings come from that same entry. A narrowed
+  reader pays what they pay today: <code>member_groups()</code>'s one query and <code>visible_to()</code> for each of their
+  MEMBERS/OWN groups. So 100 groups cost about the same reads as 2. The markup grows by roughly 100 options of ~40
+  characters, a few kilobytes, all client-side filtered (core's <code>enhance()</code> without an <code>ajax</code> module).
+  Core caps the open list at <code>max-height: 20em</code> with a scrollbar (<code>theme/boost/scss/moodle/forms.scss:290</code>).</p></div>
+
+  <h3>The other two places, and the readers in between</h3>
+  <div class="screen">
+    <div class="screencap"><b>The same control elsewhere, and per reader</b><span>fragments; the funnel above them as in &sect;04</span></div>
+    <div class="screenbody" style="background:var(--card-2)"><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px;padding:14px">
+
+      <div class="mdl frag" style="border:1px solid var(--m-border);border-radius:10px">
+        <p class="xs muted" style="margin:0 0 8px"><b>1. Coordinator narrowed to 20 groups</b> &mdash; search scoped to their own (S6)</p>
+        <div class="outc"><p class="ohead">Ao confirmar</p><p class="lead" style="font-size:14.5px">Rui entra como <b>Estudante</b> no grupo <b>Turma 12</b> e em mais 1 que você não pode ver, e recebe o aviso.</p>
+          <div class="disc open"><span class="sum">Ajustar grupos e papel</span>
+            <div class="gcards" style="grid-template-columns:minmax(0,1fr)"><div class="gcard on"><span class="cb on"></span><span class="gname">Turma 12 <span class="badge st-key">Grupo da chave</span></span><span class="pct ok">60 %</span><span class="bar" role="progressbar" aria-label="Turma 12: 12 de 20 vagas ocupadas" aria-valuenow="12" aria-valuemin="0" aria-valuemax="20"><i class="ok" style="width:60%"></i></span></div></div>
+            <div class="addg"><label class="field"><b>Adicionar outro grupo</b></label>
+              <div class="acin" style="margin-top:4px"><span class="muted">Buscar entre os seus 20 grupos</span><span class="acdown" aria-hidden="true">&#9660;</span></div></div>
+          </div></div>
+        <p class="xs muted" style="margin:8px 0 0">The other 76 groups are never options and their seats are never read for this reader: <code>choosable_groups()</code> already returns only theirs. A moderator in 3 groups gets cards, not a search.</p>
+      </div>
+
+      <div class="mdl frag" style="border:1px solid var(--m-border);border-radius:10px">
+        <p class="xs muted" style="margin:0 0 8px"><b>2. A move: the key's group unticked, another added</b></p>
+        <div class="outc"><p class="ohead">Ao confirmar</p><p class="lead" style="font-size:14.5px">Larissa entra como <b>Estudante</b> nos grupos <b>Moderadores 2026</b> e <b>Turma 55</b>, e recebe o aviso.</p>
+          <p class="small muted" style="margin:0 0 6px">Não entra na Turma 37, o grupo da chave.</p>
+          <div class="disc open"><span class="sum">Ajustar grupos e papel</span>
+            <div class="gcards" style="grid-template-columns:minmax(0,1fr)">
+              <div class="gcard"><span class="cb"></span><span class="gname">Turma 37 <span class="badge st-key">Grupo da chave</span></span><span class="pct bad">100 %</span><span class="gmeta">Sem vagas, 20 de 20</span><span class="bar" role="progressbar" aria-label="Turma 37: 20 de 20 vagas ocupadas, sem vagas" aria-valuenow="20" aria-valuemin="0" aria-valuemax="20"><i class="bad" style="width:100%"></i></span></div>
+              <div class="gcard on"><span class="cb on"></span><span class="gname">Moderadores 2026</span><span class="pct"></span><span class="gmeta">Sem limite de vagas</span></div>
+            </div>
+            <div class="acsel"><span class="acchip"><span aria-hidden="true">&times;</span>Turma 55 &middot; 3 de 20 vagas</span></div>
+          </div></div>
+        <p class="xs muted" style="margin:8px 0 0">Untick plus add, no separate "move" control (RP-D24). The extra sentence names what the key would have done and now will not.</p>
+      </div>
+
+      <div class="mdl frag" style="border:1px solid var(--m-border);border-radius:10px">
+        <p class="xs muted" style="margin:0 0 8px"><b>3. Without JavaScript</b> &mdash; the same select, native</p>
+        <div class="gcards" style="grid-template-columns:minmax(0,1fr)"><div class="gcard on"><span class="cb on"></span><span class="gname">Turma 37 <span class="badge st-key">Grupo da chave</span></span><span class="pct warn">90 %</span><span class="bar" role="progressbar" aria-label="Turma 37: 18 de 20 vagas ocupadas" aria-valuenow="18" aria-valuemin="0" aria-valuemax="20"><i class="warn" style="width:90%"></i></span></div></div>
+        <label class="field"><b>Adicionar outro grupo</b></label>
+        <div class="ms" style="margin-top:4px"><span>Turma 1 &middot; 14 de 20 vagas</span><span>Turma 2 &middot; 20 de 20, sem vagas</span><span class="sel">Turma 3 &middot; 8 de 20 vagas</span><span>Turma 4 &middot; 11 de 20 vagas</span><span class="muted">&hellip; 92 mais</span></div>
+        <p class="xs muted" style="margin:8px 0 0">Posts <code>groups[]</code> with the cards' values. The "Agrupamento" select is hidden: it needs the script to act.</p>
+      </div>
+
+      <div class="mdl frag" style="border:1px solid var(--m-border);border-radius:10px">
+        <p class="xs muted" style="margin:0 0 8px"><b>4. Participants page, bulk decision</b> &mdash; moodleform's own autocomplete element</p>
+        <p class="small" style="margin:0 0 8px"><b>Confirmar 12 solicitações</b></p>
+        <label class="field"><b>Grupos para ingressar na aprovação</b></label>
+        <div class="acsel" style="margin-top:4px"><span class="acchip"><span aria-hidden="true">&times;</span>Turma 41 &middot; 9 de 20 vagas</span></div>
+        <div class="acin"><span class="muted">Buscar grupo</span><span class="acdown" aria-hidden="true">&#9660;</span></div>
+        <p class="xs muted" style="margin:8px 0 0">Today a <code>select multiple</code> of names only, <code>size</code> up to 6. Proposed: <code>$mform-&gt;addElement('autocomplete', 'groups', &hellip;, ['multiple' =&gt; true])</code>, the same option text and order. 12 applicants into a group with 9 free: the after-decision warning stays (R5).</p>
+      </div>
+
+      <div class="mdl frag" style="border:1px solid var(--m-border);border-radius:10px">
+        <p class="xs muted" style="margin:0 0 8px"><b>5. The queue's group filter (V2)</b>, unnarrowed teacher</p>
+        <div class="rowline" style="gap:6px;margin-bottom:6px"><span class="ctrl caret small">Situação: todas</span></div>
+        <div class="acin"><span class="muted">Grupo: qualquer</span><span class="acdown" aria-hidden="true">&#9660;</span></div>
+        <ul class="acsug" aria-label="Sugestões, aberta com a seta para baixo">
+          <li>Qualquer grupo</li>
+          <li class="act">Meus grupos (3)</li>
+          <li>Sem grupo</li>
+          <li>Turma 1</li><li>Turma 2</li><li class="more">&hellip; Turma 96</li>
+        </ul>
+        <p class="xs muted" style="margin:8px 0 0">A single-value filter, so a single-select autocomplete; names without seats (the queue's capacity panel carries them). "Meus grupos" is V-D2's default made a value; "Sem grupo" only for who sees keyless applications.</p>
+      </div>
+
+      <div class="mdl frag" style="border:1px solid var(--m-border);border-radius:10px">
+        <p class="xs muted" style="margin:0 0 8px"><b>6. The queue filter, narrowed moderator</b></p>
+        <p class="small" style="margin:0 0 6px"><span class="badge st-soft">Mostrando as solicitações dos seus grupos: Turma 12, Turma 13</span></p>
+        <div class="rowline" style="gap:6px"><span class="ctrl caret small">Grupo: Turma 12</span></div>
+        <p class="xs muted" style="margin:8px 0 0">Two groups: a plain select, no search (under the threshold). Neither "Meus grupos" (the scope already is their groups) nor "Sem grupo" (they never see a keyless application, S3).</p>
+      </div>
+    </div></div>
+  </div>
+
+  <h3>Phone width</h3>
+  <div class="phones">
+    <div class="pframe"><div class="plabel">96 groups, phone, "Ajustar" opened</div><div class="mdl phone">
+      <div class="outc">
+        <p class="ohead">Ao confirmar</p>
+        <p class="lead" style="font-size:14.5px">Larissa entra como <b>Estudante</b> nos grupos <b>Turma 37</b>, <b>Moderadores 2026</b>, <b>Turma 41</b> e <b>Turma 82</b>, e recebe o aviso.</p>
+        <div class="disc open"><span class="sum">Ajustar grupos e papel</span>
+          <div class="gcards">
+            <div class="gcard on"><span class="cb on"></span><span class="gname">Turma 37 <span class="badge st-key">Grupo da chave</span></span><span class="pct warn">90 %</span><span class="gmeta">18 de 20 &middot; restam 2</span><span class="bar" role="progressbar" aria-label="Turma 37: 18 de 20 vagas ocupadas" aria-valuenow="18" aria-valuemin="0" aria-valuemax="20"><i class="warn" style="width:90%"></i></span></div>
+            <div class="gcard on"><span class="cb on"></span><span class="gname">Moderadores 2026 <span class="badge st-soft">Do método</span></span><span class="pct"></span><span class="gmeta">Sem limite de vagas</span></div>
+          </div>
+          <div class="addg">
+            <label class="field"><b>Adicionar outro grupo</b></label>
+            <span class="ctrl wide caret small" style="margin:4px 0 6px">Agrupamento: todos</span>
+            <div class="acsel"><span class="acchip"><span aria-hidden="true">&times;</span>Turma 41 &middot; 9 de 20 vagas</span><span class="acchip"><span aria-hidden="true">&times;</span>Turma 82 (NOT-82) &middot; 6 de 20 vagas</span></div>
+            <div class="acin"><span class="muted">Buscar grupo</span><span class="acdown" aria-hidden="true">&#9660;</span></div>
+          </div>
+          <label class="field" style="margin-top:10px"><b>Papel a atribuir na aprovação</b><span class="ctrl wide caret">Usar o papel do método (Estudante)</span></label>
+        </div>
+      </div>
+      <ul class="cons"><li><b>Confirmar:</b> entra nas Turmas 37, 41, 82 e em Moderadores 2026 como Estudante.</li><li><b>Adiar:</b> vai para a lista de espera.</li><li><b>Cancelar:</b> encerra a solicitação; pede confirmação.</li></ul>
+      <div class="sticky"><span class="btn btn-danger btn-sm">Cancelar</span><span class="grow"></span><span class="btn btn-secondary btn-sm">Adiar</span><span class="btn btn-primary btn-sm">Confirmar</span></div>
+    </div></div>
+    <div class="pframe"><div class="plabel">Phone, searching</div><div class="mdl phone">
+      <div class="addg" style="margin-top:4px">
+        <label class="field"><b>Adicionar outro grupo</b></label>
+        <div class="acsel" style="margin-top:4px"><span class="acchip"><span aria-hidden="true">&times;</span>Turma 41 &middot; 9 de 20 vagas</span></div>
+        <div class="acin"><span>81</span><span class="acdown" aria-hidden="true">&#9660;</span></div>
+        <ul class="acsug">
+          <li class="act">Turma 81 &middot; sem vagas, 20 de 20</li>
+          <li>Turma 66 (POLO-81) &middot; 12 de 20 vagas</li>
+        </ul>
+        <p class="xs muted" style="margin:6px 0 0">The list opens under the input, full width; the chips wrap above it. Selecting keeps the list open (core's default for a multiple select), so several groups can be added in one pass.</p>
+      </div>
+    </div></div>
+  </div>
+  <p class="caption" style="margin-top:8px">The phone stacks the pinned cards (the kit's one-column grid at phone width), puts the
+  grouping select and the search at full width, and lets the chips wrap. Typing "81" finds Turma 81 by its name and Turma 66
+  by its code, POLO-81: core matches a substring of the whole option text, which is how the <code>idnumber</code> becomes
+  searchable without any server round trip.</p>
+
+  <h3>Keyboard and screen reader path</h3>
+  <ul>
+    <li>Tab reaches the pinned cards (real checkboxes, Space toggles), then the grouping select, then the search input, which
+    core renders as <code>role="combobox"</code> with <code>aria-autocomplete="list"</code> and <code>aria-owns</code> naming the
+    suggestions and the selection (<code>lib/templates/form_autocomplete_input.mustache:45&ndash;51</code>).</li>
+    <li>Down opens the suggestions (a <code>role="listbox"</code>), Up and Down move, Enter adds, Escape closes; the chips are a
+    second listbox, Left and Right move between them and Enter or Space removes one
+    (<code>form-autocomplete.js:776&ndash;805, 972&ndash;989</code>).</li>
+    <li>Each add and remove is announced through core's polite status region as "Added Turma 41 &middot; 9 de 20 vagas" and
+    "Removed &hellip;" (<code>core</code> strings <code>added</code>, <code>removed</code>), so the seat state is heard, not
+    seen. A full group reads "sem vagas" in its text; nothing relies on colour.</li>
+    <li>The "Adicionar outro grupo" label must point at the select's id: core moves it to the input on enhance
+    (<code>originalLabel.attr('for', state.inputId)</code>). The pinned cards sit in a <code>fieldset</code> whose legend is
+    "Grupos desta aprovação".</li>
+  </ul>
+</section>
+
+<section id="b">
+  <span class="sectnum">&sect;06 &middot; the owner's "master-detail"</span>
+  <h2>Concept B: master-detail, with A's pane on the right</h2>
+  <p>The queue as a list on the left, filtered and scoped exactly as the queue is; the selected application on the right,
+  rendered by A's pane. Deciding moves the selection to the next row. Keyboard: <kbd>j</kbd>/<kbd>k</kbd> to move,
+  <kbd>a</kbd> confirm, <kbd>d</kbd> defer, <kbd>c</kbd> cancel (which still asks).</p>
+
+  <div class="screen">
+    <div class="screencap"><b>Concept B &mdash; master-detail</b><span class="url">/enrol/apply/manage.php?id=42&amp;userenrol=8812</span><span>desktop</span></div>
+    <div class="screenbody"><div class="mdl">
+      <div class="crumb"><span>Formação de moderadores</span><span>Confirmar inscrições</span></div>
+      <h1>Confirmar inscrições</h1>
+      <div class="md" style="margin:10px 0 18px">
+        <div class="list">
+          <div class="lf"><span class="chip">Aguardando decisão &middot; 6</span><span class="chip">Adiadas &middot; 4</span><span class="chip">Turma A <span class="muted">&times;</span></span><span class="ctrl" style="width:100%;color:var(--m-muted)">Buscar solicitante</span></div>
+          <div class="li"><span class="nm">Tiago Rezende</span><span class="xs muted">há 3 dias</span><span class="meta"><span class="badge st-await"><span class="dot"></span>Aguardando</span><span class="badge st-soft">Turma B</span><svg class="ic" aria-label="Chave"><use href="#i-key"/></svg></span></div>
+          <div class="li sel"><span class="nm">Larissa Moura</span><span class="xs muted">há 2 dias</span><span class="meta"><span class="badge st-await"><span class="dot"></span>Aguardando</span><span class="badge st-soft">Turma A</span><svg class="ic" aria-label="Chave"><use href="#i-key"/></svg><span class="badge st-warnb">1 atenção</span></span></div>
+          <div class="li"><span class="nm">Bianca Coelho</span><span class="xs muted">há 1 dia</span><span class="meta"><span class="badge st-await"><span class="dot"></span>Aguardando</span><span class="badge st-soft">Sem grupo</span></span></div>
+          <div class="li"><span class="nm">Júlia Campos</span><span class="xs muted">há 5 horas</span><span class="meta"><span class="badge st-await"><span class="dot"></span>Aguardando</span><span class="badge st-soft">Turma B</span><svg class="ic" aria-label="Chave"><use href="#i-key"/></svg></span></div>
+          <div class="li"><span class="nm">Rafael Nunes</span><span class="xs muted">há 9 dias</span><span class="meta"><span class="badge st-defer">Adiada</span><span class="badge st-soft">Turma A</span></span></div>
+          <div class="kb"><span><kbd>j</kbd> <kbd>k</kbd> próxima, anterior</span><span><kbd>a</kbd> confirmar</span><span><kbd>d</kbd> adiar</span><span><kbd>c</kbd> cancelar, pede confirmação</span><span><kbd>?</kbd> atalhos</span></div>
+        </div>
+        <div class="pane">
+          <div class="rowline" style="justify-content:space-between;margin-bottom:8px"><h2 style="margin:0;font-size:18px">Larissa Moura</h2><span class="link small">Abrir em página própria</span></div>
+          <div class="strip"><div class="rowline"><span class="badge st-await"><span class="dot"></span>Aguardando decisão</span><span class="badge st-key"><svg class="ic" aria-hidden="true"><use href="#i-key"/></svg>Chave aceita: Turma A</span><span class="when">Solicitada há 2 dias</span></div></div>
+          <ul class="sigs">
+            <li class="s-warn"><svg class="ic si" aria-hidden="true"><use href="#i-warn"/></svg><span><b>Turma A: 18 de 20 vagas ocupadas</b></span><span class="stw">Atenção</span></li>
+            <li class="s-ok"><svg class="ic si" aria-hidden="true"><use href="#i-check"/></svg><span>Vagas do método: 31 de 40 ocupadas</span><span class="stw">Ok</span></li>
+            <li class="s-info"><svg class="ic si" aria-hidden="true"><use href="#i-info"/></svg><span>Solicitação anterior cancelada em 04/06/26</span><span class="stw">Leia</span></li>
+          </ul>
+          <div class="outc" style="margin-top:10px"><p class="ohead">Ao confirmar</p><p class="lead">Larissa entra no curso como <b>Estudante</b> e no grupo <b>Turma A</b>, e recebe o aviso.</p><div class="disc"><span class="sum">Ajustar grupos e papel</span></div></div>
+          <div class="sticky" style="margin:0 -16px;padding:10px 16px"><span class="act"><span class="btn btn-danger btn-sm">Cancelar</span><span class="why">pede confirmação</span></span><span class="grow"></span><span class="act"><span class="btn btn-secondary btn-sm">Adiar</span><span class="why">lista de espera</span></span><span class="act end"><span class="btn btn-primary btn-sm">Confirmar e ir para a próxima</span><span class="why">Turma A, como Estudante</span></span></div>
+        </div>
+      </div>
+    </div></div>
+    <div class="phones">
+      <div class="pframe"><div class="plabel">Concept B, phone: the list</div><div class="mdl phone">
+        <h1>Confirmar inscrições</h1>
+        <div class="rowline" style="margin-bottom:8px"><span class="chip">Aguardando &middot; 6</span><span class="chip">Turma A &times;</span></div>
+        <div class="md" style="grid-template-columns:minmax(0,1fr)"><div class="list" style="border-right:0">
+          <div class="li"><span class="nm">Tiago Rezende</span><span class="xs muted">há 3 dias</span><span class="meta"><span class="badge st-soft">Turma B</span><svg class="ic" aria-label="Chave"><use href="#i-key"/></svg></span></div>
+          <div class="li"><span class="nm">Larissa Moura</span><span class="xs muted">há 2 dias</span><span class="meta"><span class="badge st-soft">Turma A</span><svg class="ic" aria-label="Chave"><use href="#i-key"/></svg><span class="badge st-warnb">1 atenção</span></span></div>
+          <div class="li"><span class="nm">Bianca Coelho</span><span class="xs muted">há 1 dia</span><span class="meta"><span class="badge st-soft">Sem grupo</span></span></div>
+        </div></div><div style="height:14px"></div>
+      </div></div>
+      <div class="pframe"><div class="plabel">Concept B, phone: the detail is A's page</div><div class="mdl phone">
+        <div class="nav2 small"><span class="link">&#8249; Lista</span><span class="muted">2 de 6</span><span class="link">Próxima &#8250;</span></div>
+        <div class="strip"><div class="rowline"><span class="badge st-await"><span class="dot"></span>Aguardando decisão</span><span class="badge st-key">Chave aceita: Turma A</span></div></div>
+        <ul class="sigs"><li class="s-warn"><svg class="ic si" aria-hidden="true"><use href="#i-warn"/></svg><span><b>Turma A: 18 de 20 vagas</b></span><span class="stw">Atenção</span></li></ul>
+        <div class="outc" style="margin-top:10px"><p class="ohead">Ao confirmar</p><p class="lead" style="font-size:14px">Larissa entra como <b>Estudante</b> no grupo <b>Turma A</b>.</p></div>
+        <div class="sticky"><span class="btn btn-danger btn-sm">Cancelar</span><span class="grow"></span><span class="btn btn-secondary btn-sm">Adiar</span><span class="btn btn-primary btn-sm">Confirmar</span></div>
+      </div></div>
+    </div>
+  </div>
+
+  <h3>What it costs in Moodle</h3>
+  <div class="tblwrap"><table class="tbl">
+    <thead><tr><th>Piece</th><th>Two ways to build it</th><th>Cost and risk</th></tr></thead>
+    <tbody>
+      <tr><td>The detail pane</td><td>(a) A <code>core/fragment</code> callback rendering A's pane; (b) a page per application whose left column is the list, with <code>&lt;link rel="prefetch"&gt;</code> on the neighbours</td><td>(a) The fragment receives a context id and arguments from the client: it must re-run <code>require_review_access()</code> and <code>scope()</code> itself and never trust the arguments; the form, its sesskey and the cancel confirmation must all work inside an injected region. (b) Every click is a page load, but every existing contract holds unchanged. (b) is the honest phase 2.</td></tr>
+      <tr><td>The list</td><td>A second rendering of the queue, or the queue's own dynamic table (<code>core_table_get_dynamic_table_content</code>) in a narrow mode</td><td>A second rendering must be held to the queue's listing by a test, as the walk is (<code>test_the_walk_visits_exactly_what_the_queue_lists_and_in_its_order</code>). The dynamic table refreshes its whole region, which loses the selection.</td></tr>
+      <tr><td>"Decide and go to the next"</td><td>The redirect after a decision goes to the next neighbour instead of the queue</td><td>Reverses a settled rule (all three decisions land on the queue). Feasible: the walk is SQL by position, so the neighbour can be read before the row leaves the queue. Needs its own decision (RP-D13).</td></tr>
+      <tr><td>Keyboard</td><td>Single-key shortcuts</td><td>WCAG 2.1.4 (character key shortcuts): they must be possible to turn off or remap, or active only while the list has focus. <kbd>c</kbd> must open the same confirmation; <kbd>a</kbd> deciding on one keystroke is the riskiest key on the page.</td></tr>
+      <tr><td>Accessibility</td><td>Focus management on every selection change; a live region announcing the new application</td><td>The kind of JavaScript this plugin has avoided; Behat must drive it with JavaScript on.</td></tr>
+      <tr><td>Scope</td><td>Mentees, narrowed moderators, viewers</td><td>The list is <code>scope()</code>'s queue; a viewer's list has no bar. Each scope needs the same test the walk has.</td></tr>
+    </tbody>
+  </table></div>
+  <p>The earlier review already weighed this. <a href="applications-desk.html#s3">applications-desk.html</a> proposed
+  "Mockup B, the reading-room split" in August; the owner approved the triage queue and the rebuilt review page instead
+  (decided 2026-08-31). Master-detail earns its cost when a decider spends real time on each application in a long
+  batch. Built around A's pane, it reuses A whole, so building A first loses nothing.</p>
+</section>
+
+<section id="c">
+  <span class="sectnum">&sect;07 &middot; the reference mockup, fixed</span>
+  <h2>Concept C: the refined dossier</h2>
+  <p>Keep the reference's colours, chips and cards. Give one card the lead (the decision, with a heavier top edge and
+  the wider column), move capacity inside the group cards, make the groups multi-select, put the outcome sentence
+  at the bottom of the lead card, label the buttons with their consequence, and use sentence case.</p>
+  <div class="screen">
+    <div class="screencap"><b>Concept C &mdash; refined dossier</b><span class="url">/enrol/apply/manage.php?userenrol=8812</span><span>desktop</span></div>
+    <div class="screenbody"><div class="mdl">
+      <div class="nav2"><span class="link">&#8249; Anterior: Tiago Rezende</span><span class="link">Todas as solicitações</span><span class="link">Próxima: Bianca Coelho &#8250;</span></div>
+      <div class="hcard">
+        <div class="rowline" style="margin-bottom:6px"><span class="badge st-await"><span class="dot"></span>Aguardando decisão</span><span class="badge st-key"><svg class="ic" aria-hidden="true"><use href="#i-key"/></svg>Chave aceita: Turma A</span><span class="small muted">Solicitada há 2 dias (03/11/26, 09:14)</span></div>
+        <div class="rowline" style="justify-content:space-between"><div><span class="big">Larissa Moura</span> <span class="muted" style="font-size:18px">&mdash; Formação de moderadores</span>
+          <div class="idline" style="margin-top:4px"><span>Nome de usuário: lmoura</span><span>Número de identificação: 2026-0311</span></div></div><span class="link small">Ver perfil</span></div>
+      </div>
+      <div class="grid2" style="grid-template-columns:minmax(0,5fr) minmax(0,7fr)">
+        <div>
+          <div class="scard"><h3>Comentário</h3><span class="muted">O solicitante não escreveu nada.</span></div>
+          <div class="scard"><h3>Dados enviados com esta solicitação</h3><dl class="kv" style="margin:0"><dt>Cidade</dt><dd>Mariana</dd><dt>Número de registro</dt><dd>2026-0311</dd></dl></div>
+          <div class="scard badtone"><h3>Solicitações anteriores a este curso</h3><span><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg> 04/06/26, 11:02 &mdash; Cancelado</span></div>
+        </div>
+        <div class="lcard">
+          <h2>Para onde vai esta inscrição</h2>
+          <p class="small muted" style="margin-top:-4px">Vagas do método: 31 de 40 ocupadas &middot; 52 de 60 solicitações em andamento, 4 adiadas</p>
+          <div class="gcards">
+            <div class="gcard on"><span class="cb on"></span><span class="gname">Turma A <span class="badge st-key">Grupo da chave</span></span><span class="badge st-warnb">Restam 2 vagas</span><span class="gmeta">18 de 20 vagas ocupadas &middot; 90 %</span><span class="bar" role="progressbar" aria-label="Turma A: 18 de 20 vagas ocupadas" aria-valuenow="18" aria-valuemin="0" aria-valuemax="20"><i class="warn" style="width:90%"></i></span></div>
+            <div class="gcard"><span class="cb"></span><span class="gname">Turma B</span><span class="badge st-okb">13 vagas livres</span><span class="gmeta">7 de 20 vagas ocupadas &middot; 35 %</span><span class="bar" role="progressbar" aria-label="Turma B: 7 de 20 vagas ocupadas" aria-valuenow="7" aria-valuemin="0" aria-valuemax="20"><i class="ok" style="width:35%"></i></span></div>
+          </div>
+          <label class="field"><b>Papel a atribuir na aprovação</b><span class="ctrl wide caret">Usar o papel definido no método de inscrição (Estudante)</span></label>
+          <p class="small" style="margin:12px 0 0;padding-top:10px;border-top:1px solid var(--m-border)"><b>Ao confirmar:</b> Larissa entra no curso como Estudante e no grupo Turma A, e recebe o aviso da aprovação.</p>
+        </div>
+      </div>
+      <div class="sticky"><span class="act"><span class="btn btn-danger btn-sm"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg>Cancelar esta solicitação</span><span class="why">Encerra e remove a inscrição; pede confirmação</span></span><span class="grow"></span>
+        <span class="act"><span class="btn btn-secondary btn-sm"><svg class="ic" aria-hidden="true"><use href="#i-hour"/></svg>Adiar esta solicitação</span><span class="why">Lista de espera</span></span><span class="act end"><span class="btn btn-primary btn-sm"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>Confirmar esta solicitação</span><span class="why">Turma A, como Estudante</span></span></div>
+    </div></div>
+    <div class="phones">
+      <div class="pframe"><div class="plabel">Concept C, phone: the lead card first</div><div class="mdl phone">
+        <div class="hcard" style="padding:12px"><div class="rowline" style="margin-bottom:4px"><span class="badge st-await"><span class="dot"></span>Aguardando decisão</span><span class="badge st-key">Chave aceita: Turma A</span></div><span class="big" style="font-size:19px">Larissa Moura</span></div>
+        <div class="lcard" style="padding:12px"><h2 style="font-size:15px">Para onde vai esta inscrição</h2>
+          <div class="gcards"><div class="gcard on"><span class="cb on"></span><span class="gname">Turma A</span><span class="badge st-warnb">Restam 2</span><span class="bar" role="progressbar" aria-label="Turma A: 18 de 20 vagas ocupadas" aria-valuenow="18" aria-valuemin="0" aria-valuemax="20"><i class="warn" style="width:90%"></i></span></div><div class="gcard"><span class="cb"></span><span class="gname">Turma B</span><span class="badge st-okb">13 livres</span><span class="bar" role="progressbar" aria-label="Turma B: 7 de 20 vagas ocupadas" aria-valuenow="7" aria-valuemin="0" aria-valuemax="20"><i class="ok" style="width:35%"></i></span></div></div>
+          <p class="small" style="margin:0"><b>Ao confirmar:</b> entra na Turma A como Estudante.</p></div>
+        <div class="scard badtone" style="margin-top:10px"><h3>Solicitações anteriores</h3>04/06/26 &mdash; Cancelado</div>
+        <div class="sticky"><span class="btn btn-danger btn-sm">Cancelar</span><span class="grow"></span><span class="btn btn-secondary btn-sm">Adiar</span><span class="btn btn-primary btn-sm">Confirmar</span></div>
+      </div></div>
+    </div>
+  </div>
+  <p>C reads faster than today and keeps what the owner liked. It still asks the eye to assemble "can I approve" from
+  three places (the history card, the method line, the group card's badge), and its outcome sits at the end of the lead
+  card rather than before the controls. Six zones, five jumps, two column crossings. Its palette is what A inherits
+  (&sect;12).</p>
+</section>
+
+<section id="d">
+  <span class="sectnum">&sect;08 &middot; for fast batches</span>
+  <h2>Concept D: inline triage in the queue</h2>
+  <p>A row of the queue expands into a compact decision panel: the signals, the outcome sentence and the buttons,
+  without leaving the queue. For a batch of clean keyed applications, two jumps per decision.</p>
+  <div class="screen">
+    <div class="screencap"><b>Concept D &mdash; a queue row expanded</b><span class="url">/enrol/apply/manage.php?id=42</span><span>desktop</span></div>
+    <div class="screenbody"><div class="mdl">
+      <table class="gt">
+        <thead><tr><th style="width:26px"><span class="cb"></span></th><th>Solicitante</th><th>Grupo</th><th>Data da solicitação</th><th>Comentário</th><th>Situação</th><th></th></tr></thead>
+        <tbody>
+          <tr><td><span class="cb"></span></td><td>Tiago Rezende</td><td>Turma B</td><td class="num">02/11/26, 14:20</td><td class="muted">&mdash;</td><td><span class="badge st-await">Aguardando</span></td><td class="chev">Abrir &#9662;</td></tr>
+          <tr class="open"><td><span class="cb"></span></td><td><b>Larissa Moura</b></td><td>Turma A <svg class="ic" aria-label="Chave"><use href="#i-key"/></svg></td><td class="num">03/11/26, 09:14</td><td class="muted">&mdash;</td><td><span class="badge st-await">Aguardando</span></td><td class="chev">Fechar &#9652;</td></tr>
+          <tr><td></td><td class="tri" colspan="6"><div class="tripanel">
+            <ul class="sigs" style="margin:0"><li class="s-warn"><svg class="ic si" aria-hidden="true"><use href="#i-warn"/></svg><span>Turma A: 18 de 20 vagas</span><span class="stw">Atenção</span></li><li class="s-info"><svg class="ic si" aria-hidden="true"><use href="#i-info"/></svg><span>Cancelada antes, em 04/06/26</span><span class="stw">Leia</span></li></ul>
+            <div class="small"><p class="ohead" style="color:var(--m-primary);font-weight:700;margin:0 0 2px">Ao confirmar</p>Larissa entra como Estudante no grupo Turma A e recebe o aviso.<br><span class="link">Abrir a solicitação para ajustar ou cancelar</span></div>
+            <div style="display:flex;flex-direction:column;gap:6px"><span class="btn btn-primary btn-sm">Confirmar</span><span class="btn btn-secondary btn-sm">Adiar</span></div>
+          </div></td></tr>
+          <tr><td><span class="cb"></span></td><td>Bianca Coelho</td><td class="muted">Sem grupo</td><td class="num">04/11/26, 08:02</td><td>Trabalho no polo de&hellip;</td><td><span class="badge st-await">Aguardando</span></td><td class="chev">Abrir &#9662;</td></tr>
+        </tbody>
+      </table>
+      <div style="height:18px"></div>
+    </div></div>
+  </div>
+  <div class="tblwrap"><table class="tbl">
+    <thead><tr><th>Problem</th><th>Why</th><th>What D would have to do</th></tr></thead>
+    <tbody>
+      <tr><td>The queue is one bulk form</td><td>A per-row submit inside it posts the ticked checkboxes too; forms cannot nest.</td><td>A separate form per panel outside the table, reached by <code>form=</code>, which the fleet's Mustache lint rejects when each partial renders alone; or a web service, which is a new surface (tier 3).</td></tr>
+      <tr><td>Cancel on the queue does not ask</td><td>Only the review page intercepts <code>cancel</code>; the queue applies it to a selection directly, and a no-JavaScript scenario proves that.</td><td>No cancel inline. Cancel and every adjustment open the full page.</td></tr>
+      <tr><td>Signals per row</td><td>Seats, history and completeness per row are per-row reads.</td><td>Read only when a row is opened (a fragment), or the listing grows N reads.</td></tr>
+      <tr><td>When to fall back to the full page</td><td colspan="2">Always for cancel, adjustment, a message or a note; and whenever a signal is red, history exists, or the comment is longer than the panel shows. That is most of the interesting cases, which is why D does not replace the page.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="e">
+  <span class="sectnum">&sect;09 &middot; one more idea, and its limit</span>
+  <h2>Concept E: an attention line, never a verdict</h2>
+  <p>The tempting extension of the funnel is a readiness banner at the top: "Pronta para confirmar", or "Atenção:
+  Turma A quase lotada". The first half of that is wrong for this plugin. The plugin sees numbers; the decider judges a
+  person, a comment and things outside Moodle. A green "pronta" turns a list of facts into a recommendation, invites
+  confirming without reading, and is wrong exactly in the cases that matter (an earlier cancellation for cause, a comment
+  that disqualifies). R5 already says the plugin warns and the human decides.</p>
+  <div class="screen">
+    <div class="screencap"><b>Concept E &mdash; three ways to summarise the signals</b><span>funnel head only</span></div>
+    <div class="screenbody" style="background:var(--card-2)"><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;padding:14px">
+      <div class="mdl frag" style="border:1px solid var(--m-border);border-radius:10px"><p class="xs muted" style="margin:0 0 8px"><b>Rejected:</b> a verdict</p>
+        <div class="notice" style="background:var(--m-okbg);color:var(--m-ok);margin:0"><span class="strike"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg> Pronta para confirmar</span></div></div>
+      <div class="mdl frag" style="border:1px solid var(--m-border);border-radius:10px"><p class="xs muted" style="margin:0 0 8px"><b>Proposed:</b> a count that names the worst signal</p>
+        <div class="notice warn" style="margin:0"><svg class="ic" aria-hidden="true"><use href="#i-warn"/></svg> 1 ponto de atenção antes de decidir: Turma A com 18 de 20 vagas ocupadas.</div></div>
+      <div class="mdl frag" style="border:1px solid var(--m-border);border-radius:10px"><p class="xs muted" style="margin:0 0 8px"><b>Proposed, when nothing is flagged:</b> a fact, not an endorsement</p>
+        <div class="notice info" style="margin:0"><svg class="ic" aria-hidden="true"><use href="#i-info"/></svg> Nenhum sinal acima do limite. A decisão continua sendo sua.</div></div>
+    </div></div>
+  </div>
+  <p>The proposed form is already in A: the muted line beside <em>O que pesa na decisão</em>. It counts and names; it
+  never says what to do. A second, optional part of E: when a decision button receives focus or hover, the outcome
+  card's head switches to that action ("Ao adiar: vai para a lista de espera, continua ocupando 1 das 60 solicitações e
+  recebe o aviso"). Without JavaScript, the consequence lines under the buttons say the same; this is an enhancement, not
+  a dependency (RP-D14).</p>
+</section>
+
+<section id="visual">
+  <span class="sectnum">&sect;10 &middot; a short spec</span>
+  <h2>Visual language</h2>
+  <p>The plugin supports Moodle 5.1&ndash;5.3 only, all on Bootstrap 5, so no Bootstrap 4 bridge or polyfill is needed.</p>
+  <div class="tblwrap"><table class="tbl">
+    <thead><tr><th>Meaning</th><th>Classes</th><th>Icon (core pix, fa map on 5.3)</th><th>Text, always beside the colour</th></tr></thead>
+    <tbody>
+      <tr><td>Awaiting a decision</td><td><code>badge bg-warning text-dark</code></td><td>A dot (CSS), or <code>i/duration</code></td><td>Aguardando decisão</td></tr>
+      <tr><td>Deferred</td><td><code>badge bg-info text-white</code></td><td><code>i/duration</code> (fa-hourglass)</td><td>Adiada</td></tr>
+      <tr><td>Key accepted</td><td><code>badge bg-primary text-white</code> (as today)</td><td>A plugin icon mapped to <code>fa-key</code>: core's <code>i/key</code> is in <code>get_deprecated_icons()</code> on 5.3</td><td>Chave aceita: Turma A</td></tr>
+      <tr><td>Read only</td><td><code>badge bg-secondary text-dark</code></td><td><code>t/hide</code> (fa-eye)</td><td>Somente leitura</td></tr>
+      <tr><td>Signal ok</td><td><code>text-success</code> icon, no row tint</td><td><code>i/valid</code> (fa-check text-success)</td><td>Ok</td></tr>
+      <tr><td>Signal attention</td><td>Row on <code>bg-warning-subtle</code>, icon <code>text-warning-emphasis</code></td><td><code>i/warning</code> (fa-triangle-exclamation)</td><td>Atenção</td></tr>
+      <tr><td>Signal over the limit</td><td>Row on <code>bg-danger-subtle</code>, icon <code>text-danger</code></td><td><code>i/invalid</code> (fa-xmark text-danger)</td><td>Lotado, Esgotado</td></tr>
+      <tr><td>Signal to read</td><td><code>text-body-secondary</code></td><td><code>i/info</code></td><td>Leia</td></tr>
+      <tr><td>Decisions</td><td><code>btn-outline-danger</code>, <code>btn-secondary</code>, <code>btn-primary</code> (as today)</td><td><code>e/cancel</code>, <code>i/duration</code>, <code>t/check</code></td><td>The label, then the consequence line</td></tr>
+    </tbody>
+  </table></div>
+  <ul>
+    <li><b>Tokens through the theme's chain,</b> declared on <code>.enrol_apply-review</code> (and on any root a modal
+    appends): <code>--enrol-apply-fill: var(--bs-primary, var(--primary, #0f6cbf))</code>,
+    <code>--enrol-apply-warn: var(--bs-warning, #f0ad4e)</code>, <code>--enrol-apply-line: var(--bs-border-color, #dee2e6)</code>,
+    as the queue already does in <code>styles.css</code>. No literal palette except as the last fallback; never
+    <code>--mds-*</code>. The <code>*-subtle</code> and <code>*-emphasis</code> utilities are Bootstrap 5.3's and follow
+    dark mode by themselves.</li>
+    <li><b>Dark mode</b> comes from those variables: nothing in the page paints a literal grey.</li>
+    <li><b>Never colour alone:</b> every signal has an icon of its own shape (check, triangle, cross, i) and a state word;
+    every chip has text.</li>
+    <li><b>Occupancy bar:</b> Bootstrap 5.3's <code>.progress</code> with <code>role="progressbar"</code>,
+    <code>aria-valuenow</code>/<code>aria-valuemax</code> in seats (not percent) and an <code>aria-label</code> such as
+    "Turma A: 18 de 20 vagas ocupadas"; the percentage is visible text, the bar decoration.</li>
+    <li><b>Selectors:</b> qualified with a plugin class (plugin CSS is compiled before the theme's); no
+    <code>!important</code>; no <code>:has()</code> keyed on attributes every element carries; transitions at 100 ms or more;
+    no <code>clamp()</code>, <code>min()</code> or <code>max()</code> in length properties; two columns as
+    <code>flex: 1 1 45%</code> with a rem <code>min-width</code>.</li>
+    <li><b>Focus order follows the funnel:</b> strip link, signal anchors, "Ajustar", group cards, role, the message
+    disclosure, then the bar (Cancel, Defer, Confirm, in source order). The evidence column comes after the funnel in
+    source order and is reached through the anchors.</li>
+    <li><b>Disclosures</b> are native <code>&lt;details&gt;</code>/<code>&lt;summary&gt;</code>: keyboard and screen readers
+    for free, no JavaScript to open them, and open in the server's markup when they must be (RP-D5, RP-D7).</li>
+    <li><b>Sticky bar on phones:</b> core's sticky footer as today; short labels; consequences in the body above it,
+    linked with <code>aria-describedby</code>.</li>
+    <li><b>Sentence case</b> in every label and heading; no <code>text-transform</code>.</li>
+  </ul>
+</section>
+
+<section id="compare">
+  <span class="sectnum">&sect;11</span>
+  <h2>Comparison</h2>
+  <div class="tblwrap"><table class="tbl">
+    <thead><tr><th>Concept</th><th>Eye jumps to a decision</th><th>Effort (templates, renderer, JS, tests, Behat)</th><th>Risk to existing contracts</th><th>Phone</th><th>Accessibility</th><th>Fit with S1/S2 scope and viewers</th></tr></thead>
+    <tbody>
+      <tr><td>Today</td><td class="num">8, three crossings</td><td>&mdash;</td><td>&mdash;</td><td>One long column, four open controls</td><td>Native multi-select needs control-click</td><td>Gated correctly</td></tr>
+      <tr class="rec"><td>A. Decision funnel</td><td class="num">3, none</td><td><span class="cost m">M</span>: review template split into four partials; two context builders; one small AMD module; renderer tests per signal and per variant; Behat updated</td><td>Low: same form, same names, same button order</td><td>Good: single column, sticky bar</td><td>Good: native disclosures, icon and word per signal</td><td>Full: every variant in &sect;05 is a current gate</td></tr>
+      <tr><td>B. Master-detail</td><td class="num">1 + A's 3</td><td><span class="cost l">L</span>: a list rendering or dynamic table mode, fragment or page-per-application, focus and shortcut JS, scope tests per list, JS Behat</td><td>Medium to high: walk and listing must agree, the redirect rule reverses, fragment access</td><td>Becomes list, then detail: two screens</td><td>Hard: shortcuts (2.1.4), focus, live region</td><td>Needs <code>scope()</code> for the list in every branch</td></tr>
+      <tr><td>C. Refined dossier</td><td class="num">5, two crossings</td><td><span class="cost s">S</span>&ndash;<span class="cost m">M</span>: template and CSS, group cards, consequence lines</td><td>Low</td><td>Fair: lead card first</td><td>Good</td><td>Fine</td></tr>
+      <tr><td>D. Inline triage</td><td class="num">2, for the easy cases only</td><td><span class="cost m">M</span>&ndash;<span class="cost l">L</span>: per-panel forms or a web service, fragment per row, JS Behat</td><td>High: bulk form, cancel confirmation, <code>form=</code> lint</td><td>Expanding cards, cramped</td><td>Medium: expanded rows inside a table</td><td>Needs <code>can_manage_application()</code> per row in the queue</td></tr>
+      <tr><td>E. Attention line</td><td class="num">0 (adds to A)</td><td><span class="cost s">S</span>: one string set, one renderer branch</td><td>None</td><td>Good</td><td>Good: a <code>role="status"</code> is not needed, it is static</td><td>Per reader, from the signals they get</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="recommend">
+  <span class="sectnum">&sect;12</span>
+  <h2>Recommendation</h2>
+  <p><b>Build A now, as one slice, with E's attention line in it and C's colours on it. Keep B as a possible phase 2,
+  decided after A has been used. Do not build D.</b></p>
+  <p><b>Decided:</b> the owner chose A on 5 November 2026 (RP-D1), and asked how it holds with dozens of groups; the answer
+  is &sect;05b and RP-D17 to RP-D28. The many-groups work rides in the same slice: the threshold, the pinned cards and the
+  search on the review page; the bulk form's autocomplete can follow as its own small change, and the queue filter belongs
+  to V2.</p>
+  <ul>
+    <li><b>Why A:</b> it answers the owner's four questions in the order they are asked, with no change to what the page
+    posts, the button order, the gates or where a decision lands. Every block reads a helper that already exists; the new
+    code classifies and words, it does not query. The single column is also the phone layout.</li>
+    <li><b>Why not B now:</b> it is A plus a list, and the list is where all the cost and all the contract risk live (the
+    walk, the redirect, the fragment's access check, keyboard accessibility). Built after A, its pane is A's partial; built
+    before, A's work would be done twice. The August review already preferred the triage queue to a split view.</li>
+    <li><b>How C carries into A:</b> the amber status chip with a dot, the blue key chip with a key, the occupancy bars
+    in green, amber and red with a percentage, the red-tinted earlier application, icons on buttons. C's layout (equal
+    cards, two columns of the same weight) does not come along.</li>
+    <li><b>Tier and gate:</b> templates, renderer, lang, CSS and one AMD module, no SQL, no capability or contract change:
+    tier 2, <code>mdl ci &lt;repo&gt; --branch &lt;highest&gt; --behat</code>. Not an MDL Shield review (display only), unless
+    the empty-group sentence work turns into a change of what an empty choice does, which would be a separate decision.</li>
+  </ul>
+  <h3>The slice, sketched</h3>
+  <div class="tblwrap"><table class="tbl">
+    <thead><tr><th>Area</th><th>Change</th></tr></thead>
+    <tbody>
+      <tr><td>Templates</td><td><code>review.mustache</code> reorders into <code>review_summary</code>, <code>review_signals</code>, <code>review_outcome</code> and <code>review_evidence</code> partials; <code>decision_controls</code> renders group cards (checkboxes named <code>groups[]</code>) inside a <code>&lt;details&gt;</code>, the message and note inside another; <code>review_actions</code> gains a consequence line per action, outside the button and tied by <code>aria-describedby</code>, so each button's accessible name and the Behat <code>I press</code> steps stay as they are. The snapshot wrapper keeps its first-class position and no nested div (renderer_test extracts it).</td></tr>
+      <tr><td>Renderer</td><td><code>signals_context()</code> and <code>outcome_context()</code>; <code>capacity_context()</code> folds into the signals and the method line, keeping its gate.</td></tr>
+      <tr><td>Lang</td><td>About 25 strings in <code>lang/en</code> and <code>lang/pt_br</code> in lockstep: the section heading, signal templates and state words, the outcome sentences (by group count, read-only, full group, no group, empty choice), the consequence lines, the short key chip, the waiting time, the attention line.</td></tr>
+      <tr><td>JS</td><td>One AMD module rewriting the outcome sentence and the after-counts when a group card, the added-groups select or the role changes, from data the server put in the markup; the page is correct without it for the preselection. Above the RP-D18 threshold it also calls <code>core/form-autocomplete</code>'s <code>enhance()</code> on the added-groups select and drives the grouping narrowing (RP-D23).</td></tr>
+      <tr><td>CSS</td><td>A <code>.enrol_apply-review</code> root with the token chain; signal rows; group cards; the consequence line.</td></tr>
+      <tr><td>Tests</td><td>Renderer tests at 79 %, 80 % and 100 % occupancy and with seats unknown; the history signal absent (not empty) without <code>viewreports</code>; completeness counted over visible keys only (no presence oracle); each &sect;05 variant's blocks; the empty-choice sentence naming the key's group; mutation gates for each threshold and gate. Behat: the review page features keep their presses; one scenario opens "Ajustar" and ticks a second group.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="decisions">
+  <span class="sectnum">&sect;13</span>
+  <h2>Decisions to take</h2>
+  <p>Each has a recommendation. The concept is decided (RP-D1, owner, 5 November 2026); nothing is started until the signals (RP-D2, RP-D3) and the many-groups shape (RP-D17 to RP-D28) are answered.</p>
+  <div class="tblwrap"><table class="tbl">
+    <thead><tr><th>#</th><th>Question</th><th>Recommendation</th></tr></thead>
+    <tbody>
+      <tr class="rec"><td>RP-D1</td><td>Which concept?</td><td><b>Decided (owner, 2026-11-05): A.</b> Built now, one slice, with E's attention line and C's palette. B decided later (RP-D15). D not built (RP-D16).</td></tr>
+      <tr><td>RP-D2</td><td>Which signals, in which order?</td><td>(1) Seats of each preselected group with declared seats, key group first; (2) places on the method; (3) earlier applications, only with <code>viewreports</code>, absent otherwise; (4) submitted details, counted from the frozen snapshot over visible keys; (5) the comment, as presence and length; (6) for a deferred application, the decision so far, in the strip. Not signals: applications held and the deferred count (a confirm does not move them), shown in the method line.</td></tr>
+      <tr><td>RP-D3</td><td>Thresholds</td><td>Ok below 80 %; attention at 80 % or more (four fifths, the queue meter's rule, <code>renderer.php:543</code>); over the limit at 100 % (members &ge; seats, the chooser's "lotado" rule, <code>renderer.php:660</code>). Seats or places without a limit: no row, and "sem limite de vagas" in the method line. Earlier applications are "Leia", never red.</td></tr>
+      <tr><td>RP-D4</td><td>Does a red signal ever disable a decision?</td><td>No (R5, <code>places_full()</code> advisory). Confirm stays enabled; its consequence line names the overbooking ("Turma A ficará com 21 de 20"), and <code>manage.php</code>'s warnings after the decision stay.</td></tr>
+      <tr><td>RP-D5</td><td>Is the outcome card the default view, with "Ajustar" collapsed?</td><td>Yes. Open by default only when a preselected group is over the limit, or the method gives no group and the reader may choose. A small AMD module keeps the sentence in step with ticks.</td></tr>
+      <tr><td>RP-D6</td><td>Group chooser: checkbox cards instead of a multi-select?</td><td>Yes, same <code>groups[]</code> name and allowlist. Under the cards, the empty-choice sentence names the groups an empty choice really joins (the key's group and the method's), because unticking all is not "no group".</td></tr>
+      <tr><td>RP-D7</td><td>Message and note</td><td>One disclosure "Escrever ao solicitante ou anotar para o registro", collapsed, and open in the markup whenever either box holds a value (the way back from the cancel confirmation). The stored note stays shown in the strip, never pre-filled.</td></tr>
+      <tr><td>RP-D8</td><td>Button consequence wording, and where it lives</td><td>Beside each button, not inside it. Confirm: "Turma A, como Estudante, e recebe o aviso" (en "Joins Turma A as Student and is notified"). Defer: "Vai para a lista de espera e recebe o aviso"; for an already-deferred one, "Continua na lista; avisa só se houver mensagem". Cancel: "Encerra e remove a inscrição; pede confirmação". On phones, short labels in the bar and the three lines in the body above it.</td></tr>
+      <tr><td>RP-D9</td><td>Evidence column: right, or below?</td><td>Right at desktop widths (a 4-of-12 column after the funnel in source order), below on narrower screens and collapsed on phones. Every signal that has evidence links to it.</td></tr>
+      <tr><td>RP-D10</td><td>The key chip's text</td><td>A short form in the strip, "Chave aceita: Turma A", because the status chip beside it already says it awaits review; the long <code>keyoutcomeforreview</code> stays on the queue and the report.</td></tr>
+      <tr><td>RP-D11</td><td>Show how long it has waited?</td><td>Yes: "Solicitada há 2 dias (03/11/26, 09:14)", from the application date, in the strip.</td></tr>
+      <tr><td>RP-D12</td><td>The viewer's funnel</td><td>Strip with a "Somente leitura" chip and the existing sentence; signals without seats, places or the method line (capacity stays a decider's, V-D3); no outcome card and no bar.</td></tr>
+      <tr><td>RP-D13</td><td>After a decision: the queue, or the next application?</td><td>The queue, as today, for A. Revisit only with B, where "Confirmar e ir para a próxima" is the point.</td></tr>
+      <tr><td>RP-D14</td><td>A readiness banner?</td><td>No verdict, ever. A count naming the worst signal ("1 ponto de atenção antes de decidir: &hellip;"), or "Nenhum sinal acima do limite. A decisão continua sendo sua." The focus preview of each action's outcome is optional and can follow.</td></tr>
+      <tr><td>RP-D15</td><td>Ship the master-detail at all?</td><td>Not now. After A has served a month, decide on evidence (applications decided per session, time per application). If yes, as a page per application with the list as a left column and prefetch, not a fragment, reusing A's partials.</td></tr>
+      <tr><td>RP-D16</td><td>Inline triage in the queue?</td><td>No. If a later batch need appears: confirm and defer only, cancel and adjustments on the full page.</td></tr>
+      <tr><td>RP-D17</td><td>Where does a course of ~100 groups change the page?</td><td>Only inside "Ajustar", in the participants page's bulk form and in the queue's group filter (V2). The strip, the signals, the outcome card and the bar are unchanged, because the outcome card already names the destination and most decisions never open "Ajustar". Never render a card per group.</td></tr>
+      <tr><td>RP-D18</td><td>The threshold between cards and search</td><td>8 choosable groups. Up to 8, every choosable group is a card (&sect;04); above 8, the route's groups are pinned cards and the rest are searched. Counted after the reader's narrowing (<code>choosable_groups()</code>), so moderators in 1 to 3 groups keep cards and a coordinator in 20 searches their own 20 (S6). The same 8 decides a plain select or a search in the queue filter.</td></tr>
+      <tr><td>RP-D19</td><td>Which groups are pinned, and ticked?</td><td>What the approval joins and this reader may see: <code>key_route_groups()</code> for a keyed application, <code>default_approval_groups()</code> otherwise, intersected with the choosable set; ticked, unticking allowed. Note one change: for a keyless application today's chooser ticks nothing and the empty choice falls back to the method's groups, so ticking them posts the same groups explicitly and records them in <code>decidedgroups</code>. Same approval, a fuller record (and the S8 report narrowing then sees them); recommended, but it is a change in what is stored.</td></tr>
+      <tr><td>RP-D20</td><td>The control for "Adicionar outro grupo"</td><td>A plain <code>&lt;select multiple name="groups[]"&gt;</code> in its own wrapper, holding the choosable groups minus the pinned ones, enhanced by <code>core/form-autocomplete</code> <code>enhance(selector, false, false, placeholder)</code>: client-side, no <code>ajax</code> module, no tags. Core uses it outside moodleform the same way (<code>report/competency/templates/user_course_navigation.mustache</code>, <code>reportbuilder/amd/src/local/editor/conditions.js</code>). Without JavaScript it is a native multi-select and the post is unchanged: <code>groups[]</code> from cards and select merged, read and allowlisted as today.</td></tr>
+      <tr><td>RP-D21</td><td>The text of each option</td><td>"{name} &middot; {members} de {seats} vagas"; "{name} &middot; sem vagas, {members} de {seats}" when full, still selectable (R5); the <code>idnumber</code> in parentheses after the name when set; the name alone when no seats are declared. Plain text, no <code>data-html</code>. "Sem vagas", not "lotada": it agrees with any group name. New strings, en and pt_br in lockstep. The chip shows the same text (core renders the option's label in the chip).</td></tr>
+      <tr><td>RP-D22</td><td>Order of the groups</td><td>Natural order everywhere a group list is shown (cards, search, bulk form, queue filter): <code>core_collator::asort_objects_by_property(..., 'name', core_collator::SORT_NATURAL)</code>. <code>groups_get_all_groups()</code> sorts by <code>name ASC</code> in the database's collation, which puts "Turma 10" before "Turma 2".</td></tr>
+      <tr><td>RP-D23</td><td>Groupings</td><td>Not optgroups: core's autocomplete reads only direct <code>&lt;option&gt;</code> children and would drop every grouped option. A separate "Agrupamento" select above the search, shown only when a grouping holds a choosable group, narrowing the suggestions by core's documented <code>data-enabled="disabled"</code> attribute; a group in several groupings stays one option. Hidden without JavaScript. Read from the cached <code>groups_get_course_data()</code> mappings, so no query.</td></tr>
+      <tr><td>RP-D24</td><td>A "Mover para outro grupo" shortcut?</td><td>Not in the first slice. Untick the key's card and add the new group: two actions, both visible, and the outcome sentence names the result and adds "Não entra na Turma 37, o grupo da chave." A move control would hide the method's other groups' fate (stay or go?) behind one word. Revisit after use; if added, as a link on the key card that unticks it and focuses the search, nothing more.</td></tr>
+      <tr><td>RP-D25</td><td>Which seats does "O que pesa na decisão" show?</td><td>Only the groups the approval will join (the pinned route, RP-D2), never the course's other groups. A group added through the search carries its seats in its chip and in the outcome card's "Depois" line, which the AMD module rewrites; the server-rendered signals do not change on a tick.</td></tr>
+      <tr><td>RP-D26</td><td>The participants page's bulk form</td><td>moodleform's own <code>autocomplete</code> element with <code>'multiple' =&gt; true</code>, replacing the <code>select</code> of names (<code>bulk_decision_form.php:165&ndash;176</code>); the same option text (with seats, read in one <code>groupseats::for_groups()</code> call) and natural order. No pinned cards there: the selection spans applications with different routes, and the form already says what an empty choice gives each of them.</td></tr>
+      <tr><td>RP-D27</td><td>The queue's group filter (V2)</td><td>A single-value filter, so a single-select autocomplete above the threshold, a plain select below; names without seats. Values: a group id; <code>none</code> ("Sem grupo"), only for readers who see keyless applications, as V2 says; and a new <code>mine</code> ("Meus grupos"), only for an unnarrowed reader who belongs to at least one group: V-D2's default made a value the reader can pick back. A narrowed reader gets neither, since their scope already is their groups. Every value cleaned against the offered list on the server, as V2 specifies.</td></tr>
+      <tr><td>RP-D28</td><td>Accessibility of the search</td><td>Core's control as it is: a <code>role="combobox"</code> input owning two listboxes, arrows, Enter and Escape, and the polite "Added &hellip;"/"Removed &hellip;" announcements, which read the seat text. Seat state is always text ("sem vagas", "18 de 20"), the bars stay <code>role="progressbar"</code> with a label. The label points at the select's id (core moves it to the input). Behat drives it only through <code>I set the field</code>, with and without <code>@javascript</code>.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="facts">
+  <span class="sectnum">&sect;14 &middot; appendix</span>
+  <h2>Facts checked, with where, and what could not be</h2>
+  <h3>Read in the code (verified)</h3>
+  <ul>
+    <li>Page structure, panels and their gates: <code>templates/review.mustache</code>; <code>renderer.php</code>
+    <code>review_form()</code> (1153), <code>key_context()</code> (797), <code>approval_summary_context()</code> (740),
+    <code>decision_controls_context()</code> (633), <code>history_context()</code> (948, <code>viewreports</code>),
+    <code>capacity_context()</code> (1001, <code>manageapplications</code> in the course), <code>decision_context()</code> (886).</li>
+    <li>Cancel first in source order as the default submit, and the 80 px clipping, no-wrap footer:
+    <code>templates/review_actions.mustache</code> docblock; the interception: <code>manage.php:224</code>.</li>
+    <li>The empty group choice falls back to the defaults: <code>lib.php:1016&ndash;1019</code> (<code>add_instance_groups()</code>),
+    <code>classes/local/submission.php:775&ndash;778</code> (<code>record_decided_groups()</code>), <code>lib.php:1049</code>
+    (<code>default_approval_groups()</code>: key group plus the method's), <code>lib.php:791</code> (<code>key_route_groups()</code>).</li>
+    <li>Re-deferral notifies only on a move or a typed message: <code>lib.php:1764</code>.</li>
+    <li>Seat and place warnings after a decision, never blocks: <code>manage.php</code> (the <code>placesfull</code> and
+    <code>groupseatsexceeded</code> warnings before the redirect); thresholds: <code>renderer.php:543</code> (four fifths),
+    <code>renderer.php:660</code> (members &ge; seats).</li>
+    <li>"Sob análise 4" is the deferred count: <code>capacity::deferred()</code> (<code>classes/local/capacity.php:188</code>)
+    feeds the review page's <code>reviewdeferred</code> row.</li>
+    <li>The instance name in key-review mode is <em>Inscrição com chave de grupo e análise</em>: <code>lib.php:138&ndash;146</code>.</li>
+    <li>Strings used in the mockups are the plugin's pt_br where they exist: <code>outcomeawaiting</code>, <code>outcomewaiting</code>,
+    <code>keyoutcomeforreview</code>, <code>decisiongroups</code>, <code>decisionrole</code>, <code>decisionroledefault</code>,
+    <code>decisionsummary_help</code>, <code>decisionsummaryhidden</code>, <code>outcomemessage</code>, <code>decisionnote</code>,
+    <code>reviewviewonly</code>, <code>reviewhistory</code>, <code>reviewcapacity</code>, <code>reviewapplicants</code>,
+    <code>reviewdeferredby</code>, <code>reviewcancel</code>, <code>reviewwait</code>, <code>reviewconfirm</code>,
+    <code>reviewqueue</code>, <code>reviewprevious</code>, <code>reviewnext</code>, <code>submittedprofile</code>,
+    <code>nocomment</code>, <code>confirmusers</code>. Everything else in the mockups is proposed wording.</li>
+    <li>Supported range 5.1&ndash;5.3: <code>version.php</code> (<code>[501, 503]</code>). <code>i/key</code> deprecated on 5.3:
+    <code>public/lib/classes/output/icon_system_fontawesome.php</code>, <code>get_deprecated_icons()</code>; the other icons
+    named in &sect;10 are mapped there.</li>
+    <li>The split view was proposed and not chosen in August: <code>applications-desk.html</code> &sect;03 and its decisions.</li>
+    <li>Many groups (&sect;05b): the chooser offers every choosable group and reads all their seats in one call,
+    <code>renderer.php:647&ndash;648</code>; <code>choosable_groups()</code> intersects with the reader's groups,
+    <code>groupscope.php:347&ndash;357</code>; the posted groups are <code>optional_param_array('groups', [], PARAM_INT)</code>,
+    <code>manage.php:210</code>; keyed preselection is <code>key_route_groups()</code>, <code>renderer.php:797&ndash;830</code>, and a keyless
+    application preselects nothing; <code>default_approval_groups()</code>, <code>lib.php:1049&ndash;1072</code>.</li>
+    <li><code>\local_groupdist\seats::for_groups()</code> is two statements for any number of groups
+    (<code>local_groupdist/classes/local/fields.php:419&ndash;504</code>, the 501 and 503 branches alike).</li>
+    <li>Core 5.1&ndash;5.3: <code>groups_get_all_groups()</code> orders <code>g.name ASC</code> and is served from the
+    <code>groupdata</code> cache, which also holds groupings and mappings (<code>lib/grouplib.php:286&ndash;307, 367, 1545&ndash;1565</code>);
+    <code>core_collator::SORT_NATURAL</code> (<code>lib/classes/collator.php:47</code>); <code>core/form-autocomplete</code>'s
+    <code>enhance()</code> signature, its <code>children('option')</code> reads, the <code>data-enabled</code> hook, the bubbling
+    <code>change</code> event, substring search on the visible text, keep-open-on-select for a multiple select, the keyboard map and
+    the announcer (<code>lib/amd/src/form-autocomplete.js</code>, read on 5.3 and diffed against 5.1 and 5.2: the differences are the
+    Popper import and the Escape handling); the combobox and listbox roles (<code>lib/templates/form_autocomplete_*.mustache</code>);
+    the suggestions' <code>max-height: 20em</code> (<code>theme/boost/scss/moodle/forms.scss:290</code>); moodleform's
+    <code>autocomplete</code> element exists on 5.1 and 5.3 (<code>lib/form/autocomplete.php</code>).</li>
+  </ul>
+  <h3>Not verified, or inferred</h3>
+  <ul>
+    <li>Eye jumps and zones are counted on these mockups, not measured with users.</li>
+    <li>Whether Behat's <code>I press</code> would still match a button whose text grew a second line was not tested; the
+    recommendation (consequence outside the button) avoids the question.</li>
+    <li>The "dados completos" signal assumes the snapshot can say which asked fields were left empty at submission; whether
+    every stored entry carries enough to tell "asked and empty" from "not asked" was not checked.</li>
+    <li>The applicant's notification travels through the message API, so "recebe o aviso" is accurate and "recebe um
+    e-mail" would depend on the applicant's preferences; not checked per site.</li>
+    <li>Moodle 5.1's Bootstrap carries the <code>*-subtle</code>/<code>*-emphasis</code> utilities (Bootstrap 5.3); read
+    from 5.3's tree only.</li>
+    <li>The feasibility of "decide and go to the next" (reading the neighbour before the row leaves the queue) is inferred
+    from the walk being positional SQL, not tried.</li>
+    <li>The read counts in &sect;05b are counted from the code, not measured with <code>perf_get_reads()</code> on a course of 100
+    groups; the cost of the Seats field lookup (<code>api::get_categories_with_fields()</code>) was not counted.</li>
+    <li>Nothing in &sect;05b was rendered: core's autocomplete inside a <code>&lt;details&gt;</code> disclosure and above the review
+    page's sticky footer (the suggestions are positioned by Popper with flipping off, so near the bottom of the page they may
+    open under the bar), and <code>FormChangeChecker.markFormChangedFromNode()</code> on a form that is not a moodleform, were
+    not tried.</li>
+    <li>Whether the queue filter bar's own script (<code>amd/src/manage.js</code>) accepts an enhanced select unchanged was read,
+    not run: it listens for <code>change</code>, which core dispatches; a single-select enhance also prepends an empty
+    <code>&lt;option&gt;</code>, whose effect on the filter's "any" value needs a Behat run.</li>
+    <li>"Sem vagas" as the full-group wording, the threshold of 8 and the "Meus grupos" value are proposals, not checked with
+    deciders.</li>
+  </ul>
+</section>
+
+</main>
+</div>
+</div>
+</body>
+</html>
