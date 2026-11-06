@@ -17,11 +17,13 @@
 namespace enrol_apply;
 
 use core\event\course_deleted;
+use core\event\user_enrolment_updated;
 use core_customfield\api;
 use core_customfield\category_controller;
 use core_customfield\event\field_deleted;
 use enrol_apply\customfield\application_handler;
 use enrol_apply\local\conditions;
+use enrol_apply\local\decisionlog;
 
 /**
  * Event observers cleaning up after core has deleted rows this plugin hangs data off.
@@ -120,5 +122,44 @@ class observers {
      */
     public static function field_deleted(field_deleted $event): void {
         conditions::delete_for_field((int) $event->objectid);
+    }
+
+    /**
+     * Log an approval made on core's "Edit enrolment", now that core has written the row.
+     *
+     * That route reaches complete_approval() only through before_user_enrolment_updated, which
+     * core dispatches before it writes the row and has no counterpart after it, so the hook pass
+     * parks the event ({@see decisionlog::park()}) and this observer fires it. Core triggers
+     * user_enrolment_updated right after update_record(), so the event's order is the effect's.
+     *
+     * Three guards. The enrol name in other filters out every other method's updates, which are
+     * the vast majority. Nothing parked for the enrolment means the update was not an approval
+     * (or activate() fired it itself). And the row is re-read: an entry left behind by an attempt
+     * whose write failed, then met by a later unrelated update of the same enrolment in the same
+     * request, must not log an approval the row does not show. The decider is the parked event's
+     * user, set in the hook pass of the deciding request, rather than this event's.
+     *
+     * @param user_enrolment_updated $event The dispatched event.
+     * @return void
+     */
+    public static function user_enrolment_updated(user_enrolment_updated $event): void {
+        global $DB;
+
+        if (($event->other['enrol'] ?? null) !== 'apply') {
+            return;
+        }
+
+        $userenrolmentid = (int) $event->objectid;
+        $approved = decisionlog::take($userenrolmentid);
+        if (!$approved) {
+            return;
+        }
+
+        $status = $DB->get_field('user_enrolments', 'status', ['id' => $userenrolmentid]);
+        if ($status === false || (int) $status !== ENROL_USER_ACTIVE) {
+            return;
+        }
+
+        $approved->trigger();
     }
 }

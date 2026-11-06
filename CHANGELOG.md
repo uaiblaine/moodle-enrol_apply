@@ -8,6 +8,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Decision events (V1 of `docs/design/group-screens.html`).** Three events log each decision in
+  the site's log store, with the decider as the user, the applicant as the affected user and the
+  application record as the object: `application_approved`, once per approval on every route
+  (the queue, the review page, the participants page's bulk operation, core's *Edit enrolment*;
+  none for a group key's admission, which keeps `application_admitted_by_key`),
+  `application_deferred`, when an application moves to the waiting list or the decider writes the
+  applicant a message about it (the rule its notification follows), and `application_cancelled`,
+  once per application cancelled. `other` carries ids and flags only (the method, the user
+  enrolment, the key group, and the groups joined, the role given and whether the decider chose
+  them, or whether a deferral moved and carried a message). A request-scoped marker,
+  `\enrol_apply\local\decisionlog`, keeps `complete_approval()`'s two passes from logging one
+  approval twice; the event is logged once the enrolment is active on every route: on *Edit
+  enrolment*, where only core's before-update hook runs, it is parked and fired by an observer of
+  `user_enrolment_updated` after core saves the row, and only if the row is active. The README gains an audit trail section
+  and a privacy paragraph: the standard log store keeps the lines about an applicant after the
+  applicant's erasure. New strings `eventapplicationapproved`, `eventapplicationcancelled`,
+  `eventapplicationdeferred`. Version 2026110503.
 - **Two capabilities and the report's group scope (S5 and S8 of `docs/design/group-review-scope.md`).**
   `enrol/apply:choosedecision` (*Choose the groups and role an approval gives*): without it a
   decider approves or refuses only. The review page, the queue and the participants page's bulk

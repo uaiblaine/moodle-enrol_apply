@@ -468,6 +468,33 @@ Two consequences worth knowing before you rely on a backup:
   reachable by a privacy request and still swept by the retention period — it simply does not
   follow the course into a copy.
 
+### Audit trail
+
+The record keeps the last decision only, and is swept after the retention period. Every decision
+is also logged, as an event in the site's log store, for as long as the log keeps its rows:
+
+- **Enrolment application approved** (`\enrol_apply\event\application_approved`), once per
+  approval, whichever page it was taken on: the queue, the review page, the participants page's
+  bulk operation, or core's *Edit enrolment*. It is logged after the enrolment has been written
+  and is active on every route, so a save that fails leaves no approval in the log. A group
+  key's admission logs *Applicant enrolled with a group key* instead.
+- **Enrolment application deferred** (`application_deferred`), when the application moves to the
+  waiting list, or when the decider writes the applicant a message about an earlier deferral. A
+  correction of the internal note alone logs nothing, as it notifies nobody.
+- **Enrolment application cancelled** (`application_cancelled`), once per application cancelled.
+
+Each names the decider as the user, the applicant as the affected user, the course as the
+context and the application record as the object. Its `other` carries ids and flags only: the
+enrolment method, the user enrolment, the group whose key was entered (0 for none), and for an
+approval the groups joined, the role given (0 for none) and whether the decider chose them; for a
+deferral whether the enrolment moved and whether there was a message. Never the message, the
+decision note, or a group or role name.
+
+They can be read in core's log report (*Course ▸ Reports ▸ Logs*) or through a custom report on
+the log source. The log report's group menu filters by the group of the user who acted, not of the
+applicant, so it does not list the decisions about one group's applicants; the applications
+report is the place for that.
+
 ## Data stored
 
 Five tables. Three hold personal data:
@@ -509,6 +536,15 @@ the group memberships its approvals add.
   approvals gave them in the course; for a decider it only clears their name from the records,
   which stay the applicant's. Role assignments and the enrolment itself are core's, covered by
   core's own privacy providers.
+
+The decision events (see "Audit trail") are rows of the site's log store, declared by the log
+store's own privacy provider, so the plugin declares nothing for them. Core's standard log store
+exports the rows a person performed or was affected by, but on an erasure request deletes only
+the rows that person performed: an applicant's erasure removes their application record and
+keeps the log lines about decisions on it, until the log's own lifetime
+(`logstore_standard | loglifetime`, never by default) removes them, whatever **Keep application
+records for** says. Core's own enrolment events behave the same way. This is why the events carry
+ids only.
 
 ## Development
 
