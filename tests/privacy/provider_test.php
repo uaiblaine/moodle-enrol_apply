@@ -167,6 +167,8 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         $this->assertArrayHasKey('decidedby', $submissionfields);
         // The decider's note, which the export delivers to both subjects.
         $this->assertArrayHasKey('decisionnote', $submissionfields);
+        // The groups an approval joined, exported beside the decider's choice.
+        $this->assertArrayHasKey('joinedgroups', $submissionfields);
 
         /* The answers are declared by hand: core's table coverage test cannot see them, as the
            table has no userid column and no key to user.id. */
@@ -425,6 +427,44 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
             /* The note reaches the applicant too: no page shows it to them, but it is a member
                of staff's assessment of them held by the site. */
             $this->assertSame('Transcript verified with the registrar.', $exported->decisionnote, $rolekey);
+        }
+    }
+
+    /**
+     * The groups an approval joined reach both subjects' exports by name, a deleted one left out;
+     * a record whose groups are not known exports null rather than an empty list, which would
+     * claim the approval joined nothing.
+     *
+     * Changes that must make it fail: the export leaving the joined groups out, or reading them
+     * as "none" where they are not known.
+     *
+     * @return void
+     */
+    public function test_the_joined_groups_are_exported_to_both_subjects(): void {
+        global $DB;
+
+        $decider = $this->getDataGenerator()->create_user();
+        $applicant = $this->create_application('Please approve me', (int) $decider->id);
+        $context = context_course::instance($this->course->id);
+        $joined = $this->getDataGenerator()->create_group(['courseid' => $this->course->id, 'name' => 'Turma Joined']);
+        $gone = $this->getDataGenerator()->create_group(['courseid' => $this->course->id, 'name' => 'Deleted later']);
+        $recordid = $this->submission_id_of($applicant);
+        $path = fn(string $rolekey): array => [
+            get_string('privacy:trailpath', 'enrol_apply'),
+            get_string($rolekey, 'enrol_apply'),
+            get_string('privacy:recordpath', 'enrol_apply', $recordid),
+        ];
+
+        // Not known yet: never approved.
+        $this->export_context_data_for_user((int) $applicant->id, $context, 'enrol_apply');
+        $this->assertNull(writer::with_context($context)->get_data($path('privacy:roleapplicant'))->joinedgroups);
+
+        $DB->set_field('enrol_apply_submission', 'joinedgroups', $joined->id . ',' . $gone->id, ['id' => $recordid]);
+        groups_delete_group((int) $gone->id);
+        foreach (['privacy:roleapplicant' => $applicant, 'privacy:roledecider' => $decider] as $rolekey => $subject) {
+            writer::reset();
+            $this->export_context_data_for_user((int) $subject->id, $context, 'enrol_apply');
+            $this->assertSame(['Turma Joined'], writer::with_context($context)->get_data($path($rolekey))->joinedgroups, $rolekey);
         }
     }
 

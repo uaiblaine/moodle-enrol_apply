@@ -191,3 +191,74 @@ function enrol_apply_migrate_snapshot_envelopes(): int {
 
     return $migrated;
 }
+
+/**
+ * Fill enrol_apply_submission.joinedgroups for the approvals recorded before the column existed.
+ *
+ * The evidence is the membership an approval leaves behind, and nothing else: a row of
+ * {groups_members} stamped with component enrol_apply and the record's enrolment method as
+ * itemid, for the record's applicant, in a group of the record's course - exactly what
+ * complete_approval() reads when it writes the column ({@see \enrol_apply\local\submission::stamped_groups()}).
+ * decidedgroups is not evidence: it is the decider's choice, empty whenever the method's defaults
+ * applied, and a group it names may never have been joined.
+ *
+ * Only an APPROVED record whose user enrolment still exists qualifies, and only the newest record
+ * of that user enrolment, the one the writer updates: the memberships belong to the enrolment, so
+ * without it they say nothing about the record. A record with no such membership stays NULL, "not
+ * known", rather than becoming "joined none": an approval whose memberships were removed since is
+ * indistinguishable from one that joined nothing, and the past is not knowable from here.
+ *
+ * Idempotent per record, which the DDL guard in the upgrade step is not: only records still NULL
+ * are read, and each is written once with the whole of its list, so a re-run after a failure part
+ * way re-reads only what was not yet written and writes the same answer. One query over a
+ * recordset, ordered by record, so a large site streams its approvals rather than loading them.
+ *
+ * @return int Number of records filled.
+ */
+function enrol_apply_backfill_joined_groups(): int {
+    global $DB;
+
+    $sql = "SELECT s.id AS submissionid, g.id AS groupid
+              FROM {enrol_apply_submission} s
+              JOIN {user_enrolments} ue ON ue.id = s.userenrolmentid AND ue.enrolid = s.enrolid AND ue.userid = s.userid
+              JOIN {groups_members} gm ON gm.userid = s.userid AND gm.component = :component AND gm.itemid = s.enrolid
+              JOIN {groups} g ON g.id = gm.groupid AND g.courseid = s.courseid
+             WHERE s.status = :approved
+               AND s.joinedgroups IS NULL
+               AND NOT EXISTS (
+                   SELECT 1
+                     FROM {enrol_apply_submission} newer
+                    WHERE newer.userenrolmentid = s.userenrolmentid
+                      AND (newer.timecreated > s.timecreated
+                           OR (newer.timecreated = s.timecreated AND newer.id > s.id))
+               )
+          ORDER BY s.id, g.id";
+    $rows = $DB->get_recordset_sql($sql, [
+        'component' => 'enrol_apply',
+        'approved' => \enrol_apply\local\submission::STATUS_APPROVED,
+    ]);
+
+    $filled = 0;
+    $current = null;
+    $groupids = [];
+    $write = function (int $submissionid, array $groupids) use ($DB, &$filled): void {
+        $DB->set_field('enrol_apply_submission', 'joinedgroups', implode(',', $groupids), ['id' => $submissionid]);
+        $filled++;
+    };
+    foreach ($rows as $row) {
+        $submissionid = (int) $row->submissionid;
+        if ($current !== null && $submissionid !== $current) {
+            $write($current, $groupids);
+            $groupids = [];
+        }
+        $current = $submissionid;
+        // Keyed by id: {groups_members} carries no unique key on (groupid, userid).
+        $groupids[(int) $row->groupid] = (int) $row->groupid;
+    }
+    $rows->close();
+    if ($current !== null) {
+        $write($current, $groupids);
+    }
+
+    return $filled;
+}

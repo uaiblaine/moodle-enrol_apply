@@ -28,7 +28,9 @@ use core_reportbuilder\system_report_factory;
 use enrol_apply\local\answers;
 use enrol_apply\local\fields;
 use enrol_apply\local\groupscope;
+use enrol_apply\local\groupvisibility;
 use enrol_apply\reportbuilder\local\entities\submission;
+use enrol_apply\reportbuilder\local\filters\group as groupfilter;
 use enrol_apply\reportbuilder\local\formatters\submission as formatter;
 
 /**
@@ -161,6 +163,49 @@ class course_applications extends system_report {
         global $USER;
 
         return groupscope::narrowed_to((int) $this->get_context()->instanceid, (int) $USER->id, groupscope::REPORT);
+    }
+
+    /**
+     * The groups the group filter offers this reader, by id, in natural order.
+     *
+     * Every group of the course groups_get_all_groups() lists to the current user, which applies
+     * core's visibility rule, narrowed to their own groups when the separate-groups rule narrows
+     * them for the report ({@see narrowed_groups()}): a narrowed reader is offered nothing their
+     * base condition would not already show, and a value outside the options filters nothing
+     * ({@see groupfilter::get_sql_filter()}). Sorted with core_collator::SORT_NATURAL, so
+     * "Turma 2" comes before "Turma 10", as on the queue's filter.
+     *
+     * The names in the escaped spelling, which the filter form's select element expects.
+     *
+     * @return array Group id => name.
+     */
+    public function group_options(): array {
+        global $DB, $USER;
+
+        /* Built before can_view() runs (core adds the filters while the report is constructed), so
+           a context that is not a course's must yield nothing here rather than throw, and leave
+           the refusal to can_view(). */
+        if (!$this->get_context() instanceof context_course) {
+            return [];
+        }
+        $courseid = (int) $this->get_context()->instanceid;
+        /* Read from {groups} with groupvisibility's rule rather than groups_get_all_groups(), whose
+           answer comes from the groupdata cache: the same visibility clauses for the same reader,
+           without a cached list standing in for the course's groups as they are now. */
+        $groups = $DB->get_records('groups', ['courseid' => $courseid], 'id', 'id, courseid, name, visibility');
+        $groups = array_intersect_key($groups, array_flip(groupvisibility::visible_ids($groups, (int) $USER->id)));
+        $narrowed = $this->narrowed_groups();
+        if ($narrowed !== null) {
+            $groups = array_intersect_key($groups, array_flip($narrowed));
+        }
+        \core_collator::asort_objects_by_property($groups, 'name', \core_collator::SORT_NATURAL);
+
+        $options = [];
+        foreach ($groups as $group) {
+            $options[(int) $group->id] = format_string($group->name, true, ['context' => $this->get_context()]);
+        }
+
+        return $options;
     }
 
     /**
@@ -321,6 +366,23 @@ class course_applications extends system_report {
         }
         $this->add_filter_from_entity(self::DECIDER . ':fullname');
 
+        /* The group filter (V5): a record's key group or a group its approval joined, for one group
+           the reader may pick. Offered, never applied by default, and only where there is a group
+           to offer, like the method filter below. The custom-report source has no such filter
+           (V-D11). The options come from the context and $USER on every request, like the base
+           condition. */
+        $alias = $this->get_entity('submission')->get_table_alias('enrol_apply_submission');
+        $groups = $this->group_options();
+        if ($groups) {
+            $this->add_filter((new filter(
+                groupfilter::class,
+                'group',
+                new lang_string('reportgroup', 'enrol_apply'),
+                'submission',
+                "{$alias}.id"
+            ))->set_options($groups));
+        }
+
         /* The method filter is added only where the course offers a choice of methods. With one
            it would read as a control that does nothing, and selecting it would hide the records
            of deleted methods, which delete_instance() keeps. */
@@ -337,7 +399,6 @@ class course_applications extends system_report {
                 $options[$id] = $plugin->get_instance_name($instance);
             }
 
-            $alias = $this->get_entity('submission')->get_table_alias('enrol_apply_submission');
             $this->add_filter((new filter(
                 select::class,
                 'method',

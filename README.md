@@ -330,8 +330,9 @@ the reader's own groups, as a filter they can remove, never as a restriction.
 A holder of `enrol/apply:viewapplications` is narrowed by the same rule, and so is a holder of
 `enrol/apply:viewreports` on the course report: in a separate-groups course, without
 `moodle/site:accessallgroups`, the report lists only the records whose key group is one of
-theirs or whose approval joined one of their groups, and a reader in no group sees no row and
-core's notice. Each capability's own system-level grant lifts its narrowing. The site-wide
+theirs or whose approval joined one of their groups (for an approval recorded before version
+2026110505 whose memberships the upgrade could not find, the groups the decider chose), and a
+reader in no group sees no row and core's notice. Each capability's own system-level grant lifts its narrowing. The site-wide
 custom-report source is not narrowed: who reads a custom report is decided by its audiences.
 
 ### Setting up a group moderator
@@ -357,9 +358,18 @@ A moderator decides the applications of their own groups and nobody else's:
 Course → Participants → Enrolment methods carries a report icon beside each Course enrol
 confirmation method, and the course settings navigation carries the same link. It lists
 every application the course has recorded — who applied, when, the comment, the profile
-details submitted, the outcome, whether a group enrolment key admitted it, who decided it and
-when — with per-user filters, sorting,
+details submitted, the outcome, whether a group enrolment key admitted it, the groups the
+approval joined, who decided it and when — with per-user filters, sorting,
 paging and a CSV or Excel download.
+
+**Groups joined** names the groups the last approval left the applicant in through the method,
+whether the decider chose them or the method's defaults applied. A group the reader may not see is
+left out (a cell whose groups are all hidden is blank), and so is a group deleted since. Approvals
+recorded before version 2026110505 show the groups the upgrade could find from the applicant's
+memberships, and nothing where it found none. Where the course has groups, a **Group (enrolment
+key or joined)** filter selects the applications of one group: its key group, or a group the
+approval joined. It offers the groups the reader may see, in natural order, and a reader narrowed
+by separate groups only their own.
 
 Where a course carries more than one Course enrol confirmation method, the report opens scoped to
 the one whose icon you clicked, clearing the method filter widens it to every application in the
@@ -370,7 +380,10 @@ such filter, and its report lists that course's applications as it always did.
 
 Site administration → Reports → Report builder offers **Enrolment applications** as a report
 source, for building ad-hoc reports across every course. It adds a course filter and a course
-name column that the course report deliberately does not have.
+name column that the course report deliberately does not have. It carries the **Groups joined**
+column too, with the same visibility rule, but no group filter: a site-wide list of every group is
+unbounded, and a filter by group name would let a reader find the applications of a group whose
+name the cell withholds from them.
 
 The profile details an applicant submitted appear here only for a reader holding
 `moodle/user:viewalldetails`, and for anyone else the column is absent rather than empty — it
@@ -514,9 +527,9 @@ Five tables. Three hold personal data:
   decision, keyed by the user enrolment. Deleted on approval, on cancellation, on unenrolment,
   with the enrolment method and with the course.
 - `enrol_apply_submission` — the durable record of each application: the applicant, the comment,
-  the decision, its message to the applicant, the decider's note, the groups and role chosen, who
-  decided and when, and the group whose enrolment key was entered with what it did (never the
-  key). Kept for the retention period (`enrol_apply/retentiondays`, 30 days by default; a record
+  the decision, its message to the applicant, the decider's note, the groups and role chosen, the
+  groups the approval actually joined, who decided and when, and the group whose enrolment key was
+  entered with what it did (never the key). Kept for the retention period (`enrol_apply/retentiondays`, 30 days by default; a record
   still in the queue is never swept), pseudonymised when the course is deleted, and kept when the
   enrolment or the method is deleted. See "The record of an application" above.
 - `enrol_apply_answer` — what the application submitted: one row per profile field and per

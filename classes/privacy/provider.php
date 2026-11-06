@@ -84,6 +84,7 @@ class provider implements
                 'userenrolmentid' => 'privacy:metadata:enrol_apply_submission:userenrolmentid',
                 'comment' => 'privacy:metadata:enrol_apply_submission:comment',
                 'decidedgroups' => 'privacy:metadata:enrol_apply_submission:decidedgroups',
+                'joinedgroups' => 'privacy:metadata:enrol_apply_submission:joinedgroups',
                 'decidedrole' => 'privacy:metadata:enrol_apply_submission:decidedrole',
                 'keygroupid' => 'privacy:metadata:enrol_apply_submission:keygroupid',
                 'keyoutcome' => 'privacy:metadata:enrol_apply_submission:keyoutcome',
@@ -348,6 +349,12 @@ class provider implements
                 : null;
             $export->decidedgroups = self::group_names((string) $row->decidedgroups, $context);
             $export->decidedrole = self::role_name((int) $row->decidedrole);
+            /* What the last approval left them in, which the chosen groups above are not when the method's
+               defaults applied. Null where it is not known (a record decided before the column),
+               rather than an empty list that would claim the approval joined nothing. */
+            $export->joinedgroups = $row->joinedgroups === null
+                ? null
+                : self::group_names((string) $row->joinedgroups, $context);
 
             /* Whether a group enrolment key admitted the applicant, and which group's: part of
                what was decided about them, so both subjects get it. The group is named, as the

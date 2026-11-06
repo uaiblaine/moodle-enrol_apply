@@ -26,6 +26,7 @@
         <FIELD NAME="status" TYPE="int" LENGTH="4" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="0 pending, 1 approved, 2 waiting, 3 cancelled"/>
         <FIELD NAME="outcomemessage" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="message the decider wrote to the applicant"/>
         <FIELD NAME="decidedgroups" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="group ids the decider chose at approval, comma separated; empty means the instance default was used"/>
+        <FIELD NAME="joinedgroups" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="group ids the applicant is a member of through this method after the last approval, comma separated; empty means none, NULL means not known (a record decided before the column, or never approved)"/>
         <FIELD NAME="decidedrole" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="role the decider chose at approval; 0 means the instance default was used. An id and not a key: the record outlives the role on purpose, and the restore does not carry it"/>
         <FIELD NAME="decisionnote" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="what the decider recorded for their colleagues about this decision; never sent to the applicant, unlike outcomemessage"/>
         <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="when the application was submitted; the retention sweep reads this"/>

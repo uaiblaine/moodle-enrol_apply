@@ -83,6 +83,7 @@ class backup_enrol_apply_plugin extends backup_enrol_plugin {
             'decisionnote',
             'decidedgroups',
             'decidedrole',
+            'joinedgroups',
             'timecreated',
             'timedecided',
             'decidedby',
@@ -279,9 +280,9 @@ class backup_enrol_apply_plugin extends backup_enrol_plugin {
 
            Groups need nothing: when the groups setting is on,
            backup_annotate_course_groups_and_groupings annotates every group of the course, so
-           each one reaches groups.xml whether or not anything refers to it. decidedgroups is a
-           comma-separated column in any case, which annotate_ids() - one id per row - could
-           not walk.
+           each one reaches groups.xml whether or not anything refers to it. decidedgroups and
+           joinedgroups are comma-separated columns in any case, which annotate_ids() - one id per
+           row - could not walk.
 
            The role does need it: roles.xml selects on 'rolefinal', so a role reaches the
            archive only through an annotation, usually from a role_assignment the applicant

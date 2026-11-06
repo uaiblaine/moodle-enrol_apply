@@ -36,12 +36,15 @@ use PHPUnit\Framework\Attributes\CoversClass;
  * The course report narrowed by separate groups (docs/design/group-review-scope.md, S8).
  *
  * The course is in separate groups mode, and the reader holds enrol/apply:viewreports through a
- * role of their own, without moodle/site:accessallgroups, as a member of one group. Five records
- * are written directly, one per case: a pending one keyed to the reader's group, a decided one
+ * role of their own, without moodle/site:accessallgroups, as a member of one group. Seven records
+ * are written directly, one per case: a pending one keyed to the reader's group; an approved one
  * whose key named another group but whose approval joined the reader's (it is matched only
- * through decidedgroups), one of another group, one without a key, and a decided one whose
- * decidedgroups carries ids that CONTAIN the reader's group id as a substring (its id followed by
- * a 1, and preceded by a 9), which a match on the bare id would take for the reader's.
+ * through joinedgroups); one of another group; one without a key; an approved one whose
+ * joinedgroups carries ids that CONTAIN the reader's group id as a substring (its id followed by
+ * a 1, and preceded by a 9), which a match on the bare id would take for the reader's; one
+ * approved before the column, its joinedgroups not known (NULL), whose decidedgroups names the
+ * reader's group (the fallback); and one whose joinedgroups says it joined none while its
+ * decidedgroups names the reader's group, which the fallback must not reach.
  *
  * Each case is read on both of the report's paths: the report built through for_method(), as
  * report.php builds it, and the course-level one system_report_factory::create() builds.
@@ -69,7 +72,7 @@ final class report_group_scope_test extends \core_reportbuilder\tests\core_repor
     /** @var \stdClass Another group. */
     private $theirs;
 
-    /** @var array Applicant id by case: keyed, decided, other, keyless, substring. */
+    /** @var array Applicant id by case: keyed, joined, other, keyless, substring, fallback, overridden. */
     private $applicants = [];
 
     /**
@@ -99,14 +102,16 @@ final class report_group_scope_test extends \core_reportbuilder\tests\core_repor
         $mine = (int) $this->mine->id;
         $theirs = (int) $this->theirs->id;
         $cases = [
-            'keyed' => [$mine, '', submission::STATUS_PENDING],
-            'decided' => [$theirs, "{$theirs},{$mine}", submission::STATUS_APPROVED],
-            'other' => [$theirs, (string) $theirs, submission::STATUS_APPROVED],
-            'keyless' => [0, '', submission::STATUS_PENDING],
-            'substring' => [0, ($mine * 10 + 1) . ',9' . $mine, submission::STATUS_APPROVED],
+            'keyed' => [$mine, null, '', submission::STATUS_PENDING],
+            'joined' => [$theirs, "{$theirs},{$mine}", '', submission::STATUS_APPROVED],
+            'other' => [$theirs, (string) $theirs, '', submission::STATUS_APPROVED],
+            'keyless' => [0, null, '', submission::STATUS_PENDING],
+            'substring' => [0, ($mine * 10 + 1) . ',9' . $mine, '', submission::STATUS_APPROVED],
+            'fallback' => [0, null, (string) $mine, submission::STATUS_APPROVED],
+            'overridden' => [0, '', (string) $mine, submission::STATUS_APPROVED],
         ];
-        foreach ($cases as $case => [$keygroupid, $decidedgroups, $status]) {
-            $this->applicants[$case] = $this->seed($keygroupid, $decidedgroups, $status);
+        foreach ($cases as $case => [$keygroupid, $joinedgroups, $decidedgroups, $status]) {
+            $this->applicants[$case] = $this->seed($keygroupid, $joinedgroups, $decidedgroups, $status);
         }
     }
 
@@ -114,11 +119,12 @@ final class report_group_scope_test extends \core_reportbuilder\tests\core_repor
      * Write one record of the course.
      *
      * @param int $keygroupid The key's group, 0 for none.
+     * @param string|null $joinedgroups The joined groups, comma separated, empty for none, null for not known.
      * @param string $decidedgroups The decided groups, comma separated, empty for none.
      * @param int $status The record's status.
      * @return int The applicant's id.
      */
-    private function seed(int $keygroupid, string $decidedgroups, int $status): int {
+    private function seed(int $keygroupid, ?string $joinedgroups, string $decidedgroups, int $status): int {
         global $DB;
 
         $user = $this->getDataGenerator()->create_user();
@@ -131,6 +137,7 @@ final class report_group_scope_test extends \core_reportbuilder\tests\core_repor
             'status' => $status,
             'outcomemessage' => '',
             'decidedgroups' => $decidedgroups,
+            'joinedgroups' => $joinedgroups,
             'keygroupid' => $keygroupid,
             'keyoutcome' => $keygroupid ? submission::KEY_FOR_REVIEW : submission::KEY_NONE,
             'timecreated' => time(),
@@ -218,19 +225,21 @@ final class report_group_scope_test extends \core_reportbuilder\tests\core_repor
     }
 
     /**
-     * A narrowed reader reads the records of their group alone, by key group or by decided
-     * groups, on both paths; not another group's, not a keyless one, and not one whose decided
-     * groups merely contain their group's id as a substring.
+     * A narrowed reader reads the records of their group alone, by key group or by the groups an
+     * approval joined, and by the decided groups only where the joined ones are not known, on both
+     * paths; not another group's, not a keyless one, not one whose joined groups merely contain
+     * their group's id as a substring, and not one that joined none whatever its decided groups.
      *
-     * Changes that must make it fail: the base condition dropped, the decided groups not read,
-     * or matched without their separators.
+     * Changes that must make it fail: the base condition dropped; the joined groups not read, or
+     * matched without their separators; the decided groups not read where the joined ones are
+     * unknown, or read in their place.
      *
      * @return void
      */
     public function test_a_narrowed_reader_reads_only_their_groups(): void {
         $this->setUser($this->reader('narrowreader'));
 
-        $expected = $this->applicants_of(['keyed', 'decided']);
+        $expected = $this->applicants_of(['keyed', 'joined', 'fallback']);
         [$page, $refresh] = $this->both_paths();
         $this->assertSame($expected, $page);
         $this->assertSame($expected, $refresh);
@@ -244,7 +253,7 @@ final class report_group_scope_test extends \core_reportbuilder\tests\core_repor
     public function test_a_reader_who_sees_every_group_reads_everything(): void {
         $this->setUser($this->reader('allreader', true));
 
-        $expected = $this->applicants_of(['keyed', 'decided', 'other', 'keyless', 'substring']);
+        $expected = $this->applicants_of(['keyed', 'joined', 'other', 'keyless', 'substring', 'fallback', 'overridden']);
         [$page, $refresh] = $this->both_paths();
         $this->assertSame($expected, $page);
         $this->assertSame($expected, $refresh);
@@ -265,7 +274,7 @@ final class report_group_scope_test extends \core_reportbuilder\tests\core_repor
         // The precondition: core's rule alone does narrow them, so the exemption is what is tested.
         $this->assertTrue(groupscope::is_scoped((int) $this->course->id, (int) $reader->id));
 
-        $expected = $this->applicants_of(['keyed', 'decided', 'other', 'keyless', 'substring']);
+        $expected = $this->applicants_of(['keyed', 'joined', 'other', 'keyless', 'substring', 'fallback', 'overridden']);
         [$page, $refresh] = $this->both_paths();
         $this->assertSame($expected, $page);
         $this->assertSame($expected, $refresh);

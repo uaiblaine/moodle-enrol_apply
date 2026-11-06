@@ -156,6 +156,45 @@ class submission {
     }
 
     /**
+     * The groups the last approval left the applicant in, by name, in natural order.
+     *
+     * Each name is gated by core's visibility rule for $USER, judged for the cell's groups at once
+     * ({@see \enrol_apply\local\groupvisibility::visible_ids()}): a group the reader may not see is
+     * left out, and a cell whose every group is hidden is blank, as the key group's cell is
+     * (V-D13). Nothing is counted in its place, since "one more" would tell a reader who may not
+     * see a group that the applicant is in one. A group deleted since is left out as well: the
+     * column's SQL finds only groups that exist ({@see submissionhelper::joined_groups_sql()}), the
+     * deletion took the membership with it, and the cell names memberships, so a list of names
+     * has nothing to say about it. Blank, too, for a record that joined none and for one whose
+     * groups are not known (decided before the column existed).
+     *
+     * Escaped by format_string() in the group's course, as {@see key_group()} is.
+     *
+     * @param mixed $value What submissionhelper::joined_groups_sql() produced, null when it found no group.
+     * @param stdClass $row Row being rendered.
+     * @return string Names separated by commas, or empty.
+     */
+    public static function joined_groups($value, stdClass $row): string {
+        global $USER;
+
+        $groups = submissionhelper::parse_joined_groups($value === null ? null : (string) $value);
+        if (!$groups) {
+            return '';
+        }
+
+        $visible = \enrol_apply\local\groupvisibility::visible_ids($groups, (int) $USER->id);
+        $groups = array_intersect_key($groups, array_flip($visible));
+        \core_collator::asort_objects_by_property($groups, 'name', \core_collator::SORT_NATURAL);
+
+        $names = [];
+        foreach ($groups as $group) {
+            $names[] = format_string($group->name, true, ['context' => \context_course::instance($group->courseid)]);
+        }
+
+        return implode(', ', $names);
+    }
+
+    /**
      * What the enrolment is doing now, or why there is nothing to report.
      *
      * A null live status means the join found nothing: no longer enrolled. But a record restored

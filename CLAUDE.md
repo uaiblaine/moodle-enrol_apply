@@ -560,9 +560,14 @@ backup/                      group mappings, comments and the durable trail, see
   and walks the rest on the site-wide one, read-only. `listing_scope()` carries `candecide`: false
   for a viewer, whose table drops the selection column and whose page drops the form, the controls
   and the sticky footer (S5). The course report narrows a narrowed `viewreports` holder with
-  `record_where()` (S8): key group OR a decided group, matched as `','||decidedgroups||','` LIKE
-  `'%,id,%'` (one placeholder per group, so 1 never matches 11), judged per record rather than per
-  newest record because every record is a report row. The custom-report datasource is
+  `record_where()` (S8): key group OR a group the approval joined, matched as
+  `','||COALESCE(joinedgroups, decidedgroups, '')||','` LIKE `'%,id,%'` (one placeholder per group,
+  so 1 never matches 11), judged per record rather than per newest record because every record is
+  a report row. `joinedgroups` (V5) is what the memberships stamped with the method are after
+  `complete_approval()`, read back rather than taken from one pass's `groups_add_member()` so the
+  two passes agree; NULL is "not known", and only there is the decider's choice read. The report's
+  group filter (`reportbuilder/local/filters/group.php`) is `record_where()` for one offered group,
+  so the two cannot disagree. Gates `JG1`-`JG22`. The custom-report datasource is
   deliberately not narrowed (audiences govern it). Gates `SC38`-`SC52`.
 
   **The queue's group column and filter (V2) read the same "newest record" and add to the scope,
