@@ -16,6 +16,7 @@
 
 namespace enrol_apply;
 
+use enrol_apply\local\groupscope;
 use enrol_apply\local\queue;
 use enrol_apply\local\submission;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -756,5 +757,84 @@ final class group_scope_test extends \advanced_testcase {
 
         $DB->set_field('course', 'groupmode', NOGROUPS, ['id' => $this->course->id]);
         $this->assertStringNotContainsString($warning, $render());
+    }
+
+    /**
+     * A site administrator who switched role to a moderator in the course is narrowed as the
+     * moderator would be, as core's participants page narrows them; another reader's system grant
+     * is not affected by the current user's switch.
+     *
+     * Changes that must make it fail: the system exemption read without regard to the switch, in
+     * narrowed_to() or in can_manage_application(), or the switch applied to a user other than the
+     * current one.
+     *
+     * @return void
+     */
+    public function test_a_role_switched_in_the_course_narrows_like_core(): void {
+        global $DB, $USER;
+
+        [$mineueid] = $this->apply_for($this->mine);
+        [$theirsueid, $theirs] = $this->apply_for($this->theirs);
+        $courseid = (int) $this->course->id;
+
+        $this->setAdminUser();
+        $this->getDataGenerator()->enrol_user($USER->id, $courseid, 'teacher');
+        $this->getDataGenerator()->create_group_member(['groupid' => $this->mine->id, 'userid' => $USER->id]);
+
+        // The control: the administrator, not switched, sees and decides every group's.
+        $this->assertNull(groupscope::narrowed_to($courseid, (int) $USER->id));
+        [$listed] = $this->listed();
+        sort($listed);
+        $this->assertSame([$mineueid, $theirsueid], $listed);
+        $this->assertTrue($this->plugin->can_manage_application($courseid, (int) $theirs->id, $theirsueid));
+
+        // A site-wide decider who is not the current user: not an administrator, no group access.
+        $sitedecider = $this->getDataGenerator()->create_user();
+        $roleid = $this->getDataGenerator()->create_role(['shortname' => 'switchsitedecider']);
+        assign_capability('enrol/apply:manageapplications', CAP_ALLOW, $roleid, \context_system::instance()->id, true);
+        role_assign($roleid, $sitedecider->id, \context_system::instance()->id);
+
+        $teacher = (int) $DB->get_field('role', 'id', ['shortname' => 'teacher'], MUST_EXIST);
+        role_switch($teacher, \context_course::instance($courseid));
+
+        $this->assertSame([(int) $this->mine->id], groupscope::narrowed_to($courseid, (int) $USER->id));
+        [$listed] = $this->listed();
+        $this->assertSame([$mineueid], $listed);
+        $this->assertFalse($this->plugin->can_manage_application($courseid, (int) $theirs->id, $theirsueid));
+        $this->assertNull(groupscope::narrowed_to($courseid, (int) $sitedecider->id));
+    }
+
+    /**
+     * A mentor who is not an administrator keeps the mentor level while switched in the course:
+     * core keeps a user-context grant through a switch made in a course, and only an administrator,
+     * who would pass that level as themselves, loses it to the preview.
+     *
+     * Changes that must make it fail: the mentor level skipped for everybody who switched.
+     *
+     * @return void
+     */
+    public function test_a_switched_mentor_keeps_the_mentor_level(): void {
+        global $DB;
+
+        [$ueid, $applicant] = $this->apply_for($this->theirs);
+        $courseid = (int) $this->course->id;
+        $mentor = $this->getDataGenerator()->create_and_enrol($this->course, 'editingteacher');
+        $this->make_mentor($mentor, $applicant);
+        // The course grant is withdrawn, so only the mentor level can answer.
+        $editing = (int) $DB->get_field('role', 'id', ['shortname' => 'editingteacher'], MUST_EXIST);
+        assign_capability(
+            'enrol/apply:manageapplications',
+            CAP_PROHIBIT,
+            $editing,
+            \context_course::instance($courseid)->id,
+            true
+        );
+        $this->setUser($mentor);
+        $this->assertTrue($this->plugin->can_manage_application($courseid, (int) $applicant->id, $ueid));
+
+        $student = (int) $DB->get_field('role', 'id', ['shortname' => 'student'], MUST_EXIST);
+        role_switch($student, \context_course::instance($courseid));
+        $this->assertTrue(groupscope::switched($courseid));
+        $this->assertTrue($this->plugin->can_manage_application($courseid, (int) $applicant->id, $ueid));
     }
 }

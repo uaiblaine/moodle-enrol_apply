@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Fixed
+
+- **"Switch role to" previews a moderator's queue as core previews the participants page.** A
+  site administrator who switched role to a moderator in a separate-groups course still listed
+  and could decide every group's applications, because the system-level exemption was read at
+  system level, where nothing is switched; core judges a switched user by the role switched to in
+  that course alone. `\enrol_apply\local\groupscope::system_exempt()` withholds the exemption from
+  the current user while they have switched role in the course, and both `narrowed_to()` and
+  `can_manage_application()` read it; a switched administrator also skips the mentor level, whose
+  user context is outside the course and so outside the switch, while a mentor who is not an
+  administrator keeps it, as in core. Anybody else's answer (a notice's recipient) is unchanged.
+  Gates `SW1`-`SW6`.
+
 ### Changed
 
 - **The instance form's keyed groups fold past the review page's threshold.** A course with dozens
