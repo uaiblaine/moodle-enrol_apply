@@ -570,4 +570,42 @@ final class edit_form_test extends \advanced_testcase {
         $this->assertStringContainsString(s(get_string('groupseatsnolimit', 'enrol_apply', 0)), $html);
         $this->assertSame(1, substr_count($html, s(get_string('groupkeyadmitsnobody', 'enrol_apply'))));
     }
+
+    /**
+     * Past the review page's threshold the summary folds: a count, the groups needing attention
+     * outside the fold, and every group inside a closed accordion; at the threshold it does not.
+     *
+     * Changes that must make it fail: folding at the threshold or never, or the attention list
+     * missing a key nobody can type or holding every group.
+     *
+     * @return void
+     */
+    public function test_the_summary_folds_past_the_threshold(): void {
+        $generator = $this->getDataGenerator();
+        $threshold = \enrol_apply\local\groupfilter::THRESHOLD;
+        for ($i = 1; $i <= $threshold; $i++) {
+            $generator->create_group(['courseid' => $this->course->id, 'name' => "Turma {$i}", 'enrolmentkey' => "Key-{$i}"]);
+        }
+
+        $html = $this->group_key_summary();
+        $this->assertStringNotContainsString('enrol_apply_groupkeys_body', $html);
+        $this->assertStringContainsString('Turma ' . $threshold, $html);
+
+        $generator->create_group(['courseid' => $this->course->id, 'name' => 'Padded', 'enrolmentkey' => 'Key-padded ']);
+        $html = $this->group_key_summary();
+
+        $this->assertMatchesRegularExpression(
+            '~class="accordion-collapse collapse" id="enrol_apply_groupkeys_body"~',
+            $html,
+            'the whole list folds, closed'
+        );
+        $this->assertStringContainsString(s(get_string('groupkeyscount', 'enrol_apply', $threshold + 1)), $html);
+        $this->assertStringContainsString(s(get_string('groupkeysattentionone', 'enrol_apply')), $html);
+        $this->assertSame(1, preg_match('~data-region="groupkeys-attention">(.*?)</ul>~s', $html, $attention));
+        $this->assertSame(1, substr_count($attention[1], '<li'));
+        $this->assertStringContainsString('Padded', $attention[1]);
+        // Every group, the attention one included, is in the folded list.
+        $this->assertSame(1, preg_match('~id="enrol_apply_groupkeys_body"(.*)~s', $html, $folded));
+        $this->assertSame($threshold + 1, substr_count($folded[1], '<li'));
+    }
 }

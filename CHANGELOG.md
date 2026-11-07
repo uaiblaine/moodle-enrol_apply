@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Unreleased
+
+### Changed
+
+- **The instance form's keyed groups fold past the review page's threshold.** A course with dozens
+  of groups carrying a key made the form a page long. The summary is a box, as on the review
+  page; above `groupfilter::THRESHOLD` (8, RP-D18) it shows how many groups carry a key, lists
+  only those needing attention (a full group, a shadowed key, a key nobody can type), and folds
+  the whole list, in columns, into a closed accordion that stays open without JavaScript. The
+  markup of one group is the new `enrol_apply/groupkey_item` partial. Gates `GF1`-`GF4`.
+
 ## v2.0.1 (2026110509) - 2026-11-06
 
 ### Fixed

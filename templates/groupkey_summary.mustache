@@ -18,7 +18,9 @@
     @template enrol_apply/groupkey_summary
 
     The groups of a course that carry an enrolment key, under the instance setting that decides
-    whether such a key admits without review. The keys themselves are never in the context.
+    whether such a key admits without review, in a box as on the review page. The keys themselves
+    are never in the context. Past the threshold the list folds: a count, the groups that need
+    attention, and the whole list in an accordion, in columns (open without JavaScript).
 
     Context variables required for this template:
     * hasgroups boolean - whether any keyed group the reader may see is listed
@@ -33,6 +35,13 @@
       * isshadowed boolean - whether another group the reader may see shares this key and admits instead
       * shadowedby string - the name of that group, or empty
       * untypable boolean - whether the key starts or ends with a space
+    * fold boolean - whether there are more keyed groups than groupfilter::THRESHOLD, so the full list
+      folds into an accordion and only those needing attention stay outside it (RP-D18)
+    * foldsummary string - how many groups carry a key, shown when folded
+    * hasattention boolean, attention array - when folded, the groups whose key admits nobody now,
+      is shadowed or cannot be typed, each as one entry of groups
+    * attentionline string - the sentence above them
+    * showall string - the accordion's header
     * manageurl string - the course's groups page
 
     Example context (json):
@@ -47,38 +56,52 @@
             {"name": "Turma C", "hasseats": true, "nolimit": true, "members": 8, "seats": 0,
              "full": false, "isshadowed": true, "shadowedby": "Turma A", "untypable": false}
         ],
+        "fold": true,
+        "foldsummary": "3 groups carry an enrolment key.",
+        "hasattention": true,
+        "attention": [
+            {"name": "Turma B", "hasseats": true, "nolimit": false, "members": 20, "seats": 20,
+             "full": true, "isshadowed": false, "shadowedby": "", "untypable": false}
+        ],
+        "attentionline": "One of them needs your attention, listed here.",
+        "showall": "Show all 3 groups",
         "manageurl": "https://example.com/group/index.php?id=2"
     }
 }}
 <div class="enrol_apply-groupkeys">
     {{#hasgroups}}
-    <ul class="list-unstyled mb-1">
-        {{#groups}}
-        <li class="mb-1">
-            <span class="fw-bold">{{name}}</span>
-            {{#hasseats}}
-                {{#nolimit}}
-                    <span class="text-muted">&middot; {{#str}} groupseatsnolimit, enrol_apply, {{members}} {{/str}}</span>
-                {{/nolimit}}
-                {{^nolimit}}
-                    <span class="text-muted">&middot; {{#str}} groupseatsof, enrol_apply, { "members": {{members}}, "seats": {{seats}} } {{/str}}</span>
-                {{/nolimit}}
-                {{#full}}
-                    <span class="badge bg-warning text-dark">{{#str}} groupkeyadmitsnobody, enrol_apply {{/str}}</span>
-                {{/full}}
-            {{/hasseats}}
-            {{#isshadowed}}
-                <div class="small text-muted">{{#str}} groupkeyshadowed, enrol_apply, {{shadowedby}} {{/str}}</div>
-            {{/isshadowed}}
-            {{#untypable}}
-                <div class="small text-muted">{{#str}} groupkeyuntypable, enrol_apply {{/str}}</div>
-            {{/untypable}}
-        </li>
-        {{/groups}}
+    {{^fold}}
+    <ul class="list-unstyled mb-2">
+        {{#groups}}<li class="mb-1">{{> enrol_apply/groupkey_item }}</li>{{/groups}}
     </ul>
+    {{/fold}}
+    {{#fold}}
+    <p class="mb-2">{{foldsummary}}{{#hasattention}} {{attentionline}}{{/hasattention}}</p>
+    {{#hasattention}}
+    <ul class="list-unstyled mb-2" data-region="groupkeys-attention">
+        {{#attention}}<li class="mb-1">{{> enrol_apply/groupkey_item }}</li>{{/attention}}
+    </ul>
+    {{/hasattention}}
+    <div class="accordion enrol_apply-accordion mb-2" id="enrol_apply_groupkeys">
+        <div class="accordion-item">
+            <h3 class="accordion-header" id="enrol_apply_groupkeys_heading">
+                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                    data-bs-target="#enrol_apply_groupkeys_body" aria-controls="enrol_apply_groupkeys_body"
+                    aria-expanded="false">{{showall}}</button>
+            </h3>
+            <div class="accordion-collapse collapse" id="enrol_apply_groupkeys_body" aria-labelledby="enrol_apply_groupkeys_heading">
+                <div class="accordion-body">
+                    <ul class="enrol_apply-groupkeycolumns list-unstyled mb-0">
+                        {{#groups}}<li class="mb-1">{{> enrol_apply/groupkey_item }}</li>{{/groups}}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+    {{/fold}}
     {{/hasgroups}}
     {{^haskeys}}
-    <div class="alert alert-warning mb-1">{{#str}} groupkeysnone, enrol_apply {{/str}}</div>
+    <div class="alert alert-warning mb-2">{{#str}} groupkeysnone, enrol_apply {{/str}}</div>
     {{/haskeys}}
     <a href="{{manageurl}}">{{#str}} groupkeysmanage, enrol_apply {{/str}}</a>
 </div>

@@ -258,11 +258,15 @@ Em qualquer modo os dados obrigatórios e as perguntas continuam sendo pedidos, 
 $string['groupkeys_off'] = 'Nada: toda inscrição passa por análise';
 $string['groupkeys_required'] = 'Só com chave: uma chave válida inscreve na hora, e ninguém se inscreve sem ela';
 $string['groupkeys_review'] = 'Só com chave: uma chave válida envia a inscrição para análise';
+$string['groupkeysattention'] = '{$a} deles pedem sua atenção e aparecem aqui.';
+$string['groupkeysattentionone'] = 'Um deles pede sua atenção e aparece aqui.';
+$string['groupkeyscount'] = '{$a} grupos têm chave de inscrição.';
 $string['groupkeyselfkeys'] = 'Este curso também tem autoinscrição com chaves de grupo: as mesmas chaves inscrevem lá sem estas perguntas.';
 $string['groupkeyshadowed'] = 'Mesma chave de {$a}, que é quem admite.';
 $string['groupkeysingroups'] = 'Grupos com chave de inscrição';
 $string['groupkeysmanage'] = 'Gerenciar grupos e suas chaves';
 $string['groupkeysnone'] = 'Nenhum grupo deste curso tem chave de inscrição ainda, então todas as inscrições continuam passando por análise.';
+$string['groupkeysshowall'] = 'Ver os {$a} grupos';
 $string['groupkeyuntypable'] = 'A chave começa ou termina com espaço, que ninguém consegue digitar no formulário de inscrição.';
 $string['groupkeyunusualspace'] = 'Sua chave começa ou termina com um espaço incomum, como costuma acontecer com uma chave copiada. Digite-a de novo, ou cole sem o espaço.';
 $string['groupscopeapprovalrefused'] = 'Você só pode aprovar as solicitações dos seus próprios grupos: esta pertence a outro grupo ou foi feita sem chave de grupo.';
