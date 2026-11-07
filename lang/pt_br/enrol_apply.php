@@ -155,6 +155,7 @@ $string['confirmmailsubject_default'] = 'Sua solicitação de inscrição em {$a
 $string['confirmmailsubject_desc'] = 'Deixe em branco para usar o texto que este plugin já traz.';
 $string['confirmusers'] = 'Confirmar inscrições';
 $string['confirmusers_desc'] = 'As solicitações com o selo de lista de espera foram adiadas.';
+$string['confirmusersinstance'] = 'Confirmar inscrições: {$a}';
 $string['coursename'] = 'Curso';
 $string['custom_label'] = 'Rótulo personalizado';
 $string['custom_label_help'] = 'Encabeça a caixa de comentário do solicitante e a coluna de comentário na fila de aprovação e na página de revisão, de modo que a pergunta feita e as respostas lidas usem a mesma redação. Não tem efeito a menos que \'Campo de comentário\' esteja como Sim. Deixe em branco para usar a redação padrão.';

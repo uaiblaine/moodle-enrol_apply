@@ -145,7 +145,9 @@ mails, who gets notified about new applications, the expiry behaviour, and the d
 applied to newly created instances.
 
 Per course, add the "Course enrol confirmation" method under Participants → Enrolment
-methods. The pending queue for a course is reachable from the enrolment methods page;
+methods. The pending queue for a course is reachable from the enrolment methods page and,
+for whoever may decide or view applications in the course (a moderator who cannot edit
+enrolment methods included), from the course's Reports page;
 the site-wide queue is at Site administration → Courses → Manage enrolment applications
 for site administrators, and at `/enrol/apply/manage.php` for anyone else holding
 `enrol/apply:manageapplications` at system level.

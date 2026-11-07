@@ -280,6 +280,21 @@ final class queue {
     }
 
     /**
+     * Whether the current user may open one instance's queue, manage.php?id=, in this course.
+     *
+     * The test listing_scope() applies to a course queue, held apart so that a link to that queue
+     * ({@see enrol_apply_extend_navigation_course()}) is offered to exactly the readers the page
+     * admits: the deciding capability or the viewing one, in the course. Neither the mentor's
+     * user-context delegation nor the site-wide queue counts here; both list other pages.
+     *
+     * @param context_course $context Course the instance belongs to.
+     * @return bool True when the instance's queue would open for the current user.
+     */
+    public static function may_list_instance(context_course $context): bool {
+        return has_capability(groupscope::DECIDE, $context) || has_capability(groupscope::VIEW, $context);
+    }
+
+    /**
      * Everything the applications LISTING is scoped by, derived from one enrol instance id.
      *
      * The counterpart of scope() above: scope() asks which queue an operator reviewing an
@@ -360,7 +375,7 @@ final class queue {
                    see all of; an empty array lists nothing and the page says why (S4). */
                 'groups' => groupscope::narrowed_to((int) $instance->courseid, (int) $USER->id, $capability),
                 'identitycontext' => $context,
-                'allowed' => $candecide || has_capability(groupscope::VIEW, $context),
+                'allowed' => self::may_list_instance($context),
                 'candecide' => $candecide,
                 'url' => new moodle_url('/enrol/apply/manage.php', ['id' => (int) $instance->id]),
             ];
