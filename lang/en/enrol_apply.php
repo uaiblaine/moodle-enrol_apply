@@ -157,6 +157,7 @@ $string['confirmmailsubject_default'] = 'Your enrolment application for {$a} was
 $string['confirmmailsubject_desc'] = 'Leave empty to use the wording this plugin ships.';
 $string['confirmusers'] = 'Enrol Confirm';
 $string['confirmusers_desc'] = 'Applications badged as on the waiting list have been deferred.';
+$string['confirmusersinstance'] = 'Enrol Confirm: {$a}';
 $string['coursename'] = 'Course';
 $string['custom_label'] = 'Custom label';
 $string['custom_label_help'] = 'Heads the applicant\'s comment box, and the comment column on the approval queue and the review page, so the question you ask and the answers you read carry the same wording. It has no effect unless \'Commentary field\' is set to Yes. Leave it empty to use the shipped wording.';

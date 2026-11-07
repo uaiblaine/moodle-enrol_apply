@@ -4,7 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased (2026110700)
+## Unreleased (2026110701)
+
+### Added
+
+- **The approval queue is listed among the course's reports** (Reports, `/report/view.php`), one
+  link per apply instance, named by the instance when the course has several. It is offered to
+  whoever `manage.php?id=` admits, the deciding or the viewing capability in the course, so a
+  moderator who cannot edit enrolment methods, and so never sees the method's node, reaches the
+  queue without typing its url. Where core removed an empty Reports node, it is put back on
+  core's own condition, `moodle/site:viewreports`.
 
 ### Changed
 

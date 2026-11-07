@@ -1469,7 +1469,7 @@ class enrol_apply_plugin extends enrol_plugin {
         }
 
         /* Added here, the per-instance hook enrol_add_course_navigation() calls, rather than
-           from a file-scope enrol_apply_extend_navigation_course(), which fires for every
+           from enrol_apply_extend_navigation_course() (the queue's Reports link), which fires for every
            course whether or not it has an apply instance. *_extend_settings_navigation() is
            not dispatched for enrol plugins at all. */
         if (has_capability('enrol/apply:viewreports', $context)) {
@@ -2616,4 +2616,67 @@ function enrol_apply_get_fontawesome_icon_map() {
     return [
         'enrol_apply:key' => 'fa-key',
     ];
+}
+
+/**
+ * Lists each apply instance's queue among the course's reports, for whoever may open it.
+ *
+ * The queue is otherwise reached through the enrolment methods node, which core shows only to
+ * holders of moodle/course:enrolreview: a moderator who decides or views applications without
+ * editing enrolment methods would have no way to it but its url. The Reports node is built
+ * after enrol_add_course_navigation() runs, which is why this is a file-scope callback rather
+ * than part of enrol_apply_plugin::add_course_navigation().
+ *
+ * The link is offered on {@see \enrol_apply\local\queue::may_list_instance()}, the test
+ * manage.php?id= applies, so it never leads to a refusal. Core removes an empty Reports node
+ * before this runs; it is put back on core's own condition, moodle/site:viewreports.
+ *
+ * @param navigation_node $parentnode The course administration node.
+ * @param stdClass $course The course.
+ * @param context_course $context The course context.
+ * @return void
+ */
+function enrol_apply_extend_navigation_course(navigation_node $parentnode, stdClass $course, context_course $context): void {
+    if (!\enrol_apply\local\queue::may_list_instance($context)) {
+        return;
+    }
+
+    $instances = array_values(array_filter(
+        enrol_get_instances((int) $course->id, false),
+        static fn(stdClass $instance): bool => $instance->enrol === 'apply'
+    ));
+    if (!$instances) {
+        return;
+    }
+
+    $reports = $parentnode->get('coursereports', navigation_node::TYPE_CONTAINER);
+    if (!$reports) {
+        if (!has_capability('moodle/site:viewreports', $context)) {
+            return;
+        }
+        $reports = $parentnode->add(
+            get_string('reports'),
+            new moodle_url('/report/view.php', ['courseid' => (int) $course->id]),
+            navigation_node::TYPE_CONTAINER,
+            null,
+            'coursereports',
+            new pix_icon('i/stats', '')
+        );
+    }
+
+    $plugin = enrol_get_plugin('apply');
+    foreach ($instances as $instance) {
+        // One instance needs no name; several are told apart by theirs.
+        $label = count($instances) === 1
+            ? get_string('confirmusers', 'enrol_apply')
+            : get_string('confirmusersinstance', 'enrol_apply', $plugin->get_instance_name($instance));
+        $reports->add(
+            $label,
+            new moodle_url('/enrol/apply/manage.php', ['id' => (int) $instance->id]),
+            navigation_node::TYPE_SETTING,
+            null,
+            'enrol_apply_queue_' . (int) $instance->id,
+            new pix_icon('i/enrolusers', '')
+        );
+    }
 }
