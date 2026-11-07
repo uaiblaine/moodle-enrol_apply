@@ -92,11 +92,13 @@ classes/bulk/                the participants page's three bulk decisions
 report.php, classes/reportbuilder/  the course report and a custom-report datasource, both over the durable record
 renderer.php                 page rendering plus the notification e-mail body
 templates/                   manage, manage_actions, queue_capacity, queue_chip, queue_filters, review
-                             (the funnel: review_summary, review_signals, review_outcome,
-                             review_evidence), review_actions, decision_controls (the queue's),
+                             (left column: review_summary, review_rules, review_history,
+                             review_evidence, review_outcome; right: review_applicant),
+                             review_actions, decision_controls (the queue's),
                              application_navigation, application_notification, profile_offer,
                              profile_missing
-amd/src/review.js            keeps the review page's outcome sentence in step with the ticks
+amd/src/review.js            keeps the review page's outcome sentence in step with the ticks, and
+                             opens the earlier applications in a core/modal
 classes/hook_callbacks.php   reconciles approvals made outside confirm_enrolment()
 classes/local/applicantstate.php  what an applicant is told about their OWN application
 classes/local/applications.php  mentee lookup shared by the queue
@@ -320,9 +322,13 @@ backup/                      group mappings, comments and the durable trail, see
   WRITE path only. Measured on m502 with a crafted envelope: the panel rendered the applicant's
   **password hash**. The `c_<id>` branch reads `{user_info_data}` directly, past every
   `PROFILE_VISIBLE_*` gate core applies on its own profile page. And the masking above does not
-  help: `visible_keys()` returns `ALL_FIELDS` for any teacher or manager, so the key filter is
-  skipped entirely and nothing has been "judged visible" at all — which is exactly what the
-  comment justifying the read claimed. The Report Builder surface never reads the live profile
+  help: `visible_keys()` returns `ALL_FIELDS` whenever the reader holds
+  `moodle/user:viewalldetails` and nothing is excepted (it excepts the identity columns
+  `showuseridentity` does not name, `hiddenuserfields` without the override and hidden custom
+  fields), so for a teacher or manager on a permissive site the key filter is skipped entirely and
+  nothing has been "judged visible" at all — which is exactly what the comment justifying the read
+  claimed. A test whose tile must show an identity column (department, institution, ...) has to
+  name it in `showuseridentity` first. The Report Builder surface never reads the live profile
   either; that is now true of both doors onto this record.
 
   Masking is `reportbuilder\local\formatters\submission::visible_keys(context_course::instance(...))`,
@@ -330,12 +336,16 @@ backup/                      group mappings, comments and the durable trail, see
   fields** — they hold nothing in the course — which is the stricter reading of a real question
   rather than an obviously right answer. Withheld rows are dropped whether or not they hold a
   value: a marker appearing only where there is data is a presence oracle. The masking governs
-  the PANEL, not the page: the identity line beside it DOES read the live profile, through
+  the PANEL, not the page: the applicant's card beside it DOES read the live profile, through
   `\core_user\fields::get_identity_fields()` and `for_identity()->get_sql()`, for the fields the
   site named and this reader may see (the e-mail address included; see "One identity rule"
   below). That read is gated by core's own helper and never takes a stored snapshot key, which is
   the distinction: what was fixed was handing an archive-controlled key to a live column with no
-  allowlist, not the idea of reading a profile at all.
+  allowlist, not the idea of reading a profile at all. The tiles' "required" flag is the same
+  distinction from the other side: it is read live, from the instance's CURRENT definitions keyed
+  by the stored key (`renderer::required_keys()`: the profile fields' per-instance flag, each
+  question's configdata), because it is metadata and never dereferences a value. Gates
+  `RQ1`-`RQ3`.
 
   **Field keys are `s_<column>` and `c_<id>`, not `standard:<column>`.** Build them with
   `fields::standard_key()`. A hand-written prefix fails two ways at once and neither is loud:
@@ -1244,17 +1254,24 @@ backup/                      group mappings, comments and the durable trail, see
   see it here either. That is the owner's decision (2026-08-31) and it is a real behaviour change:
   the profile link is the route to contact details for a reader entitled to them. Gate `AR`.
 
-  **The earlier-applications panel is gated on `enrol/apply:viewreports`, not on the capability
-  that opens the page.** What somebody applied for and what was decided is the disclosure the
-  report exists to control, and an editing teacher holding only `manageapplications` is not granted
-  it by archetype. A reader without it gets no panel rather than an empty one - a heading that
-  appears only when there IS history is itself a disclosure. Each row is worded by the REPORT's own
-  outcome formatter, never the record's bare status: a record says APPROVED for ever while the
-  enrolment it names may since have been suspended or removed by a route this plugin never sees.
-  Gate `AQ`.
+  **The earlier applications are gated on `enrol/apply:viewreports`, not on the capability that
+  opens the page.** What somebody applied for and what was decided is the disclosure the report
+  exists to control, and an editing teacher holding only `manageapplications` is not granted it by
+  archetype. A reader without it gets no line, no button and no list rather than an empty one - a
+  heading that appears only when there IS history is itself a disclosure. Each record shows only
+  what a course-report column shows the same reader, through the report's own formatters: the
+  outcome (worded from the record AND the live enrolment, never the record's bare status: a record
+  says APPROVED for ever while the enrolment it names may since have been suspended or removed by
+  a route this plugin never sees), the dates, the decider, the key group and the joined groups
+  (`key_group()`/`joined_groups()`, so core's group visibility applies) and the decision note.
+  **Never `outcomemessage`**: the report does not show it, so `queue::prior_applications()` does
+  not select it. The list is a server-rendered region (`review_history`) that `amd/src/review.js`
+  copies into a core/modal; without JavaScript it is shown in place. Gates `AQ`, `SC56`,
+  `HM1`-`HM3`.
 
 - **The applicant's profile is linked only where `user/view.php` would open it**
-  (`\enrol_apply\local\profilelink`): the review page's "View profile" and the queue's name cell.
+  (`\enrol_apply\local\profilelink`): the review page's "View full profile" on the applicant's
+  card and the queue's name cell.
   Core refuses many readers this plugin admits, and the reachable one is the commonest: a
   moderator narrowed by separate groups, because a pending applicant is in no group yet and
   `can_view_profile()` hides a user who shares no group with the reader. The helper takes

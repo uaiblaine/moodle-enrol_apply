@@ -36,7 +36,7 @@ Feature: One application read as a decision funnel
     And I log in as "teacher1"
     And I am on the "Course 1" "enrolled users" page
     When I click on "Decide this application" "link" in the "Student 1" "table_row"
-    Then I should see "What weighs on the decision"
+    Then I should see "Awaiting a decision for"
     And I should see "On confirming"
     And I should see "Student 1 joins the course as Student and the group Turma A, and is notified of the approval."
     And I click on "Adjust groups and role" "text"
@@ -63,7 +63,7 @@ Feature: One application read as a decision funnel
     Then I should see "Read only"
     And I should see "You can view this application but not decide it."
     And I should see "Key accepted: Turma A"
-    And I should see "What weighs on the decision"
+    And I should see "Awaiting a decision for"
     And I should not see "On confirming"
     And I should not see "Confirm this application"
 

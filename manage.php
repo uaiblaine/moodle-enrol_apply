@@ -88,7 +88,10 @@ if ($userenrol) {
     $instance = $DB->get_record('enrol', ['id' => $application->enrolid, 'enrol' => 'apply'], '*', MUST_EXIST);
     $context = \enrol_apply\local\queue::require_review_access($application);
     $manageurlparams['userenrol'] = $userenrol;
-    $pageheading = fullname($applicant);
+    /* The heading names the course, as every course page does; the applicant is named by the
+       breadcrumb and the title, which a screen reader meets before the page's two columns, and
+       by the card. Escaped, because set_heading() feeds a triple stash. */
+    $pageheading = \enrol_apply\local\queue::review_heading($application);
 
     /* Where a decision sends the operator back to and which applications the previous and next
        links walk must never disagree, so both come from queue::scope(), which derives the queue
