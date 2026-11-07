@@ -17,13 +17,13 @@
 {{!
     @template enrol_apply/review_summary
 
-    The strip that opens the review page: who applied, in what state, how, through which method
-    and how long ago. It answers the decider's first question before any sentence is read.
+    The strip that heads the left column: the state on the first line, the wait on the second.
 
     Every chip carries text beside its colour and icon; the status chip's label is visually
-    hidden so a screen reader hears "Status: Deferred" and the eye reads the chip. The label and
-    the value stay on one line of this template, because a Behat "I should see" matches the raw
-    text.
+    hidden so a screen reader hears "Status: Deferred" and the eye reads the chip. The wait is one
+    neutral colour whatever its length: the plugin sees time, the decider judges it. Each label
+    and its value stay on one line of this template, because a Behat "I should see" matches the
+    raw text.
 
     Context variables required for this template:
     * readonly boolean - whether the reader may only look, which earns the read-only chip
@@ -31,25 +31,14 @@
     * statuslabel string - the visually hidden label of the status chip
     * status string - whether the application is pending or on the waiting list
     * iswaiting boolean - whether it is on the waiting list, which picks the chip's icon
-    * statuschipclass string - the chip's background and text colour classes, a literal pair
+    * statuschipclass string - the chip's own class, which styles.css pairs with a text colour
     * haskeychip boolean - whether the applicant presented a group enrolment key
     * keychip string - what that key did, naming its group to a reader who may see it; plain
       spelling, escaped by the double stash
-    * haswaited boolean - whether the application date is known
-    * waited string - how long it has waited, with the date
-    * methodlabel string - label of the enrolment method
-    * methodname string - the method's name, plain spelling
-    * courselabel string - label of the course
-    * coursename string - full name of the course applied for, plain spelling
-    * courseurl string - link to the course
-    * hasidentity boolean - whether this reader may see any identifying detail of the applicant
-    * identity array - one entry per identity field the site named and this reader may see, each
-      carrying a label and a value, both in the PLAIN spelling; the e-mail address is one of
-      these when showuseridentity names it and absent when it does not
-    * hasprofile boolean - whether user/view.php would open the applicant's profile for this reader
-    * profileurl string - the applicant's profile in this course, empty without hasprofile
-    * profilelabel string - text of the profile link, a plain link rather than a button: the
-      heaviest control in the first block should not be the one that leaves the page
+    * haswaited boolean - whether the wait is known
+    * waitlabel string - "Awaiting a decision for", or the waiting list's own wording
+    * waited string - how long, in words
+    * hasapplied boolean, appliedon string - when it was applied for
     * hasdecision boolean - whether a colleague has already decided this one, which today means
       it was deferred
     * decisionlabel string - heading of that line
@@ -70,24 +59,14 @@
         "statuslabel": "Status",
         "status": "Deferred",
         "iswaiting": true,
-        "statuschipclass": "bg-info text-white",
+        "statuschipclass": "enrol_apply-statuschip-deferred",
         "haskeychip": true,
         "keychip": "Key accepted: Turma A",
         "haswaited": true,
-        "waited": "Applied 2 days 3 hours ago (03/11/26, 09:14)",
-        "methodlabel": "Method",
-        "methodname": "Application with a group key",
-        "courselabel": "Course",
-        "coursename": "R&D < Team induction",
-        "courseurl": "https://example.com/course/view.php?id=7",
-        "hasidentity": true,
-        "identity": [
-            {"label": "Username", "value": "jsa"},
-            {"label": "ID number", "value": "2026-0071"}
-        ],
-        "hasprofile": true,
-        "profileurl": "https://example.com/user/view.php?id=5&course=7",
-        "profilelabel": "View profile",
+        "waitlabel": "On the waiting list for",
+        "waited": "2 days 3 hours",
+        "hasapplied": true,
+        "appliedon": "Applied on 03/11/26, 09:14",
         "hasdecision": true,
         "decisionlabel": "The decision so far",
         "decision": "Deferred by Ana Souza on 10/08/26, 14:02.",
@@ -98,27 +77,24 @@
         "decisionnote": "Second intake opens in September."
     }
 }}
-<div class="enrol_apply-reviewstrip enrol_apply-box mb-3">
-    <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+<div class="enrol_apply-reviewstrip enrol_apply-box">
+    <div class="enrol_apply-stripchips">
         {{#readonly}}<span class="badge bg-secondary text-dark enrol_apply-chip-readonly">{{#pix}}t/hide, core{{/pix}}{{readonlylabel}}</span>{{/readonly}}
         <span class="badge {{statuschipclass}} enrol_apply-statuschip">{{^iswaiting}}<span class="enrol_apply-statusdot"></span>{{/iswaiting}}{{#iswaiting}}{{#pix}}i/duration, core{{/pix}}{{/iswaiting}}<span class="visually-hidden">{{statuslabel}}: </span>{{status}}</span>
-        {{#haskeychip}}<span class="badge bg-primary text-white enrol_apply-keychip">{{#pix}}key, enrol_apply{{/pix}}{{keychip}}</span>{{/haskeychip}}
-        {{#haswaited}}<span class="small text-body-secondary">{{waited}}</span>{{/haswaited}}
+        {{#haskeychip}}<span class="badge enrol_apply-keychip">{{#pix}}key, enrol_apply{{/pix}}{{keychip}}</span>{{/haskeychip}}
     </div>
-    <div class="d-flex flex-wrap align-items-baseline gap-3">
-        <dl class="enrol_apply-identity small text-body-secondary mb-0 d-flex flex-wrap gap-3">
-            <div><dt class="d-inline fw-normal">{{methodlabel}}:</dt> <dd class="d-inline ms-1">{{methodname}}</dd></div>
-            <div><dt class="d-inline fw-normal">{{courselabel}}:</dt> <dd class="d-inline ms-1"><a href="{{courseurl}}">{{coursename}}</a></dd></div>
-            {{#hasidentity}}
-                {{#identity}}
-                    <div><dt class="d-inline fw-normal">{{label}}:</dt> <dd class="d-inline ms-1">{{value}}</dd></div>
-                {{/identity}}
-            {{/hasidentity}}
-        </dl>
-        {{#hasprofile}}<a class="small" href="{{profileurl}}">{{profilelabel}}</a>{{/hasprofile}}
-    </div>
+    {{#haswaited}}
+        <div class="enrol_apply-wait">
+            <span class="enrol_apply-waiticon">{{#pix}}i/calendareventtime, core{{/pix}}</span>
+            <div class="enrol_apply-waittext">
+                <div class="enrol_apply-waitlabel">{{waitlabel}}</div>
+                <div class="enrol_apply-waitvalue">{{waited}}</div>
+            </div>
+            {{#hasapplied}}<div class="enrol_apply-waitsince">{{appliedon}}</div>{{/hasapplied}}
+        </div>
+    {{/haswaited}}
     {{#hasdecision}}
-        <div class="alert alert-info mt-2 mb-0" role="status">
+        <div class="alert alert-info mt-3 mb-0" role="status">
             <strong>{{decisionlabel}}</strong> {{decision}}
             {{#hasdecisionmessage}}<div class="mt-1">{{{decisionmessage}}}</div>{{/hasdecisionmessage}}
             {{#hasdecisionnote}}

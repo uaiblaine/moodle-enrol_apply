@@ -237,15 +237,69 @@ body.path-enrol-apply:not(.jsenabled) #page.drawers {
     overflow-x: auto;
 }
 
-/* The review page, read as a decision funnel. Its tokens are declared on its own root, which is
-   the only root it paints: the sticky footer stays inside the form and the cancel confirmation is
-   a page of its own. */
-.enrol_apply-review {
+/* The review page (Visual 1). Its tokens are declared on every root it paints: the page's own
+   wrapper, its navigation above the form, and the history list, which core/modal copies into a
+   dialogue appended to body. The sticky footer stays inside the form and the cancel confirmation
+   is a page of its own.
+
+   The accents are mixed from the theme's primary colour and its own surfaces, so a site's
+   institutional colour reaches them and Bootstrap's dark colour mode turns them dark with the
+   page. color-mix() is used only inside custom properties, read through var(). */
+.enrol_apply-review,
+.enrol_apply-applicationnav,
+.enrol_apply-timeline {
     --enrol-apply-line: var(--bs-border-color, #dee2e6);
     --enrol-apply-muted: var(--bs-secondary-color, #6c757d);
+    --enrol-apply-ink: var(--bs-body-color, #1d2125);
+    --enrol-apply-surface: var(--bs-card-bg, var(--bs-body-bg, #fff));
     --enrol-apply-fill: var(--bs-primary, var(--primary, #0f6cbf));
     --enrol-apply-warn: var(--bs-warning, var(--warning, #f0ad4e));
     --enrol-apply-focus: var(--bs-focus-ring-color, var(--enrol-apply-fill));
+    --enrol-apply-soft: color-mix(in srgb, var(--enrol-apply-fill) 6%, var(--bs-tertiary-bg, #f8f9fa));
+    --enrol-apply-accent: color-mix(in srgb, var(--enrol-apply-fill) 16%, var(--enrol-apply-surface));
+    --enrol-apply-accentink: color-mix(in srgb, var(--enrol-apply-fill) 70%, var(--enrol-apply-ink));
+    --enrol-apply-accentsoft: color-mix(in srgb, var(--enrol-apply-fill) 7%, var(--enrol-apply-surface));
+    /* "On confirming"'s outline: the theme's orange darkened towards the text colour, which keeps
+       it dark on a light page and light on a dark one. */
+    --enrol-apply-outcomeline: color-mix(in srgb, var(--bs-orange, #fd7e14) 70%, var(--enrol-apply-ink));
+    /* Every section title of the left column starts this far in from the column's edge. */
+    --enrol-apply-inset: 1.5rem;
+}
+
+/* The page's root carries Bootstrap's card class for one reason: a theme states its card surface in
+   --bs-card-bg, which Bootstrap defines on .card only, and the blocks below are cards. Some themes
+   tint the page itself (theme_dimensions sets --bs-body-bg to the tertiary grey), so the body
+   colour cannot stand for a card. The root itself draws nothing of a card. */
+.enrol_apply-review.card {
+    background-color: transparent;
+    border: 0;
+    color: var(--enrol-apply-ink);
+    border-radius: 0;
+    box-shadow: none;
+    display: block;
+}
+
+/* The navigation: the way back to the queue as a plain link with Moodle's own hover, and next
+   as the page's one dark pill. The pill reads the button's own variables, which outrank .btn-link
+   whatever the order of the sheets. */
+.enrol_apply-applicationnav {
+    margin-bottom: 1.25rem;
+}
+
+.enrol_apply-applicationnav .enrol_apply-navnext {
+    --bs-btn-bg: var(--enrol-apply-ink);
+    --bs-btn-color: var(--enrol-apply-surface);
+    --bs-btn-border-color: var(--enrol-apply-ink);
+    --bs-btn-hover-bg: var(--enrol-apply-accentink);
+    --bs-btn-hover-color: var(--enrol-apply-surface);
+    --bs-btn-hover-border-color: var(--enrol-apply-accentink);
+    --bs-btn-active-bg: var(--enrol-apply-accentink);
+    --bs-btn-active-color: var(--enrol-apply-surface);
+    --bs-btn-active-border-color: var(--enrol-apply-accentink);
+    border-radius: var(--bs-border-radius-pill, 50rem);
+    padding-left: 1rem;
+    padding-right: 1rem;
+    text-decoration: none;
 }
 
 /* On wide screens the button reads its full label; the one-word label is the phone's. */
@@ -289,24 +343,9 @@ body.path-enrol-apply:not(.jsenabled) #page.drawers {
     }
 }
 
-/* A button and its consequence, stacked: one button line and one small line fit the bar's 80px. */
+/* Each decision keeps its width: the row scrolls sideways rather than squeezing a label. */
 .enrol_apply-reviewaction {
-    align-items: flex-start;
-    display: flex;
     flex: 0 0 auto;
-    flex-direction: column;
-}
-
-.enrol_apply-reviewaction:last-child {
-    align-items: flex-end;
-}
-
-.enrol_apply-consequence {
-    color: var(--enrol-apply-muted);
-    font-size: 0.75rem;
-    line-height: 1.2;
-    margin-top: 0.2rem;
-    white-space: nowrap;
 }
 
 /* The awaiting chip's dot: the shape that tells it from the deferred chip's hourglass. It takes
@@ -322,27 +361,467 @@ body.path-enrol-apply:not(.jsenabled) #page.drawers {
     width: 0.5rem;
 }
 
-/* Each block of the funnel and of the evidence column is a box of its own (Concept A): the theme's
-   border colour and radius, so the page reads as the course pages around it do. */
+/* Each block is a soft card on the page's own background: no frame, a large radius and the
+   theme's small shadow. */
 .enrol_apply-review .enrol_apply-box {
-    background-color: var(--bs-body-bg, #fff);
-    border: 1px solid var(--enrol-apply-line);
-    color: var(--bs-body-color, #212529);
-    border-radius: var(--bs-border-radius-lg, 0.5rem);
-    padding: 0.75rem 1rem;
+    background-color: var(--enrol-apply-surface);
+    border: 0;
+    border-radius: 28px;
+    box-shadow: var(--bs-box-shadow-sm, 0 0.125rem 0.25rem transparent);
+    color: var(--enrol-apply-ink);
+    padding: 1.25rem var(--enrol-apply-inset);
 }
 
-/* "On confirming" is the card that says what the decision does, marked by the theme's primary
-   colour on its leading edge. Two classes, because .card is compiled after this sheet. */
+/* The left column's blocks: 1.75rem apart; "Comment" and "Submitted details" 15px further from
+   what precedes them, "On confirming" 10px further (decision 12). Siblings only, so a block's
+   own headings keep their margins, and an accordion header (an h2 too) keeps none. */
+.enrol_apply-reviewfunnel > * {
+    margin-bottom: 0;
+    margin-top: 0;
+}
+
+.enrol_apply-reviewfunnel > * + * {
+    margin-top: 1.75rem;
+}
+
+.enrol_apply-reviewfunnel > * + .enrol_apply-reviewcomment,
+.enrol_apply-reviewfunnel > * + .enrol_apply-reviewdetails {
+    margin-top: calc(1.5rem + 15px);
+}
+
+.enrol_apply-reviewfunnel > * + .enrol_apply-outcome {
+    margin-top: calc(1.75rem + 10px);
+}
+
+/* On a phone the card follows the left column's blocks. */
+@media (max-width: 991.98px) {
+    .enrol_apply-reviewaside {
+        margin-top: 1.75rem;
+    }
+}
+
+/* One title style for every section of the left column (decision 11), the theme's font. */
+.enrol_apply-review .enrol_apply-blocktitle,
+.enrol_apply-review .enrol_apply-write .enrol_apply-accordiontitle {
+    font-size: 1.125rem;
+    font-weight: 700;
+    line-height: 1.3;
+    margin-bottom: 0.6rem;
+}
+
+/* An unframed section's title alone is inset, so it starts where a framed one's does. */
+.enrol_apply-reviewcomment > .enrol_apply-blocktitle,
+.enrol_apply-reviewdetails > .enrol_apply-blockhead,
+.enrol_apply-historyregion > .enrol_apply-blocktitle {
+    padding-left: var(--enrol-apply-inset);
+}
+
+.enrol_apply-blockhead {
+    align-items: baseline;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 1rem;
+    justify-content: space-between;
+    margin-bottom: 0.6rem;
+}
+
+.enrol_apply-blockhead .enrol_apply-blocktitle {
+    margin-bottom: 0;
+}
+
+.enrol_apply-blockcount {
+    color: var(--enrol-apply-muted);
+    font-size: 0.875rem;
+}
+
+.enrol_apply-requiredcount {
+    color: var(--enrol-apply-fill);
+    font-weight: 600;
+}
+
+/* The strip: the chips on the first line, the wait on the second. */
+.enrol_apply-stripchips {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.enrol_apply-reviewstrip .badge {
+    border-radius: var(--bs-border-radius-pill, 50rem);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    padding: 0.5em 0.9em;
+}
+
+.enrol_apply-reviewstrip .enrol_apply-statuschip-pending {
+    background-color: var(--bs-warning-bg-subtle, #fff3cd);
+    color: var(--enrol-apply-ink);
+}
+
+.enrol_apply-reviewstrip .enrol_apply-statuschip-deferred {
+    background-color: var(--bs-info-bg-subtle, #cff4fc);
+    color: var(--enrol-apply-ink);
+}
+
+.enrol_apply-reviewstrip .enrol_apply-keychip {
+    background-color: var(--enrol-apply-ink);
+    color: var(--enrol-apply-surface);
+}
+
+.enrol_apply-wait {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 1rem;
+    margin-top: 0.75rem;
+}
+
+/* One neutral colour whatever the wait (decision 10). */
+.enrol_apply-waiticon {
+    align-items: center;
+    background-color: var(--enrol-apply-accent);
+    border-radius: 50%;
+    color: var(--enrol-apply-accentink);
+    display: inline-flex;
+    flex: 0 0 auto;
+    font-size: 1.25rem;
+    height: 3.25rem;
+    justify-content: center;
+    width: 3.25rem;
+}
+
+.enrol_apply-waiticon .icon {
+    margin: 0;
+}
+
+.enrol_apply-waitlabel {
+    color: var(--enrol-apply-muted);
+    font-size: 0.8125rem;
+}
+
+.enrol_apply-waitvalue {
+    font-size: 2.25rem;
+    font-variant-numeric: tabular-nums;
+    font-weight: 300;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+}
+
+.enrol_apply-waitsince {
+    color: var(--enrol-apply-muted);
+    font-size: 0.875rem;
+    margin-left: auto;
+}
+
+/* "Rules to observe": one meter per line, so a label and its count never wrap. */
+.enrol_apply-meters {
+    display: grid;
+    gap: 0.9rem;
+    grid-template-columns: 1fr;
+}
+
+.enrol_apply-meterhead {
+    display: flex;
+    font-size: 0.9375rem;
+    gap: 0.5rem;
+    justify-content: space-between;
+}
+
+.enrol_apply-metercount {
+    background-color: var(--enrol-apply-soft);
+    border-radius: var(--bs-border-radius-pill, 50rem);
+    color: var(--enrol-apply-ink);
+    font-size: 0.8125rem;
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    padding: 0.1rem 0.6rem;
+    white-space: nowrap;
+}
+
+/* Bootstrap's progress look at two thirds of the earlier pill's height; the bars inside take
+   their colour and stripes from Bootstrap's own classes. */
+.enrol_apply-review .enrol_apply-meterbar {
+    height: 1.1667rem;
+    margin: 0.5rem 0 0.4rem;
+}
+
+.enrol_apply-meterafter {
+    color: var(--enrol-apply-muted);
+    font-size: 0.8125rem;
+}
+
+.enrol_apply-meterafter-danger {
+    color: var(--bs-danger-text-emphasis, #58151c);
+    font-weight: 600;
+}
+
+.enrol_apply-rulefact {
+    align-items: flex-start;
+    display: flex;
+    font-size: 0.9375rem;
+    gap: 0.5rem;
+    margin: 0;
+}
+
+.enrol_apply-meters + .enrol_apply-rulefact {
+    border-top: 1px solid var(--enrol-apply-line);
+    margin-top: 1rem;
+    padding-top: 1rem;
+}
+
+.enrol_apply-rulefact + .enrol_apply-rulefact {
+    margin-top: 0.5rem;
+}
+
+.enrol_apply-rulefact .icon {
+    background-color: var(--enrol-apply-soft);
+    border-radius: 50%;
+    box-sizing: content-box;
+    color: var(--enrol-apply-ink);
+    margin: 0;
+    padding: 0.3rem;
+}
+
+/* The comment as a quotation. */
+.enrol_apply-quote {
+    background-color: var(--enrol-apply-accentsoft);
+    border-radius: 24px;
+    color: var(--enrol-apply-ink);
+    display: flex;
+    gap: 0.75rem;
+    padding: 1.25rem var(--enrol-apply-inset);
+}
+
+.enrol_apply-quote .icon {
+    color: var(--enrol-apply-fill);
+    font-size: 1.1rem;
+    margin: 0.15rem 0 0;
+}
+
+.enrol_apply-quotetext {
+    font-size: 1.0625rem;
+    line-height: 1.55;
+    overflow-wrap: anywhere;
+}
+
+/* The submitted details as tiles: label over value. Required is an outline in the theme's
+   primary and, in the markup, a visually hidden word; empty is a hatched light tile that says so. */
+.enrol_apply-tiles {
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+}
+
+.enrol_apply-tiles > .enrol_apply-tile-detail {
+    background-color: var(--enrol-apply-surface);
+    border-radius: 20px;
+    box-shadow: var(--bs-box-shadow-sm, 0 0.125rem 0.25rem transparent);
+    color: var(--enrol-apply-ink);
+    padding: 0.9rem 1.1rem;
+}
+
+.enrol_apply-tiles > .enrol_apply-tile-required {
+    box-shadow: inset 0 0 0 2px var(--enrol-apply-fill);
+}
+
+.enrol_apply-tiles > .enrol_apply-tile-empty {
+    background: repeating-linear-gradient(135deg, var(--enrol-apply-soft) 0 2px, var(--enrol-apply-surface) 2px 8px);
+    color: var(--enrol-apply-ink);
+}
+
+.enrol_apply-tiles dt {
+    color: var(--enrol-apply-muted);
+    font-size: 0.8125rem;
+    font-weight: 400;
+    margin-bottom: 0.2rem;
+}
+
+.enrol_apply-tiles dd {
+    font-weight: 600;
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.enrol_apply-emptyvalue {
+    color: var(--enrol-apply-muted);
+    font-style: italic;
+    font-weight: 400;
+}
+
+.enrol_apply-nothing {
+    align-items: center;
+    color: var(--enrol-apply-muted);
+    display: flex;
+    gap: 0.5rem;
+    padding-left: var(--enrol-apply-inset);
+}
+
+.enrol_apply-nothing .icon {
+    margin: 0;
+}
+
+/* The earlier applications: a dialogue once the page has JavaScript, in place without it. The
+   button that opens the dialogue is the one control that cannot work without a script. */
+.enrol_apply-review .enrol_apply-historyregion {
+    display: none;
+}
+
+body.path-enrol-apply:not(.jsenabled) .enrol_apply-review .enrol_apply-historyregion {
+    display: block;
+}
+
+body.path-enrol-apply:not(.jsenabled) .enrol_apply-historybutton {
+    display: none;
+}
+
+.enrol_apply-historyreport {
+    margin-top: 1rem;
+    padding-left: var(--enrol-apply-inset);
+}
+
+.enrol_apply-timeline > li + li {
+    border-top: 1px solid var(--enrol-apply-line);
+    margin-top: 1.25rem;
+    padding-top: 1.25rem;
+}
+
+.enrol_apply-timelinehead {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 0.75rem;
+    margin-bottom: 0.9rem;
+}
+
+.enrol_apply-timelinedate {
+    color: var(--enrol-apply-muted);
+    font-size: 0.875rem;
+}
+
+.enrol_apply-historyfacts,
+.enrol_apply-profilefacts {
+    display: grid;
+    gap: 0.9rem;
+}
+
+.enrol_apply-historyfacts {
+    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+}
+
+.enrol_apply-historyfacts dt,
+.enrol_apply-profilefacts dt {
+    color: var(--enrol-apply-muted);
+    font-size: 0.8125rem;
+    font-weight: 400;
+    margin-bottom: 0.15rem;
+}
+
+.enrol_apply-historyfacts dd,
+.enrol_apply-profilefacts dd {
+    font-weight: 600;
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+/* "On confirming": the card that says what the decision does, outlined in dark orange. Two
+   classes, because .card is compiled after this sheet. */
 .enrol_apply-review .enrol_apply-outcome {
-    border-left: 0.25rem solid var(--enrol-apply-fill);
+    background-color: var(--enrol-apply-surface);
+    border: 2px solid var(--enrol-apply-outcomeline);
+    border-radius: 28px;
+    color: var(--enrol-apply-ink);
+}
+
+.enrol_apply-review .enrol_apply-outcome > .card-body {
+    padding: 1.25rem calc(var(--enrol-apply-inset) - 2px);
 }
 
 /* The accordions (the review page's two, the instance form's keyed groups) take Bootstrap's own
-   look from the theme; only the header's weight and the hint under the message accordion's title
-   are this plugin's. */
+   look from the theme; only the header's weight is this plugin's. */
 .enrol_apply-accordion .accordion-button {
     font-weight: 600;
+}
+
+/* The review page's two accordions: a 20px item on the tertiary surface that clips its header,
+   so an open header leaves no rounded gap above its body (decision 15). */
+.enrol_apply-review .enrol_apply-accordion .accordion-item {
+    background-color: var(--bs-tertiary-bg, #f8f9fa);
+    border: 0;
+    border-radius: 20px;
+    color: var(--enrol-apply-ink);
+    overflow: hidden;
+}
+
+.enrol_apply-review .enrol_apply-accordion .accordion-button {
+    background-color: var(--bs-tertiary-bg, #f8f9fa);
+    border-radius: 0;
+    box-shadow: none;
+    color: var(--enrol-apply-ink);
+    gap: 0.75rem;
+}
+
+.enrol_apply-review .enrol_apply-write .accordion-button {
+    padding-left: var(--enrol-apply-inset);
+}
+
+/* The write accordion sits on the page itself, whose background a theme may set to the tertiary
+   surface (theme_dimensions does): it is drawn as the page's other cards are, the surface plus
+   the theme's small shadow, so it never melts into the page. */
+.enrol_apply-review .enrol_apply-write .accordion-item,
+.enrol_apply-review .enrol_apply-write .accordion-button {
+    background-color: var(--enrol-apply-surface);
+    color: var(--enrol-apply-ink);
+}
+
+.enrol_apply-review .enrol_apply-write .accordion-item {
+    box-shadow: var(--bs-box-shadow-sm, 0 0.125rem 0.25rem transparent);
+}
+
+/* The chevron on the leading edge, in Moodle's bordered square (course sections, course index),
+   rotating as the item opens. Bootstrap's own chevron is hidden. */
+.enrol_apply-review .enrol_apply-accordion .accordion-button::after {
+    display: none;
+}
+
+.enrol_apply-chevron {
+    align-items: center;
+    background-color: var(--enrol-apply-surface);
+    border: 1px solid var(--enrol-apply-line);
+    border-radius: 0.5rem;
+    color: var(--enrol-apply-ink);
+    display: inline-flex;
+    flex: 0 0 auto;
+    font-size: 0.875rem;
+    height: 2rem;
+    justify-content: center;
+    width: 2rem;
+}
+
+.enrol_apply-chevron .icon {
+    margin: 0;
+    transition: transform 200ms ease;
+}
+
+.enrol_apply-review .accordion-button:not(.collapsed) .enrol_apply-chevron .icon {
+    transform: rotate(90deg);
+}
+
+/* A closed chevron points along the reading direction: left in a right-to-left language, which
+   core_rtlcss does not do for an icon. */
+.dir-rtl .enrol_apply-review .accordion-button.collapsed .enrol_apply-chevron .icon {
+    transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .enrol_apply-chevron .icon {
+        transition: none;
+    }
+}
+
+/* Every help and description line sits 1rem in under the control or heading it describes. */
+.enrol_apply-review .form-text {
+    padding-left: 1rem;
 }
 
 /* The instance form's keyed groups, in a box as on the review page; folded past the threshold,
@@ -368,12 +847,21 @@ body.path-enrol-apply:not(.jsenabled) #page.drawers {
     display: block;
 }
 
+/* The message accordion's hint, under its header and outside the heading, so the heading names
+   the accordion alone and the hint describes its button. */
 .enrol_apply-accordionhint {
     color: var(--enrol-apply-muted);
     display: block;
     font-size: 0.8125rem;
     font-weight: 400;
-    margin-top: 0.15rem;
+    margin: 0;
+    padding: 0 var(--enrol-apply-inset) 0.75rem calc(var(--enrol-apply-inset) + 2.75rem);
+}
+
+/* The header gives the hint its room below instead of the hint pulling itself up: a focused
+   accordion button is raised (z-index) by Bootstrap and would paint over a hint tucked under it. */
+.enrol_apply-review .enrol_apply-write .accordion-button {
+    padding-bottom: 0.4rem;
 }
 
 /* Without JavaScript nothing can open a collapse, so every accordion of this plugin's pages stays
@@ -383,48 +871,82 @@ body.path-enrol-apply:not(.jsenabled) .enrol_apply-accordion .collapse {
     display: block;
 }
 
-/* One signal per row of a bordered list: icon, what is measured, its state word. Only attention
-   and over the limit are tinted, with Bootstrap's subtle utilities in the markup; the edge is the
-   state's own mark, drawn beside the icon and the word, never instead of them. */
-.enrol_apply-signallist {
-    border: 1px solid var(--enrol-apply-line);
-    border-radius: var(--bs-border-radius-lg, 0.5rem);
-    overflow: hidden;
+/* The applicant's card: the soft surface, the picture centred on the accent, the name under it. */
+.enrol_apply-review .enrol_apply-applicantcard {
+    background-color: var(--enrol-apply-soft);
+    color: var(--enrol-apply-ink);
+    padding: var(--enrol-apply-inset);
 }
 
-.enrol_apply-signal {
-    align-items: baseline;
-    border-left: 0.2rem solid transparent;
-    border-top: 1px solid var(--enrol-apply-line);
+.enrol_apply-applicanthead {
+    align-items: center;
     display: flex;
-    gap: 0.5rem;
+    flex-direction: column;
+    margin-bottom: 1.25rem;
+    text-align: center;
+}
+
+.enrol_apply-applicantavatar {
+    background-color: var(--enrol-apply-accent);
+    border-radius: 50%;
+    color: var(--enrol-apply-accentink);
+    display: inline-flex;
+    margin-bottom: 0.9rem;
+    padding: 0.25rem;
+}
+
+.enrol_apply-applicantavatar .enrol_apply-applicantpicture {
+    border-radius: 50%;
+    height: 6rem;
     margin: 0;
-    padding: 0.5rem 0.75rem;
+    width: 6rem;
 }
 
-.enrol_apply-signal:first-child {
-    border-top: 0;
+/* A user without a picture gets core's initials instead, drawn on the same accent. */
+.enrol_apply-applicantavatar .userinitials {
+    background-color: var(--enrol-apply-accent);
+    color: var(--enrol-apply-accentink);
+    font-size: 2rem;
+    font-weight: 700;
+    height: 6rem;
+    margin: 0;
+    width: 6rem;
 }
 
-.enrol_apply-signal.bg-warning-subtle {
-    border-left-color: var(--enrol-apply-warn);
+.enrol_apply-review .enrol_apply-applicantcardname {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin-bottom: 0.25rem;
+    overflow-wrap: anywhere;
 }
 
-.enrol_apply-signal.bg-danger-subtle {
-    border-left-color: var(--bs-danger, var(--danger, #ca3120));
+.enrol_apply-applicantrole {
+    color: var(--enrol-apply-muted);
+    font-size: 0.875rem;
 }
 
-.enrol_apply-signaltext {
-    flex: 1 1 auto;
-    min-width: 0;
+.enrol_apply-review .enrol_apply-profilefacts {
+    background-color: var(--enrol-apply-surface);
+    border-radius: 20px;
+    color: var(--enrol-apply-ink);
+    margin: 0 0 1.25rem;
+    padding: 1.1rem 1.25rem;
 }
 
-.enrol_apply-signallabel {
-    font-variant-numeric: tabular-nums;
-}
-
-.enrol_apply-signalstate {
-    flex: 0 0 auto;
+.enrol_apply-review .enrol_apply-profilebutton {
+    --bs-btn-bg: var(--enrol-apply-ink);
+    --bs-btn-color: var(--enrol-apply-surface);
+    --bs-btn-border-color: var(--enrol-apply-ink);
+    --bs-btn-hover-bg: var(--enrol-apply-accentink);
+    --bs-btn-hover-color: var(--enrol-apply-surface);
+    --bs-btn-hover-border-color: var(--enrol-apply-accentink);
+    --bs-btn-active-bg: var(--enrol-apply-accentink);
+    --bs-btn-active-color: var(--enrol-apply-surface);
+    --bs-btn-active-border-color: var(--enrol-apply-accentink);
+    border-radius: var(--bs-border-radius-pill, 50rem);
+    display: block;
+    padding: 0.6rem 1rem;
+    width: 100%;
 }
 
 /* The group cards: two to a row where there is room, one on a phone. */

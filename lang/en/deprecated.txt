@@ -1,4 +1,8 @@
 maxenrolled,enrol_apply
 maxenrolled_help,enrol_apply
 notification,enrol_apply
+reviewoutcomemany,enrol_apply
+reviewoutcomenogroupinfo,enrol_apply
+reviewoutcomenone,enrol_apply
+reviewoutcomeone,enrol_apply
 submitted_info,enrol_apply

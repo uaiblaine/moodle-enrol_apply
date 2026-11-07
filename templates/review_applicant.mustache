@@ -1,0 +1,70 @@
+{{!
+    This file is part of Moodle - http://moodle.org/
+
+    Moodle is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Moodle is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+}}
+{{!
+    @template enrol_apply/review_applicant
+
+    The applicant's card, the right column: the picture centred, the name under it, "Applicant",
+    the identity fields this reader may see (label over value, no frame of their own), and the
+    full profile where core would open it. No contact buttons.
+
+    The picture is decoration beside the name, rendered by core without a link and with an empty
+    alternative text, and triple stashed because it is core's own markup. Reading order is left
+    column first, so a screen reader meets the applicant's name in the breadcrumb and the page
+    title before it reaches this card.
+
+    Context variables required for this template:
+    * picture string - core's user_picture() markup, triple stashed
+    * applicantname string - the applicant's full name, plain spelling
+    * applicantrole string - "Applicant"
+    * hasidentity boolean - whether this reader may see any identifying detail of the applicant
+    * identity array - one entry per identity field the site named and this reader may see, each
+      carrying a label and a value, both in the PLAIN spelling; the e-mail address is one of
+      these when showuseridentity names it and absent when it does not
+    * hasprofile boolean - whether user/view.php would open the applicant's profile for this reader
+    * profileurl string - the applicant's profile in this course, empty without hasprofile
+    * profilelabel string - the link's text
+
+    Example context (json):
+    {
+        "picture": "<img class=\"userpicture\" src=\"https://example.com/pix/u/f1.png\" alt=\"\" width=\"100\" height=\"100\">",
+        "applicantname": "Ana Souza",
+        "applicantrole": "Applicant",
+        "hasidentity": true,
+        "identity": [
+            {"label": "Email address", "value": "ana@example.org"},
+            {"label": "ID number", "value": "2026-0071"}
+        ],
+        "hasprofile": true,
+        "profileurl": "https://example.com/user/view.php?id=5&course=7",
+        "profilelabel": "View full profile"
+    }
+}}
+<section class="enrol_apply-applicantcard enrol_apply-box" aria-labelledby="enrol_apply_applicant_name">
+    <div class="enrol_apply-applicanthead">
+        <span class="enrol_apply-applicantavatar">{{{picture}}}</span>
+        <h2 class="enrol_apply-applicantcardname" id="enrol_apply_applicant_name">{{applicantname}}</h2>
+        <div class="enrol_apply-applicantrole">{{applicantrole}}</div>
+    </div>
+    {{#hasidentity}}
+        <dl class="enrol_apply-identity enrol_apply-profilefacts">
+            {{#identity}}
+                <div><dt>{{label}}</dt><dd>{{value}}</dd></div>
+            {{/identity}}
+        </dl>
+    {{/hasidentity}}
+    {{#hasprofile}}<a class="btn enrol_apply-profilebutton" href="{{profileurl}}">{{profilelabel}}</a>{{/hasprofile}}
+</section>

@@ -4,6 +4,58 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Unreleased (2026110700)
+
+### Changed
+
+- **The review page is redrawn in two columns (Visual 1).** The page's heading is now the course,
+  as on every course page; the breadcrumb and the title still name the applicant. "All
+  applications" moved to the left as a plain link, with previous and next on the right. The left
+  column opens with the status strip (the status and key chips, then how long the application has
+  waited, in words, and when it was applied for; the method and the course left the strip), and
+  the right column is the applicant's card: picture, name, the identity fields this reader may
+  see (the same identity rule as before) and "View full profile" where core would open it. On a
+  phone the card follows the left column.
+- **"What weighs on the decision" is gone, replaced by what it summarised.** "Rules to observe"
+  appears only when there is something to observe: one meter per limit a confirmation touches
+  (each joined group that declares seats, the method's places, the applicant limit), its bar
+  coloured by the occupancy after confirming (primary up to 60 %, warning above, danger above
+  90 %) with a line saying what confirming leaves, worded in the singular where the count is
+  one; how many deferred applications hold room under the applicant limit; and the earlier
+  applications, with a "See the history" button. The applicant's comment follows as a quotation
+  and the submitted details as tiles, counted ("3 of 4 filled in · 2 required"), a required field
+  outlined and said to be required in words, an empty one hatched and saying "Not filled in";
+  with neither, one muted line. Whether a field is required is read from the method's current
+  definition of it (a profile field's flag on the method, a question's own setting), never from
+  the applicant's live profile.
+- **The earlier applications open in a dialogue.** Each says what the course report says of it
+  to the same reader: the outcome as a badge, the applied and decided dates, who decided, the key
+  group and the groups joined (each judged by core's group visibility for this reader) and the
+  decision note, with a link to the report. The message written to the applicant is not shown,
+  because the report does not show it. Without JavaScript the list is shown in place. Still
+  gated on `enrol/apply:viewreports` and the report's separate-groups narrowing.
+- **"On confirming" names the role, the groups and the notice in bold**, in the page's sentence
+  and when the sentence follows the decider's ticks, and the card is outlined in a dark orange
+  derived from the theme. Both accordions carry the chevron on the leading edge in Moodle's
+  bordered square; their bodies are named regions, and the message accordion's hint now
+  describes its button instead of lengthening its heading. Every section title of the left column
+  shares one style and one inset. Strings removed with the signals: `nocomment`,
+  `reviewattention*`, `reviewmethod*`, `reviewsignal*` (except `reviewsignalseats`, which names a
+  group card's bar), `reviewstate*`, `reviewwaited` and `reviewwaitedjustnow`; the four outcome
+  sentences take the notice as a parameter (`reviewoutcomenotice`) and so carry new ids
+  (`reviewoutcomemanywithnotice`, `reviewoutcomenogroupinfowithnotice`,
+  `reviewoutcomenonewithnotice`, `reviewoutcomeonewithnotice`); the old ids are listed in
+  `lang/en/deprecated.txt`. The report link in the earlier applications is offered only to a
+  reader who can open the report.
+
+- **The review page's decision bar shows the three buttons alone.** The line under each button
+  (what cancelling, deferring and confirming do) is gone from the bar, and so is the copy of those
+  lines a phone showed above it. What confirming does is still the outcome card's sentence and the
+  line after it, which name the groups, the role and a full group's overbooking; cancelling still
+  asks first. Six strings went with them (`reviewcancelconsequence`, `reviewwaitconsequence`,
+  `reviewwaitagainconsequence`, `reviewconfirmconsequencecourse`,
+  `reviewconfirmconsequencegroups`, `reviewconfirmoverbook`), and gate `RP20`.
+
 ## v2.0.1 (2026110509) - 2026-11-06
 
 ### Fixed

@@ -17,77 +17,80 @@
 {{!
     @template enrol_apply/review_evidence
 
-    The evidence behind the signals: the applicant's comment, the details submitted with the
-    application and the earlier applications to the course. A quieter column after the funnel in
-    source order; each block carries the id a signal links to.
+    What the applicant sent: the comment as a quotation and the submitted details as tiles, each
+    only when present, or one muted line when there is nothing to show this reader. The blocks are
+    siblings of the left column's other blocks, which is what spaces them.
 
     Context variables required for this template:
     * commentlabel string - label of the applicant's comment, plain spelling
     * hascomment boolean - whether the applicant wrote one
     * comment string - what the applicant wrote, ALREADY escaped and with its line breaks
       converted by format_text(FORMAT_PLAIN), which is why it is triple stashed
-    * nocomment string - what to say when they wrote nothing
-    * hassnapshot boolean - whether the applicant submitted any profile detail this reader may see
-    * snapshotlabel string - heading of the submitted-details list
-    * snapshot array - one entry per submitted field the reader may see, each with the label and
+    * hassnapshot boolean - whether the applicant submitted any detail this reader may see
+    * snapshotlabel string - heading of the submitted details
+    * snapshotcount string - "X of Y filled in", counted over the rows this reader sees
+    * hassnapshotrequired boolean, snapshotrequired string - how many of those are required
+    * requiredmark string - the visually hidden "(required)" after a required field's label:
+      the outline alone never says it
+    * emptyvalue string - what an empty field says
+    * snapshot array - one tile per submitted field the reader may see, each with the label and
       the value as they were submitted, both the PLAIN spelling and output through double
-      stashes. A value can hold newlines, because a textarea custom field is offerable, so the
-      cell carries the same white-space rule the report's own free-text cells do
-    * hashistory boolean - whether this reader may see earlier applications AND there are any: a
-      reader without enrol/apply:viewreports gets no heading at all, since a heading that appears
-      only when there is history is itself a disclosure
-    * historylabel string - heading of the earlier-applications list
-    * history array - one entry per earlier application, each with the date it was submitted and
-      the outcome as the report's own formatter words it
+      stashes, isempty and isrequired. A value can hold newlines, because a textarea custom field
+      is offerable, so the tile carries the same white-space rule the report's own free-text
+      cells do
+    * hasnothing boolean, nothingsent string - the one line shown when there is neither
 
     Example context (json):
     {
         "commentlabel": "Comment",
         "hascomment": true,
         "comment": "I would like to join this course.",
-        "nocomment": "The applicant did not write anything.",
         "hassnapshot": true,
-        "snapshotlabel": "Details submitted with this application",
+        "snapshotlabel": "Submitted details",
+        "snapshotcount": "1 of 2 filled in",
+        "hassnapshotrequired": true,
+        "snapshotrequired": "1 required",
+        "requiredmark": "(required)",
+        "emptyvalue": "Not filled in",
         "snapshot": [
-            {"label": "City/town", "value": "Ouro Preto"},
-            {"label": "Registration number", "value": "2026-0042"}
+            {"label": "City/town", "value": "Ouro Preto", "isempty": false, "isrequired": true},
+            {"label": "Preferred shift", "value": "", "isempty": true, "isrequired": false}
         ],
-        "hashistory": true,
-        "historylabel": "Earlier applications to this course",
-        "history": [
-            {"applied": "04/06/26, 11:02", "outcome": "Cancelled"}
-        ]
+        "hasnothing": false,
+        "nothingsent": "No comment or submitted details to show."
     }
 }}
-<div class="enrol_apply-evidence">
-    <h2 class="h5" id="enrol_apply_review_comment">{{commentlabel}}</h2>
-    <div class="enrol_apply-box mb-3">
-        {{#hascomment}}{{{comment}}}{{/hascomment}}
-        {{^hascomment}}<span class="text-body-secondary">{{nocomment}}</span>{{/hascomment}}
-    </div>
-    {{#hassnapshot}}
-        {{!
-            renderer_test scopes its snapshot assertions to this wrapper, because the page shows
-            identifying values elsewhere (the identity line). It extracts the panel with a
-            non-greedy match up to the first closing div tag, so keep this class first on the div
-            and nest no div inside it.
-        }}
-        <h2 class="h5" id="enrol_apply_review_details">{{snapshotlabel}}</h2>
-        <div class="enrol_apply-snapshot enrol_apply-box mb-3">
-            <dl class="row mb-0">
-                {{#snapshot}}
-                    <dt class="col-sm-5 col-lg-12">{{label}}</dt>
-                    <dd class="col-sm-7 col-lg-12 enrol_apply-linebreaks">{{value}}</dd>
-                {{/snapshot}}
-            </dl>
+{{#hascomment}}
+    <section class="enrol_apply-reviewcomment" aria-labelledby="enrol_apply_review_comment">
+        <h2 class="enrol_apply-blocktitle" id="enrol_apply_review_comment">{{commentlabel}}</h2>
+        <blockquote class="enrol_apply-quote mb-0">
+            {{#pix}}e/toggle_blockquote, core{{/pix}}
+            <div class="enrol_apply-quotetext">{{{comment}}}</div>
+        </blockquote>
+    </section>
+{{/hascomment}}
+{{#hassnapshot}}
+    {{!
+        renderer_test scopes its snapshot assertions to this list, because the page shows
+        identifying values elsewhere (the applicant's card). It extracts the list with a non-greedy
+        match up to the first closing dl tag, so keep the enrol_apply-snapshot class on the dl and
+        nest no dl inside it.
+    }}
+    <section class="enrol_apply-reviewdetails" aria-labelledby="enrol_apply_review_details">
+        <div class="enrol_apply-blockhead">
+            <h2 class="enrol_apply-blocktitle" id="enrol_apply_review_details">{{snapshotlabel}}</h2>
+            <span class="enrol_apply-blockcount">{{snapshotcount}}{{#hassnapshotrequired}} · <span class="enrol_apply-requiredcount">{{snapshotrequired}}</span>{{/hassnapshotrequired}}</span>
         </div>
-    {{/hassnapshot}}
-    {{#hashistory}}
-        <h2 class="h5" id="enrol_apply_review_history">{{historylabel}}</h2>
-        <ul class="enrol_apply-box list-unstyled">
-            {{#history}}
-                <li class="text-body-secondary">{{applied}} &mdash; {{outcome}}</li>
-            {{/history}}
-        </ul>
-    {{/hashistory}}
-</div>
+        <dl class="enrol_apply-snapshot enrol_apply-tiles mb-0">
+            {{#snapshot}}
+                <div class="enrol_apply-tile-detail{{#isempty}} enrol_apply-tile-empty{{/isempty}}{{#isrequired}} enrol_apply-tile-required{{/isrequired}}">
+                    <dt>{{label}}{{#isrequired}}<span class="visually-hidden"> {{requiredmark}}</span>{{/isrequired}}</dt>
+                    <dd class="enrol_apply-linebreaks">{{#isempty}}<span class="enrol_apply-emptyvalue">{{emptyvalue}}</span>{{/isempty}}{{^isempty}}{{value}}{{/isempty}}</dd>
+                </div>
+            {{/snapshot}}
+        </dl>
+    </section>
+{{/hassnapshot}}
+{{#hasnothing}}
+    <p class="enrol_apply-nothing">{{#pix}}i/info, core{{/pix}}<span>{{nothingsent}}</span></p>
+{{/hasnothing}}

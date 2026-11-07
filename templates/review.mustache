@@ -17,14 +17,15 @@
 {{!
     @template enrol_apply/review
 
-    One enrolment application, read as a decision funnel, with the controls to decide it.
+    One enrolment application, in two columns, with the controls to decide it (Visual 1).
 
-    The reading order is the order of the decider's questions: the strip (who, in what state, how
-    and through which method), what weighs on the decision, what confirming does with the
-    adjustments folded under it, the message and the note, then the decision bar. The evidence -
-    comment, submitted details, earlier applications - is a quieter column after the funnel in
-    source order, beside it on wide screens and below it on narrow ones, reached through the
-    signals' links. Focus order follows source order.
+    The left column reads in the order of the decider's questions: the strip (the state and the
+    wait), the rules a confirmation touches, the comment and the details sent, the earlier
+    applications (a region shown here only without JavaScript; the rules' button opens it in a
+    dialogue otherwise), what confirming does with the adjustments folded under it, and the
+    message and the note. The right column is the applicant's card. Below the lg breakpoint the
+    columns stack in source order, so on a phone the card follows the left column's blocks, and
+    focus order follows source order everywhere.
 
     The form posts the queue's own contract - a formaction naming the decision, a non-empty
     userenrolments array and the session key - so every guard manage.php applies to a queue
@@ -38,22 +39,19 @@
 
     Context variables required for this template:
     * candecide boolean - whether this reader may decide the application. False for a holder of
-      enrol/apply:viewapplications alone: the funnel renders without the outcome, the form, the
+      enrol/apply:viewapplications alone: the page renders without the outcome, the form, the
       controls and the sticky footer
-    * viewonlynotice string - what a reader who may not decide is told above the funnel
+    * viewonlynotice string - what a reader who may not decide is told above the columns
     * formurl string - url the decision form posts back to
     * sesskey string - session key guarding the state change
     * userenrolmentid int - the application being decided
-    * actions array - the three decisions, each with value, label and consequence (ESCAPED, hence
-      the triple stash); listed here again, in the page body, for narrow screens where the bar
-      has room for the buttons alone. aria-hidden, because each button's aria-describedby points
-      at its own line in the bar (enrol_apply/review_actions)
     * stickyfooter string - the three decisions, already rendered into a core sticky footer by
       the renderer and interpolated INSIDE this form. The footer is never moved in the DOM -
       its placement is CSS - so the submits inside it post with the rest of the form, exactly as
       the queue's own bar does
-    * everything enrol_apply/review_summary, enrol_apply/review_signals,
-      enrol_apply/review_outcome and enrol_apply/review_evidence require
+    * everything enrol_apply/review_summary, enrol_apply/review_rules, enrol_apply/review_evidence,
+      enrol_apply/review_history, enrol_apply/review_outcome and enrol_apply/review_applicant
+      require
 
     Example context (json):
     {
@@ -64,66 +62,65 @@
         "userenrolmentid": 42,
         "status": "Awaiting a decision",
         "statuslabel": "Status",
-        "statuschipclass": "bg-warning text-dark",
-        "methodlabel": "Method",
-        "methodname": "Application with a group key",
-        "courselabel": "Course",
-        "coursename": "R&D < Team induction",
-        "courseurl": "https://example.com/course/view.php?id=7",
-        "hasprofile": true,
-        "profileurl": "https://example.com/user/view.php?id=5&course=7",
-        "profilelabel": "View profile",
-        "signalsheading": "What weighs on the decision",
-        "attention": "Nothing is over a limit. The decision is still yours.",
-        "signals": [
-            {"label": "No comment from the applicant", "isnone": true}
+        "statuschipclass": "enrol_apply-statuschip-pending",
+        "haswaited": true,
+        "waitlabel": "Awaiting a decision for",
+        "waited": "5 hours 54 mins",
+        "hasapplied": true,
+        "appliedon": "Applied on 06/11/26, 21:00",
+        "hasrules": true,
+        "rulesheading": "Rules to observe",
+        "hasmeters": true,
+        "meters": [
+            {
+                "label": "Places on this method", "isplaces": true, "count": "33 of 50", "takenpercent": 66,
+                "ownpercent": 2, "barclass": "bg-warning text-dark", "after": "On confirming: 34 of 50, 16 left"
+            }
         ],
+        "commentlabel": "Comment",
+        "hascomment": true,
+        "comment": "I would like to join this course.",
+        "applicantname": "Ana Souza",
+        "applicantrole": "Applicant",
+        "picture": "<img class=\"userpicture\" src=\"https://example.com/pix/u/f1.png\" alt=\"\">",
         "outcomeheading": "On confirming",
-        "outcomesentence": "Ana Souza joins the course as Student, without a group, and is notified of the approval.",
+        "outcomesentence": "Ana Souza joins the course as <strong>Student</strong>, without a group, and <strong>is notified of the approval</strong>.",
         "writelabel": "Write to the applicant or add a note for the record",
+        "writehelp": "Optional.",
         "messagelabel": "Message to the applicant",
         "notelabel": "Note for the record",
-        "commentlabel": "Comment",
-        "nocomment": "The applicant did not write anything.",
-        "actions": [
-            {"value": "cancel", "label": "Cancel this application", "consequence": "Ends the application"},
-            {"value": "confirm", "label": "Confirm this application", "consequence": "Joins the course"}
-        ],
         "stickyfooter": "<div id=\"sticky-footer\"><button type=\"submit\">Confirm</button></div>"
     }
 }}
 {{!
-    The decision form wraps the funnel only for a reader who may decide. A viewer reads the same
+    The decision form wraps the columns only for a reader who may decide. A viewer reads the same
     blocks inside a plain container instead, so the opening and closing tags are chosen twice, by
     the same flag; each rendering is balanced.
 }}
 {{#candecide}}
-<form id="enrol_apply_review_form" class="enrol_apply-review" method="post" action="{{formurl}}">
+<form id="enrol_apply_review_form" class="enrol_apply-review card" method="post" action="{{formurl}}">
     <input type="hidden" name="sesskey" value="{{sesskey}}">
     <input type="hidden" name="userenrolments[]" value="{{userenrolmentid}}">
 {{/candecide}}
 {{^candecide}}
-<div class="enrol_apply-review">
+<div class="enrol_apply-review card">
     <div class="alert alert-info" role="status">{{viewonlynotice}}</div>
 {{/candecide}}
-    {{> enrol_apply/review_summary }}
-    <div class="row">
+    <div class="row enrol_apply-reviewcolumns">
         <div class="col-lg-8 enrol_apply-reviewfunnel">
-            {{> enrol_apply/review_signals }}
+            {{> enrol_apply/review_summary }}
+            {{> enrol_apply/review_rules }}
+            {{> enrol_apply/review_history }}
+            {{> enrol_apply/review_evidence }}
             {{#candecide}}
                 {{> enrol_apply/review_outcome }}
             {{/candecide}}
         </div>
-        <div class="col-lg-4 enrol_apply-reviewevidence">
-            {{> enrol_apply/review_evidence }}
+        <div class="col-lg-4 enrol_apply-reviewaside">
+            {{> enrol_apply/review_applicant }}
         </div>
     </div>
 {{#candecide}}
-    <ul class="enrol_apply-consequences list-unstyled small d-md-none" aria-hidden="true">
-        {{#actions}}
-            <li>{{label}}: <span data-region="consequence-{{value}}">{{{consequence}}}</span></li>
-        {{/actions}}
-    </ul>
     {{{stickyfooter}}}
 </form>
 {{/candecide}}

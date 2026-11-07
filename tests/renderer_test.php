@@ -1011,7 +1011,7 @@ final class renderer_test extends \advanced_testcase {
     }
 
     /**
-     * The identity line carries what the site named, and nothing else.
+     * The applicant's card carries the identity fields the site named, and nothing else.
      *
      * The e-mail address is one identity field among the rest, resolved by core's own helper, so
      * a site that does not name it does not see it here, as on its participants page.
@@ -1029,7 +1029,10 @@ final class renderer_test extends \advanced_testcase {
             'email' => 'ana@example.org',
         ]);
 
-        $this->assertStringContainsString('RA-2026-0042', $html);
+        // On the applicant's card, label over value.
+        $card = $this->applicant_card($html);
+        $this->assertStringContainsString('<dd>RA-2026-0042</dd>', $card);
+        $this->assertStringContainsString('<dt>' . \core_user\fields::get_display_name('idnumber') . '</dt>', $card);
         // The address is not named by the site, so this page does not show it either.
         $this->assertStringNotContainsString('ana@example.org', $html);
     }
@@ -1037,7 +1040,7 @@ final class renderer_test extends \advanced_testcase {
     /**
      * And it shows the address when the site does name it.
      *
-     * The control for the test above: without it, a page that had dropped the identity line
+     * The control for the test above: without it, a page that had dropped the identity fields
      * altogether would satisfy "the address is absent" just as well as a correct one.
      *
      * @return void
@@ -1052,7 +1055,43 @@ final class renderer_test extends \advanced_testcase {
             'email' => 'ana@example.org',
         ]);
 
-        $this->assertStringContainsString('ana@example.org', $html);
+        $this->assertStringContainsString('<dd>ana@example.org</dd>', $this->applicant_card($html));
+    }
+
+    /**
+     * The applicant's card of a rendered review page.
+     *
+     * @param string $html The rendered review page.
+     * @return string The card, opening tag to closing tag, or the empty string.
+     */
+    private function applicant_card(string $html): string {
+        return preg_match('~<section class="enrol_apply-applicantcard.*?</section>~s', $html, $m) ? $m[0] : '';
+    }
+
+    /**
+     * An earlier application by this applicant to this course, written straight to the record.
+     *
+     * @param \stdClass $applicant The applicant.
+     * @param array $fields Columns to set on the record.
+     * @return int The record's id.
+     */
+    private function prior_record(\stdClass $applicant, array $fields = []): int {
+        global $DB;
+
+        return (int) $DB->insert_record('enrol_apply_submission', (object) ($fields + [
+            'courseid' => $this->course->id,
+            'userid' => $applicant->id,
+            'enrolid' => $this->instance->id,
+            'userenrolmentid' => 0,
+            'status' => \enrol_apply\local\submission::STATUS_CANCELLED,
+            'comment' => '',
+            'outcomemessage' => '',
+            'decidedgroups' => '',
+            'decidedrole' => 0,
+            'decidedby' => 0,
+            'timecreated' => time() - DAYSECS,
+            'timedecided' => time() - DAYSECS,
+        ]));
     }
 
     /**
@@ -1068,45 +1107,179 @@ final class renderer_test extends \advanced_testcase {
     public function test_earlier_applications_need_the_report_capability(): void {
         global $DB;
 
+        global $PAGE;
+
         $applicant = $this->getDataGenerator()->create_user();
         // An earlier, cancelled application by the same person to the same course.
-        $DB->insert_record('enrol_apply_submission', (object) [
-            'courseid' => $this->course->id,
-            'userid' => $applicant->id,
-            'enrolid' => $this->instance->id,
-            'userenrolmentid' => 0,
-            'status' => \enrol_apply\local\submission::STATUS_CANCELLED,
-            'comment' => '',
-            'outcomemessage' => '',
-            'decidedgroups' => '',
-            'decidedrole' => 0,
-            'decidedby' => 0,
-            'timecreated' => time() - DAYSECS,
-            'timedecided' => time() - DAYSECS,
-        ]);
+        $this->prior_record($applicant);
+        $amd = new \ReflectionProperty($PAGE->requires, 'amdjscode');
 
         $this->setAdminUser();
         $html = $this->render_review('Please let me in', ENROL_USER_SUSPENDED, '', [], $applicant);
+        $this->assertStringContainsString('id="enrol_apply_review_history"', $html);
         $this->assertStringContainsString(get_string('reviewhistory', 'enrol_apply'), $html);
-        // The signal that links to it goes with the panel, never on its own.
-        $signal = get_string('reviewsignalhistory', 'enrol_apply', 1);
-        $this->assertStringContainsString($signal, $html);
+        // The line and the button that opens it go with the list, never on their own.
+        $this->assertStringContainsString('data-region="rules-history"', $html);
+        $this->assertStringContainsString('data-action="enrol_apply-history"', $html);
+        $this->assertStringContainsString('initHistory', implode("\n", $amd->getValue($PAGE->requires)));
 
         /* A teacher holds manageapplications and opens this page, and does NOT hold viewreports
            by archetype - which is the whole point of the second capability. */
         $teacher = $this->getDataGenerator()->create_and_enrol($this->course, 'editingteacher');
         $this->setUser($teacher);
+        $amd->setValue($PAGE->requires, []);
         $html = $this->render_review('Please let me in', ENROL_USER_SUSPENDED, '', [], $applicant);
         $this->assertStringNotContainsString(get_string('reviewhistory', 'enrol_apply'), $html);
-        $this->assertStringNotContainsString($signal, $html);
+        $this->assertStringNotContainsString('data-region="rules-history"', $html);
+        $this->assertStringNotContainsString('data-action="enrol_apply-history"', $html);
+        $this->assertStringNotContainsString('initHistory', implode("\n", $amd->getValue($PAGE->requires)));
     }
 
     /**
-     * The places signal and the method line report the two capacity numbers, each its own.
+     * The history offers the course report only to a reader who could open it.
+     *
+     * report.php asks for enrol/apply:viewreports and then require_login($course). A holder
+     * through a category role who is not enrolled passes the first and is refused by the second,
+     * so the link would lead them to an error. They still see the history itself: the disclosure
+     * is judged by the capability, the link by whether the page behind it opens. The control is the
+     * same role held by somebody enrolled in the course.
      *
      * @return void
      */
-    public function test_the_signals_and_the_method_line_report_both_numbers(): void {
+    public function test_the_report_link_needs_course_access_as_well_as_the_capability(): void {
+        $applicant = $this->getDataGenerator()->create_user();
+        $this->prior_record($applicant);
+
+        $roleid = $this->getDataGenerator()->create_role(['shortname' => 'applycatreports']);
+        $systemcontext = \context_system::instance();
+        assign_capability('enrol/apply:manageapplications', CAP_ALLOW, $roleid, $systemcontext);
+        assign_capability('enrol/apply:viewreports', CAP_ALLOW, $roleid, $systemcontext);
+        $categorycontext = \context_coursecat::instance((int) $this->course->category);
+
+        $outsider = $this->getDataGenerator()->create_user();
+        role_assign($roleid, $outsider->id, $categorycontext->id);
+        $this->setUser($outsider);
+        $this->assertFalse(can_access_course($this->course, null, 'enrol/apply:viewreports', true));
+        $html = $this->render_review('Please let me in', ENROL_USER_SUSPENDED, '', [], $applicant);
+        $this->assertStringContainsString('id="enrol_apply_review_history"', $html);
+        $this->assertStringNotContainsString('data-region="history-footer"', $html);
+        $this->assertStringNotContainsString('/enrol/apply/report.php', $html);
+
+        $member = $this->getDataGenerator()->create_user();
+        role_assign($roleid, $member->id, $categorycontext->id);
+        $this->getDataGenerator()->enrol_user($member->id, $this->course->id, 'student');
+        $this->setUser($member);
+        $this->assertTrue(can_access_course($this->course, null, 'enrol/apply:viewreports', true));
+        $html = $this->render_review('Please let me in', ENROL_USER_SUSPENDED, '', [], $applicant);
+        $this->assertStringContainsString('data-region="history-footer"', $html);
+        $this->assertStringContainsString('/enrol/apply/report.php?id=' . $this->instance->id, $html);
+    }
+
+    /**
+     * Each earlier application says what the course report says of it to the same reader, and
+     * never the message written to the applicant, which the report does not show.
+     *
+     * Changes that must make it fail: the message to the applicant read into the list, the
+     * decider, the key group, the joined groups or the note left out, or the link to the report
+     * pointing anywhere but the application's own method.
+     *
+     * @return void
+     */
+    public function test_the_history_shows_what_the_report_shows_and_no_message(): void {
+        $applicant = $this->getDataGenerator()->create_user();
+        $decider = $this->getDataGenerator()->create_user(['firstname' => 'Carla', 'lastname' => 'Decider']);
+        $keygroup = $this->getDataGenerator()->create_group(['courseid' => $this->course->id, 'name' => 'Turma Key']);
+        $joined = $this->getDataGenerator()->create_group(['courseid' => $this->course->id, 'name' => 'Turma Joined']);
+        $this->prior_record($applicant, [
+            'status' => \enrol_apply\local\submission::STATUS_APPROVED,
+            'decidedby' => $decider->id,
+            'keygroupid' => $keygroup->id,
+            'keyoutcome' => \enrol_apply\local\submission::KEY_FOR_REVIEW,
+            'joinedgroups' => (string) $joined->id,
+            'decisionnote' => 'Checked the documents.',
+            'outcomemessage' => 'SECRET-MESSAGE-TO-THE-APPLICANT',
+        ]);
+
+        $this->setAdminUser();
+        $html = $this->render_review('Please let me in', ENROL_USER_SUSPENDED, '', [], $applicant);
+
+        $this->assertSame(1, preg_match('~<section class="enrol_apply-historyregion".*?</section>~s', $html, $region), $html);
+        $list = $region[0];
+        $this->assertStringContainsString('Carla Decider', $list);
+        $this->assertStringContainsString('<dd>Turma Key</dd>', $list);
+        $this->assertStringContainsString('<dd>Turma Joined</dd>', $list);
+        $this->assertStringContainsString('Checked the documents.', $list);
+        $this->assertStringContainsString(get_string('submissiondecidedby', 'enrol_apply'), $list);
+        $this->assertStringContainsString(
+            'report.php?id=' . $this->instance->id . '"',
+            $list,
+            'the link opens the report of the application\'s own method'
+        );
+        // The report's outcome wording, as a badge carrying its text colour.
+        $this->assertMatchesRegularExpression('~<span class="badge bg-[a-z]+ text-(white|dark)">~', $list);
+        // The message to the applicant is on the record, and nowhere on this page.
+        $this->assertStringNotContainsString('SECRET-MESSAGE-TO-THE-APPLICANT', $html);
+    }
+
+    /**
+     * The history names a group only to a reader core lets see it, as the report's columns do.
+     *
+     * The reader may open the report and decide, and cannot see hidden groups; the decider's name
+     * is the control that the list rendered for them.
+     *
+     * Changes that must make it fail: the key group or the joined groups named without the
+     * report formatters' visibility check.
+     *
+     * @return void
+     */
+    public function test_the_history_names_no_group_the_reader_may_not_see(): void {
+        $applicant = $this->getDataGenerator()->create_user();
+        $decider = $this->getDataGenerator()->create_user(['firstname' => 'Carla', 'lastname' => 'Decider']);
+        $covertkey = $this->getDataGenerator()->create_group([
+            'courseid' => $this->course->id,
+            'name' => 'Covert key unit',
+            'visibility' => GROUPS_VISIBILITY_NONE,
+        ]);
+        $covertjoined = $this->getDataGenerator()->create_group([
+            'courseid' => $this->course->id,
+            'name' => 'Covert joined unit',
+            'visibility' => GROUPS_VISIBILITY_NONE,
+        ]);
+        $this->prior_record($applicant, [
+            'status' => \enrol_apply\local\submission::STATUS_APPROVED,
+            'decidedby' => $decider->id,
+            'keygroupid' => $covertkey->id,
+            'keyoutcome' => \enrol_apply\local\submission::KEY_FOR_REVIEW,
+            'joinedgroups' => (string) $covertjoined->id,
+        ]);
+
+        $roleid = $this->getDataGenerator()->create_role(['shortname' => 'applyhistoryreader']);
+        $coursecontext = \context_course::instance($this->course->id);
+        assign_capability('enrol/apply:manageapplications', CAP_ALLOW, $roleid, $coursecontext);
+        assign_capability('enrol/apply:viewreports', CAP_ALLOW, $roleid, $coursecontext);
+        $reader = $this->getDataGenerator()->create_user();
+        role_assign($roleid, $reader->id, $coursecontext->id);
+        $this->setUser($reader);
+        $this->assertFalse(has_capability('moodle/course:viewhiddengroups', $coursecontext));
+
+        $html = $this->render_review('Please let me in', ENROL_USER_SUSPENDED, '', [], $applicant);
+        $this->assertStringContainsString('Carla Decider', $html);
+        $this->assertStringNotContainsString('Covert', $html);
+
+        // The control: a reader who may see hidden groups is told both, in the list itself.
+        $this->setAdminUser();
+        $html = $this->render_review('Please let me in', ENROL_USER_SUSPENDED, '', [], $applicant);
+        $this->assertSame(1, preg_match('~<section class="enrol_apply-historyregion".*?</section>~s', $html, $region), $html);
+        $this->assertStringContainsString('<dd>Covert key unit</dd>', $region[0]);
+        $this->assertStringContainsString('<dd>Covert joined unit</dd>', $region[0]);
+    }
+
+    /**
+     * The places meter and the applicant-limit meter report the two capacity numbers, each its own.
+     *
+     * @return void
+     */
+    public function test_the_meters_report_both_capacity_numbers(): void {
         global $DB;
 
         $this->setAdminUser();
@@ -1124,23 +1297,24 @@ final class renderer_test extends \advanced_testcase {
 
         $html = $this->render_review();
 
-        /* Each number asserted in the sentence that labels it. A page-wide match on the bare
-           counts cannot see the two numbers swapped - both are still present, just against the
-           other label. */
-        $this->assertStringContainsString(
-            get_string('reviewsignalplaces', 'enrol_apply', (object) ['taken' => 1, 'total' => 20]),
-            $html,
+        /* Each number asserted in the meter that labels it. A page-wide match on the bare counts
+           cannot see the two numbers swapped - both are still present, just against the other
+           label. */
+        $meters = $this->meter_lines($html);
+        $this->assertSame(
+            get_string('reviewmeterafter', 'enrol_apply', (object) ['after' => 2, 'total' => 20, 'left' => 18]),
+            $meters[get_string('reviewmeterplaces', 'enrol_apply')] ?? null,
             'places must count the ACTIVE enrolment only, against customint4'
         );
-        $this->assertStringContainsString(
-            get_string('reviewmethodheld', 'enrol_apply', (object) ['taken' => 2, 'total' => 30]),
-            $this->method_line($html),
-            'applicants must count every non-expired row, against customint3'
+        $this->assertSame(
+            get_string('reviewmeterafter', 'enrol_apply', (object) ['after' => 2, 'total' => 30, 'left' => 28]),
+            $meters[get_string('reviewmeterapplicants', 'enrol_apply')] ?? null,
+            'applicants must count every non-expired row, this one included, against customint3'
         );
     }
 
     /**
-     * The method line reports how many of those applications are deferred.
+     * The rules report how many of those applications are deferred.
      *
      * A subset of the applications held rather than a limit of its own. A deferred application
      * counts against the applicant cap until it is cancelled, since no expiry reaches it, so this
@@ -1151,7 +1325,7 @@ final class renderer_test extends \advanced_testcase {
      *
      * @return void
      */
-    public function test_the_method_line_reports_the_deferred_count(): void {
+    public function test_the_rules_report_the_deferred_count(): void {
         global $DB;
 
         $this->setAdminUser();
@@ -1168,34 +1342,40 @@ final class renderer_test extends \advanced_testcase {
         // Adds a third, still awaiting a decision.
         $html = $this->render_review();
 
-        $line = $this->method_line($html);
+        $this->assertSame(1, preg_match('~data-region="rules-deferred"[^>]*>(.*?)</p>~s', $html, $line), $html);
         $this->assertStringContainsString(
-            get_string('reviewmethoddeferred', 'enrol_apply', 1),
-            $line,
+            get_string('reviewrulesdeferredone', 'enrol_apply', (object) ['count' => 1, 'limit' => 30]),
+            $line[1],
             'the deferred count must count the deferred row and nothing else'
         );
-        $this->assertStringContainsString(
-            get_string('reviewsignalplaces', 'enrol_apply', (object) ['taken' => 1, 'total' => 20]),
-            $html,
+        $meters = $this->meter_lines($html);
+        $this->assertSame(
+            get_string('reviewmeterafter', 'enrol_apply', (object) ['after' => 2, 'total' => 20, 'left' => 18]),
+            $meters[get_string('reviewmeterplaces', 'enrol_apply')] ?? null,
             'places must still count the ACTIVE enrolment only'
         );
-        $this->assertStringContainsString(
-            get_string('reviewmethodheld', 'enrol_apply', (object) ['taken' => 3, 'total' => 30]),
-            $line,
+        $this->assertSame(
+            get_string('reviewmeterafter', 'enrol_apply', (object) ['after' => 3, 'total' => 30, 'left' => 27]),
+            $meters[get_string('reviewmeterapplicants', 'enrol_apply')] ?? null,
             'applicants must still count all three'
         );
     }
 
     /**
-     * The method line of a rendered review page, which holds the numbers a decision does not move.
+     * The rules' meters of a rendered review page, each label with the line under its bar.
      *
      * @param string $html The rendered review page.
-     * @return string The line's text, or the empty string when the reader is given none.
+     * @return array Meter label => what confirming leaves; empty when the reader is given none.
      */
-    private function method_line(string $html): string {
-        $pattern = '~<p[^>]*data-region="methodline"[^>]*>(.*?)</p>~s';
+    private function meter_lines(string $html): array {
+        $pattern = '~<li class="enrol_apply-reviewmeter">.*?</i>([^<]*)</span>.*?data-region="meter-after">([^<]*)</div>~s';
+        preg_match_all($pattern, $html, $matches, PREG_SET_ORDER);
 
-        return preg_match($pattern, $html, $m) ? trim($m[1]) : '';
+        $lines = [];
+        foreach ($matches as $match) {
+            $lines[trim($match[1])] = trim($match[2]);
+        }
+        return $lines;
     }
 
     /**
@@ -1235,18 +1415,20 @@ final class renderer_test extends \advanced_testcase {
         $this->setUser($mentor);
         $html = $this->render_review('Please let me in', ENROL_USER_SUSPENDED, '', [], $applicant);
 
-        $this->assertSame('', $this->method_line($html));
+        $this->assertSame([], $this->meter_lines($html));
+        $this->assertStringNotContainsString('id="enrol_apply_rules_heading"', $html);
         $this->assertStringNotContainsString('of 20', $html);
-        // The control: they are seeing the page, and the course it belongs to.
-        $this->assertStringContainsString($this->course->fullname, $html);
+        // The control: they are seeing the page, and the form that decides the application.
+        $this->assertStringContainsString('id="enrol_apply_review_form"', $html);
+        $this->assertStringContainsString(fullname($applicant), $html);
     }
 
     /**
-     * An uncapped number says so rather than showing a bare zero, and gives no signal row.
+     * An uncapped number gives no meter, and a method with neither limit no rules block at all.
      *
      * @return void
      */
-    public function test_the_method_line_says_when_there_is_no_limit(): void {
+    public function test_a_method_without_limits_shows_no_rules(): void {
         global $DB;
 
         $this->setAdminUser();
@@ -1257,11 +1439,11 @@ final class renderer_test extends \advanced_testcase {
 
         $html = $this->render_review();
 
-        // No places signal at all, and the line says neither number has a limit.
-        $line = $this->method_line($html);
-        $this->assertStringContainsString(get_string('reviewmethodheldnolimit', 'enrol_apply'), $line);
-        $this->assertStringContainsString(get_string('reviewmethodnoplaces', 'enrol_apply'), $line);
+        $this->assertSame([], $this->meter_lines($html));
+        $this->assertStringNotContainsString('id="enrol_apply_rules_heading"', $html);
         $this->assertStringNotContainsString('of 0', $html);
+        // The control: the page rendered for a decider, who would be shown a limit if one existed.
+        $this->assertStringContainsString('enrol_apply_review_form', $html);
     }
 
     /**
@@ -1431,7 +1613,12 @@ final class renderer_test extends \advanced_testcase {
     }
 
     /**
-     * The course name reaches the review page escaped exactly once.
+     * The course name reaches the review page's heading escaped exactly once.
+     *
+     * The name left the form for the page heading, which manage.php sets from
+     * queue::review_heading() and core renders through a triple stash: the escaped spelling is the
+     * right one there, and exactly once. The form itself names no course, which is asserted too so
+     * the name cannot come back beside the heading unnoticed.
      *
      * @return void
      */
@@ -1441,9 +1628,15 @@ final class renderer_test extends \advanced_testcase {
         $DB->set_field('course', 'fullname', self::AWKWARD_NAME, ['id' => $this->course->id]);
 
         $html = $this->render_review();
+        $ueid = (int) $DB->get_field('user_enrolments', 'id', ['enrolid' => $this->instance->id], MUST_EXIST);
+        $application = \enrol_apply\local\queue::application($ueid);
+        $this->assertNotNull($application);
 
-        $this->assertStringContainsString(self::ESCAPED_ONCE, $html);
-        $this->assertStringNotContainsString(self::ESCAPED_TWICE, $html);
+        $heading = \enrol_apply\local\queue::review_heading($application);
+        $this->assertSame(self::ESCAPED_ONCE, $heading);
+        $this->assertStringNotContainsString(self::ESCAPED_TWICE, $heading);
+        // The control that the form stays free of it: the heading is the page's one place for the name.
+        $this->assertStringNotContainsString(self::ESCAPED_ONCE, $html);
     }
 
     /**
@@ -1566,14 +1759,23 @@ final class renderer_test extends \advanced_testcase {
     }
 
     /**
-     * An applicant who wrote nothing is said to have written nothing.
+     * An applicant who wrote nothing and sent no detail gets one muted line, and no empty blocks.
+     *
+     * The control is the same page with a comment, where the line is absent and the quotation is
+     * there.
      *
      * @return void
      */
-    public function test_an_empty_comment_says_so(): void {
+    public function test_an_application_with_nothing_sent_says_so_once(): void {
         $html = $this->render_review('');
 
-        $this->assertStringContainsString(get_string('nocomment', 'enrol_apply'), $html);
+        $this->assertSame(1, substr_count($html, get_string('reviewnothingsent', 'enrol_apply')));
+        $this->assertStringNotContainsString('enrol_apply-reviewcomment', $html);
+        $this->assertStringNotContainsString('enrol_apply-reviewdetails', $html);
+
+        $html = $this->render_review('Please let me in');
+        $this->assertStringNotContainsString(get_string('reviewnothingsent', 'enrol_apply'), $html);
+        $this->assertStringContainsString('class="enrol_apply-quote', $html);
     }
 
     /**
@@ -1687,6 +1889,138 @@ final class renderer_test extends \advanced_testcase {
     }
 
     /**
+     * The details are tiles, and "required" is the instance's CURRENT definition of each field,
+     * keyed by the stored key: a profile field's per-instance flag and a question's own
+     * configdata. An empty field says so; a required one says so in words as well as the outline.
+     *
+     * Two fields of each source, one required and one not, so a flag read from the wrong place, or
+     * set for every field of a source, changes the count.
+     *
+     * Changes that must make it fail: the profile fields' required flags ignored, every question
+     * read as required, the required flag left off the tiles, or the count taken over the wrong set.
+     *
+     * @return void
+     */
+    public function test_the_required_flags_come_from_the_instance_definition(): void {
+        global $DB;
+
+        /* Department is an identity column: the masking withholds it from every reader until the
+           site names it in showuseridentity, administrator included. Without this the empty
+           Department tile is never drawn and the empty-tile count below is 0. */
+        set_config('showuseridentity', 'department');
+        set_config('allowedfields', 's_city,s_department', 'enrol_apply');
+        $DB->set_field('enrol', 'customtext4', \enrol_apply\local\fieldset::from_keys(
+            ['s_city', 's_department'],
+            ['s_city']
+        )->to_json(), ['id' => $this->instance->id]);
+        $this->instance = $DB->get_record('enrol', ['id' => $this->instance->id], '*', MUST_EXIST);
+
+        $generator = $this->getDataGenerator()->get_plugin_generator('core_customfield');
+        $category = $generator->create_category([
+            'component' => 'enrol_apply',
+            'area' => \enrol_apply\customfield\application_handler::AREA,
+            'itemid' => $this->instance->id,
+        ]);
+        $required = $generator->create_field([
+            'categoryid' => $category->get('id'),
+            'type' => 'text',
+            'shortname' => 'motivation',
+            'name' => 'Motivation',
+            'configdata' => ['required' => 1],
+        ]);
+        $optional = $generator->create_field([
+            'categoryid' => $category->get('id'),
+            'type' => 'text',
+            'shortname' => 'shift',
+            'name' => 'Shift',
+            'configdata' => ['required' => 0],
+        ]);
+
+        $answer = static fn($field): string => \enrol_apply\local\answers::key((int) $field->get('id'));
+        $snapshot = json_encode([
+            'version' => \enrol_apply\local\submission::SNAPSHOT_VERSION,
+            'fields' => [
+                ['key' => 's_city', 'label' => 'City/town', 'value' => 'Ouro Preto'],
+                ['key' => 's_department', 'label' => 'Department', 'value' => ''],
+                ['key' => $answer($required), 'label' => 'Motivation', 'value' => 'Training'],
+                ['key' => $answer($optional), 'label' => 'Shift', 'value' => 'Evening'],
+            ],
+        ]);
+
+        $html = $this->render_review('Please let me in', ENROL_USER_SUSPENDED, $snapshot);
+
+        $this->assertSame(1, preg_match('#<dl class="enrol_apply-snapshot.*?</dl>#s', $html, $tiles), $html);
+        $this->assertSame(2, substr_count($tiles[0], 'enrol_apply-tile-required'), $tiles[0]);
+        $mark = '<span class="visually-hidden"> ' . get_string('reviewdetailsrequiredmark', 'enrol_apply') . '</span>';
+        $this->assertStringContainsString('City/town' . $mark, $tiles[0]);
+        $this->assertStringContainsString('Motivation' . $mark, $tiles[0]);
+        $this->assertStringNotContainsString('Department' . $mark, $tiles[0]);
+        $this->assertStringNotContainsString('Shift' . $mark, $tiles[0]);
+        // The empty field is a tile of its own that says so.
+        $this->assertSame(1, substr_count($tiles[0], 'enrol_apply-tile-empty'));
+        $this->assertStringContainsString(get_string('reviewdetailsempty', 'enrol_apply'), $tiles[0]);
+        // And the counts above the tiles.
+        $this->assertStringContainsString(
+            get_string('reviewdetailscount', 'enrol_apply', (object) ['filled' => 3, 'total' => 4]),
+            $html
+        );
+        $this->assertStringContainsString(get_string('reviewdetailsrequired', 'enrol_apply', 2), $html);
+    }
+
+    /**
+     * A field the masking withholds adds nothing to the counts above the tiles.
+     *
+     * Both profile fields are required, so a count taken over the stored rows rather than over
+     * the visible ones would still say 2 required and 2 filled for a reader who is shown one tile.
+     * The control is the same application read by a reader the site lets see the field.
+     *
+     * @return void
+     */
+    public function test_a_withheld_field_adds_nothing_to_the_counts(): void {
+        global $DB;
+
+        set_config('allowedfields', 's_city,s_department', 'enrol_apply');
+        $DB->set_field('enrol', 'customtext4', \enrol_apply\local\fieldset::from_keys(
+            ['s_city', 's_department'],
+            ['s_city', 's_department']
+        )->to_json(), ['id' => $this->instance->id]);
+        $this->instance = $DB->get_record('enrol', ['id' => $this->instance->id], '*', MUST_EXIST);
+
+        $snapshot = json_encode([
+            'version' => \enrol_apply\local\submission::SNAPSHOT_VERSION,
+            'fields' => [
+                ['key' => 's_city', 'label' => 'City/town', 'value' => 'Ouro Preto'],
+                ['key' => 's_department', 'label' => 'Department', 'value' => 'Sales'],
+            ],
+        ]);
+
+        // The control: the site names department as identity, so the reader is shown both.
+        set_config('showuseridentity', 'department');
+        $html = $this->render_review('Please let me in', ENROL_USER_SUSPENDED, $snapshot);
+        $this->assertSame(1, preg_match('#<dl class="enrol_apply-snapshot.*?</dl>#s', $html, $tiles), $html);
+        $this->assertStringContainsString('Department', $tiles[0]);
+        $this->assertStringContainsString(
+            get_string('reviewdetailscount', 'enrol_apply', (object) ['filled' => 2, 'total' => 2]),
+            $html
+        );
+        $this->assertStringContainsString(get_string('reviewdetailsrequired', 'enrol_apply', 2), $html);
+
+        // Not named: the administrator is refused the column too, and no number mentions it.
+        set_config('showuseridentity', '');
+        $html = $this->render_review('Please let me in', ENROL_USER_SUSPENDED, $snapshot);
+        $this->assertSame(1, preg_match('#<dl class="enrol_apply-snapshot.*?</dl>#s', $html, $tiles), $html);
+        $this->assertStringNotContainsString('Department', $tiles[0]);
+        $this->assertStringNotContainsString('Sales', $html);
+        $this->assertSame(1, substr_count($tiles[0], 'enrol_apply-tile-required'), $tiles[0]);
+        $this->assertStringContainsString(
+            get_string('reviewdetailscount', 'enrol_apply', (object) ['filled' => 1, 'total' => 1]),
+            $html
+        );
+        $this->assertStringContainsString(get_string('reviewdetailsrequiredone', 'enrol_apply'), $html);
+        $this->assertStringNotContainsString(get_string('reviewdetailsrequired', 'enrol_apply', 2), $html);
+    }
+
+    /**
      * The page never reads the applicant's live profile for a snapshot field.
      *
      * This is a security boundary, so it is asserted rather than left to the absence of a call.
@@ -1732,13 +2066,13 @@ final class renderer_test extends \advanced_testcase {
         $this->assertNotEmpty($applicant->email);
 
         /* Scoped to the PANEL and not to the page. The page legitimately shows identifying
-           values elsewhere - the identity line carries whatever showuseridentity names, which on
+           values elsewhere - the applicant's card carries whatever showuseridentity names, which on
            a default site includes the e-mail address - so a whole-page assertion would fail for a
            reason that has nothing to do with the snapshot, and one that happened to pass would be
-           holding the wrong thing. The wrapper class this matches is kept in review.mustache for
+           holding the wrong thing. The list class this matches is kept in review_evidence.mustache for
            exactly this. */
         $this->assertMatchesRegularExpression('/enrol_apply-snapshot/', $html);
-        preg_match('#<div class="enrol_apply-snapshot.*?</div>#s', $html, $panel);
+        preg_match('#<dl class="enrol_apply-snapshot.*?</dl>#s', $html, $panel);
         $this->assertNotEmpty($panel, 'the snapshot panel did not render');
 
         $this->assertStringNotContainsString($applicant->password, $panel[0]);
@@ -1760,9 +2094,9 @@ final class renderer_test extends \advanced_testcase {
         $this->assertStringContainsString('Ann', $html);
         $this->assertStringNotContainsString('Ouro Preto', $html);
         $this->assertStringNotContainsString('City/town', $html);
-        // The details signal counts the rows this reader sees, so the withheld one changes nothing.
+        // The count is taken over the rows this reader sees, so the withheld one changes nothing.
         $this->assertStringContainsString(
-            get_string('reviewsignaldetails', 'enrol_apply', (object) ['filled' => 1, 'total' => 1]),
+            get_string('reviewdetailscount', 'enrol_apply', (object) ['filled' => 1, 'total' => 1]),
             $html
         );
     }
@@ -1782,7 +2116,7 @@ final class renderer_test extends \advanced_testcase {
         $this->assertStringContainsString('Ann', $html);
         $this->assertStringContainsString('Ouro Preto', $html);
         $this->assertStringContainsString(
-            get_string('reviewsignaldetails', 'enrol_apply', (object) ['filled' => 2, 'total' => 2]),
+            get_string('reviewdetailscount', 'enrol_apply', (object) ['filled' => 2, 'total' => 2]),
             $html
         );
     }

@@ -1,0 +1,97 @@
+{{!
+    This file is part of Moodle - http://moodle.org/
+
+    Moodle is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Moodle is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+}}
+{{!
+    @template enrol_apply/review_rules
+
+    "Rules to observe": one meter per limit a confirmation touches, then the deferred count and
+    the earlier applications. Rendered only when one of them is present.
+
+    Each meter's bar is decoration (aria-hidden): the seats already taken striped, the
+    applicant's own solid, coloured by the occupancy AFTER confirming. The line under it says the
+    same thing in words and is what a screen reader reads. One meter per line, so a label and
+    its count never wrap together.
+
+    "See the history" opens a dialogue, so it is a button: enrol_apply/review moves the server's
+    own list (enrol_apply/review_history) into a core/modal. Without JavaScript the button is
+    hidden and the list is shown in place below.
+
+    Context variables required for this template:
+    * hasrules boolean - whether there is anything to show
+    * rulesheading string - the section's heading
+    * hasmeters boolean, meters array - one entry per limit, each with:
+      * label string - what the limit is, plain spelling
+      * isgroup, isplaces, isapplicants boolean - which limit, which picks the icon
+      * count string - how many it holds now, "18 of 20"
+      * takenpercent int, ownpercent int - the striped and the solid part of the bar
+      * barclass string - the level's background and text colour classes, a literal pair
+      * isdanger boolean - whether the level is danger, which weights the line
+      * after string - what confirming leaves, plain spelling
+    * hasdeferredline boolean, deferredline string - how many deferred applications hold room
+    * hashistoryline boolean, historyline string - the earlier applications, counted, the last named
+    * historyopen string - the button's label
+
+    Example context (json):
+    {
+        "hasrules": true,
+        "rulesheading": "Rules to observe",
+        "hasmeters": true,
+        "meters": [
+            {
+                "label": "Turma A (key group)", "isgroup": true, "count": "18 of 20", "takenpercent": 90,
+                "ownpercent": 5, "barclass": "bg-danger text-white", "isdanger": true,
+                "after": "On confirming: 19 of 20, 1 left"
+            },
+            {
+                "label": "Places on this method", "isplaces": true, "count": "33 of 50", "takenpercent": 66,
+                "ownpercent": 2, "barclass": "bg-warning text-dark", "after": "On confirming: 34 of 50, 16 left"
+            }
+        ],
+        "hasdeferredline": true,
+        "deferredline": "2 deferred applications count against the limit of 60 applications",
+        "hashistoryline": true,
+        "historyline": "2 earlier applications to this course. The last: Cancelled, 12/03/26, 09:14.",
+        "historyopen": "See the history"
+    }
+}}
+{{#hasrules}}
+<section class="enrol_apply-rules enrol_apply-box" aria-labelledby="enrol_apply_rules_heading">
+    <h2 class="enrol_apply-blocktitle" id="enrol_apply_rules_heading">{{rulesheading}}</h2>
+    {{#hasmeters}}
+        <ul class="enrol_apply-meters list-unstyled mb-0">
+            {{#meters}}
+                <li class="enrol_apply-reviewmeter">
+                    <div class="enrol_apply-meterhead">
+                        <span>{{#isgroup}}{{#pix}}i/group, core{{/pix}}{{/isgroup}}{{#isplaces}}{{#pix}}i/enrolusers, core{{/pix}}{{/isplaces}}{{#isapplicants}}{{#pix}}i/users, core{{/pix}}{{/isapplicants}}{{label}}</span>
+                        <span class="enrol_apply-metercount">{{count}}</span>
+                    </div>
+                    <div class="progress enrol_apply-meterbar" aria-hidden="true">
+                        <div class="progress-bar progress-bar-striped {{barclass}}" style="width: {{takenpercent}}%"></div>
+                        <div class="progress-bar {{barclass}}" style="width: {{ownpercent}}%"></div>
+                    </div>
+                    <div class="enrol_apply-meterafter{{#isdanger}} enrol_apply-meterafter-danger{{/isdanger}}" data-region="meter-after">{{after}}</div>
+                </li>
+            {{/meters}}
+        </ul>
+    {{/hasmeters}}
+    {{#hasdeferredline}}
+        <p class="enrol_apply-rulefact" data-region="rules-deferred">{{#pix}}i/duration, core{{/pix}}<span>{{deferredline}}</span></p>
+    {{/hasdeferredline}}
+    {{#hashistoryline}}
+        <p class="enrol_apply-rulefact" data-region="rules-history">{{#pix}}e/restore_last_draft, core{{/pix}}<span>{{historyline}} <button type="button" class="btn btn-link p-0 align-baseline enrol_apply-historybutton" data-action="enrol_apply-history" aria-haspopup="dialog">{{historyopen}}</button></span></p>
+    {{/hashistoryline}}
+</section>
+{{/hasrules}}
