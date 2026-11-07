@@ -177,7 +177,7 @@ final class profilelink_test extends \advanced_testcase {
         $review = $this->review_html();
         $queue = $this->queue_html();
         $this->assertStringNotContainsString($this->profile_href(), $review);
-        $this->assertStringNotContainsString(get_string('viewprofile'), $review);
+        $this->assertStringNotContainsString(get_string('reviewfullprofile', 'enrol_apply'), $review);
         $this->assertStringNotContainsString($this->profile_href(), $queue);
         // The control: the queue did list the applicant, by name.
         $this->assertStringContainsString('Ribeiro', $queue);

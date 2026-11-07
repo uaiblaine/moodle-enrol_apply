@@ -34,20 +34,23 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class enrol_apply_renderer extends plugin_renderer_base {
-    /** @var string A signal within its limit: below four fifths of it. */
+    /** @var string A group card's seats within their limit: below four fifths of it. */
     public const SIGNAL_OK = 'ok';
 
-    /** @var string A signal at four fifths of its limit or more, and below it. */
+    /** @var string A group card's seats at four fifths of their limit or more, and below it. */
     public const SIGNAL_WARN = 'warn';
 
-    /** @var string A signal at or over its limit: confirming overbooks, and is still allowed. */
+    /** @var string A group card's seats at or over their limit: confirming overbooks, and is still allowed. */
     public const SIGNAL_OVER = 'over';
 
-    /** @var string Something the plugin cannot judge and the decider should read. */
-    public const SIGNAL_READ = 'read';
+    /** @var string A review meter at or below 60 % once the application is confirmed. */
+    public const METER_PRIMARY = 'primary';
 
-    /** @var string A plain fact with no state of its own. */
-    public const SIGNAL_NONE = 'none';
+    /** @var string A review meter above 60 % once the application is confirmed. */
+    public const METER_WARNING = 'warning';
+
+    /** @var string A review meter above 90 % once the application is confirmed. */
+    public const METER_DANGER = 'danger';
 
     /**
      * Render the page listing the applications awaiting a decision.
@@ -804,7 +807,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
 
         return $summary + [
             /* Read by the review page's funnel, which renders the same facts differently (cards,
-               a search, signals); the queue's template ignores them. */
+               a search, the rules' meters); the queue's template ignores them. */
             'coursedecider' => $decides,
             'chooser' => $chooses,
             'groupfacts' => $facts,
@@ -1081,30 +1084,34 @@ class enrol_apply_renderer extends plugin_renderer_base {
     }
 
     /**
-     * What else this applicant has applied for in this course.
+     * What else this applicant has applied for in this course, as the course report shows it.
      *
      * Gated on enrol/apply:viewreports, which is deliberately narrower than the capability that
      * opens this page: the prior applications are the same disclosure the report exists to
      * control - what somebody applied for and what was decided - and an editing teacher holding
-     * only manageapplications is not granted it by archetype. A reader without it sees no panel
-     * at all rather than an empty one, because a heading that appears only when there is history
-     * is itself a disclosure.
+     * only manageapplications is not granted it by archetype. A reader without it sees no line,
+     * no button and no list at all rather than an empty one, because a heading that appears only
+     * when there is history is itself a disclosure.
      *
      * A reader the course report narrows to their groups (separate groups, without
      * moodle/site:accessallgroups, {@see \enrol_apply\local\groupscope::REPORT}) is listed the
      * records the report would list them, through the same {@see \enrol_apply\local\groupscope::record_where()}.
      *
-     * Each row's wording comes from the report's own outcome formatter rather than the record's
-     * bare status, so the two surfaces cannot describe the same record differently: a record says
-     * approved for ever, while the enrolment it names may since have been suspended or removed by
-     * a route this plugin never sees.
+     * Each record says only what a column of the course report says to the same reader, through
+     * the report's own formatters: the outcome (worded from the record AND the live enrolment, so
+     * a record that says approved for ever reads as removed once the enrolment is gone), the
+     * dates, the decider's full name (the report's decider entity), the key group and the joined
+     * groups (each judged by core's visibility rule for this reader) and the decision note. The
+     * message written to the applicant is not one of them, so it is never selected here.
      *
      * @param stdClass $application Application as \enrol_apply\local\queue::application() returns it.
      * @param \context_course $coursecontext Course the application was made to.
-     * @return array Template context: hashistory, its label, and one entry per prior application.
+     * @return array Template context: hashistory, its labels, the report link (to the report of the
+     *     application's own method,
+     *     offered only when hasreportlink says the reader can open it) and one entry per prior application.
      */
     protected function history_context($application, $coursecontext): array {
-        global $USER;
+        global $DB, $USER;
 
         if (!has_capability('enrol/apply:viewreports', $coursecontext)) {
             return ['hashistory' => false, 'history' => []];
@@ -1123,11 +1130,47 @@ class enrol_apply_renderer extends plugin_renderer_base {
             )
         );
 
+        // The deciders, in one read, worded as the report's decider column words a user's name.
+        $deciderids = array_values(array_unique(array_filter(array_map(
+            static fn(stdClass $prior): int => (int) $prior->decidedby,
+            $priors
+        ))));
+        $deciders = $deciderids
+            ? $DB->get_records_list('user', 'id', $deciderids, '', 'id, ' . implode(', ', \core_user\fields::get_name_fields()))
+            : [];
+        $viewfullnames = has_capability('moodle/site:viewfullnames', $coursecontext);
+        $short = get_string('strftimedatetimeshort', 'langconfig');
+
         $rows = [];
         foreach ($priors as $prior) {
+            $outcome = $formatter::outcome($prior->status, $prior);
+            $decider = $deciders[(int) $prior->decidedby] ?? null;
+            $applied = userdate((int) $prior->timecreated, $short);
+            $note = trim((string) ($prior->decisionnote ?? ''));
+            /* Both group cells come out of the report's formatters escaped, as a Report Builder
+               cell is raw HTML, and the template triple stashes them: format_string() escapes each
+               name once, and a group the reader may not see leaves its cell empty. */
+            $keygroup = $formatter::key_group($prior->keygroupname, $prior);
+            $joined = $formatter::joined_groups($prior->joinedgroups, $prior);
             $rows[] = [
-                'applied' => userdate((int) $prior->timecreated, get_string('strftimedatetimeshort', 'langconfig')),
-                'outcome' => $formatter::outcome($prior->status, $prior),
+                'hasfacts' => $decider !== null || $keygroup !== '' || $joined !== '' || $note !== '',
+                'outcome' => $outcome,
+                'outcomeclass' => self::outcome_badge($outcome),
+                'applieddate' => $applied,
+                'applied' => get_string('reviewappliedon', 'enrol_apply', $applied),
+                'hasdecided' => (int) $prior->timedecided > 0,
+                'decided' => (int) $prior->timedecided > 0
+                    ? get_string('reviewhistorydecided', 'enrol_apply', userdate((int) $prior->timedecided, $short))
+                    : '',
+                'hasdecider' => $decider !== null,
+                'decider' => $decider ? fullname($decider, $viewfullnames) : '',
+                'haskeygroup' => $keygroup !== '',
+                'keygroup' => $keygroup,
+                'hasjoined' => $joined !== '',
+                'joined' => $joined,
+                'hasnote' => $note !== '',
+                // Escaped with the decider's line breaks kept, as the strip's own note is.
+                'note' => format_text($note, FORMAT_PLAIN),
             ];
         }
 
@@ -1135,11 +1178,57 @@ class enrol_apply_renderer extends plugin_renderer_base {
             'hashistory' => (bool) $rows,
             'historylabel' => get_string('reviewhistory', 'enrol_apply'),
             'history' => $rows,
+            'historydeciderlabel' => get_string('submissiondecidedby', 'enrol_apply'),
+            'historykeygrouplabel' => get_string('keygroup', 'enrol_apply'),
+            'historyjoinedlabel' => get_string('joinedgroups', 'enrol_apply'),
+            'historynotelabel' => get_string('decisionnote', 'enrol_apply'),
+            'historyreportlabel' => get_string('reviewhistoryreport', 'enrol_apply'),
+            'hasreportlink' => $this->can_open_report($application),
+            'historyreporturl' => (new moodle_url('/enrol/apply/report.php', ['id' => (int) $application->enrolid]))->out(false),
         ];
     }
 
     /**
-     * How much room the enrolment method has left, as numbers for the signals and the method line.
+     * Whether the reader could open the course report the history links to.
+     *
+     * report.php asks for the capability AND require_login($course). The capability alone is not
+     * enough: a holder through a category role who is not enrolled passes the first and is refused
+     * by the second. The four-argument can_access_course() agrees with require_login() on a
+     * suspended or expired enrolment, which the three-argument form does not.
+     *
+     * @param stdClass $application Application as \enrol_apply\local\queue::application() returns it.
+     * @return bool Whether the link would lead somewhere the reader may go.
+     */
+    protected function can_open_report($application): bool {
+        $course = get_course((int) $application->courseid);
+
+        return can_access_course($course, null, 'enrol/apply:viewreports', true);
+    }
+
+    /**
+     * The badge colour of an earlier application's outcome, keyed on the report's own wording.
+     *
+     * Keyed on the text {@see \enrol_apply\reportbuilder\local\formatters\submission::outcome()}
+     * returned rather than on the record's status, so the colour cannot disagree with the words
+     * beside it: an approval whose enrolment has since gone reads as removed, in grey, not as an
+     * approval in green. Literal class pairs, so the badge scan sees each background with its text
+     * colour.
+     *
+     * @param string $outcome The outcome as the report's formatter words it.
+     * @return string The badge's background and text colour classes.
+     */
+    protected static function outcome_badge(string $outcome): string {
+        return match ($outcome) {
+            get_string('outcomeapproved', 'enrol_apply') => 'bg-success text-white',
+            get_string('outcomecancelled', 'enrol_apply') => 'bg-danger text-white',
+            get_string('outcomeawaiting', 'enrol_apply') => 'bg-warning text-dark',
+            get_string('outcomewaiting', 'enrol_apply') => 'bg-info text-white',
+            default => 'bg-secondary text-dark',
+        };
+    }
+
+    /**
+     * How much room the enrolment method has left, as numbers for the rules' meters.
      *
      * The numbers answer two different questions and must never be mixed: applicants counts every
      * non-expired row - pending, deferred and approved alike - while places counts active rows
@@ -1154,7 +1243,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
      * The deferred count is the reader's scope (V-D3): for a decider narrowed by separate groups it
      * is the queue tile's own scope_deferred(), so the review page and the queue they came from
      * cannot disagree; for everybody else the method's figure, capacity::deferred(). Each number is
-     * counted only where its limit is set, since a method without one gets no row and no count.
+     * counted only where its limit is set, since a method without one gets no meter and no count.
      *
      * @param stdClass $instance Enrol instance the application belongs to.
      * @return array hascapacity, and with it places, placestaken, limit, held, deferred and narrowed.
@@ -1178,11 +1267,43 @@ class enrol_apply_renderer extends plugin_renderer_base {
             'placestaken' => $places > 0 ? $capacity::places_taken($instance) : 0,
             'limit' => $limit,
             'held' => $limit > 0 ? $capacity::applicants($instance) : 0,
-            'deferred' => $narrowed
+            'deferred' => (int) ($narrowed
                 ? \enrol_apply\table\applications::for_scope((int) $instance->id)->scope_deferred()
-                : $capacity::deferred($instance),
+                : $capacity::deferred($instance)),
             'narrowed' => $narrowed,
         ];
+    }
+
+    /**
+     * The snapshot keys the instance asks for as required, by its CURRENT definitions.
+     *
+     * Metadata, not a value, so reading it live is sound where reading a live VALUE for a snapshot
+     * key is not ({@see self::snapshot_context()}): the profile fields' per-instance required flag
+     * from {@see \enrol_apply\local\fields::resolve()}, and each application question's own
+     * configdata "required" from {@see \enrol_apply\local\answers::fields()}. The keys are built
+     * by the same helpers that build a snapshot's keys, so a match is exact; a stored key nothing
+     * asks for now reads as not required.
+     *
+     * @param stdClass $instance Enrol instance the application belongs to.
+     * @return array Snapshot key => true, for every field the instance requires.
+     */
+    protected static function required_keys(stdClass $instance): array {
+        $required = [];
+
+        $profile = \enrol_apply\local\fields::resolve($instance);
+        foreach ($profile->keys() as $key) {
+            if ($profile->is_required($key)) {
+                $required[$key] = true;
+            }
+        }
+
+        foreach (\enrol_apply\local\answers::fields($instance) as $field) {
+            if ($field->get_configdata_property('required')) {
+                $required[\enrol_apply\local\answers::key((int) $field->get('id'))] = true;
+            }
+        }
+
+        return $required;
     }
 
     /**
@@ -1200,11 +1321,14 @@ class enrol_apply_renderer extends plugin_renderer_base {
      * (fields::DENY governs only the write path) and reads a "c_<id>" key from {user_info_data}
      * past core's PROFILE_VISIBLE_* gates, and a reader for whom visible_keys() returns
      * ALL_FIELDS skips the key filter entirely - so a crafted archive could expose any column,
-     * the password hash included. The report does not read the live profile either.
+     * the password hash included. The report does not read the live profile either. Whether a
+     * field is required is the instance's definition, read by {@see self::required_keys()}: that
+     * is metadata keyed by the stored key, and it never dereferences a value.
      *
      * Masked with the report's own rule in the course context. A mentor holds nothing in the
      * course, so they see the name fields only, even where their mentor role grants the identity
-     * capability in the applicant's user context: the stricter reading, as in the report.
+     * capability in the applicant's user context: the stricter reading, as in the report. The
+     * counts are taken over the rows the reader may see, so a withheld field changes no number.
      *
      * Every value is the plain spelling and the template double stashes it. Not format_string(),
      * whose strip_tags() would delete a restored value from the first "<" onwards. A value can
@@ -1212,12 +1336,14 @@ class enrol_apply_renderer extends plugin_renderer_base {
      * cell's white-space rule rather than converting them to markup.
      *
      * @param stdClass $application Application as \enrol_apply\local\queue::application() returns it.
-     * @return array Template context: hassnapshot, its label, and one row per visible field.
+     * @param stdClass $instance Enrol instance the application belongs to.
+     * @return array Template context: hassnapshot, its label and counts, and one tile per visible field.
      */
-    protected function snapshot_context($application): array {
+    protected function snapshot_context($application, stdClass $instance): array {
         $formatter = \enrol_apply\reportbuilder\local\formatters\submission::class;
         $entries = \enrol_apply\local\submission::read_snapshot((int) ($application->submissionid ?? 0));
         $visible = $formatter::visible_keys(\context_course::instance($application->courseid));
+        $required = $entries ? self::required_keys($instance) : [];
 
         $rows = [];
         foreach ($entries as $entry) {
@@ -1230,13 +1356,28 @@ class enrol_apply_renderer extends plugin_renderer_base {
             $rows[] = [
                 'label' => $entry['label'],
                 'value' => $entry['value'],
+                'isempty' => trim($entry['value']) === '',
+                'isrequired' => isset($required[$entry['key']]),
             ];
         }
+
+        $filled = count(array_filter($rows, static fn(array $row): bool => !$row['isempty']));
+        $requiredcount = count(array_filter($rows, static fn(array $row): bool => $row['isrequired']));
 
         return [
             'hassnapshot' => (bool) $rows,
             'snapshotlabel' => get_string('submittedprofile', 'enrol_apply'),
             'snapshot' => $rows,
+            'snapshotcount' => get_string('reviewdetailscount', 'enrol_apply', (object) [
+                'filled' => $filled,
+                'total' => count($rows),
+            ]),
+            'hassnapshotrequired' => $requiredcount > 0,
+            'snapshotrequired' => $requiredcount === 1
+                ? get_string('reviewdetailsrequiredone', 'enrol_apply')
+                : get_string('reviewdetailsrequired', 'enrol_apply', $requiredcount),
+            'requiredmark' => get_string('reviewdetailsrequiredmark', 'enrol_apply'),
+            'emptyvalue' => get_string('reviewdetailsempty', 'enrol_apply'),
         ];
     }
 
@@ -1266,8 +1407,9 @@ class enrol_apply_renderer extends plugin_renderer_base {
         $note = ''
     ) {
         echo $this->header();
-        /* No heading here: core already renders the applicant's name as the page's <h1> from
-           $PAGE->set_heading(), so the <h2>s belong to the panels below. */
+        /* No heading here: core already renders the course's name as the page's <h1> from
+           $PAGE->set_heading(), as every course page does; the applicant is named in the
+           breadcrumb, the title and the card, and the <h2>s belong to the blocks below. */
 
         /* Above the form, where core puts a tertiary navigation bar: the last control an
            operator reads before a decision should be the decision.
@@ -1282,19 +1424,20 @@ class enrol_apply_renderer extends plugin_renderer_base {
     }
 
     /**
-     * The single-application decision form, read as a decision funnel (concept A, RP-D1).
+     * The single-application decision form, in two columns (Visual 1).
      *
      * The POST carries the queue's own contract - formaction, userenrolments[] and the session
      * key - so every guard manage.php applies to a queue decision applies here unchanged. The one
      * branch manage.php adds for this page is the confirmation before a cancellation, and the
      * confirmed request arrives on the same contract and passes the same guards.
      *
-     * The page answers the decider's questions in the order they are asked: who and how (the
-     * strip), what weighs (the signals), what confirming does (the outcome card, with the
-     * adjustments folded under it), then the decision bar with each button's consequence. The
-     * evidence - comment, submitted details, earlier applications - is a column of its own that
-     * the signals link into. Every block reads a helper that already existed; the new code
-     * classifies and words, and adds no query.
+     * The left column answers the decider's questions in the order they are asked: the state (the
+     * strip), the limits the decision touches (the rules), what the applicant sent (comment and
+     * details), what confirming does (the outcome card, with the adjustments folded under it) and
+     * the message and note. The right column is the applicant's card. On a phone the columns stack
+     * in that source order, so the card comes after the left column's blocks. Every block reads a
+     * helper that already existed or a formatter the course report runs; the new code classifies
+     * and words.
      *
      * @param stdClass $application Application as \enrol_apply\local\queue::application() returns it.
      * @param stdClass $applicant Applicant user record.
@@ -1312,7 +1455,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
         $keyed = $this->key_context($application, $instance, $coursecontext);
 
         /* A reader the page admits who may not decide (a holder of enrol/apply:viewapplications
-           alone, S5) reads the same panels with no decision form: no hidden contract, no
+           alone, S5) reads the same blocks with no decision form: no hidden contract, no
            controls, no decisions. Asked of can_manage_application(), the predicate every decision
            applies, so the form appears exactly where a decision posted from it would be taken. */
         $candecide = enrol_get_plugin('apply')->can_manage_application(
@@ -1331,30 +1474,28 @@ class enrol_apply_renderer extends plugin_renderer_base {
         }
         $capacity = $candecide ? $this->capacity_context($instance) : ['hascapacity' => false];
 
-        $snapshot = $this->snapshot_context($application);
+        $snapshot = $this->snapshot_context($application, $instance);
         $history = $this->history_context($application, $coursecontext);
         $hascomment = trim((string) $application->applycomment) !== '';
 
         $outcome = $candecide
             ? $this->review_outcome_context($application, $applicant, $instance, $coursecontext, $controls, $keyed, $capacity)
-            : ['effective' => [], 'context' => [], 'confirm' => ''];
+            : ['effective' => [], 'context' => []];
 
         $context = $controls
             + $outcome['context']
-            + $this->review_signals_context(
+            + $this->review_rules_context(
                 $controls['groupfacts'] ?? [],
                 $outcome['effective'],
                 $keyed['keygroupid'],
                 $capacity,
-                $history,
-                $snapshot,
-                (string) $application->applycomment
+                $history
             )
             + $snapshot
-            + $this->identity_context($applicant, $coursecontext)
+            + $this->applicant_context($applicant, $application, $coursecontext)
             + $history
             + $this->decision_context($application)
-            + $this->review_summary_context($application, $instance, $coursecontext, $candecide)
+            + $this->review_summary_context($application, $candecide, $waiting)
             + [
             'candecide' => $candecide,
             'viewonlynotice' => get_string('reviewviewonly', 'enrol_apply'),
@@ -1368,8 +1509,10 @@ class enrol_apply_renderer extends plugin_renderer_base {
                 ? get_string('outcomewaiting', 'enrol_apply')
                 : get_string('outcomeawaiting', 'enrol_apply'),
             'iswaiting' => $waiting,
-            // Literal class pairs, so the badge scan sees each background with its text colour.
-            'statuschipclass' => $waiting ? 'bg-info text-white' : 'bg-warning text-dark',
+            /* The plugin's own chip classes rather than Bootstrap's bg-* utilities, whose
+               !important no plugin rule may outrank; each pairs a background with its text colour
+               in styles.css. */
+            'statuschipclass' => $waiting ? 'enrol_apply-statuschip-deferred' : 'enrol_apply-statuschip-pending',
             /* Plain, not escaped: review_evidence.mustache renders this through a double stash.
                The label's other two sinks render raw, which is why the helper takes a flag. */
             'commentlabel' => \enrol_apply\local\commentlabel::custom($instance, false),
@@ -1381,7 +1524,11 @@ class enrol_apply_renderer extends plugin_renderer_base {
                Not format_string(): its strip_tags() would delete the text from the first "<"
                onwards, and a restore writes the comment verbatim out of a foreign archive. */
             'comment' => format_text((string) $application->applycomment, FORMAT_PLAIN),
-            'nocomment' => get_string('nocomment', 'enrol_apply'),
+            /* One muted line when there is nothing to read, judged on what THIS reader is shown:
+               the details are counted after the masking, so the line says "to show" rather than
+               claiming nothing was sent, and it cannot tell a masked reader that something was. */
+            'hasnothing' => !$hascomment && !$snapshot['hassnapshot'],
+            'nothingsent' => get_string('reviewnothingsent', 'enrol_apply'),
             /* Singular labels of their own: the queue's btnconfirm and its siblings read
                "Confirm requests", which is wrong above one application.
 
@@ -1392,13 +1539,9 @@ class enrol_apply_renderer extends plugin_renderer_base {
                comment with it. See enrol_apply/review_actions for why its being the default
                submit is safe.
 
-               Each carries its consequence (RP-D8), escaped for a triple stash because the
-               approval's names it; beside the button, never inside it, so the button's accessible
-               name and the Behat presses that drive it stay the label alone. The short label is
-               what a phone shows under the icon, hidden from assistive technology (the full label
-               stays the name). Re-deferring an
-               application already deferred notifies only when a message is written (gates BI, BJ),
-               so its line says so. */
+               The short label is what a phone shows under the icon, hidden from assistive
+               technology (the full label stays the name). No line under a button says what it
+               does: the outcome card above the bar says what confirming does. */
             'actions' => [
                 [
                     'value' => 'cancel',
@@ -1406,7 +1549,6 @@ class enrol_apply_renderer extends plugin_renderer_base {
                     'shortlabel' => get_string('reviewcancelshort', 'enrol_apply'),
                     'style' => 'btn-outline-danger',
                     'icon' => 'e/cancel',
-                    'consequence' => s(get_string('reviewcancelconsequence', 'enrol_apply')),
                 ],
                 [
                     'value' => 'wait',
@@ -1414,10 +1556,6 @@ class enrol_apply_renderer extends plugin_renderer_base {
                     'shortlabel' => get_string('reviewwaitshort', 'enrol_apply'),
                     'style' => 'btn-secondary',
                     'icon' => 'i/duration',
-                    'consequence' => s(get_string(
-                        $waiting ? 'reviewwaitagainconsequence' : 'reviewwaitconsequence',
-                        'enrol_apply'
-                    )),
                 ],
                 [
                     'value' => 'confirm',
@@ -1425,16 +1563,13 @@ class enrol_apply_renderer extends plugin_renderer_base {
                     'shortlabel' => get_string('reviewconfirmshort', 'enrol_apply'),
                     'style' => 'btn-primary',
                     'icon' => 't/check',
-                    'consequence' => $outcome['confirm'],
                 ],
             ],
         ];
 
         /* The decisions go into a core sticky footer interpolated inside the form, as on the
-           queue (see manage_form()): only the buttons and their one-line consequences, because
-           the footer's content area clips with no scrollbar. Below the md breakpoint the
-           consequences move into the page body above the bar, where the buttons'
-           aria-describedby always point.
+           queue (see manage_form()): only the buttons, because the footer's content area clips with
+           no scrollbar.
 
            The spreading class is on the partial's own row, not passed to the footer: the footer
            applies its classes to a content area whose only child is that row, so there it would
@@ -1467,77 +1602,95 @@ class enrol_apply_renderer extends plugin_renderer_base {
         if (!empty($context['chooser'])) {
             $this->page->requires->js_call_amd('enrol_apply/review', 'init', ['#enrol_apply_review_form']);
         }
+        /* The earlier applications open in a core/modal from the rules' button. The list is the
+           server's own region, shown in place without JavaScript, so the page needs none of this. */
+        if ($context['hashistory']) {
+            $this->page->requires->js_call_amd('enrol_apply/review', 'initHistory', ['#enrol_apply_review_history']);
+        }
 
         return $this->render_from_template('enrol_apply/review', $context);
     }
 
     /**
-     * The strip that opens the funnel: who applied, how, through which method and how long ago.
+     * The strip that opens the left column: the state, and how long the application has waited.
      *
      * The status and key chips are built in review_form(), beside the decision they belong to;
-     * this adds the waiting time (RP-D11), the method and the course, and the read-only chip of a
-     * reader who may not decide (RP-D12).
-     *
-     * The method's name is the plain spelling, for a double stash: a typed name through
-     * format_string() with 'escape' => false, the unnamed fallbacks as the language strings
-     * get_instance_name() returns them.
+     * this adds the read-only chip of a reader who may not decide (RP-D12) and the wait: how
+     * long it has been in its state and when it was applied for. A pending application waits
+     * from the day it was applied for; a deferred one from the day it was deferred, which is what
+     * "on the waiting list for" means, falling back to the application date when the record
+     * carries no decision date. One neutral colour whatever the age (decision 10): the plugin sees
+     * time and the decider judges it.
      *
      * @param stdClass $application Application as \enrol_apply\local\queue::application() returns it.
-     * @param stdClass $instance Enrol instance the application belongs to.
-     * @param \context_course $coursecontext The course it was made to.
      * @param bool $candecide Whether this reader may decide it.
+     * @param bool $waiting Whether it is on the waiting list.
      * @return array Template context for enrol_apply/review_summary.
      */
-    protected function review_summary_context(
-        $application,
-        stdClass $instance,
-        \context_course $coursecontext,
-        bool $candecide
-    ): array {
+    protected function review_summary_context($application, bool $candecide, bool $waiting): array {
         $applied = (int) $application->applydate;
-        $when = $applied > 0 ? userdate($applied, get_string('strftimedatetimeshort', 'langconfig')) : '';
-        $methodname = trim((string) $instance->name) !== ''
-            ? format_string($instance->name, true, ['context' => $coursecontext, 'escape' => false])
-            : enrol_get_plugin('apply')->get_instance_name($instance);
-        // Offered only where user/view.php would open it: a moderator narrowed by separate groups
-        // is refused the profile of an applicant who is in no group yet.
+        $deferred = (int) ($application->timedecided ?? 0);
+        $since = $waiting && $deferred > 0 ? $deferred : $applied;
+        $short = get_string('strftimedatetimeshort', 'langconfig');
+
+        return [
+            'readonly' => !$candecide,
+            'readonlylabel' => get_string('reviewreadonly', 'enrol_apply'),
+            'haswaited' => $since > 0,
+            'waitlabel' => $waiting
+                ? get_string('reviewwaitingdeferred', 'enrol_apply')
+                : get_string('reviewwaiting', 'enrol_apply'),
+            /* format_time() reads no time at all as "now", which "Awaiting a decision for" cannot
+               carry, so the first second is counted as one. */
+            'waited' => $since > 0 ? format_time(max(1, time() - $since)) : '',
+            'hasapplied' => $applied > 0,
+            'appliedon' => $applied > 0
+                ? get_string('reviewappliedon', 'enrol_apply', userdate($applied, $short))
+                : '',
+        ];
+    }
+
+    /**
+     * The applicant's card: picture, name, the identity fields this reader may see, the profile.
+     *
+     * The picture is decoration beside the name, so it carries no link and no alternative text;
+     * the name is the card's heading. The identity fields are {@see self::identity_context()}'s,
+     * the one identity rule of this page. "View full profile" is offered only where
+     * {@see \enrol_apply\local\profilelink::url()} says user/view.php would open it: a moderator
+     * narrowed by separate groups is refused the profile of an applicant who is in no group yet.
+     * No contact buttons: the profile is the route to contact details for a reader entitled to
+     * them.
+     *
+     * @param stdClass $applicant Applicant user record.
+     * @param stdClass $application Application as \enrol_apply\local\queue::application() returns it.
+     * @param \context_course $coursecontext Course the application was made to.
+     * @return array Template context for enrol_apply/review_applicant.
+     */
+    protected function applicant_context($applicant, $application, \context_course $coursecontext): array {
         $profileurl = \enrol_apply\local\profilelink::url(
             \core_user::get_user((int) $application->userid, 'id, deleted', MUST_EXIST),
             get_course((int) $application->courseid)
         );
 
-        return [
-            'readonly' => !$candecide,
-            'readonlylabel' => get_string('reviewreadonly', 'enrol_apply'),
-            'haswaited' => $applied > 0,
-            /* format_time() reads under a minute as "now", which "Applied now ago" cannot carry,
-               so the first minute has a sentence of its own. */
-            'waited' => match (true) {
-                $applied <= 0 => '',
-                time() - $applied < MINSECS => get_string('reviewwaitedjustnow', 'enrol_apply', $when),
-                default => get_string('reviewwaited', 'enrol_apply', (object) [
-                    'ago' => format_time(time() - $applied),
-                    'when' => $when,
-                ]),
-            },
-            'methodlabel' => get_string('reviewmethodlabel', 'enrol_apply'),
-            'methodname' => $methodname,
-            'courselabel' => get_string('course'),
-            // Plain, for the same reason as the group names: the template double-stashes it.
-            'coursename' => format_string($application->coursename, true, [
-                'context' => $coursecontext,
-                'escape' => false,
+        return $this->identity_context($applicant, $coursecontext) + [
+            // Core's own markup, triple stashed: user_picture() escapes what it renders.
+            'picture' => $this->output->user_picture($applicant, [
+                'size' => 100,
+                'link' => false,
+                'alttext' => false,
+                'class' => 'userpicture enrol_apply-applicantpicture',
             ]),
-            'courseurl' => (new moodle_url('/course/view.php', ['id' => $application->courseid]))->out(false),
-            // No e-mail row: the address is one identity field among the rest. See identity_context().
+            // Plain, for a double stash.
+            'applicantname' => fullname($applicant),
+            'applicantrole' => get_string('reviewapplicant', 'enrol_apply'),
             'hasprofile' => $profileurl !== null,
             'profileurl' => $profileurl ? $profileurl->out(false) : '',
-            'profilelabel' => get_string('viewprofile'),
+            'profilelabel' => get_string('reviewfullprofile', 'enrol_apply'),
         ];
     }
 
     /**
-     * How full a count is against its limit, by the queue meter's rule (RP-D3).
+     * How full a group card's seats are, by the queue meter's rule (RP-D3).
      *
      * Attention from four fifths, so a limit is seen before it is reached (the queue's applicant
      * meter warns there, queue_capacity_context()); over from the limit itself, members >= seats,
@@ -1557,220 +1710,184 @@ class enrol_apply_renderer extends plugin_renderer_base {
     }
 
     /**
-     * One row of "What weighs on the decision".
+     * How full a limit is once this application is confirmed, by Visual 1's rule (decision 13).
      *
-     * Every state has an icon of its own shape and a word, so colour is never alone; only the two
-     * that need attention are tinted, with Bootstrap's subtle backgrounds, which follow the dark
-     * colour mode by themselves. The class names are literal so the Bootstrap scans see them.
+     * The occupancy AFTER confirming, in whole numbers so 60 % and 90 % themselves are exact:
+     * primary up to 60 %, warning above it, danger above 90 % (and so over the limit). Advisory,
+     * as every capacity signal of this plugin is: no level disables a decision.
      *
-     * @param string $state One of the SIGNAL_ constants.
-     * @param string $label What is measured, with its number, plain spelling.
-     * @param string $detail What the number means for this decision, plain; empty for none.
-     * @param string $href Anchor into the evidence column, empty for none.
-     * @param string $linktext Text of that link.
-     * @return array Template context for one signal.
+     * @param int $after How many the limit holds once the application is confirmed.
+     * @param int $total The limit, greater than zero.
+     * @return string One of the METER_ constants.
      */
-    protected static function signal_row(
-        string $state,
-        string $label,
-        string $detail = '',
-        string $href = '',
-        string $linktext = ''
-    ): array {
+    protected static function meter_level(int $after, int $total): string {
+        if ($after * 100 > $total * 90) {
+            return self::METER_DANGER;
+        }
+
+        return $after * 100 > $total * 60 ? self::METER_WARNING : self::METER_PRIMARY;
+    }
+
+    /**
+     * One meter of "Rules to observe": a limit, its count, the bar and what confirming leaves.
+     *
+     * The bar is decoration beside the text that says the same thing (it is aria-hidden): the
+     * seats already taken are striped and the applicant's own is solid, coloured by the level
+     * AFTER confirming ({@see self::meter_level()}). The line under it carries the information,
+     * one string per case so a count of one is never worded as a plural.
+     *
+     * @param string $label What the limit is, plain spelling.
+     * @param string $kind 'group', 'places' or 'applicants', which picks the icon.
+     * @param int $others How many the limit holds besides this application.
+     * @param int $total The limit, greater than zero.
+     * @param bool $counted Whether the count already includes this application (the applicant
+     *        limit counts every application held), so the heading shows it.
+     * @return array Template context for one meter.
+     */
+    protected static function meter(string $label, string $kind, int $others, int $total, bool $counted): array {
+        $after = $others + 1;
+        $level = self::meter_level($after, $total);
+        $takenpercent = (int) min(100, round($others * 100 / $total));
+        $afterpercent = (int) min(100, round($after * 100 / $total));
+        $left = $total - $after;
+        $a = (object) ['after' => $after, 'total' => $total, 'left' => $left];
+
         return [
             'label' => $label,
-            'hasdetail' => $detail !== '',
-            'detail' => $detail,
-            'haslink' => $href !== '',
-            'href' => $href,
-            'linktext' => $linktext,
-            'state' => $state,
-            'isok' => $state === self::SIGNAL_OK,
-            'iswarn' => $state === self::SIGNAL_WARN,
-            'isover' => $state === self::SIGNAL_OVER,
-            'isread' => $state === self::SIGNAL_READ,
-            'isnone' => $state === self::SIGNAL_NONE,
-            'rowclass' => match ($state) {
-                self::SIGNAL_WARN => 'bg-warning-subtle',
-                self::SIGNAL_OVER => 'bg-danger-subtle',
-                default => '',
+            'isgroup' => $kind === 'group',
+            'isplaces' => $kind === 'places',
+            'isapplicants' => $kind === 'applicants',
+            'count' => get_string('reviewofmany', 'enrol_apply', (object) [
+                'taken' => $counted ? $after : $others,
+                'total' => $total,
+            ]),
+            'takenpercent' => $takenpercent,
+            'ownpercent' => max(0, $afterpercent - $takenpercent),
+            'level' => $level,
+            // Literal class pairs, so the badge scan sees each background with its text colour.
+            'barclass' => match ($level) {
+                self::METER_DANGER => 'bg-danger text-white',
+                self::METER_WARNING => 'bg-warning text-dark',
+                default => 'bg-primary text-white',
             },
-            'hasstateword' => $state !== self::SIGNAL_NONE,
-            'stateword' => match ($state) {
-                self::SIGNAL_OK => get_string('reviewstateok', 'enrol_apply'),
-                self::SIGNAL_WARN => get_string('reviewstatewarn', 'enrol_apply'),
-                self::SIGNAL_OVER => get_string('reviewstateover', 'enrol_apply'),
-                self::SIGNAL_READ => get_string('reviewstateread', 'enrol_apply'),
-                default => '',
+            'isdanger' => $level === self::METER_DANGER,
+            'after' => match (true) {
+                $left < 0 => get_string('reviewmeterafterover', 'enrol_apply', $a),
+                $left === 0 => get_string('reviewmeterafterfull', 'enrol_apply', $a),
+                $left === 1 => get_string('reviewmeterafterone', 'enrol_apply', $a),
+                default => get_string('reviewmeterafter', 'enrol_apply', $a),
             },
         ];
     }
 
     /**
-     * "What weighs on the decision": the signals, the attention line and the method line.
+     * "Rules to observe": a meter per limit the decision touches, the deferred count, the history.
      *
-     * In the order RP-D2 sets: the seats of each group the approval joins that declares seats,
-     * the key group first; the method's places; the earlier applications, only for a holder of
-     * enrol/apply:viewreports and absent rather than empty otherwise (the panel's own gate,
-     * history_context()); the submitted details, counted over the rows the reader may see, so a
-     * withheld field changes no count (no presence oracle); and the comment. A limit that is not
-     * set gives no row. Earlier applications are "read", never red: the plugin cannot judge them.
+     * Only what is present, and nothing at all when nothing is (decision 6). The meters, in
+     * order: each group the approval joins as the page loads that declares seats, the key group
+     * first; the method's places; the applicant limit. Seats come only from $facts, which only a
+     * course decider gets and which name only the groups this reader may choose (V-D3); places,
+     * the applicant limit and the deferred count only from $capacity, gated the same way. So a
+     * viewer and a mentor get no meter, and a reader without enrol/apply:viewreports no history
+     * line ({@see self::history_context()}).
      *
-     * Seats come only from $facts, which only a course decider gets and which name only the
-     * groups this reader may choose (V-D3); places and the method line only from $capacity,
-     * gated the same way. So a viewer reads history, details and comment, and a mentor details
-     * and comment.
+     * The applicant limit counts this application already (capacity::applicants() counts every
+     * application held), so its meter shows the applicant's own seat inside the count and
+     * confirming adds nothing to it. The deferred count is said only where an applicant limit
+     * exists, because only there does a deferral hold room, and only when there is one to count.
      *
-     * The attention line (concept E) counts and names the worst signal and never says what to
-     * do (RP-D14).
+     * The meters follow the page as it loads; the outcome card's "Afterwards" line is what follows
+     * the decider's ticks.
      *
      * @param array $facts Group facts, as group_facts() returns them; empty when not a course decider.
      * @param array $effective Group ids the approval joins as the page loads.
      * @param int $keygroupid The key group when this reader may be told it, 0 otherwise.
      * @param array $capacity As capacity_context() returns it.
      * @param array $history As history_context() returns it.
-     * @param array $snapshot As snapshot_context() returns it.
-     * @param string $comment The applicant's comment, raw.
-     * @return array Template context for enrol_apply/review_signals.
+     * @return array Template context for enrol_apply/review_rules.
      */
-    protected function review_signals_context(
+    protected function review_rules_context(
         array $facts,
         array $effective,
         int $keygroupid,
         array $capacity,
-        array $history,
-        array $snapshot,
-        string $comment
+        array $history
     ): array {
-        $signals = [];
-
         $seated = [];
         foreach ($effective as $groupid) {
-            if (isset($facts[$groupid]) && $facts[$groupid]->hasseats) {
+            if (isset($facts[$groupid]) && $facts[$groupid]->hasseats && $facts[$groupid]->seats > 0) {
                 $seated[$groupid] = $facts[$groupid];
             }
         }
         if ($keygroupid && isset($seated[$keygroupid])) {
             $seated = [$keygroupid => $seated[$keygroupid]] + $seated;
         }
+
+        $meters = [];
         foreach ($seated as $fact) {
-            $state = self::signal_state($fact->members, $fact->seats);
-            $left = $fact->seats - $fact->members;
-            $signals[] = self::signal_row(
-                $state,
-                get_string('reviewsignalseats', 'enrol_apply', (object) [
-                    'name' => $fact->name,
-                    'members' => $fact->members,
-                    'seats' => $fact->seats,
-                ]),
-                match (true) {
-                    $state === self::SIGNAL_OVER => get_string('reviewsignalseatsover', 'enrol_apply', (object) [
-                        'after' => $fact->members + 1,
-                        'seats' => $fact->seats,
-                    ]),
-                    $fact->id === $keygroupid => get_string('reviewsignalseatsleftkey', 'enrol_apply', $left),
-                    default => get_string('reviewsignalseatsleft', 'enrol_apply', $left),
-                }
+            $meters[] = self::meter(
+                $fact->id === $keygroupid ? get_string('reviewmetergroupkey', 'enrol_apply', $fact->name) : $fact->name,
+                'group',
+                $fact->members,
+                $fact->seats,
+                false
             );
         }
 
-        if ($capacity['hascapacity'] && $capacity['places'] > 0) {
-            $state = self::signal_state($capacity['placestaken'], $capacity['places']);
-            $signals[] = self::signal_row(
-                $state,
-                get_string('reviewsignalplaces', 'enrol_apply', (object) [
-                    'taken' => $capacity['placestaken'],
-                    'total' => $capacity['places'],
-                ]),
-                $state === self::SIGNAL_OVER
-                    ? get_string('reviewsignalplacesover', 'enrol_apply', (object) [
-                        'after' => $capacity['placestaken'] + 1,
-                        'total' => $capacity['places'],
-                    ])
-                    : get_string('reviewsignalplacesleft', 'enrol_apply', $capacity['places'] - $capacity['placestaken'])
-            );
+        $deferred = '';
+        if ($capacity['hascapacity']) {
+            if ($capacity['places'] > 0) {
+                $meters[] = self::meter(
+                    get_string('reviewmeterplaces', 'enrol_apply'),
+                    'places',
+                    $capacity['placestaken'],
+                    $capacity['places'],
+                    false
+                );
+            }
+            if ($capacity['limit'] > 0) {
+                $meters[] = self::meter(
+                    get_string('reviewmeterapplicants', 'enrol_apply'),
+                    'applicants',
+                    max(0, $capacity['held'] - 1),
+                    $capacity['limit'],
+                    true
+                );
+            }
+            if ($capacity['limit'] > 0 && $capacity['deferred'] > 0) {
+                $a = (object) ['count' => $capacity['deferred'], 'limit' => $capacity['limit']];
+                $one = $capacity['deferred'] === 1;
+                $yours = $capacity['narrowed'];
+                $deferred = match (true) {
+                    $yours && $one => get_string('reviewrulesdeferredyoursone', 'enrol_apply', $a),
+                    $yours => get_string('reviewrulesdeferredyours', 'enrol_apply', $a),
+                    $one => get_string('reviewrulesdeferredone', 'enrol_apply', $a),
+                    default => get_string('reviewrulesdeferred', 'enrol_apply', $a),
+                };
+            }
         }
 
+        $historyline = '';
         if (!empty($history['hashistory'])) {
             // Newest first, as queue::prior_applications() orders them.
             $last = reset($history['history']);
-            $signals[] = self::signal_row(
-                self::SIGNAL_READ,
-                get_string('reviewsignalhistory', 'enrol_apply', count($history['history'])),
-                get_string('reviewsignalhistorylast', 'enrol_apply', (object) [
-                    'outcome' => $last['outcome'],
-                    'applied' => $last['applied'],
-                ]),
-                '#enrol_apply_review_history',
-                get_string('reviewsignalhistorylink', 'enrol_apply')
-            );
-        }
-
-        if (!empty($snapshot['hassnapshot'])) {
-            $total = count($snapshot['snapshot']);
-            $filled = count(array_filter(
-                $snapshot['snapshot'],
-                static fn(array $row): bool => trim((string) $row['value']) !== ''
-            ));
-            $signals[] = self::signal_row(
-                $filled === $total ? self::SIGNAL_OK : self::SIGNAL_READ,
-                get_string('reviewsignaldetails', 'enrol_apply', (object) ['filled' => $filled, 'total' => $total]),
-                '',
-                '#enrol_apply_review_details',
-                get_string('reviewsignaldetailslink', 'enrol_apply')
-            );
-        }
-
-        $signals[] = trim($comment) !== ''
-            ? self::signal_row(
-                self::SIGNAL_READ,
-                get_string('reviewsignalcomment', 'enrol_apply'),
-                '',
-                '#enrol_apply_review_comment',
-                get_string('reviewsignalcommentlink', 'enrol_apply')
-            )
-            : self::signal_row(self::SIGNAL_NONE, get_string('reviewsignalnocomment', 'enrol_apply'));
-
-        $over = array_values(array_filter($signals, static fn(array $row): bool => $row['isover']));
-        $warn = array_values(array_filter($signals, static fn(array $row): bool => $row['iswarn']));
-        $flagged = count($over) + count($warn);
-        $worst = $flagged ? ($over ?: $warn)[0]['label'] : '';
-
-        $methodline = '';
-        if ($capacity['hascapacity']) {
-            $parts = [
-                $capacity['limit'] > 0
-                    ? get_string('reviewmethodheld', 'enrol_apply', (object) [
-                        'taken' => $capacity['held'],
-                        'total' => $capacity['limit'],
-                    ])
-                    : get_string('reviewmethodheldnolimit', 'enrol_apply'),
-                get_string(
-                    $capacity['narrowed'] ? 'reviewmethoddeferredyours' : 'reviewmethoddeferred',
-                    'enrol_apply',
-                    $capacity['deferred']
-                ),
-            ];
-            if ($capacity['places'] <= 0) {
-                $parts[] = get_string('reviewmethodnoplaces', 'enrol_apply');
-            }
-            $methodline = get_string('reviewmethodline', 'enrol_apply', implode('; ', $parts));
+            $count = count($history['history']);
+            $a = (object) ['count' => $count, 'outcome' => $last['outcome'], 'applied' => $last['applieddate']];
+            $historyline = $count === 1
+                ? get_string('reviewhistoryone', 'enrol_apply', $a)
+                : get_string('reviewhistorymany', 'enrol_apply', $a);
         }
 
         return [
-            'signalsheading' => get_string('reviewsignals', 'enrol_apply'),
-            'signals' => $signals,
-            'attentionflagged' => $flagged > 0,
-            'attention' => match (true) {
-                $flagged === 0 => get_string('reviewattentionnone', 'enrol_apply'),
-                $flagged === 1 => get_string('reviewattentionone', 'enrol_apply', $worst),
-                default => get_string('reviewattentionmany', 'enrol_apply', (object) [
-                    'count' => $flagged,
-                    'worst' => $worst,
-                ]),
-            },
-            'hasmethodline' => $methodline !== '',
-            'methodline' => $methodline,
+            'hasrules' => $meters || $deferred !== '' || $historyline !== '',
+            'rulesheading' => get_string('reviewrules', 'enrol_apply'),
+            'hasmeters' => (bool) $meters,
+            'meters' => $meters,
+            'hasdeferredline' => $deferred !== '',
+            'deferredline' => $deferred,
+            'hashistoryline' => $historyline !== '',
+            'historyline' => $historyline,
+            'historyopen' => get_string('reviewhistoryopen', 'enrol_apply'),
         ];
     }
 
@@ -1806,15 +1923,31 @@ class enrol_apply_renderer extends plugin_renderer_base {
     }
 
     /**
+     * Wrap an ESCAPED part of the outcome sentence in <strong>.
+     *
+     * The only markup the sentence carries (decision 7): the role, the groups and the notice are
+     * what the decider checks, so they are what the eye should find. The argument must already
+     * be escaped; this adds the element and escapes nothing, so a name passes through s() exactly
+     * once on its way here. enrol_apply/review builds the same elements as nodes.
+     *
+     * @param string $escaped Text already escaped.
+     * @return string The text inside a strong element.
+     */
+    protected static function strong(string $escaped): string {
+        return '<strong>' . $escaped . '</strong>';
+    }
+
+    /**
      * The sentence that says what confirming does, in its escaped spelling.
      *
      * One string per count of groups, none of them inflected for the applicant's gender: pt_br
      * cannot put an article before an arbitrary group name, and "recebe o aviso" fits anybody.
-     * Every parameter arrives escaped; the strings' own text holds no markup, so the result is
-     * escaped exactly once and the template triple stashes it.
+     * Every parameter arrives escaped and the bold parts are wrapped here ({@see self::strong()});
+     * the strings' own text holds no markup, so the result is escaped exactly once and the
+     * template triple stashes it.
      *
      * @param string $who The applicant's name, escaped.
-     * @param string $role The role phrase, escaped ("as Student", "with no role").
+     * @param string $role The role phrase, escaped, its name already in bold ("as <strong>Student</strong>").
      * @param array $names Group names, escaped.
      * @param int $hidden How many more groups the reader may not see.
      * @return string The sentence.
@@ -1824,14 +1957,28 @@ class enrol_apply_renderer extends plugin_renderer_base {
         if ($hidden) {
             $items[] = get_string('decisionsummaryhidden', 'enrol_apply', $hidden);
         }
-        $a = (object) ['who' => $who, 'role' => $role, 'groups' => implode(', ', $items)];
+        $a = (object) [
+            'who' => $who,
+            'role' => $role,
+            'groups' => $items ? self::strong(implode(', ', $items)) : '',
+            'notice' => self::outcome_notice(),
+        ];
         $count = count($names) + $hidden;
 
         return match (true) {
-            $count === 0 => get_string('reviewoutcomenone', 'enrol_apply', $a),
-            $count === 1 => get_string('reviewoutcomeone', 'enrol_apply', $a),
-            default => get_string('reviewoutcomemany', 'enrol_apply', $a),
+            $count === 0 => get_string('reviewoutcomenonewithnotice', 'enrol_apply', $a),
+            $count === 1 => get_string('reviewoutcomeonewithnotice', 'enrol_apply', $a),
+            default => get_string('reviewoutcomemanywithnotice', 'enrol_apply', $a),
         };
+    }
+
+    /**
+     * The notice part of the outcome sentence, escaped and in bold.
+     *
+     * @return string "is notified of the approval", in a strong element.
+     */
+    protected static function outcome_notice(): string {
+        return self::strong(s(get_string('reviewoutcomenotice', 'enrol_apply')));
     }
 
     /**
@@ -1865,8 +2012,8 @@ class enrol_apply_renderer extends plugin_renderer_base {
      * @param array $controls As decision_controls_context() returns it, with groupfacts filled in.
      * @param array $keyed As key_context() returns it.
      * @param array $capacity As capacity_context() returns it.
-     * @return array Keys 'effective' (group ids joined as the page loads), 'confirm' (Confirm's
-     *     consequence, escaped) and 'context' (template context for enrol_apply/review_outcome).
+     * @return array Keys 'effective' (group ids joined as the page loads) and 'context' (template
+     *     context for enrol_apply/review_outcome).
      */
     protected function review_outcome_context(
         $application,
@@ -1927,17 +2074,20 @@ class enrol_apply_renderer extends plugin_renderer_base {
         $role = (int) $instance->roleid > 0 ? $DB->get_record('role', ['id' => (int) $instance->roleid]) : false;
         $rolename = $role ? format_string(role_get_name($role, $coursecontext), true, ['context' => $coursecontext]) : '';
         $rolephrase = $rolename !== ''
-            ? get_string('reviewoutcomerole', 'enrol_apply', $rolename)
-            : get_string('reviewoutcomenorole', 'enrol_apply');
+            ? get_string('reviewoutcomerole', 'enrol_apply', self::strong($rolename))
+            : self::strong(s(get_string('reviewoutcomenorole', 'enrol_apply')));
 
         $who = s(fullname($applicant));
         $sentence = $coursedecider
             ? self::outcome_sentence($who, $rolephrase, $escapednames, $hidden)
-            : get_string('reviewoutcomenogroupinfo', 'enrol_apply', (object) ['who' => $who, 'role' => $rolephrase]);
+            : get_string('reviewoutcomenogroupinfowithnotice', 'enrol_apply', (object) [
+                'who' => $who,
+                'role' => $rolephrase,
+                'notice' => self::outcome_notice(),
+            ]);
 
         // Afterwards: each joined group that declares seats, then the method's places.
         $after = [];
-        $overfact = null;
         foreach ($effective as $groupid) {
             $fact = $facts[$groupid] ?? null;
             if ($fact === null || !$fact->hasseats) {
@@ -1948,9 +2098,6 @@ class enrol_apply_renderer extends plugin_renderer_base {
                 'members' => $fact->members + 1,
                 'seats' => $fact->seats,
             ]);
-            if ($overfact === null && $fact->full) {
-                $overfact = $fact;
-            }
         }
         if ($capacity['hascapacity'] && $capacity['places'] > 0) {
             $after[] = get_string('reviewafterplaces', 'enrol_apply', (object) [
@@ -1958,23 +2105,6 @@ class enrol_apply_renderer extends plugin_renderer_base {
                 'total' => $capacity['places'],
             ]);
         }
-
-        $items = $escapednames;
-        if ($hidden) {
-            $items[] = get_string('decisionsummaryhidden', 'enrol_apply', $hidden);
-        }
-        $confirm = match (true) {
-            $overfact !== null => get_string('reviewconfirmoverbook', 'enrol_apply', (object) [
-                'name' => s($overfact->name),
-                'after' => $overfact->members + 1,
-                'seats' => $overfact->seats,
-            ]),
-            $coursedecider && (bool) $items => get_string('reviewconfirmconsequencegroups', 'enrol_apply', (object) [
-                'groups' => implode(', ', $items),
-                'role' => $rolephrase,
-            ]),
-            default => get_string('reviewconfirmconsequencecourse', 'enrol_apply', $rolephrase),
-        };
 
         // The cards, and the search over the rest.
         $searched = count($facts) > \enrol_apply\local\groupfilter::THRESHOLD;
@@ -2029,7 +2159,6 @@ class enrol_apply_renderer extends plugin_renderer_base {
 
         return [
             'effective' => array_values(array_map('intval', $effective)),
-            'confirm' => $confirm,
             'context' => [
                 'outcomeheading' => get_string('reviewoutcome', 'enrol_apply'),
                 'outcomesentence' => $sentence,

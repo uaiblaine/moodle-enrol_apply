@@ -26,8 +26,10 @@
     default, which for an application a group key sent for review includes the key's group, so
     unticking every box is never "no group" and the line under the cards says what it is. They
     arrive ESCAPED from the renderer, which builds them from escaped names, and are triple
-    stashed; enrol_apply/review rewrites them with textContent when a tick or the role changes,
-    from the plain names in the data attributes.
+    stashed. The sentence carries the only markup of the card: the role, the groups and the notice
+    in strong elements (decision 7). enrol_apply/review rewrites the three lines when a tick or the
+    role changes, from the plain names in the data attributes, building the strong elements as
+    nodes and every name as a text node, never as markup.
 
     The cards are real checkboxes named groups[], and "Add another group" is a plain multiple
     select named groups[] that core's autocomplete enhances above the threshold; without
@@ -35,7 +37,11 @@
     wrapper carries data-fieldtype autocomplete so Behat drives it as core's control. The
     grouping filter needs the script, so it is hidden until the script shows it.
 
-    Disclosures are native details elements, open in the server's markup when they must be.
+    The two disclosures are Bootstrap accordions, open in the server's markup when they must be
+    and open whatever their state without JavaScript (styles.css). Each header carries the chevron
+    in Moodle's bordered square on its leading edge, and each body is a region named by its
+    header. The message accordion keeps its title alone in the heading, and its hint describes the
+    button (aria-describedby) rather than lengthening the heading's name.
 
     Context variables required for this template:
     * outcomeheading string - the card's heading
@@ -84,7 +90,7 @@
     Example context (json):
     {
         "outcomeheading": "On confirming",
-        "outcomesentence": "Ana Souza joins the course as Student and the group R&amp;D &lt; Team, and is notified of the approval.",
+        "outcomesentence": "Ana Souza joins the course as <strong>Student</strong> and the group <strong>R&amp;D &lt; Team</strong>, and <strong>is notified of the approval</strong>.",
         "hasoutcomeafter": true,
         "outcomeafter": "Afterwards: R&amp;D &lt; Team with 19 of 20 seats taken.",
         "outcomenotkey": false,
@@ -144,11 +150,11 @@
         "notevalue": ""
     }
 }}
-<section class="enrol_apply-outcome card mb-3" aria-labelledby="enrol_apply_outcome_heading" data-region="enrol_apply-outcome"
+<section class="enrol_apply-outcome card" aria-labelledby="enrol_apply_outcome_heading" data-region="enrol_apply-outcome"
     data-who="{{outcomewho}}" data-keygroup="{{outcomekeygroup}}" data-defaultids="{{outcomedefaultids}}"
     data-defaulthidden="{{outcomedefaulthidden}}" data-kepthidden="{{outcomekepthidden}}" data-places="{{outcomeplaces}}" data-placestaken="{{outcomeplacestaken}}">
     <div class="card-body">
-        <h2 class="h5" id="enrol_apply_outcome_heading">{{outcomeheading}}</h2>
+        <h2 class="enrol_apply-blocktitle" id="enrol_apply_outcome_heading">{{outcomeheading}}</h2>
         <p class="mb-1" data-region="outcome-sentence">{{{outcomesentence}}}</p>
         <p class="small mb-1" data-region="outcome-notkey"{{^outcomenotkey}} hidden{{/outcomenotkey}}>{{{outcomenotkeytext}}}</p>
         <p class="small text-body-secondary mb-0" data-region="outcome-after"{{^hasoutcomeafter}} hidden{{/hasoutcomeafter}}>{{{outcomeafter}}}</p>
@@ -166,10 +172,10 @@
             <h3 class="accordion-header" id="enrol_apply_adjust_heading">
                 <button class="accordion-button{{^adjustopen}} collapsed{{/adjustopen}}" type="button" data-bs-toggle="collapse"
                     data-bs-target="#enrol_apply_adjust_body" aria-controls="enrol_apply_adjust_body"
-                    aria-expanded="{{#adjustopen}}true{{/adjustopen}}{{^adjustopen}}false{{/adjustopen}}">{{adjustlabel}}</button>
+                    aria-expanded="{{#adjustopen}}true{{/adjustopen}}{{^adjustopen}}false{{/adjustopen}}"><span class="enrol_apply-chevron">{{#pix}}t/collapsedchevron, core{{/pix}}</span>{{adjustlabel}}</button>
             </h3>
             <div class="accordion-collapse collapse{{#adjustopen}} show{{/adjustopen}}" id="enrol_apply_adjust_body"
-                aria-labelledby="enrol_apply_adjust_heading">
+                role="region" aria-labelledby="enrol_apply_adjust_heading">
             <div class="accordion-body">
                 {{#hasgroupchooser}}
                     <fieldset class="enrol_apply-groupchooser mt-2">
@@ -247,17 +253,20 @@
         {{/hasadjust}}
     </div>
 </section>
-<div class="accordion enrol_apply-accordion enrol_apply-write mb-3" id="enrol_apply_write">
+<div class="accordion enrol_apply-accordion enrol_apply-write" id="enrol_apply_write">
 <div class="accordion-item">
 <h2 class="accordion-header" id="enrol_apply_write_heading">
     <button class="accordion-button{{^writeopen}} collapsed{{/writeopen}}" type="button" data-bs-toggle="collapse"
         data-bs-target="#enrol_apply_write_body" aria-controls="enrol_apply_write_body"
+        aria-describedby="enrol_apply_write_hint"
         aria-expanded="{{#writeopen}}true{{/writeopen}}{{^writeopen}}false{{/writeopen}}">
-        <span class="enrol_apply-accordiontitle">{{writelabel}}<span class="enrol_apply-accordionhint">{{writehelp}}</span></span>
+        <span class="enrol_apply-chevron">{{#pix}}t/collapsedchevron, core{{/pix}}</span>
+        <span class="enrol_apply-accordiontitle">{{writelabel}}</span>
     </button>
 </h2>
+<p class="enrol_apply-accordionhint" id="enrol_apply_write_hint">{{writehelp}}</p>
 <div class="accordion-collapse collapse{{#writeopen}} show{{/writeopen}}" id="enrol_apply_write_body"
-    aria-labelledby="enrol_apply_write_heading">
+    role="region" aria-labelledby="enrol_apply_write_heading">
 <div class="accordion-body">
     <div class="enrol_apply-outcomemessage">
         <label class="form-label" for="enrol_apply_outcomemessage">{{messagelabel}}</label>

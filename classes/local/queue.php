@@ -476,6 +476,12 @@ final class queue {
      * aliases below are what the report's outcome formatter reads, so both surfaces describe a
      * record the same way. LEFT JOIN, because a record outlives its enrolment on purpose.
      *
+     * The rest is what the course report's other columns read for the same record, under the
+     * aliases its formatters take: the key group (joined LEFT, a group deleted since included),
+     * the groups the approval joined ({@see submission::joined_groups_sql()}), the decider and the
+     * decision note. The message to the applicant is deliberately not selected: the report does
+     * not show it, so the review page's history must not either.
+     *
      * @param int $courseid Course the application under review was made to.
      * @param int $userid The applicant.
      * @param int $excludesubmissionid Record id to leave out, normally the one being reviewed.
@@ -483,7 +489,7 @@ final class queue {
      *     ({@see groupscope::narrowed_to()} with {@see groupscope::REPORT}), or null for none. Only
      *     the records {@see groupscope::record_where()} lets through are listed, so this panel
      *     and the report cannot disagree.
-     * @return array Records, newest first, carrying what the outcome formatter needs.
+     * @return array Records, newest first, carrying what the report's formatters need.
      */
     public static function prior_applications(
         int $courseid,
@@ -512,11 +518,16 @@ final class queue {
             $params += $scopeparams;
         }
 
-        $sql = "SELECT s.id, s.status, s.timecreated, s.timedecided, s.decidedby,
+        $joined = submission::joined_groups_sql('s');
+        $sql = "SELECT s.id, s.status, s.timecreated, s.timedecided, s.decidedby, s.decisionnote,
                        s.userenrolmentid AS outcomeueid,
-                       ue.status AS outcomeenrolstatus, ue.timeend AS outcomeenroltimeend
+                       ue.status AS outcomeenrolstatus, ue.timeend AS outcomeenroltimeend,
+                       s.keygroupid, s.keyoutcome AS keygroupoutcome, g.name AS keygroupname,
+                       g.courseid AS keygroupcourseid, g.visibility AS keygroupvisibility,
+                       {$joined} AS joinedgroups
                   FROM {enrol_apply_submission} s
              LEFT JOIN {user_enrolments} ue ON ue.id = s.userenrolmentid
+             LEFT JOIN {groups} g ON g.id = s.keygroupid
                  WHERE s.courseid = :courseid AND s.userid = :userid AND s.id <> :excludeid
                        AND {$scopesql}
               ORDER BY s.timecreated DESC, s.id DESC";
@@ -709,6 +720,22 @@ final class queue {
         $records = $DB->get_records_sql($sql, $params, 0, 1);
 
         return $records ? reset($records) : null;
+    }
+
+    /**
+     * The review page's heading: the name of the course the application was made to.
+     *
+     * Escaped once, because $PAGE->set_heading() feeds a triple stash in the theme; the page's
+     * body carries no course name of its own. Judged in the course context, as core's own course
+     * pages do, so a multilingual name is filtered for the reader.
+     *
+     * @param stdClass $application Application as application() returns it.
+     * @return string The course name, HTML escaped once.
+     */
+    public static function review_heading(stdClass $application): string {
+        return format_string($application->coursename, true, [
+            'context' => context_course::instance((int) $application->courseid),
+        ]);
     }
 
     /**

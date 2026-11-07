@@ -15,7 +15,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Tests for the review page read as a decision funnel (slice V3).
+ * Tests for the review page's blocks (slice V3, redrawn as Visual 1).
  *
  * @package    enrol_apply
  * @category   test
@@ -35,14 +35,13 @@ require_once($CFG->dirroot . '/enrol/apply/lib.php');
 require_once($CFG->dirroot . '/enrol/apply/renderer.php');
 
 /**
- * Tests for the review page read as a decision funnel (slice V3).
+ * Tests for the review page's blocks (slice V3, redrawn as Visual 1).
  *
- * The funnel's blocks per reader (concept A and its variants in
- * docs/design/review-page-concepts.html), the signals and their thresholds, the attention line,
- * the outcome sentence and its empty-choice fallback, the switch from cards to a search, and the
- * spelling of every name the new blocks render. Seats need local_groupdist, which GitHub's CI
- * does not install, so the thresholds are tested on the signals' own builder with the facts it is
- * handed, and the rendered pages are tested on what needs no seats.
+ * The blocks per reader, the rules' meters and their levels, the singular and plural lines, the
+ * outcome sentence with its bold parts and its empty-choice fallback, the switch from cards to a
+ * search, and the spelling of every name the blocks render. Seats need local_groupdist, which
+ * GitHub's CI does not install, so the levels are tested on the rules' own builder with the facts
+ * it is handed, and the rendered pages are tested on what needs no seats.
  *
  * @package    enrol_apply
  * @category   test
@@ -191,7 +190,7 @@ final class review_funnel_test extends \advanced_testcase {
      * @return string|null The element's inner markup, trimmed.
      */
     private function region(string $html, string $region): ?string {
-        $pattern = '~<(p|span|section|ul)\b[^>]*data-region="' . preg_quote($region, '~') . '"[^>]*>(.*?)</\1>~s';
+        $pattern = '~<(p|span|section|ul|div)\b[^>]*data-region="' . preg_quote($region, '~') . '"[^>]*>(.*?)</\1>~s';
 
         return preg_match($pattern, $html, $m) ? trim($m[2]) : null;
     }
@@ -280,6 +279,57 @@ final class review_funnel_test extends \advanced_testcase {
     }
 
     /**
+     * The outcome sentence as the renderer words it: the role, the groups and the notice in bold.
+     *
+     * @param string $key The sentence's string: reviewoutcomenonewithnotice, onewithnotice, manywithnotice or
+     *        nogroupinfowithnotice, each with its reviewoutcome prefix.
+     * @param string $who The applicant's name, plain.
+     * @param string $role The role's name, ESCAPED, or the empty string for no role.
+     * @param string $groups The groups as the sentence lists them, ESCAPED.
+     * @return string The sentence.
+     */
+    private static function sentence(string $key, string $who, string $role, string $groups = ''): string {
+        return get_string($key, 'enrol_apply', (object) [
+            'who' => s($who),
+            'role' => $role !== ''
+                ? get_string('reviewoutcomerole', 'enrol_apply', '<strong>' . $role . '</strong>')
+                : '<strong>' . s(get_string('reviewoutcomenorole', 'enrol_apply')) . '</strong>',
+            'groups' => $groups !== '' ? '<strong>' . $groups . '</strong>' : '',
+            'notice' => '<strong>' . s(get_string('reviewoutcomenotice', 'enrol_apply')) . '</strong>',
+        ]);
+    }
+
+    /**
+     * A capacity as capacity_context() returns it for a decider.
+     *
+     * @param int $places The method's places, 0 for none.
+     * @param int $taken How many places are taken.
+     * @param int $limit The applicant limit, 0 for none.
+     * @param int $held How many applications the limit holds, this one included.
+     * @param int $deferred How many of them are deferred.
+     * @param bool $narrowed Whether the reader is narrowed by separate groups.
+     * @return array The capacity.
+     */
+    private static function capacity(
+        int $places = 0,
+        int $taken = 0,
+        int $limit = 0,
+        int $held = 0,
+        int $deferred = 0,
+        bool $narrowed = false
+    ): array {
+        return [
+            'hascapacity' => true,
+            'places' => $places,
+            'placestaken' => $taken,
+            'limit' => $limit,
+            'held' => $held,
+            'deferred' => $deferred,
+            'narrowed' => $narrowed,
+        ];
+    }
+
+    /**
      * The capacity of a method with no limit, as capacity_context() returns it.
      *
      * @return array The capacity.
@@ -289,12 +339,13 @@ final class review_funnel_test extends \advanced_testcase {
     }
 
     /**
-     * A decider who may choose reads the blocks in the funnel's order, and the bar keeps its
-     * order and its contract.
+     * A decider who may choose reads the left column's blocks in order, then the applicant's
+     * card, and the bar keeps its order and its contract; a block with nothing to say is absent.
      *
-     * Changes that must make it fail: a block moved out of order, Cancel no longer first in
-     * source order (it is the form's default submit, and only manage.php's interception makes
-     * that safe), or the long key outcome back in the strip (RP-D10).
+     * Changes that must make it fail: a block moved out of order or out of its column, Cancel no
+     * longer first in source order (it is the form's default submit, and only manage.php's
+     * interception makes that safe), the long key outcome back in the strip (RP-D10), or the rules
+     * rendered for a method with no limit.
      *
      * @return void
      */
@@ -303,12 +354,14 @@ final class review_funnel_test extends \advanced_testcase {
         $html = $this->review_html($this->application(submission::KEY_FOR_REVIEW));
 
         $order = [
+            'class="col-lg-8 enrol_apply-reviewfunnel"',
             'enrol_apply-reviewstrip',
-            'id="enrol_apply_signals_heading"',
+            'class="enrol_apply-nothing"',
             'id="enrol_apply_outcome_heading"',
             'id="enrol_apply_adjust"',
             'enrol_apply-write',
-            'class="enrol_apply-evidence"',
+            'class="col-lg-4 enrol_apply-reviewaside"',
+            'enrol_apply-applicantcard',
             'value="cancel"',
             'value="wait"',
             'value="confirm"',
@@ -318,6 +371,9 @@ final class review_funnel_test extends \advanced_testcase {
         $sorted = $positions;
         sort($sorted);
         $this->assertSame($sorted, $positions, 'the funnel is out of order');
+        // No limit, no history: no rules block at all, rather than an empty one (decision 6).
+        $this->assertStringNotContainsString('id="enrol_apply_rules_heading"', $html);
+        $this->assertStringContainsString(get_string('reviewnothingsent', 'enrol_apply'), $html);
 
         $chip = get_string('keychipgroup', 'enrol_apply', (object) [
             'outcome' => get_string('keyoutcomeforreviewshort', 'enrol_apply'),
@@ -349,18 +405,13 @@ final class review_funnel_test extends \advanced_testcase {
         $html = $this->review_html($applicant);
 
         $role = $DB->get_record('role', ['id' => (int) $this->instance->roleid], '*', MUST_EXIST);
-        $expected = get_string('reviewoutcomemany', 'enrol_apply', (object) [
-            'who' => s(fullname($applicant)),
-            'role' => get_string('reviewoutcomerole', 'enrol_apply', format_string(
-                role_get_name($role, $this->context),
-                true,
-                ['context' => $this->context]
-            )),
-            'groups' => 'Turma A, Turma B',
-        ]);
+        $expected = self::sentence(
+            'reviewoutcomemanywithnotice',
+            fullname($applicant),
+            format_string(role_get_name($role, $this->context), true, ['context' => $this->context]),
+            'Turma A, Turma B'
+        );
         $this->assertSame($expected, $this->region($html, 'outcome-sentence'));
-        // Confirm's consequence names the same groups.
-        $this->assertStringContainsString('Turma A, Turma B', (string) $this->region($html, 'consequence-confirm'));
     }
 
     /**
@@ -400,13 +451,9 @@ final class review_funnel_test extends \advanced_testcase {
 
         $this->assertSame(s(get_string('reviewemptychoicenone', 'enrol_apply')), $this->region($html, 'outcome-emptychoice'));
         $this->assertTrue($this->accordion_open($html, 'adjust'));
-        $this->assertStringContainsString(
-            get_string('reviewoutcomenone', 'enrol_apply', (object) [
-                'who' => s(fullname($applicant)),
-                'role' => get_string('reviewoutcomerole', 'enrol_apply', 'Student'),
-                'groups' => '',
-            ]),
-            (string) $this->region($html, 'outcome-sentence')
+        $this->assertSame(
+            self::sentence('reviewoutcomenonewithnotice', fullname($applicant), 'Student'),
+            $this->region($html, 'outcome-sentence')
         );
     }
 
@@ -455,11 +502,12 @@ final class review_funnel_test extends \advanced_testcase {
             $this->region($html, 'outcome-kept-line')
         );
         $this->assertSame(
-            get_string('reviewoutcomemany', 'enrol_apply', (object) [
-                'who' => s(fullname($applicant)),
-                'role' => get_string('reviewoutcomerole', 'enrol_apply', 'Student'),
-                'groups' => 'Turma B, ' . get_string('decisionsummaryhidden', 'enrol_apply', 1),
-            ]),
+            self::sentence(
+                'reviewoutcomemanywithnotice',
+                fullname($applicant),
+                'Student',
+                'Turma B, ' . get_string('decisionsummaryhidden', 'enrol_apply', 1)
+            ),
             $this->region($html, 'outcome-sentence')
         );
         $this->assertStringNotContainsString('Covert', $html);
@@ -467,12 +515,11 @@ final class review_funnel_test extends \advanced_testcase {
 
     /**
      * A full key group is red, warned and never blocked (R5): "Adjust" opens on it, the line after
-     * the sentence and Confirm's consequence name the overbooking, and Confirm stays enabled.
+     * the sentence names the overbooking, and Confirm stays enabled.
      *
      * Seats need local_groupdist, so the outcome's builder is handed the facts it would read.
      *
-     * Changes that must make it fail: Confirm's consequence ignoring the overbooking, or "Adjust"
-     * staying folded on a full group.
+     * Changes that must make it fail: "Adjust" staying folded on a full group.
      *
      * @return void
      */
@@ -505,10 +552,6 @@ final class review_funnel_test extends \advanced_testcase {
             self::no_capacity()
         );
 
-        $this->assertSame(
-            get_string('reviewconfirmoverbook', 'enrol_apply', (object) ['name' => 'Turma A', 'after' => 21, 'seats' => 20]),
-            $outcome['confirm']
-        );
         $this->assertTrue($outcome['context']['adjustopen']);
         $this->assertStringContainsString(
             get_string('reviewafterseats', 'enrol_apply', (object) ['name' => 'Turma A', 'members' => 21, 'seats' => 20]),
@@ -547,11 +590,11 @@ final class review_funnel_test extends \advanced_testcase {
     }
 
     /**
-     * A viewer reads the strip, the signals they may see and the evidence: a read-only chip, the
-     * key group's name (V-D4), and no seats, places, method line, outcome or bar (RP-D12).
+     * A viewer reads the strip, what was sent and the applicant's card: a read-only chip, the key
+     * group's name (V-D4), and no meter, outcome or bar (RP-D12).
      *
-     * The control is the administrator on the same application, who gets the places signal and
-     * the method line, so their absence for the viewer is the gate and not an empty fixture.
+     * The control is the administrator on the same application, who gets the places and the
+     * applicant-limit meters, so their absence for the viewer is the gate and not an empty fixture.
      *
      * Changes that must make it fail: the key group withheld from a viewer, or capacity shown to
      * them.
@@ -562,13 +605,16 @@ final class review_funnel_test extends \advanced_testcase {
         global $DB;
 
         $DB->set_field('enrol', 'customint4', 20, ['id' => $this->instance->id]);
+        $DB->set_field('enrol', 'customint3', 30, ['id' => $this->instance->id]);
         $applicant = $this->application(submission::KEY_FOR_REVIEW);
-        $places = get_string('reviewsignalplaces', 'enrol_apply', (object) ['taken' => 0, 'total' => 20]);
+        $places = get_string('reviewmeterplaces', 'enrol_apply');
+        $limit = get_string('reviewmeterapplicants', 'enrol_apply');
 
         $this->setAdminUser();
         $control = $this->review_html($applicant);
         $this->assertStringContainsString($places, $control);
-        $this->assertNotNull($this->region($control, 'methodline'));
+        $this->assertStringContainsString($limit, $control);
+        $this->assertNotNull($this->region($control, 'meter-after'));
 
         $roleid = $this->getDataGenerator()->create_role(['shortname' => 'funnelviewer']);
         assign_capability('enrol/apply:viewapplications', CAP_ALLOW, $roleid, \context_system::instance());
@@ -585,11 +631,15 @@ final class review_funnel_test extends \advanced_testcase {
             'group' => 'Turma A',
         ])), $html);
         $this->assertStringNotContainsString($places, $html);
-        $this->assertNull($this->region($html, 'methodline'));
+        $this->assertStringNotContainsString($limit, $html);
+        $this->assertNull($this->region($html, 'meter-after'));
+        $this->assertStringNotContainsString('id="enrol_apply_rules_heading"', $html);
         $this->assertNull($this->region($html, 'enrol_apply-outcome'));
         $this->assertStringNotContainsString('name="formaction"', $html);
-        // The signals they may see are there: the comment's, at least.
-        $this->assertStringContainsString(get_string('reviewsignalnocomment', 'enrol_apply'), $html);
+        // What they may read is there: the applicant's card and the line saying nothing was sent.
+        $this->assertStringContainsString(s(fullname($applicant)), $html);
+        $this->assertStringContainsString(get_string('reviewapplicant', 'enrol_apply'), $html);
+        $this->assertStringContainsString(get_string('reviewnothingsent', 'enrol_apply'), $html);
     }
 
     /**
@@ -625,15 +675,16 @@ final class review_funnel_test extends \advanced_testcase {
     }
 
     /**
-     * A moderator narrowed by separate groups is offered their own groups only, and the method
-     * line counts the deferred applications of their groups, labelled so (V-D3).
+     * A moderator narrowed by separate groups is offered their own groups only, and the rules
+     * count the deferred applications of their groups, labelled so (V-D3).
      *
      * The application's key route holds the listed group, which is not theirs: it gets no card,
      * and the sentence names it beside their ticked group, because confirm_enrolment() keeps the
      * method's groups outside a decider's choice; the line under the cards says so.
      *
      * Changes that must make it fail: the deferred count read method-wide for a narrowed reader,
-     * another group offered to them, or the kept group left out of the sentence.
+     * another group offered to them, the kept group left out of the sentence, or the singular
+     * worded as the plural.
      *
      * @return void
      */
@@ -641,6 +692,8 @@ final class review_funnel_test extends \advanced_testcase {
         global $DB;
 
         $DB->set_field('course', 'groupmode', SEPARATEGROUPS, ['id' => $this->course->id]);
+        // The deferred count is said where an applicant limit makes a deferral hold room.
+        $DB->set_field('enrol', 'customint3', 10, ['id' => $this->instance->id]);
         $teacher = (int) $DB->get_field('role', 'id', ['shortname' => 'teacher'], MUST_EXIST);
         $system = \context_system::instance()->id;
         assign_capability('enrol/apply:manageapplications', CAP_ALLOW, $teacher, $system, true);
@@ -660,16 +713,12 @@ final class review_funnel_test extends \advanced_testcase {
         $this->assertNull($this->card_ticked($html, (int) $this->listed->id));
         $this->assertNull($this->card_ticked($html, (int) $this->other->id));
         $this->assertStringContainsString(
-            get_string('reviewmethoddeferredyours', 'enrol_apply', 1),
-            (string) $this->region($html, 'methodline')
+            get_string('reviewrulesdeferredyoursone', 'enrol_apply', (object) ['count' => 1, 'limit' => 10]),
+            (string) $this->region($html, 'rules-deferred')
         );
         // The method's listed group is not theirs to choose, and the approval keeps it.
         $this->assertSame(
-            get_string('reviewoutcomemany', 'enrol_apply', (object) [
-                'who' => s(fullname($applicant)),
-                'role' => get_string('reviewoutcomerole', 'enrol_apply', 'Student'),
-                'groups' => 'Turma A, Turma B',
-            ]),
+            self::sentence('reviewoutcomemanywithnotice', fullname($applicant), 'Student', 'Turma A, Turma B'),
             $this->region($html, 'outcome-sentence')
         );
         $this->assertSame(get_string('reviewkeptgroups', 'enrol_apply', 'Turma B'), $this->region($html, 'outcome-kept-line'));
@@ -677,8 +726,8 @@ final class review_funnel_test extends \advanced_testcase {
         // The control: the editing teacher, not narrowed, counts both on the method.
         $this->setUser($this->getDataGenerator()->create_and_enrol($this->course, 'editingteacher'));
         $this->assertStringContainsString(
-            get_string('reviewmethoddeferred', 'enrol_apply', 2),
-            (string) $this->region($this->review_html($applicant), 'methodline')
+            get_string('reviewrulesdeferred', 'enrol_apply', (object) ['count' => 2, 'limit' => 10]),
+            (string) $this->region($this->review_html($applicant), 'rules-deferred')
         );
     }
 
@@ -703,162 +752,193 @@ final class review_funnel_test extends \advanced_testcase {
         $html = $this->review_html($applicant);
 
         $this->assertSame(
-            get_string('reviewoutcomenogroupinfo', 'enrol_apply', (object) [
-                'who' => s(fullname($applicant)),
-                'role' => get_string('reviewoutcomerole', 'enrol_apply', 'Student'),
-            ]),
+            self::sentence('reviewoutcomenogroupinfowithnotice', fullname($applicant), 'Student'),
             $this->region($html, 'outcome-sentence')
         );
         $this->assertStringNotContainsString('Turma', $html);
         $this->assertStringNotContainsString('of 20', $html);
+        $this->assertStringNotContainsString('id="enrol_apply_rules_heading"', $html);
         $this->assertStringContainsString('value="confirm"', $html);
     }
 
     /**
-     * The signals classify each count by the queue meter's rule: OK below four fifths, attention
-     * from four fifths, over the limit at the limit; a group with no seats has no row, the key
-     * group comes first, and earlier applications are read, never red.
+     * The meters are coloured by the occupancy AFTER confirming: primary up to 60 %, warning above
+     * it, danger above 90 %; a group with no seats has no meter, and the key group comes first.
      *
-     * Changes that must make it fail: either threshold moved by one, the key group not first, a
-     * row for a group without seats, or the history given a state that judges it.
+     * Each fact is one seat short of a boundary or on it, so either threshold moved by one changes
+     * a level: 59 + 1 = 60 % is primary, 60 + 1 = 61 % warning, 89 + 1 = 90 % warning, 90 + 1 =
+     * 91 % danger, 100 + 1 over the limit and danger.
+     *
+     * Changes that must make it fail: either threshold moved or made inclusive, the level read
+     * before confirming, the key group not first, or a meter for a group without seats.
      *
      * @return void
      */
-    public function test_the_signals_classify_each_threshold(): void {
+    public function test_the_meters_are_levelled_by_the_occupancy_after_confirming(): void {
         $facts = [
-            1 => self::fact(1, 'Seventy-nine', 79, 100),
-            2 => self::fact(2, 'Eighty', 80, 100),
-            3 => self::fact(3, 'Hundred', 100, 100),
-            4 => self::fact(4, 'Unlimited', null),
-            5 => self::fact(5, 'Ninety-nine', 99, 100),
-        ];
-        $history = [
-            'hashistory' => true,
-            'history' => [['applied' => '04/06/26, 11:02', 'outcome' => 'Cancelled']],
+            1 => self::fact(1, 'Sixty', 59, 100),
+            2 => self::fact(2, 'Sixty-one', 60, 100),
+            3 => self::fact(3, 'Ninety', 89, 100),
+            4 => self::fact(4, 'Ninety-one', 90, 100),
+            5 => self::fact(5, 'Unlimited', null),
+            6 => self::fact(6, 'Full', 100, 100),
         ];
 
-        $context = $this->invoke_builder(
-            'review_signals_context',
-            $facts,
-            [1, 2, 3, 4, 5],
-            5,
-            self::no_capacity(),
-            $history,
-            ['hassnapshot' => false],
-            ''
-        );
+        $context = $this->invoke_builder('review_rules_context', $facts, [1, 2, 3, 4, 5, 6], 6, self::no_capacity(), []);
 
-        $states = [];
-        foreach ($context['signals'] as $signal) {
-            $states[$signal['label']] = $signal['state'];
+        $this->assertTrue($context['hasrules']);
+        $levels = [];
+        foreach ($context['meters'] as $meter) {
+            $levels[$meter['label']] = $meter['level'];
+            $this->assertTrue($meter['isgroup']);
         }
-        $seats = static fn(string $name, int $members) => get_string('reviewsignalseats', 'enrol_apply', (object) [
-            'name' => $name,
-            'members' => $members,
-            'seats' => 100,
-        ]);
-        $this->assertSame($seats('Ninety-nine', 99), $context['signals'][0]['label'], 'the key group comes first');
-        $this->assertSame(\enrol_apply_renderer::SIGNAL_WARN, $states[$seats('Ninety-nine', 99)]);
-        $this->assertSame(\enrol_apply_renderer::SIGNAL_OK, $states[$seats('Seventy-nine', 79)]);
-        $this->assertSame(\enrol_apply_renderer::SIGNAL_WARN, $states[$seats('Eighty', 80)]);
-        $this->assertSame(\enrol_apply_renderer::SIGNAL_OVER, $states[$seats('Hundred', 100)]);
-        foreach (array_keys($states) as $label) {
-            $this->assertStringNotContainsString('Unlimited', $label);
-        }
-        $history = get_string('reviewsignalhistory', 'enrol_apply', 1);
-        $this->assertSame(\enrol_apply_renderer::SIGNAL_READ, $states[$history]);
-
-        // The over-limit row names the overbooking instead of the seats left.
-        $over = array_values(array_filter($context['signals'], static fn(array $row) => $row['isover']));
         $this->assertSame(
-            get_string('reviewsignalseatsover', 'enrol_apply', (object) ['after' => 101, 'seats' => 100]),
-            $over[0]['detail']
+            [get_string('reviewmetergroupkey', 'enrol_apply', 'Full'), 'Sixty', 'Sixty-one', 'Ninety', 'Ninety-one'],
+            array_keys($levels),
+            'the key group comes first, and a group without seats has no meter'
         );
-        $this->assertSame('bg-danger-subtle', $over[0]['rowclass']);
+        $this->assertSame(\enrol_apply_renderer::METER_PRIMARY, $levels['Sixty']);
+        $this->assertSame(\enrol_apply_renderer::METER_WARNING, $levels['Sixty-one']);
+        $this->assertSame(\enrol_apply_renderer::METER_WARNING, $levels['Ninety']);
+        $this->assertSame(\enrol_apply_renderer::METER_DANGER, $levels['Ninety-one']);
+        $this->assertSame(\enrol_apply_renderer::METER_DANGER, $levels[get_string('reviewmetergroupkey', 'enrol_apply', 'Full')]);
+
+        // The bar: the taken seats striped, the applicant's own solid, and the level's class pair.
+        $sixty = $context['meters'][1];
+        $this->assertSame(59, $sixty['takenpercent']);
+        $this->assertSame(1, $sixty['ownpercent']);
+        $this->assertSame('bg-primary text-white', $sixty['barclass']);
+        $this->assertSame(get_string('reviewofmany', 'enrol_apply', (object) ['taken' => 59, 'total' => 100]), $sixty['count']);
+        $full = $context['meters'][0];
+        $this->assertSame(100, $full['takenpercent']);
+        $this->assertSame(0, $full['ownpercent'], 'an overbooked bar never overflows');
+        $this->assertSame('bg-danger text-white', $full['barclass']);
+        $this->assertSame('bg-warning text-dark', $context['meters'][2]['barclass']);
     }
 
     /**
-     * The places signal follows the same rule, and a method without places has no row.
+     * The places meter follows the same levels, and the applicant limit counts this application
+     * already: its heading shows it, and confirming adds nothing to it.
+     *
+     * Changes that must make it fail: the applicant limit read as one more after confirming, the
+     * places and the limit swapped, or a method without either given a meter.
      *
      * @return void
      */
-    public function test_the_places_signal_follows_the_same_rule(): void {
-        $state = function (int $taken, int $total): ?string {
+    public function test_the_places_and_the_applicant_limit_have_meters_of_their_own(): void {
+        $context = $this->invoke_builder(
+            'review_rules_context',
+            [],
+            [],
+            0,
+            self::capacity(10, 5, 20, 19),
+            []
+        );
+
+        $this->assertCount(2, $context['meters']);
+        [$places, $limit] = $context['meters'];
+        $this->assertSame(get_string('reviewmeterplaces', 'enrol_apply'), $places['label']);
+        $this->assertTrue($places['isplaces']);
+        $this->assertSame(\enrol_apply_renderer::METER_PRIMARY, $places['level'], '6 of 10 is 60 %');
+        $this->assertSame(
+            get_string('reviewmeterafter', 'enrol_apply', (object) ['after' => 6, 'total' => 10, 'left' => 4]),
+            $places['after']
+        );
+
+        $this->assertSame(get_string('reviewmeterapplicants', 'enrol_apply'), $limit['label']);
+        $this->assertTrue($limit['isapplicants']);
+        $this->assertSame(get_string('reviewofmany', 'enrol_apply', (object) ['taken' => 19, 'total' => 20]), $limit['count']);
+        $this->assertSame(\enrol_apply_renderer::METER_DANGER, $limit['level'], '19 of 20 is 95 %');
+        $this->assertSame(
+            get_string('reviewmeterafterone', 'enrol_apply', (object) ['after' => 19, 'total' => 20, 'left' => 1]),
+            $limit['after']
+        );
+
+        $none = $this->invoke_builder('review_rules_context', [], [], 0, self::capacity(), []);
+        $this->assertSame([], $none['meters']);
+        $this->assertFalse($none['hasrules'], 'nothing to observe gives no block at all');
+    }
+
+    /**
+     * Every count line has its singular: one seat left, none left, over the limit, many left; one
+     * deferral or many, in the reader's groups or the method's; one earlier application or many.
+     *
+     * Changes that must make it fail: a count of one worded as a plural ("1 restantes"), the full
+     * or the over case worded as seats left, or a deferred line shown without an applicant limit.
+     *
+     * @return void
+     */
+    public function test_every_count_line_has_its_singular(): void {
+        $after = function (int $members, int $seats): string {
             $context = $this->invoke_builder(
-                'review_signals_context',
+                'review_rules_context',
+                [1 => self::fact(1, 'Turma', $members, $seats)],
+                [1],
+                0,
+                self::no_capacity(),
+                []
+            );
+            return $context['meters'][0]['after'];
+        };
+        $a = static fn(int $after, int $total) => (object) ['after' => $after, 'total' => $total, 'left' => $total - $after];
+        $this->assertSame(get_string('reviewmeterafter', 'enrol_apply', $a(8, 10)), $after(7, 10));
+        $this->assertSame(get_string('reviewmeterafterone', 'enrol_apply', $a(9, 10)), $after(8, 10));
+        $this->assertSame(get_string('reviewmeterafterfull', 'enrol_apply', $a(10, 10)), $after(9, 10));
+        $this->assertSame(get_string('reviewmeterafterover', 'enrol_apply', $a(11, 10)), $after(10, 10));
+
+        $deferred = fn(int $count, bool $narrowed, int $limit = 60) => $this->invoke_builder(
+            'review_rules_context',
+            [],
+            [],
+            0,
+            self::capacity(0, 0, $limit, 30, $count, $narrowed),
+            []
+        )['deferredline'];
+        $d = static fn(int $count) => (object) ['count' => $count, 'limit' => 60];
+        $this->assertSame(get_string('reviewrulesdeferredone', 'enrol_apply', $d(1)), $deferred(1, false));
+        $this->assertSame(get_string('reviewrulesdeferred', 'enrol_apply', $d(2)), $deferred(2, false));
+        $this->assertSame(get_string('reviewrulesdeferredyoursone', 'enrol_apply', $d(1)), $deferred(1, true));
+        $this->assertSame(get_string('reviewrulesdeferredyours', 'enrol_apply', $d(3)), $deferred(3, true));
+        $this->assertSame('', $deferred(0, false), 'no deferral, no line');
+        $this->assertSame('', $deferred(2, false, 0), 'no applicant limit, no line');
+
+        $history = function (int $count): string {
+            $rows = array_fill(0, $count, ['outcome' => 'Cancelled', 'applieddate' => '04/06/26, 11:02']);
+            return $this->invoke_builder(
+                'review_rules_context',
                 [],
                 [],
                 0,
-                [
-                    'hascapacity' => true,
-                    'places' => $total,
-                    'placestaken' => $taken,
-                    'limit' => 0,
-                    'held' => 0,
-                    'deferred' => 0,
-                    'narrowed' => false,
-                ],
-                ['hashistory' => false],
-                ['hassnapshot' => false],
-                ''
-            );
-            $label = get_string('reviewsignalplaces', 'enrol_apply', (object) ['taken' => $taken, 'total' => $total]);
-            foreach ($context['signals'] as $signal) {
-                if ($signal['label'] === $label) {
-                    return $signal['state'];
-                }
-            }
-            return null;
+                self::no_capacity(),
+                ['hashistory' => true, 'history' => $rows]
+            )['historyline'];
         };
-
-        $this->assertSame(\enrol_apply_renderer::SIGNAL_OK, $state(31, 40));
-        $this->assertSame(\enrol_apply_renderer::SIGNAL_WARN, $state(32, 40));
-        $this->assertSame(\enrol_apply_renderer::SIGNAL_OVER, $state(40, 40));
-        $this->assertNull($state(0, 0), 'a method without places has no row');
+        $h = static fn(int $count) => (object) ['count' => $count, 'outcome' => 'Cancelled', 'applied' => '04/06/26, 11:02'];
+        $this->assertSame(get_string('reviewhistoryone', 'enrol_apply', $h(1)), $history(1));
+        $this->assertSame(get_string('reviewhistorymany', 'enrol_apply', $h(2)), $history(2));
     }
 
     /**
-     * The attention line counts the flagged signals and names the worst, never a verdict.
+     * The group cards keep the queue meter's rule: OK below four fifths, attention from four
+     * fifths, over the limit at the limit (RP-D3).
      *
-     * Changes that must make it fail: an attention signal named before an over-limit one, or a
-     * count that leaves one kind out.
+     * Changes that must make it fail: either threshold moved by one.
      *
      * @return void
      */
-    public function test_the_attention_line_counts_and_names_the_worst(): void {
-        $signals = fn(array $facts) => $this->invoke_builder(
-            'review_signals_context',
-            $facts,
-            array_keys($facts),
-            0,
-            self::no_capacity(),
-            ['hashistory' => false],
-            ['hassnapshot' => false],
-            ''
-        );
+    public function test_the_group_cards_classify_their_seats_by_the_queue_rule(): void {
+        $bar = fn(int $members) => $this->invoke_builder(
+            'group_card',
+            self::fact(1, 'Turma', $members, 100),
+            false,
+            false,
+            false
+        )['barclass'];
 
-        $this->assertSame(
-            get_string('reviewattentionnone', 'enrol_apply'),
-            $signals([1 => self::fact(1, 'Quiet', 10, 100)])['attention']
-        );
-
-        $one = $signals([1 => self::fact(1, 'Busy', 90, 100)]);
-        $label = get_string('reviewsignalseats', 'enrol_apply', (object) ['name' => 'Busy', 'members' => 90, 'seats' => 100]);
-        $this->assertSame(get_string('reviewattentionone', 'enrol_apply', $label), $one['attention']);
-        $this->assertTrue($one['attentionflagged']);
-
-        $two = $signals([1 => self::fact(1, 'Busy', 90, 100), 2 => self::fact(2, 'Full', 20, 20)]);
-        $this->assertSame(
-            get_string('reviewattentionmany', 'enrol_apply', (object) [
-                'count' => 2,
-                'worst' => get_string('reviewsignalseats', 'enrol_apply', (object) [
-                    'name' => 'Full',
-                    'members' => 20,
-                    'seats' => 20,
-                ]),
-            ]),
-            $two['attention']
-        );
+        $this->assertSame('bg-success text-white', $bar(79));
+        $this->assertSame('bg-warning text-dark', $bar(80));
+        $this->assertSame('bg-warning text-dark', $bar(99));
+        $this->assertSame('bg-danger text-white', $bar(100));
     }
 
     /**
@@ -874,16 +954,22 @@ final class review_funnel_test extends \advanced_testcase {
             $names,
             $hidden
         );
-        $a = static fn(string $groups) => (object) ['who' => 'Ana', 'role' => 'as Student', 'groups' => $groups];
+        $notice = '<strong>' . s(get_string('reviewoutcomenotice', 'enrol_apply')) . '</strong>';
+        $a = static fn(string $groups) => (object) [
+            'who' => 'Ana',
+            'role' => 'as Student',
+            'groups' => $groups === '' ? '' : '<strong>' . $groups . '</strong>',
+            'notice' => $notice,
+        ];
 
-        $this->assertSame(get_string('reviewoutcomenone', 'enrol_apply', $a('')), $sentence([], 0));
-        $this->assertSame(get_string('reviewoutcomeone', 'enrol_apply', $a('Turma A')), $sentence(['Turma A'], 0));
+        $this->assertSame(get_string('reviewoutcomenonewithnotice', 'enrol_apply', $a('')), $sentence([], 0));
+        $this->assertSame(get_string('reviewoutcomeonewithnotice', 'enrol_apply', $a('Turma A')), $sentence(['Turma A'], 0));
         $this->assertSame(
-            get_string('reviewoutcomemany', 'enrol_apply', $a('Turma A, Turma B')),
+            get_string('reviewoutcomemanywithnotice', 'enrol_apply', $a('Turma A, Turma B')),
             $sentence(['Turma A', 'Turma B'], 0)
         );
         $this->assertSame(
-            get_string('reviewoutcomeone', 'enrol_apply', $a(get_string('decisionsummaryhidden', 'enrol_apply', 1))),
+            get_string('reviewoutcomeonewithnotice', 'enrol_apply', $a(get_string('decisionsummaryhidden', 'enrol_apply', 1))),
             $sentence([], 1)
         );
     }
@@ -991,12 +1077,14 @@ final class review_funnel_test extends \advanced_testcase {
     }
 
     /**
-     * Every name the funnel renders reaches the reader escaped exactly once: a group in the
-     * sentence, the line after it, the empty-choice line, the cards and Confirm's consequence; a
-     * role in the sentence and the chooser; the applicant's name in the sentence.
+     * Every name the page renders reaches the reader escaped exactly once: a group in the
+     * sentence, the line after it, the empty-choice line, the cards and a rules meter; a role in
+     * the sentence and the chooser; the applicant's name in the sentence and on the card. The bold
+     * parts of the sentence wrap the escaped names, and nothing inside them is escaped again.
      *
-     * Changes that must make it fail: a name handed to a triple-stashed sentence unescaped, or
-     * escaped before a double stash.
+     * Changes that must make it fail: a name handed to a triple-stashed sentence unescaped, a bold
+     * part escaped a second time (or its element escaped with it), or a name escaped before a
+     * double stash.
      *
      * @return void
      */
@@ -1014,12 +1102,23 @@ final class review_funnel_test extends \advanced_testcase {
             'firstname' => 'Ana & Bia',
         ]));
 
-        foreach (['outcome-sentence', 'outcome-emptychoice', 'consequence-confirm'] as $region) {
+        foreach (['outcome-sentence', 'outcome-emptychoice'] as $region) {
             $text = (string) $this->region($html, $region);
             $this->assertStringContainsString(self::ESCAPED_ONCE, $text, $region);
             $this->assertStringNotContainsString(self::AWKWARD, $text, $region);
         }
-        $this->assertStringContainsString('Ana &amp; Bia', (string) $this->region($html, 'outcome-sentence'));
+        $sentence = (string) $this->region($html, 'outcome-sentence');
+        $this->assertStringContainsString('Ana &amp; Bia', $sentence);
+        // The bold parts: the role, the groups and the notice, each a real element.
+        $this->assertSame(3, substr_count($sentence, '<strong>'), $sentence);
+        $this->assertStringContainsString(
+            get_string('reviewoutcomerole', 'enrol_apply', '<strong>' . self::ESCAPED_ONCE . '</strong>'),
+            $sentence
+        );
+        $this->assertStringContainsString('<strong>' . self::ESCAPED_ONCE . ', Turma B</strong>', $sentence);
+        $this->assertStringNotContainsString('&lt;strong&gt;', $html);
+        // The card names the applicant through a double stash.
+        $this->assertStringContainsString('id="enrol_apply_applicant_name">Ana &amp; Bia', $html);
         $this->assertStringContainsString(
             '>' . self::ESCAPED_ONCE . ' <span class="badge',
             $html,
@@ -1028,5 +1127,19 @@ final class review_funnel_test extends \advanced_testcase {
         $this->assertStringContainsString('data-name="' . self::ESCAPED_ONCE . '"', $html);
         $this->assertStringNotContainsString(self::ESCAPED_TWICE, $html);
         $this->assertStringNotContainsString('Ana &amp;amp; Bia', $html);
+
+        // A rules meter, rendered from the facts its builder is handed (seats need local_groupdist).
+        $rules = $this->invoke_builder(
+            'review_rules_context',
+            [(int) $this->keyed->id => self::fact((int) $this->keyed->id, self::AWKWARD, 3, 20)],
+            [(int) $this->keyed->id],
+            (int) $this->keyed->id,
+            self::no_capacity(),
+            []
+        );
+        $meter = $GLOBALS['PAGE']->get_renderer('enrol_apply')->render_from_template('enrol_apply/review_rules', $rules);
+        $this->assertStringContainsString(s(get_string('reviewmetergroupkey', 'enrol_apply', self::AWKWARD)), $meter);
+        $this->assertStringNotContainsString(self::ESCAPED_TWICE, $meter);
+        $this->assertStringNotContainsString(self::AWKWARD, $meter);
     }
 }

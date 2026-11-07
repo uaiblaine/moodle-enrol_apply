@@ -14,13 +14,16 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Keeps the review page's "On confirming" card in step with the decider's ticks.
+ * Keeps the review page's "On confirming" card in step with the decider's ticks, and opens the
+ * earlier applications in a dialogue.
  *
  * The server renders the card right for the page as it loads, so the page needs none of this:
- * it only rewrites the outcome sentence, the counts after the decision, the line about the key's
- * group and Confirm's consequence when a group card, the added-groups select or the role changes,
- * from the plain names and seats the server wrote into the markup. Every value goes in through
- * textContent, never as markup.
+ * it only rewrites the outcome sentence, the counts after the decision and the line about the
+ * key's group when a group card, the added-groups select or the role changes, from the plain
+ * names and seats the server wrote into the markup. The sentence carries the role, the groups
+ * and the notice in strong elements, as the server's does; they are built here as nodes, from
+ * the language string split at placeholder markers, and every name goes in as a text node,
+ * never as markup.
  *
  * An empty choice is not "no group": confirm_enrolment() records it and the approval falls back to
  * the method's defaults, which the server lists in the card, so with nothing ticked the sentence
@@ -32,12 +35,17 @@
  * data-enabled="disabled" attribute core's autocomplete documents for leaving an option out; the
  * grouping control is hidden until this module shows it, because it does nothing without it.
  *
+ * The earlier applications are a region the server renders and styles.css hides once the page
+ * has JavaScript; initHistory() copies its list and its report link into a core/modal, which handles
+ * focus, Escape and focus return, and opens it from the rules' "See the history" button.
+ *
  * @module     enrol_apply/review
  * @copyright  2026 Anderson Blaine
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 import {getString} from 'core/str';
+import Modal from 'core/modal';
 import Notification from 'core/notification';
 import Pending from 'core/pending';
 
@@ -52,10 +60,16 @@ const SELECTORS = {
     CARDS: 'input[type="checkbox"][name="groups[]"]',
     ADDED: 'select[name="groups[]"]',
     ROLE: 'select[name="roleid"]',
-    CONFIRM: '[data-region="consequence-confirm"]',
     GROUPINGFILTER: '[data-region="groupingfilter"]',
     GROUPINGSELECT: '[data-region="groupingselect"]',
+    HISTORYBUTTON: '[data-action="enrol_apply-history"]',
+    HISTORYTITLE: '[data-region="history-title"]',
+    HISTORYLIST: '[data-region="history-list"]',
+    HISTORYFOOTER: '[data-region="history-footer"]',
 };
+
+/** @var {String} What a placeholder is replaced with before a string is split into nodes. */
+const MARKER = '\u0001';
 
 /** @var {Number} Bumped on every change, so a slower earlier rewrite never overwrites a later one. */
 let generation = 0;
@@ -100,13 +114,60 @@ const chosen = (form) => offered(form)
     .map(describe);
 
 /**
- * The role phrase: the chosen role, or the method's when the select is left alone.
+ * A strong element holding plain text.
+ *
+ * @param {String} text The text, plain.
+ * @returns {HTMLElement} The element.
+ */
+const strong = (text) => {
+    const node = document.createElement('strong');
+    node.textContent = text;
+    return node;
+};
+
+/**
+ * A language string as nodes, its placeholders replaced by the given parts.
+ *
+ * The string is fetched with a numbered marker for each part, so its own text is kept as text
+ * nodes and each part goes in where its marker is: a node as it is, a string as a text node.
+ * Nothing is ever parsed as markup.
+ *
+ * @param {String} key The string identifier.
+ * @param {Object} parts Placeholder name => Node or plain string; the one name 'a' for {$a}.
+ * @returns {Promise} Resolved with a DocumentFragment.
+ */
+const compose = async(key, parts) => {
+    const names = Object.keys(parts);
+    const markers = {};
+    names.forEach((name, index) => {
+        markers[name] = MARKER + index + MARKER;
+    });
+    // A string with a bare placeholder takes its one value as is; core substitutes {$a} only then.
+    const param = names.length === 1 && names[0] === 'a' ? markers.a : markers;
+    const text = await getString(key, 'enrol_apply', param);
+    const fragment = document.createDocumentFragment();
+    text.split(MARKER).forEach((piece, index) => {
+        // Odd pieces are the marker's number, even ones the string's own text.
+        if (index % 2 === 0) {
+            if (piece !== '') {
+                fragment.append(document.createTextNode(piece));
+            }
+            return;
+        }
+        const part = parts[names[parseInt(piece, 10)]];
+        fragment.append(part instanceof Node ? part : document.createTextNode(String(part)));
+    });
+    return fragment;
+};
+
+/**
+ * The role phrase: the chosen role, or the method's when the select is left alone, in bold.
  *
  * @param {HTMLFormElement} form The review form.
  * @param {HTMLElement} outcome The outcome card.
- * @returns {Promise} Resolved with the phrase.
+ * @returns {Promise} Resolved with a DocumentFragment.
  */
-const rolePhrase = (form, outcome) => {
+const rolePhrase = async(form, outcome) => {
     const select = form.querySelector(SELECTORS.ROLE);
     const fallback = outcome.querySelector(SELECTORS.DEFAULTROLE);
     let name = fallback ? fallback.textContent.trim() : '';
@@ -114,9 +175,11 @@ const rolePhrase = (form, outcome) => {
         name = select.selectedOptions[0].textContent.trim();
     }
     if (name === '') {
-        return getString('reviewoutcomenorole', 'enrol_apply');
+        const fragment = document.createDocumentFragment();
+        fragment.append(strong(await getString('reviewoutcomenorole', 'enrol_apply')));
+        return fragment;
     }
-    return getString('reviewoutcomerole', 'enrol_apply', name);
+    return compose('reviewoutcomerole', {a: strong(name)});
 };
 
 /**
@@ -127,16 +190,16 @@ const rolePhrase = (form, outcome) => {
  */
 const sentenceKey = (count) => {
     if (count === 0) {
-        return 'reviewoutcomenone';
+        return 'reviewoutcomenonewithnotice';
     }
     if (count === 1) {
-        return 'reviewoutcomeone';
+        return 'reviewoutcomeonewithnotice';
     }
-    return 'reviewoutcomemany';
+    return 'reviewoutcomemanywithnotice';
 };
 
 /**
- * Rewrite the card and Confirm's consequence from what is ticked now.
+ * Rewrite the card from what is ticked now.
  *
  * @param {HTMLFormElement} form The review form.
  * @param {HTMLElement} outcome The outcome card.
@@ -168,11 +231,12 @@ const update = async(form, outcome) => {
         if (hidden) {
             items.push(await getString('decisionsummaryhidden', 'enrol_apply', hidden));
         }
-        const groups = items.join(', ');
-        const sentence = await getString(sentenceKey(names.length + hidden), 'enrol_apply', {
+        const notice = strong(await getString('reviewoutcomenotice', 'enrol_apply'));
+        const sentence = await compose(sentenceKey(names.length + hidden), {
             who: outcome.dataset.who,
             role: role,
-            groups: groups,
+            groups: items.length ? strong(items.join(', ')) : '',
+            notice: notice,
         });
 
         const seated = joined.filter((group) => group.hasSeats);
@@ -190,32 +254,15 @@ const update = async(form, outcome) => {
         }
         const after = parts.length ? await getString('reviewoutcomeafter', 'enrol_apply', parts.join('; ')) : '';
 
-        const over = seated.find((group) => group.members >= group.seats);
-        let confirm;
-        if (over) {
-            confirm = await getString('reviewconfirmoverbook', 'enrol_apply', {
-                name: over.name,
-                after: over.members + 1,
-                seats: over.seats,
-            });
-        } else if (items.length) {
-            confirm = await getString('reviewconfirmconsequencegroups', 'enrol_apply', {groups: groups, role: role});
-        } else {
-            confirm = await getString('reviewconfirmconsequencecourse', 'enrol_apply', role);
-        }
-
         if (mine !== generation) {
             return;
         }
-        outcome.querySelector(SELECTORS.SENTENCE).textContent = sentence;
+        outcome.querySelector(SELECTORS.SENTENCE).replaceChildren(sentence);
         const afterNode = outcome.querySelector(SELECTORS.AFTER);
         afterNode.textContent = after;
         afterNode.hidden = after === '';
         const notKey = outcome.querySelector(SELECTORS.NOTKEY);
         notKey.hidden = !keyGroup || notKey.textContent.trim() === '' || joinedIds.includes(keyGroup);
-        form.querySelectorAll(SELECTORS.CONFIRM).forEach((node) => {
-            node.textContent = confirm;
-        });
     } finally {
         pending.resolve();
     }
@@ -275,4 +322,49 @@ export const init = (selector) => {
     });
 };
 
-export default {init};
+/**
+ * Open the earlier applications in a dialogue from the rules' button.
+ *
+ * The dialogue is built once, on the first press, from copies of the server's own list and
+ * report link; the region they come from stays in the page, hidden by styles.css, which is what
+ * a page without JavaScript shows instead. Core's modal records the button as the element to
+ * return focus to.
+ *
+ * @param {String} selector The history region's selector.
+ */
+export const initHistory = (selector) => {
+    const region = document.querySelector(selector);
+    const button = document.querySelector(SELECTORS.HISTORYBUTTON);
+    if (!region || !button) {
+        return;
+    }
+    const list = region.querySelector(SELECTORS.HISTORYLIST);
+    const title = region.querySelector(SELECTORS.HISTORYTITLE);
+    const footer = region.querySelector(SELECTORS.HISTORYFOOTER);
+    if (!list || !title) {
+        return;
+    }
+
+    let opening = null;
+    button.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (!opening) {
+            /* Strings of the server's own markup, re-read as it was rendered: the list and the
+               link are copied, never built from text. */
+            opening = Modal.create({
+                title: title.textContent.trim(),
+                body: list.outerHTML,
+                footer: footer ? footer.innerHTML : '',
+                large: true,
+                removeOnClose: false,
+                returnElement: button,
+            });
+        }
+        opening.then((modal) => {
+            modal.show();
+            return modal;
+        }).catch(Notification.exception);
+    });
+};
+
+export default {init, initHistory};

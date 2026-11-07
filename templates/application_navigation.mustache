@@ -28,6 +28,10 @@
     style nothing here. What they carry there is the right-to-left flip for the chevrons; this
     plugin's stylesheet carries that rule instead, keyed on the wrapper class below.
 
+    The way back to the queue comes first, a plain link flush with the boxes below; previous and
+    next sit together on the right, next as the page's one dark pill. Without a queue link the
+    first neighbour link takes the free space instead, so next stays on the right.
+
     The whole landmark is omitted when there is nothing to link to, so a screen reader does not
     announce an empty navigation region. It is not gated on the neighbours alone: the queue link
     has to survive a queue of one, which is when a reader most needs the way back.
@@ -61,19 +65,19 @@
     }
 }}
 {{#hasnav}}
-<nav class="enrol_apply-applicationnav mb-3" aria-label="{{navlabel}}">
+<nav class="enrol_apply-applicationnav" aria-label="{{navlabel}}">
     <div class="d-flex flex-wrap align-items-center gap-2">
+        {{#hasqueueurl}}
+            <a class="enrol_apply-navqueue me-auto" href="{{queueurl}}">{{queuelabel}}</a>
+        {{/hasqueueurl}}
         {{#previous}}
-            <a class="btn btn-link ps-0" href="{{url}}">
+            <a class="btn btn-link enrol_apply-navprevious{{^hasqueueurl}} me-auto{{/hasqueueurl}}" href="{{url}}">
                 {{#pix}} i/previous, core {{/pix}}
                 {{title}}
             </a>
         {{/previous}}
-        {{#hasqueueurl}}
-            <a class="btn btn-link mx-auto" href="{{queueurl}}">{{queuelabel}}</a>
-        {{/hasqueueurl}}
         {{#next}}
-            <a class="btn btn-link ms-auto pe-0" href="{{url}}">
+            <a class="btn btn-link enrol_apply-navnext{{^hasqueueurl}}{{^previous}} ms-auto{{/previous}}{{/hasqueueurl}}" href="{{url}}">
                 {{title}}
                 {{#pix}} i/next, core {{/pix}}
             </a>

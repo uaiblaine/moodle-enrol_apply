@@ -1,0 +1,93 @@
+{{!
+    This file is part of Moodle - http://moodle.org/
+
+    Moodle is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Moodle is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+}}
+{{!
+    @template enrol_apply/review_history
+
+    The applicant's earlier applications to this course, as the course report shows them to this
+    reader: the outcome as a badge, the dates, who decided, the key group, the groups joined and
+    the decision note. Never the message written to the applicant, which the report does not
+    show either.
+
+    A server-rendered region. Without JavaScript (body without jsenabled) it is shown in place in
+    the left column; with it, styles.css hides it and enrol_apply/review moves the list and the
+    report link into a core/modal opened from the rules' "See the history" button, which handles
+    focus, Escape and focus return. So the list carries no id of its own: a copy of it lives in
+    the dialogue while the region stays in the page.
+
+    The group cells and the note arrive ESCAPED and are triple stashed: the group names come out
+    of the report's own formatters, which escape each name once and leave a cell empty for a
+    group this reader may not see, and the note out of format_text(FORMAT_PLAIN), which keeps its
+    line breaks.
+
+    Context variables required for this template:
+    * hashistory boolean - whether this reader holds enrol/apply:viewreports AND there is history
+    * historylabel string - the list's heading, and the dialogue's title
+    * historydeciderlabel, historykeygrouplabel, historyjoinedlabel, historynotelabel string
+    * hasreportlink boolean - whether this reader can open the course report (capability AND course access)
+    * historyreportlabel string, historyreporturl string - the link to the course report
+    * history array - one entry per earlier application, newest first, each with outcome (plain),
+      outcomeclass (a literal background and text colour pair), applied, hasdecided, decided,
+      hasfacts (any of the four below), hasdecider, decider (plain), haskeygroup, keygroup (escaped), hasjoined, joined (escaped),
+      hasnote and note (escaped)
+
+    Example context (json):
+    {
+        "hashistory": true,
+        "historylabel": "Earlier applications to this course",
+        "historydeciderlabel": "Decided by",
+        "historykeygrouplabel": "Group of the enrolment key",
+        "historyjoinedlabel": "Groups joined",
+        "historynotelabel": "Note for the record",
+        "hasreportlink": true,
+        "historyreportlabel": "Open the applications report",
+        "historyreporturl": "https://example.com/enrol/apply/report.php?id=7",
+        "history": [
+            {
+                "outcome": "Cancelled", "outcomeclass": "bg-danger text-white", "applied": "Applied on 12/03/26, 09:14",
+                "hasdecided": true, "decided": "decided on 14/03/26, 10:02", "hasfacts": true, "hasdecider": true, "decider": "Carlos Lima",
+                "haskeygroup": true, "keygroup": "Turma B", "hasjoined": false, "joined": "",
+                "hasnote": true, "note": "Documents missing."
+            }
+        ]
+    }
+}}
+{{#hashistory}}
+<section class="enrol_apply-historyregion" id="enrol_apply_review_history" aria-labelledby="enrol_apply_review_history_heading">
+    <h2 class="enrol_apply-blocktitle" id="enrol_apply_review_history_heading" data-region="history-title">{{historylabel}}</h2>
+    <ol class="enrol_apply-timeline list-unstyled mb-0" data-region="history-list">
+        {{#history}}
+            <li>
+                <div class="enrol_apply-timelinehead">
+                    <span class="badge {{outcomeclass}}">{{outcome}}</span>
+                    <span class="enrol_apply-timelinedate">{{applied}}{{#hasdecided}} · {{decided}}{{/hasdecided}}</span>
+                </div>
+                {{#hasfacts}}
+                    <dl class="enrol_apply-historyfacts mb-0">
+                        {{#hasdecider}}<div><dt>{{historydeciderlabel}}</dt><dd>{{decider}}</dd></div>{{/hasdecider}}
+                        {{#haskeygroup}}<div><dt>{{historykeygrouplabel}}</dt><dd>{{{keygroup}}}</dd></div>{{/haskeygroup}}
+                        {{#hasjoined}}<div><dt>{{historyjoinedlabel}}</dt><dd>{{{joined}}}</dd></div>{{/hasjoined}}
+                        {{#hasnote}}<div><dt>{{historynotelabel}}</dt><dd>{{{note}}}</dd></div>{{/hasnote}}
+                    </dl>
+                {{/hasfacts}}
+            </li>
+        {{/history}}
+    </ol>
+    {{#hasreportlink}}
+        <p class="enrol_apply-historyreport mb-0" data-region="history-footer"><a href="{{historyreporturl}}">{{historyreportlabel}}</a></p>
+    {{/hasreportlink}}
+</section>
+{{/hashistory}}
