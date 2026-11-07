@@ -1,0 +1,56 @@
+{{!
+    This file is part of Moodle - http://moodle.org/
+
+    Moodle is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Moodle is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+}}
+{{!
+    @template enrol_apply/groupkey_item
+
+    One keyed group of enrol_apply/groupkey_summary: its name, its seats when known, and what is
+    wrong with its key, inside the list item the caller writes. The key itself is never in the
+    context.
+
+    Context variables required for this template:
+    * name string - the group name, plain spelling
+    * hasseats boolean - whether seats are known (local_groupdist is installed)
+    * nolimit boolean - whether the group declares no seats
+    * members int - current members
+    * seats int - declared seats
+    * full boolean - whether no seat is left, so the key admits nobody now
+    * isshadowed boolean - whether another group the reader may see shares this key and admits instead
+    * shadowedby string - the name of that group, or empty
+    * untypable boolean - whether the key starts or ends with a space
+
+    Example context (json):
+    {"name": "Turma C", "hasseats": true, "nolimit": true, "members": 8, "seats": 0,
+     "full": false, "isshadowed": true, "shadowedby": "Turma A", "untypable": false}
+}}
+<span class="fw-bold">{{name}}</span>
+{{#hasseats}}
+    {{#nolimit}}
+        <span class="text-muted">&middot; {{#str}} groupseatsnolimit, enrol_apply, {{members}} {{/str}}</span>
+    {{/nolimit}}
+    {{^nolimit}}
+        <span class="text-muted">&middot; {{#str}} groupseatsof, enrol_apply, { "members": {{members}}, "seats": {{seats}} } {{/str}}</span>
+    {{/nolimit}}
+    {{#full}}
+        <span class="badge bg-warning text-dark">{{#str}} groupkeyadmitsnobody, enrol_apply {{/str}}</span>
+    {{/full}}
+{{/hasseats}}
+{{#isshadowed}}
+    <div class="small text-muted">{{#str}} groupkeyshadowed, enrol_apply, {{shadowedby}} {{/str}}</div>
+{{/isshadowed}}
+{{#untypable}}
+    <div class="small text-muted">{{#str}} groupkeyuntypable, enrol_apply {{/str}}</div>
+{{/untypable}}

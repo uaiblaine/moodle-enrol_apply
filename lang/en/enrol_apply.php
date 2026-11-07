@@ -260,11 +260,15 @@ In every mode the required details and questions are still asked, and the enrolm
 $string['groupkeys_off'] = 'Nothing: every application is reviewed';
 $string['groupkeys_required'] = 'Key only: a valid key enrols at once, and nobody can enrol without one';
 $string['groupkeys_review'] = 'Key only, reviewed: a valid key sends the application for review, and nobody can apply without one';
+$string['groupkeysattention'] = '{$a} of them need your attention, listed here.';
+$string['groupkeysattentionone'] = 'One of them needs your attention, listed here.';
+$string['groupkeyscount'] = '{$a} groups carry an enrolment key.';
 $string['groupkeyselfkeys'] = 'This course also has self enrolment with group keys: the same keys enrol there without these questions.';
 $string['groupkeyshadowed'] = 'Same key as {$a}, which admits instead.';
 $string['groupkeysingroups'] = 'Groups with an enrolment key';
 $string['groupkeysmanage'] = 'Manage groups and their keys';
 $string['groupkeysnone'] = 'No group in this course has an enrolment key yet, so every application is still reviewed.';
+$string['groupkeysshowall'] = 'Show all {$a} groups';
 $string['groupkeyuntypable'] = 'Its key starts or ends with a space, which nobody can type into the application form.';
 $string['groupkeyunusualspace'] = 'Your key starts or ends with an unusual space, as a copied key often does. Type it again, or paste it without the space.';
 $string['groupscopeapprovalrefused'] = 'You can approve only the applications of your own groups: this one belongs to another group, or was made without a group key.';

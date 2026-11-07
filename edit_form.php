@@ -437,10 +437,28 @@ class enrol_apply_edit_form extends moodleform {
             ];
         }
 
+        /* Above the review page's threshold the list folds (RP-D18): a course with dozens of keyed
+           groups made this form a page long. What needs the teacher's attention stays outside the
+           fold: a full group, whose key admits nobody now, a key another group shadows, and a key
+           nobody can type. */
+        $fold = count($groups) > \enrol_apply\local\groupfilter::THRESHOLD;
+        $attention = array_values(array_filter(
+            $groups,
+            static fn(array $group): bool => ($group['hasseats'] && $group['full']) || $group['isshadowed'] || $group['untypable']
+        ));
+
         return $OUTPUT->render_from_template('enrol_apply/groupkey_summary', [
             'hasgroups' => (bool) $groups,
             'haskeys' => (bool) $keyed,
             'groups' => $groups,
+            'fold' => $fold,
+            'foldsummary' => get_string('groupkeyscount', 'enrol_apply', count($groups)),
+            'hasattention' => $fold && $attention,
+            'attention' => $fold ? $attention : [],
+            'attentionline' => count($attention) === 1
+                ? get_string('groupkeysattentionone', 'enrol_apply')
+                : get_string('groupkeysattention', 'enrol_apply', count($attention)),
+            'showall' => get_string('groupkeysshowall', 'enrol_apply', count($groups)),
             'manageurl' => (new moodle_url('/group/index.php', ['id' => $courseid]))->out(false),
         ]);
     }

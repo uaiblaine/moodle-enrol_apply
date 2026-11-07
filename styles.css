@@ -338,10 +338,30 @@ body.path-enrol-apply:not(.jsenabled) #page.drawers {
     border-left: 0.25rem solid var(--enrol-apply-fill);
 }
 
-/* The two accordions take Bootstrap's own look from the theme; only the header's weight and the
-   hint under the message accordion's title are this plugin's. */
-.enrol_apply-review .enrol_apply-accordion .accordion-button {
+/* The accordions (the review page's two, the instance form's keyed groups) take Bootstrap's own
+   look from the theme; only the header's weight and the hint under the message accordion's title
+   are this plugin's. */
+.enrol_apply-accordion .accordion-button {
     font-weight: 600;
+}
+
+/* The instance form's keyed groups, in a box as on the review page; folded past the threshold,
+   the whole list reads in columns inside its accordion, so dozens of groups take a few rows. */
+.enrol_apply-groupkeys {
+    background-color: var(--bs-body-bg, #fff);
+    border: 1px solid var(--bs-border-color, #dee2e6);
+    border-radius: var(--bs-border-radius-lg, 0.5rem);
+    color: var(--bs-body-color, #212529);
+    padding: 0.75rem 1rem;
+}
+
+.enrol_apply-groupkeycolumns {
+    column-gap: 1.5rem;
+    column-width: 16rem;
+}
+
+.enrol_apply-groupkeycolumns li {
+    break-inside: avoid;
 }
 
 .enrol_apply-accordiontitle {
@@ -356,8 +376,9 @@ body.path-enrol-apply:not(.jsenabled) #page.drawers {
     margin-top: 0.15rem;
 }
 
-/* Without JavaScript nothing can open a collapse, so both accordions stay open and every field
-   of the decision form can still be reached. body.jsenabled: see the sticky footer above. */
+/* Without JavaScript nothing can open a collapse, so every accordion of this plugin's pages stays
+   open: each field of the decision form can still be reached, and each keyed group read.
+   body.jsenabled: see the sticky footer above. */
 body.path-enrol-apply:not(.jsenabled) .enrol_apply-accordion .collapse {
     display: block;
 }
