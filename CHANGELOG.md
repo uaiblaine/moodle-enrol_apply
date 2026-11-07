@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **Brazilian Portuguese calls the person who applies "solicitante" everywhere.** Six strings
+  still said "candidato", among them the decision note's help, which named the message field
+  "Mensagem para o candidato" while its label reads "Mensagem ao solicitante".
 - **The review page is redrawn in two columns (Visual 1).** The page's heading is now the course,
   as on every course page; the breadcrumb and the title still name the applicant. "All
   applications" moved to the left as a plain link, with previous and next on the right. The left
