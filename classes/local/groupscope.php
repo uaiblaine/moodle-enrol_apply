@@ -97,7 +97,8 @@ final class groupscope {
      * The groups this user decides for (or looks at) in this course, or null when not narrowed.
      *
      * Null for a holder of $capability at system level, whose site-wide delegation does not come
-     * from the course, and for anybody {@see is_scoped()} does not narrow. The exemption reads the
+     * from the course (unless they switched role in it, {@see system_exempt()}), and for anybody
+     * {@see is_scoped()} does not narrow. The exemption reads the
      * capability being exercised and no other: a site-wide viewer is not thereby a site-wide
      * decider, and a site-wide decider's exemption says nothing about the report. An empty array is
      * a narrowed user in no group they may see: they decide (or see) nothing here, and the queue
@@ -109,7 +110,7 @@ final class groupscope {
      * @return array|null Group ids, ascending; null when every application of the course is theirs.
      */
     public static function narrowed_to(int $courseid, int $userid, string $capability = self::DECIDE): ?array {
-        if (has_capability($capability, context_system::instance(), $userid)) {
+        if (self::system_exempt($courseid, $userid, $capability)) {
             return null;
         }
 
@@ -118,6 +119,43 @@ final class groupscope {
         }
 
         return self::member_groups($courseid, $userid);
+    }
+
+    /**
+     * Whether a system-level grant of the capability exempts this user from this course's narrowing.
+     *
+     * Not while the current user has switched role in the course ("Switch role to..."): core judges
+     * a switched user by the role switched to in that course, so its participants page narrows a
+     * site administrator previewing as a moderator to the moderator's groups. Read at system
+     * level, where nothing is switched, the exemption would list that previewer every group's
+     * applications instead. The switch lives in $USER, so only the current user can have made
+     * one; anybody else, such as the recipient of a notice, is judged by their grants alone.
+     *
+     * @param int $courseid Course id.
+     * @param int $userid The decider, the viewer, or the recipient of a notice.
+     * @param string $capability The capability exercised: {@see DECIDE}, {@see VIEW} or {@see REPORT}.
+     * @return bool True when the system-level grant applies here.
+     */
+    public static function system_exempt(int $courseid, int $userid, string $capability): bool {
+        global $USER;
+
+        if ($userid === (int) $USER->id && self::switched($courseid)) {
+            return false;
+        }
+
+        return has_capability($capability, context_system::instance(), $userid);
+    }
+
+    /**
+     * Whether the current user has switched role in this course ("Switch role to...").
+     *
+     * A course that no longer exists has no switch.
+     *
+     * @param int $courseid Course id.
+     * @return bool True while the switch holds.
+     */
+    public static function switched(int $courseid): bool {
+        return context_course::instance($courseid, IGNORE_MISSING) && is_role_switched($courseid);
     }
 
     /**

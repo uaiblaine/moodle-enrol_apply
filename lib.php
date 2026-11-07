@@ -1533,7 +1533,14 @@ class enrol_apply_plugin extends enrol_plugin {
     public function can_manage_application($courseid, $userid, int $userenrolmentid) {
         global $USER;
 
-        if (has_capability('enrol/apply:manageapplications', context_system::instance())) {
+        // The system level, unless the decider switched role in this course: see system_exempt().
+        if (
+            \enrol_apply\local\groupscope::system_exempt(
+                (int) $courseid,
+                (int) $USER->id,
+                \enrol_apply\local\groupscope::DECIDE
+            )
+        ) {
             return true;
         }
 
@@ -1544,6 +1551,15 @@ class enrol_apply_plugin extends enrol_plugin {
             && \enrol_apply\local\groupscope::allows((int) $courseid, $userenrolmentid, (int) $USER->id)
         ) {
             return true;
+        }
+
+        /* A switch made in the course does not reach the applicant's user context, which is outside
+           it, so a site administrator previewing as a moderator would pass the mentor level as an
+           administrator. This plugin's preview rule, not core's: core lets the administrator through
+           there. A mentor who is not an administrator keeps the grant of their own role there,
+           as in core. */
+        if (is_siteadmin() && \enrol_apply\local\groupscope::switched((int) $courseid)) {
+            return false;
         }
 
         $usercontext = context_user::instance($userid, IGNORE_MISSING);

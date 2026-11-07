@@ -567,7 +567,17 @@ backup/                      group mappings, comments and the durable trail, see
   PHPUnit resets id sequences, so a static would leak answers between tests. Gates `SC1`-`SC31`.
 
   **The system exemption reads the capability being exercised** (`narrowed_to()`'s third
-  argument: `DECIDE`, `VIEW`, `REPORT`), so a site-wide viewer is not a site-wide decider. The
+  argument: `DECIDE`, `VIEW`, `REPORT`), so a site-wide viewer is not a site-wide decider. It is
+  `groupscope::system_exempt()`, which also withholds it from the current user while they have
+  switched role in the course: core judges a switched user by that role in the course alone, and a
+  site administrator is exempt at system level whatever they switched to. A switched site
+  administrator also skips the mentor level in `can_manage_application()`, which they would pass
+  as an administrator because the applicant's user context is outside the switch; that half is
+  this plugin's preview rule, not core's, and a mentor who is not an administrator keeps the grant
+  of their own role there, as in core. The site-wide queues (`listing_scope()` and `scope()` with
+  no instance) span courses and so are not narrowed by a switch made in one of them: a switched
+  administrator lists that course's rows there and is refused them row by row (gates
+  `SW1`-`SW6`). The
   queue picks it with `reader_capability()` (deciding where the reader may decide in the course,
   viewing otherwise) in `listing_scope()`, `scope()` and `require_review_access()` alike, so a
   decider narrowed in the course who also views site-wide lists their groups on the instance queue
