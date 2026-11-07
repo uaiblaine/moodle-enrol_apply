@@ -4,30 +4,6 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased
-
-### Fixed
-
-- **"Switch role to" previews a moderator's queue as core previews the participants page.** A
-  site administrator who switched role to a moderator in a separate-groups course still listed
-  and could decide every group's applications, because the system-level exemption was read at
-  system level, where nothing is switched; core judges a switched user by the role switched to in
-  that course alone. `\enrol_apply\local\groupscope::system_exempt()` withholds the exemption from
-  the current user while they have switched role in the course, and both `narrowed_to()` and
-  `can_manage_application()` read it; a switched administrator also skips the mentor level, whose
-  user context is outside the course and so outside the switch, while a mentor who is not an
-  administrator keeps it, as in core. Anybody else's answer (a notice's recipient) is unchanged.
-  Gates `SW1`-`SW6`.
-
-### Changed
-
-- **The instance form's keyed groups fold past the review page's threshold.** A course with dozens
-  of groups carrying a key made the form a page long. The summary is a box, as on the review
-  page; above `groupfilter::THRESHOLD` (8, RP-D18) it shows how many groups carry a key, lists
-  only those needing attention (a full group, a shadowed key, a key nobody can type), and folds
-  the whole list, in columns, into a closed accordion that stays open without JavaScript. The
-  markup of one group is the new `enrol_apply/groupkey_item` partial. Gates `GF1`-`GF4`.
-
 ## v2.0.1 (2026110509) - 2026-11-06
 
 ### Fixed
@@ -45,6 +21,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   per-user rule whenever a plugin implements `control_view_profile`), so a page costs the same
   however many rows it has. Gates `PL1`-`PL21`.
 
+- **"Switch role to" previews a moderator's queue as core previews the participants page.** A
+  site administrator who switched role to a moderator in a separate-groups course still listed
+  and could decide every group's applications, because the system-level exemption was read at
+  system level, where nothing is switched; core judges a switched user by the role switched to in
+  that course alone. `\enrol_apply\local\groupscope::system_exempt()` withholds the exemption from
+  the current user while they have switched role in the course, and both `narrowed_to()` and
+  `can_manage_application()` read it; a switched administrator also skips the mentor level, whose
+  user context is outside the course and so outside the switch, while a mentor who is not an
+  administrator keeps it, as in core. Anybody else's answer (a notice's recipient) is unchanged.
+  Gates `SW1`-`SW6`.
+
 ### Changed
 
 - **The review page draws Concept A's boxes.** The summary strip, the signals (one bordered list
@@ -54,6 +41,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   applicant or add a note for the record" are Bootstrap accordions, as the theme draws them on
   course pages, the second with its hint under the title; without JavaScript both stay open. The
   submitted details' anchor moved from the box to its heading.
+
+- **The instance form's keyed groups fold past the review page's threshold.** A course with dozens
+  of groups carrying a key made the form a page long. The summary is a box, as on the review
+  page; above `groupfilter::THRESHOLD` (8, RP-D18) it shows how many groups carry a key, lists
+  only those needing attention (a full group, a shadowed key, a key nobody can type), and folds
+  the whole list, in columns, into a closed accordion that stays open without JavaScript. The
+  markup of one group is the new `enrol_apply/groupkey_item` partial. Gates `GF1`-`GF4`.
 
 ## v2.0 (2026110508) - 2026-11-06
 
