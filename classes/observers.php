@@ -76,6 +76,17 @@ class observers {
             'enrol_apply_groups',
             'NOT EXISTS (SELECT 1 FROM {enrol} e WHERE e.id = {enrol_apply_groups}.enrolid)'
         );
+        // The two tables exist only once the upgrade has run, and a course can be deleted before.
+        if (enrol_get_plugin('apply')->options_schema_ready()) {
+            $DB->delete_records_select(
+                'enrol_apply_offer',
+                'NOT EXISTS (SELECT 1 FROM {enrol} e WHERE e.id = {enrol_apply_offer}.enrolid)'
+            );
+            $DB->delete_records_select(
+                'enrol_apply_options',
+                'NOT EXISTS (SELECT 1 FROM {enrol} e WHERE e.id = {enrol_apply_options}.enrolid)'
+            );
+        }
 
         /* The application fields key off the {enrol} row through the itemid. Categories go through
            core's API, which also deletes their fields and the files of their descriptions. */

@@ -64,17 +64,26 @@ class backup_enrol_apply_plugin extends backup_enrol_plugin {
 
         $plugin = $this->get_plugin_element();
 
+        /* A backup taken between the deploy and the upgrade (the recycle bin takes one before every
+           course deletion) must not read a table or a column the upgrade has not created yet. */
+        $schemaready = enrol_get_plugin('apply')->options_schema_ready();
+
         $pluginwrapper = new backup_nested_element($this->get_recommended_name());
         $plugin->add_child($pluginwrapper);
 
         $applygroups = new backup_nested_element('applygroups');
         $applygroup = new backup_nested_element('applygroup', ['id'], ['groupid']);
 
+        // Configuration both, so outside the users gate below.
+        $options = new backup_nested_element('options', ['id'], ['groupchoice', 'deciders', 'groupseats', 'hidecard']);
+        $offeredgroups = new backup_nested_element('offeredgroups');
+        $offeredgroup = new backup_nested_element('offeredgroup', ['id'], ['groupid']);
+
         $applications = new backup_nested_element('applications');
         $application = new backup_nested_element('application', ['id'], ['userenrolmentid', 'comment']);
 
         $submissions = new backup_nested_element('submissions');
-        $submission = new backup_nested_element('submission', ['id'], [
+        $submission = new backup_nested_element('submission', ['id'], array_merge([
             'userid',
             'userenrolmentid',
             'comment',
@@ -89,7 +98,7 @@ class backup_enrol_apply_plugin extends backup_enrol_plugin {
             'decidedby',
             'keygroupid',
             'keyoutcome',
-        ]);
+        ], $schemaready ? ['chosengroupid'] : []));
 
         /* What the applicant submitted, frozen, as children of their record: they travel exactly
            when the record does, inside the users gate below, with no source of their own to gate.
@@ -134,6 +143,11 @@ class backup_enrol_apply_plugin extends backup_enrol_plugin {
         $sharedcategories->add_child($sharedcategory);
         $pluginwrapper->add_child($applygroups);
         $applygroups->add_child($applygroup);
+        if ($schemaready) {
+            $pluginwrapper->add_child($options);
+            $pluginwrapper->add_child($offeredgroups);
+            $offeredgroups->add_child($offeredgroup);
+        }
         $pluginwrapper->add_child($applications);
         $applications->add_child($application);
         $pluginwrapper->add_child($submissions);
@@ -145,6 +159,10 @@ class backup_enrol_apply_plugin extends backup_enrol_plugin {
         $fieldconditions->add_child($fieldcondition);
 
         $applygroup->set_source_table('enrol_apply_groups', ['enrolid' => backup::VAR_PARENTID]);
+        if ($schemaready) {
+            $options->set_source_table('enrol_apply_options', ['enrolid' => backup::VAR_PARENTID]);
+            $offeredgroup->set_source_table('enrol_apply_offer', ['enrolid' => backup::VAR_PARENTID], 'groupid ASC');
+        }
 
         /* The form definition is configuration, so it sits outside the users gate below. The
            component, area and itemid literals are parameters, not SQL text, as core does for
@@ -294,6 +312,7 @@ class backup_enrol_apply_plugin extends backup_enrol_plugin {
         $submission->annotate_ids('role', 'decidedrole');
 
         $applygroup->annotate_ids('group', 'groupid');
+        $offeredgroup->annotate_ids('group', 'groupid');
 
         return $plugin;
     }

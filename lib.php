@@ -36,6 +36,17 @@
 define('ENROL_APPLY_USER_WAIT', 2);
 
 /**
+ * The plugin version whose upgrade step created enrol_apply_options, enrol_apply_offer and
+ * enrol_apply_submission.chosengroupid.
+ *
+ * Code already serving a site does not wait for its upgrade: between a deploy and the upgrade a
+ * node runs this code against the old schema, and core blocks no page for a pending plugin
+ * upgrade. What touches that schema from a path that existed before it asks
+ * {@see enrol_apply_plugin::options_schema_ready()} first.
+ */
+define('ENROL_APPLY_OPTIONS_SCHEMA', 2026111900);
+
+/**
  * Enrolment upon approval plugin implementation.
  *
  * @package    enrol_apply
@@ -1429,6 +1440,8 @@ class enrol_apply_plugin extends enrol_plugin {
     public function delete_instance($instance) {
         global $DB;
 
+        $schemaready = $this->options_schema_ready();
+
         $userenrolments = $DB->get_fieldset_select('user_enrolments', 'id', 'enrolid = :enrolid', [
             'enrolid' => $instance->id,
         ]);
@@ -1437,9 +1450,27 @@ class enrol_apply_plugin extends enrol_plugin {
             $DB->delete_records_select('enrol_apply_applicationinfo', "userenrolmentid {$insql}", $params);
         }
         $DB->delete_records('enrol_apply_groups', ['enrolid' => $instance->id]);
+        /* Before the upgrade the tables do not exist and the classes may not be in core's class
+           map yet; there is nothing of the method's in them to forget either. */
+        if ($schemaready) {
+            \enrol_apply\local\groupoffer::delete_for_instance((int) $instance->id);
+            \enrol_apply\local\instanceoptions::delete((int) $instance->id);
+        }
         \enrol_apply\customfield\application_handler::delete_for_instance((int) $instance->id);
 
         parent::delete_instance($instance);
+    }
+
+    /**
+     * Whether the upgrade that created the options, the offer and the chosen group has run.
+     *
+     * Read from the plugin version stored in the site configuration, which every node reads
+     * through the same cache and the upgrade itself changes, never from anything a node keeps.
+     *
+     * @return bool True once the stored version reaches ENROL_APPLY_OPTIONS_SCHEMA.
+     */
+    public function options_schema_ready(): bool {
+        return (int) get_config('enrol_apply', 'version') >= ENROL_APPLY_OPTIONS_SCHEMA;
     }
 
     /**

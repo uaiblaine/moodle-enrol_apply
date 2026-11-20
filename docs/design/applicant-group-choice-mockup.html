@@ -1,0 +1,1000 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Applicant group choice</title>
+<style>
+:root {
+  --ea-bg: #f5f6f8; --ea-surface: #fff; --ea-ink: #1d2125; --ea-ink-muted: #5b6470; --ea-line: #dee2e6;
+  --ea-brand: #0f6cbf; --ea-brand-tint: #e7f1fb; --ea-brand-ink: #0a4f8c; --ea-hover: #eef4fb;
+  --ea-success-tint: #e8f5ee; --ea-success-edge: #a3cfb5; --ea-success-ink: #0f5132;
+  --ea-warning-tint: #fff6e0; --ea-warning-edge: #e9c46a; --ea-warning-ink: #664d03;
+  --ea-danger-tint: #fbeaea; --ea-danger-edge: #e3a1a1; --ea-danger-ink: #842029;
+  --ea-neutral-tint: #f1f3f5; --ea-neutral-edge: #ced4da; --ea-neutral-ink: #495057;
+  --ea-chip: #eef0f3; --ea-changed: #f3e8ff; --ea-changed-edge: #8b5cf6; --ea-changed-ink: #5b21b6;
+  --ea-focus: 0 0 0 3px rgba(15, 108, 191, .35);
+  --ea-radius-xs: 4px; --ea-radius-sm: 6px; --ea-radius-md: 8px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ea-bg: #15181c; --ea-surface: #1e2227; --ea-ink: #e6e8eb; --ea-ink-muted: #9aa3ad; --ea-line: #343a40;
+    --ea-brand: #6ea8fe; --ea-brand-tint: #1b2a3d; --ea-brand-ink: #9ec5fe; --ea-hover: #22303f;
+    --ea-success-tint: #0d2a1c; --ea-success-edge: #2f6b4c; --ea-success-ink: #75b798;
+    --ea-warning-tint: #2e2405; --ea-warning-edge: #7a6118; --ea-warning-ink: #ffda6a;
+    --ea-danger-tint: #2c0b0e; --ea-danger-edge: #6e2a30; --ea-danger-ink: #ea868f;
+    --ea-neutral-tint: #2b3035; --ea-neutral-edge: #495057; --ea-neutral-ink: #ced4da;
+    --ea-chip: #2b3035; --ea-changed: #2a1d42; --ea-changed-edge: #a78bfa; --ea-changed-ink: #d8c7ff;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--ea-bg); color: var(--ea-ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 1120px; margin: 0 auto; padding: 24px 16px 80px; }
+h1 { font-size: 26px; margin: 0 0 4px; }
+.lede { color: var(--ea-ink-muted); margin: 0 0 20px; max-width: 780px; }
+h2.screen { font-size: 17px; margin: 40px 0 4px; }
+.screen-note { color: var(--ea-ink-muted); font-size: 14px; margin: 0 0 12px; max-width: 780px; }
+.frame { background: var(--ea-surface); border: 1px solid var(--ea-line); border-radius: var(--ea-radius-md); padding: 20px; }
+code { font-size: 13px; }
+a { color: var(--ea-brand); }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: none; box-shadow: var(--ea-focus); }
+
+/* Decision switches. */
+.switches { position: sticky; top: 0; z-index: 30; background: var(--ea-surface); border: 1px solid var(--ea-line); border-radius: var(--ea-radius-md); padding: 10px 14px; box-shadow: 0 4px 16px rgba(0,0,0,.06); }
+.switches h2 { font-size: 14px; margin: 0 0 6px; }
+.switches .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 6px 14px; }
+.switches label { font-size: 13px; color: var(--ea-ink-muted); display: block; }
+.switches select { width: 100%; margin-top: 2px; padding: 3px 6px; border: 1px solid var(--ea-line); border-radius: var(--ea-radius-sm); background: var(--ea-surface); font-size: 14px; }
+.cd { font-weight: 600; color: var(--ea-brand-ink); }
+
+/* Segmented control (fleet DS). */
+.seg { display: inline-flex; flex-wrap: wrap; gap: 2px; background: var(--ea-neutral-tint); border-radius: var(--ea-radius-md); padding: 2px; }
+.seg button { border: 0; background: transparent; border-radius: var(--ea-radius-sm); padding: 6px 12px; cursor: pointer; font-size: 14px; }
+.seg button[aria-pressed="true"] { background: var(--ea-surface); box-shadow: 0 1px 3px rgba(0,0,0,.15); font-weight: 600; }
+
+/* Course enrolment page. */
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+.ecard { border: 1px solid var(--ea-line); border-radius: var(--ea-radius-md); padding: 16px; }
+.ecard h3 { margin: 0 0 8px; font-size: 17px; }
+.ecard p { margin: 0 0 12px; font-size: 14px; }
+.ghost { border: 1px dashed var(--ea-line); border-radius: var(--ea-radius-md); padding: 16px; color: var(--ea-ink-muted); font-size: 14px; font-style: italic; }
+
+/* Page chrome of editinstance.php. */
+.crumbs { font-size: 13px; color: var(--ea-ink-muted); margin-bottom: 6px; }
+.pagehead { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 14px; }
+.pagehead h3 { font-size: 24px; margin: 0; }
+.toplinks { font-size: 14px; display: flex; gap: 14px; }
+.strip { display: flex; flex-wrap: wrap; gap: 4px 0; background: var(--ea-brand-tint); border-radius: var(--ea-radius-sm); padding: 10px 14px; margin-bottom: 14px; font-size: 14px; }
+.strip span + span::before { content: "·"; margin: 0 10px; color: var(--ea-brand); }
+
+/* Form sections (C-D15). */
+details.sec { border-top: 1px solid var(--ea-line); }
+details.sec > summary { list-style: none; cursor: pointer; padding: 12px 0; font-size: 19px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+details.sec > summary::-webkit-details-marker { display: none; }
+details.sec > summary::before { content: "›"; display: inline-block; width: 24px; height: 24px; line-height: 22px; text-align: center; border-radius: var(--ea-radius-xs); background: var(--ea-brand-tint); color: var(--ea-brand); transition: transform 150ms; flex: none; }
+details.sec[open] > summary::before { transform: rotate(90deg); }
+summary .sum { font-size: 13px; font-weight: 400; color: var(--ea-ink-muted); margin-left: auto; text-align: right; }
+details.sec[open] > summary .sum { display: none; }
+.row { display: grid; grid-template-columns: 250px 26px 1fr; gap: 8px; align-items: start; padding: 7px 8px; margin: 0 -8px; border-radius: var(--ea-radius-sm); }
+.row.changed { background: var(--ea-changed); box-shadow: inset 3px 0 0 var(--ea-changed-edge); }
+.row > .lbl { padding-top: 6px; }
+.chg { display: block; font-size: 11px; font-weight: 600; color: var(--ea-changed-ink); margin-top: 2px; }
+.renamed { font-size: 11px; color: var(--ea-ink-muted); display: block; }
+.newtag { font-size: 11px; font-weight: 600; background: var(--ea-brand-tint); color: var(--ea-brand-ink); border-radius: var(--ea-radius-xs); padding: 1px 6px; margin-left: 4px; }
+.help { width: 20px; height: 20px; margin-top: 7px; border-radius: 50%; border: 0; background: var(--ea-brand); color: #fff; font-size: 12px; font-weight: 700; cursor: pointer; padding: 0; }
+.help.new { box-shadow: 0 0 0 2px var(--ea-surface), 0 0 0 4px #f0ad4e; }
+summary .help { margin-top: 0; }
+.helptext { grid-column: 3; font-size: 13px; background: var(--ea-neutral-tint); border-radius: var(--ea-radius-sm); padding: 8px 10px; }
+.field-ctl { border: 1px solid var(--ea-line); border-radius: var(--ea-radius-sm); padding: 6px 10px; background: var(--ea-surface); }
+input.field-ctl { width: min(100%, 380px); }
+input.narrow { width: 110px; }
+textarea.field-ctl { width: 100%; min-height: 70px; }
+.static { padding-top: 6px; color: var(--ea-ink-muted); }
+.sub { margin: 2px 0 6px 34px; border-left: 2px solid var(--ea-line); padding-left: 16px; }
+.radios label { display: flex; gap: 8px; align-items: baseline; padding: 3px 0; cursor: pointer; }
+.checks label { display: inline-flex; gap: 6px; align-items: center; margin: 0 14px 6px 0; cursor: pointer; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; background: var(--ea-chip); border-radius: var(--ea-radius-xs); padding: 3px 4px 3px 8px; font-size: 14px; }
+.chip button { border: 0; background: transparent; cursor: pointer; padding: 0 4px; border-radius: var(--ea-radius-xs); color: var(--ea-ink-muted); }
+.chip.off { opacity: .7; }
+.chip small { color: var(--ea-ink-muted); }
+.addrow { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.alert { border-radius: var(--ea-radius-sm); padding: 8px 12px; font-size: 14px; margin-top: 6px; border: 1px solid transparent; }
+.alert.warn { background: var(--ea-warning-tint); color: var(--ea-warning-ink); border-color: var(--ea-warning-edge); }
+.alert.ok { background: var(--ea-success-tint); color: var(--ea-success-ink); border-color: var(--ea-success-edge); }
+.alert.bad { background: var(--ea-danger-tint); color: var(--ea-danger-ink); border-color: var(--ea-danger-edge); }
+.alert.info { background: var(--ea-brand-tint); color: var(--ea-brand-ink); }
+.btns { display: flex; gap: 8px; padding-top: 16px; border-top: 1px solid var(--ea-line); margin-top: 8px; flex-wrap: wrap; }
+.btn { border-radius: var(--ea-radius-sm); padding: 7px 14px; border: 1px solid var(--ea-line); background: var(--ea-surface); cursor: pointer; }
+.btn.primary { background: var(--ea-brand); border-color: var(--ea-brand); color: #fff; }
+.btn.small { padding: 2px 10px; font-size: 13px; }
+
+/* Core date_time_selector and duration look (C-D22). */
+.dts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.dts select, .dts input { border: 1px solid var(--ea-line); border-radius: var(--ea-radius-sm); padding: 5px 8px; background: var(--ea-surface); }
+.dts select:disabled, .dts input:disabled { background: var(--ea-neutral-tint); color: var(--ea-ink-muted); }
+.dts .cal { border: 0; background: transparent; cursor: pointer; padding: 4px; color: var(--ea-ink-muted); border-radius: var(--ea-radius-xs); }
+.dts .cal svg { width: 18px; height: 18px; display: block; }
+.dts label { display: flex; gap: 4px; align-items: center; margin-right: 4px; }
+
+/* Status label (fleet DS). */
+.status { display: inline-flex; align-items: center; padding: .125rem .5rem; border: 1px solid var(--ea-neutral-edge); border-radius: var(--ea-radius-sm); background: var(--ea-neutral-tint); color: var(--ea-neutral-ink); font-size: .75rem; font-weight: 600; line-height: 1.4; white-space: nowrap; }
+.status--success { border-color: var(--ea-success-edge); background: var(--ea-success-tint); color: var(--ea-success-ink); }
+.status--warning { border-color: var(--ea-warning-edge); background: var(--ea-warning-tint); color: var(--ea-warning-ink); }
+.status--danger { border-color: var(--ea-danger-edge); background: var(--ea-danger-tint); color: var(--ea-danger-ink); }
+
+/* Modal. */
+.modal { max-width: 580px; margin: 0 auto; background: var(--ea-surface); border: 1px solid var(--ea-line); border-radius: var(--ea-radius-md); box-shadow: 0 8px 28px rgba(0,0,0,.14); }
+.modal header { padding: 14px 18px; border-bottom: 1px solid var(--ea-line); font-weight: 600; font-size: 18px; display: flex; justify-content: space-between; gap: 8px; }
+.modal .body { padding: 16px 18px; min-height: 120px; }
+.modal footer { padding: 12px 18px; border-top: 1px solid var(--ea-line); display: flex; justify-content: flex-end; gap: 8px; }
+.field { margin-bottom: 16px; }
+.field > label { display: block; font-weight: 600; margin-bottom: 4px; }
+.req { color: #ca3120; margin-left: 4px; }
+.desc { background: var(--ea-neutral-tint); border-radius: var(--ea-radius-sm); padding: 10px 12px; font-size: 14px; margin-bottom: 16px; }
+.err { color: var(--ea-danger-ink); font-size: 13px; margin-top: 4px; }
+.hint { color: var(--ea-ink-muted); font-size: 13px; margin-top: 4px; }
+
+/* Combobox (C-D23): menu panel and items from the fleet DS, opened inline in the modal body. */
+.cbx-input { display: flex; align-items: center; border: 1px solid var(--ea-line); border-radius: var(--ea-radius-sm); background: var(--ea-surface); }
+.cbx-input:focus-within { border-color: var(--ea-brand); box-shadow: var(--ea-focus); }
+.cbx-input input { flex: 1; border: 0; background: transparent; padding: 7px 10px; outline: none; min-width: 0; }
+.cbx-input button { border: 0; background: transparent; padding: 6px 10px; cursor: pointer; color: var(--ea-ink-muted); }
+.cbx-list { margin: 6px 0 0; background: var(--ea-surface); border: 1px solid var(--ea-line); border-radius: var(--ea-radius-md); padding: 4px; box-shadow: 0 6px 20px rgba(0,0,0,.14); max-height: 320px; overflow: auto; list-style: none; }
+.cbx-list[hidden] { display: none; }
+.cbx-list li[role="option"] { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 32px; padding: 4px 8px; border-radius: var(--ea-radius-xs); font-size: .875rem; cursor: pointer; transition: background 250ms, color 250ms; }
+.cbx-list li[role="option"]:hover, .cbx-list li.active { background: var(--ea-hover); color: var(--ea-brand-ink); transition-duration: 150ms; }
+.cbx-list li.active { box-shadow: inset 0 0 0 2px var(--ea-brand); }
+.cbx-list li[aria-disabled="true"] { color: var(--ea-ink-muted); cursor: not-allowed; background: transparent; }
+.cbx-list li[aria-selected="true"] { font-weight: 600; }
+.cbx-list li[aria-selected="true"]::after { content: "✓"; color: var(--ea-brand-ink); margin-left: 4px; }
+.cbx-list .heading { padding: 6px 8px 2px; font-size: .75rem; font-weight: 600; color: var(--ea-ink-muted); }
+.cbx-list .note { border-top: 1px solid var(--ea-line); margin-top: 4px; padding: 6px 8px; font-size: .8125rem; color: var(--ea-ink-muted); }
+.cbx-list mark { background: transparent; color: inherit; font-weight: 700; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--ea-line); vertical-align: top; }
+th { font-size: 13px; color: var(--ea-ink-muted); font-weight: 600; }
+.method { border: 1px solid var(--ea-line); border-radius: var(--ea-radius-md); padding: 12px 14px; margin: 12px 0; font-size: 14px; }
+.method dl { display: grid; grid-template-columns: 200px 1fr; gap: 4px 12px; margin: 0; }
+.method dt { color: var(--ea-ink-muted); }
+.method dd { margin: 0; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+.empty { color: var(--ea-ink-muted); font-style: italic; }
+.recipe { font-size: 14px; margin: 0 0 14px; padding: 10px 14px 10px 32px; border: 1px solid var(--ea-changed-edge); border-radius: var(--ea-radius-sm); background: var(--ea-changed); }
+.recipe li { margin: 2px 0; }
+
+@media (max-width: 760px) {
+  .row { grid-template-columns: 1fr 26px; }
+  .row > :nth-child(3), .helptext { grid-column: 1 / -1; }
+  .sub { margin-left: 6px; padding-left: 10px; }
+  .two { grid-template-columns: 1fr; }
+  .method dl { grid-template-columns: 1fr; }
+  .switches { position: static; }
+  summary .sum { display: none; }
+}
+</style>
+</head>
+<body>
+<main>
+  <h1>Applicant group choice</h1>
+  <p class="lede">Interactive mockup for <code>docs/design/applicant-group-choice.md</code>. One course, two enrolment
+    methods: <strong>Apply as a student</strong> and <strong>Apply as a moderator</strong> (M2, C-D20, C-D25). Screen 1 is the
+    course enrolment page; screen 2 the whole instance form of either method; screen 3 the application modal of the method
+    applied to; screen 4 the review page. Everything is one state: edit a method and its card, modal and review follow.
+    Help icons open their text; an orange ring marks a help that does not exist today.</p>
+
+  <section class="switches" aria-label="Design switches">
+    <h2>Design switches (open decisions, not instance settings)</h2>
+    <div class="grid">
+      <label>Seats known (local_groupdist)
+        <select id="sw-seats"><option value="1">Installed: places shown</option><option value="0">Not installed</option></select></label>
+      <label>Student method offers
+        <select id="sw-size"><option value="many">Many groups (22)</option><option value="small">A few (5)</option></select></label>
+      <label><span class="cd">C-D8</span> Full groups in the list
+        <select id="sw-full"><option value="listed">Listed when searching, disabled</option><option value="hidden">Hidden</option></select></label>
+      <label><span class="cd">C-D10</span> At approval
+        <select id="sw-bind"><option value="change">The decider may change the group</option><option value="binding">The choice is binding</option></select></label>
+      <label><span class="cd">C-D24</span> Shown before typing
+        <select id="sw-limit"><option value="8">8 groups with places</option><option value="5">5</option><option value="12">12</option></select></label>
+    </div>
+  </section>
+
+  <h2 class="screen">1 · Course enrolment page (enrol/index.php)</h2>
+  <p class="screen-note">Two methods, two cards. The moderator card is gated by a cohort (C-D25, G-a) and, with "Hide this card"
+    on, invisible to everybody outside it (G-b). Switch who is looking; the buttons open screen 3.</p>
+  <div class="frame">
+    <div class="seg" role="group" aria-label="Who is looking" id="viewer-seg">
+      <button data-viewer="student" aria-pressed="true">A student, outside the cohort</button>
+      <button data-viewer="candidate" aria-pressed="false">A member of "Candidatos a moderador"</button>
+    </div>
+    <div class="cards" id="cards" style="margin-top:14px"></div>
+  </div>
+
+  <h2 class="screen">2 · Instance form, the whole page (enrol/editinstance.php)</h2>
+  <p class="screen-note">Every section open, every field of today's form in its new place (C-D15), plus the new ones. Pick a
+    method; with "Moderator recruitment" a purple bar marks each field that differs from the student method, which is the
+    recipe for setting one up. The form's notices (under Groups) react to what you set: try "Who decides" back to "The
+    deciders of the application's group".</p>
+  <div class="frame">
+    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px">
+      <div class="seg" role="group" aria-label="Method being edited" id="method-seg">
+        <button data-method="student" aria-pressed="true">Apply as a student</button>
+        <button data-method="recruit" aria-pressed="false">Apply as a moderator</button>
+      </div>
+      <label class="checks" style="margin:0"><input type="checkbox" id="hl" checked> Mark what recruitment changes</label>
+      <button class="btn small" id="reset-method">Reset this method</button>
+    </div>
+    <div id="form"></div>
+  </div>
+
+  <h2 class="screen">3 · Application modal</h2>
+  <p class="screen-note">Opened from a card on screen 1. The list shows up to eight groups with places and a note when there are
+    more (C-D24); typing searches all, those with places first, then the full ones, disabled. On the student method with
+    keys on (Groups, "And with a group key?"), try the key <code>EVE-2026</code>.</p>
+  <div class="two">
+    <div class="modal" role="dialog" aria-labelledby="m-title">
+      <header><span id="m-title"></span><button class="btn small" id="m-reset">Start again</button></header>
+      <div class="body" id="m-body"></div>
+      <footer id="m-foot"><button class="btn">Cancel</button><button class="btn primary" id="m-submit">Submit application</button></footer>
+    </div>
+    <div class="frame" style="font-size:14px">
+      <strong>What this modal does now</strong>
+      <ul id="m-explain" style="padding-left:18px;margin:6px 0 0"></ul>
+    </div>
+  </div>
+
+  <h2 class="screen">4 · Review page</h2>
+  <p class="screen-note">Submit an application in the modal first. The table says who is handed it; the form below is Carla's,
+    who sees every group.</p>
+  <div class="frame" id="review"></div>
+
+  <h2 class="screen">5 · Why a second method (C-D19&ndash;C-D21)</h2>
+  <p class="screen-note">The four set-ups side by side. "M2 on" is the "Apply as a moderator" method of screen 2.</p>
+  <div class="frame">
+    <div class="seg" role="group" aria-label="Set-up" id="mod-seg">
+      <button data-mod="t" aria-pressed="true">Today: Moderadores' key on the student method</button>
+      <button data-mod="m1" aria-pressed="false">M1: a recruitment method, no group</button>
+      <button data-mod="m2g" aria-pressed="false">M2 off: candidate chooses</button>
+      <button data-mod="m2a" aria-pressed="false">M2 on: only those who see every group</button>
+    </div>
+    <div id="mod-body"></div>
+  </div>
+</main>
+
+<script>
+(function() {
+  'use strict';
+
+  // ---------- Course data ----------
+  const raw = [
+    ['Afternoon 1', 20, 11], ['Afternoon 2', 20, 20], ['Afternoon 3', 18, 6],
+    ['Evening A', 24, 17], ['Evening B', 24, 24], ['Evening C', 20, 12],
+    ['Morning A', 16, 15], ['Morning B', 16, 16], ['Morning C', 16, 4], ['Morning D', 16, 9],
+    ['Online Centre', 40, 22], ['Online East', 40, 40], ['Online North', 40, 31], ['Online South', 40, 38], ['Online West', 40, 40],
+    ['Saturday lab', 10, 10], ['São Paulo hub', 30, 12], ['Weekend cohort', 12, 12], ['Weekend intensive', 16, 9],
+    ['Évora exchange', 8, 3], ['Night shift', 12, 12], ['Recife hub', 30, 29]
+  ];
+  const GROUPS = raw.map((r, i) => ({id: i + 1, name: r[0], seats: r[1], members: r[2], hidden: false}));
+  GROUPS.push({id: 90, name: 'Moderadores', seats: null, members: 9, hidden: false});
+  GROUPS.push({id: 91, name: 'Staff only', seats: null, members: 4, hidden: true});
+  GROUPS.push({id: 92, name: 'All participants', seats: null, members: 180, hidden: false});
+  const byId = id => GROUPS.find(g => g.id === id);
+  const byName = n => GROUPS.find(g => g.name === n);
+  const ids = names => names.map(n => byName(n).id);
+  const GROUPINGS = {
+    'Evening programme': ['Evening A', 'Evening B', 'Evening C'],
+    'Online': ['Online Centre', 'Online East', 'Online North', 'Online South', 'Online West'],
+    'Weekend programme': ['Saturday lab', 'Weekend cohort', 'Weekend intensive'],
+  };
+  const SMALL = ['Evening A', 'Evening B', 'Morning C', 'Online North', 'Weekend cohort', 'Staff only'];
+  const MANY = GROUPS.filter(g => g.id < 90).map(g => g.name).concat(['Staff only']);
+  const KEYS = {'EVE-2026': 'Evening A'};
+  const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const COHORTS = ['', 'Candidatos a moderador', '2027 intake'];
+  const NOTIFY = {all: 'Everyone who can manage applications', none: 'Nobody', carla: 'Carla Coordinator'};
+
+  const collator = new Intl.Collator('en', {numeric: true, sensitivity: 'base'});
+  const fold = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+  const $ = sel => document.querySelector(sel);
+  const clone = o => JSON.parse(JSON.stringify(o));
+
+  // ---------- The two methods ----------
+  const base = {
+    name: '', status: '1', newapps: '1', role: 'Student',
+    open: {on: false, day: 1, month: 11, year: 2026, hour: 8, min: 0},
+    close: {on: true, day: 20, month: 11, year: 2026, hour: 23, min: 55},
+    max: '40', places: '30', taken: 4, cohort: '', hidecard: '0',
+    desc: '', comment: '1', prompt: '', fields: {City: 'req', Institution: 'yes', Phone: 'no'}, questions: '3 questions, 1 shown only on a condition',
+    mode: 'choose', offer: [], req: 'required', key: 'off', keymode: 'any', who: 'group', seatsapply: '1', join: [],
+    duration: {on: false, n: '0', unit: 'days'}, expiry: '0', threshold: '1', profilewrite: '0',
+    notify: 'all', notice: '0',
+  };
+  const DEFAULTS = {
+    student: Object.assign(clone(base), {
+      name: 'Apply as a student',
+      desc: 'Classes run on Tuesdays and Thursdays. Choose the cohort that suits you; a coordinator confirms every application.',
+      prompt: 'Why would you like to join?', join: ids(['All participants']),
+    }),
+    recruit: Object.assign(clone(base), {
+      name: 'Apply as a moderator', role: 'Non-editing teacher', max: '10', places: '6', taken: 1,
+      cohort: 'Candidatos a moderador', hidecard: '1',
+      desc: 'Moderators follow one group through the term: they answer its forum and decide its applications. Choose the group you would like to moderate; the coordination confirms every moderator.',
+      prompt: 'Tell us about your experience as a moderator', fields: {City: 'req', Institution: 'req', Phone: 'req'},
+      questions: '2 questions', who: 'all', seatsapply: '0',
+      offer: ids(['Evening A', 'Evening B', 'Morning C', 'Online North', 'Weekend intensive', 'Recife hub']),
+      join: ids(['Moderadores']),
+      duration: {on: true, n: '180', unit: 'days'}, expiry: '1', threshold: '14', notify: 'carla',
+    }),
+  };
+  DEFAULTS.student.offer = ids(MANY);
+
+  const state = {
+    seats: true, size: 'many', full: 'listed', bind: 'change', limit: 8,
+    methods: {student: clone(DEFAULTS.student), recruit: clone(DEFAULTS.recruit)},
+    editing: 'student', applyTo: 'student', viewer: 'student', highlight: true,
+    closed: new Set(), helps: new Set(),
+    app: null, mod: 't', modDest: 'Evening A',
+    modal: null,
+  };
+  const freshModal = () => ({query: '', chosen: null, open: false, active: -1, key: '', error: '', submitted: false, items: []});
+  state.modal = freshModal();
+
+  const M = () => state.methods[state.editing];
+  const left = (g, m) => (state.seats && m.seatsapply === '1' && g.seats !== null) ? Math.max(0, g.seats - g.members) : null;
+  const isFull = (g, m) => left(g, m) === 0;
+  const placesLabel = (g, m) => {
+    const l = left(g, m);
+    if (l === null) { return ''; }
+    if (l === 0) { return '<span class="status status--danger">Full</span>'; }
+    return `<span class="status status--${l <= 2 ? 'warning' : 'success'}">${l} ${l === 1 ? 'place' : 'places'} left</span>`;
+  };
+  // What the applicant may be offered: in the list, and visible to a non-member (C-D7).
+  const offered = m => m.offer.map(byId).filter(g => g && !g.hidden).sort((a, b) => collator.compare(a.name, b.name));
+  const dateText = d => `${d.day} ${MONTHS[d.month]} ${d.year}, ${String(d.hour).padStart(2, '0')}:${String(d.min).padStart(2, '0')}`;
+  const names = list => list.map(id => byId(id).name);
+
+  // ---------- Help texts (orange ring = new) ----------
+  const HELP = {
+    name: [true, 'The method\'s name: the title of its card on the enrolment page and its name on the participants page. Two methods in one course need names that tell them apart, such as "Apply as a student" and "Apply as a moderator".'],
+    status: [true, 'When this is No, every enrolment made by this method is suspended and nobody can apply. To stop new applications but keep the people already enrolled, use "Accept new applications" instead.'],
+    newapps: [true, 'Whether people can submit an application. Applications already submitted stay in the queue and can still be decided.'],
+    role: [true, 'The role an approved applicant gets: this is what makes a method a student method or a recruitment method. A decider who may choose the decision can give another role on the review page, among the roles they may assign.'],
+    when: [true, 'When applications are accepted, and how many. These limits are per method: the moderator method counts its own applicants and places.'],
+    open: [false, 'Applications are accepted from this date. Leave it disabled to accept them at once.'],
+    close: [false, 'No application is accepted after this date. It does not end any enrolment; that is the enrolment duration, under "After approval".'],
+    max: [false, 'How many people may apply at all, pending and approved together. 0 means no limit.'],
+    places: [false, 'How many applicants may be approved at once. A "Maximum applicants" above this number is overbooking: more people apply than can be approved. 0 means no limit.'],
+    cohort: [false, 'Only members of this cohort may apply. Filling a cohort usually needs an administrator, or a rule-based cohort on a profile field.'],
+    hidecard: [true, 'Hide this method\'s card from people outside the cohort. Off, they see the card saying the method is restricted. A closed window or a full method still shows its card, so somebody who may apply learns why they cannot now.'],
+    form: [true, 'What the applicant reads and fills in. Each method has its own form, so a recruitment method can ask other questions.'],
+    desc: [true, 'Shown at the top of the application form, above the questions. It may contain links and formatting.'],
+    comment: [false, 'Adds a free text box to the form; the decider reads it on the review page.'],
+    prompt: [false, 'The question above the comment box. Empty, the form asks for a comment in the site\'s words.'],
+    fields: [false, 'Profile fields the applicant fills in or confirms, among those the administrator allows.'],
+    groups: [true, 'Which group an application belongs to, who decides it, and which groups an approved applicant joins.'],
+    mode: [true, 'Decides which group an application belongs to. In a separate-groups course that is also who may see it, unless "Who decides" says otherwise. "A decider chooses" leaves the application without a group until it is approved.'],
+    offer: [true, 'The groups an applicant may choose. A group hidden from non-members is never offered, whatever this list says. "Add the groups of a grouping" copies them in once.'],
+    req: [true, 'With "No preference", the decider places the applicant at approval.'],
+    key2: [true, 'An applicant holding a group\'s key is enrolled at once in that group; everybody else chooses a group and waits for a decision.'],
+    seatsapply: [true, 'Group seats count every member of the group, whatever their role. Off, this method neither shows nor checks seats, so a moderator is never refused by a full group; approving still adds a member.'],
+    who: [true, 'In a separate-groups course, a decider who cannot see every group normally decides the applications of their own groups. "Only those who see every group" keeps this method\'s applications away from them: the setting a recruitment method needs.'],
+    join: [false, 'Every approved applicant joins these groups, besides the group of their application. A decider who may choose the decision can change them on the review page.'],
+    keymode: [false, 'Today\'s three key modes, unchanged.'],
+    duration: [false, 'How long an approved enrolment lasts, counted from the approval. A recruitment method can end a moderator\'s enrolment with the term.'],
+    expiry: [false, 'Whether to send a message before an enrolment ends, and to whom.'],
+    threshold: [false, 'How long before the end the message is sent.'],
+    profilewrite: [false, 'After applying, the applicant is offered to save the details they typed to their profile.'],
+    notify: [true, 'Who gets a message when an application arrives. In a separate-groups course each recipient is told only of applications they may decide.'],
+    notice: [false, 'In key-only mode, whether managers are told about each enrolment a key made.'],
+  };
+  const helpBtn = id => `<button class="help${HELP[id][0] ? ' new' : ''}" data-help="${id}" aria-expanded="${state.helps.has(id)}" aria-label="Help">?</button>`;
+  const helpText = id => state.helps.has(id) ? `<div class="helptext">${esc(HELP[id][1])}</div>` : '';
+
+  // A row; keys name the state the row shows, for the "what recruitment changes" mark.
+  function row(keys, label, help, control, opts = {}) {
+    const m = M();
+    const s = state.methods.student;
+    const changed = state.editing === 'recruit' && state.highlight && keys.some(k => JSON.stringify(m[k]) !== JSON.stringify(s[k]));
+    return `<div class="row${changed ? ' changed' : ''}"${opts.hidden ? ' hidden' : ''}>
+      <span class="lbl">${label}${opts.renamed ? `<span class="renamed">was: ${esc(opts.renamed)}</span>` : ''}${opts.isnew ? '<span class="newtag">new</span>' : ''}${changed ? '<span class="chg">set for recruitment</span>' : ''}</span>
+      ${help ? helpBtn(help) : '<span></span>'}<div>${control}</div>${help ? helpText(help) : ''}</div>`;
+  }
+  const select = (path, options, value) => `<select class="field-ctl" data-bind="${path}">` +
+    Object.entries(options).map(([v, t]) => `<option value="${esc(v)}"${String(value) === v ? ' selected' : ''}>${esc(t)}</option>`).join('') + '</select>';
+  const text = (path, value, cls = '') => `<input class="field-ctl ${cls}" data-bind="${path}" value="${esc(value)}">`;
+  const CAL = '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4 0h1v2h6V0h1v2h2a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h2V0zm10 6H2v9h12V6zM3 8h2v2H3V8zm4 0h2v2H7V8zm4 0h2v2h-2V8z"/></svg>';
+  function dts(path, d) {
+    const opt = (arr, sel) => arr.map(v => `<option value="${v}"${v === sel ? ' selected' : ''}>${typeof v === 'number' && arr.length > 40 ? String(v).padStart(2, '0') : v}</option>`).join('');
+    const dis = d.on ? '' : ' disabled';
+    const range = n => Array.from({length: n}, (_, i) => i);
+    return `<div class="dts"><label><input type="checkbox" data-bind="${path}.on"${d.on ? ' checked' : ''}> Enable</label>
+      <select aria-label="Day" data-bind="${path}.day" data-num${dis}>${opt(range(31).map(i => i + 1), d.day)}</select>
+      <select aria-label="Month" data-bind="${path}.month" data-num${dis}>${MONTHS.map((n, i) => `<option value="${i}"${i === d.month ? ' selected' : ''}>${n}</option>`).join('')}</select>
+      <select aria-label="Year" data-bind="${path}.year" data-num${dis}>${opt([2025, 2026, 2027, 2028], d.year)}</select>
+      <select aria-label="Hour" data-bind="${path}.hour" data-num${dis}>${range(24).map(h => `<option value="${h}"${h === d.hour ? ' selected' : ''}>${String(h).padStart(2, '0')}</option>`).join('')}</select>
+      <select aria-label="Minute" data-bind="${path}.min" data-num${dis}>${range(60).map(h => `<option value="${h}"${h === d.min ? ' selected' : ''}>${String(h).padStart(2, '0')}</option>`).join('')}</select>
+      <button class="cal" type="button" aria-label="Calendar"${dis}>${CAL}</button></div>`;
+  }
+  function chipsOf(list, m, kind) {
+    const out = list.map(byId).sort((a, b) => collator.compare(a.name, b.name)).map(g => {
+      let extra = '';
+      if (kind === 'offer') {
+        extra = g.hidden ? ' <small>· never offered: hidden from non-members</small>'
+          : (left(g, m) !== null ? ` <small>· ${isFull(g, m) ? 'full' : left(g, m) + ' left'}</small>` : '');
+      }
+      return `<span class="chip${g.hidden && kind === 'offer' ? ' off' : ''}">${esc(g.name)}${extra}<button data-rm="${kind}:${g.id}" aria-label="Remove ${esc(g.name)}">✕</button></span>`;
+    });
+    return out.length ? out.join('') : `<span class="empty">${kind === 'offer' ? 'No group offered yet.' : 'None.'}</span>`;
+  }
+  const addSelect = (kind, list) => `<select class="field-ctl" data-add="${kind}" aria-label="Add a group"><option value="">Search groups to add…</option>` +
+    GROUPS.filter(g => !list.includes(g.id)).sort((a, b) => collator.compare(a.name, b.name)).map(g => `<option value="${g.id}">${esc(g.name)}</option>`).join('') + '</select>';
+
+  // Notices the form computes from what is set (the instance form's existing warnings, extended).
+  function notices(m) {
+    const out = [];
+    const other = state.editing === 'student' ? state.methods.recruit : state.methods.student;
+    if (m.mode === 'choose' && !offered(m).length) {
+      out.push(['bad', 'No group can be offered: nobody can apply through this method.']);
+    }
+    if (m.role !== 'Student' && m.who === 'group' && m.mode !== 'decider') {
+      out.push(['bad', `This method grants ${m.role} and each group's deciders decide it: a moderator of a group could approve another moderator. Set "Who decides" to "Only those who see every group".`]);
+    }
+    const leak = m.offer.filter(id => other.join.includes(id) && other.role !== 'Student');
+    if (leak.length) {
+      out.push(['bad', `${names(leak).join(', ')} is offered here, and "${other.name}" makes its members ${other.role}s: every application to it would reach them.`]);
+    }
+    if (m.who === 'all') {
+      out.push(['info', 'Only people who see every group decide this method\'s applications: in this course, Carla. Group moderators never see them.']);
+    } else if (m.mode === 'choose' && m.req === 'optional') {
+      out.push(['warn', 'This course uses separate groups: an application with "No preference" reaches only those who see every group.']);
+    } else if (m.mode === 'decider') {
+      out.push(['warn', 'This course uses separate groups: an application with no group reaches only those who see every group.']);
+    }
+    if (m.join.some(id => byId(id).name === 'Moderadores') && m.who === 'group') {
+      out.push(['warn', 'Approved applicants join Moderadores. Its members decide every application whose group is Moderadores, in any method.']);
+    }
+    return out.map(([t, x]) => `<div class="alert ${t}">${esc(x)}</div>`).join('');
+  }
+
+  function summaryFor(m) {
+    return {
+      general: `${m.name} · ${m.role}`,
+      when: `${m.close.on ? 'Closes ' + dateText(m.close) : 'No closing date'} · ${m.places === '0' ? 'no place limit' : m.places + ' places'}`,
+      who: m.cohort ? `Cohort ${m.cohort}${m.hidecard === '1' ? ', card hidden from others' : ''}` : 'Anyone who can see the course',
+      form: `${m.comment === '1' ? 'Comment asked' : 'No comment'} · ${Object.values(m.fields).filter(v => v !== 'no').length} profile fields · ${m.questions}`,
+      groups: m.mode === 'choose' ? `Applicant chooses among ${offered(m).length} groups` : m.mode === 'key' ? 'Group enrolment keys' : 'A decider chooses on approval',
+      after: `${m.duration.on ? m.duration.n + ' ' + m.duration.unit : 'No end date'} · ${m.expiry === '0' ? 'no expiry notice' : 'expiry notice'}`,
+      notif: NOTIFY[m.notify],
+    };
+  }
+
+  function strip(m) {
+    const p = [];
+    p.push(m.status !== '1' ? 'Disabled' : m.newapps === '1' ? 'Accepting applications' : 'Not accepting applications');
+    if (m.close.on) { p.push('until ' + dateText(m.close)); }
+    p.push(`${m.taken} of ${m.places === '0' ? '∞' : m.places} places taken`);
+    p.push('grants ' + m.role);
+    if (m.cohort) { p.push('cohort ' + m.cohort); }
+    if (m.mode === 'choose') {
+      p.push(`applicants choose among ${offered(m).length} groups`);
+    } else {
+      p.push(m.mode === 'key' ? 'group keys' : 'a decider places applicants');
+    }
+    p.push(m.who === 'all' ? 'decided only by those who see every group' : 'decided by each group\'s deciders');
+    return p.map(x => `<span>${esc(x)}</span>`).join('');
+  }
+
+  function sec(id, title, help, sum, body) {
+    const open = !state.closed.has(id);
+    return `<details class="sec" data-sec="${id}"${open ? ' open' : ''}><summary>${title}${help ? ' ' + helpBtn(help) : ''}<span class="sum">${esc(sum)}</span></summary>
+      ${help && state.helps.has(help) ? `<div class="row"><span></span><span></span>${helpText(help).replace('class="helptext"', 'class="helptext" style="grid-column:auto"')}</div>` : ''}${body}</details>`;
+  }
+
+  function renderForm() {
+    const m = M();
+    const sm = summaryFor(m);
+    const yesno = {'1': 'Yes', '0': 'No'};
+    let h = `<div class="crumbs">My courses › Group dynamics 2027 › Participants › Enrolment methods › ${esc(m.name)}</div>
+      <div class="pagehead"><h3>Course enrol confirmation</h3><div class="toplinks"><a href="#" onclick="return false">Applications queue</a><a href="#" onclick="return false">Report</a></div></div>
+      <div class="strip" aria-live="polite">${strip(m)}</div>`;
+
+    if (state.editing === 'recruit') {
+      h += `<ol class="recipe"><li>General: name it "Apply as a moderator" and grant <strong>Non-editing teacher</strong>.</li>
+        <li>Who may apply: the cohort "Candidatos a moderador", and hide the card from everybody else.</li>
+        <li>Groups: offer the destination groups (never Moderadores), switch group seats off, and set <strong>Who decides</strong> to "Only those who see every group".</li>
+        <li>Groups joined on approval: Moderadores. Notifications: the coordination only.</li></ol>`;
+    }
+
+    h += sec('general', 'General', null, sm.general,
+      row(['name'], 'Custom instance name', 'name', text('name', m.name)) +
+      row(['status'], 'Allow existing enrolments', 'status', select('status', yesno, m.status), {renamed: 'Allow Course enrol confirmation'}) +
+      row(['newapps'], 'Accept new applications', 'newapps', select('newapps', yesno, m.newapps), {renamed: 'Allow new course enrol request'}) +
+      row(['role'], 'Role on approval', 'role', select('role', {'Student': 'Student', 'Non-editing teacher': 'Non-editing teacher', 'Teacher': 'Teacher'}, m.role), {renamed: 'Default role'}));
+
+    h += sec('when', 'When and how many', 'when', sm.when,
+      row(['open'], 'Applications open', 'open', dts('open', m.open)) +
+      row(['close'], 'Applications close', 'close', dts('close', m.close)) +
+      row(['max'], 'Maximum applicants', 'max', text('max', m.max, 'narrow')) +
+      row(['places'], 'Places', 'places', text('places', m.places, 'narrow')) +
+      row([], 'Places taken', null, `<div class="static">${m.taken} of ${m.places === '0' ? 'no limit' : m.places}</div>`, {renamed: 'a second row called "Places"'}));
+
+    h += sec('who', 'Who may apply', null, sm.who,
+      row(['cohort'], 'Only cohort members', 'cohort', select('cohort', Object.fromEntries(COHORTS.map(c => [c, c || 'No restriction'])), m.cohort)) +
+      row(['hidecard'], 'Hide this card from people outside the cohort', 'hidecard',
+        select('hidecard', {'0': 'No: show it, saying the method is restricted', '1': 'Yes: only cohort members see this method'}, m.hidecard) +
+        (m.hidecard === '1' && !m.cohort ? '<div class="alert warn">Nothing is hidden: there is no cohort restriction.</div>' : ''),
+        {isnew: true}));
+
+    const fieldRows = Object.entries(m.fields).map(([f, v]) =>
+      `<label><input type="checkbox" data-field="${f}" data-part="ask"${v !== 'no' ? ' checked' : ''}> ${f}</label>` +
+      (v !== 'no' ? `<label><input type="checkbox" data-field="${f}" data-part="req"${v === 'req' ? ' checked' : ''}> required</label>` : '') + '<br>').join('');
+    h += sec('form', 'Application form', 'form', sm.form,
+      row(['desc'], 'Text shown to applicants', 'desc', `<textarea class="field-ctl" data-bind="desc">${esc(m.desc)}</textarea>`, {renamed: 'Textarea description'}) +
+      row(['comment'], 'Ask for a comment', 'comment', select('comment', yesno, m.comment), {renamed: 'Commentary field'}) +
+      row(['prompt'], 'Comment prompt', 'prompt', text('prompt', m.prompt), {renamed: 'Custom label', hidden: m.comment !== '1'}) +
+      row(['fields'], 'Requested profile fields', 'fields', `<div class="checks">${fieldRows}</div>`) +
+      row(['questions'], 'Questions', null, `<div class="static">${esc(m.questions)} · <a href="#" onclick="return false">Save and edit questions</a></div>`));
+
+    const modeRadios = [['decider', 'A decider chooses on approval'], ['choose', 'The applicant chooses from a list'], ['key', 'The applicant types a group enrolment key']]
+      .map(([v, t]) => `<label><input type="radio" name="mode" data-bind="mode" value="${v}"${m.mode === v ? ' checked' : ''}> ${v === 'choose' ? `<span><strong>${t}</strong> <span class="newtag">new</span></span>` : t}</label>`).join('');
+    let groups = row(['mode'], 'How is an applicant\'s group decided?', 'mode', `<div class="radios" role="radiogroup">${modeRadios}</div>`);
+    if (m.mode === 'choose') {
+      groups += '<div class="sub">' +
+        row(['offer'], 'Groups offered', 'offer', `<div class="chips">${chipsOf(m.offer, m, 'offer')}</div><div class="addrow">${addSelect('offer', m.offer)}
+          <select class="field-ctl" data-grouping aria-label="Add the groups of a grouping"><option value="">Add the groups of a grouping…</option>${Object.keys(GROUPINGS).map(n => `<option>${esc(n)}</option>`).join('')}</select></div>`, {isnew: true}) +
+        row(['req'], 'The applicant must choose', 'req', select('req', {required: 'Yes: no application without a group', optional: 'No: "No preference" is allowed'}, m.req), {isnew: true}) +
+        row(['seatsapply'], 'Group seats apply to this method', 'seatsapply', select('seatsapply', {'1': 'Yes: show places, refuse a full group', '0': 'No: ignore seats'}, m.seatsapply) +
+          (state.seats ? '' : '<div class="hint">local_groupdist is not installed: no group declares seats.</div>'), {isnew: true}) +
+        row(['key'], 'And with a group key?', 'key2', select('key', {off: 'Keys are not used', any: 'A valid key enrols at once, in the key\'s group'}, m.key), {isnew: true}) +
+        '</div>';
+    } else if (m.mode === 'key') {
+      groups += '<div class="sub">' +
+        row(['keymode'], 'What a valid key does', 'keymode', select('keymode', {any: 'A valid key enrols at once; without one, the application is reviewed', required: 'Key only: a valid key enrols at once, nobody reviews', review: 'Key only, and every application is reviewed'}, m.keymode)) +
+        row([], 'Groups with an enrolment key', null, '<div class="static">Evening A · 17 of 24 seats taken<br>Weekend cohort · 12 of 12 seats taken <span class="status status--warning">Full: its key admits nobody now</span></div>') +
+        '</div>';
+    }
+    groups += row(['who'], 'Who decides applications to this method?', 'who',
+      select('who', {group: 'The deciders of the application\'s group', all: 'Only those who see every group'}, m.who), {isnew: true});
+    groups += row(['join'], 'Groups joined on approval', 'join', `<div class="chips">${chipsOf(m.join, m, 'join')}</div><div class="addrow">${addSelect('join', m.join)}</div>`, {renamed: 'Group assignment'});
+    groups += `<div class="row"><span></span><span></span><div>${notices(m)}</div></div>`;
+    h += sec('groups', 'Groups', 'groups', sm.groups, groups);
+
+    h += sec('after', 'After approval', null, sm.after,
+      row(['duration'], 'Enrolment duration', 'duration', `<div class="dts"><input class="narrow" data-bind="duration.n" value="${esc(m.duration.n)}"${m.duration.on ? '' : ' disabled'} aria-label="Duration">
+        <select data-bind="duration.unit"${m.duration.on ? '' : ' disabled'} aria-label="Unit">${['days', 'weeks', 'hours'].map(u => `<option${u === m.duration.unit ? ' selected' : ''}>${u}</option>`).join('')}</select>
+        <label><input type="checkbox" data-bind="duration.on"${m.duration.on ? ' checked' : ''}> Enable</label></div>`, {renamed: 'Default enrolment duration'}) +
+      row(['expiry'], 'Notify before enrolment expires', 'expiry', select('expiry', {'0': 'No', '1': 'Teacher only', '2': 'Teacher and enrolled user'}, m.expiry)) +
+      row(['threshold'], 'Notification threshold', 'threshold', `<div class="dts"><input class="narrow" data-bind="threshold" value="${esc(m.threshold)}"${m.expiry === '0' ? ' disabled' : ''} aria-label="Threshold"><select disabled><option>days</option></select></div>`) +
+      row(['profilewrite'], 'Offer to save details to the profile', 'profilewrite', `<label class="checks" style="margin:6px 0 0"><input type="checkbox" data-bind="profilewrite" data-flag${m.profilewrite === '1' ? ' checked' : ''}> Offer it after applying</label>`));
+
+    h += sec('notif', 'Notifications', null, sm.notif,
+      row(['notify'], 'Notify of new applications', 'notify', select('notify', NOTIFY, m.notify), {renamed: 'Define who gets notified about new enrolment applications.'}) +
+      row(['notice'], 'Tell managers about each enrolment with a key', 'notice', select('notice', yesno, m.notice), {hidden: !(m.mode === 'key' && m.keymode === 'required')}));
+
+    h += '<div class="btns"><button class="btn primary">Save changes</button><button class="btn">Save and edit questions</button><button class="btn">Cancel</button></div>';
+    $('#form').innerHTML = h;
+  }
+
+  // ---------- Form events (delegated) ----------
+  function setPath(obj, path, value) {
+    const parts = path.split('.');
+    let o = obj;
+    parts.slice(0, -1).forEach(p => { o = o[p]; });
+    o[parts[parts.length - 1]] = value;
+  }
+  $('#form').addEventListener('change', e => {
+    const t = e.target;
+    const m = M();
+    if (t.dataset.bind) {
+      let v = t.type === 'checkbox' ? (t.dataset.flag !== undefined ? (t.checked ? '1' : '0') : t.checked) : t.value;
+      if (t.dataset.num !== undefined) { v = parseInt(v, 10); }
+      setPath(m, t.dataset.bind, v);
+      if (t.dataset.bind === 'mode' || t.dataset.bind === 'key' || t.dataset.bind === 'req') { state.modal = freshModal(); }
+    } else if (t.dataset.add) {
+      const id = parseInt(t.value, 10);
+      if (id) { m[t.dataset.add].push(id); }
+    } else if (t.dataset.grouping !== undefined) {
+      (GROUPINGS[t.value] || []).forEach(n => { const id = byName(n).id; if (!m.offer.includes(id)) { m.offer.push(id); } });
+    } else if (t.dataset.field) {
+      const f = t.dataset.field;
+      if (t.dataset.part === 'ask') { m.fields[f] = t.checked ? 'yes' : 'no'; } else { m.fields[f] = t.checked ? 'req' : 'yes'; }
+    }
+    renderAll();
+  });
+  $('#form').addEventListener('input', e => {
+    const t = e.target;
+    if (t.dataset.bind && (t.tagName === 'TEXTAREA' || t.type === 'text' || !t.type || t.type === 'search')) {
+      if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA') { setPath(M(), t.dataset.bind, t.value); }
+    }
+  });
+  $('#form').addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b) { return; }
+    if (b.dataset.help) {
+      e.preventDefault();
+      if (state.helps.has(b.dataset.help)) { state.helps.delete(b.dataset.help); } else { state.helps.add(b.dataset.help); }
+      renderForm();
+      const again = document.querySelector(`#form [data-help="${b.dataset.help}"]`);
+      if (again) { again.focus(); }
+    } else if (b.dataset.rm) {
+      const [kind, id] = b.dataset.rm.split(':');
+      M()[kind] = M()[kind].filter(x => x !== parseInt(id, 10));
+      state.modal = freshModal();
+      renderAll();
+    }
+  });
+  $('#form').addEventListener('toggle', e => {
+    const d = e.target;
+    if (d.dataset && d.dataset.sec) {
+      if (d.open) { state.closed.delete(d.dataset.sec); } else { state.closed.add(d.dataset.sec); }
+    }
+  }, true);
+  document.querySelectorAll('#method-seg button').forEach(b => b.addEventListener('click', () => { state.editing = b.dataset.method; renderAll(); }));
+  $('#hl').addEventListener('change', e => { state.highlight = e.target.checked; renderForm(); });
+  $('#reset-method').addEventListener('click', () => { state.methods[state.editing] = clone(DEFAULTS[state.editing]); state.modal = freshModal(); renderAll(); });
+
+  // ---------- Switches ----------
+  [['sw-seats', 'seats'], ['sw-size', 'size'], ['sw-full', 'full'], ['sw-bind', 'bind'], ['sw-limit', 'limit']].forEach(([id, k]) => {
+    document.getElementById(id).addEventListener('change', e => {
+      let v = e.target.value;
+      if (k === 'seats') { v = v === '1'; }
+      if (k === 'limit') { v = parseInt(v, 10); }
+      state[k] = v;
+      if (k === 'size') { state.methods.student.offer = ids(v === 'small' ? SMALL : MANY); }
+      state.modal = freshModal();
+      renderAll();
+    });
+  });
+
+  // ---------- Enrolment page ----------
+  function renderCards() {
+    document.querySelectorAll('#viewer-seg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.viewer === state.viewer)));
+    const inCohort = c => !c || (c === 'Candidatos a moderador' && state.viewer === 'candidate');
+    let h = '';
+    let hidden = 0;
+    ['student', 'recruit'].forEach(k => {
+      const m = state.methods[k];
+      if (m.status !== '1') { return; }
+      const member = inCohort(m.cohort);
+      if (!member && m.hidecard === '1') { hidden++; return; }
+      let body;
+      let button = '';
+      if (!member) {
+        body = 'This course is restricted: you cannot apply through this method.';
+      } else if (m.newapps !== '1') {
+        body = 'Enrolment is disabled or inactive.';
+      } else {
+        body = 'You will be asked for some details; your application is then checked before you are enrolled.';
+        if (m.mode === 'choose') { body += ' You choose your group in the form.'; }
+        button = `<button class="btn primary" data-apply="${k}">Start application</button>`;
+      }
+      h += `<div class="ecard"><h3>${esc(m.name)}</h3><p>${esc(body)}</p>${button}</div>`;
+    });
+    if (hidden) {
+      h += `<div class="ghost">Mockup note: ${hidden} method hidden from this viewer (G-b). Core shows nothing in its place.</div>`;
+    }
+    $('#cards').innerHTML = h;
+    $('#cards').querySelectorAll('[data-apply]').forEach(b => b.addEventListener('click', () => {
+      state.applyTo = b.dataset.apply;
+      state.modal = freshModal();
+      renderModal();
+      document.querySelector('.modal').scrollIntoView({behavior: 'smooth', block: 'start'});
+    }));
+  }
+  document.querySelectorAll('#viewer-seg button').forEach(b => b.addEventListener('click', () => { state.viewer = b.dataset.viewer; renderCards(); }));
+
+  // ---------- Modal and combobox (C-D23, C-D24) ----------
+  const AM = () => state.methods[state.applyTo];
+  function listModel() {
+    const m = AM();
+    const all = offered(m).filter(g => !(state.full === 'hidden' && isFull(g, m)));
+    const q = fold(state.modal.query.trim());
+    const items = [];
+    let note = '';
+    if (m.req === 'optional' && !q) { items.push({id: 0, name: 'No preference', none: true}); }
+    if (!q) {
+      const avail = offered(m).filter(g => !isFull(g, m));
+      const shown = avail.slice(0, state.limit);
+      shown.forEach(g => items.push(g));
+      const fullCount = offered(m).length - avail.length;
+      const searchable = state.full === 'listed' ? offered(m).length : avail.length;
+      if (avail.length > shown.length || (fullCount && state.full === 'listed')) {
+        note = `Showing ${shown.length} of ${avail.length} groups with places${fullCount && state.full === 'listed' ? `, ${fullCount} full` : ''}. Type to search all ${searchable}.`;
+      }
+      if (!avail.length) { note = 'Every group is full. Type a name to see them.'; }
+    } else {
+      const match = all.filter(g => fold(g.name).includes(q));
+      match.filter(g => !isFull(g, m)).concat(match.filter(g => isFull(g, m))).slice(0, 50).forEach(g => items.push(g));
+      if (match.length > 50) { note = 'Refine your search: more than 50 groups match.'; }
+      if (!match.length) { note = `No group matches "${state.modal.query.trim()}".`; }
+    }
+    return {items, note};
+  }
+  function highlight(name) {
+    const q = fold(state.modal.query.trim());
+    const i = q ? fold(name).indexOf(q) : -1;
+    if (i < 0) { return esc(name); }
+    return esc(name.slice(0, i)) + '<mark>' + esc(name.slice(i, i + q.length)) + '</mark>' + esc(name.slice(i + q.length));
+  }
+
+  function renderModal() {
+    const m = AM();
+    const st = state.modal;
+    $('#m-title').textContent = m.name;
+    const body = $('#m-body');
+    if (st.submitted) {
+      const a = state.app;
+      body.innerHTML = (a.keygroup
+        ? `<div class="alert ok">You are enrolled in the course, in <strong>${esc(byId(a.keygroup).name)}</strong>. Your key admitted you at once.</div>`
+        : `<div class="alert ok">Your application${a.chosen ? ` for <strong>${esc(byId(a.chosen).name)}</strong>` : ''} is waiting for a decision.</div>`) +
+        '<p class="hint">Without JavaScript (apply.php) the list is the plain select it enhances: same order, the full groups disabled.</p>';
+      $('#m-foot').hidden = true;
+      explain();
+      return;
+    }
+    $('#m-foot').hidden = false;
+    let h = `<div class="desc">${esc(m.desc)}</div>`;
+    const keyGroup = (m.mode === 'choose' && m.key === 'any' && KEYS[st.key.trim()]) ? byName(KEYS[st.key.trim()]) : null;
+    if (m.mode !== 'choose') {
+      h += `<div class="alert info">${m.mode === 'key' ? 'This method uses group keys: the form asks for a key, as today.' : 'The decider places the applicant on approval: the form asks for no group.'}</div>`;
+    } else {
+      if (m.key === 'any') {
+        h += `<div class="field"><label for="m-key">Group enrolment key <span class="hint" style="font-weight:400">(optional)</span></label>
+          <input class="field-ctl" id="m-key" value="${esc(st.key)}" autocomplete="off" style="width:100%">
+          ${keyGroup ? `<div class="alert ok">This key enrols you at once in <strong>${esc(keyGroup.name)}</strong>.</div>` : '<div class="hint">If you have a key from your group, it enrols you at once. Otherwise choose a group below.</div>'}</div>`;
+      }
+      const chosen = st.chosen !== null ? (st.chosen === 0 ? {name: 'No preference'} : byId(st.chosen)) : null;
+      h += `<div class="field"><label id="cbx-label" for="cbx">Group${m.req === 'required' && !keyGroup ? '<span class="req" aria-hidden="true">*</span>' : ''}</label>
+        <div class="cbx-input"><input id="cbx" role="combobox" aria-autocomplete="list" aria-expanded="${st.open}" aria-controls="cbx-list"
+          placeholder="${keyGroup ? 'Your key decides your group' : 'Choose or type a group'}" value="${esc(st.open ? st.query : (chosen ? chosen.name : ''))}"
+          ${keyGroup ? 'disabled' : ''} autocomplete="off"${m.req === 'required' ? ' aria-required="true"' : ''}>
+          <button type="button" id="cbx-toggle" tabindex="-1" aria-label="Show groups"${keyGroup ? ' disabled' : ''}>▾</button></div>
+        <ul class="cbx-list" id="cbx-list" role="listbox" aria-labelledby="cbx-label"${st.open ? '' : ' hidden'}></ul>
+        <div class="sr-only" aria-live="polite" id="cbx-live"></div>
+        ${st.error ? `<div class="err">${esc(st.error)}</div>` : ''}
+        ${chosen && chosen.id && !st.open ? `<div class="hint">${placesLabel(chosen, m) || 'No place limit for this method'}</div>` : ''}</div>`;
+    }
+    if (m.comment === '1') {
+      h += `<div class="field"><label for="m-comment">${esc(m.prompt || 'Comment')}</label><textarea class="field-ctl" id="m-comment"></textarea></div>`;
+    }
+    Object.entries(m.fields).filter(([, v]) => v !== 'no').forEach(([f, v]) => {
+      h += `<div class="field"><label>${f}${v === 'req' ? '<span class="req" aria-hidden="true">*</span>' : ''}</label><input class="field-ctl" style="width:100%"></div>`;
+    });
+    body.innerHTML = h;
+    $('#m-submit').textContent = keyGroup ? 'Enrol me' : 'Submit application';
+    wireModal();
+    if (st.open) { renderList(); }
+    explain();
+  }
+
+  function renderList() {
+    const m = AM();
+    const st = state.modal;
+    const {items, note} = listModel();
+    st.items = items;
+    const q = st.query.trim();
+    let h = '';
+    items.forEach((g, i) => {
+      if (q && isFull(g, m) && (i === 0 || !isFull(items[i - 1], m))) { h += '<li class="heading" role="presentation">Full</li>'; }
+      const dis = !g.none && isFull(g, m);
+      h += `<li role="option" id="cbx-opt-${i}" data-i="${i}" aria-selected="${st.chosen === g.id}"${dis ? ' aria-disabled="true"' : ''} class="${i === st.active ? 'active' : ''}">
+        <span>${g.none ? '<em>No preference</em>' : highlight(g.name)}</span>${g.none ? '' : placesLabel(g, m)}</li>`;
+    });
+    if (note) { h += `<li class="note" role="presentation">${esc(note)}</li>`; }
+    const list = $('#cbx-list');
+    list.innerHTML = h;
+    list.querySelectorAll('li[role="option"]').forEach(li => li.addEventListener('mousedown', e => { e.preventDefault(); choose(parseInt(li.dataset.i, 10)); }));
+    const n = items.filter(g => !g.none).length;
+    $('#cbx-live').textContent = `${n} ${n === 1 ? 'group' : 'groups'} listed. ${note}`;
+    const act = list.querySelector('.active');
+    if (act) { act.scrollIntoView({block: 'nearest'}); }
+    $('#cbx').setAttribute('aria-activedescendant', st.active >= 0 ? 'cbx-opt-' + st.active : '');
+  }
+  function choose(i) {
+    const st = state.modal;
+    const g = st.items[i];
+    if (!g || (!g.none && isFull(g, AM()))) { return; }
+    Object.assign(st, {chosen: g.id, open: false, query: '', active: -1, error: ''});
+    renderModal();
+    $('#cbx').focus();
+  }
+  function move(delta) {
+    const st = state.modal;
+    const n = st.items.length;
+    let i = st.active;
+    for (let step = 0; step < n; step++) {
+      i = (i + delta + n) % n;
+      if (st.items[i].none || !isFull(st.items[i], AM())) { st.active = i; break; }
+    }
+    renderList();
+  }
+  function openList() {
+    const st = state.modal;
+    if (st.open) { return; }
+    Object.assign(st, {open: true, query: '', active: -1});
+    $('#cbx').value = '';
+    $('#cbx').setAttribute('aria-expanded', 'true');
+    $('#cbx-list').hidden = false;
+    renderList();
+  }
+  function closeList() {
+    Object.assign(state.modal, {open: false, active: -1, query: ''});
+    renderModal();
+  }
+  function wireModal() {
+    const key = $('#m-key');
+    if (key) {
+      key.addEventListener('input', () => {
+        const before = !!KEYS[state.modal.key.trim()];
+        state.modal.key = key.value;
+        if (before !== !!KEYS[key.value.trim()]) {
+          renderModal();
+          const k = $('#m-key');
+          k.focus();
+          k.setSelectionRange(k.value.length, k.value.length);
+        }
+      });
+    }
+    const inp = $('#cbx');
+    if (!inp) { return; }
+    inp.addEventListener('click', openList);
+    $('#cbx-toggle').addEventListener('mousedown', e => { e.preventDefault(); if (state.modal.open) { closeList(); } else { inp.focus(); openList(); } });
+    inp.addEventListener('input', () => {
+      const st = state.modal;
+      if (!st.open) { st.open = true; $('#cbx-list').hidden = false; inp.setAttribute('aria-expanded', 'true'); }
+      st.query = inp.value;
+      st.active = -1;
+      renderList();
+    });
+    inp.addEventListener('keydown', e => {
+      const st = state.modal;
+      if (e.key === 'ArrowDown') { e.preventDefault(); openList(); move(1); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); openList(); move(-1); }
+      else if (e.key === 'Enter' && st.open && st.active >= 0) { e.preventDefault(); choose(st.active); }
+      else if (e.key === 'Escape' && st.open) { e.preventDefault(); closeList(); $('#cbx').focus(); }
+    });
+    inp.addEventListener('blur', () => { if (state.modal.open) { setTimeout(() => { if (document.activeElement !== $('#cbx')) { closeList(); } }, 0); } });
+  }
+  $('#m-submit').addEventListener('click', () => {
+    const m = AM();
+    const st = state.modal;
+    if (m.mode !== 'choose') { return; }
+    const keyGroup = (m.key === 'any' && KEYS[st.key.trim()]) ? byName(KEYS[st.key.trim()]).id : 0;
+    if (!keyGroup && st.chosen === null && m.req === 'required') {
+      st.error = 'Choose a group.';
+      renderModal();
+      $('#cbx').focus();
+      return;
+    }
+    state.app = {method: state.applyTo, keygroup: keyGroup, chosen: keyGroup ? 0 : (st.chosen || 0)};
+    st.submitted = true;
+    renderModal();
+    renderReview();
+  });
+  $('#m-reset').addEventListener('click', () => { state.modal = freshModal(); state.app = null; renderModal(); renderReview(); });
+
+  function explain() {
+    const m = AM();
+    const avail = offered(m).filter(g => !isFull(g, m)).length;
+    const total = offered(m).length;
+    const li = [`Method: ${m.name}, granting ${m.role}.`];
+    if (m.mode !== 'choose') {
+      li.push('The chooser is off: this method does not let the applicant choose.');
+    } else {
+      li.push(`${total} groups are offered; ${left(byId(1), m) === null ? 'seats do not apply, so none is full' : avail + ' still have places'}.`);
+      li.push(`Opened with nothing typed: up to ${state.limit} groups with places, in natural order${avail > state.limit ? ', then a note saying how many more there are' : ''}.`);
+      li.push(state.full === 'listed' ? 'Typing searches every offered group: with places first, then the full ones, disabled, under "Full".' : 'Full groups are hidden, even when typing.');
+      li.push(m.req === 'optional' ? '"No preference" heads the list.' : 'A group is required: submitting without one is refused on the element.');
+      if (m.key === 'any') { li.push('A valid key (EVE-2026) disables the list: the key decides the group and enrols at once.'); }
+      li.push('Search ignores case and accents: try "sao" or "evora". Keyboard: Down, Up, Enter, Escape.');
+    }
+    $('#m-explain').innerHTML = li.map(t => `<li>${esc(t)}</li>`).join('');
+  }
+
+  // ---------- Review page ----------
+  const PEOPLE = [
+    {name: 'Carla, coordinator', groups: ['Moderadores'], all: true, choose: true, role: 'Editing teacher'},
+    {name: 'Ana, moderator', groups: ['Evening A', 'Moderadores'], all: false, choose: false, role: 'Non-editing teacher'},
+    {name: 'Bruno, moderator since last week', groups: ['Weekend intensive', 'Moderadores'], all: false, choose: false, role: 'Non-editing teacher'},
+  ];
+  function renderReview() {
+    const box = $('#review');
+    const a = state.app;
+    if (!a) { box.innerHTML = '<p class="empty">No application yet. Submit one in the modal above.</p>'; return; }
+    const m = state.methods[a.method];
+    if (a.keygroup) {
+      box.innerHTML = `<span class="status status--success">Key: ${esc(byId(a.keygroup).name)}</span><p>Admitted by the key, with no decision: the application is in the report, not in the queue.</p>`;
+      return;
+    }
+    const chosen = a.chosen ? byId(a.chosen) : null;
+    const appGroup = chosen ? chosen.name : null;
+    let h = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px"><strong>${esc(m.name)}</strong>
+      ${chosen ? `<span class="status status--success">Chose: ${esc(chosen.name)}</span>` : '<span class="status">No preference</span>'}</div>`;
+    h += '<table><thead><tr><th>Decider</th><th>Groups</th><th>Handed the application?</th></tr></thead><tbody>';
+    PEOPLE.forEach(p => {
+      const sees = p.all || (m.who === 'group' && appGroup && p.groups.includes(appGroup));
+      h += `<tr><td>${esc(p.name)}</td><td>${esc(p.groups.join(', '))}</td><td>${sees ? '<span class="status status--success">Yes</span>' : '<span class="status">No</span>'}</td></tr>`;
+    });
+    h += '</tbody></table>';
+    if (chosen && left(chosen, m) === 0) { h += `<div class="alert warn">${esc(chosen.name)} is full now: approving goes over its seats.</div>`; }
+    const binding = state.bind === 'binding';
+    const defaults = m.join.map(byId);
+    const candidates = offered(m).slice(0, 6);
+    if (chosen && !candidates.includes(chosen)) { candidates.unshift(chosen); }
+    h += '<div class="row" style="grid-template-columns:180px 1fr;margin-top:10px"><span class="lbl">Role</span><div class="static">' + esc(m.role) + ' <em>(the method\'s)</em></div></div>';
+    h += '<div class="row" style="grid-template-columns:180px 1fr"><span class="lbl">Groups to join</span><div class="checks">';
+    if (binding && chosen) {
+      h += `<div class="static">${esc(chosen.name)} <em>(the applicant's choice, binding)</em>${defaults.map(g => ' · ' + esc(g.name) + ' <em>(method)</em>').join('')}</div>`;
+    } else {
+      candidates.forEach(g => { h += `<label><input type="checkbox" data-grp="${g.id}"${chosen && g.id === chosen.id ? ' checked' : ''}> ${esc(g.name)}${chosen && g.id === chosen.id ? ' <em>(choice)</em>' : ''}</label>`; });
+      defaults.forEach(g => { h += `<label><input type="checkbox" checked data-grp="${g.id}"> ${esc(g.name)} <em>(method)</em></label>`; });
+    }
+    h += '</div></div><div style="display:flex;gap:8px;margin-top:8px"><button class="btn primary" id="r-approve">Approve</button><button class="btn">Waiting list</button><button class="btn">Refuse</button></div><div id="r-out"></div>';
+    box.innerHTML = h;
+    $('#r-approve').addEventListener('click', () => {
+      const joined = (binding && chosen) ? [chosen.name].concat(defaults.map(g => g.name))
+        : [...box.querySelectorAll('[data-grp]:checked')].map(c => byId(parseInt(c.dataset.grp, 10)).name);
+      const moved = chosen && !joined.includes(chosen.name);
+      $('#r-out').innerHTML = `<div class="alert ok">Approved as ${esc(m.role)}, joining ${esc(joined.join(', ') || 'no group')}.</div>` +
+        (moved ? `<div class="alert info">The decider moved the applicant away from their choice; the record keeps both, and the approval message names the groups joined.</div>` : '');
+    });
+  }
+
+  // ---------- Why a second method ----------
+  const DESTS = ['Evening A', 'Morning C', 'Weekend intensive'];
+  function modConfig() {
+    const d = state.modDest;
+    switch (state.mod) {
+      case 't': return {method: 'Apply as a student', role: 'Student', how: 'Moderadores\' group key, "every application is reviewed"', appgroup: 'Moderadores', joins: ['Moderadores'], who: 'group', choice: false,
+        verdict: ['bad', 'Ana and Bruno are handed the application because they are in Moderadores. Approved by either, the candidate becomes a Student in Moderadores, who will in turn decide the next moderators.']};
+      case 'm1': return {method: 'Apply as a moderator', role: 'Non-editing teacher', how: 'No key, no choice', appgroup: null, joins: ['Moderadores'], who: 'group', choice: false,
+        verdict: ['ok', 'No application has a group, so only those who see every group are handed it: Carla. Membership in Moderadores routes nothing. The candidate cannot say where they want to moderate. Needs no code.']};
+      case 'm2g': return {method: 'Apply as a moderator', role: 'Non-editing teacher', how: 'Candidate chooses a destination group', appgroup: d, joins: ['Moderadores', d], who: 'group', choice: true,
+        verdict: ['bad', `The candidate's choice routes the application to ${d}'s moderators: a peer decides on a peer. The form warns about exactly this (screen 2, set "Who decides" back).`]};
+      default: return {method: 'Apply as a moderator', role: 'Non-editing teacher', how: 'Candidate chooses a destination group', appgroup: d, joins: ['Moderadores', d], who: 'all', choice: true,
+        verdict: ['ok', `The candidate says where they want to moderate (${d}); the queue and the report file the application under ${d}, but only Carla is handed it.`]};
+    }
+  }
+  function renderMod() {
+    document.querySelectorAll('#mod-seg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mod === state.mod)));
+    const c = modConfig();
+    let h = `<div class="method"><dl><dt>Method</dt><dd>${esc(c.method)}</dd><dt>Role on approval</dt><dd>${esc(c.role)}</dd>
+      <dt>How the candidate applies</dt><dd>${esc(c.how)}${c.choice ? ` <select class="field-ctl" id="mod-dest" aria-label="Destination group">${DESTS.map(n => `<option${n === state.modDest ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select>` : ''}</dd>
+      <dt>The application's group</dt><dd>${c.appgroup ? esc(c.appgroup) : '<em>none</em>'}</dd><dt>Groups joined on approval</dt><dd>${esc(c.joins.join(', '))}</dd>
+      <dt>Who decides</dt><dd>${c.who === 'all' ? 'Only those who see every group' : 'The deciders of the application\'s group'}</dd></dl></div>`;
+    h += '<table><thead><tr><th>Decider</th><th>Groups</th><th>Handed the application?</th><th>If they approve</th></tr></thead><tbody>';
+    PEOPLE.forEach(p => {
+      const sees = p.all || (c.who === 'group' && c.appgroup && p.groups.includes(c.appgroup));
+      let res = '—';
+      if (sees) {
+        res = p.choose ? `Non-editing teacher (chosen), joins ${esc(c.choice ? c.joins.join(', ') : 'Moderadores and the destination they pick')}`
+          : `<span class="status status--${c.role === 'Student' ? 'danger' : 'warning'}">${esc(c.role)}</span> (the method's role), joins ${esc(c.joins.join(', '))}`;
+      }
+      h += `<tr><td>${esc(p.name)}<br><span class="hint">${esc(p.role)}${p.all ? ', sees every group' : ''}</span></td><td>${esc(p.groups.join(', '))}</td>
+        <td>${sees ? '<span class="status status--success">Yes</span>' : '<span class="status">No</span>'}</td><td>${res}</td></tr>`;
+    });
+    h += `</tbody></table><div class="alert ${c.verdict[0]}" style="margin-top:12px">${esc(c.verdict[1])}</div>`;
+    $('#mod-body').innerHTML = h;
+    const sel = $('#mod-dest');
+    if (sel) { sel.addEventListener('change', () => { state.modDest = sel.value; renderMod(); }); }
+  }
+  document.querySelectorAll('#mod-seg button').forEach(b => b.addEventListener('click', () => { state.mod = b.dataset.mod; renderMod(); }));
+
+  // ---------- Render ----------
+  function renderAll() {
+    document.querySelectorAll('#method-seg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.method === state.editing)));
+    renderCards();
+    renderForm();
+    renderModal();
+    renderReview();
+    renderMod();
+  }
+  renderAll();
+})();
+</script>
+</body>
+</html>

@@ -1692,7 +1692,10 @@ final class backup_test extends \advanced_testcase {
     public function test_plugin_data_is_not_restored_onto_another_enrolment_method(): void {
         global $DB;
 
-        [$course] = $this->create_course_with_application();
+        [$course, $instance] = $this->create_course_with_application();
+        \enrol_apply\local\instanceoptions::set((int) $instance->id, ['deciders' => 1]);
+        $offered = $this->getDataGenerator()->create_group(['courseid' => $course->id]);
+        \enrol_apply\local\groupoffer::set((int) $instance->id, [(int) $offered->id]);
 
         $newcourseid = $this->backup_and_restore($course, true, false, null, backup::ENROL_NEVER);
 
@@ -1701,6 +1704,208 @@ final class backup_test extends \advanced_testcase {
         $manualid = $DB->get_field('enrol', 'id', ['courseid' => $newcourseid, 'enrol' => 'manual'], MUST_EXIST);
 
         $this->assertFalse($DB->record_exists('enrol_apply_groups', ['enrolid' => $manualid]));
+        $this->assertFalse($DB->record_exists('enrol_apply_options', ['enrolid' => $manualid]));
+        $this->assertFalse($DB->record_exists('enrol_apply_offer', ['enrolid' => $manualid]));
         $this->assertEquals(0, $DB->count_records('enrol_apply_submission', ['courseid' => $newcourseid]));
+    }
+
+    /**
+     * The method's options and its offer survive a restore without users, the offer translated
+     * to the new course's groups.
+     *
+     * Changes that must make it fail: either element left out of the backup or put under the
+     * users gate, or the offered group copied through rather than mapped.
+     *
+     * @return void
+     */
+    public function test_the_options_and_the_offer_survive_a_restore(): void {
+        global $DB;
+
+        [$course, $instance] = $this->create_course_with_application();
+        \enrol_apply\local\instanceoptions::set((int) $instance->id, [
+            'groupchoice' => \enrol_apply\local\instanceoptions::CHOICE_REQUIRED,
+            'deciders' => \enrol_apply\local\instanceoptions::DECIDERS_ALLGROUPS,
+            'groupseats' => 0,
+            'hidecard' => 1,
+        ]);
+        $evening = $this->getDataGenerator()->create_group(['courseid' => $course->id, 'name' => 'Evening A']);
+        $morning = $this->getDataGenerator()->create_group(['courseid' => $course->id, 'name' => 'Morning C']);
+        \enrol_apply\local\groupoffer::set((int) $instance->id, [(int) $evening->id, (int) $morning->id]);
+
+        $newcourseid = $this->backup_and_restore($course, false);
+        $newinstanceid = (int) $DB->get_field('enrol', 'id', ['courseid' => $newcourseid, 'enrol' => 'apply'], MUST_EXIST);
+
+        $this->assertEquals((object) [
+            'groupchoice' => \enrol_apply\local\instanceoptions::CHOICE_REQUIRED,
+            'deciders' => \enrol_apply\local\instanceoptions::DECIDERS_ALLGROUPS,
+            'groupseats' => 0,
+            'hidecard' => 1,
+        ], \enrol_apply\local\instanceoptions::get($newinstanceid));
+
+        $names = array_map(fn($group) => $group->name, \enrol_apply\local\groupoffer::groups($newinstanceid));
+        sort($names);
+        $this->assertSame(['Evening A', 'Morning C'], $names);
+        foreach (\enrol_apply\local\groupoffer::groups($newinstanceid) as $group) {
+            $this->assertEquals($newcourseid, $group->courseid);
+        }
+    }
+
+    /**
+     * An option outside its vocabulary in the archive restores as its default, and the restore
+     * goes on.
+     *
+     * Changes that must make it fail: the restore writing the archive's values without
+     * normalising them, which set() would then refuse, failing the whole restore.
+     *
+     * @return void
+     */
+    public function test_an_option_outside_the_vocabulary_restores_as_its_default(): void {
+        global $DB;
+
+        [$course, $instance] = $this->create_course_with_application();
+        \enrol_apply\local\instanceoptions::set((int) $instance->id, ['groupchoice' => 1, 'deciders' => 1]);
+        // What a foreign archive can carry; the backup reads the row as it is.
+        $DB->set_field('enrol_apply_options', 'deciders', 9, ['enrolid' => $instance->id]);
+
+        $newcourseid = $this->backup_and_restore($course, false);
+        $newinstanceid = (int) $DB->get_field('enrol', 'id', ['courseid' => $newcourseid, 'enrol' => 'apply'], MUST_EXIST);
+
+        $options = \enrol_apply\local\instanceoptions::get($newinstanceid);
+        $this->assertSame(\enrol_apply\local\instanceoptions::DECIDERS_GROUP, $options->deciders);
+        $this->assertSame(\enrol_apply\local\instanceoptions::CHOICE_OPTIONAL, $options->groupchoice);
+        $this->assertSame(9, (int) $DB->get_field('enrol_apply_options', 'deciders', ['enrolid' => $instance->id]), 'the premise');
+        $this->assertNotEquals(9, (int) $DB->get_field('enrol_apply_options', 'deciders', ['enrolid' => $newinstanceid]));
+    }
+
+    /**
+     * The group an applicant chose survives a restore with users, translated to the new
+     * course's id; a group that did not travel restores as no choice.
+     *
+     * Changes that must make it fail: the column left out of the backup, or copied unmapped.
+     *
+     * @return void
+     */
+    public function test_the_chosen_group_survives_a_restore(): void {
+        global $DB;
+
+        [$course, , $applicant] = $this->create_course_with_application();
+        $group = $this->getDataGenerator()->create_group(['courseid' => $course->id, 'name' => 'Chosen by the applicant']);
+        $where = ['courseid' => $course->id, 'userid' => $applicant->id];
+        $DB->set_field('enrol_apply_submission', 'chosengroupid', $group->id, $where);
+
+        $newcourseid = $this->backup_and_restore($course, true);
+        $restored = $this->restored_record($newcourseid);
+
+        $newgroupid = (int) $DB->get_field(
+            'groups',
+            'id',
+            ['courseid' => $newcourseid, 'name' => 'Chosen by the applicant'],
+            MUST_EXIST
+        );
+        $this->assertNotEquals((int) $group->id, $newgroupid, 'the premise: the group really was re-created');
+        $this->assertSame($newgroupid, (int) $restored->chosengroupid);
+
+        // A group of another course never travels with this one, and restores as 0.
+        $foreign = $this->getDataGenerator()->create_group(['courseid' => $this->getDataGenerator()->create_course()->id]);
+        $DB->set_field('enrol_apply_submission', 'chosengroupid', $foreign->id, $where);
+        $this->assertSame(0, (int) $this->restored_record($this->backup_and_restore($course, true))->chosengroupid);
+    }
+
+    /**
+     * A chosen group beside a key route, which only a foreign archive carries, restores as no
+     * choice and keeps the key.
+     *
+     * Changes that must make it fail: restoring the chosen group whatever the key route says.
+     *
+     * @return void
+     */
+    public function test_a_chosen_group_beside_a_key_route_restores_as_no_choice(): void {
+        global $DB;
+
+        [$course, , $applicant] = $this->create_course_with_application();
+        $keyed = $this->getDataGenerator()->create_group(['courseid' => $course->id, 'name' => 'Keyed']);
+        $chosen = $this->getDataGenerator()->create_group(['courseid' => $course->id, 'name' => 'Chosen']);
+        $this->record_key($course, $applicant, (int) $keyed->id, submission::KEY_FOR_REVIEW);
+        $where = ['courseid' => $course->id, 'userid' => $applicant->id];
+        $DB->set_field('enrol_apply_submission', 'chosengroupid', $chosen->id, $where);
+
+        $newcourseid = $this->backup_and_restore($course, true);
+        $restored = $this->restored_record($newcourseid);
+
+        $this->assertSame(0, (int) $restored->chosengroupid);
+        $this->assertSame(submission::KEY_FOR_REVIEW, (int) $restored->keyoutcome);
+        $this->assertSame(
+            (int) $DB->get_field('groups', 'id', ['courseid' => $newcourseid, 'name' => 'Keyed'], MUST_EXIST),
+            (int) $restored->keygroupid
+        );
+    }
+
+    /**
+     * A backup taken before the upgrade has run writes neither the new elements nor the new
+     * column, and its restore leaves the new tables alone.
+     *
+     * The recycle bin backs every course up before deleting it, so a backup that read the new
+     * schema too early failed every course deletion on a node serving this code before the upgrade
+     * (measured on the mini cluster).
+     *
+     * Changes that must make it fail: the backup's gate dropped, or either restore handler's.
+     *
+     * @return void
+     */
+    public function test_before_the_upgrade_a_backup_and_a_restore_leave_the_new_schema_alone(): void {
+        global $DB;
+
+        [$course, $instance] = $this->create_course_with_application();
+        \enrol_apply\local\instanceoptions::set((int) $instance->id, ['deciders' => 1]);
+        $group = $this->getDataGenerator()->create_group(['courseid' => $course->id]);
+        \enrol_apply\local\groupoffer::set((int) $instance->id, [(int) $group->id]);
+        set_config('version', ENROL_APPLY_OPTIONS_SCHEMA - 1, 'enrol_apply');
+
+        $xml = $this->backup_enrolments_xml($course, true);
+        $this->assertStringNotContainsString('<options', $xml);
+        $this->assertStringNotContainsString('<offeredgroups', $xml);
+        $this->assertStringNotContainsString('chosengroupid', $xml);
+        // The control: the plugin's other data is still written.
+        $this->assertStringContainsString('<applygroups', $xml);
+
+        // An archive taken after the upgrade, restored on a node still before it.
+        set_config('version', ENROL_APPLY_OPTIONS_SCHEMA, 'enrol_apply');
+        $before = $DB->count_records('enrol_apply_options');
+        $newcourseid = $this->backup_and_restore($course, false, false, null, backup::ENROL_ALWAYS, function () {
+            set_config('version', ENROL_APPLY_OPTIONS_SCHEMA - 1, 'enrol_apply');
+        });
+        $newinstanceid = (int) $DB->get_field('enrol', 'id', ['courseid' => $newcourseid, 'enrol' => 'apply'], MUST_EXIST);
+        $this->assertSame($before, $DB->count_records('enrol_apply_options'));
+        $this->assertFalse($DB->record_exists('enrol_apply_offer', ['enrolid' => $newinstanceid]));
+    }
+
+    /**
+     * A record restored before the upgrade has run carries no chosen group, and its key route
+     * still travels.
+     *
+     * Before the upgrade the column does not exist; the PHPUnit site has it, which is what lets
+     * this test see that the restore leaves it alone rather than counting on insert_record()
+     * dropping a column the table lacks.
+     *
+     * Changes that must make it fail: the gate in group_route_fields() dropped.
+     *
+     * @return void
+     */
+    public function test_before_the_upgrade_a_restored_record_carries_no_chosen_group(): void {
+        global $DB;
+
+        [$course, , $applicant] = $this->create_course_with_application();
+        $chosen = $this->getDataGenerator()->create_group(['courseid' => $course->id, 'name' => 'Chosen']);
+        $where = ['courseid' => $course->id, 'userid' => $applicant->id];
+        $DB->set_field('enrol_apply_submission', 'chosengroupid', $chosen->id, $where);
+
+        $newcourseid = $this->backup_and_restore($course, true, false, null, backup::ENROL_ALWAYS, function () {
+            set_config('version', ENROL_APPLY_OPTIONS_SCHEMA - 1, 'enrol_apply');
+        });
+        $restored = $this->restored_record($newcourseid);
+
+        $this->assertSame(0, (int) $restored->chosengroupid);
+        // The control: the record itself travelled.
+        $this->assertSame('I would like to join this course', $restored->comment);
     }
 }

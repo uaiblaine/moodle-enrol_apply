@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Unreleased (2026111900)
+
+### Added
+
+- **Storage for the applicant's group choice and the per-method options**
+  (`docs/design/applicant-group-choice.md`, stage G2). Two configuration tables,
+  `enrol_apply_options` (one row per method at most; none means every option at its default) and
+  `enrol_apply_offer` (the groups a method offers its applicants, kept apart from the groups an
+  approval joins), and the column `enrol_apply_submission.chosengroupid`. All three travel in a
+  backup, the group ids mapped; a value outside an option's vocabulary restores as its default.
+  The chosen group is in the privacy metadata and the export. Nothing reads them yet, so nothing
+  changes for a site: the upgrade step only creates the tables and the column.
+
 ## v2.1 (2026110701) - 2026-11-07
 
 ### Added

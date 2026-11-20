@@ -13,7 +13,8 @@ confirms, defers to a waiting list, or cancels it. Its personal-data tables are
 `user_enrolments.id`), `enrol_apply_submission` (the durable record of each application, which
 outlives its enrolment) and `enrol_apply_answer` (what that application submitted, one frozen row
 per value, owned by the record); `enrol_apply_groups` (groups an approved applicant joins) and
-`enrol_apply_fieldcond` (when a question is shown) are configuration. It leans on core's enrolment expiry machinery for everything time based. Supports
+`enrol_apply_fieldcond` (when a question is shown), `enrol_apply_offer` (groups an applicant may
+choose) and `enrol_apply_options` (per-method options with no `{enrol}` column left) are configuration. It leans on core's enrolment expiry machinery for everything time based. Supports
 Moodle **5.1 through 5.3** (`$plugin->requires = 2025100600`,
 `$plugin->supported = [501, 503]`). CI is the moodle-an-hochschulen reusable workflow,
 one job per supported branch in `.github/workflows/ci.yml` — **update those jobs when
@@ -107,6 +108,8 @@ classes/local/submission.php the durable application record: constants, writes, 
 classes/local/keyattempts.php  the wrong-key throttle and its per-applicant request lock
 classes/local/groupvisibility.php  whether a reader may be told a group's name (core's visibility rule)
 classes/local/groupfilter.php  the queue's group filter: the values each reader is offered, what each selects
+classes/local/groupoffer.php  the groups a method offers its applicants, read joined on the method's course
+classes/local/instanceoptions.php  per-method options (enrol_apply_options), read strictly, no row = defaults
 classes/local/profilelink.php  whether user/view.php would open an applicant's profile for this reader
 classes/observers.php        course_deleted, orphan cleanup for the plugin-disabled case
 classes/privacy/provider.php full provider: three personal-data tables, two personal-data roles
@@ -1773,6 +1776,23 @@ backup/                      group mappings, comments and the durable trail, see
   is the standard recovery, re-enters the step with `table_exists()` now true. The backfill needs
   its own per-row existence check. Measured on the live m502 database: two extra runs of the
   2026082300 step change nothing.
+
+- **A node serves new code before the upgrade has run, and core blocks no page for a pending
+  plugin upgrade** (only a core upgrade redirects). Measured on the mini cluster with the G2 code
+  deployed and the step pending: `delete_instance()` stopped on `Class "enrol_apply\local\groupoffer"
+  not found` (core's class map is rebuilt by the upgrade's purge, not by the deploy), and every
+  course deletion failed, because `tool_recyclebin` backs the course up first and the backup read
+  `enrol_apply_options`. So every path that existed before a schema change asks
+  `enrol_apply_plugin::options_schema_ready()` (the stored plugin version, shared by every node
+  through the config cache and changed by the upgrade itself) before touching the new tables or
+  classes: `delete_instance()`, the `course_deleted` sweep, the backup structure, the restore
+  handlers and `group_route_fields()`, and the two classes check it on every entry point.
+  `ENROL_APPLY_OPTIONS_SCHEMA` is pinned to the step that creates the tables by
+  `instanceoptions_test::test_the_schema_version_is_the_step_that_creates_the_table`. Cron is safe
+  on its own: it refuses to run while an upgrade is pending. A later schema change needs the same
+  gate, with its own constant. Gates `LB2`-`LB4`, `OB1`, `BK1`, `RS4`, `RS5`; `delete_instance()`'s
+  own gate has none, because under PHPUnit the classes' gates cover it: what it stops, the fatal of a
+  node whose class map predates the deploy, is reproduced on the mini cluster only.
 
 - **A backfill's predicate must be the queue's predicate, timeend clause included.** "Not
   active" is strictly weaker: `process_expirations()` re-suspends an ACTIVE enrolment whose

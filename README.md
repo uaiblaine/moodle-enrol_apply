@@ -560,17 +560,20 @@ Five tables. Three hold personal data:
   with the enrolment method and with the course.
 - `enrol_apply_submission` — the durable record of each application: the applicant, the comment,
   the decision, its message to the applicant, the decider's note, the groups and role chosen, the
-  groups the approval actually joined, who decided and when, and the group whose enrolment key was
-  entered with what it did (never the key). Kept for the retention period (`enrol_apply/retentiondays`, 30 days by default; a record
+  groups the approval actually joined, who decided and when, the group whose enrolment key was
+  entered with what it did (never the key), and the group the applicant chose from the method's
+  offer. Kept for the retention period (`enrol_apply/retentiondays`, 30 days by default; a record
   still in the queue is never swept), pseudonymised when the course is deleted, and kept when the
   enrolment or the method is deleted. See "The record of an application" above.
 - `enrol_apply_answer` — what the application submitted: one row per profile field and per
   question asked, with the question as it read at submission. Removed with its record, by every
   route that removes one.
 
-Two are configuration and name nobody: `enrol_apply_groups` (the groups an approved applicant
-joins, per method) and `enrol_apply_fieldcond` (when a question is shown). Both are deleted with
-the method.
+Four are configuration and name nobody: `enrol_apply_groups` (the groups an approved applicant
+joins, per method), `enrol_apply_offer` (the groups an applicant may choose from, per method),
+`enrol_apply_options` (a method's options that have no column on the enrolment method itself; a
+method without a row uses the defaults) and `enrol_apply_fieldcond` (when a question is shown). All
+four are deleted with the method.
 
 An approval also writes core rows: a role assignment and group memberships stamped with
 `enrol_apply`, and the enrolment itself. The plugin never writes the applicant's profile unless
