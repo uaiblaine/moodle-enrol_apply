@@ -18,8 +18,8 @@
     @template enrol_apply/review_history
 
     The applicant's earlier applications to this course, as the course report shows them to this
-    reader: the outcome as a badge, the dates, who decided, the key group, the groups joined and
-    the decision note. Never the message written to the applicant, which the report does not
+    reader: the outcome as a badge, the dates, who decided, the key group, the group chosen, the
+    groups joined and the decision note. Never the message written to the applicant, which the report does not
     show either.
 
     A server-rendered region. Without JavaScript (body without jsenabled) it is shown in place in
@@ -36,13 +36,14 @@
     Context variables required for this template:
     * hashistory boolean - whether this reader holds enrol/apply:viewreports AND there is history
     * historylabel string - the list's heading, and the dialogue's title
-    * historydeciderlabel, historykeygrouplabel, historyjoinedlabel, historynotelabel string
+    * historydeciderlabel, historykeygrouplabel, historychosengrouplabel, historyjoinedlabel,
+      historynotelabel string
     * hasreportlink boolean - whether this reader can open the course report (capability AND course access)
     * historyreportlabel string, historyreporturl string - the link to the course report
     * history array - one entry per earlier application, newest first, each with outcome (plain),
       outcomeclass (a literal background and text colour pair), applied, hasdecided, decided,
-      hasfacts (any of the four below), hasdecider, decider (plain), haskeygroup, keygroup (escaped), hasjoined, joined (escaped),
-      hasnote and note (escaped)
+      hasfacts (any of the five below), hasdecider, decider (plain), haskeygroup, keygroup (escaped),
+      haschosengroup, chosengroup (escaped), hasjoined, joined (escaped), hasnote and note (escaped)
 
     Example context (json):
     {
@@ -50,6 +51,7 @@
         "historylabel": "Earlier applications to this course",
         "historydeciderlabel": "Decided by",
         "historykeygrouplabel": "Group of the enrolment key",
+        "historychosengrouplabel": "Group chosen",
         "historyjoinedlabel": "Groups joined",
         "historynotelabel": "Note for the record",
         "hasreportlink": true,
@@ -59,7 +61,8 @@
             {
                 "outcome": "Cancelled", "outcomeclass": "bg-danger text-white", "applied": "Applied on 12/03/26, 09:14",
                 "hasdecided": true, "decided": "decided on 14/03/26, 10:02", "hasfacts": true, "hasdecider": true, "decider": "Carlos Lima",
-                "haskeygroup": true, "keygroup": "Turma B", "hasjoined": false, "joined": "",
+                "haskeygroup": true, "keygroup": "Turma B", "haschosengroup": false, "chosengroup": "",
+                "hasjoined": false, "joined": "",
                 "hasnote": true, "note": "Documents missing."
             }
         ]
@@ -79,6 +82,7 @@
                     <dl class="enrol_apply-historyfacts mb-0">
                         {{#hasdecider}}<div><dt>{{historydeciderlabel}}</dt><dd>{{decider}}</dd></div>{{/hasdecider}}
                         {{#haskeygroup}}<div><dt>{{historykeygrouplabel}}</dt><dd>{{{keygroup}}}</dd></div>{{/haskeygroup}}
+                        {{#haschosengroup}}<div><dt>{{historychosengrouplabel}}</dt><dd>{{{chosengroup}}}</dd></div>{{/haschosengroup}}
                         {{#hasjoined}}<div><dt>{{historyjoinedlabel}}</dt><dd>{{{joined}}}</dd></div>{{/hasjoined}}
                         {{#hasnote}}<div><dt>{{historynotelabel}}</dt><dd>{{{note}}}</dd></div>{{/hasnote}}
                     </dl>

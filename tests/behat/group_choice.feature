@@ -63,3 +63,31 @@ Feature: The applicant chooses a group when applying
     And I set the field "Group" to "Evening B"
     And I press "Submit application"
     Then I should see "Your application for Evening B is waiting for a decision."
+
+  # No @javascript: the chip and the ticks are server markup. Eleven groups are more than the eight
+  # a page shows as cards, so only the ticked ones are cards: the choice and the method's own.
+  # The ticks are read from the markup: the cards and the "add a group" select both post groups[],
+  # which the browserkit driver cannot resolve to one checkbox by label.
+  Scenario: The decider reads the chosen group and finds it ticked on top of the method's
+    Given the following "users" exist:
+      | username | firstname | lastname | email                |
+      | teacher1 | Teacher   | 1        | teacher1@example.com |
+    And the following "course enrolments" exist:
+      | user     | course | role           |
+      | teacher1 | C1     | editingteacher |
+    And the "C1" apply enrolment method also joins "Evening A"
+    And I log in as "student1"
+    And I am on "Course 1" course homepage
+    And I press "Start application"
+    And I set the field "Group" to "Evening B"
+    And I press "Submit application"
+    And I log out
+    When I log in as "teacher1"
+    And I am on the "C1" "enrol_apply > manage applications" page
+    And I click on "Review" "link" in the "Student 1" "table_row"
+    Then I should see "Chose: Evening B"
+    And I should not see "Key accepted"
+    And "//input[@type='checkbox'][@data-name='Evening B'][@checked]" "xpath_element" should exist
+    And "//input[@type='checkbox'][@data-name='Evening A'][@checked]" "xpath_element" should exist
+    And "//input[@type='checkbox'][@data-name='Evening C']" "xpath_element" should not exist
+    And I should see "Applicant's choice"

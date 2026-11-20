@@ -27,10 +27,13 @@ use context_system;
  * SEPARATEGROUPS when they lack moodle/site:accessallgroups in its context. VISIBLEGROUPS and
  * NOGROUPS scope nobody (docs/design/group-review-scope.md, S1 and S2).
  *
- * A pending application belongs to the group of its key, enrol_apply_submission.keygroupid on
- * the newest record of its user enrolment, 0 for none. A narrowed decider may see and decide it
- * only when that group is one of theirs, so an application without a key reaches only those
- * who can access all groups (S3).
+ * A pending application belongs to "the application's group" (docs/design/applicant-group-choice.md,
+ * C-D4): on the newest record of its user enrolment, the key's group when a key was presented
+ * (enrol_apply_submission.keygroupid) and the group the applicant chose otherwise (chosengroupid),
+ * 0 for none; {@see application_group()} and {@see application_group_sql()}. A narrowed decider
+ * may see and decide it only when that group is one of theirs, so a chosen group routes exactly as
+ * a key group does (C-D11), and an application without either reaches only those who can access
+ * all groups (S3).
  *
  * Only a COURSE-level grant is narrowed, and the rule asks about the capability actually being
  * exercised: enrol/apply:manageapplications for deciding, enrol/apply:viewapplications for
@@ -305,33 +308,70 @@ final class groupscope {
     }
 
     /**
-     * The group a pending application belongs to.
+     * The group a pending application belongs to: "the application's group" (C-D4).
      *
-     * The key's group on the newest record of the user enrolment, the record key_of() and
+     * Read on the newest record of the user enrolment, the record key_of(), chosen_group_of() and
      * chosen_groups() read, so that a user enrolment carrying an older record does not take its
-     * group from it. {@see where()} expresses the same choice in SQL; keep the two in step.
+     * group from it: the key's group when the record has a key route (any keyoutcome but
+     * KEY_NONE, the vocabulary's or not), and the group the applicant chose otherwise. A record
+     * never carries both ({@see submission::create()} refuses it, and the restore drops a choice
+     * beside a key), so which one wins matters only for a hand-edited row, and the key wins there
+     * as everywhere else. {@see application_group_sql()} expresses the same choice in SQL; keep
+     * the two in step (test_the_sql_and_the_per_row_check_agree).
      *
      * Read here rather than through submission::key_of(), which answers null for an outcome
      * outside its vocabulary: the SQL cannot tell such a row apart, and the per-row check and the
-     * listing must agree on every row.
+     * listing must agree on every row. Before the upgrade that adds chosengroupid nobody chose,
+     * and the column is not read.
      *
      * @param int $userenrolmentid User enrolment the application belongs to.
-     * @return int Group id, 0 for an application without a key or without a record.
+     * @return int Group id, 0 for an application without a key or a choice, or without a record.
      */
     public static function application_group(int $userenrolmentid): int {
         global $DB;
 
+        $choice = instanceoptions::schema_ready();
         $rows = $DB->get_records(
             'enrol_apply_submission',
             ['userenrolmentid' => $userenrolmentid],
             'timecreated DESC, id DESC',
-            'id, keygroupid',
+            'id, keygroupid, keyoutcome' . ($choice ? ', chosengroupid' : ''),
             0,
             1
         );
         $row = reset($rows);
+        if (!$row) {
+            return 0;
+        }
+        if ((int) $row->keyoutcome !== submission::KEY_NONE) {
+            return max(0, (int) $row->keygroupid);
+        }
 
-        return $row ? max(0, (int) $row->keygroupid) : 0;
+        return $choice ? max(0, (int) $row->chosengroupid) : 0;
+    }
+
+    /**
+     * The SQL form of {@see application_group()} over one record aliased $alias.
+     *
+     * The key's group on a record with a key route, the chosen group otherwise: a CASE, because
+     * a record never carries both (C-D4). Every reader that files an application under a group
+     * selects or compares this expression and never a bare keygroupid: the scope and its filter
+     * ({@see group_where()}), the report's narrowing and filter ({@see record_group_where()}), the
+     * queue's "without a group" ({@see groupfilter::where()}) and its group column. The caller
+     * restricts $alias to the newest record where that matters, as {@see group_where()} does.
+     *
+     * Before the upgrade that adds chosengroupid nobody chose, so the expression reads the key's
+     * group alone rather than a column that does not exist yet. The constant is written into the
+     * SQL rather than bound, so the expression can sit several times in one statement.
+     *
+     * @param string $alias Alias of {enrol_apply_submission} in the caller's query.
+     * @return string An SQL expression taking no parameters; 0 for no group.
+     */
+    public static function application_group_sql(string $alias): string {
+        $otherwise = instanceoptions::schema_ready() ? "{$alias}.chosengroupid" : '0';
+
+        return "(CASE WHEN {$alias}.keyoutcome <> " . submission::KEY_NONE
+            . " THEN {$alias}.keygroupid ELSE {$otherwise} END)";
     }
 
     /**
@@ -362,7 +402,7 @@ final class groupscope {
             return false;
         }
 
-        // No group id is 0, so an application without a key is never in the list.
+        // No group id is 0, so an application without a group is never in the list.
         return in_array($groupid, $groups, true);
     }
 
@@ -394,7 +434,7 @@ final class groupscope {
 
         $groupid = self::application_group($userenrolmentid);
 
-        // No group id is 0, so an application without a key is never in the list.
+        // No group id is 0, so an application without a group is never in the list.
         return in_array($groupid, $groups, true);
     }
 
@@ -421,11 +461,12 @@ final class groupscope {
     /**
      * Whether an application belongs to one of the groups, over a user enrolment aliased "ue".
      *
-     * True when the newest record of the user enrolment names one of the groups. Written with
-     * NOT EXISTS rather than a LIMIT inside a subquery, which not every supported database
-     * accepts; "newest" is (timecreated, id), as {@see application_group()} orders. An
-     * application without a record, or whose key named no group, matches nothing, because no
-     * group id is 0.
+     * True when "the application's group" on the newest record of the user enrolment
+     * ({@see application_group_sql()}: the key's group, or the chosen one) is one of the groups.
+     * Written with NOT EXISTS rather than a LIMIT inside a subquery, which not every supported
+     * database accepts; "newest" is (timecreated, id), as {@see application_group()} orders. An
+     * application without a record, or naming no group, matches nothing, because no group id is
+     * 0.
      *
      * get_in_or_equal() throws on an empty array, so a reader in no group gets a never-true
      * predicate rather than a query.
@@ -441,13 +482,14 @@ final class groupscope {
         }
 
         [$insql, $params] = $DB->get_in_or_equal(array_values($groupids), SQL_PARAMS_NAMED, 'scopegroup');
+        $group = self::application_group_sql('scopesub');
 
         return [
             "EXISTS (
                 SELECT 1
                   FROM {enrol_apply_submission} scopesub
                  WHERE scopesub.userenrolmentid = ue.id
-                   AND scopesub.keygroupid {$insql}
+                   AND {$group} {$insql}
                    AND NOT EXISTS (
                        SELECT 1
                          FROM {enrol_apply_submission} scopenewer
@@ -486,9 +528,10 @@ final class groupscope {
     /**
      * Whether a durable record belongs to one of the groups, over the record aliased $alias.
      *
-     * A record belongs to a group by its key while it waits and, once approved, also by the groups
-     * the approval left the applicant in: true when keygroupid is one of the groups, or when the
-     * comma-separated joinedgroups names one ({@see submission::record_joined_groups()} writes it).
+     * A record belongs to a group by "the application's group" (its key's group, or the group the
+     * applicant chose, {@see application_group_sql()}) and, once approved, also by the groups the
+     * approval left the applicant in: true when the application's group is one of the groups, or
+     * when the comma-separated joinedgroups names one ({@see submission::record_joined_groups()} writes it).
      * That is what joined, defaults included, where decidedgroups is only the decider's choice and
      * is empty for every approval left on the method's defaults, which a moderator of the group the
      * defaults joined would otherwise never see (V-D10). Unlike {@see where()} every record of the
@@ -533,7 +576,7 @@ final class groupscope {
             $params[$name] = '%,' . $groupid . ',%';
         }
 
-        return ["({$alias}.keygroupid {$insql} OR " . implode(' OR ', $likes) . ')', $params];
+        return ['(' . self::application_group_sql($alias) . " {$insql} OR " . implode(' OR ', $likes) . ')', $params];
     }
 
     /**

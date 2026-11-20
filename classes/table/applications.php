@@ -999,13 +999,17 @@ class applications extends \table_sql implements dynamic_table {
                  JOIN {course} c ON c.id = e.courseid
                  {$this->identitysql->joins}";
 
-        /* The key group of the application's NEWEST record, the one groupscope::where() and
-           application_group() read, so the column names the group the scope and the group filter
-           judge the row by. Two LEFT joins, the first restricted to the newest record by the NOT
-           EXISTS shape of groupscope::where(), so neither can add or remove a row. Only where the
-           column is shown; the visibility of each group is judged per page in query_db(). */
+        /* The application's group on its NEWEST record, the one groupscope::where() and
+           application_group() read - the key's group, or the one the applicant chose
+           (groupscope::application_group_sql(), C-D4) - so the column names the group the scope and
+           the group filter judge the row by. The fields keep their key-group names, as the column
+           does: a chosen group is filed exactly where a key group is. Two LEFT joins, the first
+           restricted to the newest record by the NOT EXISTS shape of groupscope::where(), so
+           neither can add or remove a row. Only where the column is shown; the visibility of each
+           group is judged per page in query_db(). */
         if ($this->groupcolumn) {
-            $fields .= ", kgs.keygroupid AS keygroupid, kgs.keyoutcome AS keygroupoutcome,
+            $appgroup = groupscope::application_group_sql('kgs');
+            $fields .= ", {$appgroup} AS keygroupid, kgs.keyoutcome AS keygroupoutcome,
                        kg.name AS keygroupname, kg.courseid AS keygroupcourseid, kg.visibility AS keygroupvisibility";
             $from .= "
             LEFT JOIN {enrol_apply_submission} kgs ON kgs.userenrolmentid = ue.id
@@ -1016,7 +1020,7 @@ class applications extends \table_sql implements dynamic_table {
                              AND (kgnewer.timecreated > kgs.timecreated
                                   OR (kgnewer.timecreated = kgs.timecreated AND kgnewer.id > kgs.id))
                       )
-            LEFT JOIN {groups} kg ON kg.id = kgs.keygroupid";
+            LEFT JOIN {groups} kg ON kg.id = {$appgroup}";
         }
 
         /* The operator's own filters, last: everything above is the scope, everything below the
@@ -1424,19 +1428,19 @@ class applications extends \table_sql implements dynamic_table {
     }
 
     /**
-     * The group of the application's key, as far as this reader may be told it.
+     * The application's group - its key's, or the one the applicant chose (C-D4) - as far as this
+     * reader may be told it.
      *
-     * The rules of the course report's cell (submission formatter key_group()): a group the
-     * reader may not see by core's visibility rule leaves the cell blank, card label included
-     * (V-D13), since the key badge in the applicant's cell already says a key was used; a key
-     * whose group is gone, or was never mapped by a restore, says so; and an application made
-     * without a key says it has no group.
+     * The rules of the course report's cells (submission formatter key_group() and
+     * chosen_group()): a group the reader may not see by core's visibility rule leaves the cell
+     * blank, card label included (V-D13); a group that is gone, or was never mapped by a restore,
+     * says so; and an application made without a key or a choice says it has no group.
      *
      * An escaping boundary: flexible_table writes the cell unescaped, so the name goes out in the
      * ESCAPED spelling format_string() gives by default.
      *
-     * @param stdClass $row Row data carrying keygroupid, keygroupoutcome, keygroupname,
-     *     keygroupcourseid and keygroupvisibility, null where the joins found nothing.
+     * @param stdClass $row Row data carrying keygroupid (the application's group), keygroupoutcome,
+     *     keygroupname, keygroupcourseid and keygroupvisibility, null where the joins found nothing.
      * @return string Rendered cell.
      */
     public function col_keygroup($row) {

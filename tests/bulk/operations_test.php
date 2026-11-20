@@ -1167,11 +1167,14 @@ final class operations_test extends \advanced_testcase {
         global $DB;
 
         $applicant = $this->applicant();
+        // A group key route, as apply_for_review() records it: the group and its outcome together.
+        $where = ['userenrolmentid' => $this->ueid($applicant)];
+        $DB->set_field('enrol_apply_submission', 'keygroupid', $group ? (int) $group->id : 0, $where);
         $DB->set_field(
             'enrol_apply_submission',
-            'keygroupid',
-            $group ? (int) $group->id : 0,
-            ['userenrolmentid' => $this->ueid($applicant)]
+            'keyoutcome',
+            $group ? \enrol_apply\local\submission::KEY_FOR_REVIEW : \enrol_apply\local\submission::KEY_NONE,
+            $where
         );
 
         return $applicant;

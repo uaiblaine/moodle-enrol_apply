@@ -98,6 +98,38 @@ final class groupscope_test extends \advanced_testcase {
     }
 
     /**
+     * A pending application on the instance, recording the group the applicant chose.
+     *
+     * @param \stdClass $instance The apply instance.
+     * @param int $groupid The chosen group, 0 for "No preference".
+     * @return int The user enrolment id.
+     */
+    private function chosen_application(\stdClass $instance, int $groupid): int {
+        global $DB;
+
+        $user = $this->getDataGenerator()->create_user();
+        $this->plugin->enrol_user($instance, $user->id, null, 0, 0, ENROL_USER_SUSPENDED);
+        $ueid = (int) $DB->get_field('user_enrolments', 'id', ['enrolid' => $instance->id, 'userid' => $user->id], MUST_EXIST);
+        submission::create($instance, (int) $user->id, $ueid, (object) [], 0, submission::KEY_NONE, $groupid);
+
+        return $ueid;
+    }
+
+    /**
+     * Write a key route beside a choice on every record of an application, which only a hand edit does.
+     *
+     * @param int $ueid The application.
+     * @param int $keygroupid The key's group.
+     * @return void
+     */
+    private function add_key_route(int $ueid, int $keygroupid): void {
+        global $DB;
+
+        $DB->set_field('enrol_apply_submission', 'keygroupid', $keygroupid, ['userenrolmentid' => $ueid]);
+        $DB->set_field('enrol_apply_submission', 'keyoutcome', submission::KEY_FOR_REVIEW, ['userenrolmentid' => $ueid]);
+    }
+
+    /**
      * Each group mode, with whether it narrows a decider who may not access all groups.
      *
      * @return array Group mode and the expected answer, keyed by case name.
@@ -342,6 +374,122 @@ final class groupscope_test extends \advanced_testcase {
                 "row {$ueid}"
             );
         }
+    }
+
+    /**
+     * "The application's group" is the chosen group when no key decided (C-D4): "No preference"
+     * is no group, a newer record with a choice replaces an older keyed one, and a key route
+     * written beside a choice by hand wins, as everywhere else.
+     *
+     * Changes that must make it fail: the per-row helper ignoring the choice, or preferring it to
+     * the key.
+     *
+     * @return void
+     */
+    public function test_an_application_made_with_a_choice_belongs_to_the_chosen_group(): void {
+        global $DB;
+
+        [$course, $instance] = $this->course(SEPARATEGROUPS);
+        $chosen = $this->getDataGenerator()->create_group(['courseid' => $course->id]);
+        $keyed = $this->getDataGenerator()->create_group(['courseid' => $course->id]);
+
+        $own = $this->chosen_application($instance, (int) $chosen->id);
+        $this->assertSame((int) $chosen->id, groupscope::application_group($own));
+        $this->assertSame(0, groupscope::application_group($this->chosen_application($instance, 0)), 'no preference');
+
+        $both = $this->chosen_application($instance, (int) $chosen->id);
+        $this->add_key_route($both, (int) $keyed->id);
+        $this->assertSame((int) $keyed->id, groupscope::application_group($both), 'the key wins');
+
+        // An older keyed record, a newer chosen one: the newest decides.
+        $moved = $this->application($instance, (int) $keyed->id);
+        $DB->set_field('enrol_apply_submission', 'timecreated', time() - HOURSECS, ['userenrolmentid' => $moved]);
+        $newer = $DB->get_record('enrol_apply_submission', ['userenrolmentid' => $moved], '*', MUST_EXIST);
+        unset($newer->id);
+        $newer->keygroupid = 0;
+        $newer->keyoutcome = submission::KEY_NONE;
+        $newer->chosengroupid = $chosen->id;
+        $newer->timecreated = time();
+        $DB->insert_record('enrol_apply_submission', $newer);
+        $this->assertSame((int) $chosen->id, groupscope::application_group($moved));
+    }
+
+    /**
+     * The SQL predicate and the per-row check agree on rows made with a choice: of the reader's
+     * group, of another, no preference, a key and a choice written together both ways round, and a
+     * newer chosen record over an older keyed one.
+     *
+     * Changes that must make it fail: either side ignoring the choice, or either side preferring
+     * it to a key.
+     *
+     * @return void
+     */
+    public function test_the_sql_and_the_per_row_check_agree_on_a_chosen_group(): void {
+        global $DB;
+
+        [$course, $instance] = $this->course(SEPARATEGROUPS);
+        $mine = $this->getDataGenerator()->create_group(['courseid' => $course->id]);
+        $theirs = $this->getDataGenerator()->create_group(['courseid' => $course->id]);
+        $teacher = $this->getDataGenerator()->create_and_enrol($course, 'teacher');
+        $this->getDataGenerator()->create_group_member(['groupid' => $mine->id, 'userid' => $teacher->id]);
+
+        $own = $this->chosen_application($instance, (int) $mine->id);
+        $other = $this->chosen_application($instance, (int) $theirs->id);
+        $nopreference = $this->chosen_application($instance, 0);
+        // Chose mine, but a key of theirs written beside it: the key wins, so not mine.
+        $keytheirs = $this->chosen_application($instance, (int) $mine->id);
+        $this->add_key_route($keytheirs, (int) $theirs->id);
+        // Chose theirs, a key of mine beside it: mine.
+        $keymine = $this->chosen_application($instance, (int) $theirs->id);
+        $this->add_key_route($keymine, (int) $mine->id);
+        // A key of theirs, then a newer record choosing mine.
+        $moved = $this->application($instance, (int) $theirs->id);
+        $DB->set_field('enrol_apply_submission', 'timecreated', time() - HOURSECS, ['userenrolmentid' => $moved]);
+        $newer = $DB->get_record('enrol_apply_submission', ['userenrolmentid' => $moved], '*', MUST_EXIST);
+        unset($newer->id);
+        $newer->keygroupid = 0;
+        $newer->keyoutcome = submission::KEY_NONE;
+        $newer->chosengroupid = $mine->id;
+        $newer->timecreated = time();
+        $DB->insert_record('enrol_apply_submission', $newer);
+
+        [$where, $params] = groupscope::where(groupscope::narrowed_to((int) $course->id, (int) $teacher->id));
+        $matched = array_map('intval', $DB->get_fieldset_sql(
+            "SELECT ue.id FROM {user_enrolments} ue WHERE ue.enrolid = :enrolid AND {$where} ORDER BY ue.id",
+            $params + ['enrolid' => $instance->id]
+        ));
+
+        $expected = [$own, $keymine, $moved];
+        sort($expected);
+        $this->assertSame($expected, $matched);
+        foreach ([$own, $other, $nopreference, $keytheirs, $keymine, $moved] as $ueid) {
+            $this->assertSame(
+                in_array($ueid, $matched, true),
+                groupscope::allows((int) $course->id, $ueid, (int) $teacher->id),
+                "row {$ueid}"
+            );
+        }
+    }
+
+    /**
+     * Before the upgrade that adds chosengroupid nobody chose: the per-row helper reads the key
+     * alone, as the SQL does.
+     *
+     * Changes that must make it fail: the per-row helper reading the column without the schema gate.
+     *
+     * @return void
+     */
+    public function test_before_the_upgrade_the_application_group_is_the_keys(): void {
+        [$course, $instance] = $this->course(SEPARATEGROUPS);
+        $chosen = $this->getDataGenerator()->create_group(['courseid' => $course->id]);
+        $ueid = $this->chosen_application($instance, (int) $chosen->id);
+
+        set_config('version', ENROL_APPLY_OPTIONS_SCHEMA - 1, 'enrol_apply');
+        $this->assertSame(0, groupscope::application_group($ueid));
+        $this->assertStringNotContainsString('chosengroupid', groupscope::application_group_sql('s'));
+
+        set_config('version', ENROL_APPLY_OPTIONS_SCHEMA, 'enrol_apply');
+        $this->assertSame((int) $chosen->id, groupscope::application_group($ueid), 'the control');
     }
 
     /**

@@ -83,8 +83,12 @@ the foot of the page, choosing the groups and the role an approval gives.
 **Review** opens one application, with links to the previous and next, and reads top to bottom
 in the order a decision asks its questions:
 
-1. **Who, and how.** A strip with the status, what the group key did (*Key accepted: Turma A*),
-   how long the application has waited, the method, the course and the applicant's identity line.
+1. **Who, and how.** A strip with the status, what the group key did (*Key accepted: Turma A*) or
+   the group the applicant chose (*Chose: Evening A*), how long the application has waited, the
+   method, the course and the applicant's identity line. **Already in this course** lists the
+   applicant's other enrolments in the course, through any method: its status, the role it gave,
+   and for this plugin's methods the groups joined through it and how it was admitted (by a group
+   key, or approved on a date, and by whom for a holder of `enrol/apply:viewreports`).
 2. **What weighs on the decision.** One line per signal, each with an icon, its number and a word:
    the seats of each group the approval joins that declares seats (with `local_groupdist`), the
    places on the method, the earlier applications to the course (for a holder of
@@ -95,9 +99,12 @@ in the order a decision asks its questions:
    are deferred (in your groups, for a decider narrowed by separate groups).
 3. **On confirming.** A sentence says who joins the course with which role and in which groups,
    and that they are told, with the seats and places afterwards. **Adjust groups and role** opens
-   the groups as cards to tick, with each group's occupancy, and the role. With no group ticked the
-   approval uses the method's groups, and for an application a key sent for review the key's group
-   too; the page names them. In a course with more than eight groups you may choose, only the
+   the groups as cards to tick, with each group's occupancy, and the role. The group the applicant
+   chose is ticked on top of the method's groups; untick it or pick another to place them
+   elsewhere. With no group ticked the approval uses the method's groups, and for an application a
+   key sent for review the key's group, or the group the applicant chose, too; the page names them.
+   So does an approval from core's **Edit enrolment** or a bulk approval with no group chosen.
+   In a course with more than eight groups you may choose, only the
    approval's own groups are cards and the others are found by typing part of a name or code,
    optionally within one grouping.
 4. **A message to the applicant or a note for the record**, behind one disclosure: the message goes
@@ -369,7 +376,8 @@ In a course whose group mode is **Separate groups**, a decider who lacks
 `moodle/site:accessallgroups` there (the stock *Non-editing teacher*, given
 `enrol/apply:manageapplications`) decides only the applications of their own groups. This is
 core's rule for the participants page, so nothing extra is configured. An application belongs to
-the group whose enrolment key the applicant typed. One made without a key belongs to no group and
+the group whose enrolment key the applicant typed, or else to the group the applicant chose from
+the method's list. One made with neither ("No preference" included) belongs to no group and
 reaches only those who can access all groups. The instance form says so in such a course while
 the mode lets keyless applications in: *Nothing* and *A valid key enrols at once*. Such a decider
 sees only their groups' applications in the queue and in the previous/next links. The review page
@@ -388,7 +396,7 @@ capability at system level and a mentor (the capability in the applicant's own u
 never narrowed, as their delegation does not come from the course.
 
 The queue says whose application each row is. A **Group** column names the group of the key the
-applicant typed (or *Without a group*), on a course's queue and on the site-wide one, never on a
+applicant typed or the group they chose (or *Without a group*), on a course's queue and on the site-wide one, never on a
 mentor's; a group core hides from the reader leaves the cell blank. A **Group** filter, on a
 course's queue only, offers the groups the reader may see in natural order (a search above eight),
 plus *My groups* and *Without a group* for a reader who sees every group; a narrowed decider is
@@ -410,8 +418,8 @@ membership made by hand, or by another plugin, counts as core counts it.
 
 A holder of `enrol/apply:viewapplications` is narrowed by the same rule, and so is a holder of
 `enrol/apply:viewreports` on the course report: in a separate-groups course, without
-`moodle/site:accessallgroups`, the report lists only the records whose key group is one of
-theirs or whose approval joined one of their groups (for an approval recorded before version
+`moodle/site:accessallgroups`, the report lists only the records whose key group or chosen group
+is one of theirs or whose approval joined one of their groups (for an approval recorded before version
 2026110505 whose memberships the upgrade could not find, the groups the decider chose), and a
 reader in no group sees no row and core's notice. Each capability's own system-level grant lifts its narrowing. The site-wide
 custom-report source is not narrowed: who reads a custom report is decided by its audiences.
@@ -478,9 +486,11 @@ paging and a CSV or Excel download.
 whether the decider chose them or the method's defaults applied. A group the reader may not see is
 left out (a cell whose groups are all hidden is blank), and so is a group deleted since. Approvals
 recorded before version 2026110505 show the groups the upgrade could find from the applicant's
-memberships, and nothing where it found none. Where the course has groups, a **Group (enrolment
-key or joined)** filter selects the applications of one group: its key group, or a group the
-approval joined. It offers the groups the reader may see, in natural order, and a reader narrowed
+memberships, and nothing where it found none. **Group chosen** names the group the applicant
+chose from the method's list, beside **Group of the enrolment key**; neither is sortable, and a
+group the reader may not see leaves the cell blank. Where the course has groups, a **Group
+(applied for or joined)** filter selects the applications of one group: its key group or chosen
+group, or a group the approval joined. It offers the groups the reader may see, in natural order, and a reader narrowed
 by separate groups only their own.
 
 Where a course carries more than one Course enrol confirmation method, the report opens scoped to

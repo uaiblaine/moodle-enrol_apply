@@ -680,6 +680,14 @@ body.path-enrol-apply:not(.jsenabled) .enrol_apply-historybutton {
     padding-left: var(--enrol-apply-inset);
 }
 
+/* "Already in this course" (C-D5): its entries draw as the earlier applications do, and the roles
+   held outside any method close the card under a rule, as the rules' facts follow their meters. */
+.enrol_apply-enrolments .enrol_apply-timeline + .enrol_apply-rulefact {
+    border-top: 1px solid var(--enrol-apply-line);
+    margin-top: 1rem;
+    padding-top: 1rem;
+}
+
 .enrol_apply-timeline > li + li {
     border-top: 1px solid var(--enrol-apply-line);
     margin-top: 1.25rem;

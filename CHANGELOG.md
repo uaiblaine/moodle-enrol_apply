@@ -4,9 +4,31 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased (2026112001)
+## Unreleased (2026112002)
 
 ### Added
+
+- **The decision side of the applicant's group choice** (`docs/design/applicant-group-choice.md`,
+  stage G5). An application made with a chosen group is filed under that group exactly as one made
+  with a group key (C-D4, C-D11): in a separate-groups course it reaches that group's deciders and no
+  other group's (unless "Who decides" is "Only those who see every group"), in the queue, its group
+  column and filter, the review page, the previous/next walk, the per-row check of every decision,
+  the new-application notice and the course report's narrowing and group filter. The review page
+  shows a **Chose: \<group\>** chip beside the status (never beside the key chip; unnamed to a reader
+  who may not see the group) and ticks the chosen group on top of the method's groups; the decider
+  may untick it or pick another (C-D10). An approval that records no choice (core's "Edit
+  enrolment", a bulk approval with an empty choice, a decider without
+  `enrol/apply:choosedecision`) joins the chosen group plus the method's groups, skipping a group
+  deleted since. The managers' notice names the chosen group to each recipient who may see it.
+- **"Already in this course"** on the review page (C-D5): the applicant's other enrolments in the
+  course, through any method, with the method, its status, the roles that method gave, and for this
+  plugin's methods the groups joined through it and how it was admitted (by a group key, or approved
+  on a date, by whom for a holder of `enrol/apply:viewreports`), all read from what was recorded.
+  Shown only to a reader holding core's `moodle/course:enrolreview` in the course, and a reader
+  narrowed by separate groups is listed only the records the course report shows them.
+- **Group chosen** column in the course report and the custom-report source, and in the review
+  page's earlier applications, named only to a reader who may see the group; not sortable. The
+  report's group filter is now **Group (applied for or joined)**.
 
 - **Who applies as a moderator cannot apply as a student** (`docs/design/applicant-group-choice.md`,
   stage G3, C-D29). A method is a *deciding* method when the role it grants on approval holds

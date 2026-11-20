@@ -21,10 +21,11 @@ use core_reportbuilder\local\helpers\database;
 use enrol_apply\local\groupscope;
 
 /**
- * The course report's group filter: the records of one group, by key group or by a group joined.
+ * The course report's group filter: the records of one group, by the application's group or by a group joined.
  *
- * A select over the groups the report offers the reader, matching a record whose keygroupid is the
- * chosen group or whose joinedgroups names it, with decidedgroups read where joinedgroups is not
+ * A select over the groups the report offers the reader, matching a record whose application's
+ * group (its key's, or the one the applicant chose, {@see groupscope::application_group_sql()}) is
+ * the picked group or whose joinedgroups names it, with decidedgroups read where joinedgroups is not
  * known: the shape of the separate-groups narrowing, {@see groupscope::record_group_where()}, for one
  * group, so the filter and the narrowing cannot disagree on which records belong to a group. Core's
  * core_group entity has no group-id filter, and a plain select compiles to "field = value", which

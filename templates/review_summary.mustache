@@ -35,6 +35,9 @@
     * haskeychip boolean - whether the applicant presented a group enrolment key
     * keychip string - what that key did, naming its group to a reader who may see it; plain
       spelling, escaped by the double stash
+    * haschosenchip boolean - whether the applicant chose a group; never together with haskeychip
+    * chosenchip string - "Chose: <group>", naming the group to a reader who may see it and saying
+      only that a group was chosen to anybody else; plain spelling, escaped by the double stash
     * haswaited boolean - whether the wait is known
     * waitlabel string - "Awaiting a decision for", or the waiting list's own wording
     * waited string - how long, in words
@@ -62,6 +65,8 @@
         "statuschipclass": "enrol_apply-statuschip-deferred",
         "haskeychip": true,
         "keychip": "Key accepted: Turma A",
+        "haschosenchip": false,
+        "chosenchip": "",
         "haswaited": true,
         "waitlabel": "On the waiting list for",
         "waited": "2 days 3 hours",
@@ -82,6 +87,7 @@
         {{#readonly}}<span class="badge bg-secondary text-dark enrol_apply-chip-readonly">{{#pix}}t/hide, core{{/pix}}{{readonlylabel}}</span>{{/readonly}}
         <span class="badge {{statuschipclass}} enrol_apply-statuschip">{{^iswaiting}}<span class="enrol_apply-statusdot"></span>{{/iswaiting}}{{#iswaiting}}{{#pix}}i/duration, core{{/pix}}{{/iswaiting}}<span class="visually-hidden">{{statuslabel}}: </span>{{status}}</span>
         {{#haskeychip}}<span class="badge enrol_apply-keychip">{{#pix}}key, enrol_apply{{/pix}}{{keychip}}</span>{{/haskeychip}}
+        {{#haschosenchip}}<span class="badge enrol_apply-keychip" data-region="chosen-chip">{{#pix}}i/group, core{{/pix}}{{chosenchip}}</span>{{/haschosenchip}}
     </div>
     {{#haswaited}}
         <div class="enrol_apply-wait">

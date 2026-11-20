@@ -534,15 +534,25 @@ final class queue {
         }
 
         $joined = submission::joined_groups_sql('s');
+        /* The chosen group as the report's "Group chosen" column reads it (C-D4), once the upgrade
+           that adds the column has run. */
+        $chosenfields = '';
+        $chosenjoin = '';
+        if (instanceoptions::schema_ready()) {
+            $chosenfields = ', s.chosengroupid, cg.name AS chosengroupname, cg.courseid AS chosengroupcourseid,
+                       cg.visibility AS chosengroupvisibility';
+            $chosenjoin = 'LEFT JOIN {groups} cg ON cg.id = s.chosengroupid';
+        }
         $sql = "SELECT s.id, s.status, s.timecreated, s.timedecided, s.decidedby, s.decisionnote,
                        s.userenrolmentid AS outcomeueid,
                        ue.status AS outcomeenrolstatus, ue.timeend AS outcomeenroltimeend,
                        s.keygroupid, s.keyoutcome AS keygroupoutcome, g.name AS keygroupname,
                        g.courseid AS keygroupcourseid, g.visibility AS keygroupvisibility,
-                       {$joined} AS joinedgroups
+                       {$joined} AS joinedgroups{$chosenfields}
                   FROM {enrol_apply_submission} s
              LEFT JOIN {user_enrolments} ue ON ue.id = s.userenrolmentid
              LEFT JOIN {groups} g ON g.id = s.keygroupid
+                       {$chosenjoin}
                  WHERE s.courseid = :courseid AND s.userid = :userid AND s.id <> :excludeid
                        AND {$scopesql}
               ORDER BY s.timecreated DESC, s.id DESC";

@@ -565,6 +565,11 @@ class enrol_apply_plugin extends enrol_plugin {
 
         $admitted = $keyoutcome === \enrol_apply\local\submission::KEY_ADMITTED;
         $forreview = $keyoutcome === \enrol_apply\local\submission::KEY_FOR_REVIEW ? $keygroupid : 0;
+        /* The application's group, as groupscope::application_group() reads it off the record just
+           written: the key's on a key route, the chosen one otherwise (C-D4). A narrowed recipient
+           is told of the application by it, exactly as the queue will list it to them. */
+        $keyroute = $keyoutcome !== \enrol_apply\local\submission::KEY_NONE;
+        $chosen = $keyroute ? 0 : max(0, $chosengroupid);
         if (!$admitted || \enrol_apply\local\groupkey::announces_admissions($instance)) {
             $this->send_application_notification(
                 $instance,
@@ -572,7 +577,8 @@ class enrol_apply_plugin extends enrol_plugin {
                 $data,
                 $admitted ? $keygroupid : 0,
                 $forreview,
-                max(0, $keygroupid)
+                $keyroute ? max(0, $keygroupid) : $chosen,
+                $chosen
             );
         }
 
@@ -1242,9 +1248,13 @@ class enrol_apply_plugin extends enrol_plugin {
      * accumulate, joining a group the approver had deselected. Where nothing was recorded, the
      * instance's own list applies, and for an application a valid key sent for review the key's
      * group too: that applicant was promised it, and an approval with no chooser (the bulk
-     * decision, core's "Edit enrolment") must not drop it. Every other key outcome keeps the
-     * instance's list alone: its key failed to admit, and what it would have joined is offered to
-     * the decider on the review page instead.
+     * decision, core's "Edit enrolment") must not drop it. The group an applicant chose is joined
+     * the same way (C-D10), so an approval that records no choice - a bulk approval with an empty
+     * choice, a decider without enrol/apply:choosedecision, "Edit enrolment" - honours it, while a
+     * decider who unticks it on the review page records a choice without it. Every other key
+     * outcome keeps the instance's list alone: its key failed to admit, and what it would have
+     * joined is offered to the decider on the review page instead. All of it is
+     * {@see default_approval_groups()}.
      *
      * @param stdClass $instance Course enrol instance.
      * @param int $userid User to add to the groups.
@@ -1284,14 +1294,19 @@ class enrol_apply_plugin extends enrol_plugin {
     /**
      * The groups an approval joins when the decider chose none.
      *
-     * The key route for an application a valid key sent for review, the instance's own list
-     * otherwise; see add_instance_groups() for why. Also what the review page and the queue show,
-     * read-only, to a decider who may not choose (S5), so the summary and the approval cannot
-     * disagree.
+     * The key route for an application a valid key sent for review; the group the applicant
+     * chose plus the instance's own list for an application made with a choice (C-D10), the same
+     * shape, read off the same newest record; the instance's own list otherwise. See
+     * add_instance_groups() for why. Also what the review page ticks as it loads and what it and
+     * the queue show, read-only, to a decider who may not choose (S5), so the page, the summary
+     * and the approval cannot disagree.
      *
      * Only groups that still belong to the course: a group deleted after the instance was
-     * configured, or while the application waited, leaves its id behind, and groups_add_member()
-     * throws on an unknown group id.
+     * configured, or while the application waited (the key's or the chosen one), leaves its id
+     * behind, and groups_add_member() throws on an unknown group id. A chosen group is joined
+     * because the record says it was chosen, whatever the method offers now: the offer was judged
+     * when the application was written (groupchoice::resolve()), and the decider who wants
+     * another group ticks it.
      *
      * @param stdClass $instance Course enrol instance.
      * @param int $userenrolmentid User enrolment the approval is for, 0 for none (the instance's list).
@@ -1301,12 +1316,23 @@ class enrol_apply_plugin extends enrol_plugin {
         global $DB;
 
         $key = $userenrolmentid ? \enrol_apply\local\submission::key_of($userenrolmentid) : null;
-        if ($key !== null && $key->outcome === \enrol_apply\local\submission::KEY_FOR_REVIEW && $key->groupid > 0) {
-            /* key_route_groups() checks the instance's list against the course but not the key
-               group, which can have been deleted while the application waited. */
+        /* The application's own group, which the approval joins on top of the method's list: the
+           key's for an application a valid key sent for review, the chosen one for an application
+           made without a key (C-D10). Never both: a record with a key route carries no choice
+           (submission::create()), and any other key outcome keeps the instance's list alone. */
+        $routegroup = 0;
+        if ($key !== null) {
+            $routegroup = $key->outcome === \enrol_apply\local\submission::KEY_FOR_REVIEW ? $key->groupid : 0;
+        } else if ($userenrolmentid) {
+            $chosen = \enrol_apply\local\submission::chosen_group_of($userenrolmentid);
+            $routegroup = $chosen ? $chosen->groupid : 0;
+        }
+        if ($routegroup > 0) {
+            /* key_route_groups() checks the instance's list against the course but not the route's
+               own group, which can have been deleted while the application waited. */
             return array_values(array_filter(
-                $this->key_route_groups($instance, $key->groupid),
-                fn(int $groupid): bool => $groupid !== $key->groupid
+                $this->key_route_groups($instance, $routegroup),
+                fn(int $groupid): bool => $groupid !== $routegroup
                     || $DB->record_exists('groups', ['id' => $groupid, 'courseid' => $instance->courseid])
             ));
         }
@@ -1876,8 +1902,9 @@ class enrol_apply_plugin extends enrol_plugin {
             /* Choosing the groups and the role is a capability of its own (S5), judged in this
                application's course because a site-wide batch can span courses. Without it the
                approval gives what the method gives - the key route for an application a key sent
-               for review, the instance's list otherwise, and the instance's role - whatever the
-               post carries. The choosers on screen are cosmetic; this is the guard.
+               for review, the chosen group and the instance's list for one made with a choice, the
+               instance's list otherwise, and the instance's role - whatever the post carries. The
+               choosers on screen are cosmetic; this is the guard.
 
                Recorded as an empty choice rather than skipped: a re-queued application keeps the
                record of its earlier approval, and skipping would let that earlier choice be
@@ -1919,7 +1946,8 @@ class enrol_apply_plugin extends enrol_plugin {
                omits the key.
 
                A choice covers only the groups this decider may choose, so the method's own groups
-               outside them (default_approval_groups(): the key route, or the instance's list) are
+               outside them (default_approval_groups(): the key route, the chosen group and the
+               instance's list, or the instance's list) are
                kept on top of it: a moderator narrowed by separate groups, or a reader who cannot see
                a hidden group, neither adds nor removes a group they cannot choose. For a decider who
                may choose every group the set is empty. An empty choice is left empty, so it still
@@ -2338,18 +2366,24 @@ class enrol_apply_plugin extends enrol_plugin {
      * key sent for review is an ordinary new application that also names its key group, to the
      * same recipients and by the same rule as an admission.
      *
+     * An application made with a chosen group names that group too (C-D4), to the same recipients
+     * and by the same per-recipient rule as a key group ({@see application_notification_body()}).
+     *
      * A course recipient narrowed by separate groups ({@see \enrol_apply\local\groupscope}) is
-     * told only of an application whose key group is one of theirs, on a method its groups' deciders
-     * decide (C-D20), judged for the recipient and never for the applicant whose request sends the
-     * notice: the queue would show them nothing else. The mentors and the site-wide recipients are
-     * not narrowed, as their delegation does not come from the course.
+     * told only of an application whose group (its key's, or the chosen one) is one of theirs, on a
+     * method its groups' deciders decide (C-D20), judged for the recipient and never for the
+     * applicant whose request sends the notice: the queue would show them nothing else. The mentors
+     * and the site-wide recipients are not narrowed, as their delegation does not come from the
+     * course.
      *
      * @param stdClass $instance Course enrol instance.
      * @param int $userid Applicant user id.
      * @param stdClass $data Submitted application form data.
      * @param int $admittedgroupid The key group of an admission by key; 0 for an application waiting for review.
      * @param int $reviewgroupid The key group of an application a valid key sent for review; 0 otherwise.
-     * @param int $keygroupid The group recorded on the application, whatever the key did; 0 for none.
+     * @param int $keygroupid The application's group, as groupscope::application_group() reads it:
+     *     the key's whatever the key did, or the chosen one; 0 for none. Narrows the recipients.
+     * @param int $chosengroupid The group the applicant chose, 0 for none; named in the notice.
      * @return void
      */
     protected function send_application_notification(
@@ -2358,7 +2392,8 @@ class enrol_apply_plugin extends enrol_plugin {
         $data,
         int $admittedgroupid = 0,
         int $reviewgroupid = 0,
-        int $keygroupid = 0
+        int $keygroupid = 0,
+        int $chosengroupid = 0
     ) {
         global $CFG, $DB;
 
@@ -2401,6 +2436,21 @@ class enrol_apply_plugin extends enrol_plugin {
         }
         $admitted = $admission !== null && $admission->admitted;
 
+        /* The group the applicant chose, carried like the key group above: its plain name for the
+           template's double stash, and its record so each recipient is judged by its visibility.
+           Not MUST_EXIST either: a group deleted since the choice was resolved names nothing. */
+        $choice = null;
+        if ($chosengroupid > 0) {
+            $group = $DB->get_record('groups', ['id' => $chosengroupid], 'id, courseid, name, visibility');
+            $choice = (object) [
+                'group' => $group ? format_string($group->name, true, [
+                    'context' => context_course::instance($instance->courseid),
+                    'escape' => false,
+                ]) : '',
+                'grouprecord' => $group ?: null,
+            ];
+        }
+
         // Notify users holding the capability in the course context.
         $recipients = $this->get_notifycoursebased_users($instance);
         $notified = [];
@@ -2427,7 +2477,8 @@ class enrol_apply_plugin extends enrol_plugin {
                     $applicant,
                     $applydescription,
                     $submitted,
-                    $admission
+                    $admission,
+                    $choice
                 );
                 $this->send_application_notification_to(
                     $user,
@@ -2457,7 +2508,8 @@ class enrol_apply_plugin extends enrol_plugin {
                     $applicant,
                     $applydescription,
                     $submitted,
-                    $admission
+                    $admission,
+                    $choice
                 );
                 $this->send_application_notification_to(
                     $user,
@@ -2486,7 +2538,8 @@ class enrol_apply_plugin extends enrol_plugin {
                     $applicant,
                     $applydescription,
                     $submitted,
-                    $admission
+                    $admission,
+                    $choice
                 );
                 $this->send_application_notification_to(
                     $user,
@@ -2516,7 +2569,8 @@ class enrol_apply_plugin extends enrol_plugin {
      * than for the applicant whose request sends the notice. A mentor, who holds the capability in
      * the applicant's user context alone, a site-wide recipient without it, and a recipient a
      * hidden group is hidden from are told of the key without the group, as the page would tell
-     * them.
+     * them. The group an applicant chose is named by the same rule, and to the rest the notice
+     * says only that a group was chosen.
      *
      * @param stdClass $recipient User the message goes to.
      * @param moodle_url $manageurl Link to the screen where the application can be decided.
@@ -2527,6 +2581,8 @@ class enrol_apply_plugin extends enrol_plugin {
      * @param stdClass|null $admission For an admission by key, or an application a valid key sent
      *     for review: 'admitted' (which of the two), 'group', the key group's plain name (empty when
      *     the group is gone), and 'grouprecord', its {groups} record or null.
+     * @param stdClass|null $choice For an application made with a chosen group: 'group', its plain
+     *     name (empty when the group is gone), and 'grouprecord', its {groups} record or null.
      * @return string Rendered HTML body.
      */
     protected function application_notification_body(
@@ -2536,7 +2592,8 @@ class enrol_apply_plugin extends enrol_plugin {
         $applicant,
         $applydescription,
         array $submitted,
-        ?stdClass $admission = null
+        ?stdClass $admission = null,
+        ?stdClass $choice = null
     ): string {
         global $PAGE;
 
@@ -2564,8 +2621,34 @@ class enrol_apply_plugin extends enrol_plugin {
                     ) => $admission->group,
                 default => '',
             },
-            $admission !== null && !$admission->admitted
+            $admission !== null && !$admission->admitted,
+            match (true) {
+                $choice === null => null,
+                $this->names_group_to($choice, $coursecontext, (int) $recipient->id) => $choice->group,
+                default => '',
+            }
         );
+    }
+
+    /**
+     * Whether a notice may name a group to this recipient.
+     *
+     * Only to a recipient holding enrol/apply:manageapplications in the course, the gate the review
+     * page's group chooser applies, who may see the group by core's visibility rule
+     * ({@see \enrol_apply\local\groupvisibility::visible_to()}), judged for the recipient rather
+     * than for the applicant whose request sends the notice; and never for a group that is gone.
+     *
+     * @param stdClass $named An object with 'group' (the plain name, empty when the group is gone)
+     *     and 'grouprecord' (its {groups} record, or null).
+     * @param context_course $coursecontext The course applied for.
+     * @param int $recipientid The recipient.
+     * @return bool True when the name may go into this recipient's notice.
+     */
+    protected function names_group_to(stdClass $named, context_course $coursecontext, int $recipientid): bool {
+        return $named->group !== ''
+            && $named->grouprecord !== null
+            && has_capability('enrol/apply:manageapplications', $coursecontext, $recipientid)
+            && \enrol_apply\local\groupvisibility::visible_to($named->grouprecord, $recipientid);
     }
 
     /**
