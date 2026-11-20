@@ -1,0 +1,1182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Audit report mockup</title>
+<meta name="description" content="Interactive mockup for docs/design/audit-report-study.md: concept C (Report Builder as the engine, a React view drawn with the fleet Design System: turnaround summary, filter bar, column chooser, resizable columns in a scrolling grid with a fixed applicant column, cards, server paging, skeletons and asynchronous loading, a search by name through the web service, hundreds of groups), concept A (the system report restyled) and today's report, at desktop and phone width.">
+<style>
+:root {
+  --ea-bg: #f5f6f8; --ea-surface: #fff; --ea-surface-alt: #f8f9fa; --ea-surface-inset: #eef0f3;
+  --ea-hover: #eef4fb; --ea-line: #dee2e6; --ea-control-line: #8f959e;
+  --ea-ink: #1d2125; --ea-ink-strong: #000; --ea-ink-muted: #5b6470; --ea-ink-faint: #8a939c;
+  --ea-accent: #0f6cbf; --ea-brand-fill: #0f6cbf; --ea-on-brand-fill: #fff;
+  --ea-brand-tint: #e7f1fb; --ea-brand-edge: #a9cbee; --ea-brand-ink: #0a4f8c;
+  --ea-success-tint: #e8f5ee; --ea-success-edge: #a3cfb5; --ea-success-ink: #0f5132;
+  --ea-warning-tint: #fff6e0; --ea-warning-edge: #e9c46a; --ea-warning-ink: #664d03;
+  --ea-danger-tint: #fbeaea; --ea-danger-edge: #e3a1a1; --ea-danger-ink: #842029;
+  --ea-info-tint: #e6f6fa; --ea-info-edge: #9fd6e4; --ea-info-ink: #055160;
+  --ea-neutral-tint: #f1f3f5; --ea-neutral-edge: #ced4da; --ea-neutral-ink: #495057;
+  --ea-focus-ring: #1d2125; --ea-focus-width: 2px; --ea-shadow: rgb(0 0 0 / 10%);
+  --ea-radius-xs: 4px; --ea-radius-sm: 6px; --ea-radius-md: 8px; --ea-radius-lg: 12px; --ea-radius-xl: 16px;
+  --ea-elevation-sm: 0 1px 2px rgba(7, 0, 147, .08), 0 1px 3px rgba(7, 0, 147, .06);
+  --ea-elevation-md: 0 4px 12px rgba(7, 0, 147, .10);
+  --ea-elevation-lg: 0 12px 32px rgba(7, 0, 147, .14);
+  --ea-fast: 150ms; --ea-base: 250ms; --ea-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --ea-proposal: #8b5cf6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ea-bg: #15181c; --ea-surface: #1e2227; --ea-surface-alt: #252a30; --ea-surface-inset: #2b3035;
+    --ea-hover: #22303f; --ea-line: #343a40; --ea-control-line: #6c757d;
+    --ea-ink: #e6e8eb; --ea-ink-strong: #fff; --ea-ink-muted: #9aa3ad; --ea-ink-faint: #737d87;
+    --ea-accent: #6ea8fe; --ea-brand-fill: #3d8bfd; --ea-on-brand-fill: #fff;
+    --ea-brand-tint: #1b2a3d; --ea-brand-edge: #2f4f78; --ea-brand-ink: #9ec5fe;
+    --ea-success-tint: #0d2a1c; --ea-success-edge: #2f6b4c; --ea-success-ink: #75b798;
+    --ea-warning-tint: #2e2405; --ea-warning-edge: #7a6118; --ea-warning-ink: #ffda6a;
+    --ea-danger-tint: #2c0b0e; --ea-danger-edge: #6e2a30; --ea-danger-ink: #ea868f;
+    --ea-info-tint: #032830; --ea-info-edge: #1f6b7c; --ea-info-ink: #6edff6;
+    --ea-neutral-tint: #2b3035; --ea-neutral-edge: #495057; --ea-neutral-ink: #ced4da;
+    --ea-focus-ring: #fff; --ea-shadow: rgb(0 0 0 / 50%);
+    --ea-elevation-sm: 0 1px 2px rgba(0, 0, 0, .5);
+    --ea-elevation-md: 0 4px 12px rgba(0, 0, 0, .55);
+    --ea-elevation-lg: 0 12px 32px rgba(0, 0, 0, .6);
+  }
+}
+* { box-sizing: border-box; }
+html, body { overflow-x: hidden; }
+body { margin: 0; background: var(--ea-bg); color: var(--ea-ink);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 1240px; margin: 0 auto; padding: 24px 16px 80px; }
+h1 { font-size: 1.75rem; margin: 0 0 4px; }
+.lede { color: var(--ea-ink-muted); margin: 0 0 16px; max-width: 860px; }
+a { color: var(--ea-accent); }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: var(--ea-focus-width) solid var(--ea-focus-ring); outline-offset: 2px; }
+code { font-size: .8125rem; }
+.muted { color: var(--ea-ink-muted); }
+.sm { font-size: .875rem; }
+.xs { font-size: .75rem; }
+.num { font-variant-numeric: tabular-nums; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Mockup switches (not part of the design). */
+.switches { position: sticky; top: 0; z-index: 40; display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center;
+  background: var(--ea-surface); border: 1px solid var(--ea-line); border-radius: var(--ea-radius-lg);
+  padding: 8px 12px; box-shadow: var(--ea-elevation-sm); margin-bottom: 16px; }
+.switches .sw { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.switches .sw > span { font-size: .8125rem; color: var(--ea-ink-muted); }
+
+/* Segmented control (DS segmented-control.md). */
+.ea-seg { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: .1875rem; border-radius: var(--ea-radius-lg);
+  background: var(--ea-surface-inset); }
+.ea-seg button { border: 0; background: transparent; border-radius: var(--ea-radius-md); min-height: 2rem;
+  padding: 0 .75rem; cursor: pointer; font-size: .875rem; color: var(--ea-ink-muted);
+  transition: background var(--ea-base) var(--ea-ease), color var(--ea-base) var(--ea-ease); }
+.ea-seg button:hover { color: var(--ea-ink); }
+.ea-seg button[aria-checked="true"] { background: var(--ea-surface); color: var(--ea-ink); font-weight: 600; box-shadow: var(--ea-elevation-sm); }
+.ea-seg small { font-size: .75rem; font-weight: 600; color: var(--ea-ink-muted); margin-left: 4px; font-variant-numeric: tabular-nums; }
+.switches .ea-seg button { min-height: 1.75rem; padding: 0 .5rem; font-size: .8125rem; }
+
+/* Device frame. */
+.device { margin: 0 auto; transition: max-width var(--ea-base) var(--ea-ease); }
+.device.is-phone { max-width: 375px; }
+.page { background: var(--ea-surface); border: 1px solid var(--ea-line); border-radius: var(--ea-radius-lg); overflow: hidden; min-width: 0; }
+.device.is-phone .page { border-radius: var(--ea-radius-xl); box-shadow: var(--ea-elevation-lg); }
+.moodlebar { display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-bottom: 1px solid var(--ea-line);
+  font-size: .875rem; color: var(--ea-ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.moodlebar b { color: var(--ea-ink); }
+.pagebody { padding: 16px; min-width: 0; }
+.crumbs { font-size: .8125rem; color: var(--ea-ink-muted); margin-bottom: 4px; }
+.pagebody h2 { font-size: 1.5rem; margin: 0 0 4px; }
+.notein { font-size: .8125rem; color: var(--ea-ink-muted); border-left: 3px solid var(--ea-proposal); padding: 2px 0 2px 10px; margin: 16px 0 0; }
+
+/* Status label (DS status-label.md). */
+.ea-status { display: inline-flex; align-items: center; gap: .25rem; padding: .125rem .5rem; white-space: nowrap;
+  border: 1px solid var(--ea-neutral-edge); border-radius: var(--ea-radius-sm);
+  background: var(--ea-neutral-tint); color: var(--ea-neutral-ink); font-size: .75rem; font-weight: 600; line-height: 1.4; }
+.ea-status--success { border-color: var(--ea-success-edge); background: var(--ea-success-tint); color: var(--ea-success-ink); }
+.ea-status--warning { border-color: var(--ea-warning-edge); background: var(--ea-warning-tint); color: var(--ea-warning-ink); }
+.ea-status--danger { border-color: var(--ea-danger-edge); background: var(--ea-danger-tint); color: var(--ea-danger-ink); }
+.ea-status--info { border-color: var(--ea-info-edge); background: var(--ea-info-tint); color: var(--ea-info-ink); }
+.ea-status--brand { border-color: var(--ea-brand-edge); background: var(--ea-brand-tint); color: var(--ea-brand-ink); }
+
+/* Skeleton (DS skeleton.md). */
+.ea-sk-block { display: block; background: var(--ea-surface-inset); border-radius: var(--ea-radius-xs); height: .75rem; }
+.ea-sk-block.big { height: 1.5rem; width: 60%; margin: 6px 0; }
+.ea-sk-block.w40 { width: 40%; } .ea-sk-block.w60 { width: 60%; } .ea-sk-block.w80 { width: 80%; }
+.ea-sk-block.pill { height: 1.25rem; width: 7rem; border-radius: var(--ea-radius-sm); }
+@media (prefers-reduced-motion: no-preference) { .ea-sk { animation: ea-sk-pulse 1300ms ease-in-out infinite; } }
+@keyframes ea-sk-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+
+/* Summary band. */
+.ea-region { position: relative; }
+.ea-region[aria-busy="true"] .ea-dim { opacity: .55; transition: opacity var(--ea-fast) var(--ea-ease); }
+.ea-progress { position: absolute; left: 0; right: 0; top: 0; height: 2px; overflow: hidden; z-index: 6; border-radius: 2px; }
+.ea-progress::before { content: ""; position: absolute; top: 0; bottom: 0; width: 30%; background: var(--ea-brand-fill); }
+@media (prefers-reduced-motion: no-preference) { .ea-progress::before { animation: ea-indet 1100ms var(--ea-ease) infinite; } }
+@keyframes ea-indet { from { left: -30%; } to { left: 100%; } }
+.ea-band { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-bottom: 8px; }
+.ea-tile { border: 1px solid var(--ea-line); border-radius: var(--ea-radius-lg); padding: 12px; background: var(--ea-surface); min-width: 0; }
+.ea-tile .lbl { font-size: .75rem; font-weight: 600; color: var(--ea-ink-muted); }
+.ea-tile .val { font-size: 1.5rem; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; color: var(--ea-ink-strong); }
+.ea-tile .sub { font-size: .75rem; color: var(--ea-ink-muted); }
+.ea-tile.warn .val { color: var(--ea-warning-ink); }
+.ea-bandhead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.ea-bandhead .ttl { font-size: .875rem; font-weight: 600; }
+.ea-dist { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; margin-bottom: 16px; }
+.ea-dist.narrow { grid-template-columns: minmax(0, 1fr); }
+.ea-panel { border: 1px solid var(--ea-line); border-radius: var(--ea-radius-lg); padding: 12px; min-width: 0; }
+.ea-panel .ttl { font-size: .8125rem; font-weight: 600; margin-bottom: 8px; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; align-items: center; }
+.ea-hrow { display: grid; grid-template-columns: 5.5rem minmax(0, 1fr) 3rem; gap: 8px; align-items: center; font-size: .8125rem; margin: 4px 0; }
+.ea-hrow.wide { grid-template-columns: minmax(0, 8rem) minmax(0, 1fr) 5.5rem; }
+.ea-hrow .lab { color: var(--ea-ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ea-track { display: block; height: .5rem; border-radius: var(--ea-radius-xs); background: var(--ea-surface-inset); overflow: hidden; }
+.ea-fill { display: block; height: 100%; border-radius: var(--ea-radius-xs); background: var(--ea-brand-fill); }
+.ea-fill.late { background: var(--ea-warning-edge); }
+.ea-hrow .n { text-align: right; font-variant-numeric: tabular-nums; color: var(--ea-ink-muted); white-space: nowrap; }
+.ea-seg.mini button { min-height: 1.75rem; padding: 0 .5rem; font-size: .8125rem; }
+.ea-scrolllist { max-height: 16rem; overflow-y: auto; margin-top: 8px; padding-right: 4px; border-top: 1px solid var(--ea-line); padding-top: 6px; }
+
+/* Filter bar (DS filter-bar.md). */
+.ea-bar { --ea-bar-inner: 2rem; position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-bottom: 12px; }
+@media (pointer: coarse) { .ea-bar { --ea-bar-inner: 2.25rem; } }
+.ea-bar-spacer { flex: 1 1 0; }
+.ea-bar-cluster { display: inline-flex; align-items: center; border-radius: var(--ea-radius-lg); background: var(--ea-surface-inset); }
+.ea-bar-count { padding: 0 .5rem 0 .75rem; font-size: .875rem; font-weight: 600; color: var(--ea-ink-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ea-capsule { position: relative; display: inline-flex; align-items: center; gap: .125rem; padding: .1875rem;
+  border: 1px solid var(--ea-line); border-radius: var(--ea-radius-lg); background: var(--ea-surface); box-shadow: var(--ea-elevation-sm); }
+.ea-ib { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 2px;
+  min-width: var(--ea-bar-inner); height: var(--ea-bar-inner); padding: 0 .375rem; border: 0; border-radius: var(--ea-radius-md);
+  background: transparent; color: var(--ea-ink-muted); cursor: pointer;
+  transition: background var(--ea-base) var(--ea-ease), color var(--ea-base) var(--ea-ease); }
+.ea-ib:hover { background: var(--ea-surface-alt); color: var(--ea-ink); transition-duration: var(--ea-fast); }
+.ea-ib[aria-expanded="true"] { background: var(--ea-brand-tint); color: var(--ea-brand-ink); }
+.ea-ib svg { width: 16px; height: 16px; }
+.ea-ib .chev { width: 12px; height: 12px; }
+.ea-loud { position: absolute; top: -4px; right: -4px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 50rem;
+  background: var(--ea-brand-fill); color: var(--ea-on-brand-fill); font-size: .75rem; font-weight: 700; line-height: 16px; text-align: center; font-variant-numeric: tabular-nums; }
+.ea-search-field { display: inline-flex; align-items: center; gap: .375rem; height: var(--ea-bar-inner); padding: 0 .5rem;
+  border-radius: var(--ea-radius-md); background: var(--ea-surface-inset); color: var(--ea-ink-muted); }
+.ea-search-field svg { width: 16px; height: 16px; flex: none; }
+.ea-search-field input { border: 0; background: transparent; width: 190px; min-width: 60px; font-size: .875rem; outline: none; color: var(--ea-ink); }
+.ea-search-field:focus-within { outline: var(--ea-focus-width) solid var(--ea-focus-ring); outline-offset: 2px; }
+.ea-search-field .spin { width: 14px; height: 14px; border: 2px solid var(--ea-line); border-top-color: var(--ea-brand-fill); border-radius: 50%; flex: none; }
+@media (prefers-reduced-motion: no-preference) { .ea-search-field .spin { animation: ea-spin 700ms linear infinite; } }
+@keyframes ea-spin { to { transform: rotate(360deg); } }
+.ea-tip { position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); padding: 2px 8px;
+  border-radius: var(--ea-radius-sm); background: var(--ea-ink); color: var(--ea-surface); font-size: .75rem; white-space: nowrap;
+  opacity: 0; pointer-events: none; transition: opacity var(--ea-fast) var(--ea-ease) 100ms; z-index: 25; }
+.ea-ib:hover .ea-tip, .ea-ib:focus-visible .ea-tip { opacity: 1; }
+
+/* Chips (DS chip.md). */
+.ea-chips { flex: 1 0 100%; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.ea-chips[hidden] { display: none; }
+.ea-chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 6px 0 8px; border: 1px solid var(--ea-brand-edge);
+  border-radius: var(--ea-radius-sm); background: var(--ea-brand-tint); color: var(--ea-brand-ink); font-size: .8125rem; font-weight: 500; cursor: pointer; max-width: 100%; }
+.ea-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ea-chip svg { width: 12px; height: 12px; flex: none; }
+.ea-clearall { border: 0; background: none; padding: 0 4px; font-size: .8125rem; font-weight: 600; text-decoration: underline; cursor: pointer; }
+
+/* Menu and panel (DS menu.md, filter-panel.md, panel-popover-sheet.md). */
+.ea-menu { position: absolute; top: calc(100% + 6px); right: 0; z-index: 20; min-width: 260px; max-width: calc(100vw - 32px);
+  padding: 4px; border: 1px solid var(--ea-line); border-radius: var(--ea-radius-md); background: var(--ea-surface);
+  box-shadow: var(--ea-elevation-md); max-height: 70vh; overflow: auto; }
+.ea-menu[hidden] { display: none; }
+.ea-menu-head { padding: 6px 8px 2px; font-size: .75rem; font-weight: 600; color: var(--ea-ink-muted); }
+.ea-menu-sep { height: 1px; background: var(--ea-line); margin: 4px 0; }
+.ea-menu-item { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 32px; padding: 4px 8px; border: 0;
+  border-radius: var(--ea-radius-xs); background: transparent; font-size: .875rem; color: var(--ea-ink); text-align: left; cursor: pointer;
+  transition: background var(--ea-base) var(--ea-ease), color var(--ea-base) var(--ea-ease); }
+.ea-menu-item:hover { background: var(--ea-hover); color: var(--ea-brand-ink); transition-duration: var(--ea-fast); }
+.ea-menu-item:focus-visible { outline-offset: -2px; }
+.ea-menu-item[aria-disabled="true"] { color: var(--ea-ink-faint); cursor: default; }
+.ea-menu-item svg { width: 16px; height: 16px; flex: none; color: var(--ea-ink-muted); }
+.ea-menu-item .tick { margin-left: auto; color: var(--ea-brand-ink); visibility: hidden; display: inline-flex; }
+.ea-menu-item[aria-checked="true"] { font-weight: 600; }
+.ea-menu-item[aria-checked="true"] .tick { visibility: visible; }
+.ea-menu-item .box { width: 16px; height: 16px; flex: none; border: 1px solid var(--ea-control-line); border-radius: var(--ea-radius-xs);
+  display: inline-flex; align-items: center; justify-content: center; }
+.ea-menu-item[aria-checked="true"] .box { background: var(--ea-brand-fill); border-color: var(--ea-brand-fill); }
+.ea-menu-item .box svg { width: 12px; height: 12px; visibility: hidden; color: var(--ea-on-brand-fill); }
+.ea-menu-item[aria-checked="true"] .box svg { visibility: visible; }
+.ea-menu-item .hint { margin-left: auto; font-size: .75rem; color: var(--ea-ink-muted); font-weight: 400; }
+.ea-fpanel { position: absolute; top: calc(100% + 6px); right: 0; z-index: 20; width: 380px; max-width: 100%;
+  border: 1px solid var(--ea-line); border-radius: var(--ea-radius-lg); background: var(--ea-surface); box-shadow: var(--ea-elevation-md); }
+.ea-fpanel[hidden] { display: none; }
+.ea-fpanel .body { padding: 12px; max-height: 62vh; overflow: auto; }
+.ea-fgroup { margin-bottom: 12px; }
+.ea-fgroup .gl { font-size: .75rem; font-weight: 600; color: var(--ea-ink-muted); padding-bottom: 6px; display: flex; justify-content: space-between; gap: 8px; }
+.ea-opts { display: flex; flex-wrap: wrap; gap: 6px; }
+.ea-opt { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 0 8px; border: 1px solid var(--ea-control-line);
+  border-radius: var(--ea-radius-sm); background: var(--ea-surface); font-size: .8125rem; font-weight: 500; cursor: pointer; }
+.ea-opt[aria-pressed="true"] { border-color: var(--ea-brand-edge); background: var(--ea-brand-tint); color: var(--ea-brand-ink); }
+.ea-opt small { font-size: .75rem; font-weight: 600; color: var(--ea-ink-muted); font-variant-numeric: tabular-nums; }
+.ea-optlist { max-height: 15rem; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; margin-top: 6px;
+  border: 1px solid var(--ea-line); border-radius: var(--ea-radius-md); padding: 4px; }
+.ea-optrow { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 8px; border: 0; border-radius: var(--ea-radius-xs);
+  background: transparent; text-align: left; font-size: .8125rem; cursor: pointer; }
+.ea-optrow:hover { background: var(--ea-hover); }
+.ea-optrow .box { width: 16px; height: 16px; flex: none; border: 1px solid var(--ea-control-line); border-radius: var(--ea-radius-xs); display: inline-flex; align-items: center; justify-content: center; }
+.ea-optrow[aria-pressed="true"] .box { background: var(--ea-brand-fill); border-color: var(--ea-brand-fill); }
+.ea-optrow .box svg { width: 12px; height: 12px; visibility: hidden; color: var(--ea-on-brand-fill); }
+.ea-optrow[aria-pressed="true"] .box svg { visibility: visible; }
+.ea-optrow small { margin-left: auto; font-size: .75rem; font-weight: 600; color: var(--ea-ink-muted); font-variant-numeric: tabular-nums; }
+.ea-optrow.pinned { font-weight: 600; }
+.ea-inline { display: flex; gap: 6px; flex-wrap: wrap; }
+.ea-input, .ea-select { min-height: 2rem; padding: 0 .5rem; border: 1px solid var(--ea-control-line); border-radius: var(--ea-radius-md);
+  background: var(--ea-surface); font-size: .8125rem; min-width: 0; }
+.ea-input { flex: 1 1 10rem; }
+.ea-fpanel .foot { display: flex; justify-content: space-between; gap: 8px; padding: 12px; border-top: 1px solid var(--ea-line); }
+.btn { display: inline-flex; align-items: center; gap: 6px; min-height: 2rem; padding: 0 .75rem; border-radius: var(--ea-radius-md);
+  border: 1px solid var(--ea-control-line); background: var(--ea-surface); cursor: pointer; font-size: .875rem; }
+.btn[disabled] { opacity: .5; cursor: default; }
+.btn-primary { background: var(--ea-brand-fill); border-color: var(--ea-brand-fill); color: var(--ea-on-brand-fill); }
+.btn-link { border: 0; background: none; color: var(--ea-accent); text-decoration: underline; padding: 0 4px; cursor: pointer; }
+
+/* Concept C grid: bounded, scrolling both ways, header and applicant column fixed. */
+.ea-gridwrap { position: relative; border: 1px solid var(--ea-line); border-radius: var(--ea-radius-lg); overflow: auto;
+  max-height: 34rem; overscroll-behavior-x: contain; }
+table.ea-table { border-collapse: separate; border-spacing: 0; table-layout: fixed; font-size: .875rem; }
+.ea-table th { position: sticky; top: 0; z-index: 2; text-align: left; font-size: .8125rem; font-weight: 600; color: var(--ea-ink-muted);
+  background: var(--ea-surface-alt); border-bottom: 1px solid var(--ea-line); padding: 0; white-space: nowrap; }
+.ea-table th .sortbtn, .ea-table th .plain { display: flex; align-items: center; gap: 4px; width: 100%; padding: 8px 14px 8px 12px; border: 0;
+  background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; overflow: hidden; }
+.ea-table th .sortbtn span.t, .ea-table th .plain span.t { overflow: hidden; text-overflow: ellipsis; }
+.ea-table th .plain { cursor: default; }
+.ea-table th .sortbtn:hover { color: var(--ea-ink); }
+.ea-table th[aria-sort="ascending"], .ea-table th[aria-sort="descending"] { color: var(--ea-ink); }
+.ea-table th .arrow { font-size: .75rem; color: var(--ea-brand-ink); flex: none; }
+.ea-rsz { position: absolute; top: 0; right: -4px; width: 9px; height: 100%; cursor: col-resize; z-index: 3; touch-action: none; }
+.ea-rsz::after { content: ""; position: absolute; top: 25%; bottom: 25%; left: 4px; width: 1px; background: var(--ea-line); }
+.ea-rsz:hover::after, .ea-rsz:focus-visible::after, .ea-rsz.on::after { width: 3px; left: 3px; background: var(--ea-brand-fill); top: 0; bottom: 0; }
+.ea-rsz:focus-visible { outline: none; }
+.ea-table td { padding: 8px 12px; border-bottom: 1px solid var(--ea-line); vertical-align: top; background: var(--ea-surface); }
+.ea-table tr:last-child td { border-bottom: 0; }
+.ea-table td .c, .ea-table td .sub { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ea-table .col-fixed { position: sticky; left: 0; z-index: 1; }
+.ea-table th.col-fixed { z-index: 4; }
+.ea-gridwrap.is-scrolled .col-fixed { box-shadow: 6px 0 8px -6px var(--ea-shadow); }
+.ea-table tbody tr:hover td { background: var(--ea-hover); }
+.ea-table .sub, .ea-card .sub { font-size: .8125rem; color: var(--ea-ink-muted); }
+.ea-table .name { font-weight: 600; color: var(--ea-accent); text-decoration: none; }
+.ea-wait { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ea-wait .bar { display: block; height: .25rem; border-radius: var(--ea-radius-xs); background: var(--ea-surface-inset); overflow: hidden; }
+.ea-wait .bar span { display: block; height: 100%; background: var(--ea-brand-fill); }
+.ea-wait.open .bar span { background: var(--ea-warning-edge); }
+.ea-wait.open .v { color: var(--ea-warning-ink); font-weight: 600; }
+.ea-wait.key .v { color: var(--ea-ink-muted); }
+.ea-wait .v { font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ea-more { color: var(--ea-ink-muted); font-weight: 600; }
+.ea-hscrollhint { font-size: .75rem; color: var(--ea-ink-muted); margin: 6px 0 0; }
+
+/* Pager. */
+.ea-foot { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; margin-top: 12px; font-size: .8125rem; color: var(--ea-ink-muted); }
+.ea-pager { display: inline-flex; flex-wrap: wrap; gap: 2px; align-items: center; }
+.ea-pager button { min-width: 2rem; min-height: 2rem; padding: 0 .5rem; border: 0; border-radius: var(--ea-radius-md); background: transparent;
+  cursor: pointer; font-size: .8125rem; color: var(--ea-ink); font-variant-numeric: tabular-nums; }
+.ea-pager button:hover { background: var(--ea-hover); }
+.ea-pager button[aria-current="page"] { background: var(--ea-brand-tint); color: var(--ea-brand-ink); font-weight: 700; }
+.ea-pager button[disabled] { color: var(--ea-ink-faint); cursor: default; background: transparent; }
+.ea-pager .gap { padding: 0 4px; }
+
+/* Concept C cards: a grid on a wide screen, one column on a narrow one. */
+.ea-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(17.5rem, 1fr)); gap: 8px; }
+.ea-cards.single { grid-template-columns: minmax(0, 1fr); }
+.ea-card { border: 1px solid var(--ea-line); border-radius: var(--ea-radius-lg); padding: 12px; background: var(--ea-surface); min-width: 0; }
+.ea-card .l1 { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.ea-card .l1 a { font-weight: 600; color: var(--ea-accent); text-decoration: none; overflow-wrap: anywhere; }
+.ea-card .ln { font-size: .8125rem; margin-top: 4px; color: var(--ea-ink); overflow-wrap: anywhere; }
+.ea-card .ln .k { color: var(--ea-ink-muted); }
+.ea-card .ln.open { color: var(--ea-warning-ink); font-weight: 600; }
+.ea-card .ln.open .k { font-weight: 400; }
+.ea-card .more { margin-top: 6px; }
+.ea-card dl { display: grid; grid-template-columns: minmax(0, 7rem) minmax(0, 1fr); gap: 4px 8px; margin: 8px 0 0; font-size: .8125rem;
+  border-top: 1px solid var(--ea-line); padding-top: 8px; }
+.ea-card dt { color: var(--ea-ink-muted); }
+.ea-card dd { margin: 0; overflow-wrap: anywhere; min-width: 0; }
+.ea-card dd .c, .ea-card dd .sub { display: block; }
+.ea-empty { text-align: center; padding: 32px 16px; color: var(--ea-ink-muted); border: 1px dashed var(--ea-line); border-radius: var(--ea-radius-lg); }
+
+/* Concept A: core's system report look (Boost-like). */
+.core-filters { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+.core-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--ea-neutral-edge);
+  background: var(--ea-neutral-tint); font-size: .875rem; cursor: pointer; }
+.core-btn svg { width: 14px; height: 14px; }
+table.core { width: 100%; border-collapse: collapse; font-size: .875rem; }
+.core th { text-align: left; padding: 8px; border-bottom: 2px solid var(--ea-line); vertical-align: bottom; white-space: nowrap; }
+.core th a { color: var(--ea-accent); text-decoration: none; }
+.core td { padding: 8px; border-top: 1px solid var(--ea-line); vertical-align: top; }
+.core tbody tr:nth-child(odd) { background: var(--ea-surface-alt); }
+.core.cards thead { display: none; }
+.core.cards tr, .core.cards tbody tr:nth-child(odd) { display: flex; flex-direction: column; border: 1px solid var(--ea-line); border-radius: 8px; margin-bottom: 8px; padding: 8px; background: var(--ea-surface); }
+.core.cards td { border: 0; padding: 2px 0; display: flex; gap: 8px; min-width: 0; }
+.core.cards td::before { content: attr(data-cardtitle); flex: 0 0 6.5rem; font-weight: 600; color: var(--ea-ink-muted); font-size: .8125rem; }
+.core.cards td > div { min-width: 0; overflow-wrap: anywhere; }
+.core-download { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; font-size: .875rem; }
+.core-download select { padding: 4px 8px; border-radius: 6px; border: 1px solid var(--ea-control-line); background: var(--ea-surface); max-width: 100%; }
+.core-paging { font-size: .875rem; margin-top: 8px; color: var(--ea-ink-muted); }
+
+/* Today: the measured report. */
+.table-responsive { overflow-x: auto; }
+table.today { border-collapse: collapse; font-size: .875rem; min-width: 1680px; }
+.today th { text-align: left; padding: 8px; border-bottom: 2px solid var(--ea-line); vertical-align: bottom; }
+.today th a { color: var(--ea-accent); text-decoration: none; }
+.today td { padding: 8px; border-top: 1px solid var(--ea-line); vertical-align: top; }
+.today tbody tr:nth-child(odd) { background: var(--ea-surface-alt); }
+.today th.flag { box-shadow: inset 0 -3px 0 var(--ea-danger-edge); }
+
+/* Reading notes and the request log beside the mockup. */
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-top: 20px; }
+.note { background: var(--ea-surface); border: 1px solid var(--ea-line); border-radius: var(--ea-radius-lg); padding: 12px 14px; font-size: .875rem; min-width: 0; }
+.note h4 { margin: 0 0 6px; font-size: .875rem; }
+.note ul { margin: 0; padding-left: 18px; }
+.netlog { margin-top: 12px; background: var(--ea-surface); border: 1px solid var(--ea-line); border-radius: var(--ea-radius-lg); padding: 12px 14px; }
+.netlog h4 { margin: 0 0 6px; font-size: .875rem; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.netlog ol { margin: 0; padding: 0; list-style: none; font-size: .75rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.netlog li { display: flex; flex-wrap: wrap; gap: 0 8px; padding: 3px 0; border-top: 1px solid var(--ea-line); min-width: 0; }
+.netlog li .p { flex-basis: 8rem; }
+.netlog li .fn { color: var(--ea-brand-ink); white-space: nowrap; }
+.netlog li .p { color: var(--ea-ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 auto; min-width: 0; }
+.netlog li .st { white-space: nowrap; }
+.netlog li.cancelled .st { color: var(--ea-ink-faint); text-decoration: line-through; }
+.netlog li.pending .st { color: var(--ea-warning-ink); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>The audit report, rethought</h1>
+  <p class="lede">Mockup for <code>audit-report-study.md</code>. <b>Concept C</b> (the decided target, AR-D1): Report Builder stays the engine
+  (access, group narrowing, filters, downloads) and a React view drawn with the fleet Design System presents it, loading every region
+  asynchronously from the plugin's web services. <b>Concept A</b>: the same system report restyled, as Moodle 5.1 keeps it.
+  <b>Today</b>: the report as measured on m501. The data is invented and served by a simulated web service with the latency you pick;
+  the "now" is 20 Nov 2026, 10:00. The grid opens on "Every column" so the sideways scroll shows; the default is the
+  Decisions set (AR-D3), under Columns. A moderator reads the compact band (AR-D17).</p>
+
+  <div class="switches" role="group" aria-label="Mockup switches">
+    <div class="sw"><span id="sw-concept">Concept</span>
+      <div class="ea-seg" role="radiogroup" aria-labelledby="sw-concept" data-switch="concept">
+        <button type="button" role="radio" data-v="C" aria-checked="true">C: React view</button>
+        <button type="button" role="radio" data-v="A" aria-checked="false">A: restyled</button>
+        <button type="button" role="radio" data-v="T" aria-checked="false">Today</button>
+      </div></div>
+    <div class="sw"><span id="sw-data">Course</span>
+      <div class="ea-seg" role="radiogroup" aria-labelledby="sw-data" data-switch="data">
+        <button type="button" role="radio" data-v="small" aria-checked="true">Small: 23</button>
+        <button type="button" role="radio" data-v="large" aria-checked="false">Large: 2,400, 240 groups</button>
+      </div></div>
+    <div class="sw"><span id="sw-vp">Viewport</span>
+      <div class="ea-seg" role="radiogroup" aria-labelledby="sw-vp" data-switch="vp">
+        <button type="button" role="radio" data-v="desktop" aria-checked="true">Desktop</button>
+        <button type="button" role="radio" data-v="phone" aria-checked="false">Phone</button>
+      </div></div>
+    <div class="sw"><span id="sw-view">View</span>
+      <div class="ea-seg" role="radiogroup" aria-labelledby="sw-view" data-switch="view">
+        <button type="button" role="radio" data-v="auto" aria-checked="true">Automatic</button>
+        <button type="button" role="radio" data-v="table" aria-checked="false">Table</button>
+        <button type="button" role="radio" data-v="cards" aria-checked="false">Cards</button>
+      </div></div>
+    <div class="sw"><span id="sw-reader">Reader</span>
+      <div class="ea-seg" role="radiogroup" aria-labelledby="sw-reader" data-switch="reader">
+        <button type="button" role="radio" data-v="manager" aria-checked="true">Manager</button>
+        <button type="button" role="radio" data-v="moderator" aria-checked="false">Moderator</button>
+      </div></div>
+    <div class="sw"><span id="sw-lat">Latency</span>
+      <div class="ea-seg" role="radiogroup" aria-labelledby="sw-lat" data-switch="latency">
+        <button type="button" role="radio" data-v="400" aria-checked="true">0.4 s</button>
+        <button type="button" role="radio" data-v="1500" aria-checked="false">1.5 s</button>
+      </div></div>
+  </div>
+
+  <div class="device" id="device">
+    <div class="page">
+      <div class="moodlebar"><b>Moodle</b><span>·</span><span id="coursename">Python for data work 2027</span></div>
+      <div class="pagebody" id="pagebody"></div>
+    </div>
+  </div>
+
+  <div class="netlog" id="netlog"></div>
+  <div class="notes" id="notes"></div>
+</main>
+
+<script>
+(() => {
+  'use strict';
+  const NOW = Date.UTC(2026, 10, 20, 13, 0);
+  const DAY = 86400000, HOUR = 3600000;
+  const TZ = 'America/Sao_Paulo';
+  const fmtShort = new Intl.DateTimeFormat('en-GB', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: TZ});
+  const fmtLong = new Intl.DateTimeFormat('en-GB', {weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true, timeZone: TZ});
+  const nf = new Intl.NumberFormat('en-GB');
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+  const fold = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  const icon = {
+    filter: '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M1.5 2h13l-5 6v5l-3 1.5V8z"/></svg>',
+    columns: '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M1 2h4v12H1zm5 0h4v12H6zm5 0h4v12h-4z"/></svg>',
+    table: '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M1 2h14v3H1zm0 4.5h14v3H1zM1 11h14v3H1z"/></svg>',
+    cards: '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M1 2h6v5H1zm8 0h6v5H9zM1 9h6v5H1zm8 0h6v5H9z"/></svg>',
+    auto: '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M1 2h9v12H1zm10 3h4v9h-4z"/></svg>',
+    download: '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M7 1h2v7l2.5-2.5L13 7l-5 5-5-5 1.5-1.5L7 8zM2 13h12v2H2z"/></svg>',
+    search: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="7" cy="7" r="5"/><path d="m11 11 4 4"/></svg>',
+    chev: '<svg class="chev" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m3 4.5 3 3 3-3"/></svg>',
+    x: '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m3 3 6 6M9 3 3 9"/></svg>',
+    tick: '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m2.5 6.5 2.5 2.5 4.5-5"/></svg>',
+    reset: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 8a6 6 0 1 0 2-4.5M2 2v3h3"/></svg>'
+  };
+
+  /* ---------- Data. ---------- */
+  const METHOD = {S: 'Student intake', M: 'Moderator recruitment'};
+  const mk = (i, name, m, d, status, f, rs, decider, route, group, joined, city, exp, comment) => {
+    const submitted = NOW - d * DAY;
+    return {id: i, name, email: fold(name.split(' ')[0]) + (i > 99 ? i : '') + '@example.invalid', method: METHOD[m], status, submitted,
+      first: f === null ? null : submitted + f * DAY, resolved: rs === null ? null : submitted + rs * DAY, decider, route, group,
+      joined: joined ? joined.split(', ') : [], city, exp, comment,
+      role: m === 'M' && status === 'approved' ? 'Non-editing teacher' : (status === 'approved' || status === 'key' ? 'Student' : ''),
+      note: status === 'cancelled' ? 'Outside the intake this term' : (status === 'deferred' ? 'Waiting for a seat in the group' : '')};
+  };
+  const SMALL = [
+    ['Jonas Berg', 'S', 25.3, 'pending', null, null, '', 'chose', 'Evening A', '', 'Oslo', 'None yet', 'Career change from logistics'],
+    ['Ursula Gomes', 'S', 21.0, 'approved', 9.5, 9.5, 'João Lima', 'chose', 'Evening B', 'Evening B', 'Recife', 'A few scripts', 'Automate my reports'],
+    ['Lia Costa', 'S', 18.2, 'approved', 1.2, 1.2, 'Maria Souza', 'chose', 'Evening B', 'Evening B', 'Natal', 'A few scripts', 'Analyse sales data'],
+    ['Rafael Nunes', 'S', 16.0, 'key', 0, 0, '', 'key', 'Evening A', 'Evening A', 'Salvador', 'Some projects', ''],
+    ['Bruna Alves', 'S', 15.5, 'deferred', 2.1, null, 'João Lima', 'chose', 'Morning C', '', 'Maceió', 'None yet', 'Research at the university'],
+    ['Caio Mendes', 'S', 14.8, 'approved', 0.4, 0.4, 'Maria Souza', 'chose', 'Evening A', 'Evening A', 'Fortaleza', 'Some projects', 'Move into data science'],
+    ['Daniela Rocha', 'M', 13.9, 'approved', 3.6, 3.6, 'Ana Ferreira', 'chose', 'Morning C', 'Morning C, Moderators, Evening A, Evening B', 'Recife', 'Professional', 'Moderate the morning group'],
+    ['Eduardo Pires', 'S', 12.1, 'cancelled', 1.0, 1.0, 'João Lima', 'chose', 'Evening B', '', 'Aracaju', 'None yet', ''],
+    ['Fernanda Dias', 'S', 11.7, 'approved', 1.5, 6.2, 'Maria Souza', 'chose', 'Evening A', 'Evening A', 'João Pessoa', 'A few scripts', 'Public health dashboards for the state secretariat'],
+    ['Gustavo Reis', 'S', 10.2, 'key', 0, 0, '', 'key', 'Evening B', 'Evening B', 'Natal', 'Some projects', ''],
+    ['Helena Prado', 'M', 9.6, 'pending', null, null, '', 'chose', 'Evening A', '', 'Recife', 'Professional', 'I teach Python at school'],
+    ['Igor Santos', 'S', 9.1, 'approved', 0.9, 0.9, 'João Lima', 'chose', 'Morning C', 'Morning C', 'Teresina', 'None yet', 'Curiosity'],
+    ['Julia Ramos', 'S', 8.4, 'approved', 4.8, 4.8, 'Ana Ferreira', 'chose', 'Evening A', 'Evening A', 'Salvador', 'A few scripts', 'Thesis data'],
+    ['Kleber Moura', 'S', 7.7, 'cancelled', 2.9, 2.9, 'Maria Souza', 'none', '', '', 'Recife', 'None yet', ''],
+    ['Larissa Melo', 'S', 6.3, 'approved', 0.2, 0.2, 'Maria Souza', 'chose', 'Evening B', 'Evening B', 'Olinda', 'Some projects', 'Better spreadsheets'],
+    ['Marcos Teixeira', 'M', 5.8, 'deferred', 1.1, null, 'Ana Ferreira', 'chose', 'Evening B', '', 'Recife', 'Professional', 'Moderate evenings'],
+    ['Natália Freitas', 'S', 4.9, 'approved', 1.7, 1.7, 'João Lima', 'chose', 'Evening A', 'Evening A', 'Caruaru', 'A few scripts', 'Agronomy data'],
+    ['Otávio Lopes', 'S', 4.2, 'pending', null, null, '', 'chose', 'Morning C', '', 'Recife', 'None yet', ''],
+    ['Paula Cardoso', 'S', 3.0, 'approved', 0.6, 0.6, 'Maria Souza', 'keyreview', 'Morning C', 'Morning C', 'Petrolina', 'Some projects', 'Work projects'],
+    ['Quitéria Barros', 'S', 2.4, 'pending', null, null, '', 'chose', 'Evening B', '', 'Natal', 'None yet', 'Learn something new'],
+    ['Renan Castro', 'S', 1.3, 'key', 0, 0, '', 'key', 'Evening A', 'Evening A', 'Recife', 'Some projects', ''],
+    ['Sofia Martins', 'S', 0.8, 'pending', null, null, '', 'chose', 'Evening A', '', 'Recife', 'A few scripts', 'Biology lab data'],
+    ['Tiago Vieira', 'M', 0.3, 'pending', null, null, '', 'chose', 'Morning C', '', 'Olinda', 'Professional', 'Help new learners']
+  ].map((r, i) => mk(i + 1, ...r));
+
+  /* A large course, generated: 240 groups in 20 groupings (one per city), 2,400 applications. */
+  const CITIES = ['Recife', 'Olinda', 'Caruaru', 'Petrolina', 'Natal', 'Mossoró', 'Fortaleza', 'Sobral', 'Salvador', 'Feira de Santana',
+    'Maceió', 'Arapiraca', 'Aracaju', 'João Pessoa', 'Campina Grande', 'Teresina', 'São Luís', 'Imperatriz', 'Palmas', 'Belém'];
+  const LARGE_GROUPS = CITIES.flatMap(c => Array.from({length: 12}, (_, k) => c + ' ' + String(k + 1).padStart(2, '0')));
+  const GROUPING = g => g === 'Moderators' ? '' : g.replace(/ \d\d$/, '');
+  const buildLarge = () => {
+    let seed = 20261120;
+    const rnd = () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+    const pick = a => a[Math.floor(rnd() * a.length)];
+    const gauss = () => Math.sqrt(-2 * Math.log(1 - rnd())) * Math.cos(2 * Math.PI * rnd());
+    const FIRST = ['Ana', 'Bruno', 'Carla', 'Diego', 'Elisa', 'Felipe', 'Gabriela', 'Heitor', 'Isabela', 'João', 'Karina', 'Lucas', 'Marina', 'Nicolas', 'Olívia', 'Pedro', 'Raquel', 'Samuel', 'Tânia', 'Vinícius', 'Yasmin', 'Mariana', 'Mário', 'Marcela'];
+    const LAST = ['Silva', 'Santos', 'Oliveira', 'Souza', 'Lima', 'Pereira', 'Ferreira', 'Costa', 'Rodrigues', 'Almeida', 'Nascimento', 'Carvalho', 'Araújo', 'Ribeiro', 'Barbosa', 'Moura', 'Cavalcanti', 'Monteiro'];
+    const DECIDERS = ['Maria Souza', 'João Lima', 'Ana Ferreira', 'Rita Campos', 'Paulo Bezerra', 'Clara Nobre', 'Davi Teles', 'Lúcia Prado'];
+    const EXP = ['None yet', 'A few scripts', 'Some projects', 'Professional'];
+    const out = [];
+    for (let i = 0; i < 2400; i++) {
+      const m = rnd() < 0.08 ? 'M' : 'S';
+      const d = rnd() * 120;
+      const group = pick(LARGE_GROUPS);
+      const r = rnd();
+      let status, f = null, rs = null, decider = '', route = 'chose', joined = '';
+      if (m === 'S' && r < 0.1) {
+        status = 'key'; f = 0.001; rs = 0.001; route = 'key'; joined = group;
+      } else {
+        const first = Math.exp(Math.log(1.4) + 0.95 * gauss());
+        if (first > d) { status = 'pending'; } else {
+          f = first; decider = pick(DECIDERS);
+          const o = rnd();
+          if (o < 0.72) { status = 'approved'; rs = f; joined = m === 'M' ? group + ', Moderators' : group; }
+          else if (o < 0.86) {
+            const later = f + 1 + rnd() * 9;
+            if (later < d && rnd() < 0.6) { status = 'approved'; rs = later; joined = group; } else { status = 'deferred'; }
+          } else { status = 'cancelled'; rs = f; }
+        }
+      }
+      const name = pick(FIRST) + ' ' + pick(LAST) + ' ' + pick(LAST);
+      out.push(mk(1000 + i, name, m, d, status, f, rs, decider, route, group, joined, GROUPING(group), pick(EXP), rnd() < 0.5 ? 'Work with data in ' + GROUPING(group) : ''));
+    }
+    return out;
+  };
+  const DATA = {small: SMALL, large: null};
+  const groupsOf = () => S.data === 'small' ? ['Evening A', 'Evening B', 'Morning C', 'Moderators'] : [...LARGE_GROUPS, 'Moderators'];
+  const narrowedTo = () => S.data === 'small' ? ['Evening A'] : ['Recife 01', 'Recife 02', 'Recife 03'];
+
+  /* ---------- Wording. ---------- */
+  const OUTCOME = {
+    pending: ['Awaiting a decision', 'warning'], approved: ['Approved', 'success'], deferred: ['On the waiting list', 'info'],
+    cancelled: ['Cancelled', 'danger'], key: ['Admitted with a key', 'brand']
+  };
+  const groupText = r => r.route === 'key' ? 'Key: ' + r.group : r.route === 'keyreview' ? 'Key, reviewed: ' + r.group
+    : r.route === 'chose' ? 'Chose: ' + r.group : 'No group';
+  const routeText = r => r.route === 'key' ? 'Key admitted' : r.route === 'keyreview' ? 'Key, sent for review' : 'Review';
+  const dur = ms => {
+    if (ms < HOUR) { return Math.max(1, Math.round(ms / 60000)) + ' min'; }
+    if (ms < DAY) { return Math.round(ms / HOUR) + ' h'; }
+    const d = Math.floor(ms / DAY), h = Math.round((ms - d * DAY) / HOUR);
+    return h && d < 10 ? d + ' d ' + h + ' h' : d + ' d';
+  };
+  const short = t => fmtShort.format(new Date(t));
+  const long = t => fmtLong.format(new Date(t));
+  const human = r => r.status !== 'key';
+  const waitOf = (r, measure) => {
+    if (r.status === 'key') { return {kind: 'key'}; }
+    if (r.status === 'pending') { return {kind: 'open', ms: NOW - r.submitted}; }
+    if (measure === 'resolution' && r.resolved === null) { return {kind: 'open', ms: NOW - r.submitted, first: r.first - r.submitted}; }
+    const t = measure === 'resolution' ? r.resolved : r.first;
+    return {kind: 'done', ms: t - r.submitted, other: measure === 'first' && r.resolved && r.resolved !== r.first ? r.resolved - r.submitted : null,
+      stillopen: r.status === 'deferred' ? NOW - r.submitted : null};
+  };
+  const pct = (sorted, p) => {
+    if (!sorted.length) { return null; }
+    const i = (sorted.length - 1) * p, lo = Math.floor(i), hi = Math.ceil(i);
+    return sorted[lo] + (sorted[hi] - sorted[lo]) * (i - lo);
+  };
+
+  /* ---------- Columns: the catalogue the server renders into the page's props. ---------- */
+  const COLS = [
+    {k: 'applicant', t: 'Applicant', fixed: true, w: 220, min: 160, sort: r => fold(r.name)},
+    {k: 'outcome', t: 'Outcome', w: 168, min: 120, sort: r => OUTCOME[r.status][0]},
+    {k: 'submitted', t: 'Submitted', w: 132, min: 104, sort: r => r.submitted},
+    {k: 'wait', t: 'Wait', w: 150, min: 110, sort: 'wait'},
+    {k: 'decided', t: 'Decided', w: 176, min: 120, sort: r => r.resolved || r.first || 0},
+    {k: 'group', t: 'Group', w: 200, min: 120, sort: r => r.group},
+    {k: 'method', t: 'Method', w: 176, min: 110, sort: r => r.method},
+    {k: 'route', t: 'Admission route', w: 168, min: 110, sort: r => r.route},
+    {k: 'role', t: 'Role given', w: 160, min: 100, sort: r => r.role},
+    {k: 'comment', t: 'Comment', w: 260, min: 120},
+    {k: 'note', t: 'Note for the record', w: 240, min: 120},
+    {k: 'city', t: 'City/town', w: 150, min: 100, answer: true, sort: r => r.city},
+    {k: 'exp', t: 'How much Python have you written?', w: 200, min: 120, answer: true, sort: r => r.exp}
+  ];
+  const COL = Object.fromEntries(COLS.map(c => [c.k, c]));
+  const PRESETS = {
+    decisions: ['outcome', 'submitted', 'wait', 'decided', 'group', 'method'],
+    answers: ['outcome', 'submitted', 'comment', 'city', 'exp'],
+    groups: ['outcome', 'group', 'method', 'route', 'role', 'decided'],
+    all: COLS.filter(c => !c.fixed).map(c => c.k)
+  };
+
+  /* ---------- State. The preference (columns and widths) is a server fact; the rest is view state. ---------- */
+  const emptyF = () => ({method: new Set(), group: new Set(), outcome: new Set(), decider: new Set(), waited: 0});
+  const S = {
+    concept: 'C', data: 'small', vp: 'desktop', view: 'auto', reader: 'manager', latency: 400,
+    scope: 'all', measure: 'first', breakdown: 'method', cols: new Set(PRESETS.all), widths: {},
+    search: '', searchOpen: false, f: emptyF(), sort: {k: 'submitted', dir: -1}, page: 1, perpage: 30,
+    open: null, more: new Set(), groupQ: '', grouping: '', allGroups: false, allGroupsQ: ''
+  };
+  try {
+    const p = JSON.parse(localStorage.getItem('ea-report-pref') || 'null');
+    if (p && Array.isArray(p.cols)) { S.cols = new Set(p.cols); S.widths = p.widths || {}; }
+  } catch (e) { /* Preview without storage. */ }
+  const savePref = () => {
+    logCall('enrol_apply_set_report_preference', {columns: [...S.cols].length + ' keys', widths: Object.keys(S.widths).length + ' set'}, 60, () => 'saved');
+    try { localStorage.setItem('ea-report-pref', JSON.stringify({cols: [...S.cols], widths: S.widths})); } catch (e) { /* Ignore. */ }
+  };
+  const width = k => S.widths[k] || COL[k].w;
+
+  /* ---------- The simulated server: the report's base condition (S8), filters, search, sort, paging. ---------- */
+  const all = () => {
+    if (S.data === 'large' && !DATA.large) { DATA.large = buildLarge(); }
+    return DATA[S.data];
+  };
+  const visibleRows = () => {
+    if (S.reader === 'manager') { return all(); }
+    const mine = new Set(narrowedTo());
+    return all().filter(r => mine.has(r.group) || r.joined.some(g => mine.has(g)));
+  };
+  const showsEmail = () => S.reader === 'manager';
+  const matches = (r, p) => {
+    if (p.scope === 'awaiting' && r.status !== 'pending') { return false; }
+    if (p.scope === 'decided' && r.status === 'pending') { return false; }
+    if (p.f.method.size && !p.f.method.has(r.method)) { return false; }
+    if (p.f.group.size && !(p.f.group.has(r.group || 'No group') || r.joined.some(g => p.f.group.has(g)))) { return false; }
+    if (p.f.outcome.size && !p.f.outcome.has(r.status)) { return false; }
+    if (p.f.decider.size && !p.f.decider.has(r.decider || 'By key')) { return false; }
+    if (p.f.waited) { const w = waitOf(r, p.measure); if (w.kind === 'key' || w.ms < p.f.waited * DAY) { return false; } }
+    /* Core's text filter: sql_like(fullname, '%q%', casesensitive false, accentsensitive false). */
+    if (p.search && !fold(r.name).includes(fold(p.search))) { return false; }
+    return true;
+  };
+  const snapshot = () => ({scope: S.scope, f: {method: new Set(S.f.method), group: new Set(S.f.group), outcome: new Set(S.f.outcome),
+    decider: new Set(S.f.decider), waited: S.f.waited}, search: S.search.trim().length >= 2 ? S.search.trim() : '', measure: S.measure,
+    sort: {...S.sort}, page: S.page, perpage: S.perpage, cols: [...S.cols]});
+  const serverRows = p => {
+    let rows = visibleRows().filter(r => matches(r, p));
+    const c = COL[p.sort.k];
+    const key = c && c.sort === 'wait' ? (r => { const w = waitOf(r, p.measure); return w.kind === 'key' ? -1 : w.ms; }) : (c && c.sort);
+    if (key) { rows = [...rows].sort((a, b) => { const x = key(a), y = key(b); return (x > y ? 1 : x < y ? -1 : a.id - b.id) * p.sort.dir; }); }
+    const total = rows.length;
+    const pages = Math.max(1, Math.ceil(total / p.perpage));
+    const page = Math.min(p.page, pages);
+    return {rows: rows.slice((page - 1) * p.perpage, page * p.perpage), total, page, pages};
+  };
+  const serverSummary = p => {
+    const rows = visibleRows().filter(r => matches(r, p));
+    const done = rows.filter(r => human(r) && r.status !== 'pending' && (p.measure === 'first' || r.resolved !== null));
+    const waits = done.map(r => waitOf(r, p.measure).ms).sort((a, b) => a - b);
+    const open = rows.filter(r => r.status === 'pending' || (p.measure === 'resolution' && r.status === 'deferred'));
+    const per = by => {
+      const m = new Map();
+      for (const r of done) { const k = by(r); if (!m.has(k)) { m.set(k, []); } m.get(k).push(waitOf(r, p.measure).ms); }
+      return [...m].map(([k, w]) => { w.sort((a, b) => a - b); return [k, pct(w, 0.5), w.length]; });
+    };
+    return {
+      n: waits.length, med: pct(waits, 0.5), p90: pct(waits, 0.9), open: open.length,
+      oldest: open.length ? Math.max(...open.map(r => NOW - r.submitted)) : null,
+      late: open.filter(r => NOW - r.submitted > 7 * DAY).length, keys: rows.filter(r => r.status === 'key').length,
+      buckets: [[0, 1], [1, 3], [3, 7], [7, 14], [14, 1e9]].map(b => waits.filter(w => w >= b[0] * DAY && w < b[1] * DAY).length),
+      bymethod: per(r => r.method), bygroup: per(r => r.group || 'No group')
+    };
+  };
+
+  /* ---------- The client: one request in flight per region, a later one supersedes it. ---------- */
+  const LOG = [];
+  let logSeq = 0;
+  const logCall = (fn, params, ms, result) => {
+    const e = {id: ++logSeq, fn, params, ms, status: 'pending', result: ''};
+    LOG.unshift(e); LOG.length = Math.min(LOG.length, 9);
+    renderLog();
+    setTimeout(() => { if (e.status === 'pending') { e.status = 'ok'; e.result = result(); renderLog(); } }, ms);
+    return e;
+  };
+  const R = {rows: null, total: 0, page: 1, pages: 1, loading: false, band: null, bandLoading: false};
+  let rowsReq = null, bandReq = null;
+  const jitter = () => Math.round(S.latency * (0.7 + Math.random() * 0.6));
+  const describe = p => {
+    const o = {page: p.page, perpage: p.perpage, sort: p.sort.k + (p.sort.dir > 0 ? ' asc' : ' desc')};
+    if (p.search) { o.search = p.search; }
+    if (p.scope !== 'all') { o.scope = p.scope; }
+    const fl = Object.entries(p.f).filter(([, v]) => v instanceof Set ? v.size : v).map(([k, v]) => k + '=' + (v instanceof Set ? v.size : v));
+    if (fl.length) { o.filters = fl.join(','); }
+    return o;
+  };
+  const loadRows = () => {
+    if (rowsReq) { rowsReq.log.status = 'cancelled'; clearTimeout(rowsReq.t); }
+    const p = snapshot(), ms = jitter();
+    R.loading = true;
+    const req = {log: logCall('enrol_apply_report_rows', describe(p), ms, () => '')};
+    req.t = setTimeout(() => {
+      if (rowsReq !== req) { return; }
+      const res = serverRows(p);
+      Object.assign(R, {rows: res.rows, total: res.total, page: res.page, pages: res.pages, loading: false});
+      S.page = res.page;
+      req.log.status = 'ok'; req.log.result = res.rows.length + ' rows of ' + nf.format(res.total);
+      rowsReq = null; render(); renderLog();
+    }, ms);
+    rowsReq = req;
+  };
+  const loadBand = () => {
+    if (bandReq) { bandReq.log.status = 'cancelled'; clearTimeout(bandReq.t); }
+    const p = snapshot(), ms = Math.round(jitter() * 1.3);
+    R.bandLoading = true;
+    const o = describe(p); delete o.page; delete o.perpage; delete o.sort; o.measure = p.measure;
+    const req = {log: logCall('enrol_apply_report_summary', o, ms, () => '')};
+    req.t = setTimeout(() => {
+      if (bandReq !== req) { return; }
+      R.band = serverSummary(p); R.bandLoading = false;
+      req.log.status = 'ok'; req.log.result = nf.format(R.band.n) + ' waits' + (S.reader === 'manager' ? ', groups: ' + R.band.bygroup.length : ', compact band');
+      bandReq = null; render(); renderLog();
+    }, ms);
+    bandReq = req;
+  };
+  const refresh = ({rows = true, band = true, resetPage = true} = {}) => {
+    if (resetPage) { S.page = 1; }
+    if (rows) { loadRows(); }
+    if (band) { loadBand(); }
+  };
+  const coldStart = () => { R.rows = null; R.band = null; refresh(); };
+
+  /* ---------- Cells. ---------- */
+  let maxWaitCache = DAY;
+  const computeMaxWait = () => {
+    maxWaitCache = Math.max(DAY, ...(R.rows || []).map(r => { const w = waitOf(r, S.measure); return w.kind === 'key' ? 0 : w.ms; }));
+  };
+  const joinedText = r => {
+    if (!r.joined.length) { return ''; }
+    const shown = r.joined.slice(0, 2).join(', ');
+    return 'Joined ' + shown + (r.joined.length > 2 ? ' +' + (r.joined.length - 2) : '');
+  };
+  const cell = (k, r) => {
+    const c = (s, title) => '<span class="c"' + (title ? ' title="' + esc(title) + '"' : '') + '>' + s + '</span>';
+    switch (k) {
+      case 'applicant': return c('<a class="name" href="#" onclick="return false">' + esc(r.name) + '</a>', r.name) +
+        (showsEmail() ? '<span class="sub" title="' + esc(r.email) + '">' + esc(r.email) + '</span>' : '');
+      case 'outcome': { const [t, tone] = OUTCOME[r.status]; return c('<span class="ea-status ea-status--' + tone + '">' + t + '</span>'); }
+      case 'submitted': return c('<span class="num">' + short(r.submitted) + '</span>', long(r.submitted));
+      case 'wait': return waitCell(r);
+      case 'decided': return decidedCell(r);
+      case 'group': return c(esc(groupText(r)), groupText(r)) + (r.joined.length ? '<span class="sub" title="' + esc('Joined ' + r.joined.join(', ')) + '">' + esc(joinedText(r)) + '</span>' : '');
+      case 'method': return c(esc(r.method), r.method);
+      case 'route': return c(esc(routeText(r)));
+      case 'role': return c(esc(r.role || '–'));
+      case 'comment': return c(esc(r.comment || '–'), r.comment);
+      case 'note': return c(esc(r.note || '–'), r.note);
+      case 'city': return c(esc(r.city));
+      case 'exp': return c(esc(r.exp));
+    }
+    return '';
+  };
+  const waitCell = r => {
+    const w = waitOf(r, S.measure);
+    if (w.kind === 'key') { return '<div class="ea-wait key"><span class="v">By key</span></div>'; }
+    const p = Math.min(100, Math.round(w.ms / maxWaitCache * 100));
+    if (w.kind === 'open') {
+      return '<div class="ea-wait open"><span class="v">' + dur(w.ms) + ', open</span><span class="bar"><span style="width:' + p + '%"></span></span>' +
+        (w.first ? '<span class="sub">deferred after ' + dur(w.first) + '</span>' : '') + '</div>';
+    }
+    return '<div class="ea-wait"><span class="v">' + dur(w.ms) + '</span><span class="bar"><span style="width:' + p + '%"></span></span>' +
+      (w.other ? '<span class="sub">resolved after ' + dur(w.other) + '</span>' : '') +
+      (w.stillopen ? '<span class="sub">deferred, open ' + dur(w.stillopen) + '</span>' : '') + '</div>';
+  };
+  const decidedCell = r => {
+    if (r.status === 'pending') { return '<span class="c muted">Not yet</span>'; }
+    if (r.status === 'key') { return '<span class="c num" title="' + esc(long(r.first)) + '">' + short(r.first) + '</span><span class="sub">by the key, ' + esc(r.group) + '</span>'; }
+    const t = r.resolved || r.first;
+    return '<span class="c num" title="' + esc(long(t)) + '">' + short(t) + '</span><span class="sub" title="' + esc(r.decider) + '">by ' + esc(r.decider) + '</span>';
+  };
+
+  /* ---------- Summary band. ---------- */
+  const bandSkeleton = compact => '<div class="ea-band" aria-hidden="true">' + Array.from({length: compact ? 3 : 4}, () =>
+    '<div class="ea-tile ea-sk"><span class="ea-sk-block w60"></span><span class="ea-sk-block big"></span><span class="ea-sk-block w80"></span></div>').join('') +
+    '</div>' + (compact ? '' : '<div class="ea-dist" data-dist aria-hidden="true">' + Array.from({length: 2}, () => '<div class="ea-panel ea-sk"><span class="ea-sk-block w40"></span>' +
+    Array.from({length: 4}, () => '<span class="ea-sk-block" style="margin-top:10px"></span>').join('') + '</div>').join('') + '</div>');
+  const band = () => {
+    const mword = S.measure === 'first' ? 'first response' : 'resolution';
+    let h = '<section class="ea-region" aria-label="Turnaround" aria-busy="' + (R.bandLoading) + '">' + (R.bandLoading && R.band ? '<div class="ea-progress"></div>' : '') +
+      '<div class="ea-bandhead"><span class="ttl">Turnaround</span>' +
+      '<div class="ea-seg mini" role="radiogroup" aria-label="Measure the wait to"><button type="button" role="radio" data-act="measure" data-v="first" aria-checked="' + (S.measure === 'first') + '">First response</button>' +
+      '<button type="button" role="radio" data-act="measure" data-v="resolution" aria-checked="' + (S.measure === 'resolution') + '">Resolution</button></div></div>';
+    if (!R.band) { return h + bandSkeleton(S.reader === 'moderator') + '<span class="visually-hidden" role="status">Loading the turnaround</span></section>'; }
+    const b = R.band;
+    const tile = (lbl, val, sub, cls) => '<div class="ea-tile' + (cls ? ' ' + cls : '') + '"><div class="lbl">' + lbl + '</div><div class="val">' + val + '</div><div class="sub">' + sub + '</div></div>';
+    /* A moderator narrowed to their groups reads the compact band: no percentile, no distribution, no breakdown (owner, 2026-11-20). */
+    const compact = S.reader === 'moderator';
+    h += '<div class="ea-dim"><div class="ea-band">' +
+      tile('Median ' + mword, b.med === null ? '–' : dur(b.med), 'over ' + nf.format(b.n) + ' decided by a person') +
+      (compact ? '' : tile('90th percentile', b.p90 === null ? '–' : dur(b.p90), '9 in 10 answered within this')) +
+      tile('Still open', nf.format(b.open), b.oldest === null ? 'nothing waiting' : 'oldest ' + dur(b.oldest) + (b.late ? ' · ' + nf.format(b.late) + ' over 7 d' : ''), b.late ? 'warn' : '') +
+      tile('Admitted with a key', nf.format(b.keys), 'not in the turnaround') + '</div>';
+    if (compact) { return h + '</div></section>'; }
+    const labels = ['< 1 d', '1–3 d', '3–7 d', '7–14 d', '> 14 d'];
+    const cmax = Math.max(1, ...b.buckets);
+    let dist = '<div class="ea-panel"><div class="ttl"><span>Distribution of the ' + mword + '</span><span class="xs muted">' + nf.format(b.n) + ' decisions</span></div>';
+    b.buckets.forEach((n, i) => { dist += '<div class="ea-hrow"><span class="lab">' + labels[i] + '</span><span class="ea-track"><span class="ea-fill' + (i >= 3 ? ' late' : '') + '" style="width:' + Math.round(n / cmax * 100) + '%"></span></span><span class="n">' + nf.format(n) + '</span></div>'; });
+    dist += '</div>';
+    const list = S.breakdown === 'method' ? b.bymethod : b.bygroup;
+    const hrow = m => '<div class="ea-hrow wide"><span class="lab" title="' + esc(m[0]) + '">' + esc(m[0]) + '</span><span class="ea-track"><span class="ea-fill' + (m[1] > 7 * DAY ? ' late' : '') + '" style="width:' + Math.round(m[1] / mmax * 100) + '%"></span></span><span class="n">' + dur(m[1]) + ' <span class="xs">(' + m[2] + ')</span></span></div>';
+    const mmax = Math.max(DAY, ...list.map(m => m[1] || 0));
+    let brk = '<div class="ea-panel"><div class="ttl"><span>Median by</span><div class="ea-seg mini" role="radiogroup" aria-label="Break down by">' +
+      '<button type="button" role="radio" data-act="breakdown" data-v="method" aria-checked="' + (S.breakdown === 'method') + '">Method</button>' +
+      '<button type="button" role="radio" data-act="breakdown" data-v="group" aria-checked="' + (S.breakdown === 'group') + '">Group</button></div></div>';
+    if (S.breakdown === 'method' || list.length <= 8) {
+      brk += [...list].sort((x, y) => y[2] - x[2]).map(hrow).join('');
+    } else {
+      /* Hundreds of groups: the eight with most decisions, then every group, slowest first, searched and scrolled. */
+      brk += '<div class="xs muted" style="margin-bottom:4px">The 8 groups with most decisions</div>' + [...list].sort((x, y) => y[2] - x[2]).slice(0, 8).map(hrow).join('');
+      brk += '<button type="button" class="btn-link sm" data-act="allgroups" aria-expanded="' + S.allGroups + '" style="margin-top:6px">' + (S.allGroups ? 'Hide' : 'All ' + nf.format(list.length) + ' groups, slowest first') + '</button>';
+      if (S.allGroups) {
+        const q = fold(S.allGroupsQ);
+        const rows = [...list].filter(m => !q || fold(m[0]).includes(q)).sort((x, y) => y[1] - x[1]);
+        brk += '<div style="margin-top:6px"><input class="ea-input" style="width:100%" type="search" data-fk="allgroupsq" data-act="allgroupsq" placeholder="Search a group" aria-label="Search a group" value="' + esc(S.allGroupsQ) + '"></div>' +
+          '<div class="ea-scrolllist" data-keep="allgroups" role="list">' + (rows.length ? rows.map(hrow).join('') : '<p class="sm muted">No group matches.</p>') + '</div>';
+      }
+    }
+    brk += '</div>';
+    h += '<div class="ea-dist" data-dist>' + dist + brk + '</div></div></section>';
+    return h;
+  };
+
+  /* ---------- Filter bar, chips, menus. ---------- */
+  const facetVals = () => {
+    const rows = visibleRows();
+    const count = fn => { const m = new Map(); for (const r of rows) { for (const v of [].concat(fn(r))) { m.set(v, (m.get(v) || 0) + 1); } } return m; };
+    const methods = count(r => r.method), groups = count(r => [...new Set([r.group || 'No group', ...r.joined])]);
+    const outcomes = count(r => r.status), deciders = count(r => r.status === 'pending' ? [] : (r.decider || 'By key'));
+    return {
+      method: [...methods].map(([v, n]) => [v, v, n]),
+      group: [...groups].sort((a, b) => a[0].localeCompare(b[0], 'pt', {numeric: true})).map(([v, n]) => [v, v, n]),
+      outcome: Object.keys(OUTCOME).filter(v => outcomes.get(v)).map(v => [v, OUTCOME[v][0], outcomes.get(v)]),
+      decider: [...deciders].sort((a, b) => a[0].localeCompare(b[0])).map(([v, n]) => [v, v, n])
+    };
+  };
+  const activeCount = () => S.f.method.size + S.f.group.size + S.f.outcome.size + S.f.decider.size + (S.f.waited ? 1 : 0);
+  const LABEL = {method: 'Method', group: 'Group', outcome: 'Outcome', decider: 'Decided by'};
+  const chips = () => {
+    const out = [];
+    for (const k of ['method', 'group', 'outcome', 'decider']) {
+      for (const v of S.f[k]) { out.push(['f', k, v, LABEL[k] + ': ' + (k === 'outcome' ? OUTCOME[v][0] : v)]); }
+    }
+    if (S.f.waited) { out.push(['w', 'waited', '', 'Waited more than ' + S.f.waited + ' d']); }
+    if (S.search.trim().length >= 2) { out.push(['s', 'search', '', 'Name: ' + S.search.trim()]); }
+    return out;
+  };
+  const ib = (act, ic, tip, extra, expanded) => '<button type="button" class="ea-ib" data-act="' + act + '" aria-label="' + esc(tip) + '"' +
+    (expanded !== undefined ? ' aria-haspopup="true" aria-expanded="' + expanded + '"' : '') + '>' + ic + (extra || '') + '<span class="ea-tip" aria-hidden="true">' + esc(tip) + '</span></button>';
+  const bar = narrow => {
+    const vis = visibleRows();
+    const n = c => nf.format(vis.filter(c).length);
+    const seg = '<div class="ea-seg" role="radiogroup" aria-label="Show">' +
+      [['all', 'All', nf.format(vis.length)], ['awaiting', 'Awaiting', n(r => r.status === 'pending')], ['decided', 'Decided', n(r => r.status !== 'pending')]]
+        .map(s => '<button type="button" role="radio" data-act="scope" data-v="' + s[0] + '" aria-checked="' + (S.scope === s[0]) + '">' + s[1] + (S.scope === s[0] || !narrow ? '<small>' + s[2] + '</small>' : '') + '</button>').join('') + '</div>';
+    const ac = activeCount();
+    const viewIcon = S.view === 'table' ? icon.table : S.view === 'cards' ? icon.cards : icon.auto;
+    const viewTip = 'View: ' + (S.view === 'auto' ? 'automatic' : S.view);
+    const count = R.rows === null ? '…' : nf.format(R.total) + (narrow ? '' : ' applications');
+    const searching = rowsReq && S.search.trim().length >= 2;
+    let h = '<div class="ea-bar" data-region="ea-bar">' + seg + '<span class="ea-bar-spacer"></span>' +
+      '<div class="ea-bar-cluster"><span class="ea-bar-count" aria-live="polite">' + count + '</span><div class="ea-capsule">' +
+      ib('filters', icon.filter, 'Filters', ac ? '<span class="ea-loud">' + ac + '</span>' : '', S.open === 'filters') +
+      ib('columns', icon.columns, 'Columns', icon.chev, S.open === 'columns') +
+      ib('viewmenu', viewIcon, viewTip, icon.chev, S.open === 'viewmenu') +
+      ib('download', icon.download, 'Download', '') + '</div></div>' +
+      '<div class="ea-capsule">' + (S.searchOpen
+        ? '<label class="ea-search-field">' + (searching ? '<span class="spin" aria-hidden="true"></span>' : icon.search) + '<span class="visually-hidden">Search by name</span><input type="search" data-fk="search" data-act="search" value="' + esc(S.search) + '" placeholder="Search by name" autocomplete="off"></label>'
+        : ib('search', icon.search, 'Search by name', '')) + '</div>';
+    h += columnsMenu() + viewMenu() + filterPanel();
+    const cs = chips();
+    h += '<div class="ea-chips"' + (cs.length ? '' : ' hidden') + '>' + cs.map(c => '<button type="button" class="ea-chip" data-act="unchip" data-t="' + c[0] + '" data-k="' + c[1] + '" data-v="' + esc(c[2]) + '" aria-label="Remove filter ' + esc(c[3]) + '"><span>' + esc(c[3]) + '</span>' + icon.x + '</button>').join('') +
+      (cs.length > 1 ? '<button type="button" class="ea-clearall" data-act="clearall">Clear all</button>' : '') + '</div></div>';
+    return h;
+  };
+  const columnsMenu = () => {
+    let h = '<div class="ea-menu" role="menu" aria-label="Columns" data-keep="colmenu"' + (S.open === 'columns' ? '' : ' hidden') + '>';
+    h += '<div class="ea-menu-head">Sets</div>';
+    for (const [k, label] of [['decisions', 'Decisions'], ['answers', 'Answers'], ['groups', 'Groups'], ['all', 'Every column']]) {
+      const on = PRESETS[k].length === S.cols.size && PRESETS[k].every(c => S.cols.has(c));
+      h += '<button type="button" class="ea-menu-item" role="menuitemradio" aria-checked="' + on + '" data-act="preset" data-v="' + k + '">' + label + '<span class="tick">' + icon.tick + '</span></button>';
+    }
+    h += '<div class="ea-menu-sep" role="separator"></div><div class="ea-menu-head">Columns</div>';
+    for (const c of COLS) {
+      if (c.fixed) {
+        h += '<button type="button" class="ea-menu-item" role="menuitemcheckbox" aria-checked="true" aria-disabled="true"><span class="box">' + icon.tick + '</span>' + c.t + '<span class="hint">always, fixed</span></button>';
+        continue;
+      }
+      h += '<button type="button" class="ea-menu-item" role="menuitemcheckbox" aria-checked="' + S.cols.has(c.k) + '" data-act="col" data-v="' + c.k + '"><span class="box">' + icon.tick + '</span>' + esc(c.t) + (c.answer ? '<span class="hint">answer</span>' : '') + '</button>';
+    }
+    if (!showsEmail()) { h += '<div class="ea-menu-head" style="font-weight:400">Identity fields are not offered to this reader.</div>'; }
+    h += '<div class="ea-menu-sep" role="separator"></div><button type="button" class="ea-menu-item" role="menuitem" data-act="resetwidths"' + (Object.keys(S.widths).length ? '' : ' aria-disabled="true"') + '>' + icon.reset + 'Reset column widths</button>';
+    return h + '</div>';
+  };
+  const viewMenu = () => '<div class="ea-menu" role="menu" aria-label="View"' + (S.open === 'viewmenu' ? '' : ' hidden') + '>' +
+    [['auto', 'Automatic', icon.auto, 'cards on a narrow screen'], ['table', 'Table', icon.table, ''], ['cards', 'Cards', icon.cards, '']].map(v =>
+      '<button type="button" class="ea-menu-item" role="menuitemradio" aria-checked="' + (S.view === v[0]) + '" data-act="view" data-v="' + v[0] + '">' + v[2] + v[1] + (v[3] ? '<span class="hint">' + v[3] + '</span>' : '') + '<span class="tick">' + icon.tick + '</span></button>').join('') +
+    '<div class="ea-menu-sep" role="separator"></div><button type="button" class="ea-menu-item" role="menuitem" data-act="coretable">' + icon.table + 'Core\'s table view</button></div>';
+  const facetButtons = (k, vals) => '<div class="ea-opts">' + vals.map(v =>
+    '<button type="button" class="ea-opt" aria-pressed="' + S.f[k].has(v[0]) + '" data-act="facet" data-k="' + k + '" data-v="' + esc(v[0]) + '">' + esc(v[1]) + ' <small>' + nf.format(v[2]) + '</small></button>').join('') + '</div>';
+  const groupFacet = vals => {
+    if (vals.length <= 8) { return facetButtons('group', vals); }
+    /* Above eight choosable groups (RP-D18): a search, the grouping (RP-D23), the chosen pinned first, a capped scrolling list. */
+    const groupings = [...new Set(vals.map(v => GROUPING(v[0])).filter(Boolean))].sort();
+    const q = fold(S.groupQ);
+    const chosen = vals.filter(v => S.f.group.has(v[0]));
+    const rest = vals.filter(v => !S.f.group.has(v[0]) && (!q || fold(v[0]).includes(q)) && (!S.grouping || GROUPING(v[0]) === S.grouping));
+    const CAP = 50;
+    const row = (v, pinned) => '<button type="button" class="ea-optrow' + (pinned ? ' pinned' : '') + '" aria-pressed="' + S.f.group.has(v[0]) + '" data-act="facet" data-k="group" data-v="' + esc(v[0]) + '"><span class="box">' + icon.tick + '</span>' + esc(v[1]) + '<small>' + nf.format(v[2]) + '</small></button>';
+    return '<div class="ea-inline"><input class="ea-input" type="search" data-fk="groupq" data-act="groupq" value="' + esc(S.groupQ) + '" placeholder="Search ' + nf.format(vals.length) + ' groups" aria-label="Search groups">' +
+      (groupings.length > 1 ? '<select class="ea-select" data-act="grouping" aria-label="Grouping"><option value="">Every grouping</option>' + groupings.map(g => '<option' + (g === S.grouping ? ' selected' : '') + '>' + esc(g) + '</option>').join('') + '</select>' : '') + '</div>' +
+      '<div class="ea-optlist" data-keep="grouplist" role="group" aria-label="Groups">' + chosen.map(v => row(v, true)).join('') + rest.slice(0, CAP).map(v => row(v, false)).join('') +
+      (rest.length > CAP ? '<p class="xs muted" style="margin:6px 8px">' + nf.format(rest.length - CAP) + ' more: refine the search or pick a grouping.</p>' : '') +
+      (!chosen.length && !rest.length ? '<p class="xs muted" style="margin:6px 8px">No group matches.</p>' : '') + '</div>';
+  };
+  const filterPanel = () => {
+    const fv = facetVals();
+    let h = '<div class="ea-fpanel" role="dialog" aria-label="Filters"' + (S.open === 'filters' ? '' : ' hidden') + '><div class="body" data-keep="fbody">';
+    h += '<div class="ea-fgroup"><div class="gl">Method</div>' + facetButtons('method', fv.method) + '</div>';
+    h += '<div class="ea-fgroup"><div class="gl"><span>Group: key, chosen or joined</span>' + (S.f.group.size ? '<span>' + S.f.group.size + ' chosen</span>' : '') + '</div>' + groupFacet(fv.group) + '</div>';
+    h += '<div class="ea-fgroup"><div class="gl">Outcome</div>' + facetButtons('outcome', fv.outcome) + '</div>';
+    h += '<div class="ea-fgroup"><div class="gl">Decided by</div>' + facetButtons('decider', fv.decider) + '</div>';
+    h += '<div class="ea-fgroup"><div class="gl">Waited more than</div><div class="ea-opts" role="radiogroup">' + [0, 1, 3, 7, 14].map(d =>
+      '<button type="button" class="ea-opt" role="radio" aria-checked="' + (S.f.waited === d) + '" aria-pressed="' + (S.f.waited === d) + '" data-act="waited" data-v="' + d + '">' + (d ? d + ' d' : 'Any') + '</button>').join('') + '</div></div>';
+    h += '<p class="xs muted" style="margin:0">The report\'s other filters (dates, the comment, each answer) open in core\'s filter form: <button type="button" class="btn-link xs">More filters</button></p>';
+    return h + '</div><div class="foot"><button type="button" class="btn" data-act="clearall">Clear filters</button><button type="button" class="btn btn-primary" data-act="close">Show results</button></div></div>';
+  };
+
+  /* ---------- Rows: the grid, the cards and their skeletons. ---------- */
+  const activeCols = () => COLS.filter(c => c.fixed || S.cols.has(c.k));
+  const gridSkeleton = cols => {
+    const tw = cols.reduce((s, c) => s + width(c.k), 0);
+    return '<div class="ea-gridwrap"><table class="ea-table" style="width:' + tw + 'px" aria-hidden="true"><colgroup>' + cols.map(c => '<col style="width:' + width(c.k) + 'px">').join('') + '</colgroup><thead><tr>' +
+      cols.map(c => '<th class="' + (c.fixed ? 'col-fixed' : '') + '"><span class="plain"><span class="t">' + esc(c.t) + '</span></span></th>').join('') + '</tr></thead><tbody>' +
+      Array.from({length: 8}, (_, i) => '<tr class="ea-sk">' + cols.map((c, j) => '<td class="' + (c.fixed ? 'col-fixed' : '') + '">' + (c.k === 'outcome' ? '<span class="ea-sk-block pill"></span>' : '<span class="ea-sk-block ' + ['w80', 'w60', 'w40'][(i + j) % 3] + '"></span>') + (c.k === 'applicant' || c.k === 'decided' ? '<span class="ea-sk-block w40" style="margin-top:6px"></span>' : '') + '</td>').join('') + '</tr>').join('') +
+      '</tbody></table></div>';
+  };
+  const cardSkeleton = single => '<div class="ea-cards' + (single ? ' single' : '') + '" aria-hidden="true">' + Array.from({length: single ? 4 : 6}, () =>
+    '<div class="ea-card ea-sk"><span class="ea-sk-block w60"></span><span class="ea-sk-block w80" style="margin-top:10px"></span><span class="ea-sk-block w60" style="margin-top:8px"></span><span class="ea-sk-block w40" style="margin-top:8px"></span></div>').join('') + '</div>';
+  const grid = cols => {
+    const tw = cols.reduce((s, c) => s + width(c.k), 0);
+    return '<div class="ea-gridwrap" data-keep="grid" tabindex="0" aria-label="Applications, scroll for more columns"><table class="ea-table" style="width:' + tw + 'px"><caption class="visually-hidden">Enrolment applications</caption><colgroup>' +
+      cols.map(c => '<col data-col="' + c.k + '" style="width:' + width(c.k) + 'px">').join('') + '</colgroup><thead><tr>' + cols.map(c => {
+        const st = S.sort.k === c.k ? (S.sort.dir > 0 ? 'ascending' : 'descending') : 'none';
+        const label = '<span class="t">' + esc(c.t) + '</span>';
+        return '<th scope="col" class="' + (c.fixed ? 'col-fixed' : '') + '" aria-sort="' + st + '" title="' + esc(c.t) + '">' + (c.sort ? '<button type="button" class="sortbtn" data-act="sort" data-v="' + c.k + '">' + label +
+          '<span class="arrow" aria-hidden="true">' + (st === 'ascending' ? '▲' : st === 'descending' ? '▼' : '') + '</span></button>' : '<span class="plain">' + label + '</span>') +
+          '<span class="ea-rsz" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Resize ' + esc(c.t) + '" aria-valuemin="' + c.min + '" aria-valuemax="600" aria-valuenow="' + width(c.k) + '" data-rsz="' + c.k + '"></span></th>';
+      }).join('') + '</tr></thead><tbody>' + R.rows.map(r => '<tr>' + cols.map(c => '<td class="' + (c.fixed ? 'col-fixed' : '') + '">' + cell(c.k, r) + '</td>').join('') + '</tr>').join('') + '</tbody></table></div>';
+  };
+  const cardC = (r, cols, single) => {
+    const w = waitOf(r, S.measure);
+    const [ot, tone] = OUTCOME[r.status];
+    const wline = w.kind === 'key' ? '<span class="k">Admitted at once, no review</span>' : w.kind === 'open'
+      ? 'Waiting ' + dur(w.ms) + ', open' : '<span class="k">Waited</span> ' + dur(w.ms);
+    const dline = r.status === 'pending' ? '<span class="k">Not decided yet</span>' : r.status === 'key'
+      ? '<span class="k">By the key,</span> ' + esc(r.group) : '<span class="k">Decided</span> ' + short(r.resolved || r.first) + ' <span class="k">by</span> ' + esc(r.decider);
+    const extra = cols.filter(c => !['applicant', 'outcome', 'submitted', 'wait', 'decided', 'group', 'method'].includes(c.k));
+    const dl = () => '<dl>' + (showsEmail() ? '<dt>Email</dt><dd>' + esc(r.email) + '</dd>' : '') + (r.joined.length ? '<dt>Groups joined</dt><dd>' + esc(r.joined.join(', ')) + '</dd>' : '') +
+      extra.map(c => '<dt>' + esc(c.t) + '</dt><dd>' + cell(c.k, r) + '</dd>').join('') + '</dl>';
+    /* A wide grid shows the other chosen fields at once; a phone keeps them behind "More". */
+    const open = !single || S.more.has(r.id);
+    return '<article class="ea-card" role="listitem"><div class="l1"><a href="#" onclick="return false">' + esc(r.name) + '</a>' +
+      '<span class="ea-status ea-status--' + tone + '">' + ot + '</span></div>' +
+      '<div class="ln' + (w.kind === 'open' ? ' open' : '') + '">' + wline + ' <span class="k">· submitted ' + short(r.submitted) + '</span></div>' +
+      '<div class="ln">' + dline + '</div>' +
+      '<div class="ln"><span class="k">' + esc(groupText(r)) + ' · ' + esc(r.method) + '</span></div>' +
+      (single ? '<div class="more"><button type="button" class="btn-link sm" data-act="more" data-v="' + r.id + '" aria-expanded="' + open + '">' + (open ? 'Less' : 'More') + '</button>' + (open ? dl() : '') + '</div>' : dl()) +
+      '</article>';
+  };
+  const pager = narrow => {
+    if (R.pages <= 1) { return ''; }
+    const p = R.page, n = R.pages;
+    const btn = (v, label, extra) => '<button type="button" data-act="page" data-v="' + v + '"' + (extra || '') + '>' + label + '</button>';
+    let h = '<nav class="ea-pager" aria-label="Pages">' + btn(p - 1, 'Previous', p === 1 ? ' disabled' : '');
+    if (narrow) {
+      h += '<span class="gap num">Page ' + p + ' of ' + nf.format(n) + '</span>';
+    } else {
+      const set = [...new Set([1, p - 1, p, p + 1, n].filter(x => x >= 1 && x <= n))].sort((a, b) => a - b);
+      set.forEach((x, i) => { if (i && x - set[i - 1] > 1) { h += '<span class="gap">…</span>'; } h += btn(x, x, x === p ? ' aria-current="page"' : ''); });
+    }
+    return h + btn(p + 1, 'Next', p === n ? ' disabled' : '') + '</nav>';
+  };
+
+  /* ---------- Concept C. ---------- */
+  const renderC = narrow => {
+    const cols = activeCols();
+    const cards = S.view === 'cards' || (S.view === 'auto' && narrow);
+    let h = '<div class="crumbs">' + esc(courseName()) + ' › Reports › Enrolment applications</div><h2>Enrolment applications</h2>';
+    if (S.reader === 'moderator') { h += '<p class="sm muted" style="margin:0 0 12px">You see the applications of your groups: ' + esc(narrowedTo().join(', ')) + '.</p>'; }
+    h += band() + bar(narrow);
+    h += '<section class="ea-region" aria-label="Applications" aria-busy="' + (R.loading) + '">' + (R.loading && R.rows ? '<div class="ea-progress"></div>' : '');
+    if (R.rows === null) {
+      h += (cards ? cardSkeleton(narrow) : gridSkeleton(cols)) + '<span class="visually-hidden" role="status">Loading applications</span>';
+    } else if (!R.rows.length) {
+      h += '<div class="ea-empty"><b>No application matches</b><br><span class="sm">Clear a filter or the search to see more.</span></div>';
+    } else {
+      computeMaxWait();
+      h += '<div class="ea-dim">' + (cards ? '<div class="ea-cards' + (narrow ? ' single' : '') + '" role="list">' + R.rows.map(r => cardC(r, cols, narrow)).join('') + '</div>' : grid(cols)) + '</div>';
+      if (!cards) { h += '<p class="ea-hscrollhint">Scroll sideways for more columns; the applicant stays in view. Drag a heading\'s edge to resize it (arrow keys on the edge, double click to reset).</p>'; }
+    }
+    h += '</section>';
+    const from = R.rows && R.total ? (R.page - 1) * S.perpage + 1 : 0, to = R.rows ? from + R.rows.length - Math.min(1, R.rows.length) : 0;
+    h += '<div class="ea-foot"><span class="num">' + (R.rows ? (R.total ? nf.format(from) + '–' + nf.format(to) + ' of ' + nf.format(R.total) : '0 applications') : 'Loading…') + '</span>' + (R.rows ? pager(narrow) : '') +
+      '<label class="sm">Per page <select class="ea-select" data-act="perpage">' + [30, 50, 100].map(n => '<option' + (n === S.perpage ? ' selected' : '') + '>' + n + '</option>').join('') + '</select></label>' +
+      '<a href="#" onclick="return false">Download (CSV, Excel, PDF…)</a></div>';
+    h += '<p class="notein">Proposal. The page arrives with the shell and the column catalogue; the band and the rows load in parallel from two web services, each with its own skeleton the first time and a thin progress line after, so nothing jumps. A newer request supersedes an older one (see the log below). Every number is computed from the table\'s own SQL, so the moderator\'s band counts only their groups and a filter moves both.</p>';
+    return h;
+  };
+  const courseName = () => S.data === 'small' ? 'Python for data work 2027' : 'Data literacy for public servants 2027';
+
+  /* ---------- Concept A: the system report restyled; fixed columns, core filters and paging, CSS cards. ---------- */
+  const renderA = narrow => {
+    const rows = [...visibleRows()].sort((a, b) => b.submitted - a.submitted);
+    const pageRows = rows.slice(0, 30);
+    computeMaxWaitFor(pageRows);
+    const cols = [['applicant', 'Applicant'], ...(showsEmail() ? [['email', 'Email address']] : []), ['outcome', 'Outcome'], ['submitted', 'Submitted'],
+      ['wait', 'Wait'], ['decided', 'Decided'], ['group', 'Group'], ['method', 'Method']];
+    const c = (k, r) => k === 'email' ? esc(r.email) : k === 'applicant' ? '<a href="#" onclick="return false">' + esc(r.name) + '</a>' : cell(k, r);
+    let h = '<div class="crumbs">' + esc(courseName()) + ' › Reports › Enrolment applications</div><h2>Enrolment applications</h2>';
+    h += '<div class="core-filters"><button type="button" class="core-btn">' + icon.filter + ' Filters</button></div>';
+    h += '<div class="' + (narrow ? '' : 'table-responsive') + '"><table class="core' + (narrow ? ' cards' : '') + '"><thead><tr>' +
+      cols.map(x => '<th><a href="#" onclick="return false">' + x[1] + '</a></th>').join('') + '</tr></thead><tbody>' +
+      pageRows.map(r => '<tr>' + cols.map(x => '<td data-cardtitle="' + x[1] + '"><div>' + c(x[0], r) + '</div></td>').join('') + '</tr>').join('') + '</tbody></table></div>';
+    if (rows.length > 30) { h += '<div class="core-paging">Page 1 of ' + nf.format(Math.ceil(rows.length / 30)) + ' · core\'s paging bar, sorting and filters reload the table through core_table_get_dynamic_table_content</div>'; }
+    h += '<div class="core-download"><label for="dl">Download table data as</label><select id="dl"><option>Comma separated values (.csv)</option><option>Microsoft Excel (.xlsx)</option></select><button type="button" class="btn">Download</button></div>';
+    h += '<p class="notein">Concept A: the content of section 3.0 (the decider in the Decided cell, the Wait column, one Outcome, one Group, short dates) inside core\'s system report. Columns are the report\'s, not the reader\'s, and cannot be resized; cards below 576 px come from a plugin stylesheet copying core\'s custom-report card view. No summary. This is what Moodle 5.1 keeps under concept C.</p>';
+    return h;
+  };
+  const computeMaxWaitFor = rows => { maxWaitCache = Math.max(DAY, ...rows.map(r => { const w = waitOf(r, S.measure); return w.kind === 'key' ? 0 : w.ms; })); };
+
+  /* ---------- Today: the measured report. ---------- */
+  const renderT = () => {
+    const rows = [...visibleRows()].sort((a, b) => b.submitted - a.submitted).slice(0, 8);
+    const statusWord = r => r.status === 'pending' ? 'Pending' : r.status === 'deferred' ? 'Waiting' : r.status === 'cancelled' ? 'Cancelled' : 'Approved';
+    const heads = ['First name / Last name', ...(showsEmail() ? ['Email address'] : []), 'Status', 'Submitted on', 'Decided on', 'Comment', 'Note for the record', 'Enrolment now', 'Outcome',
+      'Admission route', 'Group of the enrolment key', 'Groups joined', 'Details submitted', 'City/town', 'How much Python have you written?', 'What would you like to use it for?', 'Full name'];
+    const flagged = new Set(['Decided on', 'Full name']);
+    let h = '<div class="crumbs">' + esc(courseName()) + ' › Reports › Enrolment applications</div><h2>Enrolment applications</h2>';
+    h += '<div class="core-filters"><button type="button" class="core-btn">' + icon.filter + ' Filters</button></div>';
+    h += '<div class="table-responsive"><table class="today"><thead><tr>' + heads.map(t => '<th class="' + (flagged.has(t) ? 'flag' : '') + '"><a href="#" onclick="return false">' + t + '</a></th>').join('') + '</tr></thead><tbody>';
+    h += rows.map(r => '<tr>' + [
+      '<a href="#" onclick="return false">' + esc(r.name) + '</a>', ...(showsEmail() ? [esc(r.email)] : []), statusWord(r), esc(long(r.submitted)),
+      r.first ? esc(long(r.resolved || r.first)) : '-', esc(r.comment), esc(r.note), r.status === 'pending' || r.status === 'deferred' ? 'Suspended' : r.status === 'cancelled' ? 'Not enrolled' : 'Active',
+      OUTCOME[r.status][0], esc(routeText(r)), r.route.startsWith('key') ? esc(r.group) : '', esc(r.joined.join(', ')),
+      'City/town: ' + esc(r.city) + '<br>How much Python have you written?: ' + esc(r.exp) + '<br>What would you like to use it for?: ' + esc(r.comment),
+      esc(r.city), esc(r.exp), esc(r.comment), r.status === 'key' ? esc(r.name) : esc(r.decider)
+    ].map(v => '<td>' + v + '</td>').join('') + '</tr>').join('');
+    h += '</tbody></table></div>';
+    h += '<p class="notein">Today, measured on m501: 17 columns, 1680 px wide (300 px of sideways scroll at 1440 px; 4.7 screens at 375 px), the header scrolls away with the rows and nothing stays in view. "Decided on" is the 5th column and its decider the 17th, headed "Full name" (underlined in red). The snapshot repeats the three answer columns. No wait anywhere.</p>';
+    return h;
+  };
+
+  /* ---------- Notes. ---------- */
+  const NOTES = {
+    C: [['Many columns', ['the grid scrolls sideways inside its own frame; the heading row and the applicant column stay in view', 'cells keep one line and end in an ellipsis; the full value is in the title and in the card', 'drag a heading edge to resize; widths are saved with the column choice (one preference), reset from Columns']],
+      ['Large course', ['Course: Large. 2,400 applications in 240 groups, 80 pages of 30, paged and sorted by the server', 'Filters → Group: search, grouping, chosen pinned, at most 50 listed and scrolled', 'Median by Group: the 8 busiest, then all 240 slowest first, searched and scrolled']],
+      ['Loading', ['first load: skeletons in the shape of the band and the rows', 'later: the old rows stay, dimmed, under a thin progress line; no layout jump', 'search by name: 300 ms after typing, 2 characters at least; a spinner in the field; a newer request supersedes the older']]],
+    A: [['Keeps', ['everything Report Builder gives today, Moodle 5.1 included', 'the new content: Decided cell, Wait, one Outcome, one Group']],
+      ['Loses', ['the reader\'s choice and widths of columns (core switches it off: collapsible(false))', 'the summary band; designed cards (the cards follow the table\'s order)']]],
+    T: [['Measured', ['17 columns; 13 filters; the decider 12 columns from its date', 'long dates of 32 characters, twice a row', 'three state columns: Status, Enrolment now, Outcome']]]
+  };
+  const renderLog = () => {
+    const el = document.getElementById('netlog');
+    if (S.concept !== 'C') { el.hidden = true; return; }
+    el.hidden = false;
+    el.innerHTML = '<h4><span>Requests (simulated web service calls, newest first)</span><span class="xs muted">latency ' + (S.latency / 1000) + ' s</span></h4><ol>' +
+      LOG.map(e => '<li class="' + e.status + '"><span class="fn">' + esc(e.fn) + '</span><span class="p" title="' + esc(JSON.stringify(e.params)) + '">' + esc(JSON.stringify(e.params)) + '</span><span class="st">' +
+        (e.status === 'pending' ? 'waiting…' : e.status === 'cancelled' ? 'superseded' : e.ms + ' ms' + (e.result ? ' · ' + esc(e.result) : '')) + '</span></li>').join('') + '</ol>';
+  };
+
+  /* ---------- Render, keeping focus and scroll positions. ---------- */
+  const device = document.getElementById('device');
+  const body = document.getElementById('pagebody');
+  let lastNarrow = null;
+  const isNarrow = () => body.clientWidth < 576;
+  const render = () => {
+    device.classList.toggle('is-phone', S.vp === 'phone');
+    document.getElementById('coursename').textContent = courseName();
+    const narrow = isNarrow();
+    lastNarrow = narrow;
+    const ae = document.activeElement;
+    const fk = ae && ae.dataset ? ae.dataset.fk : null;
+    const caret = fk && ae.selectionStart !== undefined ? ae.selectionStart : null;
+    const keep = {};
+    body.querySelectorAll('[data-keep]').forEach(e => { keep[e.dataset.keep] = [e.scrollLeft, e.scrollTop]; });
+    body.innerHTML = S.concept === 'C' ? renderC(narrow) : S.concept === 'A' ? renderA(narrow) : renderT();
+    body.querySelectorAll('[data-dist]').forEach(d => d.classList.toggle('narrow', narrow));
+    body.querySelectorAll('[data-keep]').forEach(e => { const k = keep[e.dataset.keep]; if (k) { e.scrollLeft = k[0]; e.scrollTop = k[1]; } });
+    const gw = body.querySelector('.ea-gridwrap[data-keep]');
+    if (gw) { const upd = () => gw.classList.toggle('is-scrolled', gw.scrollLeft > 0); upd(); gw.addEventListener('scroll', upd, {passive: true}); }
+    if (fk) { const i = body.querySelector('[data-fk="' + fk + '"]'); if (i) { i.focus(); if (caret !== null) { i.setSelectionRange(caret, caret); } } }
+    document.getElementById('notes').innerHTML = NOTES[S.concept].map(n => '<div class="note"><h4>' + n[0] + '</h4><ul>' + n[1].map(i => '<li>' + esc(i) + '</li>').join('') + '</ul></div>').join('');
+    renderLog();
+  };
+  new ResizeObserver(() => { if (isNarrow() !== lastNarrow) { render(); } }).observe(body);
+
+  document.querySelectorAll('.switches [data-switch]').forEach(g => g.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) { return; }
+    const k = g.dataset.switch;
+    S[k] = k === 'latency' ? Number(b.dataset.v) : b.dataset.v; S.open = null;
+    g.querySelectorAll('button').forEach(x => x.setAttribute('aria-checked', String(x === b)));
+    if (k === 'reader' || k === 'data') { S.f = emptyF(); S.groupQ = ''; S.grouping = ''; S.allGroups = false; S.search = ''; S.searchOpen = false; coldStart(); }
+    else if (k === 'concept' && S.concept === 'C' && R.rows === null) { coldStart(); }
+    render();
+  }));
+  const syncViewSwitch = () => document.querySelectorAll('[data-switch="view"] button').forEach(x => x.setAttribute('aria-checked', String(x.dataset.v === S.view)));
+
+  /* Debounced search through the web service. */
+  let searchTimer = null;
+  const onSearch = v => {
+    S.search = v;
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      const q = S.search.trim();
+      if (q.length === 1) { return; }
+      refresh();
+      render();
+    }, 300);
+  };
+
+  body.addEventListener('click', e => {
+    const b = e.target.closest('[data-act]');
+    if (!b) { if (S.open && !e.target.closest('.ea-menu, .ea-fpanel')) { S.open = null; render(); } return; }
+    const a = b.dataset.act, v = b.dataset.v;
+    if (b.tagName === 'INPUT' || b.tagName === 'SELECT' || b.getAttribute('aria-disabled') === 'true' && a !== 'resetwidths') { return; }
+    if (b.getAttribute('aria-disabled') === 'true') { return; }
+    let reload = null;
+    switch (a) {
+      case 'filters': case 'columns': case 'viewmenu': S.open = S.open === a ? null : a; break;
+      case 'search': S.searchOpen = true; S.open = null; render(); { const i = body.querySelector('[data-fk="search"]'); if (i) { i.focus(); } } return;
+      case 'download': S.open = null; break;
+      case 'scope': S.scope = v; reload = {}; break;
+      case 'measure': S.measure = v; reload = {rows: S.sort.k === 'wait' || S.f.waited > 0, band: true, resetPage: false}; break;
+      case 'breakdown': S.breakdown = v; break;
+      case 'allgroups': S.allGroups = !S.allGroups; break;
+      case 'preset': S.cols = new Set(PRESETS[v]); savePref(); reload = {band: false, resetPage: false}; break;
+      case 'col': if (S.cols.has(v)) { S.cols.delete(v); } else { S.cols.add(v); } savePref(); reload = {band: false, resetPage: false}; break;
+      case 'resetwidths': S.widths = {}; savePref(); break;
+      case 'view': S.view = v; S.open = null; syncViewSwitch(); break;
+      case 'coretable': S.concept = 'A'; S.open = null;
+        document.querySelectorAll('[data-switch="concept"] button').forEach(x => x.setAttribute('aria-checked', String(x.dataset.v === 'A'))); break;
+      case 'facet': { const set = S.f[b.dataset.k]; if (set.has(v)) { set.delete(v); } else { set.add(v); } reload = {}; break; }
+      case 'waited': S.f.waited = Number(v); reload = {}; break;
+      case 'unchip': if (b.dataset.t === 'f') { S.f[b.dataset.k].delete(v); } else if (b.dataset.t === 'w') { S.f.waited = 0; } else { S.search = ''; S.searchOpen = false; } reload = {}; break;
+      case 'clearall': S.f = emptyF(); S.search = ''; S.searchOpen = false; reload = {}; break;
+      case 'close': S.open = null; break;
+      case 'sort': S.sort = S.sort.k === v ? {k: v, dir: -S.sort.dir} : {k: v, dir: v === 'applicant' ? 1 : -1}; reload = {band: false}; break;
+      case 'page': S.page = Number(v); reload = {band: false, resetPage: false};
+        { const gw = body.querySelector('.ea-gridwrap'); if (gw) { gw.scrollTop = 0; } } break;
+      case 'more': { const id = Number(v); if (S.more.has(id)) { S.more.delete(id); } else { S.more.add(id); } break; }
+    }
+    if (reload) { refresh(reload); }
+    render();
+    if (S.open && a === S.open) { const m = body.querySelector('.ea-menu:not([hidden]) .ea-menu-item, .ea-fpanel:not([hidden]) button, .ea-fpanel:not([hidden]) input'); if (m) { m.focus(); } }
+  });
+  body.addEventListener('input', e => {
+    const a = e.target.dataset.act;
+    if (a === 'search') { onSearch(e.target.value); }
+    if (a === 'groupq') { S.groupQ = e.target.value; render(); }
+    if (a === 'allgroupsq') { S.allGroupsQ = e.target.value; render(); }
+  });
+  body.addEventListener('change', e => {
+    const a = e.target.dataset.act;
+    if (a === 'grouping') { S.grouping = e.target.value; render(); }
+    if (a === 'perpage') { S.perpage = Number(e.target.value); refresh({band: false}); render(); }
+  });
+  body.addEventListener('focusout', e => {
+    if (e.target.dataset && e.target.dataset.act === 'search' && !e.target.value) { setTimeout(() => { if (!S.search && document.activeElement?.dataset?.fk !== 'search') { S.searchOpen = false; render(); } }, 150); }
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && S.open) { const was = S.open; S.open = null; render(); const t = body.querySelector('[data-act="' + was + '"]'); if (t) { t.focus(); } }
+  });
+
+  /* Column resizing: the drag changes the col element only; the width is saved once, on release, with the preference. */
+  let drag = null;
+  const setWidth = (k, w) => {
+    const c = COL[k];
+    w = Math.max(c.min, Math.min(600, Math.round(w)));
+    const col = body.querySelector('col[data-col="' + k + '"]');
+    const table = body.querySelector('.ea-gridwrap[data-keep] table');
+    if (!col || !table) { return w; }
+    col.style.width = w + 'px';
+    S.widths[k] = w;
+    table.style.width = activeCols().reduce((s, x) => s + width(x.k), 0) + 'px';
+    const h = body.querySelector('[data-rsz="' + k + '"]'); if (h) { h.setAttribute('aria-valuenow', w); }
+    return w;
+  };
+  body.addEventListener('pointerdown', e => {
+    const h = e.target.closest('[data-rsz]'); if (!h) { return; }
+    e.preventDefault(); e.stopPropagation();
+    drag = {k: h.dataset.rsz, x: e.clientX, w: width(h.dataset.rsz), h};
+    h.classList.add('on'); h.setPointerCapture(e.pointerId);
+  });
+  body.addEventListener('pointermove', e => { if (drag) { setWidth(drag.k, drag.w + e.clientX - drag.x); } });
+  body.addEventListener('pointerup', () => { if (drag) { drag.h.classList.remove('on'); drag = null; savePref(); } });
+  body.addEventListener('dblclick', e => {
+    const h = e.target.closest('[data-rsz]'); if (!h) { return; }
+    delete S.widths[h.dataset.rsz]; savePref(); render();
+  });
+  body.addEventListener('keydown', e => {
+    const h = e.target.closest('[data-rsz]'); if (!h || !['ArrowLeft', 'ArrowRight'].includes(e.key)) { return; }
+    e.preventDefault();
+    setWidth(h.dataset.rsz, width(h.dataset.rsz) + (e.key === 'ArrowRight' ? 16 : -16));
+    clearTimeout(h._t); h._t = setTimeout(savePref, 500);
+  });
+
+  coldStart();
+  render();
+})();
+</script>
+</body>
+</html>
