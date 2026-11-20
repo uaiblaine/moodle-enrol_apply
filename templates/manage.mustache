@@ -32,7 +32,8 @@
     * sesskey string - session key guarding the state change
     * capacityhtml string - the decision context above the table, already rendered. OUTSIDE the
       decision form, because it is not a control and because a method whose applicant limit is
-      reached has an EMPTY queue, and its numbers are what explain that
+      reached has an EMPTY queue, and its numbers are what explain that. Empty on the queues that
+      span methods, which have no single method's numbers to show
     * filtershtml string - the controls narrowing the queue, already rendered. It is a GET form,
       so it CANNOT sit inside the decision form below - HTML forbids nested forms, and nesting it
       would make the search box submit a decision
@@ -63,6 +64,14 @@
       from the table and the action from the bar. Core does the same in grade/templates/edit_tree
       and the sticky footer is never moved in the DOM - its placement is CSS, not JavaScript, so
       the inputs inside it post normally.
+    * decisionoptionslabel string - the summary of the decision options' details, which holds
+      them above the table so that they are where the decider starts (MQ-D5). With JavaScript
+      enrol_apply/manage hides the details and moves the region inside it, data-region
+      "decisioncontrols", into the decision sheet while the sheet is open, and back before it posts,
+      so what posts is still this one form
+    * hasspansnote boolean - whether the queue spans enrolment methods (the site-wide and mentee
+      queues), where one message reaches every application decided without JavaScript
+    * spansnote string - the sentence saying so
     * everything enrol_apply/decision_controls requires - the group chooser, the role chooser
       and the message box are that partial's, shared with the single-application review page so
       the two decision surfaces cannot drift. See it for what each variable means and for which
@@ -82,12 +91,15 @@
         "keyonlynotice": "This method enrols by group key only; nothing waits for a decision.",
         "hasscopeline": true,
         "scopeline": "You see the applications of: Turma A, Turma B",
-        "capacityhtml": "<div class=\"card\"><div class=\"card-body\">12 awaiting decision</div></div>",
+        "capacityhtml": "<div class=\"card\"><div class=\"card-body\">8 of 20 places taken</div></div>",
         "tablehtml": "<table class=\"generaltable\"><tbody><tr><td>Student 1</td></tr></tbody></table>",
         "filtershtml": "<form method=\"get\"><input type=\"text\" name=\"search\" value=\"\"></form>",
         "hasshowing": true,
         "showingtext": "Showing 1-4 of 4",
-        "stickyfooter": "<div id=\"sticky-footer\"><button type=\"submit\">Go</button></div>",
+        "stickyfooter": "<div id=\"sticky-footer\"><button type=\"submit\" name=\"formaction\" value=\"confirm\">Confirm</button></div>",
+        "decisionoptionslabel": "Decision options: applied to every application you decide",
+        "hasspansnote": true,
+        "spansnote": "One message reaches every application you decide. Decide each method's applications separately to word them differently.",
         "messagelabel": "Message to the applicant",
         "messagehelp": "Included in the message they receive. Optional.",
         "messagevalue": "",
@@ -135,6 +147,22 @@
     {{#candecide}}
     <form id="enrol_apply_manage_form" class="enrol_apply-manage" method="post" action="{{formurl}}">
         <input type="hidden" name="sesskey" value="{{sesskey}}">
+        {{!
+            The form's default button, first in it and disabled, so that Enter in a control of the
+            form submits nothing: the first of the footer's buttons is Cancel applications, which
+            would otherwise be the default and unenrol the selection (see "Cancelling asks" in the
+            plugin's CLAUDE.md).
+        }}
+        <button type="submit" class="d-none" disabled aria-hidden="true" tabindex="-1">{{#str}}none, core{{/str}}</button>
+        <details class="enrol_apply-decisionoptions mb-3" data-region="decisionoptions" open>
+            <summary>{{decisionoptionslabel}}</summary>
+            <div class="enrol_apply-decisionoptions-body">
+                {{#hasspansnote}}<p class="form-text mt-0">{{spansnote}}</p>{{/hasspansnote}}
+                <div class="enrol_apply-decisioncontrols" data-region="decisioncontrols">
+                    {{> enrol_apply/decision_controls }}
+                </div>
+            </div>
+        </details>
     {{/candecide}}
     {{^candecide}}
     <div class="alert alert-info" role="status">{{viewonlynotice}}</div>
@@ -145,7 +173,6 @@
         </div>
         <div class="enrol_apply-showing small text-muted mb-3{{^hasshowing}} d-none{{/hasshowing}}" data-region="showing">{{showingtext}}</div>
     {{#candecide}}
-        {{> enrol_apply/decision_controls }}
         {{{stickyfooter}}}
     </form>
     {{/candecide}}

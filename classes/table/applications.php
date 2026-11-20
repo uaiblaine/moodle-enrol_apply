@@ -23,6 +23,7 @@ use core_table\local\filter\filterset;
 use core_table\local\filter\integer_filter;
 use core_table\local\filter\string_filter;
 use enrol_apply\local\commentlabel;
+use enrol_apply\local\decidingrole;
 use enrol_apply\local\identity;
 use enrol_apply\local\queue;
 use enrol_apply\local\coursefilter;
@@ -132,6 +133,12 @@ class applications extends \table_sql implements dynamic_table {
 
     /** @var array "courseid:userid" => true, for the applicants whose profile opens; see query_db(). */
     protected $profilelinks = [];
+
+    /**
+     * @var array Enrol instance id => object with name (plain) and deciding, for the methods of this
+     *     page, on the queues that span methods only; see query_db().
+     */
+    protected $methods = [];
 
     /** @var \stdClass|null The identity SELECT/JOIN, resolved once in set_filterset(). */
     protected $identitysql = null;
@@ -990,7 +997,8 @@ class applications extends \table_sql implements dynamic_table {
                    COALESCE(s.comment, ai.comment) AS applycomment, s.id AS submissionid,
                    s.keyoutcome, u.deleted AS userdeleted,
                    c.fullname AS course,
-                   c.id AS courseid, {$priorsql}, {$userfields}{$this->identitysql->selects}";
+                   c.id AS courseid, e.id AS enrolid, e.name AS enrolname, e.roleid AS enrolroleid,
+                   e.customchar1 AS enrolkeymode, {$priorsql}, {$userfields}{$this->identitysql->selects}";
         $from = "{user_enrolments} ue
             LEFT JOIN {enrol_apply_applicationinfo} ai ON ai.userenrolmentid = ue.id
             LEFT JOIN {enrol_apply_submission} s ON s.userenrolmentid = ue.id
@@ -1211,6 +1219,10 @@ class applications extends \table_sql implements dynamic_table {
             $this->column_class('snapshot', 'enrol_apply-col-answers');
         }
         $this->column_class('applycomment', 'enrol_apply-col-comment');
+        // The short cells, which keep a width of their own and share a line on a card.
+        foreach (['course', 'keygroup', 'applydate'] as $short) {
+            $this->column_class($short, 'enrol_apply-col-short');
+        }
 
         /* Names the cell that identifies each row, so table_sql emits it as a
            <th scope="row"> and a screen reader announces every other cell of the row
@@ -1453,11 +1465,28 @@ class applications extends \table_sql implements dynamic_table {
             ]
         );
 
+        /* What the decision sheet reads off a selected row (amd/src/manage.js): the method the
+           application belongs to, and on the queues that span methods its name, its course and
+           whether its role decides. Plain spellings: html_writer escapes attribute values, and the
+           module reads them back through dataset and writes them with textContent. Nothing here is
+           new to this reader, who sees the course and the method in the row itself. */
+        $attributes = ['data-region' => 'applicant', 'data-enrolid' => (int) $row->enrolid];
+        $method = $this->methods[(int) $row->enrolid] ?? null;
+        if ($method !== null) {
+            $attributes['data-methodname'] = $method->name;
+            $attributes['data-coursename'] = format_string($row->course, true, [
+                'context' => context_course::instance((int) $row->courseid),
+                'escape' => false,
+            ]);
+            $attributes['data-deciding'] = $method->deciding ? '1' : '0';
+        }
+
         return html_writer::div(
             $OUTPUT->user_picture($user, ['popup' => true])
                 . html_writer::div($lines, 'enrol_apply-applicanttext')
                 . $review,
-            'enrol_apply-applicant'
+            'enrol_apply-applicant',
+            $attributes
         );
     }
 
@@ -1528,16 +1557,34 @@ class applications extends \table_sql implements dynamic_table {
     }
 
     /**
-     * The course column, linking to the course.
+     * The course column, linking to the course, with the enrolment method under it.
+     *
+     * Only the site-wide and mentee queues have this column, and they are the queues whose
+     * selection can span methods: two methods of one course share a course name, so the method's
+     * name is the second line (MQ-D15), with a warning label when its role decides applications
+     * (MQ-D16), the C-D29 rule read once per method in query_db(). The method name is escaped here,
+     * flexible_table writing the cell unescaped.
      *
      * @param stdClass $row Row data.
      * @return string Rendered cell.
      */
     public function col_course($row) {
         $url = new moodle_url('/course/view.php', ['id' => $row->courseid]);
-
-        return $this->card_label(s(get_string('course')))
+        $cell = $this->card_label(s(get_string('course')))
             . html_writer::link($url, format_string($row->course), ['target' => '_blank']);
+
+        $method = $this->methods[(int) $row->enrolid] ?? null;
+        if ($method === null) {
+            return $cell;
+        }
+
+        return $cell . html_writer::div(
+            html_writer::span(s($method->name), 'enrol_apply-methodname')
+                . ($method->deciding
+                    ? ' ' . $this->status_label(get_string('queuegrantsdecidingrole', 'enrol_apply'), 'warning')
+                    : ''),
+            'enrol_apply-methodline small text-muted'
+        );
     }
 
     /**
@@ -1635,6 +1682,54 @@ class applications extends \table_sql implements dynamic_table {
                 $this->visiblegroups = array_fill_keys(groupvisibility::visible_ids($groups, (int) $USER->id), true);
             }
         }
+
+        /* Which method each row belongs to, on the queues that span methods (MQ-D15, MQ-D16): its
+           name, and whether its role decides applications in its course, the C-D29 rule. Judged
+           once per method of the page, from the columns the listing already selects, because the
+           role's answer is a capability resolution per call. */
+        $this->methods = [];
+        if ($this->scope->instance === null) {
+            foreach ((array) $this->rawdata as $row) {
+                $enrolid = (int) $row->enrolid;
+                if (isset($this->methods[$enrolid])) {
+                    continue;
+                }
+                $instance = (object) [
+                    'id' => $enrolid,
+                    'enrol' => 'apply',
+                    'courseid' => (int) $row->courseid,
+                    'name' => (string) ($row->enrolname ?? ''),
+                    'roleid' => (int) ($row->enrolroleid ?? 0),
+                    'customchar1' => $row->enrolkeymode,
+                ];
+                $this->methods[$enrolid] = (object) [
+                    'name' => self::method_name($instance),
+                    'deciding' => decidingrole::method_decides($instance),
+                ];
+            }
+        }
+    }
+
+    /**
+     * A method's name in the PLAIN spelling, for a data attribute and for s() in a cell.
+     *
+     * The plugin's get_instance_name() returns two spellings: a custom name through
+     * format_string() with its default escaping, and the plugin's own wording, a bare lang string,
+     * when the method has none. The custom name is therefore formatted here without escaping, and
+     * the lang string is taken as it is, so every caller escapes exactly once.
+     *
+     * @param stdClass $instance The {enrol} record, or the fields of it the listing selects.
+     * @return string The name, plain spelling.
+     */
+    protected static function method_name(stdClass $instance): string {
+        if (empty($instance->name)) {
+            return enrol_get_plugin('apply')->get_instance_name($instance);
+        }
+
+        return format_string($instance->name, true, [
+            'context' => context_course::instance((int) $instance->courseid),
+            'escape' => false,
+        ]);
     }
 
     /**

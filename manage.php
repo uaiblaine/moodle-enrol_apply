@@ -236,20 +236,19 @@ if ($formaction !== '' && $userenrolments) {
         exit;
     }
 
-    $enrolapply = enrol_get_plugin('apply');
-    switch ($formaction) {
-        case 'confirm':
-            $decided = $enrolapply->confirm_enrolment($userenrolments, $outcomemessage, $decision);
-            break;
-        case 'wait':
-            $decided = $enrolapply->wait_enrolment($userenrolments, $outcomemessage, $decision);
-            break;
-        case 'cancel':
-            $decided = $enrolapply->cancel_enrolment($userenrolments, $outcomemessage, $decision);
-            break;
-        default:
-            throw new moodle_exception('invalidformaction', 'enrol_apply');
-    }
+    /* One message per enrolment method, keyed by its id, which the decision sheet asks for when a
+       selection on the site-wide or mentee queue spans methods (MQ-D15). PARAM_TEXT for the same
+       reason as the plain message. Which method a row belongs to is read from the database by
+       decision::apply(), never from these keys; an empty array is today's single call. */
+    $outcomemessages = optional_param_array('outcomemessages', [], PARAM_TEXT);
+
+    $decided = \enrol_apply\local\decision::apply(
+        $formaction,
+        $userenrolments,
+        $outcomemessage,
+        $outcomemessages,
+        $decision
+    );
 
     /* Report what the decision methods actually did. Each silently skips a row it will not act
        on - no longer awaiting a decision, in a course this operator may not decide in, or with

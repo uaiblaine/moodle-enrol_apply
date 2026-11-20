@@ -487,9 +487,10 @@ final class group_queue_test extends \advanced_testcase {
         $this->assertSame(groupfilter::MINE, $filters[groupfilter::NAME]);
         [$rows] = $this->queue_for($filters);
         $this->assertCount(2, $rows, 'Turma 2 and Turma 10, not the keyless one');
-        /* Two links say `all`: the chip's remove link and clear-all. The option itself is
-           value="all", and every other url of the page carries the applied group=mine. */
-        $this->assertSame(2, substr_count($this->page_for($filters), 'group=all'));
+        /* Three links say `all`: the chip's remove link, clear-all and the Filters panel's "Clear
+           filters", which is clear-all's url. The option itself is value="all", and every other url
+           of the page, the status control's included, carries the applied group=mine. */
+        $this->assertSame(3, substr_count($this->page_for($filters), 'group=all'));
 
         $_GET[groupfilter::NAME] = groupfilter::ANY;
         $filters = applications::request_filters($listing);
@@ -512,13 +513,15 @@ final class group_queue_test extends \advanced_testcase {
     }
 
     /**
-     * The deferred tile counts the reader's scope, beside the waiting tile, and says so (V-D3).
+     * The deferred count counts the reader's scope, beside the waiting one, and says so (V-D3).
      *
-     * One deferred application in the moderator's group and one in another: the moderator's tile
-     * reads 1 "in your groups", the editing teacher's reads 2, the method's figure.
+     * One deferred application in the moderator's group and one in another: the moderator's status
+     * control reads 1 deferred "in your groups", the editing teacher's reads 2, the method's figure.
+     * The count was the band's deferred tile until it moved into the status control (MQ-D3); the
+     * test keeps its name for the gates that hold it.
      *
-     * Changes that must make it fail: the tile read from capacity::deferred() for a narrowed
-     * reader, or the scope dropped from scope_deferred().
+     * Changes that must make it fail: the count read from capacity::deferred() for a narrowed
+     * reader, the scope dropped from scope_deferred(), or the note dropped.
      *
      * @return void
      */
@@ -530,13 +533,15 @@ final class group_queue_test extends \advanced_testcase {
         $this->application_in($this->ten);
         $DB->set_field('user_enrolments', 'status', ENROL_APPLY_USER_WAIT, ['id' => $mine]);
         $DB->set_field('user_enrolments', 'status', ENROL_APPLY_USER_WAIT, ['id' => $theirs]);
-        $deferred = preg_quote(get_string('queuedeferred', 'enrol_apply'), '/');
+        $deferred = '~data-region="statuscell" data-status="' . ENROL_APPLY_USER_WAIT . '"[^>]*>'
+            . '<span class="enrol_apply-seg-label">' . preg_quote(s(get_string('submissionstatuswaiting', 'enrol_apply')), '~')
+            . '</span>\s*<small class="enrol_apply-seg-count">%d</small>~';
 
         $this->setUser($this->moderator);
         [, $table] = $this->queue_for();
         $this->assertSame(1, $table->scope_deferred());
         $html = $this->page_for();
-        $this->assertMatchesRegularExpression('/>1<\/span>\s*<span class="enrol_apply-tilelabel">' . $deferred . '/', $html);
+        $this->assertMatchesRegularExpression(sprintf($deferred, 1), $html);
         $this->assertStringContainsString(get_string('queueinyourgroups', 'enrol_apply'), $html);
 
         $this->setUser($this->editing);
@@ -544,7 +549,7 @@ final class group_queue_test extends \advanced_testcase {
         $this->assertSame(2, $table->scope_deferred());
         $this->assertSame(\enrol_apply\local\capacity::deferred($this->instance), $table->scope_deferred());
         $html = $this->page_for();
-        $this->assertMatchesRegularExpression('/>2<\/span>\s*<span class="enrol_apply-tilelabel">' . $deferred . '/', $html);
+        $this->assertMatchesRegularExpression(sprintf($deferred, 2), $html);
         $this->assertStringNotContainsString(get_string('queueinyourgroups', 'enrol_apply'), $html);
     }
 

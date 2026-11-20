@@ -14,13 +14,24 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Fills the gaps core leaves in the applications queue's bulk bar and filter bar.
+ * Fills the gaps core leaves in the applications queue's decision bar and filter bar, and opens the
+ * decision sheet.
  *
- * The bulk action's initial state: core/checkbox-toggleall's init() only binds click handlers, so
- * nothing disables the action until the first click. Core callers hardcode the disabled attribute
- * in their markup instead; this queue must stay operable without JavaScript, so the action is
- * disabled from here. That relies on the styles.css rule that puts the sticky footer back on
- * screen when no script ran; the two go together.
+ * The decisions' initial state: core/checkbox-toggleall's init() only binds click handlers, so
+ * nothing disables the footer's three buttons until the first click. Core callers hardcode the
+ * disabled attribute in their markup instead; this queue must stay operable without JavaScript, so
+ * the buttons are disabled from here. That relies on the styles.css rule that puts the sticky
+ * footer back on screen when no script ran; the two go together.
+ *
+ * The decision sheet (MQ-D5, MQ-D6): a press on Cancel applications, Defer or Confirm opens a
+ * core/modal naming the selected applicants instead of posting. Its body holds the page's own
+ * decision fields, MOVED in from the decision options above the table and moved back before
+ * anything posts, so the one form that posts is still #enrol_apply_manage_form and no input is ever
+ * copied. Its decision button submits that form with form.submit() and a hidden formaction this
+ * module writes, because a programmatic submit posts no submitter. A selection spanning enrolment
+ * methods (the site-wide and mentee queues only) gets a section and a message box per method,
+ * posted as outcomemessages[<enrolid>] and grouped by method again on the server from the
+ * database, never from these keys (MQ-D15, MQ-D16).
  *
  * Table refreshes: refreshTableContent() replaces the whole table region on a page turn, a sort or
  * a filter change, while the bulk bar (in the sticky footer), the filter bar's chips, clear-all
@@ -41,10 +52,12 @@
 import {setFilters, getFilters} from 'core_table/dynamic';
 import CheckboxToggleAll from 'core/checkbox-toggleall';
 import DynamicTableEvents from 'core_table/local/dynamic/events';
+import Modal from 'core/modal';
+import ModalEvents from 'core/modal_events';
 import Notification from 'core/notification';
 import Templates from 'core/templates';
 import {subscribe} from 'core/pubsub';
-import {getString} from 'core/str';
+import {getString, getStrings} from 'core/str';
 
 const SELECTORS = {
     FORM: '#enrol_apply_manage_form',
@@ -53,14 +66,39 @@ const SELECTORS = {
     TABLE: '[data-region="core_table/dynamic"]',
     FILTERS: '[data-region="queuefilters"]',
     SEARCH: '[data-region="searchinput"]',
-    STATUS: '[data-region="statusselect"]',
+    STATUSCELL: '[data-region="statuscell"]',
     FIELD: '[data-region="filterfield"]',
+    PANEL: '[data-region="filterpanel"]',
+    PANELCOUNT: '[data-region="filterpanelcount"]',
     CHIPROW: '[data-region="chiprow"]',
     CLEARALL: '[data-region="clearall"]',
+    CLEARFILTERS: '[data-region="clearfilters"]',
     FILTERCOUNT: '[data-region="filtercount"]',
     SHOWING: '[data-region="showing"]',
     CHIPREMOVE: '.enrol_apply-chipremove',
+    DECIDE: '[data-region="decide"]',
+    OPTIONS: '[data-region="decisionoptions"]',
+    CONTROLS: '[data-region="decisioncontrols"]',
+    SELECTED: 'input[name="userenrolments[]"]:checked',
+    APPLICANT: '[data-region="applicant"]',
+    /* The parts of the decision fields that belong to an approval alone: hidden in the sheet for a
+       deferral or a cancellation, which read the note and the message only. */
+    CONFIRMONLY: '.enrol_apply-decisiongroups, .enrol_apply-decisionrole, .enrol_apply-decisionsummary',
+    MESSAGE: '.enrol_apply-outcomemessage',
 };
+
+/**
+ * @var {Object} The sheet's strings per decision, literal ids rather than built ones, so every id
+ *     can be found by a search of the lang file.
+ */
+const SHEET = {
+    confirm: {title: 'queuesheetconfirm', one: 'queuesheetconfirmone', commit: 'queuesheetconfirmcommit'},
+    wait: {title: 'queuesheetwait', one: 'queuesheetwaitone', commit: 'queuesheetwaitcommit'},
+    cancel: {title: 'queuesheetcancel', one: 'queuesheetcancelone', commit: 'queuesheetcancelcommit'},
+};
+
+/** @var {Number} How many applicants the sheet names before "and N more". */
+const NAMED = 5;
 
 /** @var {Number} How long to wait after the last keystroke before narrowing the queue. */
 const DEBOUNCE = 250;
@@ -111,6 +149,12 @@ let pending = null;
 let refreshing = false;
 
 /**
+ * @var {Boolean} Whether a decision sheet is open or opening: the decision fields can be in one
+ *     dialogue only, so a second press while the first sheet is being built opens nothing.
+ */
+let sheetopen = false;
+
+/**
  * Every bulk action control belonging to this queue's toggle group.
  *
  * @param {String} group The checkbox-toggleall group the table and the bar share.
@@ -151,12 +195,12 @@ const setSelected = (group, count) => {
  * The controls are the only state; this module keeps no copy that could drift from what the
  * operator sees.
  *
- * @return {Object} search, status and statuslabel ('' when not applied), and fields: one entry
- *     ({token, value, label, text}) per field filter that holds a value.
+ * @return {Object} search and status ('' when not applied), and fields: one entry
+ *     ({token, value, label, text}) per field filter, the Filters panel's, that holds a value.
  */
 const currentFilters = () => {
     const search = document.querySelector(SELECTORS.SEARCH);
-    const status = document.querySelector(SELECTORS.STATUS);
+    const status = document.querySelector(SELECTORS.STATUSCELL + '[aria-current="true"]');
 
     /* One entry per control on the page, so a field added to the setting needs no change here.
        The label comes from the control's data-filterlabel, so a chip repeats the control's own
@@ -176,10 +220,25 @@ const currentFilters = () => {
 
     return {
         search: search ? search.value.trim() : '',
-        status: status ? status.value : '',
-        statuslabel: status && status.selectedIndex >= 0 ? status.options[status.selectedIndex].text : '',
+        status: status ? status.dataset.status : '',
         fields,
     };
+};
+
+/**
+ * Make one value of the status control the current one.
+ *
+ * @param {String} value The status parameter's value, empty for every status.
+ * @return {void}
+ */
+const setStatus = (value) => {
+    document.querySelectorAll(SELECTORS.STATUSCELL).forEach((cell) => {
+        if (cell.dataset.status === value) {
+            cell.setAttribute('aria-current', 'true');
+        } else {
+            cell.removeAttribute('aria-current');
+        }
+    });
 };
 
 /**
@@ -326,6 +385,18 @@ const syncAddressBar = () => {
     TABLE_PARAMS.forEach((name) => url.searchParams.delete(name));
 
     window.history.replaceState({}, '', url.toString());
+
+    /* Each status value stays a link to this listing with that status, as the server built it, so
+       opening one in a new tab carries the filters applied since the page loaded. */
+    document.querySelectorAll(SELECTORS.STATUSCELL).forEach((cell) => {
+        const target = new URL(url.toString());
+        if (cell.dataset.status === '') {
+            target.searchParams.delete('status');
+        } else {
+            target.searchParams.set('status', cell.dataset.status);
+        }
+        cell.href = target.toString();
+    });
 };
 
 /**
@@ -342,11 +413,11 @@ const renderChip = (chip) => getString('queueremovefilter', 'enrol_apply', {
 }).then((removelabel) => Templates.render('enrol_apply/queue_chip', {...chip, removelabel}));
 
 /**
- * Redraw the chip row and the count for the filters now applied.
+ * Redraw the chip row, the panel's loud counter and the clear controls for the filters applied.
  *
  * The chips are rendered from the same partial the server uses (enrol_apply/queue_chip), so the
- * markup exists once. The status chip takes its wording from the selected option's text, so the
- * chip and the control cannot word the same state differently.
+ * markup exists once. The status has no chip, as on the server: the status control says which
+ * value is current.
  *
  * @return {Promise} Resolved once the row has been redrawn.
  */
@@ -357,18 +428,23 @@ const redrawChips = () => {
         return Promise.resolve();
     }
 
-    const {search, status, statuslabel, fields} = currentFilters();
+    const {search, fields} = currentFilters();
 
-    return Promise.all([
-        getString('queuesearch', 'enrol_apply'),
-        getString('queuefilterstatus', 'enrol_apply'),
-    ]).then(([searchname, statusname]) => {
+    // One per panel filter in force, as renderer::queue_filters_context() counts them.
+    const badge = document.querySelector(SELECTORS.PANELCOUNT);
+    if (badge) {
+        badge.textContent = String(fields.length);
+        badge.hidden = fields.length === 0;
+    }
+    const clearfilters = document.querySelector(SELECTORS.CLEARFILTERS);
+    if (clearfilters) {
+        clearfilters.href = urlWithout(null);
+    }
+
+    return getString('queuesearch', 'enrol_apply').then((searchname) => {
         const wanted = [];
         if (search !== '') {
             wanted.push({filter: 'search', name: searchname, value: search, removeurl: urlWithout('search')});
-        }
-        if (status !== '') {
-            wanted.push({filter: 'status', name: statusname, value: statuslabel, removeurl: urlWithout('status')});
         }
         // Field labels come from the controls themselves; see currentFilters().
         fields.forEach((field) => {
@@ -466,7 +542,6 @@ const redrawShowing = (tableRoot) => {
  */
 const removeFilter = (drop, href) => {
     const search = document.querySelector(SELECTORS.SEARCH);
-    const status = document.querySelector(SELECTORS.STATUS);
 
     const reload = Array.from(document.querySelectorAll(SELECTORS.FIELD)).some((el) => el.dataset.reloadonremove
         && (drop === null || drop === el.dataset.filter)
@@ -479,8 +554,8 @@ const removeFilter = (drop, href) => {
     if ((drop === null || drop === 'search') && search) {
         search.value = '';
     }
-    if ((drop === null || drop === 'status') && status) {
-        status.value = '';
+    if (drop === null || drop === 'status') {
+        setStatus('');
     }
     document.querySelectorAll(SELECTORS.FIELD).forEach((el) => {
         if (drop === null || drop === el.dataset.filter) {
@@ -499,6 +574,329 @@ const removeFilter = (drop, href) => {
     if (tableRoot) {
         applyFilters(tableRoot);
     }
+};
+
+/**
+ * What the sheet names of one selected row, read off the row the server rendered for this reader.
+ *
+ * Nothing is fetched: the picture, the name and the method are the row's own markup and data
+ * attributes, so the sheet discloses nothing the page did not already show.
+ *
+ * @param {HTMLInputElement} checkbox A selected row's checkbox.
+ * @return {Object} name, picture (a detached copy of core's picture, or null), and the method:
+ *     enrolid, methodname, coursename, deciding.
+ */
+const selectedRow = (checkbox) => {
+    const row = checkbox.closest('tr');
+    const applicant = row ? row.querySelector(SELECTORS.APPLICANT) : null;
+    if (!applicant) {
+        return {name: checkbox.value, picture: null, enrolid: '', methodname: '', coursename: '', deciding: false};
+    }
+
+    const nameNode = applicant.querySelector('.enrol_apply-applicantname');
+    const pictureNode = applicant.querySelector('.userpicture, .userinitials');
+    let picture = null;
+    if (pictureNode) {
+        // The picture without its link: the sheet repeats the picture, never the profile link (section 4).
+        picture = pictureNode.cloneNode(true);
+        picture.removeAttribute('id');
+        picture.setAttribute('aria-hidden', 'true');
+        if (picture.tagName === 'IMG') {
+            picture.alt = '';
+        }
+    }
+
+    return {
+        name: nameNode ? nameNode.textContent.trim() : '',
+        picture,
+        enrolid: applicant.dataset.enrolid || '',
+        methodname: applicant.dataset.methodname || '',
+        coursename: applicant.dataset.coursename || '',
+        deciding: applicant.dataset.deciding === '1',
+    };
+};
+
+/**
+ * The list of applicants a sheet or one of its sections names: the first five, then "and N more".
+ *
+ * @param {Array} rows What selectedRow() read, for the applicants to name.
+ * @param {String} more The "and N more" wording for this list, empty when it names everybody.
+ * @return {HTMLElement} The list.
+ */
+const whoList = (rows, more) => {
+    const list = document.createElement('ul');
+    list.className = 'enrol_apply-sheetwho';
+    rows.slice(0, NAMED).forEach((row) => {
+        const item = document.createElement('li');
+        if (row.picture) {
+            item.appendChild(row.picture.cloneNode(true));
+        }
+        const name = document.createElement('span');
+        name.textContent = row.name;
+        item.appendChild(name);
+        list.appendChild(item);
+    });
+    if (more !== '') {
+        const item = document.createElement('li');
+        item.className = 'enrol_apply-sheetmore';
+        item.textContent = more;
+        list.appendChild(item);
+    }
+
+    return list;
+};
+
+/**
+ * A paragraph or alert of the sheet, worded with textContent.
+ *
+ * @param {String} tag The element to create.
+ * @param {String} className Its classes.
+ * @param {String} text Its wording, a lang string.
+ * @return {HTMLElement} The element.
+ */
+const sheetLine = (tag, className, text) => {
+    const node = document.createElement(tag);
+    node.className = className;
+    node.textContent = text;
+
+    return node;
+};
+
+/**
+ * Text as html, for the two parts of core/modal that take markup: the title and the footer.
+ *
+ * @param {String} text Plain text, a lang string with a number in it.
+ * @return {String} The same text, escaped.
+ */
+const escapeHtml = (text) => {
+    const node = document.createElement('span');
+    node.textContent = text;
+
+    return node.innerHTML;
+};
+
+/**
+ * The selection grouped by enrolment method, in the order the methods first appear.
+ *
+ * @param {Array} rows What selectedRow() read for every selected row.
+ * @return {Array} One {enrolid, methodname, coursename, deciding, rows} per method.
+ */
+const byMethod = (rows) => {
+    const methods = [];
+    rows.forEach((row) => {
+        let method = methods.find((candidate) => candidate.enrolid === row.enrolid);
+        if (!method) {
+            method = {
+                enrolid: row.enrolid,
+                methodname: row.methodname,
+                coursename: row.coursename,
+                deciding: row.deciding,
+                rows: [],
+            };
+            methods.push(method);
+        }
+        method.rows.push(row);
+    });
+
+    return methods;
+};
+
+/**
+ * One section of a sheet whose selection spans methods: the method, its course and count, the
+ * label of a deciding method, the applicants, and the message box for them.
+ *
+ * The box is created here and posted from the hidden holder in the form (see commit()); its name
+ * is outcomemessages[<enrolid>], an enrol id the server only uses as a key to look up, grouping the
+ * posted rows by the method the database names.
+ *
+ * @param {Object} method One entry of byMethod().
+ * @param {Object} words The sheet's strings: messagelabel, deciding, and more (a function of a count).
+ * @param {Number} index The section's position, for unique ids.
+ * @return {HTMLElement} The section.
+ */
+const methodSection = (method, words, index) => {
+    const section = document.createElement('section');
+    section.className = 'enrol_apply-sheetsection';
+
+    const head = document.createElement('div');
+    head.className = 'enrol_apply-sheetsectionhead';
+    head.id = 'enrol_apply_sheetmethod_' + index;
+    head.appendChild(sheetLine('strong', '', method.methodname));
+    head.appendChild(sheetLine('span', 'enrol_apply-sheetcourse', method.coursename + ' · ' + method.rows.length));
+    if (method.deciding) {
+        head.appendChild(sheetLine('span', 'enrol_apply-status enrol_apply-status--warning', words.deciding));
+    }
+    section.appendChild(head);
+
+    const hidden = method.rows.length - NAMED;
+    section.appendChild(whoList(method.rows, hidden > 0 ? words.more[method.rows.length] : ''));
+
+    const id = 'enrol_apply_sheetmessage_' + index;
+    const label = sheetLine('label', 'form-label', words.messagelabel);
+    label.htmlFor = id;
+    const box = document.createElement('textarea');
+    box.className = 'form-control';
+    box.id = id;
+    box.rows = 2;
+    box.name = 'outcomemessages[' + method.enrolid + ']';
+    box.setAttribute('aria-describedby', head.id);
+    section.appendChild(label);
+    section.appendChild(box);
+
+    return section;
+};
+
+/**
+ * Open the decision sheet for one of the footer's three decisions.
+ *
+ * Moves the page's decision fields into the dialogue and back when it closes, by any route: Back,
+ * the close cross, Escape or a press outside all hide the modal, and the hidden event puts the
+ * fields home and discards the sheet's own message boxes, so nothing is posted. Only the decision
+ * button posts, through commit().
+ *
+ * @param {HTMLButtonElement} button The footer button pressed; its value is the decision.
+ * @return {Promise} Resolved once the sheet is shown.
+ */
+const openSheet = async(button) => {
+    const form = document.querySelector(SELECTORS.FORM);
+    const controls = form ? form.querySelector(SELECTORS.CONTROLS) : null;
+    const action = button.value;
+    const rows = form ? Array.from(form.querySelectorAll(SELECTORS.SELECTED)).map(selectedRow) : [];
+    if (!controls || !SHEET[action] || !rows.length || sheetopen) {
+        return;
+    }
+    sheetopen = true;
+    const methods = byMethod(rows);
+    const spans = methods.length > 1;
+    const count = rows.length;
+
+    /* Every "and N more" a list of this sheet can need: the whole selection's, and each section's
+       when the sheet is split by method. */
+    const mores = [count, ...methods.map((method) => method.rows.length)].filter((n) => n > NAMED);
+    const ids = [
+        {key: count === 1 ? SHEET[action].one : SHEET[action].title, component: 'enrol_apply', param: count},
+        {key: SHEET[action].commit, component: 'enrol_apply', param: count},
+        {key: 'back', component: 'core'},
+        {key: 'queuesheetcanceldanger', component: 'enrol_apply'},
+        {key: 'queuesheetwaitline', component: 'enrol_apply'},
+        {key: 'queuesheetspans', component: 'enrol_apply', param: methods.length},
+        {key: 'queuesheetmessage', component: 'enrol_apply'},
+        {key: 'queuegrantsdecidingrole', component: 'enrol_apply'},
+        ...mores.map((n) => ({key: 'queuesheetandmore', component: 'enrol_apply', param: n - NAMED})),
+    ];
+    const strings = await getStrings(ids);
+    const [title, commitlabel, backlabel, danger, waitline, spansline, messagelabel, deciding] = strings;
+    const more = {};
+    mores.forEach((n, index) => {
+        more[n] = strings[8 + index];
+    });
+
+    const body = document.createElement('div');
+    if (action === 'cancel') {
+        body.appendChild(sheetLine('div', 'alert alert-danger', danger));
+    }
+    if (action === 'wait') {
+        body.appendChild(sheetLine('p', 'enrol_apply-sheetline', waitline));
+    }
+    if (spans) {
+        body.appendChild(sheetLine('div', 'alert alert-warning', spansline));
+        const words = {messagelabel, deciding, more};
+        methods.forEach((method, index) => body.appendChild(methodSection(method, words, index)));
+    } else {
+        body.appendChild(whoList(rows, count > NAMED ? more[count] : ''));
+    }
+
+    // What the sheet hides inside the moved fields, so that closing it puts each back as it was.
+    const hidden = [];
+    const hide = (node) => {
+        if (!node.hidden) {
+            node.hidden = true;
+            hidden.push(node);
+        }
+    };
+    if (action !== 'confirm') {
+        controls.querySelectorAll(SELECTORS.CONFIRMONLY).forEach(hide);
+    }
+    if (spans) {
+        // Each section has its own box; the page's single one would reach every method.
+        controls.querySelectorAll(SELECTORS.MESSAGE).forEach(hide);
+    }
+
+    const home = controls.parentNode;
+    const modal = await Modal.create({
+        title: escapeHtml(title),
+        body: '',
+        footer: '<button type="button" class="btn btn-secondary" data-action="hide">' + escapeHtml(backlabel) + '</button>'
+            + '<button type="button" class="btn ' + (action === 'cancel' ? 'btn-danger' : 'btn-primary')
+            + '" data-region="sheetcommit">' + escapeHtml(commitlabel) + '</button>',
+        large: true,
+        removeOnClose: true,
+        returnElement: button,
+    });
+    modal.getRoot().addClass('enrol_apply-sheet');
+
+    const sheetbody = modal.getBody()[0];
+    sheetbody.appendChild(body);
+    sheetbody.appendChild(controls);
+
+    let restored = false;
+    const restore = () => {
+        if (restored) {
+            return;
+        }
+        restored = true;
+        sheetopen = false;
+        home.appendChild(controls);
+        hidden.forEach((node) => {
+            node.hidden = false;
+        });
+    };
+    modal.getRoot().on(ModalEvents.hidden, restore);
+
+    modal.getFooter()[0].querySelector('[data-region="sheetcommit"]').addEventListener('click', () => {
+        commit(form, action, body, restore);
+    });
+
+    modal.show();
+};
+
+/**
+ * Post the decision the sheet was opened for, from the page's one form.
+ *
+ * The fields go home first, so they are inside the form when it posts; the sheet's message boxes,
+ * if any, go into the form beside them. form.submit() posts no submitter, so the decision rides on
+ * a hidden formaction written here: requestSubmit(button) would post the button's own, but it is
+ * missing from browsers this plugin's versions still support, and a hidden input posts the same
+ * contract everywhere.
+ *
+ * @param {HTMLFormElement} form The decision form.
+ * @param {String} action confirm, wait or cancel.
+ * @param {HTMLElement} body The sheet's own body, holding any per-method message boxes.
+ * @param {Function} restore Puts the decision fields back into the form.
+ * @return {void}
+ */
+const commit = (form, action, body, restore) => {
+    restore();
+
+    let holder = form.querySelector('[data-region="sheetmessages"]');
+    if (!holder) {
+        holder = document.createElement('div');
+        holder.hidden = true;
+        holder.dataset.region = 'sheetmessages';
+        form.appendChild(holder);
+    }
+    holder.replaceChildren(...body.querySelectorAll('textarea[name^="outcomemessages["]'));
+
+    let input = form.querySelector('input[type="hidden"][name="formaction"]');
+    if (!input) {
+        input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'formaction';
+        form.appendChild(input);
+    }
+    input.value = action;
+
+    form.submit();
 };
 
 /**
@@ -524,6 +922,22 @@ export const init = (group) => {
             return;
         }
         setSelected(group, data.checkedTargets.length);
+    });
+
+    /* The decision options live in the sheet once there is a script to open it; without one the
+       details above the table holds them and the footer's buttons post them directly. */
+    const options = document.querySelector(SELECTORS.OPTIONS);
+    if (options) {
+        options.hidden = true;
+    }
+    document.querySelectorAll(SELECTORS.DECIDE).forEach((button) => {
+        button.addEventListener('click', (e) => {
+            e.preventDefault();
+            openSheet(button).catch((error) => {
+                sheetopen = false;
+                Notification.exception(error);
+            });
+        });
     });
 
     // Everything outside the refreshed region is reset here; see the module docblock.
@@ -563,20 +977,41 @@ export const init = (group) => {
         }
     });
 
-    const status = filters.querySelector(SELECTORS.STATUS);
-    if (status) {
-        // No debounce on a select: a change is deliberate and there is no second one coming.
-        status.addEventListener('change', () => {
-            const tableRoot = document.querySelector(SELECTORS.TABLE);
-            if (tableRoot) {
-                applyFilters(tableRoot);
+    /* The panel closes on Escape and gives the focus back to its control, as a menu does. Its
+       open state is the details element's own, so it opens and closes without this module too. */
+    const panel = filters.querySelector(SELECTORS.PANEL);
+    if (panel) {
+        panel.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && panel.open) {
+                panel.open = false;
+                panel.querySelector('summary').focus();
+            }
+        });
+        /* A popover closes on a press outside it: open, it lies over the chip row and the top of
+           the table. */
+        document.addEventListener('click', (e) => {
+            if (panel.open && !panel.contains(e.target)) {
+                panel.open = false;
             }
         });
     }
 
-    /* Delegated from the row rather than bound per chip, because the chips are replaced wholesale
-       on every refresh and a handler bound to one goes with it. */
+    /* Delegated from the form rather than bound per chip, because the chips are replaced
+       wholesale on every refresh and a handler bound to one goes with it. */
     filters.addEventListener('click', (e) => {
+        /* A status value is a link to the same listing with that status; here it refreshes the
+           table instead, like any other filter, with no debounce: a press is deliberate. */
+        const cell = e.target.closest(SELECTORS.STATUSCELL);
+        if (cell) {
+            e.preventDefault();
+            setStatus(cell.dataset.status);
+            const tableRoot = document.querySelector(SELECTORS.TABLE);
+            if (tableRoot) {
+                applyFilters(tableRoot);
+            }
+            return;
+        }
+
         const remove = e.target.closest(SELECTORS.CHIPREMOVE);
         if (remove) {
             e.preventDefault();
@@ -584,7 +1019,7 @@ export const init = (group) => {
             return;
         }
 
-        const clearall = e.target.closest(SELECTORS.CLEARALL);
+        const clearall = e.target.closest(SELECTORS.CLEARALL + ', ' + SELECTORS.CLEARFILTERS);
         if (clearall) {
             e.preventDefault();
             removeFilter(null, clearall.href);

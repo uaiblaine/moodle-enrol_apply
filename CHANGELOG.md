@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased (2026112003)
+## Unreleased (2026112004)
 
 ### Added
 
@@ -101,6 +101,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   "Next" is a plain link. Strings `confirmusers_desc` and `queuewaitinglist` removed;
   `keyoutcomegroupfullshort`, `keyoutcomenoplaceshort` and `keyoutcomeseatunconfirmedshort` added.
   Nothing changes in what the queue posts or in its no-JavaScript path.
+- **The confirmation queue's controls** (`docs/design/manage-queue-study.md`, stage Q2). The status
+  is a segmented control in the filter bar, *All · Pending · Deferred* with the scope's counts
+  (MQ-D3); each value is a link carrying the other filters, so it works without JavaScript, and the
+  band keeps places, applications held and the method's status, without the two plain count tiles.
+  Group, course category, course, the field filters and the applied dates move into a **Filters**
+  panel (a native details element, open while one of its filters is applied) with "Clear filters"
+  and "Apply filters" at its foot. The sticky footer's "With selected users..." select and "Go"
+  become three buttons, **Cancel applications**, **Defer** and **Confirm** (MQ-D4), short labels below
+  576 px. Without JavaScript they post at once, as before, and the decision options sit above the
+  grid in a "Decision options" panel (MQ-D5). With JavaScript a button opens a **decision sheet**
+  naming the selected applicants, holding the page's own decision fields, and asking before a
+  cancellation (MQ-D5, MQ-D6). On the site-wide and mentee queues the course cell names the
+  enrolment method, with "Grants a deciding role" for a method whose role decides applications, and
+  a selection spanning methods gets one section and one message per method in the sheet (MQ-D15,
+  MQ-D16), posted as `outcomemessages[<enrolid>]`: `manage.php` groups the posted applications by the
+  method `{user_enrolments}` names, in `\enrol_apply\local\decision`, and decides each group with its
+  own message; per-row authorisation is unchanged. Strings `btncancel`, `btnconfirm` and `btnwait`
+  reworded; `btncancelshort`, `btnconfirmshort`, `btnwaitshort`, `queuedecisionoptions`,
+  `queuedecisionspans`, `queuefilters`, `queuegrantsdecidingrole`, `queuestatusall` and the
+  `queuesheet*` strings added; `queuestatusany` removed.
 - **A membership this plugin wrote on approval scopes a decider only through a deciding role**
   (C-D28, decided (b)). In a separate-groups course, a group membership stamped `enrol_apply` counts
   towards the groups whose applications somebody decides only when the role the same method gave

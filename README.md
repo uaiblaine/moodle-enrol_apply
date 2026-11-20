@@ -402,7 +402,7 @@ course's queue only, offers the groups the reader may see in natural order (a se
 plus *My groups* and *Without a group* for a reader who sees every group; a narrowed decider is
 offered their own groups and nothing else, and the server ignores any other value they send. A
 narrowed reader is told which groups their queue shows (*You see the applications of: ...*), and
-the *Deferred to the waiting list* tile counts their groups, while the method's places and
+the status control's counts (*All*, *Pending*, *Deferred*) are their groups', while the method's places and
 applications held stay the method's and say so. In a *Visible groups* course the filter starts on
 the reader's own groups, as a filter they can remove, never as a restriction.
 

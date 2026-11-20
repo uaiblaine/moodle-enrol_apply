@@ -41,6 +41,7 @@ Feature: The approval queue says whose group each application is in, and filters
     And I should see "Student 2"
     And I should see "Student 3"
     And I should see "Without a group"
+    And I open the filters of the applications queue
     And I set the field "Group" to "Turma A"
     And I should see "Student 1"
     And I should not see "Student 2"
@@ -50,6 +51,7 @@ Feature: The approval queue says whose group each application is in, and filters
     And I should see "Student 3"
     And I should not see "Student 1"
     And I should not see "Student 2"
+    And I close the filters of the applications queue
     And I click on "Remove the filter Group: Without a group" "link"
     And I should see "Student 1"
     And I should see "Student 2"

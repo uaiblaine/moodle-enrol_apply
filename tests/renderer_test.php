@@ -248,20 +248,21 @@ final class renderer_test extends \advanced_testcase {
     }
 
     /**
-     * The capacity header counts the whole queue while the table counts the matches.
+     * The status control counts the whole queue while the table counts the matches.
      *
-     * The tile beside it reports deferrals read straight from \enrol_apply\local\capacity and is
-     * instance-wide whatever was typed, so a filtered number in the first tile renders a pair that
-     * cannot both be true - and it reads as a fault in the capacity figures rather than in the
-     * count.
+     * "Deferred" beside it is the scope's deferred count whatever was typed, so a filtered number
+     * in "All" renders a pair that cannot both be true. The counts were the capacity header's first
+     * two tiles until they moved into the status control (MQ-D3); the test keeps its name for the
+     * gate that holds it.
      *
      * @return void
      */
     public function test_the_capacity_header_counts_the_whole_queue_not_the_matches(): void {
         $rendered = $this->render_filtered_queue('nothingmatchesthis');
 
-        // One application in scope, none matching: the header says 1 and the count line says 0 of 1.
-        $this->assertSame('1', $this->tile_value($rendered, get_string('queueawaiting', 'enrol_apply')), $rendered);
+        // One application in scope, none matching: "All" says 1 and the count line says 0 of 1.
+        $this->assertSame('1', $this->status_count($rendered, ''), $rendered);
+        $this->assertSame('1', $this->status_count($rendered, (string) ENROL_USER_SUSPENDED), $rendered);
         $this->assertStringContainsString(
             get_string('queuefiltercount', 'enrol_apply', (object) ['matched' => 0, 'total' => 1]),
             $rendered
@@ -269,15 +270,15 @@ final class renderer_test extends \advanced_testcase {
     }
 
     /**
-     * The number shown on one tile of the queue's capacity header.
+     * The count one value of the status control shows.
      *
      * @param string $html The rendered queue.
-     * @param string $label The tile's label.
-     * @return string The value on that tile, or the empty string when there is no such tile.
+     * @param string $value The status parameter's value, empty for "All".
+     * @return string The count, or the empty string when the value is not drawn.
      */
-    private function tile_value(string $html, string $label): string {
-        $pattern = '~<span class="enrol_apply-tilevalue">([^<]*)</span>\s*<span class="enrol_apply-tilelabel">'
-            . preg_quote(s($label), '~') . '</span>~';
+    private function status_count(string $html, string $value): string {
+        $pattern = '~data-region="statuscell" data-status="' . preg_quote($value, '~') . '"[^>]*>'
+            . '<span class="enrol_apply-seg-label">[^<]*</span>\s*<small class="enrol_apply-seg-count">([^<]*)</small>~';
 
         return preg_match($pattern, $html, $m) ? trim($m[1]) : '';
     }
@@ -329,25 +330,27 @@ final class renderer_test extends \advanced_testcase {
     }
 
     /**
-     * The status select keeps its own vocabulary when a field filter is offered beside it.
+     * The status control keeps its own vocabulary when a field filter is offered beside it.
      *
-     * queue_filters_context() builds the status options and then loops over the offered fields,
-     * each with options of its own; if the two shared a variable, the status select would carry
-     * the last field's vocabulary and post values no status can hold. The queuefilterfields
+     * queue_filters_context() builds the status control's values and then loops over the offered
+     * fields, each with options of its own; if the two shared a variable, the status control would
+     * carry the last field's vocabulary and post values no status can hold. The queuefilterfields
      * setting ships empty, so the other tests here render the queue with no field offered.
      *
-     * The assertions are scoped to each `<select>` element, because both vocabularies are present
-     * somewhere on the page and a page-wide match would pass against that defect.
+     * The assertions are scoped to each element, because both vocabularies are present somewhere
+     * on the page and a page-wide match would pass against that defect.
      *
      * @return void
      */
     public function test_the_status_select_is_not_overwritten_by_a_field_filter(): void {
         $rendered = $this->render_queue_with_a_menu_field();
 
-        $status = $this->select_named($rendered, 'status');
+        $found = preg_match('#<div class="enrol_apply-seg"[^>]*>.*?</div>#s', $rendered, $m);
+        $this->assertSame(1, $found, 'no status control in the rendered page');
+        $status = $m[0];
+        $this->assertStringContainsString(get_string('queuestatusall', 'enrol_apply'), $status);
         $this->assertStringContainsString(get_string('submissionstatuspending', 'enrol_apply'), $status);
-        $this->assertStringContainsString(get_string('submissionstatuswaiting', 'enrol_apply'), $status);
-        $this->assertStringNotContainsString('Sargento', $status, 'the status select must not carry a field vocabulary');
+        $this->assertStringNotContainsString('Sargento', $status, 'the status control must not carry a field vocabulary');
 
         // The control: the field's own select DOES carry it, so this is not about a missing field.
         $field = $this->select_named($rendered, 'pf' . $this->menufield->id);
@@ -536,8 +539,10 @@ final class renderer_test extends \advanced_testcase {
 
         // The precondition: the queue really is empty, so this is about the empty case.
         $this->assertSame(0, (int) $table->totalrows);
-        $this->assertStringContainsString(get_string('queueawaiting', 'enrol_apply'), $html);
-        $this->assertStringContainsString(get_string('queuedeferred', 'enrol_apply'), $html);
+        $this->assertStringContainsString(get_string('queuestatus', 'enrol_apply'), $html);
+        $this->assertStringContainsString(get_string('queueapplicationsopen', 'enrol_apply'), $html);
+        // The status control too, with "All" counting nothing.
+        $this->assertSame('0', $this->status_count($html, ''), $html);
         /* The control: a section the template really does withhold. Without an applicant limit
            there is no closed notice, so the assertions above are not being satisfied by a
            template that renders every string it is handed. */
@@ -546,8 +551,9 @@ final class renderer_test extends \advanced_testcase {
             'limit' => 0,
             'deferred' => 0,
         ]), $html);
-        // The bulk bar renders on an empty queue too, so a filter matching nothing keeps it.
-        $this->assertStringContainsString(get_string('withselectedusers'), $html);
+        // The decisions render on an empty queue too, so a filter matching nothing keeps them.
+        $this->assertStringContainsString(get_string('btnconfirm', 'enrol_apply'), $html);
+        $this->assertStringContainsString('name="formaction" value="confirm"', $html);
     }
 
     /**
@@ -564,7 +570,7 @@ final class renderer_test extends \advanced_testcase {
         $html = $this->render_queue();
 
         // The control: the page really did render, so this is not passing over an empty string.
-        $this->assertStringContainsString(get_string('queueawaiting', 'enrol_apply'), $html);
+        $this->assertStringContainsString(get_string('queuefilterstatus', 'enrol_apply'), $html);
         // And the guard sees a placeholder in both spellings, so its silence below means something.
         $this->assertSame(1, preg_match(self::PLACEHOLDER, '{$a->count} selected'));
         $this->assertSame(1, preg_match(self::PLACEHOLDER, '{\$a} selected'));
@@ -601,6 +607,53 @@ final class renderer_test extends \advanced_testcase {
             get_string('queuestatus', 'enrol_apply'),
             $this->render_sitewide_queue()
         );
+    }
+
+    /**
+     * On the queue that spans methods the course cell names the method, and a deciding one says so.
+     *
+     * Two methods: this course's, granting the student role, and one in a second course whose
+     * approval grants the editing teacher's role, which holds enrol/apply:manageapplications there
+     * (C-D29). Only the second carries "Grants a deciding role" (MQ-D16), and each row tells the
+     * decision sheet its method through data attributes, the name in its plain spelling escaped
+     * once by the attribute.
+     *
+     * Changes that must make it fail: the deciding answer dropped, or the method line dropped.
+     *
+     * @return void
+     */
+    public function test_the_sitewide_queue_names_each_rows_method_and_a_deciding_one(): void {
+        global $DB;
+
+        $this->setAdminUser();
+        $teacherrole = (int) $DB->get_field('role', 'id', ['shortname' => 'editingteacher'], MUST_EXIST);
+        $other = $this->getDataGenerator()->create_course();
+        $deciding = $DB->get_record('enrol', [
+            'id' => $this->plugin->add_instance($other, ['name' => self::AWKWARD_NAME, 'roleid' => $teacherrole]
+                + $this->plugin->get_instance_defaults()),
+        ], '*', MUST_EXIST);
+        foreach ([$this->instance, $deciding] as $instance) {
+            $applicant = $this->getDataGenerator()->create_user();
+            $this->plugin->enrol_user($instance, $applicant->id, null, 0, 0, ENROL_USER_SUSPENDED);
+        }
+
+        $html = $this->render_sitewide_queue();
+
+        preg_match_all('~<div class="enrol_apply-methodline[^"]*">(.*?)</div>~s', $html, $lines);
+        $this->assertCount(2, $lines[1], 'one method line per row');
+        $label = get_string('queuegrantsdecidingrole', 'enrol_apply');
+        $decidingline = array_values(array_filter($lines[1], static fn($line) => str_contains($line, self::ESCAPED_ONCE)));
+        $this->assertCount(1, $decidingline);
+        $this->assertStringContainsString($label, $decidingline[0]);
+        $this->assertStringNotContainsString(self::ESCAPED_TWICE, $html);
+        // The control: the learner method's line carries no label.
+        $learnerline = array_values(array_filter($lines[1], static fn($line) => !str_contains($line, self::ESCAPED_ONCE)));
+        $this->assertStringNotContainsString($label, $learnerline[0]);
+
+        $this->assertStringContainsString('data-enrolid="' . $deciding->id . '"', $html);
+        $this->assertStringContainsString('data-methodname="' . self::ESCAPED_ONCE . '"', $html);
+        $this->assertStringContainsString('data-deciding="1"', $html);
+        $this->assertStringContainsString('data-deciding="0"', $html);
     }
 
     /**
@@ -793,23 +846,34 @@ final class renderer_test extends \advanced_testcase {
     }
 
     /**
-     * The bulk action carries the toggle-all action vocabulary, in the same group.
+     * Each of the three decisions carries the toggle-all action vocabulary, in the same group.
      *
      * getActionElements() matches the group exactly where the targets match by prefix, so a
-     * mismatch here disables nothing and reports nothing.
+     * mismatch here disables nothing and reports nothing. The three are submits named formaction
+     * with their decision as the value, in the review page's order (MQ-D4).
      *
-     * Changes that must make it fail: removing the toggle-all attributes from the action select.
+     * Changes that must make it fail: removing the toggle-all attributes from a decision button.
      *
      * @return void
      */
     public function test_the_bulk_action_is_wired_to_the_same_group(): void {
         $html = $this->render_queue();
 
-        preg_match('~<select[^>]*name="formaction"[^>]*>~', $html, $select);
-        $this->assertNotEmpty($select, 'the action select is still there');
-        $this->assertStringContainsString('data-action="toggle"', $select[0]);
-        $this->assertStringContainsString('data-toggle="action"', $select[0]);
-        $this->assertStringContainsString('data-togglegroup="enrol-apply-queue"', $select[0]);
+        preg_match_all('~<button[^>]*name="formaction"[^>]*>~', $html, $buttons);
+        $this->assertCount(3, $buttons[0], 'one button per decision');
+        $values = [];
+        foreach ($buttons[0] as $button) {
+            $this->assertStringContainsString('type="submit"', $button);
+            $this->assertStringContainsString('data-action="toggle"', $button);
+            $this->assertStringContainsString('data-toggle="action"', $button);
+            $this->assertStringContainsString('data-togglegroup="enrol-apply-queue"', $button);
+            $this->assertStringNotContainsString('disabled', $button);
+            preg_match('~value="([a-z]+)"~', $button, $value);
+            $values[] = $value[1];
+        }
+        $this->assertSame(['cancel', 'wait', 'confirm'], $values);
+        // The select and Go they replaced are gone.
+        $this->assertDoesNotMatchRegularExpression('~<select[^>]*name="formaction"~', $html);
     }
 
     /**

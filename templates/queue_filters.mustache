@@ -17,7 +17,8 @@
 {{!
     @template enrol_apply/queue_filters
 
-    The controls that narrow the applications queue.
+    The controls that narrow the applications queue: a filter bar holding the status control, the
+    search box, the count and the Filters control, the Filters panel under it, then the chips.
 
     A GET form, rendered outside the decision form in manage.mustache: HTML forbids nested
     forms, so a search box inside the POST form would submit the decision instead.
@@ -27,11 +28,18 @@
     clamps a stale page number, so keeping page three across a search that now matches four rows
     would render an empty table.
 
+    The status is a segmented control (MQ-D3) whose values are links to this listing with that
+    status and every other filter kept, so it works with scripting off; enrol_apply/manage takes
+    the click over and refreshes the table instead. Its counts are the scope's and no filter changes
+    them.
+
+    The other filters live in the Filters panel, a native details element, so it opens and closes
+    with scripting off and its fields stay in this one form; "Apply filters" in its foot submits
+    them without JavaScript. It never renders open: it is a popover over the chip row, so the chips
+    and the loud count say what is applied. The stylesheet lays it out as a panel under the bar.
+
     Every chip's remove control is a real link naming the filters that survive it, so the row works
     with scripting off.
-
-    Every control stays on the page, at the small size, so the row is compact without hiding a
-    field: the Behat scenarios set them by label, and a script-driven step needs each one visible.
 
     Classes required for JS:
     * none - the module attaches by data-region.
@@ -39,10 +47,13 @@
     Data attributes required for JS:
     * data-region="queuefilters" on the form, the module's root.
     * data-region="searchinput" on the search field.
-    * data-region="statusselect" on the status field.
-    * data-region="filterfield" on every per-field and date control, each carrying data-filter
-      (the token the query string and the filterset both use) and data-filterlabel (the wording a
-      chip repeats), so the module needs no second copy of either.
+    * data-region="statuscell" on each status value, carrying data-status (the status parameter's
+      value, empty for every status) and aria-current="true" on the current one.
+    * data-region="filterpanel" on the Filters panel, and data-region="filterpanelcount" on its
+      loud counter, hidden when no panel filter is applied rather than omitted.
+    * data-region="filterfield" on every control in the panel, each carrying data-filter (the token
+      the query string and the filterset both use) and data-filterlabel (the wording a chip
+      repeats), so the module needs no second copy of either.
     * data-emptyvalue on the group select, the value that means "every group": `all` where the page
       would otherwise apply its default, so the module writes it into the url instead of dropping
       the parameter; absent elsewhere, where the empty value means the same.
@@ -51,7 +62,8 @@
       removing that filter follows the chip's link instead.
     * data-region="chiprow" on the chip row, which the module empties and refills.
     * data-region="clearall" on the clear-all link, hidden with d-none when nothing is applied
-      rather than omitted, so the module has a node to unhide instead of one to invent.
+      rather than omitted, so the module has a node to unhide instead of one to invent; and
+      data-region="clearfilters" on the panel's own "Clear filters", the same url.
     * data-region="filtercount" on the count line, carrying data-scopetotal - the count is
       "matched of total", the refreshed table reports only the matched half in its own
       data-table-total-rows, and the total is a property of the scope that no refresh changes.
@@ -60,11 +72,14 @@
     * formaction string - url the GET form submits to
     * hasscope boolean - whether a scope id must ride along
     * scopeid int - the enrol instance id
-    * searchlabel string - visible label for the search field
+    * searchlabel string - label of the search field, visually hidden, and its placeholder
     * searchvalue string - the term currently applied
     * searchhelp string - rendered help icon for the search field
-    * statuslabel string - visible label for the status select
-    * statusoptions array - value, label and selected for each option
+    * statuslabel string - accessible name of the status control
+    * statuscells array - value, label, count, current and url for each status value drawn
+    * countnote string - "in your groups" for a reader narrowed to their groups, else empty
+    * filterslabel string - accessible name of the Filters control
+    * panelcount int - how many of the panel's filters are applied, 0 for none
     * hasgroupfilter bool - whether the group filter is offered: the instance queue, to a reader
       who may pick at least one group; see enrol_apply\local\groupfilter
     * grouplabel string - its label
@@ -84,7 +99,7 @@
     * clearlabel string - wording of the clear-all control
     * counttext string - how many applications match, of how many
     * scopetotal int - how many the queue holds before any filter, for the module to recount with
-    * groupheading string - visually-hidden legend naming what the control group does
+    * groupheading string - visually-hidden legend naming what the panel's controls do
     * hasfields boolean - whether any per-field filter is offered to this reader
     * fields array - token, label, inputid, isselect, value and options for each offered field
     * fromlabel, fromvalue, tolabel, tovalue - the applied-date bounds and their labels
@@ -97,6 +112,17 @@
         "searchvalue": "goncalves",
         "searchhelp": "",
         "statuslabel": "Application status",
+        "statuscells": [
+            {"value": "", "label": "All", "count": 7, "current": true,
+             "url": "https://example.com/enrol/apply/manage.php?id=140"},
+            {"value": "1", "label": "Pending", "count": 5, "current": false,
+             "url": "https://example.com/enrol/apply/manage.php?id=140&status=1"},
+            {"value": "2", "label": "Deferred", "count": 2, "current": false,
+             "url": "https://example.com/enrol/apply/manage.php?id=140&status=2"}
+        ],
+        "countnote": "in your groups",
+        "filterslabel": "Filters",
+        "panelcount": 2,
         "hasgroupfilter": true,
         "grouplabel": "Group",
         "groupoptions": [
@@ -117,11 +143,6 @@
         "courseoptions": [
             {"value": "", "label": "Any course", "selected": true},
             {"value": "7", "label": "Structural mechanics", "selected": false}
-        ],
-        "statusoptions": [
-            {"value": "", "label": "Any status", "selected": false},
-            {"value": "1", "label": "Pending", "selected": true},
-            {"value": "2", "label": "Deferred", "selected": false}
         ],
         "haschips": true,
         "chips": [
@@ -168,96 +189,110 @@
 }}
 <form method="get" action="{{formaction}}" class="enrol_apply-filters mb-3" data-region="queuefilters">
     {{#hasscope}}<input type="hidden" name="id" value="{{scopeid}}">{{/hasscope}}
-    <fieldset class="enrol_apply-filterrow">
-        <legend class="visually-hidden">{{groupheading}}</legend>
-        <div class="enrol_apply-filterfield">
-            <label class="form-label" for="enrol_apply_search">{{searchlabel}}{{{searchhelp}}}</label>
+    <div class="enrol_apply-filterbar">
+        <div class="enrol_apply-seg" role="group" aria-label="{{statuslabel}}">
+            {{#statuscells}}
+                <a class="enrol_apply-seg-cell" href="{{url}}" data-region="statuscell" data-status="{{value}}"
+                   {{#current}}aria-current="true"{{/current}}><span class="enrol_apply-seg-label">{{label}}</span>
+                    <small class="enrol_apply-seg-count">{{count}}</small></a>
+            {{/statuscells}}
+        </div>
+        {{#countnote}}<span class="enrol_apply-segnote small text-muted">{{countnote}}</span>{{/countnote}}
+        <div class="enrol_apply-searchfield">
+            <label class="visually-hidden" for="enrol_apply_search">{{searchlabel}}</label>
             <input type="text" class="form-control form-control-sm" id="enrol_apply_search" name="search"
-                   value="{{searchvalue}}" data-region="searchinput" autocomplete="off">
+                   value="{{searchvalue}}" placeholder="{{searchlabel}}" data-region="searchinput" autocomplete="off">
+            {{{searchhelp}}}
         </div>
-        <div class="enrol_apply-filterfield">
-            <label class="form-label" for="enrol_apply_status">{{statuslabel}}</label>
-            <select class="form-select form-select-sm" id="enrol_apply_status" name="status" data-region="statusselect">
-                {{#statusoptions}}
-                    <option value="{{value}}" {{#selected}}selected{{/selected}}>{{label}}</option>
-                {{/statusoptions}}
-            </select>
-        </div>
-        {{#hasgroupfilter}}
-            <div class="enrol_apply-filterfield">
-                <label class="form-label" for="enrol_apply_filter_group">{{grouplabel}}</label>
-                <select class="form-select form-select-sm" id="enrol_apply_filter_group" name="group"
-                        data-region="filterfield" data-filter="group" data-filterlabel="{{grouplabel}}"
-                        {{#groupemptyvalue}}data-emptyvalue="{{groupemptyvalue}}"{{/groupemptyvalue}}
-                        {{#groupsearch}}data-reloadonremove="1"{{/groupsearch}}>
-                    {{#groupoptions}}
-                        <option value="{{value}}" {{#selected}}selected{{/selected}}>{{label}}</option>
-                    {{/groupoptions}}
-                </select>
+        <span class="enrol_apply-filtercount" data-region="filtercount"
+              data-scopetotal="{{scopetotal}}" aria-live="polite">{{counttext}}</span>
+        <details class="enrol_apply-filterpanel" data-region="filterpanel">
+            <summary class="enrol_apply-filterstoggle">
+                {{#pix}} i/filter, core {{/pix}}<span class="visually-hidden">{{filterslabel}}</span>
+                <span class="enrol_apply-filtersbadge" data-region="filterpanelcount"
+                      {{^panelcount}}hidden{{/panelcount}}>{{panelcount}}</span>
+            </summary>
+            <div class="enrol_apply-filterpanel-body">
+                <fieldset class="enrol_apply-filterrow">
+                    <legend class="visually-hidden">{{groupheading}}</legend>
+                    {{#hasgroupfilter}}
+                        <div class="enrol_apply-filterfield">
+                            <label class="form-label" for="enrol_apply_filter_group">{{grouplabel}}</label>
+                            <select class="form-select form-select-sm" id="enrol_apply_filter_group" name="group"
+                                    data-region="filterfield" data-filter="group" data-filterlabel="{{grouplabel}}"
+                                    {{#groupemptyvalue}}data-emptyvalue="{{groupemptyvalue}}"{{/groupemptyvalue}}
+                                    {{#groupsearch}}data-reloadonremove="1"{{/groupsearch}}>
+                                {{#groupoptions}}
+                                    <option value="{{value}}" {{#selected}}selected{{/selected}}>{{label}}</option>
+                                {{/groupoptions}}
+                            </select>
+                        </div>
+                    {{/hasgroupfilter}}
+                    {{#hascoursefilters}}
+                        <div class="enrol_apply-filterfield">
+                            <label class="form-label" for="enrol_apply_category">{{categorylabel}}</label>
+                            <select class="form-select form-select-sm" id="enrol_apply_category" name="category"
+                                    data-region="filterfield" data-filter="category" data-filterlabel="{{categorylabel}}">
+                                {{#categoryoptions}}
+                                    <option value="{{value}}" {{#selected}}selected{{/selected}}>{{label}}</option>
+                                {{/categoryoptions}}
+                            </select>
+                        </div>
+                        <div class="enrol_apply-filterfield">
+                            <label class="form-label" for="enrol_apply_course">{{courselabel}}</label>
+                            <select class="form-select form-select-sm" id="enrol_apply_course" name="course"
+                                    data-region="filterfield" data-filter="course" data-filterlabel="{{courselabel}}">
+                                {{#courseoptions}}
+                                    <option value="{{value}}" {{#selected}}selected{{/selected}}>{{label}}</option>
+                                {{/courseoptions}}
+                            </select>
+                        </div>
+                    {{/hascoursefilters}}
+                    {{#fields}}
+                        <div class="enrol_apply-filterfield">
+                            <label class="form-label" for="{{inputid}}">{{label}}</label>
+                            {{#isselect}}
+                                <select class="form-select form-select-sm" id="{{inputid}}" name="{{token}}"
+                                        data-region="filterfield" data-filter="{{token}}" data-filterlabel="{{label}}">
+                                    <option value="">{{#str}}choosedots, core{{/str}}</option>
+                                    {{#options}}
+                                        <option value="{{value}}" {{#selected}}selected{{/selected}}>{{label}}</option>
+                                    {{/options}}
+                                </select>
+                            {{/isselect}}
+                            {{^isselect}}
+                                <input type="text" class="form-control form-control-sm" id="{{inputid}}" name="{{token}}"
+                                       value="{{value}}" autocomplete="off"
+                                       data-region="filterfield" data-filter="{{token}}" data-filterlabel="{{label}}">
+                            {{/isselect}}
+                        </div>
+                    {{/fields}}
+                    <div class="enrol_apply-filterfield">
+                        <label class="form-label" for="enrol_apply_appliedfrom">{{fromlabel}}</label>
+                        <input type="date" class="form-control form-control-sm" id="enrol_apply_appliedfrom"
+                               name="appliedfrom" value="{{fromvalue}}" data-region="filterfield" data-filter="appliedfrom"
+                               data-filterlabel="{{fromlabel}}">
+                    </div>
+                    <div class="enrol_apply-filterfield">
+                        <label class="form-label" for="enrol_apply_appliedto">{{tolabel}}</label>
+                        <input type="date" class="form-control form-control-sm" id="enrol_apply_appliedto"
+                               name="appliedto" value="{{tovalue}}" data-region="filterfield" data-filter="appliedto"
+                               data-filterlabel="{{tolabel}}">
+                    </div>
+                </fieldset>
+                <div class="enrol_apply-filterpanel-foot">
+                    <a href="{{clearurl}}" class="btn btn-sm btn-outline-secondary"
+                       data-region="clearfilters">{{#str}}clearfilters, core{{/str}}</a>
+                    <button type="submit" class="btn btn-sm btn-primary">{{#str}}applyfilters, core{{/str}}</button>
+                </div>
             </div>
-        {{/hasgroupfilter}}
-        {{#hascoursefilters}}
-            <div class="enrol_apply-filterfield">
-                <label class="form-label" for="enrol_apply_category">{{categorylabel}}</label>
-                <select class="form-select form-select-sm" id="enrol_apply_category" name="category"
-                        data-region="filterfield" data-filter="category" data-filterlabel="{{categorylabel}}">
-                    {{#categoryoptions}}
-                        <option value="{{value}}" {{#selected}}selected{{/selected}}>{{label}}</option>
-                    {{/categoryoptions}}
-                </select>
-            </div>
-            <div class="enrol_apply-filterfield">
-                <label class="form-label" for="enrol_apply_course">{{courselabel}}</label>
-                <select class="form-select form-select-sm" id="enrol_apply_course" name="course"
-                        data-region="filterfield" data-filter="course" data-filterlabel="{{courselabel}}">
-                    {{#courseoptions}}
-                        <option value="{{value}}" {{#selected}}selected{{/selected}}>{{label}}</option>
-                    {{/courseoptions}}
-                </select>
-            </div>
-        {{/hascoursefilters}}
-        {{#fields}}
-            <div class="enrol_apply-filterfield">
-                <label class="form-label" for="{{inputid}}">{{label}}</label>
-                {{#isselect}}
-                    <select class="form-select form-select-sm" id="{{inputid}}" name="{{token}}"
-                            data-region="filterfield" data-filter="{{token}}" data-filterlabel="{{label}}">
-                        <option value="">{{#str}}choosedots, core{{/str}}</option>
-                        {{#options}}
-                            <option value="{{value}}" {{#selected}}selected{{/selected}}>{{label}}</option>
-                        {{/options}}
-                    </select>
-                {{/isselect}}
-                {{^isselect}}
-                    <input type="text" class="form-control form-control-sm" id="{{inputid}}" name="{{token}}"
-                           value="{{value}}" autocomplete="off"
-                           data-region="filterfield" data-filter="{{token}}" data-filterlabel="{{label}}">
-                {{/isselect}}
-            </div>
-        {{/fields}}
-        <div class="enrol_apply-filterfield">
-            <label class="form-label" for="enrol_apply_appliedfrom">{{fromlabel}}</label>
-            <input type="date" class="form-control form-control-sm" id="enrol_apply_appliedfrom" name="appliedfrom"
-                   value="{{fromvalue}}" data-region="filterfield" data-filter="appliedfrom"
-                   data-filterlabel="{{fromlabel}}">
-        </div>
-        <div class="enrol_apply-filterfield">
-            <label class="form-label" for="enrol_apply_appliedto">{{tolabel}}</label>
-            <input type="date" class="form-control form-control-sm" id="enrol_apply_appliedto" name="appliedto"
-                   value="{{tovalue}}" data-region="filterfield" data-filter="appliedto"
-                   data-filterlabel="{{tolabel}}">
-        </div>
-        <div class="enrol_apply-filterfield enrol_apply-filtersubmit">
-            <button type="submit" class="btn btn-sm btn-secondary">{{#str}}applyfilters, core{{/str}}</button>
-        </div>
-    </fieldset>
+        </details>
+    </div>
     <div class="enrol_apply-chiprow" data-region="chiprow">
         {{#chips}}
             {{> enrol_apply/queue_chip }}
         {{/chips}}
         <a href="{{clearurl}}" class="enrol_apply-clearall small {{^haschips}}d-none{{/haschips}}"
            data-region="clearall">{{clearlabel}}</a>
-        <span class="enrol_apply-filtercount small text-muted" data-region="filtercount"
-              data-scopetotal="{{scopetotal}}" aria-live="polite">{{counttext}}</span>
     </div>
 </form>
