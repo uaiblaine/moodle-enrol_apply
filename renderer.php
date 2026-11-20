@@ -1911,7 +1911,10 @@ class enrol_apply_renderer extends plugin_renderer_base {
             + $this->review_summary_context($application, $candecide, $waiting)
             + [
             'candecide' => $candecide,
-            'viewonlynotice' => get_string('reviewviewonly', 'enrol_apply'),
+            // The reader's own application says why it is not theirs to decide.
+            'viewonlynotice' => \enrol_apply\local\queue::is_own_application((int) $application->userid)
+                ? get_string('reviewownapplication', 'enrol_apply')
+                : get_string('reviewviewonly', 'enrol_apply'),
             'formurl' => $manageurl->out(false),
             'sesskey' => sesskey(),
             'userenrolmentid' => (int) $application->id,

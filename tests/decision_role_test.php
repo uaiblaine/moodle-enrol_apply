@@ -224,8 +224,8 @@ final class decision_role_test extends \advanced_testcase {
     /**
      * A chosen role replaces the instance default, and only that role is assigned.
      *
-     * complete_approval() runs twice for a queue approval and the first pass, from the hook,
-     * carries no operator input. A role passed as an argument instead of read off the record
+     * complete_approval() runs twice for a queue approval and the first pass, from the
+     * user_enrolment_updated observer, carries no operator input. A role passed as an argument instead of read off the record
      * would leave both roles assigned, which the exact match on the assignments catches.
      *
      * @return void
@@ -283,8 +283,8 @@ final class decision_role_test extends \advanced_testcase {
      * An approval taken outside the queue falls back to the instance role.
      *
      * Core's "Edit enrolment" screen drives update_user_enrol() directly. That route reaches
-     * complete_approval() through the before_user_enrolment_updated hook, which carries no
-     * operator input, so the instance role is the only role it can produce.
+     * complete_approval() through the before_user_enrolment_updated hook and the
+     * user_enrolment_updated observer, which carry no operator input, so the instance role is the only role it can produce.
      *
      * Changes that must make it fail: assign_decided_role() returning early when no role was
      * recorded instead of falling back to $instance->roleid.

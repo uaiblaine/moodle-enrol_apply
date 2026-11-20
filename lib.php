@@ -956,7 +956,7 @@ class enrol_apply_plugin extends enrol_plugin {
             $written = $this->apply($instance, $userid, $data, $keygroupid, \enrol_apply\local\submission::KEY_ADMITTED);
             $userenrolmentid = $written['userenrolmentid'];
 
-            /* Recorded before the enrolment moves, like every decision: the hook pass of
+            /* Recorded before the enrolment moves, like every decision: the observer's pass of
                complete_approval() joins the groups the record names while activate() runs. */
             \enrol_apply\local\submission::record_decided_groups($userenrolmentid, $targets);
             /* Deferred so that neither pass of complete_approval() logs an approval: nobody
@@ -1058,29 +1058,27 @@ class enrol_apply_plugin extends enrol_plugin {
     /**
      * Apply everything that must follow an application becoming active.
      *
-     * Called both by confirm_enrolment() and by the before_user_enrolment_updated hook
-     * callback, so an approval made from core's "Edit enrolment" screen leaves the same
-     * state behind as one made from the plugin's own queue. A queue approval runs it twice:
-     * update_user_enrol() dispatches the hook before writing the row, so the callback runs it
-     * first, with no operator input, and confirm_enrolment() runs it again. What the decider
-     * chose is therefore read from the durable record, never passed in, and every step is
-     * idempotent: role_assign() and groups_add_member() do not duplicate an existing row, the
-     * delete matches nothing the second time, and the notification task is deduplicated.
+     * Called both by activate() and by \enrol_apply\observers::user_enrolment_updated(), so an
+     * approval made from core's "Edit enrolment" screen leaves the same state behind as one made
+     * from the plugin's own queue. Both run after core has written the active row: the
+     * before_user_enrolment_updated hook only authorises and expects the approval
+     * ({@see \enrol_apply\local\approvalwrite}), so a write that fails gives nothing. A queue
+     * approval runs it twice: update_user_enrol() triggers the event whose observer runs it first,
+     * with no operator input, and activate() runs it again. What the decider chose is therefore
+     * read from the durable record, never passed in, and every step is idempotent:
+     * role_assign() and groups_add_member() do not duplicate an existing row, the delete matches
+     * nothing the second time, and the notification task is deduplicated.
      *
-     * It logs application_approved once per approval, always after the row is active
-     * ({@see \enrol_apply\local\decisionlog}): activate()'s own pass, which passes $written, on the
-     * queue, the review page and the bulk operations; on core's "Edit enrolment", the only route
-     * that runs just the hook pass, before core writes the row, the event is parked and
-     * \enrol_apply\observers::user_enrolment_updated() fires it once core has written; none for a
-     * key admission.
+     * It logs application_approved once per approval ({@see \enrol_apply\local\decisionlog}):
+     * activate()'s own pass on the queue, the review page and the bulk operations, the observer's
+     * on core's "Edit enrolment", none for a key admission.
      *
      * @param stdClass $instance Course enrol instance.
      * @param int $userid Applicant user id.
      * @param int $userenrolmentid User enrolment the application belongs to.
-     * @param bool $written True when the caller has already written the active row.
      * @return void
      */
-    public function complete_approval($instance, $userid, $userenrolmentid, bool $written = false) {
+    public function complete_approval($instance, $userid, $userenrolmentid) {
         global $DB, $USER;
 
         // The role follows approval, never the bare application. See assign_decided_role().
@@ -1101,7 +1099,7 @@ class enrol_apply_plugin extends enrol_plugin {
 
         /* Stamped here rather than in confirm_enrolment() so that an approval made from
            core's "Edit enrolment" screen records its decider too: that route reaches this
-           method through the before_user_enrolment_updated hook and never touches
+           method through the user_enrolment_updated observer and never touches
            confirm_enrolment() at all. */
         \enrol_apply\local\submission::decide(
             (int) $userenrolmentid,
@@ -1112,10 +1110,10 @@ class enrol_apply_plugin extends enrol_plugin {
 
         $DB->delete_records('enrol_apply_applicationinfo', ['userenrolmentid' => $userenrolmentid]);
 
-        /* The applicant is told by an adhoc task rather than from here. The hook route runs
-           before the enrolment row is written, so notifying inline could announce an approval
-           a failed write then undoes; the task re-reads the enrolment and stays silent unless it
-           is active. Queueing is deduplicated on classname, component and custom data
+        /* The applicant is told by an adhoc task rather than from here. Inside a key admission's
+           transaction, notifying inline could announce an approval a rollback then undoes; the
+           task re-reads the enrolment and stays silent unless it is active. Queueing is
+           deduplicated on classname, component and custom data
            (\core\task\manager::get_queued_adhoc_task_record()), so the two passes send one
            message. */
         $task = new \enrol_apply\task\notify_approval();
@@ -1130,12 +1128,7 @@ class enrol_apply_plugin extends enrol_plugin {
                 'chosen' => \enrol_apply\local\submission::chosen_groups((int) $userenrolmentid) !== null
                     || \enrol_apply\local\submission::chosen_role((int) $userenrolmentid) !== null,
             ]);
-            if ($written) {
-                $event->trigger();
-            } else {
-                // The hook pass runs before core's write; see decisionlog.
-                \enrol_apply\local\decisionlog::park((int) $userenrolmentid, $event);
-            }
+            $event->trigger();
         }
     }
 
@@ -1144,7 +1137,7 @@ class enrol_apply_plugin extends enrol_plugin {
      *
      * Called from the ad-hoc task, so it re-establishes everything from the database and
      * does nothing unless the enrolment is really active on an apply instance. That guard
-     * is what makes it safe to queue the task from a "before" hook.
+     * is what makes it safe to queue the task inside a transaction that may still roll back.
      *
      * @param int $userenrolmentid User enrolment that was approved.
      * @return void
@@ -1775,6 +1768,9 @@ class enrol_apply_plugin extends enrol_plugin {
      * The user enrolment is what names the application: one applicant can hold an application
      * on each of two apply instances of a course, and each carries its own key group.
      *
+     * Nobody decides their own application but a site administrator
+     * ({@see \enrol_apply\local\queue::is_own_application()}).
+     *
      * @param int $courseid Course the application belongs to.
      * @param int $userid Applicant user id.
      * @param int $userenrolmentid User enrolment the application belongs to.
@@ -1782,6 +1778,12 @@ class enrol_apply_plugin extends enrol_plugin {
      */
     public function can_manage_application($courseid, $userid, int $userenrolmentid) {
         global $USER;
+
+        /* At every level, before any of them: a decider applying to another method of the course,
+           one whose role decides for instance, would otherwise grant themselves that role. */
+        if (\enrol_apply\local\queue::is_own_application((int) $userid)) {
+            return false;
+        }
 
         // The system level, unless the decider switched role in this course: see system_exempt().
         if (
@@ -1892,8 +1894,8 @@ class enrol_apply_plugin extends enrol_plugin {
             \enrol_apply\local\submission::ensure((int) $userenrolment->id);
 
             /* Stored on the record rather than passed along, like the rest of the decision
-               below: update_user_enrol() dispatches the hook that reaches complete_approval()
-               with no operator input, and the notify_approval task it queues reads the message
+               below: update_user_enrol() triggers the event whose observer reaches
+               complete_approval() with no operator input, and the notify_approval task it queues reads the message
                back through submission::outcome_message(). */
             \enrol_apply\local\submission::record_outcome_message((int) $userenrolment->id, $message);
 
@@ -1979,8 +1981,8 @@ class enrol_apply_plugin extends enrol_plugin {
      * The half of an approval that does not decide anything: the two routes into ACTIVE, a
      * decider's confirm_enrolment() and a group key's admission in submit_application(), share it
      * so they cannot drift apart. Each caller makes its own authorisation decision first, and
-     * records what was decided (groups, role, message) before calling, because the hook pass of
-     * complete_approval() acts on the record while this method runs.
+     * records what was decided (groups, role, message) before calling, because the observer's pass
+     * of complete_approval() acts on the record while this method runs.
      *
      * @param stdClass $instance Course enrol instance.
      * @param stdClass $userenrolment The {user_enrolments} row, with at least id and userid.
@@ -1995,30 +1997,31 @@ class enrol_apply_plugin extends enrol_plugin {
             ? $userenrolment->timestart + $instance->enrolperiod
             : 0;
 
-        /* update_user_enrol() dispatches before_user_enrolment_updated, so the callback in
-           classes/hook_callbacks.php has usually run complete_approval() already. It is
-           called again below on purpose: it is idempotent, and this method must leave the
-           right state even when the hook is not registered, for instance before the hook
-           cache is rebuilt after an upgrade.
+        /* update_user_enrol() dispatches before_user_enrolment_updated, which judges nobody while
+           approvalwrite::own() runs: the caller has decided. That is what lets a key admission
+           through for an applicant holding enrol/apply:manage in the course, whom
+           can_manage_application() refuses as their own application. The hook still expects the
+           approval, so the user_enrolment_updated observer has usually run complete_approval()
+           once the row is written. It is called again below on purpose: it is idempotent, and this
+           method must leave the right state even when the hook or the observer is not registered,
+           for instance before the caches are rebuilt after an upgrade, or under an event sink.
 
-           Deferred so that the hook pass, which runs before core writes the row, does not log
-           the approval: the pass below does, once the enrolment is active. */
-        /* A parked event of an earlier Edit enrolment attempt in this request is dropped first:
-           the write below would trigger the observer that fires it, and this method fires its own. */
-        \enrol_apply\local\decisionlog::clear((int) $userenrolment->id);
-        \enrol_apply\local\decisionlog::defer(
-            (int) $userenrolment->id,
-            fn() => $this->update_user_enrol(
-                $instance,
-                $userenrolment->userid,
-                ENROL_USER_ACTIVE,
-                $userenrolment->timestart,
-                $userenrolment->timeend
-            )
-        );
+           Deferred so that the observer's pass does not log the approval: the pass below does. */
+        \enrol_apply\local\approvalwrite::own((int) $userenrolment->id, function () use ($instance, $userenrolment): void {
+            \enrol_apply\local\decisionlog::defer(
+                (int) $userenrolment->id,
+                fn() => $this->update_user_enrol(
+                    $instance,
+                    $userenrolment->userid,
+                    ENROL_USER_ACTIVE,
+                    $userenrolment->timestart,
+                    $userenrolment->timeend
+                )
+            );
+        });
 
         // The applicant's notification is queued by complete_approval(); see it for why.
-        $this->complete_approval($instance, (int) $userenrolment->userid, (int) $userenrolment->id, true);
+        $this->complete_approval($instance, (int) $userenrolment->userid, (int) $userenrolment->id);
     }
 
     /**

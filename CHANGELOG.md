@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased (2026112005)
+## Unreleased (2026112006)
 
 ### Security
 
@@ -16,8 +16,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   now shows the checkbox for a valid key as for a wrong one. The count and its lock are kept per
   applicant and course, not per instance, because a key opens every group of the course: two apply
   instances of one course no longer give two budgets.
+- **Core's "Edit enrolment" now asks the plugin's own decision rule** (external audit 2026-11-20,
+  A-02). Any change to an enrolment the approval queue lists (activating it, or giving it a start or
+  end date) is a decision on it: a user holding `enrol/apply:manage` in the course must also be able
+  to decide that application, exactly as on the queue (`can_manage_application()`: the deciding
+  capability, the separate-groups narrowing, the mentor level). Before, a role holding
+  `enrol/apply:manage` alone approved any application of a course without separate groups, and in
+  any course could set a past end date on an application of another group, dropping it from the
+  queue. The new refusal is `editenrolmentrefused` (it replaces `groupscopeapprovalrefused`). An
+  approved enrolment suspended from the participants page is back in the queue, so reactivating it
+  is judged, and approved again, as on the queue. Dates of active enrolments stay core's.
+- **The approval's effects follow core's write** (A-02.4). The hook only authorises the change; the
+  role, the groups, the decision and the notification are given by the `user_enrolment_updated`
+  observer once core has written the row, so a write that fails, or another listener that throws,
+  leaves the application untouched.
+- **Nobody decides their own application** (A-04), except a site administrator: on the queue, the
+  review page, the participants page's bulk decisions and core's "Edit enrolment". The queue offers
+  no selection box on the reader's own row and labels it, the review page says why it offers no
+  decision, and the bulk form counts it among the applications it will leave alone. A group key
+  still admits an applicant who holds `enrol/apply:manage` in the course.
 
-## Unreleased (2026112004)
 
 ### Added
 

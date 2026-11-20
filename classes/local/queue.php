@@ -104,6 +104,24 @@ final class queue {
     }
 
     /**
+     * Whether an application is the current user's own, which they may not decide.
+     *
+     * The one definition of self-decision: can_manage_application() refuses it, and with it every
+     * decision method, the participants page's bulk decisions and core's "Edit enrolment"; the
+     * queue offers no selection on such a row and the review page no decision form, and both say
+     * why. A site administrator is exempt, as from every capability check, so a site run by one
+     * person can still decide.
+     *
+     * @param int $userid The applicant.
+     * @return bool True when the current user is the applicant and not a site administrator.
+     */
+    public static function is_own_application(int $userid): bool {
+        global $USER;
+
+        return $userid === (int) $USER->id && !is_siteadmin();
+    }
+
+    /**
      * One application, if it is still awaiting a decision.
      *
      * One lookup for three outcomes - never applied, already decided, enrolment gone - because

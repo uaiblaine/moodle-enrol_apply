@@ -36,7 +36,7 @@ use stdClass;
  * confirm_enrolment(), wait_enrolment() or cancel_enrolment(). Do not copy the core
  * precedents (enrol_manual and enrol_self): they write {user_enrolments} with a raw UPDATE and
  * build the event by hand, so \core_enrol\hook\before_user_enrolment_updated is never
- * dispatched. That hook is what reaches this plugin's complete_approval() out of band, so such
+ * dispatched. That hook is what authorises and expects an approval made out of band, so such
  * a bulk approval would flip the status to active and silently skip the role assignment, the
  * group memberships, the durable record and the applicant's notification.
  *
@@ -163,7 +163,7 @@ abstract class decision_operation extends enrol_bulk_enrolment_operation {
      *
      * @param course_enrolment_manager $manager Manager core built for the course.
      * @param array $users Selected users carrying their user enrolments, keyed by user id.
-     * @return int How many awaiting applications are outside the operator's groups.
+     * @return int How many awaiting applications are outside the operator's groups, or their own.
      */
     public function outside_groups_count(course_enrolment_manager $manager, array $users): int {
         $courseid = (int) $manager->get_course()->id;

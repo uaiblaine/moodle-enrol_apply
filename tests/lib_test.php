@@ -2101,16 +2101,18 @@ final class lib_test extends \advanced_testcase {
     }
 
     /**
-     * Editing an already-approved enrolment does not run the approval work a second time.
+     * Editing an approved enrolment runs the approval work again only when the queue lists it again.
      *
-     * hook_callbacks treats the existence of an enrol_apply_applicationinfo row as proof that a
-     * move to active is an approval, and complete_approval() deletes that row. That is why the
-     * table cannot hold the durable record: were the row kept, every later status edit of an
-     * approved user would re-add their groups and queue another notification.
+     * The hook judges what the queue lists: an active enrolment is not an application, so editing
+     * its dates touches neither its groups nor its notification. Suspended, it is back in the queue
+     * (queue::is_awaiting_decision()), and reactivating it from core's "Edit enrolment" is a second
+     * approval, exactly as approving it from the queue would be. The applicationinfo row cannot tell
+     * the two apart, since complete_approval() deleted it, which is why the hook reads the queue's
+     * predicate instead.
      *
      * @return void
      */
-    public function test_the_out_of_band_approval_path_still_short_circuits(): void {
+    public function test_only_an_application_runs_the_approval_work_again(): void {
         global $DB;
 
         $this->setAdminUser();
@@ -2144,11 +2146,21 @@ final class lib_test extends \advanced_testcase {
         $DB->delete_records('task_adhoc', $notify);
         groups_remove_member($group->id, $applicant->id);
 
-        // Suspend and re-activate: a second status edit of an already-approved enrolment.
-        $this->plugin->update_user_enrol($this->instance, $applicant->id, ENROL_USER_SUSPENDED);
-        $this->plugin->update_user_enrol($this->instance, $applicant->id, ENROL_USER_ACTIVE);
+        // A date edit of the active enrolment is core's, not a decision.
+        $this->plugin->update_user_enrol($this->instance, $applicant->id, null, null, time() + WEEKSECS);
 
         $this->assertCount(0, $DB->get_records('task_adhoc', $notify));
         $this->assertFalse(groups_is_member($group->id, $applicant->id));
+
+        // Suspended, it is in the queue again; reactivated, it is approved again.
+        $this->plugin->update_user_enrol($this->instance, $applicant->id, ENROL_USER_SUSPENDED);
+        $this->assertTrue(\enrol_apply\local\queue::is_awaiting_decision(
+            $DB->get_record('user_enrolments', ['id' => $ueid], '*', MUST_EXIST)
+        ));
+        $this->assertFalse($DB->record_exists('enrol_apply_applicationinfo', ['userenrolmentid' => $ueid]));
+        $this->plugin->update_user_enrol($this->instance, $applicant->id, ENROL_USER_ACTIVE);
+
+        $this->assertCount(1, $DB->get_records('task_adhoc', $notify));
+        $this->assertTrue(groups_is_member($group->id, $applicant->id));
     }
 }

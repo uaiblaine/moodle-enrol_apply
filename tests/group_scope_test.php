@@ -366,8 +366,9 @@ final class group_scope_test extends \advanced_testcase {
      * A moderator who also mentors an applicant outside their group decides that application:
      * only the course grant is narrowed. The walk is then the mentor's, which contains it.
      *
-     * Changes that must make it fail: the mentor level narrowed too, or scope() taking the
-     * instance queue for an application outside it.
+     * Changes that must make it fail: the mentor level narrowed too, in can_manage_application()
+     * or in the edit-enrolment hook, or scope() taking the instance queue for an application
+     * outside it.
      *
      * @return void
      */
@@ -383,10 +384,11 @@ final class group_scope_test extends \advanced_testcase {
         $this->assertSame(0, $scope->enrolid);
         $this->assertSame([(int) $applicant->id], $scope->mentees);
 
+        // Core's Edit enrolment, which the hook judges for a holder of enrol/apply:manage, as the queue does.
         $sink = $this->redirectMessages();
-        $this->assertSame(1, $this->plugin->confirm_enrolment([$keyless]), 'the hook lets the mentor through');
+        $this->plugin->update_user_enrol($this->instance, $applicant->id, ENROL_USER_ACTIVE);
         $sink->close();
-        $this->assertSame(ENROL_USER_ACTIVE, $this->enrolment_status($keyless));
+        $this->assertSame(ENROL_USER_ACTIVE, $this->enrolment_status($keyless), 'the hook lets the mentor through');
     }
 
     /**
@@ -566,8 +568,7 @@ final class group_scope_test extends \advanced_testcase {
      * Core's edit-enrolment route, enrol_plugin::update_user_enrol(), is refused to the moderator
      * for an application outside their group, before anything is written (S7).
      *
-     * Changes that must make it fail: the refusal dropped from the hook, or thrown after
-     * complete_approval().
+     * Changes that must make it fail: the refusal dropped from the hook.
      *
      * @return void
      */
@@ -581,7 +582,7 @@ final class group_scope_test extends \advanced_testcase {
             $this->plugin->update_user_enrol($this->instance, $applicant->id, ENROL_USER_ACTIVE);
             $this->fail('the update went through');
         } catch (\moodle_exception $e) {
-            $this->assertSame('groupscopeapprovalrefused', $e->errorcode);
+            $this->assertSame('editenrolmentrefused', $e->errorcode);
         }
 
         $this->assertSame(ENROL_USER_SUSPENDED, $this->enrolment_status($other));
@@ -596,8 +597,8 @@ final class group_scope_test extends \advanced_testcase {
      * it, the administrator, and a script running as nobody; and the plugin's own approval,
      * which reaches the same hook, inside the group.
      *
-     * Changes that must make it fail: the hook refusing by the mode alone, judging the applicant
-     * on a key admission, or refusing a CLI or cron run.
+     * Changes that must make it fail: the hook refusing by the mode alone, or judging a user who
+     * holds no enrol/apply:manage, such as a CLI or cron run with no user.
      *
      * @return void
      */
@@ -704,9 +705,7 @@ final class group_scope_test extends \advanced_testcase {
     /**
      * A group key's admission runs the hook as the applicant, who is in no group yet and holds no
      * capability, in a separate-groups course: it is not a decider's update and is not refused.
-     *
-     * Changes that must make it fail: the hook judging every user, not only holders of
-     * enrol/apply:manage.
+     * An applicant who does hold enrol/apply:manage there is hook_callbacks_test's.
      *
      * @return void
      */

@@ -101,7 +101,7 @@ templates/                   manage, manage_actions, queue_capacity, queue_chip,
 amd/src/group_chooser.js     the applicant's searchable group list over the plain select (modal and apply.php)
 amd/src/review.js            keeps the review page's outcome sentence in step with the ticks, and
                              opens the earlier applications in a core/modal
-classes/hook_callbacks.php   reconciles approvals made outside confirm_enrolment()
+classes/hook_callbacks.php   judges core's Edit enrolment on an application; the approval it allows is completed by observers.php
 classes/local/applicantstate.php  what an applicant is told about their OWN application
 classes/local/applications.php  mentee lookup shared by the queue
 classes/local/capacity.php   the two capacity numbers, and how many deferrals hold one
@@ -113,7 +113,7 @@ classes/local/groupoffer.php  the groups a method offers its applicants, read jo
 classes/local/groupchoice.php  the applicant's chosen group: what they may choose, judged by the form and again by the write door
 classes/local/instanceoptions.php  per-method options (enrol_apply_options), read strictly, no row = defaults
 classes/local/profilelink.php  whether user/view.php would open an applicant's profile for this reader
-classes/observers.php        course_deleted, orphan cleanup for the plugin-disabled case
+classes/observers.php        course_deleted, orphan cleanup for the plugin-disabled case; completes an Edit enrolment approval
 classes/privacy/provider.php full provider: three personal-data tables, two personal-data roles
 classes/task/                sync_enrolments, send_expiry_notifications, purge_submissions (scheduled);
                              notify_approval (adhoc: the approval message)
@@ -430,7 +430,7 @@ backup/                      group mappings, comments and the durable trail, see
 
   **The warning is emitted where somebody is standing, never from `complete_approval()`**, which
   runs TWICE for a queue approval while `\core\notification::add()` does not deduplicate: a batch
-  of ten would warn twenty times, and the earlier pass sees pre-write state anyway. It lives in
+  of ten would warn twenty times. It lives in
   `manage.php` before the redirect, and on the queue itself — the latter rendered **outside** the
   decision form and gated on nothing about the rows, because an instance at its applicant limit
   has an EMPTY queue, which is exactly when the manager needs to be told why.
@@ -558,7 +558,13 @@ backup/                      group mappings, comments and the durable trail, see
   before acting on it. Three delegation levels are accepted — system, course, and the
   applicant's own **user context**, which is what lets a mentor approve for the users
   they mentor. Keep the per-row check even when the page-level check looks sufficient:
-  the bulk form posts a list of arbitrary ids.
+  the bulk form posts a list of arbitrary ids. **Nobody decides their own application**, at any
+  level, except a site administrator: `queue::is_own_application()` is the one definition,
+  `can_manage_application()` refuses it first (so every decision method, the bulk path and the
+  edit-enrolment hook inherit it), the queue's table draws no selection box on that row and labels
+  it, the review page says why it offers no form, and the bulk form counts it with the rows outside
+  the reader's groups. A key admission is the applicant's own activation and is not a decision:
+  see `approvalwrite::own()` below. Gates `XA17`-`XA19`.
 
 - **Separate groups narrow the COURSE grant, in one helper, and nothing else.**
   `\enrol_apply\local\groupscope` is core's participants-page rule: `SEPARATEGROUPS` without
@@ -574,8 +580,8 @@ backup/                      group mappings, comments and the durable trail, see
   `confirm_enrolment()` allowlist (`choosable_groups()`), the notice (judged per recipient) and
   the icon. The bulk menu inherits the per-row check. `hook_callbacks::refuses_approval()` throws
   from `before_user_enrolment_updated` before `update_user_enrol()` writes (core catches nothing
-  there), judging only holders of `enrol/apply:manage`: a key admission runs as the applicant, a
-  script as the admin or nobody. `allow_unenrol_user()` closes core's unenrol route (screen,
+  there), judging only holders of `enrol/apply:manage`, by `can_manage_application()` itself: a
+  script runs as the admin or nobody, and the plugin's own `activate()` is not judged at all. `allow_unenrol_user()` closes core's unenrol route (screen,
   participants icon, AJAX) the same way: false for a pending application outside the groups of a
   holder of `enrol/apply:unenrol`; active enrolments stay core's. `groupscope::where()` and `application_group()` must agree on
   "newest record"; `test_the_sql_and_the_per_row_check_agree` holds it. Nothing is memoised:
@@ -738,20 +744,42 @@ backup/                      group mappings, comments and the durable trail, see
   participants page offers "Edit enrolment", which posts to `enrol/editenrolment.php`;
   that page requires only `enrol/apply:manage` and drives
   `enrol_plugin::update_user_enrol()` directly, so it knows nothing about groups or the
-  application row. `classes/hook_callbacks.php` observes
-  `\core_enrol\hook\before_user_enrolment_updated` and calls `complete_approval()`
-  whichever route was taken. Put any new post-approval side effect in
-  `complete_approval()`, never inline in `confirm_enrolment()`, or the two paths drift.
-  The observer **does** notify, and the sentence that used to stand here said the opposite.
-  `complete_approval()` queues `\enrol_apply\task\notify_approval` (`lib.php`), which is
-  reached from both routes; queueing is deduplicated on classname, component and custom data,
-  so the two callers cannot produce two messages. It is exactly the kind of sentence a
-  reviewer leans on, which is why it is called out rather than quietly corrected.
+  application row. Two halves, around core's write, keep it the plugin's:
+
+  **The hook judges, and writes nothing.** `hook_callbacks::before_user_enrolment_updated()` reads
+  the row as it stands BEFORE the update (core writes after the hook; the hook carries the new
+  values) and acts when it is what the queue lists (`queue::is_awaiting_decision()`), or an expired
+  one still carrying its applicationinfo row. Not the applicationinfo row alone: an approval deletes
+  it, so an approved-then-suspended enrolment, which the queue lists again, would pass unjudged.
+  ANY change to such a row is a decision (activating approves it; a past `timeend` drops it from the
+  queue and feeds core's expiry sweep), so a holder of `enrol/apply:manage` must pass
+  `can_manage_application()`; the dates of an active enrolment stay core's. On a move to active it
+  only records the id in `\enrol_apply\local\approvalwrite` (`expect()`). Gates `SC14`-`SC16`,
+  `XA10`-`XA13`.
+
+  **The observer completes, after the write.** `observers::user_enrolment_updated()` (core triggers
+  the event right after `update_record()`) takes the expectation, re-reads the row and runs
+  `complete_approval()` only if it is active. So a failed write, or a listener after this plugin's
+  that throws (no transaction anywhere on that path), leaves no role, no group and no decision.
+  The hook drops any earlier entry for the enrolment first (`forget()`): an entry no observer
+  consumed, from a write that threw or from a test's event sink, must not complete a later date
+  edit of the same, now active, enrolment. Gates `XA15`, `XA16`, `EV15`-`EV17`. An event sink (`redirectEvents()`) silences observers, so a
+  test of this route under a sink sees no approval at all; read the log store instead
+  (`decision_events_test::enable_the_log()`).
+
+  Put any new post-approval side effect in `complete_approval()`, never inline in
+  `confirm_enrolment()`, or the two paths drift. `complete_approval()` queues
+  `\enrol_apply\task\notify_approval` (`lib.php`), which is reached from both routes; queueing is
+  deduplicated on classname, component and custom data, so the two callers cannot produce two
+  messages.
 
 - **Two routes into ACTIVE share `activate()`: a decider's `confirm_enrolment()` and a group
   key's admission (`apply_or_admit()`).** Each makes its own authorisation decision and records
   what was decided before calling it; anything that must follow an activation goes in
-  `complete_approval()`, never in one caller. The key is resolved inside `submit_application()`'s
+  `complete_approval()`, never in one caller. `activate()` writes inside `approvalwrite::own()`,
+  which the hook reads as "already decided" and judges nobody: that, and never "the actor is the
+  applicant", is what lets a key admit an applicant holding `enrol/apply:manage` in the course,
+  whom `can_manage_application()` refuses as a self-decision (gates `XA13`, `XA14`). The key is resolved inside `submit_application()`'s
   lock from the database, never from what the form concluded, and resolved again once
   `lock_admission()` holds its locks (which can take seconds); the group page takes none of them, so
   that second read narrows the gap to the write without closing it (gate `SR4`). A ticked
@@ -1846,8 +1874,8 @@ backup/                      group mappings, comments and the durable trail, see
 
   What separates the two cases is knowledge the CALLER has and the record does not.
   `confirm_enrolment()` only ever processes rows `get_pending_user_enrolment()` returned, which
-  admits only this plugin's applications still awaiting a decision; the hook callback only fires
-  on a status change to active. Both know the enrolment genuinely moved, so `complete_approval()`,
+  admits only this plugin's applications still awaiting a decision; the observer completes only an
+  application the hook saw become active. Both know the enrolment genuinely moved, so `complete_approval()`,
   which both reach, passes `true`, as `cancel_enrolment()` does; `wait_enrolment()` passes
   `$moved` (see "Correcting a deferral's reason"). A bare `decide()` call knows nothing and keeps
   the conservative default, which is why the pinned test still passes unchanged — it is the
@@ -1867,12 +1895,13 @@ backup/                      group mappings, comments and the durable trail, see
 
 - **A decision's own data must be written BEFORE the enrolment is mutated, and never through
   `submission::decide()`.** `complete_approval()` runs **twice** for a queue approval:
-  `enrol_plugin::update_user_enrol()` dispatches `before_user_enrolment_updated` *before* it
-  writes the row, so `hook_callbacks` reaches `complete_approval()` first — and that call carries
-  no operator input, because the hook has none. That first pass acts on whatever the record says —
-  the role it assigns, the groups it joins — so the decider's choices must already be recorded
-  when `update_user_enrol()` is called; handed to the second pass as arguments, they would arrive
-  after the first had acted on the instance's defaults. Nor can they ride on `decide()`: approval
+  `enrol_plugin::update_user_enrol()` triggers `user_enrolment_updated` once it has written the
+  row, inside the call, so `observers::user_enrolment_updated()` reaches `complete_approval()`
+  first — and that call carries no operator input, because the event has none. That first pass
+  acts on whatever the record says — the role it assigns, the groups it joins — so the decider's
+  choices must already be recorded when `update_user_enrol()` is called; handed to the second pass
+  (`activate()`'s own) as arguments, they would arrive after the first had acted on the instance's
+  defaults. Nor can they ride on `decide()`: approval
   passes it `true`, but its same-status skip still applies to a re-deferral, which passes
   `$moved`, and would drop them in silence there. The outcome message is recorded by its own
   writer before the status changes, and the notification reads it back off the record rather than
@@ -1884,8 +1913,8 @@ backup/                      group mappings, comments and the durable trail, see
   carries a component and an itemid, so it is attributable and removable. Two different roles also both get assigned,
   and a role assignment records nothing about which pass wrote it — measured, two rows, both
   looking exactly like something a human did. The dates are the exception and need no record:
-  `confirm_enrolment()` writes them onto `{user_enrolments}` itself, before the hook fires, so
-  core already holds the one answer both passes see.
+  `activate()` hands them to `update_user_enrol()` itself, so the row core writes already holds the
+  one answer both passes see.
 
 ## The phpcs trap that keeps costing a CI round
 

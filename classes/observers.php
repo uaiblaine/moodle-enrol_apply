@@ -23,7 +23,7 @@ use core_customfield\category_controller;
 use core_customfield\event\field_deleted;
 use enrol_apply\customfield\application_handler;
 use enrol_apply\local\conditions;
-use enrol_apply\local\decisionlog;
+use enrol_apply\local\approvalwrite;
 
 /**
  * Event observers cleaning up after core has deleted rows this plugin hangs data off.
@@ -136,19 +136,21 @@ class observers {
     }
 
     /**
-     * Log an approval made on core's "Edit enrolment", now that core has written the row.
+     * Complete an approval the before_user_enrolment_updated hook authorised, now that core has written the row.
      *
-     * That route reaches complete_approval() only through before_user_enrolment_updated, which
-     * core dispatches before it writes the row and has no counterpart after it, so the hook pass
-     * parks the event ({@see decisionlog::park()}) and this observer fires it. Core triggers
-     * user_enrolment_updated right after update_record(), so the event's order is the effect's.
+     * enrol_plugin::update_user_enrol() dispatches that hook before it writes the row, with no
+     * transaction, and triggers this event right after update_record(). So the hook only
+     * expects the approval ({@see approvalwrite::expect()}) and the role, the groups, the decision
+     * and the notification are given here, when the enrolment really is active: a write that
+     * throws, or a listener after this plugin's that does, never reaches this event and leaves
+     * nothing behind. complete_approval() also logs the approval here, after the write, unless an
+     * outer caller owes it ({@see \enrol_apply\local\decisionlog}): activate() logs its own, a key admission none.
      *
      * Three guards. The enrol name in other filters out every other method's updates, which are
-     * the vast majority. Nothing parked for the enrolment means the update was not an approval
-     * (or activate() fired it itself). And the row is re-read: an entry left behind by an attempt
-     * whose write failed, then met by a later unrelated update of the same enrolment in the same
-     * request, must not log an approval the row does not show. The decider is the parked event's
-     * user, set in the hook pass of the deciding request, rather than this event's.
+     * the vast majority. Nothing expected for the enrolment means the update was not an approval
+     * the hook authorised. And the row is re-read: an entry left behind by an attempt whose write
+     * failed, then met by a later update of the same enrolment that is not an activation, must not
+     * complete an approval the row does not show.
      *
      * @param user_enrolment_updated $event The dispatched event.
      * @return void
@@ -161,16 +163,20 @@ class observers {
         }
 
         $userenrolmentid = (int) $event->objectid;
-        $approved = decisionlog::take($userenrolmentid);
-        if (!$approved) {
+        if (!approvalwrite::take($userenrolmentid)) {
             return;
         }
 
-        $status = $DB->get_field('user_enrolments', 'status', ['id' => $userenrolmentid]);
-        if ($status === false || (int) $status !== ENROL_USER_ACTIVE) {
+        $userenrolment = $DB->get_record('user_enrolments', ['id' => $userenrolmentid]);
+        if (!$userenrolment || (int) $userenrolment->status !== ENROL_USER_ACTIVE) {
             return;
         }
 
-        $approved->trigger();
+        $instance = $DB->get_record('enrol', ['id' => $userenrolment->enrolid, 'enrol' => 'apply']);
+        if (!$instance) {
+            return;
+        }
+
+        enrol_get_plugin('apply')->complete_approval($instance, (int) $userenrolment->userid, $userenrolmentid);
     }
 }

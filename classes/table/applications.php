@@ -1325,13 +1325,20 @@ class applications extends \table_sql implements dynamic_table {
     }
 
     /**
-     * The per-row selection checkbox.
+     * The per-row selection checkbox, on every row but the reader's own application.
+     *
+     * A decision posted for that row would be skipped by can_manage_application(), so a bulk
+     * approval would leave it alone in silence; the name cell says why there is no box instead.
      *
      * @param stdClass $row Row data.
-     * @return string Rendered checkbox with its accessible label.
+     * @return string Rendered checkbox with its accessible label, or nothing on the reader's own row.
      */
     public function col_checkboxcolumn($row) {
         global $OUTPUT;
+
+        if (queue::is_own_application((int) $row->userid)) {
+            return '';
+        }
 
         /* The name and value are manage.php's POST contract (userenrolments[]), and the label is
            what Behat locates the checkbox by ("Select Student 1"). */
@@ -1433,6 +1440,14 @@ class applications extends \table_sql implements dynamic_table {
         }
         if (!empty($row->appliedbefore)) {
             $labels[] = $this->status_label(get_string('queueappliedbefore', 'enrol_apply'), 'neutral');
+        }
+        // Why a decider's queue offers no selection box on this row (see col_checkboxcolumn()).
+        if ($this->can_decide() && queue::is_own_application((int) $row->userid)) {
+            $labels[] = $this->status_label(
+                get_string('queueownapplication', 'enrol_apply'),
+                'neutral',
+                get_string('ownapplicationnotdecidable', 'enrol_apply')
+            );
         }
 
         $identity = [];
