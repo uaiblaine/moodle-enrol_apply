@@ -36,6 +36,12 @@ $observers = [
         'callback' => '\enrol_apply\observers::course_deleted',
     ],
     [
+        /* Cleans up after a user deleted while this plugin is disabled: enrol_user_delete() asks
+           only enabled plugins to unenrol the user, then deletes the enrolments anyway. */
+        'eventname' => '\core\event\user_deleted',
+        'callback' => '\enrol_apply\observers::user_deleted',
+    ],
+    [
         /* A deleted application field takes the display conditions naming it along, whether it
            was the question shown on a condition or the one controlling it. */
         'eventname' => '\core_customfield\event\field_deleted',

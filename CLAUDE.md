@@ -1715,6 +1715,11 @@ backup/                      group mappings, comments and the durable trail, see
   `test_a_kept_roles_copy_carries_only_the_kept_users_data` and
   `test_an_excluded_applicant_does_not_reach_the_copied_course`.
 
+  `anonymize` is a third axis, read in the same place: when on, `$users` is forced off, so none of
+  the three personal sources is defined (core drops `user_info_data` and blanks `users.xml`, and
+  cannot scrub the comment or the answers). Pinned on the archive file by
+  `test_an_anonymised_backup_carries_no_personal_data`.
+
 - **"Are users included?" is not the users setting.** Core gates its own `<user_enrolments>` on
   `empty($keptroles) && $users`, with a second branch for a course copy that keeps roles
   (`backup/moodle2/backup_stepslib.php`, identical on 5.1 and 5.2). The async copy task sets the

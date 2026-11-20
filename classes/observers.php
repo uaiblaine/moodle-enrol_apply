@@ -17,6 +17,7 @@
 namespace enrol_apply;
 
 use core\event\course_deleted;
+use core\event\user_deleted;
 use core\event\user_enrolment_updated;
 use core_customfield\api;
 use core_customfield\category_controller;
@@ -63,15 +64,7 @@ class observers {
     public static function course_deleted(course_deleted $event): void {
         global $DB;
 
-        /* A correlated NOT EXISTS rather than NOT IN over the whole parent table: this runs on
-           every course deletion, apply instance or not, and it reads the plugin's own small table
-           while probing the parent by primary key for each row. The outer table is named in full
-           because delete_records_select() writes a DELETE with no alias. Both columns are NOT
-           NULL, so it matches the same rows NOT IN would. */
-        $DB->delete_records_select(
-            'enrol_apply_applicationinfo',
-            'NOT EXISTS (SELECT 1 FROM {user_enrolments} ue WHERE ue.id = {enrol_apply_applicationinfo}.userenrolmentid)'
-        );
+        self::sweep_orphaned_applicationinfo();
         $DB->delete_records_select(
             'enrol_apply_groups',
             'NOT EXISTS (SELECT 1 FROM {enrol} e WHERE e.id = {enrol_apply_groups}.enrolid)'
@@ -117,6 +110,45 @@ class observers {
         $DB->delete_records_select(
             conditions::TABLE,
             'NOT EXISTS (SELECT 1 FROM {enrol} e WHERE e.id = {' . conditions::TABLE . '}.enrolid)'
+        );
+    }
+
+    /**
+     * Forget the applications of a user deleted while this plugin is disabled.
+     *
+     * delete_user() calls enrol_user_delete(), which asks only the enabled enrol plugins to
+     * unenrol the user (so the unenrol_user() of this plugin, which deletes the comment, is
+     * skipped) and then deletes every {user_enrolments} row regardless. The comment of the
+     * application would stay behind, keyed to an enrolment that no longer exists. Observers run
+     * whatever the plugin's state. The durable trail in enrol_apply_submission is not touched:
+     * it is not keyed to the enrolment and follows its own retention.
+     *
+     * @param user_deleted $event The dispatched event.
+     * @return void
+     */
+    public static function user_deleted(user_deleted $event): void {
+        self::sweep_orphaned_applicationinfo();
+    }
+
+    /**
+     * Delete the pending application comments whose user enrolment no longer exists.
+     *
+     * The one sweep behind both deletion events, so they cannot drift apart.
+     *
+     * A correlated NOT EXISTS rather than NOT IN over the whole parent table: this runs on every
+     * course and user deletion, apply instance or not, and it reads the plugin's own small table
+     * while probing the parent by primary key for each row. The outer table is named in full
+     * because delete_records_select() writes a DELETE with no alias. Both columns are NOT NULL,
+     * so it matches the same rows NOT IN would.
+     *
+     * @return void
+     */
+    protected static function sweep_orphaned_applicationinfo(): void {
+        global $DB;
+
+        $DB->delete_records_select(
+            'enrol_apply_applicationinfo',
+            'NOT EXISTS (SELECT 1 FROM {user_enrolments} ue WHERE ue.id = {enrol_apply_applicationinfo}.userenrolmentid)'
         );
     }
 

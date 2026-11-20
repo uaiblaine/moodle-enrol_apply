@@ -103,13 +103,15 @@ final class backup_test extends \advanced_testcase {
      * @param bool $userdata Value of the users setting.
      * @param int $mode One of the backup::MODE_* constants.
      * @param array $keptroles Role ids whose holders' enrolments a copy keeps, empty to keep no roles.
+     * @param bool $anonymize Value of the anonymize setting.
      * @return array The backup id and the path of the extracted archive, in that order.
      */
     protected function backup_course(
         $course,
         bool $userdata,
         int $mode = backup::MODE_SAMESITE,
-        array $keptroles = []
+        array $keptroles = [],
+        bool $anonymize = false
     ): array {
         global $CFG, $USER;
 
@@ -128,6 +130,9 @@ final class backup_test extends \advanced_testcase {
         }
         $bc->get_plan()->get_setting('users')->set_status(backup_setting::NOT_LOCKED);
         $bc->get_plan()->get_setting('users')->set_value($userdata);
+        if ($anonymize) {
+            $bc->get_plan()->get_setting('anonymize')->set_value(true);
+        }
         $backupid = $bc->get_backupid();
         $basepath = $bc->get_plan()->get_basepath();
         $bc->execute_plan();
@@ -665,6 +670,40 @@ final class backup_test extends \advanced_testcase {
         /* The second control: instance configuration is NOT gated and still travels, so the
            assertions above are about the gate rather than about an empty backup. */
         $this->assertStringContainsString('<applygroup id=', $withoutusers);
+    }
+
+    /**
+     * An anonymised backup carries none of the three personal tables.
+     *
+     * Core anonymises users.xml and drops the custom profile data, but the comment, the
+     * submission record and the typed answers are free text only this plugin writes. Read from the
+     * archive file, since a restore would drop the rows for its own reasons. The same backup with
+     * anonymisation off is the control, and the instance configuration still travels in both.
+     *
+     * Changes that must make it fail: the backup reading the anonymize setting nowhere, or only
+     * for one of the three sources.
+     *
+     * @return void
+     */
+    public function test_an_anonymised_backup_carries_no_personal_data(): void {
+        [$course] = $this->create_course_with_application();
+
+        $plain = $this->backup_enrolments_xml($course, true);
+        $this->assertStringContainsString('<application id=', $plain);
+        $this->assertStringContainsString('<submission id=', $plain);
+        $this->assertStringContainsString('<answer id=', $plain);
+        $this->assertStringContainsString('I would like to join this course', $plain);
+        $this->assertStringContainsString('Recife', $plain);
+
+        [, $basepath] = $this->backup_course($course, true, backup::MODE_SAMESITE, [], true);
+        $anonymised = file_get_contents($basepath . '/course/enrolments.xml');
+        $this->assertStringNotContainsString('<application id=', $anonymised);
+        $this->assertStringNotContainsString('<submission id=', $anonymised);
+        $this->assertStringNotContainsString('<answer id=', $anonymised);
+        $this->assertStringNotContainsString('I would like to join this course', $anonymised);
+        $this->assertStringNotContainsString('Recife', $anonymised);
+        // The control the other way: configuration still travels, so the file is not just empty.
+        $this->assertStringContainsString('<applygroup id=', $anonymised);
     }
 
     /**

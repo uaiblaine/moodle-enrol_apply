@@ -148,9 +148,15 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         $names = array_map(static function ($item): string {
             return $item->get_name();
         }, $items);
-        $this->assertCount(4, $items);
+        $this->assertCount(5, $items);
         $this->assertEqualsCanonicalizing(
-            ['enrol_apply_applicationinfo', 'enrol_apply_submission', 'enrol_apply_answer', 'core_group'],
+            [
+                'enrol_apply_applicationinfo',
+                'enrol_apply_submission',
+                'enrol_apply_answer',
+                'core_group',
+                'core_message',
+            ],
             $names
         );
 
@@ -1049,6 +1055,63 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         $this->assertSame(['Turma A'], array_values(array_map(static function ($group): string {
             return $group->name;
         }, (array) $data->groups)));
+    }
+
+    /**
+     * The conversation of a group an approval joined is exported with the membership; another
+     * group's conversation is left to core_group's own export.
+     *
+     * Deletion erases the conversations of the memberships stamped with the component, so the
+     * export of the same memberships must hand them over. The manual group's conversation is the
+     * control: it carries a message for the same user, and its absence proves the export is scoped
+     * to the memberships this plugin stamped rather than to every conversation of the user.
+     *
+     * Changes that must make it fail: the export of the conversations left out, or called without
+     * the group id.
+     *
+     * @return void
+     */
+    public function test_the_conversation_of_a_group_an_approval_joined_is_exported(): void {
+        $generator = $this->getDataGenerator();
+        // The group is created as the current user, and core makes the conversation only for one allowed to.
+        set_config('messaging', 1);
+        $this->setAdminUser();
+        $applicant = $this->create_application('Chatty');
+        $context = \context_course::instance((int) $this->course->id);
+        $approvalgroup = (int) $generator->create_group([
+            'courseid' => $this->course->id,
+            'name' => 'Turma Chat',
+            'enablemessaging' => 1,
+        ])->id;
+        $manualgroup = (int) $generator->create_group([
+            'courseid' => $this->course->id,
+            'name' => 'Turma Manual',
+            'enablemessaging' => 1,
+        ])->id;
+        $this->assertTrue(groups_add_member($approvalgroup, $applicant->id, 'enrol_apply', $this->instance->id));
+        $this->assertTrue(groups_add_member($manualgroup, $applicant->id));
+
+        foreach ([$approvalgroup => 'Said in the approved group', $manualgroup => 'Said in the manual group'] as $id => $text) {
+            $conversation = \core_message\api::get_conversation_by_area('core_group', 'groups', $id, $context->id);
+            $this->assertNotFalse($conversation);
+            \core_message\api::send_message_to_conversation((int) $applicant->id, (int) $conversation->id, $text, FORMAT_PLAIN);
+        }
+
+        $this->export_context_data_for_user((int) $applicant->id, $context, 'enrol_apply');
+        $subcontext = static function (string $groupname): array {
+            return [
+                get_string('messages', 'core_message'),
+                get_string('groups', 'core_group'),
+                get_string('privacy:export:conversationprefix', 'core_message') . $groupname,
+            ];
+        };
+        $writer = writer::with_context($context);
+
+        $exported = $writer->get_data($subcontext('Turma Chat'));
+        $this->assertNotEmpty($exported);
+        $this->assertSame('Said in the approved group', strip_tags(array_values((array) $exported)[0]->message));
+        // The control: only the stamped membership's conversation came from this provider.
+        $this->assertEmpty($writer->get_data($subcontext('Turma Manual')));
     }
 
     /**
