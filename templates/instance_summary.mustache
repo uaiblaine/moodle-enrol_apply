@@ -1,0 +1,42 @@
+{{!
+    This file is part of Moodle - http://moodle.org/
+
+    Moodle is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Moodle is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+}}
+{{!
+    @template enrol_apply/instance_summary
+
+    The one-line summary at the top of a saved instance's settings form: whether it accepts
+    applications, the places taken of the limit, and what a group enrolment key does. Each fact is
+    a language string filled with numbers and dates, in its plain spelling.
+
+    Context variables required for this template:
+    * label string - the name of the summary, for assistive technology
+    * facts array - one object per fact, in reading order:
+      * first boolean - whether it is the first, which takes no separator before it
+      * text string - the fact
+
+    Example context (json):
+    {
+        "label": "Summary of this method",
+        "facts": [
+            {"first": true, "text": "Accepting applications until Friday, 4 December 2026, 6:00 PM"},
+            {"first": false, "text": "4 of 30 places taken"},
+            {"first": false, "text": "Group enrolment keys are not used"}
+        ]
+    }
+}}
+<div class="alert alert-info enrol_apply-summary" role="note" aria-label="{{label}}">
+    {{#facts}}{{^first}}<span aria-hidden="true"> &middot; </span>{{/first}}<span>{{text}}</span>{{/facts}}
+</div>

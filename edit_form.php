@@ -41,6 +41,11 @@ class enrol_apply_edit_form extends moodleform {
     /**
      * Build the instance edit form.
      *
+     * Seven sections, each opened by a header of its own, so every element lands in the section
+     * declared just above it: a header stays open until the next one, and closeHeaderBefore()
+     * ends the last before the buttons. An element added between two sections would join the
+     * one above it, so a new element goes inside its section's block.
+     *
      * @return void
      */
     protected function definition() {
@@ -50,25 +55,191 @@ class enrol_apply_edit_form extends moodleform {
 
         [$instance, $plugin, $context] = $this->_customdata;
 
-        $mform->addElement('header', 'header', get_string('pluginname', 'enrol_apply'));
+        // The summary strip reads the saved instance, so a new one has none.
+        if (!empty($instance->id)) {
+            $mform->addElement('html', $this->summary_strip($instance));
+        }
+
+        /* Which collapsed sections open on load. General, When and how many, Application form and
+           Groups are always open; the other three open only when they hold a value other than the
+           default, so nothing configured hides behind a closed section. */
+        $opened = $this->opened_sections($instance, $plugin);
+
+        $yesno = [1 => get_string('yes'), 0 => get_string('no')];
+
+        // Section 1: General.
+        $mform->addElement('header', 'sectiongeneral', get_string('sectiongeneral', 'enrol_apply'));
+        $mform->addHelpButton('sectiongeneral', 'sectiongeneral', 'enrol_apply');
+        $mform->setExpanded('sectiongeneral', true);
 
         $mform->addElement('text', 'name', get_string('custominstancename', 'enrol'));
         $mform->setType('name', PARAM_TEXT);
-
-        $yesno = [1 => get_string('yes'), 0 => get_string('no')];
 
         $mform->addElement('select', 'status', get_string('status', 'enrol_apply'), [
             ENROL_INSTANCE_ENABLED => get_string('yes'),
             ENROL_INSTANCE_DISABLED => get_string('no'),
         ]);
         $mform->setDefault('status', $plugin->get_config('status'));
+        $mform->addHelpButton('status', 'status', 'enrol_apply');
 
         $mform->addElement('select', 'customint6', get_string('newenrols', 'enrol_apply'), $yesno);
         $mform->setDefault('customint6', $plugin->get_config('newenrols'));
+        $mform->addHelpButton('customint6', 'newenrols', 'enrol_apply');
 
         $roleid = $instance->id ? $instance->roleid : $plugin->get_config('roleid');
-        $mform->addElement('select', 'roleid', get_string('defaultrole', 'role'), get_default_enrol_roles($context, $roleid));
+        $mform->addElement(
+            'select',
+            'roleid',
+            get_string('roleonapproval', 'enrol_apply'),
+            get_default_enrol_roles($context, $roleid)
+        );
         $mform->setDefault('roleid', $plugin->get_config('roleid'));
+        $mform->addHelpButton('roleid', 'roleonapproval', 'enrol_apply');
+
+        // Section 2: When and how many.
+        $mform->addElement('header', 'sectionwhen', get_string('sectionwhen', 'enrol_apply'));
+        $mform->addHelpButton('sectionwhen', 'sectionwhen', 'enrol_apply');
+        $mform->setExpanded('sectionwhen', true);
+
+        /* The window during which applications are accepted. It is separate from the
+           enrolment period under "After approval": enrolperiod measures how long an approved
+           enrolment lasts, these two decide when an application may be submitted at all. Both
+           live on {enrol} already and are carried by core's own backup. */
+        $mform->addElement('date_time_selector', 'enrolstartdate', get_string('enrolstartdate', 'enrol_apply'), [
+            'optional' => true,
+        ]);
+        $mform->setDefault('enrolstartdate', 0);
+        $mform->addHelpButton('enrolstartdate', 'enrolstartdate', 'enrol_apply');
+
+        $mform->addElement('date_time_selector', 'enrolenddate', get_string('enrolenddate', 'enrol_apply'), [
+            'optional' => true,
+        ]);
+        $mform->setDefault('enrolenddate', 0);
+        $mform->addHelpButton('enrolenddate', 'enrolenddate', 'enrol_apply');
+
+        /* The two capacity numbers: customint3 is how many people may apply, customint4 how
+           many may be approved at once. The gap between them is overbooking, which is
+           legitimate where approval is discretionary. 0 means no limit, and validation()
+           refuses a negative. */
+        $mform->addElement('text', 'customint3', get_string('maxapplicants', 'enrol_apply'));
+        $mform->setType('customint3', PARAM_INT);
+        $mform->setDefault('customint3', $plugin->get_config('maxenrolled', 0));
+        $mform->addHelpButton('customint3', 'maxapplicants', 'enrol_apply');
+
+        $mform->addElement('text', 'customint4', get_string('places', 'enrol_apply'));
+        $mform->setType('customint4', PARAM_INT);
+        $mform->setDefault('customint4', $plugin->get_config('places', 0));
+        $mform->addHelpButton('customint4', 'places', 'enrol_apply');
+
+        /* How many places are currently taken, for the person setting the limits. Only for an
+           existing instance: a new one has nothing to count. */
+        if (!empty($instance->id)) {
+            $mform->addElement(
+                'static',
+                'currentoccupancy',
+                get_string('placestakenlabel', 'enrol_apply'),
+                $this->places_taken_text($instance)
+            );
+        }
+
+        // Section 3: Who may apply.
+        $mform->addElement('header', 'sectionwho', get_string('sectionwho', 'enrol_apply'));
+        $mform->addHelpButton('sectionwho', 'sectionwho', 'enrol_apply');
+        $mform->setExpanded('sectionwho', $opened['sectionwho']);
+
+        /* Restrict applications to one cohort. The element is emitted even when there is
+           nothing to choose from, as a hidden constant zero: enrol_plugin::update_instance()
+           copies a property only when it is set on the submitted data, so omitting the
+           element would make an existing restriction impossible to remove. */
+        $cohorts = $this->get_cohort_options($instance, $context);
+        if (count($cohorts) > 1) {
+            $mform->addElement('select', 'customint5', get_string('cohortonly', 'enrol_apply'), $cohorts);
+            $mform->addHelpButton('customint5', 'cohortonly', 'enrol_apply');
+        } else {
+            $mform->addElement('hidden', 'customint5');
+            $mform->setType('customint5', PARAM_INT);
+            $mform->setConstant('customint5', 0);
+            // The section would otherwise be an empty fieldset.
+            $mform->addElement(
+                'static',
+                'nocohorts',
+                get_string('cohortonly', 'enrol_apply'),
+                get_string('nocohortsavailable', 'enrol_apply')
+            );
+        }
+
+        // Section 4: Application form.
+        $mform->addElement('header', 'sectionform', get_string('sectionform', 'enrol_apply'));
+        $mform->addHelpButton('sectionform', 'sectionform', 'enrol_apply');
+        $mform->setExpanded('sectionform', true);
+
+        $mform->addElement('textarea', 'customtext1', get_string('editdescription', 'enrol_apply'));
+        $mform->setType('customtext1', PARAM_RAW);
+        $mform->addHelpButton('customtext1', 'editdescription', 'enrol_apply');
+
+        $mform->addElement('select', 'customint7', get_string('opt_commentaryzone', 'enrol_apply'), $yesno);
+        $mform->setDefault('customint7', 0);
+        $mform->addHelpButton('customint7', 'opt_commentaryzone', 'enrol_apply');
+
+        /* No setDefault: empty is the correct default, and the readers fall back to the shipped
+           wording. Pre-filling a get_string() here would freeze the creating teacher's language
+           into customtext2, so the label would stop following the language pack.
+
+           hideIf rather than disabledIf, because the label only matters while the commentary
+           zone is on. hideIf hides the wrapper without disabling the input (_hideElement() in
+           lib/form/form.js), so a label survives the zone being switched off; a disabled field
+           would post nothing. */
+        $mform->addElement('text', 'customtext2', get_string('custom_label', 'enrol_apply'));
+        $mform->setType('customtext2', PARAM_TEXT);
+        $mform->addHelpButton('customtext2', 'custom_label', 'enrol_apply');
+        $mform->hideIf('customtext2', 'customint7', 'eq', 0);
+
+        /* The profile fields this instance asks an applicant for, picked from the pool the
+           administrator allows. Two checkboxes per field: collect it, and require it. The
+           "required" box is hidden until the field itself is ticked, which is presentation
+           only - edit.php recomputes the pair server side, because hideIf is a browser
+           behaviour and decides nothing about what is submitted. */
+        $pool = \enrol_apply\local\fields::pool();
+        $offerable = array_intersect_key(\enrol_apply\local\fields::offerable(), array_flip($pool));
+
+        if ($offerable) {
+            $mform->addElement(
+                'static',
+                'requestedfields',
+                get_string('requestedfields', 'enrol_apply'),
+                get_string('requestedfieldsintro', 'enrol_apply')
+            );
+            $mform->addHelpButton('requestedfields', 'requestedfields', 'enrol_apply');
+
+            foreach ($offerable as $key => $label) {
+                /* The label is the escaped spelling: a moodleform element label renders
+                   through a triple stash in element-template.mustache. */
+                $escaped = \enrol_apply\local\fields::label($key, true);
+                $group = [
+                    $mform->createElement('advcheckbox', 'field_' . $key, '', $escaped),
+                    $mform->createElement('advcheckbox', 'fieldreq_' . $key, '', get_string('fieldrequired', 'enrol_apply')),
+                ];
+                $mform->addGroup($group, 'fieldgroup_' . $key, $escaped, ' ', false);
+                $mform->hideIf('fieldreq_' . $key, 'field_' . $key, 'notchecked');
+            }
+        } else {
+            $mform->addElement(
+                'static',
+                'nofieldsoffered',
+                get_string('requestedfields', 'enrol_apply'),
+                get_string('nofieldsoffered', 'enrol_apply')
+            );
+        }
+
+        /* The method's own questions hang off the instance id, so they are edited on their own
+           page once the instance exists, reached by the "Save and edit" button at the foot of
+           the form. */
+        $mform->addElement('static', 'questions', get_string('questions', 'enrol_apply'), $this->questions_text($instance));
+
+        // Section 5: Groups.
+        $mform->addElement('header', 'sectiongroups', get_string('sectiongroups', 'enrol_apply'));
+        $mform->addHelpButton('sectiongroups', 'sectiongroups', 'enrol_apply');
+        $mform->setExpanded('sectiongroups', true);
 
         // Groups the applicant joins once their application is approved.
         $groups = [];
@@ -81,8 +252,7 @@ class enrol_apply_edit_form extends moodleform {
 
         /* What a group's enrolment key does: nothing, admit, or send for review. The groups that
            carry a key are listed beneath it, the keys themselves never; hideIf because the list
-           only matters while the option is on. No header: one opened here would stay open over every element
-           that follows, down to the requested fields. */
+           only matters while the option is on. */
         $mform->addElement('select', 'customchar1', get_string('groupkeys', 'enrol_apply'), [
             \enrol_apply\local\groupkey::MODE_OFF => get_string('groupkeys_off', 'enrol_apply'),
             \enrol_apply\local\groupkey::MODE_ANY => get_string('groupkeys_any', 'enrol_apply'),
@@ -148,6 +318,11 @@ class enrol_apply_edit_form extends moodleform {
             $mform->hideIf('groupkeyselfkeys', 'customchar1', 'eq', \enrol_apply\local\groupkey::MODE_OFF);
         }
 
+        // Section 6: After approval.
+        $mform->addElement('header', 'sectionafter', get_string('sectionafter', 'enrol_apply'));
+        $mform->addHelpButton('sectionafter', 'sectionafter', 'enrol_apply');
+        $mform->setExpanded('sectionafter', $opened['sectionafter']);
+
         // Enrolment duration.
         $mform->addElement('duration', 'enrolperiod', get_string('defaultperiod', 'enrol_apply'), [
             'optional' => true,
@@ -172,135 +347,10 @@ class enrol_apply_edit_form extends moodleform {
         $mform->disabledIf('expirythreshold', 'expirynotify', 'eq', 0);
         $mform->setDefault('expirythreshold', DAYSECS);
 
-        /* The window during which applications are accepted. It is separate from the
-           enrolment period above: enrolperiod measures how long an approved enrolment
-           lasts, these two decide when an application may be submitted at all. Both live
-           on {enrol} already and are carried by core's own backup. */
-        $mform->addElement('date_time_selector', 'enrolstartdate', get_string('enrolstartdate', 'enrol_apply'), [
-            'optional' => true,
-        ]);
-        $mform->setDefault('enrolstartdate', 0);
-        $mform->addHelpButton('enrolstartdate', 'enrolstartdate', 'enrol_apply');
-
-        $mform->addElement('date_time_selector', 'enrolenddate', get_string('enrolenddate', 'enrol_apply'), [
-            'optional' => true,
-        ]);
-        $mform->setDefault('enrolenddate', 0);
-        $mform->addHelpButton('enrolenddate', 'enrolenddate', 'enrol_apply');
-
-        $mform->addElement('textarea', 'customtext1', get_string('editdescription', 'enrol_apply'));
-        $mform->setType('customtext1', PARAM_RAW);
-
-        $mform->addElement('select', 'customint7', get_string('opt_commentaryzone', 'enrol_apply'), $yesno);
-        $mform->setDefault('customint7', 0);
-        $mform->addHelpButton('customint7', 'opt_commentaryzone', 'enrol_apply');
-
-        /* No setDefault: empty is the correct default, and the readers fall back to the shipped
-           wording. Pre-filling a get_string() here would freeze the creating teacher's language
-           into customtext2, so the label would stop following the language pack.
-
-           hideIf rather than disabledIf, because the label only matters while the commentary
-           zone is on. hideIf hides the wrapper without disabling the input (_hideElement() in
-           lib/form/form.js), so a label survives the zone being switched off; a disabled field
-           would post nothing. */
-        $mform->addElement('text', 'customtext2', get_string('custom_label', 'enrol_apply'));
-        $mform->setType('customtext2', PARAM_TEXT);
-        $mform->addHelpButton('customtext2', 'custom_label', 'enrol_apply');
-        $mform->hideIf('customtext2', 'customint7', 'eq', 0);
-
-        /* The two capacity numbers: customint3 is how many people may apply, customint4 how
-           many may be approved at once. The gap between them is overbooking, which is
-           legitimate where approval is discretionary. 0 means no limit, and validation()
-           refuses a negative.
-
-           Added before the profile-field header below, which stays open until the next header
-           or the action buttons: anything added after it would render inside that section, or
-           in the main one when no field is offerable and the header is not opened. */
-        $mform->addElement('text', 'customint3', get_string('maxapplicants', 'enrol_apply'));
-        $mform->setType('customint3', PARAM_INT);
-        $mform->setDefault('customint3', $plugin->get_config('maxenrolled', 0));
-        $mform->addHelpButton('customint3', 'maxapplicants', 'enrol_apply');
-
-        $mform->addElement('text', 'customint4', get_string('places', 'enrol_apply'));
-        $mform->setType('customint4', PARAM_INT);
-        $mform->setDefault('customint4', $plugin->get_config('places', 0));
-        $mform->addHelpButton('customint4', 'places', 'enrol_apply');
-
-        /* How many places are currently taken, for the person setting the limits. Only for an
-           existing instance: a new one has nothing to count. */
-        if (!empty($instance->id)) {
-            $mform->addElement(
-                'static',
-                'currentoccupancy',
-                get_string('places', 'enrol_apply'),
-                get_string('placestaken', 'enrol_apply', (object) [
-                    'taken' => \enrol_apply\local\capacity::places_taken($instance),
-                    'limit' => \enrol_apply\local\capacity::places($instance),
-                ])
-            );
-        }
-
-        /* The profile fields this instance asks an applicant for, picked from the pool the
-           administrator allows. Two checkboxes per field: collect it, and require it. The
-           "required" box is hidden until the field itself is ticked, which is presentation
-           only - edit.php recomputes the pair server side, because hideIf is a browser
-           behaviour and decides nothing about what is submitted. */
-        $pool = \enrol_apply\local\fields::pool();
-        $offerable = array_intersect_key(\enrol_apply\local\fields::offerable(), array_flip($pool));
-
-        if ($offerable) {
-            $mform->addElement('header', 'requestedfieldsheader', get_string('requestedfields', 'enrol_apply'));
-            $mform->addHelpButton('requestedfieldsheader', 'requestedfields', 'enrol_apply');
-            $mform->setExpanded('requestedfieldsheader', true);
-
-            foreach ($offerable as $key => $label) {
-                /* The label is the escaped spelling: a moodleform element label renders
-                   through a triple stash in element-template.mustache. */
-                $escaped = \enrol_apply\local\fields::label($key, true);
-                $group = [
-                    $mform->createElement('advcheckbox', 'field_' . $key, '', $escaped),
-                    $mform->createElement('advcheckbox', 'fieldreq_' . $key, '', get_string('fieldrequired', 'enrol_apply')),
-                ];
-                $mform->addGroup($group, 'fieldgroup_' . $key, $escaped, ' ', false);
-                $mform->hideIf('fieldreq_' . $key, 'field_' . $key, 'notchecked');
-            }
-        } else {
-            $mform->addElement(
-                'static',
-                'nofieldsoffered',
-                get_string('requestedfields', 'enrol_apply'),
-                get_string('nofieldsoffered', 'enrol_apply')
-            );
-        }
-
-        $choices = [
-            '$@NONE@$' => get_string('nobody'),
-            '$@ALL@$' => get_string('everyonewhocan', 'admin', get_capability_string('enrol/apply:manageapplications')),
-        ];
-        foreach (get_enrolled_users($context, 'enrol/apply:manageapplications') as $userid => $user) {
-            $choices[$userid] = fullname($user);
-        }
-        $notify = $mform->addElement('select', 'notify', get_string('notify_desc', 'enrol_apply'), $choices);
-        $notify->setMultiple(true);
-
-        /* Restrict applications to one cohort. The element is emitted even when there is
-           nothing to choose from, as a hidden constant zero: enrol_plugin::update_instance()
-           copies a property only when it is set on the submitted data, so omitting the
-           element would make an existing restriction impossible to remove. */
-        $cohorts = $this->get_cohort_options($instance, $context);
-        if (count($cohorts) > 1) {
-            $mform->addElement('select', 'customint5', get_string('cohortonly', 'enrol_apply'), $cohorts);
-            $mform->addHelpButton('customint5', 'cohortonly', 'enrol_apply');
-        } else {
-            $mform->addElement('hidden', 'customint5');
-            $mform->setType('customint5', PARAM_INT);
-            $mform->setConstant('customint5', 0);
-        }
-
         /* The per-instance half of the profile-write switch. Emitted either way, as a hidden
            constant zero when the site switch is off, for the same reason as the cohort
-           element above: update_instance() copies a property only when it is set on the
-           submitted data, so omitting it would make an existing opt-in impossible to clear. */
+           element: update_instance() copies a property only when it is set on the submitted
+           data, so omitting it would make an existing opt-in impossible to clear. */
         if (get_config('enrol_apply', 'allowprofilewrite')) {
             $mform->addElement('advcheckbox', 'customint8', get_string('saveforfutureinstance', 'enrol_apply'));
             $mform->addHelpButton('customint8', 'saveforfutureinstance', 'enrol_apply');
@@ -310,6 +360,22 @@ class enrol_apply_edit_form extends moodleform {
             $mform->setType('customint8', PARAM_INT);
             $mform->setConstant('customint8', 0);
         }
+
+        // Section 7: Notifications.
+        $mform->addElement('header', 'sectionnotify', get_string('sectionnotify', 'enrol_apply'));
+        $mform->addHelpButton('sectionnotify', 'sectionnotify', 'enrol_apply');
+        $mform->setExpanded('sectionnotify', $opened['sectionnotify']);
+
+        $choices = [
+            '$@NONE@$' => get_string('nobody'),
+            '$@ALL@$' => get_string('everyonewhocan', 'admin', get_capability_string('enrol/apply:manageapplications')),
+        ];
+        foreach (get_enrolled_users($context, 'enrol/apply:manageapplications') as $userid => $user) {
+            $choices[$userid] = fullname($user);
+        }
+        $notify = $mform->addElement('select', 'notify', get_string('notify', 'enrol_apply'), $choices);
+        $notify->setMultiple(true);
+        $mform->addHelpButton('notify', 'notify', 'enrol_apply');
 
         $mform->addElement('hidden', 'id');
         $mform->setType('id', PARAM_INT);
@@ -328,6 +394,157 @@ class enrol_apply_edit_form extends moodleform {
         $mform->closeHeaderBefore('buttonar');
 
         $this->set_data($this->prepare_instance_data($instance, $DB));
+    }
+
+    /**
+     * Which of the sections closed by default open on load.
+     *
+     * Who may apply, After approval and Notifications are closed by default; each opens when the
+     * instance holds a value in it other than the default, so a configured value is never hidden
+     * behind a closed section. For a new instance the "instance" is the defaults, so a site
+     * default such as an enrolment duration opens its section too.
+     *
+     * @param stdClass $instance Instance record, or the defaults for a new instance.
+     * @param enrol_apply_plugin $plugin The plugin, for the notification default.
+     * @return array Whether to open each section, keyed by header name: sectionwho, sectionafter
+     *         and sectionnotify.
+     */
+    protected function opened_sections($instance, $plugin): array {
+        $defaults = $plugin->get_instance_defaults();
+
+        return [
+            'sectionwho' => (int) ($instance->customint5 ?? 0) !== 0,
+            'sectionafter' => !empty($instance->enrolperiod)
+                || !empty($instance->expirynotify)
+                || !empty($instance->customint8),
+            'sectionnotify' => (string) ($instance->customtext3 ?? '') !== (string) $defaults['customtext3'],
+        ];
+    }
+
+    /**
+     * The facts the summary strip states about a saved instance, in reading order.
+     *
+     * Whether it accepts applications (in allow_apply()'s order: disabled, not accepting new
+     * ones, not open yet, closed, the applicant limit reached, then open, until the closing date
+     * when there is one), how many places are taken of the limit, and what a group enrolment key
+     * does. Each fact comes from the instance row or an existing reader; the cohort restriction
+     * is left out, because whether it lets somebody in depends on who asks.
+     *
+     * @param stdClass $instance The saved {enrol} record.
+     * @return string[] The facts, plain text.
+     */
+    protected function summary_facts(stdClass $instance): array {
+        $facts = [];
+
+        $now = time();
+        $opens = (int) ($instance->enrolstartdate ?? 0);
+        $closes = (int) ($instance->enrolenddate ?? 0);
+        if ($instance->status != ENROL_INSTANCE_ENABLED) {
+            $facts[] = get_string('summarydisabled', 'enrol_apply');
+        } else if (empty($instance->customint6)) {
+            $facts[] = get_string('summarynotaccepting', 'enrol_apply');
+        } else if ($opens > 0 && $opens > $now) {
+            $facts[] = get_string('summarynotopen', 'enrol_apply', userdate($opens));
+        } else if ($closes > 0 && $closes < $now) {
+            $facts[] = get_string('summaryclosed', 'enrol_apply', userdate($closes));
+        } else if (\enrol_apply\local\capacity::applications_closed($instance)) {
+            $facts[] = get_string('summaryfull', 'enrol_apply');
+        } else if ($closes > 0) {
+            $facts[] = get_string('summaryacceptinguntil', 'enrol_apply', userdate($closes));
+        } else {
+            $facts[] = get_string('summaryaccepting', 'enrol_apply');
+        }
+
+        $taken = \enrol_apply\local\capacity::places_taken($instance);
+        $limit = \enrol_apply\local\capacity::places($instance);
+        $facts[] = $limit > 0
+            ? get_string('summaryplaces', 'enrol_apply', (object) ['taken' => $taken, 'limit' => $limit])
+            : get_string('summaryplacesnolimit', 'enrol_apply', $taken);
+
+        // The strict readers, so a mode a restore carried in verbatim reads as off, as everywhere else.
+        if (!\enrol_apply\local\groupkey::enabled($instance)) {
+            $facts[] = get_string('summarykeysoff', 'enrol_apply');
+        } else if (\enrol_apply\local\groupkey::required($instance)) {
+            $facts[] = get_string('summarykeysrequired', 'enrol_apply');
+        } else if (\enrol_apply\local\groupkey::mandatory($instance)) {
+            $facts[] = get_string('summarykeysreview', 'enrol_apply');
+        } else {
+            $facts[] = get_string('summarykeysany', 'enrol_apply');
+        }
+
+        return $facts;
+    }
+
+    /**
+     * The summary strip above the sections, rendered.
+     *
+     * @param stdClass $instance The saved {enrol} record.
+     * @return string HTML for the form's html element, which renders it raw.
+     */
+    protected function summary_strip(stdClass $instance): string {
+        global $OUTPUT;
+
+        $facts = [];
+        foreach ($this->summary_facts($instance) as $index => $text) {
+            $facts[] = ['first' => $index === 0, 'text' => $text];
+        }
+
+        return $OUTPUT->render_from_template('enrol_apply/instance_summary', [
+            'label' => get_string('summarylabel', 'enrol_apply'),
+            'facts' => $facts,
+        ]);
+    }
+
+    /**
+     * The places taken, for the static row under the places limit.
+     *
+     * @param stdClass $instance The saved {enrol} record.
+     * @return string Plain text; the static element renders it raw, and it holds no user data.
+     */
+    protected function places_taken_text(stdClass $instance): string {
+        $taken = \enrol_apply\local\capacity::places_taken($instance);
+        $limit = \enrol_apply\local\capacity::places($instance);
+
+        return $limit > 0
+            ? get_string('placestaken', 'enrol_apply', (object) ['taken' => $taken, 'limit' => $limit])
+            : get_string('placestakennolimit', 'enrol_apply', $taken);
+    }
+
+    /**
+     * The line about the method's own questions in the Application form section.
+     *
+     * A new instance has none yet: its questions hang off its id. A saved one says how many it
+     * asks and how many of them are shown on a condition, read as the conditions page reads them.
+     *
+     * @param stdClass $instance Instance record, or the defaults for a new instance.
+     * @return string Escaped text for the static element, which renders it raw.
+     */
+    protected function questions_text($instance): string {
+        $button = get_string('saveandeditfields', 'enrol_apply');
+        if (empty($instance->id)) {
+            return s(get_string('questionsnew', 'enrol_apply', $button));
+        }
+
+        $fields = \enrol_apply\local\answers::fields($instance);
+        $count = count($fields);
+        $conditional = count(\enrol_apply\local\conditions::effective($instance, $fields));
+
+        if ($count === 0) {
+            $line = get_string('questionsnone', 'enrol_apply', $button);
+        } else if ($count === 1) {
+            // A condition is set by an earlier question, so a lone question never has one.
+            $line = get_string('questionsone', 'enrol_apply', $button);
+        } else if ($conditional === 0) {
+            $line = get_string('questionsmany', 'enrol_apply', (object) ['button' => $button, 'count' => $count]);
+        } else {
+            $line = get_string('questionsmanyconditional', 'enrol_apply', (object) [
+                'button' => $button,
+                'count' => $count,
+                'conditional' => $conditional,
+            ]);
+        }
+
+        return s($line);
     }
 
     /**

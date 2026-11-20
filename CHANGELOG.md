@@ -17,6 +17,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   The chosen group is in the privacy metadata and the export. Nothing reads them yet, so nothing
   changes for a site: the upgrade step only creates the tables and the column.
 
+### Changed
+
+- **The method's settings form is redrawn in seven sections** (`docs/design/applicant-group-choice.md`,
+  stage G1, C-D15 to C-D18; no new setting). General; When and how many; Who may apply;
+  Application form; Groups; After approval; Notifications, each a collapsible section with its own
+  help. General, When and how many, Application form and Groups open by default; Who may apply, After
+  approval and Notifications open only when they hold something other than the default (a cohort,
+  an enrolment duration, an expiry notice, the profile write, a recipient list other than the
+  default), so nothing configured is hidden behind a closed section. The requested profile fields
+  are part of Application form, which also says how many questions the method asks and how many
+  are shown on a condition; the "Save and edit application fields" button stays at the foot.
+  Every field keeps its name, default and behaviour.
+- **A saved method's form opens with a one-line summary**: whether it accepts applications (or why
+  not: disabled, not accepting new ones, not open yet, closed, the applicant limit reached), the
+  closing date, the places taken of the limit, and what a group enrolment key does.
+- **Clearer labels, and help where there was none.** "Allow Course enrol confirmation" is now
+  "Allow existing enrolments", "Allow new course enrol request" "Accept new applications",
+  "Default role" "Role on approval", "Group assignment" "Groups joined on approval", "Textarea
+  description" "Text shown to applicants", "Commentary field" "Ask for a comment", "Custom label"
+  "Comment prompt", the second "Places" row "Places taken" (saying "no limit" rather than "of 0"),
+  and "Define who gets notified about new enrolment applications." "Notify of new applications".
+  The first three, and "Ask for a comment", are also the labels of the site defaults. Help was
+  added to the first two, the role, the text shown to applicants, the notification recipients and
+  every section.
+
 ## v2.1 (2026110701) - 2026-11-07
 
 ### Added
