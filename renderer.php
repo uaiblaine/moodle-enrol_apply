@@ -854,8 +854,9 @@ class enrol_apply_renderer extends plugin_renderer_base {
      * What an approval will give, for a decider who may not choose it (S5).
      *
      * The groups are the approval's own fallback, {@see \enrol_apply_plugin::default_approval_groups()}:
-     * on the review page that application's key route or the instance's list, on the queue the
-     * instance's list with a sentence saying that a keyed application also joins its key group.
+     * on the review page that application's key route, its chosen group and the instance's list, or
+     * the instance's list; on the queue the instance's list with a sentence saying that a keyed
+     * application, or one made with a chosen group, also joins that group.
      * The role is the instance's. Read from the same helpers the approval runs, so the summary
      * cannot promise what the decision then does not do.
      *
@@ -897,7 +898,12 @@ class enrol_apply_renderer extends plugin_renderer_base {
             : false;
         $rolename = $role ? role_get_name($role, $coursecontext) : get_string('none');
 
+        /* On the queue the summary speaks for every application at once, so it says that one a key
+           sent for review, or one made with a chosen group (C-D10), also joins that group. The two
+           never apply together: the method offers no choice in a key-only mode (C-D5). */
         $keynote = $userenrolmentid === 0 && $instance->customchar1 === \enrol_apply\local\groupkey::MODE_REVIEW;
+        $chosennote = $userenrolmentid === 0 && !$keynote
+            && \enrol_apply\local\groupchoice::mode($instance) !== \enrol_apply\local\instanceoptions::CHOICE_OFF;
 
         return [
             'hassummary' => true,
@@ -910,8 +916,10 @@ class enrol_apply_renderer extends plugin_renderer_base {
             'summaryrolelabel' => get_string('decisionsummaryrole', 'enrol_apply'),
             'summaryrole' => format_string($rolename, true, ['context' => $coursecontext]),
             'summaryhelp' => get_string('decisionsummary_help', 'enrol_apply'),
-            'hassummarykeynote' => $keynote,
-            'summarykeynote' => get_string('decisionsummarykey', 'enrol_apply'),
+            'hassummarykeynote' => $keynote || $chosennote,
+            'summarykeynote' => $chosennote
+                ? get_string('decisionsummarychosen', 'enrol_apply')
+                : get_string('decisionsummarykey', 'enrol_apply'),
         ];
     }
 
@@ -972,6 +980,55 @@ class enrol_apply_renderer extends plugin_renderer_base {
                 ? []
                 : enrol_get_plugin('apply')->key_route_groups($instance, (int) $group->id),
             'keygroupid' => (int) $group->id,
+        ];
+    }
+
+    /**
+     * The group the applicant chose for this application, for the review page (C-D4).
+     *
+     * Only for an application without a key route: a record never carries both, and the key chip
+     * says what a key did ({@see self::key_context()}), so the two chips never show together. The
+     * chip reads "Chose: <group>" to a reader {@see self::key_context()} would name a key group to
+     * (a decider or viewer in the course who may see the group by core's visibility rule), and
+     * "Chose a group" to anybody else, a mentor and a reader the group is hidden from included,
+     * and for a group deleted since. The groups offered ticked are not read here: the approval's
+     * own fallback, {@see \enrol_apply_plugin::default_approval_groups()}, already puts the chosen
+     * group on top of the method's (C-D10), and the review page ticks that.
+     *
+     * @param stdClass $application Application as \enrol_apply\local\queue::application() returns it.
+     * @param \context_course $coursecontext Course the application was made to.
+     * @return array Keys 'chip' (plain spelling, empty when no group was chosen) and 'groupid'
+     *     (the chosen group when the chip names it, 0 otherwise).
+     */
+    protected function chosen_context($application, \context_course $coursecontext): array {
+        global $DB, $USER;
+
+        // Null beside a key route too: the application is then filed under the key's group.
+        $chosen = \enrol_apply\local\submission::chosen_group_of((int) $application->id);
+        if ($chosen === null) {
+            return ['chip' => '', 'groupid' => 0];
+        }
+
+        $group = $DB->get_record(
+            'groups',
+            ['id' => $chosen->groupid, 'courseid' => $application->courseid],
+            'id, courseid, name, visibility'
+        );
+        if (
+            !$group
+            || !self::reads_course_groups($coursecontext)
+            || !\enrol_apply\local\groupvisibility::visible_to($group, (int) $USER->id)
+        ) {
+            return ['chip' => get_string('chosenchipunnamed', 'enrol_apply'), 'groupid' => 0];
+        }
+
+        return [
+            // Plain, for the same reason as the key chip: the template double-stashes it.
+            'chip' => get_string('chosenchip', 'enrol_apply', format_string($group->name, true, [
+                'context' => $coursecontext,
+                'escape' => false,
+            ])),
+            'groupid' => (int) $group->id,
         ];
     }
 
@@ -1100,8 +1157,9 @@ class enrol_apply_renderer extends plugin_renderer_base {
      * Each record says only what a column of the course report says to the same reader, through
      * the report's own formatters: the outcome (worded from the record AND the live enrolment, so
      * a record that says approved for ever reads as removed once the enrolment is gone), the
-     * dates, the decider's full name (the report's decider entity), the key group and the joined
-     * groups (each judged by core's visibility rule for this reader) and the decision note. The
+     * dates, the decider's full name (the report's decider entity), the key group, the chosen
+     * group and the joined groups (each judged by core's visibility rule for this reader) and the
+     * decision note. The
      * message written to the applicant is not one of them, so it is never selected here.
      *
      * @param stdClass $application Application as \enrol_apply\local\queue::application() returns it.
@@ -1151,9 +1209,10 @@ class enrol_apply_renderer extends plugin_renderer_base {
                cell is raw HTML, and the template triple stashes them: format_string() escapes each
                name once, and a group the reader may not see leaves its cell empty. */
             $keygroup = $formatter::key_group($prior->keygroupname, $prior);
+            $chosengroup = $formatter::chosen_group($prior->chosengroupname ?? null, $prior);
             $joined = $formatter::joined_groups($prior->joinedgroups, $prior);
             $rows[] = [
-                'hasfacts' => $decider !== null || $keygroup !== '' || $joined !== '' || $note !== '',
+                'hasfacts' => $decider !== null || $keygroup !== '' || $chosengroup !== '' || $joined !== '' || $note !== '',
                 'outcome' => $outcome,
                 'outcomeclass' => self::outcome_badge($outcome),
                 'applieddate' => $applied,
@@ -1166,6 +1225,8 @@ class enrol_apply_renderer extends plugin_renderer_base {
                 'decider' => $decider ? fullname($decider, $viewfullnames) : '',
                 'haskeygroup' => $keygroup !== '',
                 'keygroup' => $keygroup,
+                'haschosengroup' => $chosengroup !== '',
+                'chosengroup' => $chosengroup,
                 'hasjoined' => $joined !== '',
                 'joined' => $joined,
                 'hasnote' => $note !== '',
@@ -1180,12 +1241,323 @@ class enrol_apply_renderer extends plugin_renderer_base {
             'history' => $rows,
             'historydeciderlabel' => get_string('submissiondecidedby', 'enrol_apply'),
             'historykeygrouplabel' => get_string('keygroup', 'enrol_apply'),
+            'historychosengrouplabel' => get_string('chosengroupcolumn', 'enrol_apply'),
             'historyjoinedlabel' => get_string('joinedgroups', 'enrol_apply'),
             'historynotelabel' => get_string('decisionnote', 'enrol_apply'),
             'historyreportlabel' => get_string('reviewhistoryreport', 'enrol_apply'),
             'hasreportlink' => $this->can_open_report($application),
             'historyreporturl' => (new moodle_url('/enrol/apply/report.php', ['id' => (int) $application->enrolid]))->out(false),
         ];
+    }
+
+    /**
+     * "Already in this course": the applicant's other enrolments in the application's course (C-D5).
+     *
+     * One entry per other user enrolment of the applicant in the course, through any enrolment
+     * method, in the course's method order: the method's name, its status, the roles that method
+     * gave them there, and for this plugin's methods the groups joined through that method and how
+     * it was admitted. All of it is what was recorded, never recomputed: the status is the
+     * enrolment's own (and, for an application of this plugin's still waiting, the record's), the
+     * roles are the assignments stamped with the method (component and itemid, as
+     * complete_approval() and every protected enrol plugin stamp them), and the groups and the
+     * admission come off the newest record of that enrolment (joinedgroups, keyoutcome, keygroupid,
+     * decidedby, timedecided). A role assigned outside any method (core's manual and self
+     * enrolments stamp nothing) cannot be told apart by method, so it is listed once under the
+     * entries rather than credited to one of them.
+     *
+     * Names follow the page's rules. Group names only for a reader {@see self::reads_course_groups()}
+     * admits, each judged by core's visibility rule for them
+     * ({@see \enrol_apply\local\groupvisibility::visible_to()}); a group they may not see is left
+     * out and not counted, as in the course report's "Groups joined" (V-D13), and a key group they
+     * may not see leaves the admission unnamed. The decider's name only for a reader holding
+     * enrol/apply:viewreports, the gate of the earlier applications panel
+     * ({@see self::history_context()}), which is where the page already names deciders; anybody
+     * else reads the date alone.
+     *
+     * Spellings: the method's name and the role names are normalised to the escaped spelling and
+     * triple stashed, because get_instance_name() and role_get_name() each return a bare language
+     * string for some records and format_string() output for others; format_string() leaves the
+     * escaped half as it is. The group names and the admission line are plain, for a double stash.
+     *
+     * @param stdClass $application Application as \enrol_apply\local\queue::application() returns it.
+     * @param \context_course $coursecontext Course the application was made to.
+     * @return array Template context for enrol_apply/review_enrolments.
+     */
+    protected function enrolments_context($application, \context_course $coursecontext): array {
+        global $DB, $USER;
+
+        $courseid = (int) $application->courseid;
+        $userid = (int) $application->userid;
+
+        /* Core's own gate for reading a user's enrolments in a course (the participants page's status
+           column): a mentor, who holds nothing in the course, and a moderator without it see no panel. */
+        if (!has_capability('moodle/course:enrolreview', $coursecontext)) {
+            return ['hasenrolments' => false, 'enrolments' => []];
+        }
+        /* A reader the course report narrows sees, of this plugin's own methods, only the records the
+           report would show them: their groups, and no method decided only by those who see every
+           group (groupscope::record_where()). */
+        $narrowed = \enrol_apply\local\groupscope::narrowed_to($courseid, (int) $USER->id, \enrol_apply\local\groupscope::REPORT);
+
+        $userenrolments = $DB->get_records_sql(
+            "SELECT ue.id, ue.enrolid, ue.status, ue.timestart, ue.timeend
+               FROM {user_enrolments} ue
+               JOIN {enrol} e ON e.id = ue.enrolid
+              WHERE e.courseid = :courseid AND ue.userid = :userid AND ue.id <> :ueid
+           ORDER BY e.sortorder, e.id",
+            ['courseid' => $courseid, 'userid' => $userid, 'ueid' => (int) $application->id]
+        );
+        if (!$userenrolments) {
+            return ['hasenrolments' => false, 'enrolments' => []];
+        }
+
+        $instances = enrol_get_instances($courseid, false);
+        $namesgroups = self::reads_course_groups($coursecontext);
+        $namesdecider = has_capability('enrol/apply:viewreports', $coursecontext);
+        $viewfullnames = has_capability('moodle/site:viewfullnames', $coursecontext);
+        $short = get_string('strftimedatetimeshort', 'langconfig');
+        $now = time();
+
+        // Every role assignment the applicant holds in the course, stamped or not, in one read.
+        $assignments = $DB->get_records(
+            'role_assignments',
+            ['userid' => $userid, 'contextid' => $coursecontext->id],
+            'id ASC',
+            'id, roleid, component, itemid'
+        );
+        $rolenames = role_fix_names(get_all_roles($coursecontext), $coursecontext, ROLENAME_ALIAS, true);
+        $rolename = static fn(int $roleid): string => isset($rolenames[$roleid])
+            ? format_string($rolenames[$roleid], true, ['context' => $coursecontext])
+            : '';
+
+        $entries = [];
+        foreach ($userenrolments as $ue) {
+            $instance = $instances[(int) $ue->enrolid] ?? null;
+            $plugin = $instance ? enrol_get_plugin($instance->enrol) : null;
+            if (!$instance || !$plugin) {
+                // A method whose plugin is gone from the site: core lists nothing for it either.
+                continue;
+            }
+            $isapply = $instance->enrol === 'apply';
+            $record = $isapply ? $this->newest_record((int) $ue->id) : null;
+            if ($isapply && $narrowed !== null && !$this->record_in_scope($record, $narrowed)) {
+                continue;
+            }
+
+            [$status, $statusclass] = $this->enrolment_status($ue, $instance, $record, $now);
+
+            $roles = [];
+            foreach ($assignments as $assignment) {
+                if ($assignment->component === 'enrol_' . $instance->enrol && (int) $assignment->itemid === (int) $instance->id) {
+                    $roles[(int) $assignment->roleid] = $rolename((int) $assignment->roleid);
+                }
+            }
+            $roles = array_filter($roles, static fn(string $name): bool => $name !== '');
+
+            $groups = '';
+            $admission = '';
+            if ($record !== null) {
+                if ($namesgroups && $record->joinedgroups !== null && trim((string) $record->joinedgroups) !== '') {
+                    $groups = implode(', ', $this->visible_group_names(
+                        array_values(array_filter(array_map('intval', explode(',', (string) $record->joinedgroups)))),
+                        $coursecontext
+                    )[0]);
+                }
+                $admission = $this->admission_line($record, $userid, $namesgroups, $namesdecider, $viewfullnames, $short);
+            }
+
+            $entries[] = [
+                'method' => format_string($plugin->get_instance_name($instance), true, ['context' => $coursecontext]),
+                'status' => $status,
+                'statusclass' => $statusclass,
+                'hasrole' => (bool) $roles,
+                'role' => implode(', ', $roles),
+                'hasgroups' => $groups !== '',
+                'groups' => $groups,
+                'hasadmission' => $admission !== '',
+                'admission' => $admission,
+                'hasfacts' => $roles || $groups !== '' || $admission !== '',
+            ];
+        }
+
+        $others = [];
+        foreach ($assignments as $assignment) {
+            if ((string) $assignment->component === '') {
+                $others[(int) $assignment->roleid] = $rolename((int) $assignment->roleid);
+            }
+        }
+        $others = array_filter($others, static fn(string $name): bool => $name !== '');
+
+        return [
+            'hasenrolments' => (bool) $entries,
+            'enrolmentsheading' => get_string('reviewenrolments', 'enrol_apply'),
+            'enrolmentsrolelabel' => get_string('reviewenrolmentsrole', 'enrol_apply'),
+            'enrolmentsgroupslabel' => get_string('joinedgroups', 'enrol_apply'),
+            'enrolmentsadmissionlabel' => get_string('reviewenrolmentsadmission', 'enrol_apply'),
+            'enrolments' => $entries,
+            'hasotherroles' => $entries && $others,
+            'otherroleslabel' => get_string('reviewenrolmentsotherroles', 'enrol_apply'),
+            'otherroles' => implode(', ', $others),
+        ];
+    }
+
+    /**
+     * Whether a record of this plugin's is one the course report shows a narrowed reader.
+     *
+     * The report's own predicate ({@see \enrol_apply\local\groupscope::record_where()}) over the one
+     * record, so the panel and the report cannot disagree. No record at all (an application older
+     * than the durable record) is shown to nobody narrowed.
+     *
+     * @param stdClass|null $record The newest record of the enrolment, or null.
+     * @param array $groups The reader's groups, as groupscope::narrowed_to() returns them.
+     * @return bool True when the report would show it to this reader.
+     */
+    protected function record_in_scope(?stdClass $record, array $groups): bool {
+        global $DB;
+
+        if ($record === null) {
+            return false;
+        }
+        [$where, $params] = \enrol_apply\local\groupscope::record_where('s', $groups, 'panelscope');
+        if ($where === '1 = 0') {
+            return false;
+        }
+
+        return $DB->record_exists_sql(
+            "SELECT 1 FROM {enrol_apply_submission} s WHERE s.id = :panelrecord AND {$where}",
+            $params + ['panelrecord' => (int) $record->id]
+        );
+    }
+
+    /**
+     * The newest durable record of a user enrolment, with what the "Already in this course" panel reads.
+     *
+     * Newest first, as every reader of the record orders it (key_of(), chosen_groups()).
+     *
+     * @param int $userenrolmentid The user enrolment.
+     * @return stdClass|null The record, or null when the enrolment has none.
+     */
+    protected function newest_record(int $userenrolmentid): ?stdClass {
+        global $DB;
+
+        $rows = $DB->get_records(
+            'enrol_apply_submission',
+            ['userenrolmentid' => $userenrolmentid],
+            'timecreated DESC, id DESC',
+            'id, courseid, status, keygroupid, keyoutcome, decidedby, timedecided, joinedgroups',
+            0,
+            1
+        );
+
+        return reset($rows) ?: null;
+    }
+
+    /**
+     * The status of another enrolment of the applicant's, worded and coloured for its badge.
+     *
+     * Core's participants-page words for any method: active, suspended, or not current (an active
+     * row outside its dates, or on a disabled method). This plugin's own methods add the two
+     * states an application can be in, read from the enrolment and its record: on the waiting
+     * list (ENROL_APPLY_USER_WAIT, a status core does not know) and awaiting a decision (suspended
+     * while the record is still pending). Literal class pairs, so the badge scan sees each
+     * background with its text colour.
+     *
+     * @param stdClass $ue The {user_enrolments} row: status, timestart and timeend.
+     * @param stdClass $instance Its {enrol} record.
+     * @param stdClass|null $record The newest record, for this plugin's methods; null otherwise.
+     * @param int $now The time the page is judged at.
+     * @return array Two elements: the plain label and the badge's classes.
+     */
+    protected function enrolment_status(stdClass $ue, stdClass $instance, ?stdClass $record, int $now): array {
+        $status = (int) $ue->status;
+        if ($instance->enrol === 'apply' && $status === ENROL_APPLY_USER_WAIT) {
+            return [get_string('outcomewaiting', 'enrol_apply'), 'bg-info text-white'];
+        }
+        if (
+            $instance->enrol === 'apply'
+            && $status === ENROL_USER_SUSPENDED
+            && $record !== null
+            && (int) $record->status === \enrol_apply\local\submission::STATUS_PENDING
+        ) {
+            return [get_string('outcomeawaiting', 'enrol_apply'), 'bg-warning text-dark'];
+        }
+        if ($status !== ENROL_USER_ACTIVE) {
+            return [get_string('participationsuspended', 'enrol'), 'bg-secondary text-dark'];
+        }
+        $current = (int) $instance->status === ENROL_INSTANCE_ENABLED
+            && (int) $ue->timestart <= $now
+            && ((int) $ue->timeend === 0 || (int) $ue->timeend > $now);
+
+        return $current
+            ? [get_string('participationactive', 'enrol'), 'bg-success text-white']
+            : [get_string('participationnotcurrent', 'enrol'), 'bg-secondary text-dark'];
+    }
+
+    /**
+     * How another of this plugin's enrolments was admitted, as its record says, or empty.
+     *
+     * By a group key while the key's admission still stands (the applicant recorded as the decider,
+     * {@see \enrol_apply\local\submission::admitted_by_key()}), naming the key's group where the
+     * reader may see it; otherwise by the approval the record names, with the decider's name only
+     * where $namesdecider allows it. An application not approved has no admission to describe: its
+     * status says where it stands.
+     *
+     * @param stdClass $record As newest_record() returns it.
+     * @param int $userid The applicant.
+     * @param bool $namesgroups Whether the reader may be told group names on this page at all.
+     * @param bool $namesdecider Whether the reader may be told who decided.
+     * @param bool $viewfullnames Whether the reader sees full names.
+     * @param string $format The date format.
+     * @return string The plain line, or empty.
+     */
+    protected function admission_line(
+        stdClass $record,
+        int $userid,
+        bool $namesgroups,
+        bool $namesdecider,
+        bool $viewfullnames,
+        string $format
+    ): string {
+        global $DB, $USER;
+
+        $key = (object) [
+            'groupid' => (int) $record->keygroupid,
+            'outcome' => (int) $record->keyoutcome,
+            'userid' => $userid,
+            'decidedby' => (int) $record->decidedby,
+        ];
+        if (\enrol_apply\local\submission::admitted_by_key($key)) {
+            $group = $key->groupid > 0
+                ? $DB->get_record(
+                    'groups',
+                    ['id' => $key->groupid, 'courseid' => $record->courseid],
+                    'id, courseid, name, visibility'
+                )
+                : false;
+            if ($group && $namesgroups && \enrol_apply\local\groupvisibility::visible_to($group, (int) $USER->id)) {
+                return get_string('reviewenrolmentsbykey', 'enrol_apply', format_string($group->name, true, [
+                    'context' => \context_course::instance((int) $group->courseid),
+                    'escape' => false,
+                ]));
+            }
+
+            return get_string('reviewenrolmentsbykeyunnamed', 'enrol_apply');
+        }
+
+        if ((int) $record->status !== \enrol_apply\local\submission::STATUS_APPROVED || (int) $record->timedecided <= 0) {
+            return '';
+        }
+        $when = userdate((int) $record->timedecided, $format);
+        $decider = $namesdecider && (int) $record->decidedby > 0
+            ? \core_user::get_user((int) $record->decidedby, '*', IGNORE_MISSING)
+            : false;
+
+        return $decider
+            ? get_string('reviewenrolmentsapprovedby', 'enrol_apply', (object) [
+                'who' => fullname($decider, $viewfullnames),
+                'when' => $when,
+            ])
+            : get_string('reviewenrolmentsapprovedon', 'enrol_apply', $when);
     }
 
     /**
@@ -1453,6 +1825,13 @@ class enrol_apply_renderer extends plugin_renderer_base {
 
         $coursecontext = \context_course::instance($application->courseid);
         $keyed = $this->key_context($application, $instance, $coursecontext);
+        $chosen = $this->chosen_context($application, $coursecontext);
+        /* The application's group as this reader may be told it, by key or by choice (C-D4): what
+           the outcome and the rules single out. A key route keeps its preselection (the groups the
+           key would have joined); a choice needs none, because the approval's defaults carry it. */
+        $route = $keyed['keygroupid']
+            ? $keyed + ['chosen' => false]
+            : ['chip' => '', 'preselected' => [], 'keygroupid' => $chosen['groupid'], 'chosen' => $chosen['groupid'] > 0];
 
         /* A reader the page admits who may not decide (a holder of enrol/apply:viewapplications
            alone, S5) reads the same blocks with no decision form: no hidden contract, no
@@ -1479,7 +1858,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
         $hascomment = trim((string) $application->applycomment) !== '';
 
         $outcome = $candecide
-            ? $this->review_outcome_context($application, $applicant, $instance, $coursecontext, $controls, $keyed, $capacity)
+            ? $this->review_outcome_context($application, $applicant, $instance, $coursecontext, $controls, $route, $capacity)
             : ['effective' => [], 'context' => []];
 
         $context = $controls
@@ -1487,10 +1866,12 @@ class enrol_apply_renderer extends plugin_renderer_base {
             + $this->review_rules_context(
                 $controls['groupfacts'] ?? [],
                 $outcome['effective'],
-                $keyed['keygroupid'],
+                $route['keygroupid'],
                 $capacity,
-                $history
+                $history,
+                $route['chosen']
             )
+            + $this->enrolments_context($application, $coursecontext)
             + $snapshot
             + $this->applicant_context($applicant, $application, $coursecontext)
             + $history
@@ -1504,6 +1885,9 @@ class enrol_apply_renderer extends plugin_renderer_base {
             'userenrolmentid' => (int) $application->id,
             'haskeychip' => $keyed['chip'] !== '',
             'keychip' => $keyed['chip'],
+            // Never beside the key chip: chosen_context() answers nothing for a key route.
+            'haschosenchip' => $chosen['chip'] !== '',
+            'chosenchip' => $chosen['chip'],
             'statuslabel' => get_string('submissionstatus', 'enrol_apply'),
             'status' => $waiting
                 ? get_string('outcomewaiting', 'enrol_apply')
@@ -1801,9 +2185,11 @@ class enrol_apply_renderer extends plugin_renderer_base {
      *
      * @param array $facts Group facts, as group_facts() returns them; empty when not a course decider.
      * @param array $effective Group ids the approval joins as the page loads.
-     * @param int $keygroupid The key group when this reader may be told it, 0 otherwise.
+     * @param int $keygroupid The application's group (the key's, or the chosen one) when this reader
+     *     may be told it, 0 otherwise.
      * @param array $capacity As capacity_context() returns it.
      * @param array $history As history_context() returns it.
+     * @param bool $chosen Whether $keygroupid is the group the applicant chose rather than a key's.
      * @return array Template context for enrol_apply/review_rules.
      */
     protected function review_rules_context(
@@ -1811,7 +2197,8 @@ class enrol_apply_renderer extends plugin_renderer_base {
         array $effective,
         int $keygroupid,
         array $capacity,
-        array $history
+        array $history,
+        bool $chosen = false
     ): array {
         $seated = [];
         foreach ($effective as $groupid) {
@@ -1825,8 +2212,14 @@ class enrol_apply_renderer extends plugin_renderer_base {
 
         $meters = [];
         foreach ($seated as $fact) {
+            $label = $fact->name;
+            if ($fact->id === $keygroupid) {
+                $label = $chosen
+                    ? get_string('reviewmetergroupchosen', 'enrol_apply', $fact->name)
+                    : get_string('reviewmetergroupkey', 'enrol_apply', $fact->name);
+            }
             $meters[] = self::meter(
-                $fact->id === $keygroupid ? get_string('reviewmetergroupkey', 'enrol_apply', $fact->name) : $fact->name,
+                $label,
                 'group',
                 $fact->members,
                 $fact->seats,
@@ -1996,9 +2389,12 @@ class enrol_apply_renderer extends plugin_renderer_base {
      *
      * Ticked as the page loads (RP-D19): the part of the key route this reader may choose, for an
      * application whose key group they may see; for any other the part of the method's defaults
-     * they may choose. The rest of the route is kept: confirm_enrolment() joins the ticked groups
-     * plus the method's groups this reader may not choose, so the sentence names those too, and a
-     * line under the cards says they stay.
+     * they may choose, which for an application made with a choice is the chosen group on top of
+     * the method's own (C-D10). Unticking the chosen group records a choice without it, and the
+     * line under the sentence says the approval leaves it out, as for a key's group. The rest of
+     * the route is kept: confirm_enrolment() joins the ticked groups plus the method's groups this
+     * reader may not choose, so the sentence names those too, and a line under the cards says they
+     * stay.
      *
      * Above groupfilter::THRESHOLD choosable groups (counted after the reader's narrowing,
      * RP-D18) only the ticked ones are cards and the rest are a search (RP-D20); at or below it
@@ -2010,7 +2406,9 @@ class enrol_apply_renderer extends plugin_renderer_base {
      * @param stdClass $instance Enrol instance the application belongs to.
      * @param \context_course $coursecontext The course it was made to.
      * @param array $controls As decision_controls_context() returns it, with groupfacts filled in.
-     * @param array $keyed As key_context() returns it.
+     * @param array $keyed As key_context() returns it, with 'chosen' true when 'keygroupid' is the
+     *     group the applicant chose rather than a key's (review_form() builds that from
+     *     chosen_context()); absent reads as a key's.
      * @param array $capacity As capacity_context() returns it.
      * @return array Keys 'effective' (group ids joined as the page loads) and 'context' (template
      *     context for enrol_apply/review_outcome).
@@ -2030,6 +2428,8 @@ class enrol_apply_renderer extends plugin_renderer_base {
         $chooser = $controls['chooser'];
         $coursedecider = $controls['coursedecider'];
         $keygroupid = $keyed['keygroupid'];
+        // Whether that group is the one the applicant chose (C-D4) rather than a key's.
+        $chosen = !empty($keyed['chosen']);
 
         // The approval's own fallback, read from the helper add_instance_groups() runs.
         $defaults = $chooser ? enrol_get_plugin('apply')->default_approval_groups($instance, (int) $application->id) : [];
@@ -2121,7 +2521,13 @@ class enrol_apply_renderer extends plugin_renderer_base {
         foreach ($facts as $fact) {
             $checked = in_array($fact->id, $ticked, true);
             if (!$searched || $checked) {
-                $cards[] = $this->group_card($fact, $checked, $fact->id === $keygroupid, in_array($fact->id, $defaults, true));
+                $cards[] = $this->group_card(
+                    $fact,
+                    $checked,
+                    $fact->id === $keygroupid,
+                    in_array($fact->id, $defaults, true),
+                    $chosen
+                );
                 continue;
             }
             $options[] = $this->group_option($fact, $ingroupings[$fact->id] ?? []);
@@ -2167,7 +2573,11 @@ class enrol_apply_renderer extends plugin_renderer_base {
                 'outcomenotkey' => $chooser && $keygroupid && isset($facts[$keygroupid])
                     && !in_array($keygroupid, $effective, true),
                 'outcomenotkeytext' => $keygroupid && isset($facts[$keygroupid])
-                    ? get_string('reviewoutcomenotkey', 'enrol_apply', s($facts[$keygroupid]->name))
+                    ? get_string(
+                        $chosen ? 'reviewoutcomenotchosen' : 'reviewoutcomenotkey',
+                        'enrol_apply',
+                        s($facts[$keygroupid]->name)
+                    )
                     : '',
                 'outcomereadonly' => $coursedecider && !$chooser,
                 'outcomereadonlyhelp' => get_string('decisionsummary_help', 'enrol_apply'),
@@ -2233,11 +2643,13 @@ class enrol_apply_renderer extends plugin_renderer_base {
      *
      * @param stdClass $fact As group_facts() returns one.
      * @param bool $checked Whether it is ticked as the page loads.
-     * @param bool $iskey Whether it is the key's group.
+     * @param bool $iskey Whether it is the application's group: the key's, or the chosen one.
      * @param bool $ismethod Whether the approval's defaults name it.
+     * @param bool $chosen Whether the application's group is the one the applicant chose, which
+     *     words its badge.
      * @return array Template context for one card.
      */
-    protected function group_card(stdClass $fact, bool $checked, bool $iskey, bool $ismethod): array {
+    protected function group_card(stdClass $fact, bool $checked, bool $iskey, bool $ismethod, bool $chosen = false): array {
         $state = $fact->hasseats ? self::signal_state($fact->members, $fact->seats) : self::SIGNAL_OK;
 
         return [
@@ -2245,7 +2657,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
             'name' => $fact->name,
             'checked' => $checked,
             'iskey' => $iskey,
-            'keybadge' => get_string('reviewgroupkey', 'enrol_apply'),
+            'keybadge' => $chosen ? get_string('reviewgroupchosen', 'enrol_apply') : get_string('reviewgroupkey', 'enrol_apply'),
             'ismethod' => $ismethod && !$iskey,
             'methodbadge' => get_string('reviewgroupmethod', 'enrol_apply'),
             'hasseats' => $fact->hasseats,
@@ -2460,6 +2872,8 @@ class enrol_apply_renderer extends plugin_renderer_base {
      *     null when no key counted.
      * @param bool $forreview Whether $keygroup is that of an application sent for review, which is
      *     still a request to decide, rather than of an admission.
+     * @param string|null $chosengroup For an application made with a chosen group, its plain name,
+     *     or empty where the recipient may not be told it; null when no group was chosen.
      * @return string Rendered HTML body.
      */
     public function application_notification_mail_body(
@@ -2469,7 +2883,8 @@ class enrol_apply_renderer extends plugin_renderer_base {
         $applydescription,
         array $submitted = [],
         ?string $keygroup = null,
-        bool $forreview = false
+        bool $forreview = false,
+        ?string $chosengroup = null
     ) {
         $admittedgroup = $forreview ? null : $keygroup;
         $reviewgroup = $forreview ? $keygroup : null;
@@ -2512,6 +2927,12 @@ class enrol_apply_renderer extends plugin_renderer_base {
                 null => '',
                 '' => get_string('mailtoteacher_keyreviewnogroup', 'enrol_apply'),
                 default => get_string('mailtoteacher_keyreview', 'enrol_apply', $reviewgroup),
+            },
+            // One line naming the group the applicant chose (C-D4); plain, as above.
+            'chosengroup' => match ($chosengroup) {
+                null => '',
+                '' => get_string('mailtoteacher_chosengroupunnamed', 'enrol_apply'),
+                default => get_string('mailtoteacher_chosengroup', 'enrol_apply', $chosengroup),
             },
             'manageurl' => $manageurl->out(false),
             'managelabel' => $admittedgroup === null ? get_string('applymanage', 'enrol_apply') : get_string('viewprofile'),

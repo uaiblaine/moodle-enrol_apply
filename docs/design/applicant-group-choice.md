@@ -1,6 +1,6 @@
 # Applicant group choice, and a redrawn instance form
 
-Status: **decided 2026-11-19** (see "Decisions taken" below; C-D28 and C-D29 were raised and decided the same day). G2 merged in #145 (2026111900), G1 in #147, G4 in #148 (2026112000), G3 in this change (2026112001); G5, G6 and T1 follow.
+Status: **decided 2026-11-19** (see "Decisions taken" below; C-D28 and C-D29 were raised and decided the same day). G2 merged in #145 (2026111900), G1 in #147, G4 in #148 (2026112000), G3 in #149 (2026112001), G5 in this change (2026112002); G6 and T1 follow.
 Decisions C-D1&ndash;C-D27 below each keep the recommendation they were decided on. Interactive mockup:
 [`applicant-group-choice-mockup.html`](applicant-group-choice-mockup.html) (open in a browser; its
 decision switches change every screen).
@@ -449,7 +449,7 @@ export, named as the group's name where the subject may see it.
 | G2 | **Merged, #145 (2026111900).** Schema: `enrol_apply_options` (groupchoice, deciders, groupseats, hidecard), `enrol_apply_offer`, `chosengroupid`, the deploy-window gate (`options_schema_ready()`), upgrade step, backup and restore, privacy | 3 |
 | G3 | **Written (2026112001).** The lock (C-D29) in `allow_apply()`; C-D28's scope rule (b) in `groupscope`; `hides_card_from()` and the hidden card on core's enrolment page (C-D25); the Groups section's new question, the offer list, "Who decides" (C-D20) with its clause in `groupscope`, seats per method (C-D26), the hidden card (C-D25 G-b), the warnings (C-D27), validation (choice with a key-only mode, an empty offer in required mode) | 3 |
 | G4 | **Merged, #148 (2026112000).** The applicant's form and its combobox (C-D23, C-D24: AMD module, template, `mdl grunt`), the submission's re-resolution, `applicantstate` wording | 3 |
-| G5 | The decision side: the "Already in this course" panel (C-D5), the helper and its six SQL readers, review chip, pre-ticked chooser, bulk form, report column and filter | 3 |
+| G5 | **Written (2026112002).** The decision side: the "Already in this course" panel (C-D5), the helper (`groupscope::application_group()` and `application_group_sql()`) and its SQL readers, review chip, pre-ticked chooser (through `default_approval_groups()`, which the bulk form's empty choice and "Edit enrolment" reach too), report column ("Group chosen", beside the key's) and filter | 3 |
 | G6 | Behat for the modal, README (the table, the setting, the "Recruiting moderators" recipe with the invitation link), screenshots | 1 |
 | T1 | theme_dimensions: leave an apply method whose card is hidden out of the visitor's offers, through `hides_card_from()` (C-D25); after G3 | 2 |
 

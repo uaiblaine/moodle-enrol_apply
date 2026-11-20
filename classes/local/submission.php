@@ -1111,12 +1111,14 @@ class submission {
             'enrol_apply_submission',
             ['userenrolmentid' => $userenrolmentid],
             'timecreated DESC, id DESC',
-            'id, userid, chosengroupid',
+            'id, userid, chosengroupid, keyoutcome',
             0,
             1
         );
         $row = reset($rows);
-        if (!$row || (int) $row->chosengroupid <= 0) {
+        /* A record with any key route is filed under its key's group (groupscope::application_group()
+           reads a non-zero outcome so, known or not), so its chosen group is not the application's. */
+        if (!$row || (int) $row->chosengroupid <= 0 || (int) $row->keyoutcome !== self::KEY_NONE) {
             return null;
         }
 

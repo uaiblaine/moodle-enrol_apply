@@ -88,6 +88,23 @@ class submission extends base {
     }
 
     /**
+     * The join onto the group the applicant chose (C-D4).
+     *
+     * LEFT, because most records carry no choice, and a chosen group can be deleted after the fact
+     * while the record keeps its id. The alias is the entity's groups alias with a suffix: the key
+     * group's join holds that alias already, and a generated alias ends in digits, so the suffixed
+     * one cannot meet another.
+     *
+     * @return string The join.
+     */
+    protected function chosen_group_join(): string {
+        $alias = $this->get_table_alias('enrol_apply_submission');
+        $calias = $this->get_table_alias('groups') . 'chosen';
+
+        return "LEFT JOIN {groups} {$calias} ON {$calias}.id = {$alias}.chosengroupid";
+    }
+
+    /**
      * The entity's title, as shown when picking columns.
      *
      * @return lang_string The title.
@@ -273,6 +290,31 @@ class submission extends base {
             ->add_field("{$galias}.visibility", 'keygroupvisibility')
             ->set_is_sortable(false)
             ->add_callback([formatter::class, 'key_group']);
+
+        /* The group the applicant chose (C-D4), a column of its own beside the key's rather than a
+           second meaning of it: the record keeps "proved membership with a key" apart from "asked
+           for a group", and the admission route column beside them already says which route ran.
+           Named only to a reader who may see the group (formatter::chosen_group()), so not
+           sortable, for the key group's reason. Offered only once the upgrade that adds the column
+           has run: a node serving this code before it (a rolling deploy) would otherwise break the
+           whole report on a missing column. */
+        if (\enrol_apply\local\instanceoptions::schema_ready()) {
+            $calias = $this->get_table_alias('groups') . 'chosen';
+            $columns[] = (new column(
+                'chosengroup',
+                new lang_string('chosengroupcolumn', 'enrol_apply'),
+                $this->get_entity_name()
+            ))
+                ->add_joins($this->get_joins())
+                ->add_join($this->chosen_group_join())
+                ->set_type(column::TYPE_TEXT)
+                ->add_field("{$calias}.name", 'chosengroupname')
+                ->add_field("{$alias}.chosengroupid", 'chosengroupid')
+                ->add_field("{$calias}.courseid", 'chosengroupcourseid')
+                ->add_field("{$calias}.visibility", 'chosengroupvisibility')
+                ->set_is_sortable(false)
+                ->add_callback([formatter::class, 'chosen_group']);
+        }
 
         /* The groups the last approval left the applicant in (joinedgroups, V-D10), named only to
            a reader who may see each one (formatter::joined_groups()). Not sortable and no filter

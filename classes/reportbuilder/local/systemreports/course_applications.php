@@ -109,8 +109,8 @@ class course_applications extends system_report {
 
         /* Separate groups narrow the report as they narrow the queue (S8): a reader the rule
            scopes, judged for this report's own capability and its own system exemption, reads the
-           records of their groups alone, by key group or by decided groups; none in no group, and
-           report.php says why. Derived from the context and $USER on every request, so a sort,
+           records of their groups alone, by the application's group (key or choice) or by the
+           groups joined; none in no group, and report.php says why. Derived from the context and $USER on every request, so a sort,
            a page turn or a download through core_table_get_dynamic_table_content is narrowed the
            same way as the first render. */
         $groups = $this->narrowed_groups();
@@ -366,8 +366,8 @@ class course_applications extends system_report {
         }
         $this->add_filter_from_entity(self::DECIDER . ':fullname');
 
-        /* The group filter (V5): a record's key group or a group its approval joined, for one group
-           the reader may pick. Offered, never applied by default, and only where there is a group
+        /* The group filter (V5): a record's application group (key or choice) or a group its
+           approval joined, for one group the reader may pick. Offered, never applied by default, and only where there is a group
            to offer, like the method filter below. The custom-report source has no such filter
            (V-D11). The options come from the context and $USER on every request, like the base
            condition. */

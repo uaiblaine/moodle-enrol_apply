@@ -156,6 +156,44 @@ class submission {
     }
 
     /**
+     * The group the applicant chose from the method's offer (C-D4).
+     *
+     * The rules of {@see key_group()}: escaped by format_string(), as a Report Builder cell is raw
+     * HTML; a choice whose group was deleted since, or never mapped by a restore, says so; and a
+     * group the reader may not see by core's visibility rule
+     * ({@see \enrol_apply\local\groupvisibility::visible_to()}, judged for $USER) leaves the cell
+     * empty, as for no choice. "No preference" is recorded as no group, so its cell is empty too.
+     *
+     * @param mixed $value The group's name, null when the join found nothing.
+     * @param stdClass $row Row being rendered, carrying chosengroupid, chosengroupcourseid and
+     *     chosengroupvisibility.
+     * @return string The name, a note that the group is gone, or empty when no group was chosen or
+     *     the reader may not see it.
+     */
+    public static function chosen_group($value, stdClass $row): string {
+        global $USER;
+
+        if ((int) ($row->chosengroupid ?? 0) <= 0) {
+            return '';
+        }
+        if ($value === null || $value === '') {
+            return get_string('keygroupgone', 'enrol_apply');
+        }
+        $group = (object) [
+            'id' => $row->chosengroupid,
+            'courseid' => $row->chosengroupcourseid ?? null,
+            'visibility' => $row->chosengroupvisibility ?? null,
+        ];
+        if (!\enrol_apply\local\groupvisibility::visible_to($group, (int) $USER->id)) {
+            return '';
+        }
+
+        return format_string((string) $value, true, [
+            'context' => \context_course::instance((int) $row->chosengroupcourseid),
+        ]);
+    }
+
+    /**
      * The groups the last approval left the applicant in, by name, in natural order.
      *
      * Each name is gated by core's visibility rule for $USER, judged for the cell's groups at once

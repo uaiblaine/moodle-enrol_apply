@@ -47,7 +47,7 @@ final class groupfilter {
     /** @var string The filter's name, in the query string and in the dynamic table's filterset. */
     public const NAME = 'group';
 
-    /** @var string The applications whose newest record names no group of the course. */
+    /** @var string The applications whose newest record names no group of the course, by key or by choice. */
     public const NONE = 'none';
 
     /** @var string The applications of the groups the reader belongs to. */
@@ -157,13 +157,14 @@ final class groupfilter {
      * The predicate one cleaned value adds, over a user enrolment aliased "ue".
      *
      * A group id and {@see MINE} reuse {@see groupscope::group_where()}, so "which group an
-     * application belongs to" is the newest record's key group here exactly as in the
+     * application belongs to" is the newest record's application group (its key's, or the one the
+     * applicant chose, {@see groupscope::application_group_sql()}) here exactly as in the
      * separate-groups scope. Not {@see groupscope::where()}, which also drops the methods only those
      * who see every group decide: that is the scope's, already applied before this filter, and a
      * reader who sees every group filtering by a group must still find those methods' applications.
      * {@see NONE} is its complement over the groups that exist: no newest record naming a group of
      * the course. An application whose group has been deleted since lands there, beside the ones
-     * without a key, so every row is reached by exactly one value of the filter (or by none, when
+     * without a key or a choice, so every row is reached by exactly one value of the filter (or by none, when
      * its group is hidden from the reader).
      *
      * @param stdClass $listing The scope, from {@see queue::listing_scope()}.
@@ -176,11 +177,12 @@ final class groupfilter {
         }
 
         if ($value === self::NONE) {
+            $group = groupscope::application_group_sql('nonesub');
             return [
                 "NOT EXISTS (
                     SELECT 1
                       FROM {enrol_apply_submission} nonesub
-                      JOIN {groups} nonegroup ON nonegroup.id = nonesub.keygroupid
+                      JOIN {groups} nonegroup ON nonegroup.id = {$group}
                      WHERE nonesub.userenrolmentid = ue.id
                        AND NOT EXISTS (
                            SELECT 1

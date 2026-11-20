@@ -1,0 +1,85 @@
+{{!
+    This file is part of Moodle - http://moodle.org/
+
+    Moodle is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Moodle is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+}}
+{{!
+    @template enrol_apply/review_enrolments
+
+    "Already in this course": the applicant's other enrolments in the course, through any
+    enrolment method (docs/design/applicant-group-choice.md, C-D5), so a decider reads before the
+    decision that the person is, say, already a student in one group by a key. Rendered only when
+    there is one. A card of the left column, like the rules above it; each entry is the method in
+    bold with its status as a badge, then the facts the record holds.
+
+    The method's name and the role names arrive ESCAPED and are triple stashed: the enrolment
+    method's and the role's own helpers return a mixed spelling, which the renderer normalises to
+    the escaped one. The groups and the admission line are plain and double stashed. Each label
+    and its value stay on one line, because a Behat "I should see" matches the raw text.
+
+    Context variables required for this template:
+    * hasenrolments boolean - whether the applicant holds any other enrolment in the course
+    * enrolmentsheading string - the card's heading
+    * enrolmentsrolelabel, enrolmentsgroupslabel, enrolmentsadmissionlabel string - the facts' labels
+    * enrolments array - one entry per other enrolment, in the course's method order, each with
+      method (ESCAPED), status (plain), statusclass (a literal background and text colour pair),
+      hasfacts, hasrole, role (ESCAPED, comma-separated), hasgroups, groups (plain, the groups
+      joined through that method this reader may see), hasadmission and admission (plain)
+    * hasotherroles boolean, otherroleslabel string, otherroles string (ESCAPED) - roles held in
+      the course outside any method, which no entry can be credited with
+
+    Example context (json):
+    {
+        "hasenrolments": true,
+        "enrolmentsheading": "Already in this course",
+        "enrolmentsrolelabel": "Role",
+        "enrolmentsgroupslabel": "Groups joined",
+        "enrolmentsadmissionlabel": "Admitted",
+        "enrolments": [
+            {
+                "method": "Apply as a student", "status": "Active", "statusclass": "bg-success text-white",
+                "hasfacts": true, "hasrole": true, "role": "Student", "hasgroups": true, "groups": "Evening A",
+                "hasadmission": true, "admission": "By the enrolment key of Evening A"
+            }
+        ],
+        "hasotherroles": false,
+        "otherroleslabel": "Also holds in this course",
+        "otherroles": ""
+    }
+}}
+{{#hasenrolments}}
+<section class="enrol_apply-enrolments enrol_apply-box" aria-labelledby="enrol_apply_enrolments_heading" data-region="review-enrolments">
+    <h2 class="enrol_apply-blocktitle" id="enrol_apply_enrolments_heading">{{enrolmentsheading}}</h2>
+    <ul class="enrol_apply-timeline list-unstyled mb-0">
+        {{#enrolments}}
+            <li>
+                <div class="enrol_apply-timelinehead">
+                    <strong>{{{method}}}</strong>
+                    <span class="badge {{statusclass}}">{{status}}</span>
+                </div>
+                {{#hasfacts}}
+                    <dl class="enrol_apply-historyfacts mb-0">
+                        {{#hasrole}}<div><dt>{{enrolmentsrolelabel}}</dt><dd>{{{role}}}</dd></div>{{/hasrole}}
+                        {{#hasgroups}}<div><dt>{{enrolmentsgroupslabel}}</dt><dd>{{groups}}</dd></div>{{/hasgroups}}
+                        {{#hasadmission}}<div><dt>{{enrolmentsadmissionlabel}}</dt><dd>{{admission}}</dd></div>{{/hasadmission}}
+                    </dl>
+                {{/hasfacts}}
+            </li>
+        {{/enrolments}}
+    </ul>
+    {{#hasotherroles}}
+        <p class="enrol_apply-rulefact mb-0">{{#pix}}i/role, core{{/pix}}<span>{{otherroleslabel}}: {{{otherroles}}}</span></p>
+    {{/hasotherroles}}
+</section>
+{{/hasenrolments}}

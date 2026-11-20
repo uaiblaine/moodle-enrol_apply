@@ -20,7 +20,8 @@
     One enrolment application, in two columns, with the controls to decide it (Visual 1).
 
     The left column reads in the order of the decider's questions: the strip (the state and the
-    wait), the rules a confirmation touches, the comment and the details sent, the earlier
+    wait), the rules a confirmation touches, the applicant's other enrolments in the course, the
+    comment and the details sent, the earlier
     applications (a region shown here only without JavaScript; the rules' button opens it in a
     dialogue otherwise), what confirming does with the adjustments folded under it, and the
     message and the note. The right column is the applicant's card. Below the lg breakpoint the
@@ -49,9 +50,9 @@
       the renderer and interpolated INSIDE this form. The footer is never moved in the DOM -
       its placement is CSS - so the submits inside it post with the rest of the form, exactly as
       the queue's own bar does
-    * everything enrol_apply/review_summary, enrol_apply/review_rules, enrol_apply/review_evidence,
-      enrol_apply/review_history, enrol_apply/review_outcome and enrol_apply/review_applicant
-      require
+    * everything enrol_apply/review_summary, enrol_apply/review_rules, enrol_apply/review_enrolments,
+      enrol_apply/review_evidence, enrol_apply/review_history, enrol_apply/review_outcome and
+      enrol_apply/review_applicant require
 
     Example context (json):
     {
@@ -110,6 +111,7 @@
         <div class="col-lg-8 enrol_apply-reviewfunnel">
             {{> enrol_apply/review_summary }}
             {{> enrol_apply/review_rules }}
+            {{> enrol_apply/review_enrolments }}
             {{> enrol_apply/review_history }}
             {{> enrol_apply/review_evidence }}
             {{#candecide}}

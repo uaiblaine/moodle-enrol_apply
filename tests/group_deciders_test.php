@@ -163,6 +163,35 @@ final class group_deciders_test extends \advanced_testcase {
     }
 
     /**
+     * Write a pending application through the plugin's own apply(), with a chosen group.
+     *
+     * @param \stdClass $instance The method.
+     * @param \stdClass $group The group chosen.
+     * @return int The user enrolment id.
+     */
+    private function choose_for(\stdClass $instance, \stdClass $group): int {
+        global $USER;
+
+        $previous = $USER;
+        $this->setAdminUser();
+        $applicant = $this->getDataGenerator()->create_user();
+        $sink = $this->redirectMessages();
+        $written = (new \ReflectionMethod(\enrol_apply_plugin::class, 'apply'))->invoke(
+            $this->plugin,
+            $instance,
+            (int) $applicant->id,
+            (object) ['applydescription' => 'Please'],
+            0,
+            submission::KEY_NONE,
+            (int) $group->id
+        );
+        $sink->close();
+        $this->setUser($previous);
+
+        return (int) $written['userenrolmentid'];
+    }
+
+    /**
      * The user enrolment ids the queue's own table lists to the current user for a method.
      *
      * @param \stdClass $instance The method.
@@ -256,6 +285,50 @@ final class group_deciders_test extends \advanced_testcase {
                 "row {$ueid}"
             );
         }
+    }
+
+    /**
+     * A chosen group follows "Who decides" as a key group does: the learner method's application
+     * chosen for Evening reaches Evening's moderator, the recruitment method's does not, and the
+     * SQL scope agrees with the per-row check on all four rows.
+     *
+     * Changes that must make it fail: the scope ignoring the chosen group, or the "Who decides"
+     * clause dropped for it.
+     *
+     * @return void
+     */
+    public function test_a_chosen_group_follows_who_decides(): void {
+        global $DB;
+
+        $rows = [
+            $this->choose_for($this->recruit, $this->evening),
+            $this->choose_for($this->recruit, $this->morning),
+            $this->choose_for($this->student, $this->evening),
+            $this->choose_for($this->student, $this->morning),
+        ];
+
+        $this->setUser($this->moderator);
+        $this->assertSame([], $this->listed($this->recruit));
+        $this->assertSame([$rows[2]], $this->listed($this->student));
+
+        [$where, $params] = groupscope::where(groupscope::narrowed_to((int) $this->course->id, (int) $this->moderator->id));
+        [$insql, $inparams] = $DB->get_in_or_equal($rows, SQL_PARAMS_NAMED, 'row');
+        $matched = array_map('intval', $DB->get_fieldset_sql(
+            "SELECT ue.id FROM {user_enrolments} ue WHERE ue.id {$insql} AND {$where} ORDER BY ue.id",
+            $params + $inparams
+        ));
+        $this->assertSame([$rows[2]], $matched);
+        foreach ($rows as $ueid) {
+            $this->assertSame(
+                in_array($ueid, $matched, true),
+                groupscope::allows((int) $this->course->id, $ueid, (int) $this->moderator->id),
+                "row {$ueid}"
+            );
+        }
+
+        // The control: who sees every group lists the recruitment method's two.
+        $this->setUser($this->editing);
+        $this->assertSame([$rows[0], $rows[1]], $this->listed($this->recruit));
     }
 
     /**

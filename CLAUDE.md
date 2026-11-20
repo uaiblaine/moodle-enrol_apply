@@ -626,6 +626,17 @@ backup/                      group mappings, comments and the durable trail, see
   `scope_deferred()`, over `scope_where()`, so it agrees with "awaiting decision" beside it.
   Gates `QG1`-`QG27`.
 
+- **"The application's group" is the key's group or the chosen one, never both (G5, C-D4).**
+  `groupscope::application_group()` (per row) and `application_group_sql()` (SQL) read the newest
+  record's `keygroupid` when its `keyoutcome` is not none, else its `chosengroupid`; every bullet
+  below that says "the newest record's key group" means this now, for the listing, the filters,
+  the walk, the per-row check, the report's narrowing and the notice recipients. A test fixture
+  that files an applicant under a group by `keygroupid` alone (no outcome) files them under no group.
+  `submission::chosen_group_of()` answers null beside any key route, so the chip and the approval
+  agree with the routing. The review page's "Already in this course" panel is gated on core's
+  `moodle/course:enrolreview` and, for a narrowed reader, shows of this plugin's methods only what
+  `record_where()` shows them.
+
 - **Two narrowing rules came with the moderator recruitment method (G3, `docs/design/applicant-group-choice.md`
   C-D20, C-D28), and both live in `groupscope` alone.** A membership stamped `enrol_apply` narrows a
   decider only when the role assignment the same instance (itemid) gave them is of a deciding role
