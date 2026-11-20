@@ -261,7 +261,7 @@ class application_form extends dynamic_form {
                 $groupid = $this->resolve_key($this->posted_key());
                 if (
                     $groupid !== null
-                    && !keyattempts::locked((int) $instance->id, (int) $USER->id)
+                    && !keyattempts::locked((int) $instance->courseid, (int) $USER->id)
                     && $this->capacity_refusal($groupid) === null
                 ) {
                     $this->keystep = 2;
@@ -301,7 +301,12 @@ class application_form extends dynamic_form {
     protected function submission(): array {
         $submission = !empty($this->_ajaxformdata) ? (array) $this->_ajaxformdata : $_POST;
 
-        return empty($submission['_qf__' . $this->_formname]) ? [] : $submission;
+        /* The same test as formslib's: only a marker equal to 1 makes it a submission, with the
+           sesskey check that comes with it. Any other truthy marker is no submission to core, so
+           it must not build step 2 or drop the way out for a key it was never asked to judge. */
+        $marker = '_qf__' . $this->_formname;
+
+        return array_key_exists($marker, $submission) && $submission[$marker] == 1 ? $submission : [];
     }
 
     /**
@@ -446,7 +451,7 @@ class application_form extends dynamic_form {
             $this->definition_after_data();
         }
         if ($this->is_wrong_key($this->posted_key())) {
-            keyattempts::record_failure((int) $this->get_instance()->id, (int) $USER->id);
+            keyattempts::record_failure((int) $this->get_instance()->courseid, (int) $USER->id);
         }
 
         return false;
@@ -489,7 +494,7 @@ class application_form extends dynamic_form {
             default => get_string('groupkeyblock_any', 'enrol_apply'),
         });
 
-        if (keyattempts::locked((int) $instance->id, (int) $USER->id)) {
+        if (keyattempts::locked((int) $instance->courseid, (int) $USER->id)) {
             $mform->addElement(
                 'static',
                 'groupkeylocked',
@@ -637,7 +642,9 @@ class application_form extends dynamic_form {
             }
             return;
         }
-        if (!$this->is_wrong_key($posted)) {
+        /* A post that ticked the way out gets the checkbox whether or not the key is right, so
+           the form never shows which it was. */
+        if (!$this->is_wrong_key($posted) && !$this->posted_without_key()) {
             return;
         }
 
@@ -649,6 +656,17 @@ class application_form extends dynamic_form {
             $mform->insertElementBefore($box, $next);
         }
         $mform->disabledIf('groupkey', 'withoutkey', 'checked');
+    }
+
+    /**
+     * Whether this submission ticked "send without a key".
+     *
+     * @return bool True when the posted withoutkey value is set and not '0'.
+     */
+    protected function posted_without_key(): bool {
+        $value = $this->submission()['withoutkey'] ?? '';
+
+        return is_scalar($value) && $value !== '' && $value !== '0' && $value !== 0 && $value !== false;
     }
 
     /**
@@ -895,7 +913,7 @@ class application_form extends dynamic_form {
                 $errors['groupkey'] = $keyerror;
             }
             if ($this->is_wrong_key($posted)) {
-                keyattempts::record_failure((int) $this->get_instance()->id, (int) $USER->id);
+                keyattempts::record_failure((int) $this->get_instance()->courseid, (int) $USER->id);
             }
         }
         /* A locked key-only form has nothing it could submit: the write door would refuse it,

@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Unreleased (2026112005)
+
+### Security
+
+- **The wrong-key throttle can no longer be sidestepped** (audit A-01). A form post whose submission
+  marker was a truthy value other than 1 was read as a submission by this plugin but not by formslib:
+  it built step 2 for a valid key, or left the way out off a wrong one, with no sesskey check, no
+  validation and no count, so a script could test keys without spending a try. It is a submission
+  only when the marker equals 1. In the key-or-review mode a post that ticked "send without a key"
+  now shows the checkbox for a valid key as for a wrong one. The count and its lock are kept per
+  applicant and course, not per instance, because a key opens every group of the course: two apply
+  instances of one course no longer give two budgets.
+
 ## Unreleased (2026112004)
 
 ### Added

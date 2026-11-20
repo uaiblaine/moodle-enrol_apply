@@ -98,11 +98,11 @@ final class keyattempts_test extends \advanced_testcase {
     }
 
     /**
-     * One applicant's wrong keys lock neither another applicant nor another instance.
+     * One applicant's wrong keys lock neither another applicant nor another course.
      *
      * @return void
      */
-    public function test_counts_are_per_applicant_and_instance(): void {
+    public function test_counts_are_per_applicant_and_course(): void {
         $this->resetAfterTest();
         $this->mock_clock_with_frozen(1000000);
 

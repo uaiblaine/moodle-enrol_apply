@@ -17,14 +17,14 @@
 namespace enrol_apply\local;
 
 /**
- * How many wrong group keys one applicant has typed on one instance lately.
+ * How many wrong group keys one applicant has typed in one course lately.
  *
  * Without a limit the form would answer "is this a key?" as often as it is asked, for keys that
  * skip a human decision. After LIMIT wrong keys within WINDOW seconds the key field locks; on the
  * key-or-review mode the application can still be sent without a key, while a locked key-only
  * form cannot be sent at all until the window has passed.
  *
- * The count is read and written under a core lock on the applicant and the instance, held from
+ * The count is read and written under a core lock on the applicant and the course, held from
  * the first read of a request to its end ({@see self::hold()}). Requests of one session are
  * serialised by the session lock, but several sessions of one account are not; without this lock
  * each of them would read a count under the limit, get a real answer, and the last write would
@@ -63,20 +63,20 @@ class keyattempts {
     /**
      * Count one wrong key.
      *
-     * @param int $instanceid Enrol instance id.
+     * @param int $courseid Course id.
      * @param int $userid Applicant user id.
      * @return void
      */
-    public static function record_failure(int $instanceid, int $userid): void {
+    public static function record_failure(int $courseid, int $userid): void {
         /* Without the lock this request was shown the locked form and learned nothing, and a write
            here could overwrite the count of the request that does hold it. */
-        if (!self::hold($instanceid, $userid)) {
+        if (!self::hold($courseid, $userid)) {
             return;
         }
         $now = \core\di::get(\core\clock::class)->time();
-        $entry = self::current($instanceid, $userid, $now);
+        $entry = self::current($courseid, $userid, $now);
         $entry->count++;
-        self::cache()->set(self::key($instanceid, $userid), (array) $entry);
+        self::cache()->set(self::key($courseid, $userid), (array) $entry);
     }
 
     /**
@@ -85,28 +85,28 @@ class keyattempts {
      * The first call of a request takes the applicant's lock for the rest of it, so the count read
      * here stays exact until this request has counted its own try.
      *
-     * @param int $instanceid Enrol instance id.
+     * @param int $courseid Course id.
      * @param int $userid Applicant user id.
      * @return bool True when the key field must not be offered, including when the lock could not
      *     be obtained in time.
      */
-    public static function locked(int $instanceid, int $userid): bool {
-        if (!self::hold($instanceid, $userid)) {
+    public static function locked(int $courseid, int $userid): bool {
+        if (!self::hold($courseid, $userid)) {
             return true;
         }
         $now = \core\di::get(\core\clock::class)->time();
-        return self::current($instanceid, $userid, $now)->count >= self::LIMIT;
+        return self::current($courseid, $userid, $now)->count >= self::LIMIT;
     }
 
     /**
      * Forget the wrong keys, after a key was accepted.
      *
-     * @param int $instanceid Enrol instance id.
+     * @param int $courseid Course id.
      * @param int $userid Applicant user id.
      * @return void
      */
-    public static function clear(int $instanceid, int $userid): void {
-        self::cache()->delete(self::key($instanceid, $userid));
+    public static function clear(int $courseid, int $userid): void {
+        self::cache()->delete(self::key($courseid, $userid));
     }
 
     /**
@@ -128,7 +128,7 @@ class keyattempts {
     }
 
     /**
-     * Take the applicant's lock on this instance, once per request, and keep it to the end.
+     * Take the applicant's lock on this course, once per request, and keep it to the end.
      *
      * The registry, not the lock factory, is what makes a second call of the same request reuse
      * the lock (the web service builds the form twice on Continue): core's factories differ on
@@ -137,12 +137,12 @@ class keyattempts {
      * while a file or record lock would wait for itself until the timeout. A lock not obtained is
      * remembered as well, so one request never reads both answers.
      *
-     * @param int $instanceid Enrol instance id.
+     * @param int $courseid Course id.
      * @param int $userid Applicant user id.
      * @return bool True when this request holds the lock.
      */
-    protected static function hold(int $instanceid, int $userid): bool {
-        $resource = self::key($instanceid, $userid);
+    protected static function hold(int $courseid, int $userid): bool {
+        $resource = self::key($courseid, $userid);
         if (!array_key_exists($resource, self::$held)) {
             if (!self::$releaseregistered) {
                 \core_shutdown_manager::register_function([self::class, 'release_all']);
@@ -162,13 +162,13 @@ class keyattempts {
      * judged here, against the time of its first wrong key, so a cache store that ignores TTLs
      * cannot lock anybody for ever.
      *
-     * @param int $instanceid Enrol instance id.
+     * @param int $courseid Course id.
      * @param int $userid Applicant user id.
      * @param int $now Current time.
      * @return \stdClass Object with int 'count' and int 'since'.
      */
-    protected static function current(int $instanceid, int $userid, int $now): \stdClass {
-        $stored = self::cache()->get(self::key($instanceid, $userid));
+    protected static function current(int $courseid, int $userid, int $now): \stdClass {
+        $stored = self::cache()->get(self::key($courseid, $userid));
         if (is_array($stored) && isset($stored['count'], $stored['since']) && $now - (int) $stored['since'] < self::WINDOW) {
             return (object) ['count' => (int) $stored['count'], 'since' => (int) $stored['since']];
         }
@@ -176,15 +176,15 @@ class keyattempts {
     }
 
     /**
-     * The cache key and lock resource: instance and user, joined without a colon (MUC keys must
+     * The cache key and lock resource: course and user, joined without a colon (MUC keys must
      * not carry one).
      *
-     * @param int $instanceid Enrol instance id.
+     * @param int $courseid Course id.
      * @param int $userid Applicant user id.
      * @return string The key.
      */
-    protected static function key(int $instanceid, int $userid): string {
-        return $instanceid . '_' . $userid;
+    protected static function key(int $courseid, int $userid): string {
+        return $courseid . '_' . $userid;
     }
 
     /**

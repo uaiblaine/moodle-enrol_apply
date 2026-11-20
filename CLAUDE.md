@@ -794,14 +794,16 @@ backup/                      group mappings, comments and the durable trail, see
   where every other key outcome keeps the instance's list alone. Gates `RV1`-`RV27`.
 
   **The wrong-key count is read and written under a per-applicant lock held for the whole
-  request.** `keyattempts::locked()` takes `enrol_apply_keyattempts` on `<instanceid>_<userid>` at
+  request.** `keyattempts::locked()` takes `enrol_apply_keyattempts` on `<courseid>_<userid>` (keys are course-wide) at
   its first call and keeps it to the end of the request (`release_all()`, a shutdown function), so
   parallel sessions of one account cannot each read a count under the limit; a static registry,
   not the factory, makes later calls of the same request reuse it, because core's factories differ
   on re-entry in one process. A lock not obtained in time reads as locked (fail closed), and
   `record_failure()` then writes nothing. Tests that drive the form call `release_all()` between
   simulated requests and in `tearDown()`, and `tests/fixtures/fake_lock_factory.php` stands in for
-  another request holding the lock. Gates `KA4`-`KA8`.
+  another request holding the lock. Gates `KA4`-`KA8`, `XA3`, `XA4`. `submission()` reads a
+  submission only when the marker equals 1, as formslib does (`XA1`); a posted `withoutkey` gets its
+  checkbox for a valid key too (`XA2`).
 
   **Every group name shown to anybody but the applicant who typed its key goes through
   `groupvisibility::visible_to()`**, which mirrors `groups_get_all_groups()`'s visibility clause for
