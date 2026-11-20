@@ -98,6 +98,7 @@ templates/                   manage, manage_actions, queue_capacity, queue_chip,
                              review_actions, decision_controls (the queue's),
                              application_navigation, application_notification, profile_offer,
                              profile_missing
+amd/src/group_chooser.js     the applicant's searchable group list over the plain select (modal and apply.php)
 amd/src/review.js            keeps the review page's outcome sentence in step with the ticks, and
                              opens the earlier applications in a core/modal
 classes/hook_callbacks.php   reconciles approvals made outside confirm_enrolment()
@@ -109,6 +110,7 @@ classes/local/keyattempts.php  the wrong-key throttle and its per-applicant requ
 classes/local/groupvisibility.php  whether a reader may be told a group's name (core's visibility rule)
 classes/local/groupfilter.php  the queue's group filter: the values each reader is offered, what each selects
 classes/local/groupoffer.php  the groups a method offers its applicants, read joined on the method's course
+classes/local/groupchoice.php  the applicant's chosen group: what they may choose, judged by the form and again by the write door
 classes/local/instanceoptions.php  per-method options (enrol_apply_options), read strictly, no row = defaults
 classes/local/profilelink.php  whether user/view.php would open an applicant's profile for this reader
 classes/observers.php        course_deleted, orphan cleanup for the plugin-disabled case

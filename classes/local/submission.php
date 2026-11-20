@@ -150,14 +150,21 @@ class submission {
      * has to recompute it from seats and places that have moved since. It is the caller's
      * resolution of the key, never anything the form carried: the key itself is not stored.
      *
+     * So is the group the applicant chose, as the caller judged it (groupchoice::resolve()). A
+     * chosen group and a key route are never recorded together: a valid key wins over a choice
+     * (docs/design/applicant-group-choice.md, C-D5), and "the application's group" reads one or
+     * the other.
+     *
      * @param stdClass $instance Course enrol instance applied to.
      * @param int $userid Applicant.
      * @param int $userenrolmentid User enrolment created for the application.
      * @param stdClass $data Submitted application form data.
      * @param int $keygroupid Group whose key was presented and resolved, 0 for none.
      * @param int $keyoutcome One of the KEY_ constants; KEY_NONE exactly when $keygroupid is 0.
+     * @param int $chosengroupid Group the applicant chose, 0 for none; only with KEY_NONE.
      * @return int Id of the new row.
-     * @throws \coding_exception When the outcome is unknown, or the group and the outcome disagree.
+     * @throws \coding_exception When the outcome is unknown, the group and the outcome disagree, or a
+     *     chosen group comes with a key route.
      */
     public static function create(
         stdClass $instance,
@@ -165,7 +172,8 @@ class submission {
         int $userenrolmentid,
         stdClass $data,
         int $keygroupid = 0,
-        int $keyoutcome = self::KEY_NONE
+        int $keyoutcome = self::KEY_NONE,
+        int $chosengroupid = 0
     ): int {
         global $DB;
 
@@ -177,9 +185,11 @@ class submission {
         if (($keyoutcome === self::KEY_NONE) !== ($keygroupid <= 0)) {
             throw new \coding_exception('A group key outcome needs its group, and a key group needs an outcome');
         }
+        if ($chosengroupid < 0 || ($chosengroupid > 0 && $keyoutcome !== self::KEY_NONE)) {
+            throw new \coding_exception('A chosen group is recorded only on an application no key decided');
+        }
 
-        $transaction = $DB->start_delegated_transaction();
-        $id = (int) $DB->insert_record('enrol_apply_submission', (object) [
+        $row = [
             'courseid' => (int) $instance->courseid,
             'userid' => $userid,
             'enrolid' => (int) $instance->id,
@@ -196,7 +206,15 @@ class submission {
             'decidedby' => 0,
             'keygroupid' => max(0, $keygroupid),
             'keyoutcome' => $keyoutcome,
-        ]);
+        ];
+        /* Named only when there is one: the column comes with the upgrade that creates the offer,
+           and before it nothing can be chosen, since groupoffer::groups() offers nothing. */
+        if ($chosengroupid > 0) {
+            $row['chosengroupid'] = $chosengroupid;
+        }
+
+        $transaction = $DB->start_delegated_transaction();
+        $id = (int) $DB->insert_record('enrol_apply_submission', (object) $row);
         self::snapshot($id, $instance, $data);
         $transaction->allow_commit();
 
@@ -1069,6 +1087,40 @@ class submission {
             self::STATUS_CANCELLED => get_string('submissionstatuscancelled', 'enrol_apply'),
             default => get_string('submissionstatuspending', 'enrol_apply'),
         };
+    }
+
+    /**
+     * The group the applicant chose on the newest application of a user enrolment.
+     *
+     * Newest first, as key_of() reads. The id as recorded: the group may have been deleted
+     * since, and whether the applicant may still be told its name is the caller's question
+     * ({@see groupvisibility::visible_to()}).
+     *
+     * @param int $userenrolmentid User enrolment the application belongs to.
+     * @return stdClass|null Object with int 'groupid' and int 'userid' (the applicant); null when
+     *     no group was chosen.
+     */
+    public static function chosen_group_of(int $userenrolmentid): ?stdClass {
+        global $DB;
+
+        // The column comes with the upgrade that creates the options; before it nobody chose.
+        if (!instanceoptions::schema_ready()) {
+            return null;
+        }
+        $rows = $DB->get_records(
+            'enrol_apply_submission',
+            ['userenrolmentid' => $userenrolmentid],
+            'timecreated DESC, id DESC',
+            'id, userid, chosengroupid',
+            0,
+            1
+        );
+        $row = reset($rows);
+        if (!$row || (int) $row->chosengroupid <= 0) {
+            return null;
+        }
+
+        return (object) ['groupid' => (int) $row->chosengroupid, 'userid' => (int) $row->userid];
     }
 
     /**

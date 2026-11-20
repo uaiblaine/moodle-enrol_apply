@@ -1075,3 +1075,165 @@ body.path-enrol-apply:not(.jsenabled) .enrol_apply-accordion .collapse {
     font-size: 1.125rem;
     letter-spacing: 0.02em;
 }
+
+/* The applicant's group chooser (amd/src/group_chooser.js), drawn per the fleet Design System:
+   the menu's panel and items, and the status label for the places. Its tokens are declared on
+   its own root, which sits inside core's modal body or on apply.php, each reading the family
+   name theme_dimensions declares, then Bootstrap's, then Bootstrap 5.3's light default. The list
+   is inline, not positioned: the modal body scrolls and would clip a popup over its edge. */
+.enrol_apply-chooser {
+    --enrol-apply-surface: var(--dimensions-surface, var(--bs-body-bg, #fff));
+    --enrol-apply-line: var(--dimensions-line, var(--bs-border-color, #dee2e6));
+    --enrol-apply-ink: var(--dimensions-ink, var(--bs-body-color, #212529));
+    --enrol-apply-ink-muted: var(--dimensions-ink-muted, var(--bs-secondary-color, rgba(33, 37, 41, .75)));
+    --enrol-apply-hover: var(--dimensions-hover, var(--bs-primary-bg-subtle, #cfe2ff));
+    --enrol-apply-brand-ink: var(--dimensions-brand-ink, var(--bs-primary-text-emphasis, #052c65));
+    --enrol-apply-success-tint: var(--dimensions-success-tint, var(--bs-success-bg-subtle, #d1e7dd));
+    --enrol-apply-success-edge: var(--dimensions-success-edge, var(--bs-success-border-subtle, #a3cfbb));
+    --enrol-apply-success-ink: var(--dimensions-success-ink, var(--bs-success-text-emphasis, #0a3622));
+    --enrol-apply-neutral-tint: var(--dimensions-neutral-tint, var(--bs-secondary-bg-subtle, #e2e3e5));
+    --enrol-apply-neutral-edge: var(--dimensions-neutral-edge, var(--bs-secondary-border-subtle, #c4c8cb));
+    --enrol-apply-neutral-ink: var(--dimensions-neutral-ink, var(--bs-secondary-text-emphasis, #2b2f32));
+    --enrol-apply-focus-ring: var(--dimensions-focus-ring, var(--bs-emphasis-color, #000));
+    --enrol-apply-focus-width: var(--dimensions-focus-width, 2px);
+    --enrol-apply-radius-xs: var(--dimensions-radius-xs, 4px);
+    --enrol-apply-radius-sm: var(--dimensions-radius-sm, 6px);
+    --enrol-apply-radius-md: var(--dimensions-radius-md, 8px);
+    --enrol-apply-elevation-md: var(--dimensions-elevation-md, 0 4px 12px rgba(7, 0, 147, .10));
+    --enrol-apply-motion-fast: var(--dimensions-motion-fast, 150ms);
+    --enrol-apply-motion-base: var(--dimensions-motion-base, 250ms);
+    --enrol-apply-motion-ease: var(--dimensions-motion-ease, cubic-bezier(.4, 0, .2, 1));
+    max-width: 30rem;
+}
+
+.enrol_apply-chooser .enrol_apply-chooser-field {
+    align-items: center;
+    display: flex;
+    position: relative;
+}
+
+.enrol_apply-chooser .enrol_apply-chooser-input {
+    padding-right: 2.5rem;
+}
+
+.enrol_apply-chooser .enrol_apply-chooser-toggle {
+    background: transparent;
+    border: 0;
+    border-radius: var(--enrol-apply-radius-xs);
+    color: var(--enrol-apply-ink-muted);
+    padding: 0.25rem 0.5rem;
+    position: absolute;
+    right: 0.25rem;
+}
+
+.dir-rtl .enrol_apply-chooser .enrol_apply-chooser-input {
+    padding-left: 2.5rem;
+    padding-right: 0.75rem;
+}
+
+.dir-rtl .enrol_apply-chooser .enrol_apply-chooser-toggle {
+    left: 0.25rem;
+    right: auto;
+}
+
+/* The menu's panel, in the flow rather than over it. */
+.enrol_apply-chooser .enrol_apply-chooser-list {
+    background: var(--enrol-apply-surface);
+    border: 1px solid var(--enrol-apply-line);
+    border-radius: var(--enrol-apply-radius-md);
+    box-shadow: var(--enrol-apply-elevation-md);
+    color: var(--enrol-apply-ink);
+    list-style: none;
+    margin: 0.375rem 0 0;
+    max-height: 20rem;
+    overflow-y: auto;
+    padding: 0.25rem;
+}
+
+.enrol_apply-chooser .enrol_apply-chooser-option {
+    align-items: center;
+    border-radius: var(--enrol-apply-radius-xs);
+    cursor: pointer;
+    display: flex;
+    font-size: 0.875rem;
+    gap: 0.5rem;
+    justify-content: space-between;
+    min-height: 2rem;
+    padding: 0.25rem 0.5rem;
+    transition:
+        background-color var(--enrol-apply-motion-base) var(--enrol-apply-motion-ease),
+        color var(--enrol-apply-motion-base) var(--enrol-apply-motion-ease);
+}
+
+/* The hover and the active row share the family's hover: the ground, the brand ink, fast in. */
+.enrol_apply-chooser .enrol_apply-chooser-option:hover,
+.enrol_apply-chooser .enrol_apply-chooser-active {
+    background: var(--enrol-apply-hover);
+    color: var(--enrol-apply-brand-ink);
+    transition-duration: var(--enrol-apply-motion-fast);
+}
+
+/* The active row is where the keyboard is, so it carries the focus ring, drawn inwards. */
+.enrol_apply-chooser .enrol_apply-chooser-active {
+    outline: var(--enrol-apply-focus-width) solid var(--enrol-apply-focus-ring);
+    outline-offset: -2px;
+}
+
+.enrol_apply-chooser .enrol_apply-chooser-option[aria-selected="true"] {
+    font-weight: 600;
+}
+
+.enrol_apply-chooser .enrol_apply-chooser-option[aria-disabled="true"] {
+    background: transparent;
+    color: var(--enrol-apply-ink-muted);
+    cursor: not-allowed;
+}
+
+.enrol_apply-chooser .enrol_apply-chooser-name mark {
+    background: transparent;
+    color: inherit;
+    font-weight: 700;
+    padding: 0;
+}
+
+.enrol_apply-chooser .enrol_apply-chooser-heading {
+    color: var(--enrol-apply-ink-muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.375rem 0.5rem 0.125rem;
+}
+
+.enrol_apply-chooser .enrol_apply-chooser-note {
+    border-top: 1px solid var(--enrol-apply-line);
+    color: var(--enrol-apply-ink-muted);
+    font-size: 0.8125rem;
+    margin-top: 0.25rem;
+    padding: 0.375rem 0.5rem;
+}
+
+/* The status label: a static word in a tone, never colour alone. */
+.enrol_apply-chooser .enrol_apply-status {
+    align-items: center;
+    background: var(--enrol-apply-neutral-tint);
+    border: 1px solid var(--enrol-apply-neutral-edge);
+    border-radius: var(--enrol-apply-radius-sm);
+    color: var(--enrol-apply-neutral-ink);
+    display: inline-flex;
+    flex-shrink: 0;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.4;
+    padding: 0.125rem 0.5rem;
+}
+
+.enrol_apply-chooser .enrol_apply-status--success {
+    background: var(--enrol-apply-success-tint);
+    border-color: var(--enrol-apply-success-edge);
+    color: var(--enrol-apply-success-ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .enrol_apply-chooser .enrol_apply-chooser-option {
+        transition: none;
+    }
+}

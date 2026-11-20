@@ -28,6 +28,11 @@ in `.github/workflows/ci.yml` are updated together with `supported`.
   plugin (for example a state and municipality picker) works as it does on the profile page.
 - A waiting list, distinct from a plain pending application.
 - Groups an applicant automatically joins **once the application is approved**.
+- Optionally, the applicant chooses a group when applying, from the groups the method offers:
+  a searchable list in the application form (a plain list without JavaScript), showing only the
+  groups the applicant may see and, with `local_groupdist`, the places each has left; a full group
+  is shown and cannot be chosen. The choice can be optional ("No preference") or required, and the
+  acknowledgement names the group applied for.
 - A cap on the number of applicants per instance, and a number of places that the queue
   measures approvals against.
 - Optionally, core's group enrolment keys: a valid key enrols the applicant at once, without

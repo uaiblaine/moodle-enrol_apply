@@ -21,7 +21,9 @@ use core_form\dynamic_form;
 use enrol_apply\local\answers;
 use enrol_apply\local\customfield;
 use enrol_apply\local\fields;
+use enrol_apply\local\groupchoice;
 use enrol_apply\local\groupkey;
+use enrol_apply\local\instanceoptions;
 use enrol_apply\local\keyattempts;
 use moodle_url;
 
@@ -173,6 +175,7 @@ class application_form extends dynamic_form {
         } else {
             $this->add_group_key($instance);
         }
+        $this->add_group_chooser($instance);
 
         $editable = [];
         $locked = [];
@@ -528,6 +531,82 @@ class application_form extends dynamic_form {
     }
 
     /**
+     * Offer the groups the applicant may choose, after the key and before everything else.
+     *
+     * The first thing the applicant decides, and the comment may refer to it, so it comes before
+     * the details and the comment (docs/design/applicant-group-choice.md, "The applicant's side").
+     * A plain select: it is the transport on apply.php without JavaScript, and in the modal
+     * amd/src/group_chooser.js enhances it into a searchable list while it stays in the form,
+     * hidden, carrying the posted value. Every option carries what that script reads: the plain
+     * name, the places left and whether the group is full. A full group is listed and disabled
+     * (C-D8), so the applicant learns why it cannot be chosen.
+     *
+     * Required by a client rule only where no key is read: in the 'any' key mode a valid key wins
+     * over the chooser (C-D5), so a key holder must be able to submit without choosing, and
+     * validation() asks for a group only when no key wins.
+     *
+     * @param \stdClass $instance The {enrol} record.
+     * @return void
+     */
+    protected function add_group_chooser(\stdClass $instance): void {
+        global $USER;
+
+        $mode = groupchoice::mode($instance);
+        if ($mode === instanceoptions::CHOICE_OFF) {
+            return;
+        }
+
+        $required = $mode === instanceoptions::CHOICE_REQUIRED;
+        $context = context_course::instance($instance->courseid);
+        $mform = $this->_form;
+        $select = $mform->createElement('select', 'chosengroup', get_string('chosengroup', 'enrol_apply'), [], [
+            'data-enrol-apply-groupchooser' => '1',
+            'data-required' => $required ? '1' : '0',
+        ]);
+        if ($required) {
+            $select->addOption(get_string('choosedots'), '');
+        } else {
+            $select->addOption(get_string('chosengroupnone', 'enrol_apply'), '0', ['data-none' => '1']);
+        }
+        foreach (groupchoice::offered($instance, (int) $USER->id) as $group) {
+            // The plain spelling: core writes an option's other attributes through s().
+            $attributes = ['data-name' => format_string($group->name, true, ['context' => $context, 'escape' => false])];
+            if ($group->hasseats) {
+                $attributes['data-places'] = (string) $group->places;
+            }
+            if ($group->full) {
+                $attributes['data-full'] = '1';
+                $attributes['disabled'] = 'disabled';
+            }
+            $select->addOption(groupchoice::option_text($group, $context), (string) $group->id, $attributes);
+        }
+        $mform->addElement($select);
+        $mform->setType('chosengroup', PARAM_INT);
+        $mform->addHelpButton('chosengroup', 'chosengroup', 'enrol_apply');
+        if ($required && !groupkey::enabled($instance)) {
+            $mform->addRule('chosengroup', get_string('chosengrouprequired', 'enrol_apply'), 'required', null, 'client');
+        }
+    }
+
+    /**
+     * Whether a valid key wins over the chosen group on this submission (C-D5).
+     *
+     * Only where a key is read and not set aside by "without the key": the write door then
+     * records the key's group, and the chosen one is neither judged nor recorded.
+     *
+     * @param array $data Submitted data.
+     * @return bool True when the posted key names a group of the course.
+     */
+    protected function key_wins(array $data): bool {
+        if (!$this->_form->elementExists('groupkey') || !empty($data['withoutkey'])) {
+            return false;
+        }
+        $posted = is_string($data['groupkey'] ?? null) ? trim($data['groupkey']) : '';
+
+        return $posted !== '' && $this->resolve_key($posted) !== null;
+    }
+
+    /**
      * After a wrong key, offer the way out: send the application for review without it.
      *
      * Added here rather than in definition() so it appears only once a key has failed: this runs
@@ -823,6 +902,24 @@ class application_form extends dynamic_form {
            and this keeps the applicant on the sentence that says why. */
         if ($required && $this->_form->elementExists('groupkeylocked')) {
             $errors['groupkeylocked'] = get_string('groupkeylocked_required', 'enrol_apply');
+        }
+
+        /* The chosen group, judged as the write door judges it (groupchoice::resolve()): offered,
+           visible to the applicant, with a place where seats count, or "none" where optional. The
+           value is read raw from the submission (getSubmitValue() cleans nothing; posted() takes
+           only an id or "none" from it), not from $data: a select exports nothing for a value
+           outside its options, so a forged id would reach $data as no group at all and an
+           optional chooser would accept it in silence. The door resolves it again inside its
+           lock; this is the message on the element. */
+        if ($this->_form->elementExists('chosengroup') && !$this->key_wins($data)) {
+            $choice = groupchoice::resolve(
+                $this->get_instance(),
+                (int) $USER->id,
+                groupchoice::posted((object) ['chosengroup' => $this->_form->getSubmitValue('chosengroup')])
+            );
+            if ($choice->refusal !== null) {
+                $errors['chosengroup'] = $choice->refusal;
+            }
         }
 
         /* One confirmation for the whole block, and only when there is something to confirm -
