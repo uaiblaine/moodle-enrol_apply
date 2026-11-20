@@ -28,6 +28,7 @@ namespace enrol_apply\table;
 use core_table\local\filter\integer_filter;
 use enrol_apply\local\submission;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -231,14 +232,14 @@ final class applications_test extends \advanced_testcase {
     }
 
     /**
-     * A deferred application says so on its own row.
+     * A deferred application says so on its own row, as "Deferred" in the warning tone.
      *
-     * A badge rather than a purely visual cue: it is readable, announced, and survives the row
-     * becoming a card.
+     * A status label rather than a purely visual cue: it is readable, announced, and survives the
+     * row becoming a card. "Deferred" is the owner's word for the state everywhere (MQ-D10).
      *
      * @return void
      */
-    public function test_a_deferred_application_is_badged(): void {
+    public function test_a_deferred_application_is_labelled_deferred(): void {
         global $DB;
 
         $this->setAdminUser();
@@ -248,19 +249,124 @@ final class applications_test extends \advanced_testcase {
             'enrolid' => $this->instance->id,
         ]);
 
+        $label = '<span class="enrol_apply-status enrol_apply-status--warning">'
+            . s(get_string('enrolmentwaiting', 'enrol_apply')) . '</span>';
         $html = $this->rendered((int) $this->instance->id);
 
-        $this->assertStringContainsString(get_string('queuewaitinglist', 'enrol_apply'), $html);
-        /* The control: an ordinary pending application does NOT carry it, so the badge is a
+        $this->assertStringContainsString($label, $this->applicant_cell($html));
+        /* The control: an ordinary pending application does NOT carry it, so the label is a
            statement about this row rather than markup every row gets. */
         $DB->set_field('user_enrolments', 'status', ENROL_USER_SUSPENDED, [
             'userid' => $applicant->id,
             'enrolid' => $this->instance->id,
         ]);
-        $this->assertStringNotContainsString(
-            get_string('queuewaitinglist', 'enrol_apply'),
-            $this->rendered((int) $this->instance->id)
+        $this->assertStringNotContainsString('enrol_apply-status--warning', $this->rendered((int) $this->instance->id));
+    }
+
+    /**
+     * Each group key outcome shows its short label, with the full sentence still on the page.
+     *
+     * The short form is what the row has room for (MQ-D11); the sentence is the label's title and
+     * its visually hidden text, so a screen reader and a text search of the page still meet it.
+     *
+     * @param int $outcome One of the KEY_ constants that leave an application waiting.
+     * @param string $short The short label's string id.
+     * @param string $long The full sentence's string id.
+     * @return void
+     */
+    #[DataProvider('key_outcome_provider')]
+    public function test_each_key_outcome_shows_its_short_label_with_the_sentence(
+        int $outcome,
+        string $short,
+        string $long
+    ): void {
+        global $DB;
+
+        $this->setAdminUser();
+        $applicant = $this->applicant();
+
+        // The control: an application without a key carries no info label at all.
+        $this->assertStringNotContainsString('enrol_apply-status--info', $this->rendered((int) $this->instance->id));
+
+        $DB->set_field('enrol_apply_submission', 'keyoutcome', $outcome, ['userid' => $applicant->id]);
+        $cell = $this->applicant_cell($this->rendered((int) $this->instance->id));
+
+        $shorttext = preg_quote(s(get_string($short, 'enrol_apply')), '~');
+        $longtext = preg_quote(s(get_string($long, 'enrol_apply')), '~');
+        $this->assertMatchesRegularExpression(
+            '~<span (?=[^>]*title="' . $longtext . '")[^>]*class="enrol_apply-status enrol_apply-status--info"[^>]*>'
+                . $shorttext . '<span class="visually-hidden"> ' . $longtext . '</span></span>~',
+            $cell
         );
+        $this->assertNotSame(get_string($short, 'enrol_apply'), get_string($long, 'enrol_apply'));
+    }
+
+    /**
+     * The key outcomes that leave an application in the queue, each with its two strings.
+     *
+     * @return array Outcome, short string id, full string id.
+     */
+    public static function key_outcome_provider(): array {
+        return [
+            'no seat in a group' => [submission::KEY_GROUP_FULL, 'keyoutcomegroupfullshort', 'keyoutcomegroupfull'],
+            'no place' => [submission::KEY_NO_PLACE, 'keyoutcomenoplaceshort', 'keyoutcomenoplace'],
+            'not confirmed in time' => [
+                submission::KEY_SEAT_UNCONFIRMED,
+                'keyoutcomeseatunconfirmedshort',
+                'keyoutcomeseatunconfirmed',
+            ],
+            'sent for review' => [submission::KEY_FOR_REVIEW, 'keyoutcomeforreviewshort', 'keyoutcomeforreview'],
+        ];
+    }
+
+    /**
+     * The Review button sits in the applicant's cell, and the grid has no column of its own for it.
+     *
+     * A last column was off screen at a common width (MQ-D7). Counted rather than found: one link
+     * per row, inside the cell that names the applicant, and the last heading is the comment's.
+     *
+     * @return void
+     */
+    public function test_the_review_button_sits_in_the_applicant_cell(): void {
+        global $DB;
+
+        $this->setAdminUser();
+        $applicant = $this->applicant();
+        $ueid = (int) $DB->get_field('user_enrolments', 'id', [
+            'userid' => $applicant->id,
+            'enrolid' => $this->instance->id,
+        ], MUST_EXIST);
+
+        $html = $this->rendered((int) $this->instance->id);
+        $cell = $this->applicant_cell($html);
+
+        $this->assertSame(1, substr_count($html, 'userenrol=' . $ueid));
+        $this->assertMatchesRegularExpression(
+            '~<a [^>]*class="btn btn-sm btn-outline-secondary enrol_apply-reviewbutton"[^>]*>'
+                . preg_quote(get_string('queuereview', 'enrol_apply'), '~') . '</a>~',
+            $cell
+        );
+        $this->assertStringContainsString('userenrol=' . $ueid, $cell);
+
+        // No review column: the last heading is the comment's, and a row has as many cells as headings.
+        preg_match_all('~<th class="header c\d+([^"]*)"~', $html, $headers);
+        $this->assertNotEmpty($headers[1]);
+        $this->assertStringContainsString('enrol_apply-col-comment', end($headers[1]));
+        preg_match('~<tr [^>]*id="[^"]*_r0"[^>]*>(.*?)</tr>~s', $html, $row);
+        $this->assertSame(count($headers[1]), preg_match_all('~<t[dh] class="cell c\d+~', $row[1] ?? ''));
+    }
+
+    /**
+     * The applicant's cell of the first row of a rendered queue.
+     *
+     * @param string $html The rendered table.
+     * @return string The cell's inner markup.
+     */
+    protected function applicant_cell(string $html): string {
+        $found = preg_match('~<th class="cell c\d+ enrol_apply-col-applicant"[^>]*>(.*?)</th>~s', $html, $m);
+        $this->assertSame(1, $found, 'no applicant cell in the rendered queue');
+
+        return $m[1];
     }
 
     /**
@@ -571,7 +677,7 @@ final class applications_test extends \advanced_testcase {
     }
 
     /**
-     * The fields that envelope holds, so a test can count pills without hardcoding how many.
+     * The fields that envelope holds, so a test can count answers without hardcoding how many.
      *
      * @param string $city Value for the identity half.
      * @return array One entry per field, in the shape read_snapshot() returns.
@@ -633,6 +739,35 @@ final class applications_test extends \advanced_testcase {
         );
         $this->assertStringContainsString('Hometown', $rendered);
         $this->assertStringContainsString('Ouropretoville', $rendered);
+    }
+
+    /**
+     * The answers cell holds every answer in one element, with the whole set as its title.
+     *
+     * One flowing line that the stylesheet clamps to two (MQ-D8): clamping hides nothing from the
+     * markup, and the title carries the set for a pointer. Each answer is its own node, label and
+     * value, so the line is not a run-on string for a screen reader.
+     *
+     * @return void
+     */
+    public function test_the_answers_cell_holds_every_answer_in_one_element(): void {
+        $this->setAdminUser();
+        $this->applicant(null, $this->snapshot());
+
+        $rendered = $this->rendered((int) $this->instance->id);
+
+        $found = preg_match('~<div class="enrol_apply-answers" title="([^"]*)">(.*?)</div>~s', $rendered, $m);
+        $this->assertSame(1, $found, $rendered);
+        $separator = get_string('labelsep', 'langconfig');
+        foreach ($this->snapshot_fields() as $field) {
+            $this->assertStringContainsString(
+                '<span class="enrol_apply-answer"><span class="enrol_apply-fieldname">' . s($field['label']) . $separator
+                    . '</span>' . s($field['value']) . '</span>',
+                $m[2]
+            );
+            $this->assertStringContainsString(s($field['label'] . $separator . $field['value']), $m[1]);
+        }
+        $this->assertSame(count($this->snapshot_fields()), substr_count($m[2], 'class="enrol_apply-answer"'));
     }
 
     /**
@@ -700,18 +835,19 @@ final class applications_test extends \advanced_testcase {
      *
      * @return void
      */
-    public function test_an_application_with_no_stored_answers_shows_no_pill(): void {
+    public function test_an_application_with_no_stored_answers_shows_no_answers(): void {
         $this->setAdminUser();
         $this->applicant();
         $this->applicant(null, $this->snapshot());
 
         $rendered = $this->rendered((int) $this->instance->id);
 
-        /* One row carries an envelope and one does not, so exactly one cell may hold pills - and
+        /* One row carries an envelope and one does not, so exactly one cell may hold answers - and
            that cell holds one per field, which snapshot() writes two of. Counted rather than
-           merely found, because "no pill on the empty row" is invisible to a containment
+           merely found, because "no answer on the empty row" is invisible to a containment
            assertion once the other row has drawn some. */
-        $this->assertSame(count($this->snapshot_fields()), substr_count($rendered, 'enrol_apply-fieldpill'));
+        $this->assertSame(count($this->snapshot_fields()), substr_count($rendered, 'class="enrol_apply-answer"'));
+        $this->assertSame(1, substr_count($rendered, 'class="enrol_apply-answers"'));
         $this->assertSame(1, substr_count($rendered, 'enrol_apply-cardlabel">' . get_string('queuesubmitted', 'enrol_apply')));
     }
 
@@ -741,7 +877,7 @@ final class applications_test extends \advanced_testcase {
             // The control: every row's answers really are on the page.
             $this->assertSame(
                 count($DB->get_records('enrol_apply_submission')) * count($this->snapshot_fields()),
-                substr_count($rendered, 'enrol_apply-fieldpill')
+                substr_count($rendered, 'class="enrol_apply-answer"')
             );
 
             return $reads;

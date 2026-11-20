@@ -30,6 +30,9 @@
     Every chip's remove control is a real link naming the filters that survive it, so the row works
     with scripting off.
 
+    Every control stays on the page, at the small size, so the row is compact without hiding a
+    field: the Behat scenarios set them by label, and a script-driven step needs each one visible.
+
     Classes required for JS:
     * none - the module attaches by data-region.
 
@@ -169,12 +172,12 @@
         <legend class="visually-hidden">{{groupheading}}</legend>
         <div class="enrol_apply-filterfield">
             <label class="form-label" for="enrol_apply_search">{{searchlabel}}{{{searchhelp}}}</label>
-            <input type="text" class="form-control" id="enrol_apply_search" name="search"
+            <input type="text" class="form-control form-control-sm" id="enrol_apply_search" name="search"
                    value="{{searchvalue}}" data-region="searchinput" autocomplete="off">
         </div>
         <div class="enrol_apply-filterfield">
             <label class="form-label" for="enrol_apply_status">{{statuslabel}}</label>
-            <select class="form-select" id="enrol_apply_status" name="status" data-region="statusselect">
+            <select class="form-select form-select-sm" id="enrol_apply_status" name="status" data-region="statusselect">
                 {{#statusoptions}}
                     <option value="{{value}}" {{#selected}}selected{{/selected}}>{{label}}</option>
                 {{/statusoptions}}
@@ -183,7 +186,7 @@
         {{#hasgroupfilter}}
             <div class="enrol_apply-filterfield">
                 <label class="form-label" for="enrol_apply_filter_group">{{grouplabel}}</label>
-                <select class="form-select" id="enrol_apply_filter_group" name="group"
+                <select class="form-select form-select-sm" id="enrol_apply_filter_group" name="group"
                         data-region="filterfield" data-filter="group" data-filterlabel="{{grouplabel}}"
                         {{#groupemptyvalue}}data-emptyvalue="{{groupemptyvalue}}"{{/groupemptyvalue}}
                         {{#groupsearch}}data-reloadonremove="1"{{/groupsearch}}>
@@ -196,7 +199,7 @@
         {{#hascoursefilters}}
             <div class="enrol_apply-filterfield">
                 <label class="form-label" for="enrol_apply_category">{{categorylabel}}</label>
-                <select class="form-select" id="enrol_apply_category" name="category"
+                <select class="form-select form-select-sm" id="enrol_apply_category" name="category"
                         data-region="filterfield" data-filter="category" data-filterlabel="{{categorylabel}}">
                     {{#categoryoptions}}
                         <option value="{{value}}" {{#selected}}selected{{/selected}}>{{label}}</option>
@@ -205,7 +208,7 @@
             </div>
             <div class="enrol_apply-filterfield">
                 <label class="form-label" for="enrol_apply_course">{{courselabel}}</label>
-                <select class="form-select" id="enrol_apply_course" name="course"
+                <select class="form-select form-select-sm" id="enrol_apply_course" name="course"
                         data-region="filterfield" data-filter="course" data-filterlabel="{{courselabel}}">
                     {{#courseoptions}}
                         <option value="{{value}}" {{#selected}}selected{{/selected}}>{{label}}</option>
@@ -217,7 +220,7 @@
             <div class="enrol_apply-filterfield">
                 <label class="form-label" for="{{inputid}}">{{label}}</label>
                 {{#isselect}}
-                    <select class="form-select" id="{{inputid}}" name="{{token}}"
+                    <select class="form-select form-select-sm" id="{{inputid}}" name="{{token}}"
                             data-region="filterfield" data-filter="{{token}}" data-filterlabel="{{label}}">
                         <option value="">{{#str}}choosedots, core{{/str}}</option>
                         {{#options}}
@@ -226,7 +229,7 @@
                     </select>
                 {{/isselect}}
                 {{^isselect}}
-                    <input type="text" class="form-control" id="{{inputid}}" name="{{token}}"
+                    <input type="text" class="form-control form-control-sm" id="{{inputid}}" name="{{token}}"
                            value="{{value}}" autocomplete="off"
                            data-region="filterfield" data-filter="{{token}}" data-filterlabel="{{label}}">
                 {{/isselect}}
@@ -234,18 +237,18 @@
         {{/fields}}
         <div class="enrol_apply-filterfield">
             <label class="form-label" for="enrol_apply_appliedfrom">{{fromlabel}}</label>
-            <input type="date" class="form-control" id="enrol_apply_appliedfrom" name="appliedfrom"
+            <input type="date" class="form-control form-control-sm" id="enrol_apply_appliedfrom" name="appliedfrom"
                    value="{{fromvalue}}" data-region="filterfield" data-filter="appliedfrom"
                    data-filterlabel="{{fromlabel}}">
         </div>
         <div class="enrol_apply-filterfield">
             <label class="form-label" for="enrol_apply_appliedto">{{tolabel}}</label>
-            <input type="date" class="form-control" id="enrol_apply_appliedto" name="appliedto"
+            <input type="date" class="form-control form-control-sm" id="enrol_apply_appliedto" name="appliedto"
                    value="{{tovalue}}" data-region="filterfield" data-filter="appliedto"
                    data-filterlabel="{{tolabel}}">
         </div>
         <div class="enrol_apply-filterfield enrol_apply-filtersubmit">
-            <button type="submit" class="btn btn-secondary">{{#str}}applyfilters, core{{/str}}</button>
+            <button type="submit" class="btn btn-sm btn-secondary">{{#str}}applyfilters, core{{/str}}</button>
         </div>
     </fieldset>
     <div class="enrol_apply-chiprow" data-region="chiprow">
