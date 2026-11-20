@@ -167,10 +167,11 @@ final class report_group_scope_test extends \core_reportbuilder\tests\core_repor
 
         $user = $this->getDataGenerator()->create_user();
         role_assign($role, $user->id, $sitewide ? $system->id : context_course::instance($this->course->id)->id);
+        /* Enrolled with no role, always: the report's can_view() asks can_access_course() with
+           the capability, and groups_add_member() returns false, without an exception, for a user
+           who is not enrolled, which would leave the reader in no group. */
+        $this->getDataGenerator()->enrol_user($user->id, $this->course->id);
         if ($member) {
-            // Enrolled with no role: groups_add_member() returns false, without an exception, for
-            // a user who is not enrolled, which would leave the reader in no group.
-            $this->getDataGenerator()->enrol_user($user->id, $this->course->id);
             $this->getDataGenerator()->create_group_member(['groupid' => $this->mine->id, 'userid' => $user->id]);
             $this->assertTrue(groups_is_member((int) $this->mine->id, (int) $user->id));
         }

@@ -603,6 +603,129 @@ final class group_queue_test extends \advanced_testcase {
     }
 
     /**
+     * An earlier application of the applicant to this course, written straight into the record.
+     *
+     * @param int $userid The applicant.
+     * @param \stdClass $group The group the earlier application was filed under, by its key.
+     * @return void
+     */
+    private function earlier_application(int $userid, \stdClass $group): void {
+        global $DB;
+
+        $DB->insert_record('enrol_apply_submission', (object) [
+            'courseid' => $this->course->id,
+            'userid' => $userid,
+            'enrolid' => $this->instance->id,
+            'userenrolmentid' => 0,
+            'comment' => 'Earlier',
+            'status' => submission::STATUS_CANCELLED,
+            'outcomemessage' => '',
+            'timecreated' => time() - DAYSECS,
+            'timedecided' => time() - DAYSECS,
+            'decidedby' => 0,
+            'keygroupid' => $group->id,
+            'keyoutcome' => submission::KEY_FOR_REVIEW,
+        ]);
+    }
+
+    /**
+     * Which rows of the queue carry the "applied before" flag, for the current user.
+     *
+     * @param int|null $enrolid The instance to list, 0 for the site-wide queue, null for the fixture instance.
+     * @return array User enrolment id => 1 or 0.
+     */
+    private function badges(?int $enrolid = null): array {
+        [, $table] = $this->queue_for([], $enrolid);
+        $badges = [];
+        foreach ($table->rawdata as $row) {
+            $badges[(int) $row->userenrolmentid] = (int) $row->appliedbefore;
+        }
+
+        return $badges;
+    }
+
+    /**
+     * Grant the course report to a role in the course.
+     *
+     * @param string $shortname The role.
+     * @return void
+     */
+    private function grant_report(string $shortname): void {
+        global $DB;
+
+        $role = (int) $DB->get_field('role', 'id', ['shortname' => $shortname], MUST_EXIST);
+        assign_capability('enrol/apply:viewreports', CAP_ALLOW, $role, \context_course::instance($this->course->id)->id, true);
+        accesslib_clear_all_caches_for_unit_testing();
+    }
+
+    /**
+     * The "applied before" badge discloses earlier applications, so it needs the report capability.
+     *
+     * The editing teacher decides and sees every group but holds no enrol/apply:viewreports by
+     * archetype; the administrator, who holds it, is the control that the badge is drawn at all,
+     * and the same teacher with the capability granted is the control that the capability is
+     * what moved it. The site-wide queue draws none for anybody, as one context cannot judge it.
+     *
+     * Changes that must make it fail: the badge computed unconditionally, without the capability
+     * or on the site-wide scope.
+     *
+     * @return void
+     */
+    public function test_the_applied_before_badge_needs_the_report_capability_on_one_instances_queue(): void {
+        $current = $this->application_in($this->two);
+        $this->earlier_application($this->owner_of($current), $this->other);
+
+        $this->setAdminUser();
+        $this->assertSame([$current => 1], $this->badges(), 'the control: a holder of the capability');
+        $this->assertSame([$current => 0], $this->badges(0), 'the site-wide queue judges no single course');
+
+        $this->setUser($this->editing);
+        $this->assertSame([$current => 0], $this->badges());
+
+        $this->grant_report('editingteacher');
+        $this->setUser($this->editing);
+        $this->assertSame([$current => 1], $this->badges(), 'the control: the capability granted');
+    }
+
+    /**
+     * A reader the report narrows by groups is badged only for an earlier application in their groups.
+     *
+     * Both applicants have a current application in the moderator's group; one has an earlier one
+     * in the moderator's group, the other in a group outside it. The editing teacher, who sees
+     * every group, is the control that the second badge exists to be withheld.
+     *
+     * Changes that must make it fail: the narrowing left out of the EXISTS.
+     *
+     * @return void
+     */
+    public function test_a_narrowed_reader_is_badged_only_for_an_earlier_application_in_their_groups(): void {
+        $visible = $this->application_in($this->two);
+        $hidden = $this->application_in($this->two);
+        $this->earlier_application($this->owner_of($visible), $this->ten);
+        $this->earlier_application($this->owner_of($hidden), $this->other);
+        $this->grant_report('teacher');
+        $this->grant_report('editingteacher');
+
+        $this->setUser($this->editing);
+        $this->assertSame([$visible => 1, $hidden => 1], $this->badges(), 'the control: every group');
+
+        $this->setUser($this->moderator);
+        $this->assertSame([$visible => 1, $hidden => 0], $this->badges());
+    }
+
+    /**
+     * The applicant of a user enrolment.
+     *
+     * @param int $userenrolmentid The user enrolment id.
+     * @return int The user id.
+     */
+    private function owner_of(int $userenrolmentid): int {
+        global $DB;
+
+        return (int) $DB->get_field('user_enrolments', 'userid', ['id' => $userenrolmentid], MUST_EXIST);
+    }
+
+    /**
      * The group filter is declared, so core does not refuse it on the refresh path.
      *
      * @return void

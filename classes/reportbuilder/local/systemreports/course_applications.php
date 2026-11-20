@@ -83,7 +83,13 @@ class course_applications extends system_report {
             return false;
         }
 
-        return has_capability('enrol/apply:viewreports', $context);
+        /* Core's download.php calls only the site-level require_login() before this method, so the
+           course gate lives here. All four arguments matter: $onlyactive set to true makes a
+           suspended or expired enrolment fail as require_login($course) would, and the course
+           check refuses a hidden course to a reader without moodle/course:viewhiddencourses. */
+        $course = get_course((int) $context->instanceid);
+
+        return can_access_course($course, null, 'enrol/apply:viewreports', true);
     }
 
     /**

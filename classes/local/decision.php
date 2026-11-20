@@ -44,6 +44,21 @@ namespace enrol_apply\local;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 final class decision {
+    /** @var int[] User enrolment ids the last confirm apply() call decided, see confirmed_ids(). */
+    private static array $confirmed = [];
+
+    /**
+     * The user enrolments the last apply() call confirmed, which the posted list may exceed.
+     *
+     * What a post-decision read-back (the seats warning) may look at: the posted ids include rows
+     * the decision skipped, among them rows outside the operator's groups.
+     *
+     * @return int[] User enrolment ids; empty after a wait or cancel decision.
+     */
+    public static function confirmed_ids(): array {
+        return self::$confirmed;
+    }
+
     /**
      * Apply one posted decision.
      *
@@ -74,6 +89,7 @@ final class decision {
         }
 
         $decided = 0;
+        self::$confirmed = [];
         foreach (self::groups($userenrolmentids, $message, $messages) as $group) {
             $decided += self::decide($action, $group['ids'], $group['message'], $decision);
         }
@@ -136,8 +152,14 @@ final class decision {
     protected static function decide(string $action, array $ids, string $message, array $decision): int {
         $plugin = enrol_get_plugin('apply');
 
+        if ($action === 'confirm') {
+            $count = (int) $plugin->confirm_enrolment($ids, $message, $decision);
+            self::$confirmed = array_merge(self::$confirmed, $plugin->get_confirmed_enrolment_ids());
+
+            return $count;
+        }
+
         return match ($action) {
-            'confirm' => (int) $plugin->confirm_enrolment($ids, $message, $decision),
             'wait' => (int) $plugin->wait_enrolment($ids, $message, $decision),
             'cancel' => (int) $plugin->cancel_enrolment($ids, $message, $decision),
         };

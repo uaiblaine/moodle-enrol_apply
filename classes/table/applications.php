@@ -955,7 +955,7 @@ class applications extends \table_sql implements dynamic_table {
      * @return void
      */
     protected function build_sql(): void {
-        global $DB;
+        global $DB, $USER;
 
         [$wheres, $params] = $this->scope_where();
 
@@ -976,19 +976,40 @@ class applications extends \table_sql implements dynamic_table {
         /* Whether this applicant applied to this course before: a status label prompting the operator
            to open the review page.
 
+           Shown only where the review page would show the history, on the same rule
+           (renderer::history_context()): on one instance's queue, to a reader holding
+           enrol/apply:viewreports in that course, narrowed by the report's own groups. The badge
+           discloses that earlier applications exist, which is what that capability controls, so
+           the mentee and site-wide queues, which span courses no single context can judge, and a
+           reader without it select a constant.
+
            A correlated EXISTS rather than a join, so the row count cannot change: (courseid,
            userid) is not unique, and a join would multiply the row per earlier application. It
            reads the courseuser index.
 
            `s.id IS NULL OR prior.id <> s.id` excludes the row's own record; the null branch is
            for applications that predate the durable record and have no s.id. */
-        $priorsql = "CASE WHEN EXISTS (
-                            SELECT 1
-                              FROM {enrol_apply_submission} prior
-                             WHERE prior.courseid = c.id
-                               AND prior.userid = ue.userid
-                               AND (s.id IS NULL OR prior.id <> s.id)
-                          ) THEN 1 ELSE 0 END AS appliedbefore";
+        $priorsql = '0 AS appliedbefore';
+        if ($this->scope->enrolid && $this->scope->instance !== null) {
+            $priorcourse = (int) $this->scope->instance->courseid;
+            if (has_capability(groupscope::REPORT, context_course::instance($priorcourse))) {
+                $priorscope = '';
+                $reportgroups = groupscope::narrowed_to($priorcourse, (int) $USER->id, groupscope::REPORT);
+                if ($reportgroups !== null) {
+                    [$priorwhere, $priorparams] = groupscope::record_where('prior', $reportgroups, 'priorscope');
+                    $priorscope = 'AND ' . $priorwhere;
+                    $params += $priorparams;
+                }
+                $priorsql = "CASE WHEN EXISTS (
+                                SELECT 1
+                                  FROM {enrol_apply_submission} prior
+                                 WHERE prior.courseid = c.id
+                                   AND prior.userid = ue.userid
+                                   AND (s.id IS NULL OR prior.id <> s.id)
+                                   {$priorscope}
+                              ) THEN 1 ELSE 0 END AS appliedbefore";
+            }
+        }
 
         /* s.id names the record whose frozen answers query_db() reads for the whole page. They
            have no fallback: enrol_apply_applicationinfo never held a snapshot, so an application

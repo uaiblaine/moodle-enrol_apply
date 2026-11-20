@@ -45,6 +45,11 @@ use enrol_apply\reportbuilder\local\formatters\submission as formatter;
  * the report's audiences. A site that must keep a group's applications from another group's
  * moderator gives such a report no audience that includes them.
  *
+ * The columns that mask a value per reader (the key, chosen and joined groups and the snapshot)
+ * offer no aggregation, so a Count cannot reach what the callback withholds. An ungrouped masked
+ * column beside a Count of another column still yields one row per hidden group, blank where the
+ * callback masks it: the row exists, so the audience is the control, not the columns.
+ *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later

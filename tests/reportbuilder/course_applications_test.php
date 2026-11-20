@@ -138,6 +138,8 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
             true
         );
         role_assign($roleid, $user->id, $context->id);
+        // Enrolled and active: can_view() asks can_access_course() too, as require_login() would.
+        $this->getDataGenerator()->enrol_user($user->id, $this->course->id);
 
         return $user;
     }
@@ -610,6 +612,91 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
 
         $this->setUser($this->reader());
         $this->assertInstanceOf(\core_reportbuilder\system_report::class, $this->report());
+    }
+
+    /**
+     * A holder whose enrolment is suspended may not open the report, though the role is kept.
+     *
+     * Core's download.php runs only the site-level require_login() before can_view(), so the
+     * course gate has to be the report's own: can_access_course() with the capability and
+     * $onlyactive, the form require_login($course) agrees with.
+     *
+     * Changes that must make it fail: can_view() judging the capability alone, or calling
+     * can_access_course() without $onlyactive.
+     *
+     * @return void
+     */
+    public function test_can_view_refuses_a_holder_whose_enrolment_is_suspended(): void {
+        global $DB;
+
+        $this->seed();
+        $reader = $this->reader();
+
+        // The control: the same holder, active, is admitted.
+        $this->setUser($reader);
+        $this->assertInstanceOf(\core_reportbuilder\system_report::class, $this->report());
+
+        $DB->set_field('user_enrolments', 'status', ENROL_USER_SUSPENDED, ['userid' => $reader->id]);
+        $this->setUser($reader);
+        // Core caches the built report per persistent and user, so can_view() would not run again.
+        \core_reportbuilder\manager::reset_caches();
+        $this->assertTrue(has_capability('enrol/apply:viewreports', context_course::instance($this->course->id)));
+        $this->expectException(\core_reportbuilder\exception\report_access_exception::class);
+        $this->report();
+    }
+
+    /**
+     * A hidden course is refused to a holder without moodle/course:viewhiddencourses.
+     *
+     * Changes that must make it fail: can_view() not loading the course.
+     *
+     * @return void
+     */
+    public function test_can_view_refuses_a_hidden_course_to_a_reader_without_viewhiddencourses(): void {
+        global $DB;
+
+        $this->seed();
+        $reader = $this->reader();
+        $this->setUser($reader);
+        $this->assertInstanceOf(\core_reportbuilder\system_report::class, $this->report(), 'the control: visible');
+
+        $DB->set_field('course', 'visible', 0, ['id' => $this->course->id]);
+        $this->setUser($reader);
+        \core_reportbuilder\manager::reset_caches();
+        $this->assertFalse(has_capability('moodle/course:viewhiddencourses', context_course::instance($this->course->id)));
+        $this->expectException(\core_reportbuilder\exception\report_access_exception::class);
+        $this->report();
+    }
+
+    /**
+     * The columns that mask a value per reader offer no aggregation.
+     *
+     * A Count over a masked column would count the rows the callback withholds. A column that
+     * masks nothing offers them all, so the assertion is not vacuous.
+     *
+     * Changes that must make it fail: set_disabled_aggregation_all() dropped from keygroup,
+     * chosengroup, joinedgroups or snapshot.
+     *
+     * @return void
+     */
+    public function test_masked_columns_offer_no_aggregation(): void {
+        $this->seed();
+        $this->setUser($this->reader());
+        $report = $this->report();
+
+        $every = array_map(
+            static fn(string $aggregation): string => $aggregation::get_class_name(),
+            \core_reportbuilder\local\helpers\aggregation::get_aggregations()
+        );
+        $this->assertNotEmpty($every);
+
+        foreach (['keygroup', 'chosengroup', 'joinedgroups', 'snapshot'] as $name) {
+            $column = $report->get_column("submission:{$name}");
+            $this->assertNotNull($column, $name);
+            $this->assertEqualsCanonicalizing($every, $column->get_disabled_aggregation(), $name);
+        }
+
+        $this->assertSame([], $report->get_column('submission:enrolment')->get_disabled_aggregation());
     }
 
     /**

@@ -165,9 +165,10 @@ final class joined_groups_report_test extends \core_reportbuilder\tests\core_rep
 
         $user = $this->getDataGenerator()->create_user();
         role_assign($role, $user->id, context_course::instance($this->course->id)->id);
+        /* Enrolled with no role, always: the report's can_view() asks can_access_course() with the
+           capability, and groups_add_member() refuses a user who is not enrolled. */
+        $this->getDataGenerator()->enrol_user($user->id, $this->course->id);
         if ($groups) {
-            // Enrolled with no role: groups_add_member() refuses a user who is not enrolled.
-            $this->getDataGenerator()->enrol_user($user->id, $this->course->id);
             foreach ($groups as $group) {
                 $this->assertTrue(groups_add_member($group->id, $user->id));
             }

@@ -289,6 +289,7 @@ class submission extends base {
             ->add_field("{$galias}.courseid", 'keygroupcourseid')
             ->add_field("{$galias}.visibility", 'keygroupvisibility')
             ->set_is_sortable(false)
+            ->set_disabled_aggregation_all()
             ->add_callback([formatter::class, 'key_group']);
 
         /* The group the applicant chose (C-D4), a column of its own beside the key's rather than a
@@ -313,6 +314,7 @@ class submission extends base {
                 ->add_field("{$calias}.courseid", 'chosengroupcourseid')
                 ->add_field("{$calias}.visibility", 'chosengroupvisibility')
                 ->set_is_sortable(false)
+                ->set_disabled_aggregation_all()
                 ->add_callback([formatter::class, 'chosen_group']);
         }
 
@@ -331,15 +333,23 @@ class submission extends base {
             ->set_type(column::TYPE_TEXT)
             ->add_field(submissionhelper::joined_groups_sql($alias), 'joinedgroups')
             ->set_is_sortable(false)
+            ->set_disabled_aggregation_all()
             ->add_callback([formatter::class, 'joined_groups']);
 
         /* The frozen snapshot, as one long-text column that is neither sortable nor filterable.
            Built from the record's rows in SQL (submission::aggregate_sql()), because a display
            callback sees one row and could only read them with a query per row.
-           That is what makes a display callback a sound place to mask values here: there is no
-           SQL path by which a reader could recover a hidden one by filtering and counting rows.
-           test_the_snapshot_column_has_no_filter_and_is_not_sortable holds that precondition; if
-           it fails, the masking is unsound.
+           A display callback is a sound place to mask values here only while no SQL path lets a
+           reader recover a hidden one by filtering or sorting on it, and none does: this column
+           and the three group columns above have no filter and are not sortable.
+           set_disabled_aggregation_all() on all four closes the third path, because a Count or a
+           Count distinct over them would see rows whatever the callback masks, and a grouped
+           report would then count the withheld ones. What aggregation cannot reach is an ungrouped
+           masked column beside a Count of another one: it still yields one blank row per hidden
+           group, and the report's audience is the control there (see the datasource).
+           test_the_snapshot_column_has_no_filter_and_is_not_sortable holds the first two
+           preconditions and test_masked_columns_offer_no_aggregation the third; if either fails,
+           the masking is unsound.
            The callback is registered with no argument, which formatter::snapshot() answers with
            the name parts alone - the restrictive default any report reusing this entity
            inherits until it calls set_callback() with a context-based decision.
@@ -353,6 +363,7 @@ class submission extends base {
             ->set_type(column::TYPE_LONGTEXT)
             ->add_field(submissionhelper::aggregate_sql("{$alias}.id"), 'snapshot')
             ->set_is_sortable(false)
+            ->set_disabled_aggregation_all()
             /* The pairs are separated by a literal newline, which this class makes CSS draw;
                markup would corrupt the download (see formatter::snapshot()). */
             ->add_attributes(['class' => 'enrol_apply-linebreaks'])
