@@ -1,7 +1,8 @@
 # The audit report, rethought: a presentation layer over Report Builder
 
 Status: **decided** (2026-11-20, round 2 the same day). The owner accepted every recommendation of
-AR-D1&ndash;AR-D16 as written and decided AR-D17; nothing is started. Next: R1, after G5.
+AR-D1&ndash;AR-D16 as written and decided AR-D17; nothing is started. Next: R1, after G5. AR-D18 (a
+"Review" action on an open application, asked the same day) was accepted as recommended.
 Interactive mockup: [`audit-report-mockup.html`](audit-report-mockup.html) (open in a browser; its
 switches change concept, course size, viewport, view, reader and simulated latency, and it logs the
 web service calls it would make).
@@ -502,11 +503,36 @@ answered (dimmed rows or spinner) within 100 ms, and an interaction under 200 ms
 groups sees the median, what is still open and the key admissions; the 90th percentile, the
 distribution and the breakdown are removed for them.
 
+**AR-D18. A way from the report to an open application. Decided by the owner (2026-11-20): (b), as
+recommended.** Asked by the owner (2026-11-20): "senti falta
+de um botão de ação para levar a análise individual de uma candidatura ainda em aberto. Ou esse poderia
+ser o comportamento ao clicar no nome do usuário?" (a) The name opens the review page; (b) the name stays
+the profile link and an open application gets a "Review" action; (c) both. **(b)**:
+
+- the name is the profile link on the queue, the review page and every core report (the owner's decision
+  of 2026-08-31: "the applicant name is a plain profile link"), and a name that opens the profile on
+  one page and the decision on the next teaches the reader to distrust both; a decided row would also need
+  a second meaning for the same click;
+- the action is drawn only on a row whose application still awaits a decision (outcome Pending or
+  Deferred, read from the live enrolment with `queue::is_awaiting_decision()`, the outcome column's own
+  rule) and only for a reader the review page would admit (`can_view_application()`: deciders and
+  viewers, narrowed by groups as the queue is). A reader holding `viewreports` alone sees no button
+  rather than one that refuses them;
+- in core's system report (R1, every version) it is a row action, `system_report::add_action()` with a
+  callback that hides it on a decided row; in the React view (R4) a `btn btn-sm btn-outline-secondary`
+  "Review" at the right of the fixed Applicant cell and in the card's first line, the same as the queue's
+  button (`manage-queue-study.md`, MQ-D7);
+- the band's "Still open" tile links to the queue (`manage.php?id=`, status Pending) for the same reader.
+
+The per-row check must not cost a query per row: R1 reads the page's rows' review access in one batch
+beside the rows (as `profilelink::viewable_ids()` does for the profile link), with a test that the batch
+agrees with `can_view_application()` row by row.
+
 ## 7. Stages
 
 | Stage | Content | Tier |
 |---|---|---|
-| R1 | 3.0's content: `waittime` column and filter, the "Decided" cell, one Group column (key or chosen, after G5's helper), one Outcome cell, short dates, the default set, the snapshot out of the default; the same columns in the datasource; CSS cards for the system report (A). Lands on 5.1&ndash;5.3 | 2 |
+| R1 | 3.0's content: `waittime` column and filter, the "Decided" cell, one Group column (key or chosen, after G5's helper), one Outcome cell, short dates, the default set, the snapshot out of the default; the same columns in the datasource; CSS cards for the system report (A); the "Review" row action (AR-D18). Lands on 5.1&ndash;5.3 | 2 |
 | R2 | AR-D4: `timefirstdecided`, the upgrade step, backup and restore, privacy, `decide()` stamping it once | 3 |
 | R3 | The engine made headless: the column preference read in `initialise()`, `enrol_apply_report_rows`, `enrol_apply_report_summary` (over `$table->sql`), `enrol_apply_set_report_preference` (columns and widths, AR-D13); tests that the rows and the summary obey S8 and the filters | 3 |
 | R4 | The React view on 5.2+ (`js/esm/src/report/`): filter bar, chips, columns menu, the bounded grid (sticky heading and Applicant column, resizable columns), cards, pager, summary band (compact for a narrowed reader), skeletons and superseded requests, the search by name; core's table as `<noscript>` and "Table view"; Behat on 5.3 | 2 (3 for its WS changes) |
