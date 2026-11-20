@@ -25,7 +25,8 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-require(__DIR__ . '/../../config.php');
+// Once only: tests/group_choice_test.php runs this script inside a PHPUnit process that has loaded it.
+require_once(__DIR__ . '/../../config.php');
 
 $instanceid = required_param('instance', PARAM_INT);
 

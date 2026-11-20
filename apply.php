@@ -75,6 +75,12 @@ if ($form->is_cancelled()) {
 
 $form->set_data_for_dynamic_submission();
 
+/* The plain select is this page's chooser without JavaScript; with it, the same searchable list
+   the modal shows. */
+if (\enrol_apply\local\groupchoice::mode($instance) !== \enrol_apply\local\instanceoptions::CHOICE_OFF) {
+    $PAGE->requires->js_call_amd('enrol_apply/group_chooser', 'init');
+}
+
 echo $OUTPUT->header();
 echo $OUTPUT->heading(get_string('checkyourdetails', 'enrol_apply'));
 $form->display();

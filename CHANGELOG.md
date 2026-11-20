@@ -4,10 +4,24 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased (2026111900)
+## Unreleased (2026112000)
 
 ### Added
 
+- **The applicant chooses a group when applying** (`docs/design/applicant-group-choice.md`, stage
+  G4). Where a method lets its applicants choose (optional or required) and no key-only mode is on,
+  the application form asks for a **Group** after the method's text and before the details: in the
+  modal, a searchable list that shows up to eight groups with places, says how many more there are,
+  and finds every offered group by typing, ignoring case and accents, the full ones last and
+  disabled; on `apply.php` without JavaScript, the plain select it enhances. Only groups the
+  applicant may see are offered. "No preference" heads an optional list. Where the method counts
+  seats (`local_groupdist`), each group says its places left. The write door judges the posted group
+  again inside its lock (offered, visible to the applicant, with a place) and refuses anything else
+  before writing, so a caller other than the form cannot record a group the form would refuse; the
+  choice is recorded in `enrol_apply_submission.chosengroupid`. With "a valid key enrols at once"
+  the list stays, and a valid key wins over it: the key's group is the application's group. The
+  acknowledgement and the enrolment page name the chosen group ("Your application for Evening A is
+  waiting for a decision."). A pending application takes no seat, so a choice reserves nothing.
 - **Storage for the applicant's group choice and the per-method options**
   (`docs/design/applicant-group-choice.md`, stage G2). Two configuration tables,
   `enrol_apply_options` (one row per method at most; none means every option at its default) and

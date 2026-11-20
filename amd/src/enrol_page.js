@@ -28,6 +28,7 @@
 import ModalForm from 'core_form/modalform';
 import {getString} from 'core/str';
 import {prefetchStrings} from 'core/prefetch';
+import {enhance as enhanceGroupChooser} from 'enrol_apply/group_chooser';
 
 const SELECTORS = {
     button: (instanceId) => `[data-instance="${instanceId}"][data-form]`,
@@ -97,6 +98,8 @@ export function init(instanceId) {
 
         // Registered before show(), so it is in place for the first body.
         modalForm.addEventListener('core/modal:bodyRendered', followKeyStep);
+        // The group chooser is enhanced on every body, the re-render after a validation error included.
+        modalForm.addEventListener('core/modal:bodyRendered', (event) => enhanceGroupChooser(event.detail.getRoot()[0]));
 
         modalForm.addEventListener(modalForm.events.FORM_SUBMITTED, (event) => {
             // The form's process_dynamic_submission() returns the acknowledgement page's url, or the

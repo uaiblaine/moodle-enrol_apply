@@ -381,6 +381,7 @@ class enrol_apply_plugin extends enrol_plugin {
      * @param stdClass $data Submitted application form data.
      * @param int $keygroupid Group whose key was presented and resolved, 0 for none.
      * @param int $keyoutcome One of the submission::KEY_ constants.
+     * @param int $chosengroupid Group the applicant chose, as groupchoice::resolve() judged it; 0 for none.
      * @return array The user enrolment id and the record id, under 'userenrolmentid' and 'submissionid'.
      */
     protected function apply(
@@ -388,7 +389,8 @@ class enrol_apply_plugin extends enrol_plugin {
         $userid,
         $data,
         int $keygroupid = 0,
-        int $keyoutcome = \enrol_apply\local\submission::KEY_NONE
+        int $keyoutcome = \enrol_apply\local\submission::KEY_NONE,
+        int $chosengroupid = 0
     ): array {
         global $DB;
 
@@ -422,7 +424,8 @@ class enrol_apply_plugin extends enrol_plugin {
             (int) $userenrolment->id,
             $data,
             $keygroupid,
-            $keyoutcome
+            $keyoutcome,
+            $chosengroupid
         );
 
         $admitted = $keyoutcome === \enrol_apply\local\submission::KEY_ADMITTED;
@@ -559,6 +562,10 @@ class enrol_apply_plugin extends enrol_plugin {
      * admit (groupkey::admits()), a valid key writes an application for review instead
      * (apply_for_review()).
      *
+     * A valid key wins over a chosen group (C-D5): every route the key decides records the key's
+     * group and ignores the chosen one, which only an application no key decides judges and
+     * records (apply_without_key()).
+     *
      * @param stdClass $instance Course enrol instance.
      * @param int $userid Applicant user id.
      * @param stdClass $data Submitted application form data.
@@ -585,8 +592,7 @@ class enrol_apply_plugin extends enrol_plugin {
                 }
                 return \enrol_apply\local\application_result::refused($refusal);
             }
-            $this->apply($instance, $userid, $data);
-            return \enrol_apply\local\application_result::created();
+            return $this->apply_without_key($instance, $userid, $data);
         }
 
         $targets = $this->key_route_groups($instance, $keygroupid);
@@ -622,8 +628,8 @@ class enrol_apply_plugin extends enrol_plugin {
                         get_string('groupkeyinvalid_required', 'enrol_apply')
                     );
                 }
-                $this->apply($instance, $userid, $data);
-                return \enrol_apply\local\application_result::created();
+                // The method as just read: a key-only mode switched on meanwhile offers no choice.
+                return $this->apply_without_key($current ?: $instance, $userid, $data);
             }
 
             /* Both capacities are read under the locks, so two key holders cannot both take the
@@ -662,6 +668,41 @@ class enrol_apply_plugin extends enrol_plugin {
         \enrol_apply\local\keyattempts::clear((int) $instance->id, $userid);
 
         return \enrol_apply\local\application_result::created(\enrol_apply\local\submission::KEY_ADMITTED, $keygroupid);
+    }
+
+    /**
+     * Write an application no key decides, with the group the applicant chose.
+     *
+     * The chosen group is judged here, from the database, inside submit_application()'s lock,
+     * and never taken from what the form concluded (docs/design/applicant-group-choice.md, "What
+     * G2 leaves to the later stages"): it must be in the method's offer, which joins the method's
+     * course, visible to the applicant and, where seats count, have a place. Anything else
+     * refuses the application before anything is written, never a silent drop to "no group",
+     * because a caller other than the form gets no other message. No admission lock is taken: a
+     * pending application takes no seat (C-D8), so two applicants who both read the last place
+     * free both wait for a decision.
+     *
+     * A route a valid key decides never reaches this method, so a chosen group and a key group are
+     * never recorded together (C-D5).
+     *
+     * @param stdClass $instance Course enrol instance.
+     * @param int $userid Applicant user id.
+     * @param stdClass $data Submitted application form data.
+     * @return \enrol_apply\local\application_result What was written, or why nothing was.
+     */
+    protected function apply_without_key(stdClass $instance, int $userid, stdClass $data) {
+        $choice = \enrol_apply\local\groupchoice::resolve(
+            $instance,
+            $userid,
+            \enrol_apply\local\groupchoice::posted($data)
+        );
+        if ($choice->refusal !== null) {
+            return \enrol_apply\local\application_result::refused($choice->refusal);
+        }
+
+        $this->apply($instance, $userid, $data, 0, \enrol_apply\local\submission::KEY_NONE, $choice->groupid);
+
+        return \enrol_apply\local\application_result::created();
     }
 
     /**

@@ -319,6 +319,74 @@ class behat_enrol_apply extends behat_base {
     }
 
     /**
+     * Let an apply enrolment method's applicants choose among some of its course's groups.
+     *
+     * What the instance form's Groups section writes (enrol_apply_options and enrol_apply_offer),
+     * through the same two classes, without driving that form.
+     *
+     * @Given /^applicants to the "(?P<c_string>[^"]*)" apply method (?P<m_string>may|must) choose among "(?P<g_string>[^"]*)"$/
+     * @param string $shortname Course shortname.
+     * @param string $mode "may" for an optional choice, "must" for a required one.
+     * @param string $groupnames Comma separated group names.
+     * @return void
+     */
+    public function applicants_to_the_apply_method_choose_among(string $shortname, string $mode, string $groupnames): void {
+        global $DB;
+
+        $instance = $DB->get_record('enrol', ['id' => $this->get_instance_id($shortname)], '*', MUST_EXIST);
+        $groupids = [];
+        foreach (array_filter(array_map('trim', explode(',', $groupnames))) as $groupname) {
+            $groupids[] = (int) $DB->get_field(
+                'groups',
+                'id',
+                ['courseid' => $instance->courseid, 'name' => $groupname],
+                MUST_EXIST
+            );
+        }
+        \enrol_apply\local\groupoffer::set((int) $instance->id, $groupids);
+        \enrol_apply\local\instanceoptions::set((int) $instance->id, [
+            'groupchoice' => $mode === 'must'
+                ? \enrol_apply\local\instanceoptions::CHOICE_REQUIRED
+                : \enrol_apply\local\instanceoptions::CHOICE_OPTIONAL,
+        ]);
+    }
+
+    /**
+     * Declare a group's seats in local_groupdist's group custom field.
+     *
+     * Skipped where local_groupdist is not installed: without it no group has seats.
+     *
+     * @Given /^the group "(?P<group_string>[^"]*)" of "(?P<course_string>[^"]*)" has "(?P<seats_number>\d+)" seats$/
+     * @param string $groupname The group, by name.
+     * @param string $shortname Course shortname.
+     * @param string $seats Seats; 0 is full from the start.
+     * @return void
+     * @throws \Moodle\BehatExtension\Exception\SkippedException Without local_groupdist.
+     */
+    public function the_group_has_seats(string $groupname, string $shortname, string $seats): void {
+        global $DB, $USER;
+
+        if (!class_exists('\local_groupdist\seats')) {
+            throw new \Moodle\BehatExtension\Exception\SkippedException('local_groupdist is not installed');
+        }
+        $courseid = $DB->get_field('course', 'id', ['shortname' => $shortname], MUST_EXIST);
+        $groupid = $DB->get_field('groups', 'id', ['courseid' => $courseid, 'name' => $groupname], MUST_EXIST);
+
+        \local_groupdist\local\fields::ensure_fields_exist();
+        // The handler saves only the fields its user may edit.
+        $previous = $USER;
+        \core\session\manager::set_user(get_admin());
+        try {
+            \core_group\customfield\group_handler::create()->instance_form_save((object) [
+                'id' => (int) $groupid,
+                'customfield_groupdist_seats' => (int) $seats,
+            ]);
+        } finally {
+            \core\session\manager::set_user($previous);
+        }
+    }
+
+    /**
      * Return the apply enrolment instance id of the given course.
      *
      * @param string $shortname Course short name.

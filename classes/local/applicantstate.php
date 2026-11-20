@@ -52,6 +52,10 @@ use stdClass;
  * one: it is the one group they already know. A key group deleted since leaves the plain state,
  * because a sentence about a group that no longer exists would explain nothing.
  *
+ * A pending application no key decided names the group the applicant chose from the method's
+ * offer, while the applicant may still be told its name ({@see groupvisibility::visible_to()}):
+ * a group made visible to its members only since is not named to somebody outside it.
+ *
  * It is deliberately a describer and not a renderer. The enrolment page has no heading of its
  * own and puts the body in a core notification inside its enrol_page panel, while the
  * acknowledgement page uses all three parts.
@@ -87,6 +91,9 @@ final class applicantstate {
 
     /** @var string PENDING because a valid key sends the application for review on this method. */
     private const KEY_FOR_REVIEW = 'keyforreview';
+
+    /** @var string PENDING, for the group the applicant chose from the method's offer. */
+    private const CHOSEN = 'chosen';
 
     /**
      * Heading, body and notification level for one applicant's own application.
@@ -170,6 +177,7 @@ final class applicantstate {
             self::KEY_GROUP_FULL => 'applicationkeygroupfull_body',
             self::KEY_UNCONFIRMED => 'applicationkeyunconfirmed_body',
             self::KEY_FOR_REVIEW => 'applicationkeyforreview_body',
+            self::CHOSEN => 'applicationchosengroup_body',
             default => 'applicationsubmitted_body',
         };
     }
@@ -194,7 +202,7 @@ final class applicantstate {
 
         $key = submission::key_of((int) ($userenrolment->id ?? 0));
         if ($key === null) {
-            return [$state, null];
+            return $state === self::PENDING ? self::chosen($userenrolment) : [$state, null];
         }
 
         $refined = match (true) {
@@ -218,6 +226,31 @@ final class applicantstate {
 
         return [
             $refined,
+            format_string($group->name, true, ['context' => \context_course::instance($group->courseid)]),
+        ];
+    }
+
+    /**
+     * A pending application refined by the group the applicant chose, when one is named.
+     *
+     * The escaped spelling, as for the key group: both sinks render the body raw.
+     *
+     * @param stdClass $userenrolment The applicant's own {user_enrolments} row, carrying id.
+     * @return array The state constant, then the group name or null.
+     */
+    private static function chosen(stdClass $userenrolment): array {
+        global $DB;
+
+        $chosen = submission::chosen_group_of((int) ($userenrolment->id ?? 0));
+        $group = $chosen
+            ? $DB->get_record('groups', ['id' => $chosen->groupid], 'id, courseid, name, visibility')
+            : false;
+        if (!$group || !groupvisibility::visible_to($group, $chosen->userid)) {
+            return [self::PENDING, null];
+        }
+
+        return [
+            self::CHOSEN,
             format_string($group->name, true, ['context' => \context_course::instance($group->courseid)]),
         ];
     }
