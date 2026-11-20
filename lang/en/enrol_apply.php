@@ -365,6 +365,7 @@ $string['privacy:metadata:enrol_apply_applicationinfo'] = 'Information submitted
 $string['privacy:metadata:enrol_apply_applicationinfo:comment'] = 'The comment the user wrote when applying for the course enrolment.';
 $string['privacy:metadata:enrol_apply_applicationinfo:userenrolmentid'] = 'The enrolment the application belongs to, which identifies the applying user and the course.';
 $string['privacy:metadata:enrol_apply_submission'] = 'The durable record of a course enrolment application: what was submitted, what was decided, by whom and when.';
+$string['privacy:metadata:enrol_apply_submission:chosengroupid'] = 'The group the applicant chose from those the enrolment method offered.';
 $string['privacy:metadata:enrol_apply_submission:comment'] = 'The comment the user wrote when applying for the course enrolment.';
 $string['privacy:metadata:enrol_apply_submission:courseid'] = 'The course the application was submitted to.';
 $string['privacy:metadata:enrol_apply_submission:decidedby'] = 'The user who approved, deferred or cancelled the application.';

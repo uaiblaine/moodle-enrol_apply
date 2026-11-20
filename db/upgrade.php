@@ -515,5 +515,59 @@ function xmldb_enrol_apply_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026110505, 'enrol', 'apply');
     }
 
+    if ($oldversion < 2026111900) {
+        /* Per-method options with no {enrol} column left for them, the groups a method offers its
+           applicants, and the group an applicant chose (docs/design/applicant-group-choice.md, G2).
+           DDL only: a method with no options row reads every option at its default, which is what
+           every method did before this step, so nothing is written for the methods that exist and
+           a step stopped part way is finished by running it again. The column's default is a
+           constant, so neither database family rewrites the table to add it. */
+        $table = new xmldb_table('enrol_apply_options');
+        $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('enrolid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('groupchoice', XMLDB_TYPE_INTEGER, '2', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('deciders', XMLDB_TYPE_INTEGER, '2', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('groupseats', XMLDB_TYPE_INTEGER, '2', null, XMLDB_NOTNULL, null, '1');
+        $table->add_field('hidecard', XMLDB_TYPE_INTEGER, '2', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('timemodified', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_key('enrol', XMLDB_KEY_FOREIGN_UNIQUE, ['enrolid'], 'enrol', ['id']);
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+        /* MySQL and MariaDB commit each DDL statement on its own, so a step stopped between creating
+           a table and its unique index leaves the table without it, and the guard above skips the
+           table on the re-run. The unique indexes are what keeps one row per method and one row
+           per offered group, so they are checked apart. */
+        $unique = new xmldb_index('enrolid', XMLDB_INDEX_UNIQUE, ['enrolid']);
+        if (!$dbman->index_exists($table, $unique)) {
+            $dbman->add_key($table, new xmldb_key('enrol', XMLDB_KEY_FOREIGN_UNIQUE, ['enrolid'], 'enrol', ['id']));
+        }
+
+        $table = new xmldb_table('enrol_apply_offer');
+        $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('enrolid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('groupid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_key('enrol', XMLDB_KEY_FOREIGN, ['enrolid'], 'enrol', ['id']);
+        $table->add_key('group', XMLDB_KEY_FOREIGN, ['groupid'], 'groups', ['id']);
+        $table->add_index('enrolidgroupid', XMLDB_INDEX_UNIQUE, ['enrolid', 'groupid']);
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+        $unique = new xmldb_index('enrolidgroupid', XMLDB_INDEX_UNIQUE, ['enrolid', 'groupid']);
+        if (!$dbman->index_exists($table, $unique)) {
+            $dbman->add_index($table, $unique);
+        }
+
+        $table = new xmldb_table('enrol_apply_submission');
+        $field = new xmldb_field('chosengroupid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0', 'keyoutcome');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        upgrade_plugin_savepoint(true, 2026111900, 'enrol', 'apply');
+    }
+
     return true;
 }

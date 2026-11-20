@@ -131,6 +131,107 @@ final class observers_test extends \advanced_testcase {
     }
 
     /**
+     * A course deletion sweeps the options and offers whose method is gone, the case a disabled
+     * plugin leaves behind, and keeps the live ones.
+     *
+     * Changes that must make it fail: either of the two sweeps left out, or written without its
+     * NOT EXISTS so that it empties the table.
+     *
+     * @return void
+     */
+    public function test_a_course_deletion_sweeps_orphaned_options_and_offers(): void {
+        global $DB;
+
+        $plugin = enrol_get_plugin('apply');
+        $generator = $this->getDataGenerator();
+        $make = function () use ($plugin, $generator): int {
+            $course = $generator->create_course();
+            $enrolid = (int) $plugin->add_instance($course, $plugin->get_instance_defaults());
+            \enrol_apply\local\instanceoptions::set($enrolid, ['deciders' => 1]);
+            $group = $generator->create_group(['courseid' => $course->id]);
+            \enrol_apply\local\groupoffer::set($enrolid, [(int) $group->id]);
+            return $enrolid;
+        };
+        $live = $make();
+        $orphan = $make();
+        // What enrol_course_delete() leaves when the plugin is disabled: the {enrol} row is gone.
+        $DB->delete_records('enrol', ['id' => $orphan]);
+
+        delete_course($generator->create_course(), false);
+
+        $this->assertFalse($DB->record_exists('enrol_apply_options', ['enrolid' => $orphan]));
+        $this->assertFalse($DB->record_exists('enrol_apply_offer', ['enrolid' => $orphan]));
+        $this->assertTrue($DB->record_exists('enrol_apply_options', ['enrolid' => $live]));
+        $this->assertTrue($DB->record_exists('enrol_apply_offer', ['enrolid' => $live]));
+    }
+
+    /**
+     * Before the upgrade has run, deleting a method or a course leaves the two new tables alone.
+     *
+     * Measured on the mini cluster with the code deployed and the upgrade pending: without these
+     * gates delete_instance() stops on a class core's class map does not know yet, and every course
+     * deletion fails, because the recycle bin's backup reads a table that does not exist.
+     *
+     * Changes that must make it fail: the gate in the course_deleted sweep dropped. Dropping the one
+     * in delete_instance() does not, because the two classes gate themselves; that gate stops the
+     * class-not-found fatal, which only the cluster reproduces.
+     *
+     * @return void
+     */
+    public function test_before_the_upgrade_deletions_leave_the_new_tables_alone(): void {
+        global $DB;
+
+        $plugin = enrol_get_plugin('apply');
+        $course = $this->getDataGenerator()->create_course();
+        $group = $this->getDataGenerator()->create_group(['courseid' => $course->id]);
+        $deleted = (int) $plugin->add_instance($course, $plugin->get_instance_defaults());
+        $orphan = (int) $plugin->add_instance($course, $plugin->get_instance_defaults());
+        foreach ([$deleted, $orphan] as $enrolid) {
+            \enrol_apply\local\instanceoptions::set($enrolid, ['hidecard' => 1]);
+            \enrol_apply\local\groupoffer::set($enrolid, [(int) $group->id]);
+        }
+        $DB->delete_records('enrol', ['id' => $orphan]);
+        set_config('version', ENROL_APPLY_OPTIONS_SCHEMA - 1, 'enrol_apply');
+
+        $plugin->delete_instance($DB->get_record('enrol', ['id' => $deleted], '*', MUST_EXIST));
+        delete_course($this->getDataGenerator()->create_course(), false);
+
+        $this->assertFalse($DB->record_exists('enrol', ['id' => $deleted]), 'the method itself is still deleted');
+        foreach ([$deleted, $orphan] as $enrolid) {
+            $this->assertTrue($DB->record_exists('enrol_apply_options', ['enrolid' => $enrolid]));
+            $this->assertTrue($DB->record_exists('enrol_apply_offer', ['enrolid' => $enrolid]));
+        }
+    }
+
+    /**
+     * Deleting a method forgets its options and its offer, and nobody else's.
+     *
+     * Changes that must make it fail: either delete left out of delete_instance().
+     *
+     * @return void
+     */
+    public function test_deleting_a_method_forgets_its_options_and_offer(): void {
+        global $DB;
+
+        $plugin = enrol_get_plugin('apply');
+        $course = $this->getDataGenerator()->create_course();
+        $group = $this->getDataGenerator()->create_group(['courseid' => $course->id]);
+        $ids = [];
+        foreach (['gone', 'kept'] as $name) {
+            $ids[$name] = (int) $plugin->add_instance($course, $plugin->get_instance_defaults());
+            \enrol_apply\local\instanceoptions::set($ids[$name], ['hidecard' => 1]);
+            \enrol_apply\local\groupoffer::set($ids[$name], [(int) $group->id]);
+        }
+
+        $plugin->delete_instance($DB->get_record('enrol', ['id' => $ids['gone']], '*', MUST_EXIST));
+
+        $this->assertFalse($DB->record_exists('enrol_apply_options', ['enrolid' => $ids['gone']]));
+        $this->assertFalse($DB->record_exists('enrol_apply_offer', ['enrolid' => $ids['gone']]));
+        $this->assertTrue($DB->record_exists('enrol_apply_options', ['enrolid' => $ids['kept']]));
+        $this->assertTrue($DB->record_exists('enrol_apply_offer', ['enrolid' => $ids['kept']]));
+    }
+
+    /**
      * Deleting any course sweeps the frozen answers whose record is gone, and keeps the rest.
      *
      * No path of this plugin leaves such a row - each deletes the answers before the record - so

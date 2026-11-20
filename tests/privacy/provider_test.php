@@ -518,6 +518,44 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
     }
 
     /**
+     * The group an applicant chose reaches both subjects' exports by name; a record without a
+     * choice exports none.
+     *
+     * Changes that must make it fail: the export leaving the chosen group out, or naming it by id.
+     *
+     * @return void
+     */
+    public function test_the_chosen_group_is_exported_to_both_subjects(): void {
+        global $DB;
+
+        $decider = $this->getDataGenerator()->create_user();
+        $applicant = $this->create_application('Please approve me', (int) $decider->id);
+        $context = context_course::instance($this->course->id);
+        $group = $this->getDataGenerator()->create_group(['courseid' => $this->course->id, 'name' => 'Turma noturna']);
+        $recordid = $this->submission_id_of($applicant);
+        $DB->set_field('enrol_apply_submission', 'chosengroupid', $group->id, ['id' => $recordid]);
+        $path = fn(string $rolekey): array => [
+            get_string('privacy:trailpath', 'enrol_apply'),
+            get_string($rolekey, 'enrol_apply'),
+            get_string('privacy:recordpath', 'enrol_apply', $recordid),
+        ];
+
+        foreach (['privacy:roleapplicant' => $applicant, 'privacy:roledecider' => $decider] as $rolekey => $subject) {
+            writer::reset();
+            $this->export_context_data_for_user((int) $subject->id, $context, 'enrol_apply');
+            $exported = writer::with_context($context)->get_data($path($rolekey));
+            $this->assertSame('Turma noturna', $exported->chosengroup, $rolekey);
+        }
+
+        // The control: without a choice the record exports no chosen group.
+        $DB->set_field('enrol_apply_submission', 'chosengroupid', 0, ['id' => $recordid]);
+        writer::reset();
+        $this->export_context_data_for_user((int) $applicant->id, $context, 'enrol_apply');
+        $exported = writer::with_context($context)->get_data($path('privacy:roleapplicant'));
+        $this->assertFalse(property_exists($exported, 'chosengroup'));
+    }
+
+    /**
      * A group and a custom role are exported in their plain spelling.
      *
      * format_string()'s escape flag defaults to true, and an export file is data rather than

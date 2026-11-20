@@ -31,6 +31,8 @@ use enrol_apply\customfield\application_handler;
 use enrol_apply\local\answers;
 use enrol_apply\local\conditions;
 use enrol_apply\local\fields;
+use enrol_apply\local\groupoffer;
+use enrol_apply\local\instanceoptions;
 use enrol_apply\local\submission;
 
 /**
@@ -56,6 +58,8 @@ class restore_enrol_apply_plugin extends restore_enrol_plugin {
             ),
             new restore_path_element('enrol_apply_sharedcategory', $this->get_pathfor('/sharedcategories/sharedcategory')),
             new restore_path_element('enrol_apply_applygroup', $this->get_pathfor('/applygroups/applygroup')),
+            new restore_path_element('enrol_apply_options', $this->get_pathfor('/options')),
+            new restore_path_element('enrol_apply_offeredgroup', $this->get_pathfor('/offeredgroups/offeredgroup')),
             new restore_path_element('enrol_apply_application', $this->get_pathfor('/applications/application')),
             new restore_path_element('enrol_apply_submission', $this->get_pathfor('/submissions/submission')),
             new restore_path_element('enrol_apply_answer', $this->get_pathfor('/submissions/submission/answers/answer')),
@@ -206,7 +210,7 @@ class restore_enrol_apply_plugin extends restore_enrol_plugin {
             'timecreated' => (int) $data->timecreated,
             'timedecided' => (int) $data->timedecided,
             'decidedby' => (int) $this->get_mappingid('user', $data->decidedby),
-        ] + $this->key_fields($data)));
+        ] + $this->group_route_fields($data)));
 
         if (isset($data->userinfodata) && is_string($data->userinfodata)) {
             $entries = [];
@@ -353,6 +357,29 @@ class restore_enrol_apply_plugin extends restore_enrol_plugin {
             'keygroupid' => (int) $this->get_mappingid('group', $data->keygroupid ?? 0),
             'keyoutcome' => $outcome,
         ];
+    }
+
+    /**
+     * The group an application is for, by key or by choice, translated to this restore.
+     *
+     * The key's columns as {@see key_fields()} gives them, and the chosen group mapped the same
+     * way, 0 when it did not travel. An application names a group by one route only, so a chosen
+     * group beside a key route, which only a foreign archive carries, restores as no choice: the
+     * key is the stronger fact, and every reader takes it first. Before the upgrade that adds the
+     * column there is no choice to restore, and the key's columns come alone.
+     *
+     * @param stdClass $data Backup data of the application record.
+     * @return array The keygroupid and keyoutcome columns, and chosengroupid once the column exists.
+     */
+    protected function group_route_fields(stdClass $data): array {
+        $fields = $this->key_fields($data);
+        if (!enrol_get_plugin('apply')->options_schema_ready()) {
+            return $fields;
+        }
+        $fields['chosengroupid'] = $fields['keyoutcome'] === submission::KEY_NONE
+            ? (int) $this->get_mappingid('group', $data->chosengroupid ?? 0)
+            : 0;
+        return $fields;
     }
 
     /**
@@ -612,5 +639,47 @@ class restore_enrol_apply_plugin extends restore_enrol_plugin {
                 'groupid' => $groupid,
             ]);
         }
+    }
+
+    /**
+     * Restore the method's options.
+     *
+     * Each value is read as a stored one is ({@see instanceoptions::normalise()}): an archive can
+     * carry anything, and a value outside its option's vocabulary restores as that option's
+     * default rather than failing the restore.
+     *
+     * @param array $data Backup data of the options.
+     * @return void
+     */
+    public function process_enrol_apply_options($data) {
+        $enrolid = $this->get_apply_instanceid();
+        if (!$enrolid || !enrol_get_plugin('apply')->options_schema_ready()) {
+            return;
+        }
+
+        instanceoptions::set($enrolid, (array) instanceoptions::normalise($data));
+    }
+
+    /**
+     * Restore one group the method offers its applicants.
+     *
+     * @param array $data Backup data of the offered group.
+     * @return void
+     */
+    public function process_enrol_apply_offeredgroup($data) {
+        $data = (object) $data;
+
+        $enrolid = $this->get_apply_instanceid();
+        if (!$enrolid || !enrol_get_plugin('apply')->options_schema_ready()) {
+            return;
+        }
+
+        $groupid = (int) $this->get_mappingid('group', $data->groupid ?? 0);
+        if (!$groupid) {
+            // Groups were excluded from this restore, or the group no longer exists.
+            return;
+        }
+
+        groupoffer::add($enrolid, $groupid);
     }
 }

@@ -363,6 +363,7 @@ $string['privacy:metadata:enrol_apply_applicationinfo'] = 'Informações enviada
 $string['privacy:metadata:enrol_apply_applicationinfo:comment'] = 'O comentário escrito pelo usuário ao solicitar a inscrição no curso.';
 $string['privacy:metadata:enrol_apply_applicationinfo:userenrolmentid'] = 'A inscrição à qual a solicitação pertence, que identifica o usuário solicitante e o curso.';
 $string['privacy:metadata:enrol_apply_submission'] = 'O registro durável de uma solicitação de inscrição no curso: o que foi enviado, o que foi decidido, por quem e quando.';
+$string['privacy:metadata:enrol_apply_submission:chosengroupid'] = 'O grupo que o solicitante escolheu entre os oferecidos pelo método de inscrição.';
 $string['privacy:metadata:enrol_apply_submission:comment'] = 'O comentário que o usuário escreveu ao solicitar a inscrição no curso.';
 $string['privacy:metadata:enrol_apply_submission:courseid'] = 'O curso ao qual a solicitação foi enviada.';
 $string['privacy:metadata:enrol_apply_submission:decidedby'] = 'O usuário que aprovou, adiou ou cancelou a solicitação.';

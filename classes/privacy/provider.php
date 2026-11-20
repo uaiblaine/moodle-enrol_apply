@@ -88,6 +88,7 @@ class provider implements
                 'decidedrole' => 'privacy:metadata:enrol_apply_submission:decidedrole',
                 'keygroupid' => 'privacy:metadata:enrol_apply_submission:keygroupid',
                 'keyoutcome' => 'privacy:metadata:enrol_apply_submission:keyoutcome',
+                'chosengroupid' => 'privacy:metadata:enrol_apply_submission:chosengroupid',
                 'status' => 'privacy:metadata:enrol_apply_submission:status',
                 'outcomemessage' => 'privacy:metadata:enrol_apply_submission:outcomemessage',
                 'decisionnote' => 'privacy:metadata:enrol_apply_submission:decisionnote',
@@ -362,6 +363,11 @@ class provider implements
             if ((int) $row->keyoutcome !== submission::KEY_NONE) {
                 $export->keyoutcome = submission::key_outcome_label((int) $row->keyoutcome);
                 $export->keygroup = self::group_names((string) $row->keygroupid, $context)[0] ?? null;
+            }
+
+            // The group the applicant asked for, named like the key group, to both subjects.
+            if ((int) ($row->chosengroupid ?? 0) > 0) {
+                $export->chosengroup = self::group_names((string) $row->chosengroupid, $context)[0] ?? null;
             }
 
             /* The comment and the profile snapshot are the applicant's own data and go into the

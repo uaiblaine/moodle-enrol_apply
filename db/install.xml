@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<XMLDB PATH="enrol/apply/db" VERSION="20261013" COMMENT="XMLDB file for Moodle enrol/apply"
+<XMLDB PATH="enrol/apply/db" VERSION="20261119" COMMENT="XMLDB file for Moodle enrol/apply"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:noNamespaceSchemaLocation="../../../lib/xmldb/xmldb.xsd"
 >
@@ -34,6 +34,7 @@
         <FIELD NAME="decidedby" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="who decided it; zeroed when the course is deleted"/>
         <FIELD NAME="keygroupid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="group whose enrolment key the applicant presented, 0 for none; an id and not a key, the record outlives the group on purpose"/>
         <FIELD NAME="keyoutcome" TYPE="int" LENGTH="4" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="what the key did: 0 no key, 1 admitted without review, 2 valid but no place left on the method, 3 valid but a group to join had no seat left, 4 valid but a place or seat could not be confirmed in time, 5 valid and sent for review"/>
+        <FIELD NAME="chosengroupid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="group the applicant chose from the method's offer, 0 for none; never set together with keygroupid. An id and not a key, the record outlives the group on purpose"/>
       </FIELDS>
       <KEYS>
         <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
@@ -76,6 +77,36 @@
         <KEY NAME="enrol" TYPE="foreign" FIELDS="enrolid" REFTABLE="enrol" REFFIELDS="id"/>
         <KEY NAME="group" TYPE="foreign" FIELDS="groupid" REFTABLE="groups" REFFIELDS="id"/>
       </KEYS>
+    </TABLE>
+    <TABLE NAME="enrol_apply_options" COMMENT="Per-method options with no column left on {enrol}: at most one row per enrolment method, and no row means every option at its default. Configuration, not personal data.">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="enrolid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="enrol instance the options belong to"/>
+        <FIELD NAME="groupchoice" TYPE="int" LENGTH="2" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="whether the applicant chooses a group from the offer: 0 no, 1 optionally, 2 required"/>
+        <FIELD NAME="deciders" TYPE="int" LENGTH="2" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="who decides in a separate-groups course: 0 the deciders of the application's group, 1 only those who see every group"/>
+        <FIELD NAME="groupseats" TYPE="int" LENGTH="2" NOTNULL="true" DEFAULT="1" SEQUENCE="false" COMMENT="whether group seats apply to this method's applicants: 1 yes, 0 ignored"/>
+        <FIELD NAME="hidecard" TYPE="int" LENGTH="2" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="whether the enrolment page hides this method from people outside its cohort: 0 no, 1 yes"/>
+        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="enrol" TYPE="foreign-unique" FIELDS="enrolid" REFTABLE="enrol" REFFIELDS="id" COMMENT="one row per method, which the writer's lock and this key keep together"/>
+      </KEYS>
+    </TABLE>
+    <TABLE NAME="enrol_apply_offer" COMMENT="Groups an applicant may choose when applying through a method. Never the groups an approval joins, which are enrol_apply_groups. Configuration, not personal data.">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="enrolid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="enrol instance offering the group"/>
+        <FIELD NAME="groupid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="group offered; read only through a join on the method's own course"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="enrol" TYPE="foreign" FIELDS="enrolid" REFTABLE="enrol" REFFIELDS="id"/>
+        <KEY NAME="group" TYPE="foreign" FIELDS="groupid" REFTABLE="groups" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="enrolidgroupid" UNIQUE="true" FIELDS="enrolid, groupid" COMMENT="a group is offered once per method"/>
+      </INDEXES>
     </TABLE>
     <TABLE NAME="enrol_apply_fieldcond" COMMENT="When an application question is shown: at most one condition per question and enrolment method, on the answer to an earlier question. Configuration, not personal data.">
       <FIELDS>
