@@ -23,6 +23,9 @@
     Rendered whether or not the queue has rows: a method whose applicant limit is reached can
     have an empty queue, which is exactly when these numbers explain something.
 
+    A band of separate tiles (the fleet Design System's panel at 12 px), the method's state as a
+    status label in the success tone when open and the neutral one when closed.
+
     Context variables required for this template:
     * tiles array - the plain counts, each an object with a value, a label and an optional note
       saying whose count it is ("in your groups" on a queue narrowed to the reader's groups)
@@ -59,38 +62,36 @@
         "remainingtext": "5 more applications will be accepted before the method closes itself."
     }
 }}
-<div class="enrol_apply-capacity card mb-3">
-    <div class="card-body d-flex flex-wrap">
-        {{#tiles}}
-            <div class="enrol_apply-tile">
-                <span class="enrol_apply-tilevalue">{{value}}</span>
-                <span class="enrol_apply-tilelabel">{{label}}</span>
-                {{#note}}<span class="small text-muted">{{note}}</span>{{/note}}
-            </div>
-        {{/tiles}}
-        {{#meters}}
-            <div class="enrol_apply-tile enrol_apply-tile-meter">
-                <span class="enrol_apply-tilevalue">{{value}}</span>
-                <span class="enrol_apply-tilelabel">{{label}}</span>
-                {{#note}}<span class="small text-muted">{{note}}</span>{{/note}}
-                <span class="enrol_apply-meter" role="presentation">
-                    <span class="enrol_apply-meterfill {{#warn}}enrol_apply-meterfill-warn{{/warn}}"
-                          style="width: {{percent}}%"></span>
-                </span>
-            </div>
-        {{/meters}}
-        {{#hasstatus}}
-            <div class="enrol_apply-tile enrol_apply-tile-status">
-                <span class="enrol_apply-tilelabel">{{statuslabel}}</span>
-                <span>
-                    {{#isopen}}<span class="badge bg-success text-white">{{statustext}}</span>{{/isopen}}
-                    {{^isopen}}<span class="badge bg-secondary text-dark">{{statustext}}</span>{{/isopen}}
-                    {{#hasclosing}}<span class="small text-muted">{{closingtext}}</span>{{/hasclosing}}
-                </span>
-                {{#hasremaining}}
-                    <span class="small text-muted">{{remainingtext}}</span>
-                {{/hasremaining}}
-            </div>
-        {{/hasstatus}}
-    </div>
+<div class="enrol_apply-capacity mb-3">
+    {{#tiles}}
+        <div class="enrol_apply-tile">
+            <span class="enrol_apply-tilevalue">{{value}}</span>
+            <span class="enrol_apply-tilelabel">{{label}}</span>
+            {{#note}}<span class="enrol_apply-tilenote">{{note}}</span>{{/note}}
+        </div>
+    {{/tiles}}
+    {{#meters}}
+        <div class="enrol_apply-tile enrol_apply-tile-meter">
+            <span class="enrol_apply-tilevalue">{{value}}</span>
+            <span class="enrol_apply-tilelabel">{{label}}</span>
+            {{#note}}<span class="enrol_apply-tilenote">{{note}}</span>{{/note}}
+            <span class="enrol_apply-meter" role="presentation">
+                <span class="enrol_apply-meterfill {{#warn}}enrol_apply-meterfill-warn{{/warn}}"
+                      style="width: {{percent}}%"></span>
+            </span>
+        </div>
+    {{/meters}}
+    {{#hasstatus}}
+        <div class="enrol_apply-tile enrol_apply-tile-status">
+            <span class="enrol_apply-tilelabel">{{statuslabel}}</span>
+            <span class="enrol_apply-tilestate">
+                {{#isopen}}<span class="enrol_apply-status enrol_apply-status--success">{{statustext}}</span>{{/isopen}}
+                {{^isopen}}<span class="enrol_apply-status enrol_apply-status--neutral">{{statustext}}</span>{{/isopen}}
+                {{#hasclosing}}<span class="enrol_apply-tilenote">{{closingtext}}</span>{{/hasclosing}}
+            </span>
+            {{#hasremaining}}
+                <span class="enrol_apply-tilenote">{{remainingtext}}</span>
+            {{/hasremaining}}
+        </div>
+    {{/hasstatus}}
 </div>

@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased (2026112002)
+## Unreleased (2026112003)
 
 ### Added
 
@@ -87,6 +87,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **The confirmation queue takes the fleet Design System's look** (`docs/design/manage-queue-study.md`,
+  stage Q1). The heading reads "Confirm enrolments" and the description line under it is gone. A
+  row's states are status labels: "Deferred" in the warning tone (no longer "Waiting list"), a group
+  key's outcome in a short form ("Key: no seat", "Key: no place", "Key: not confirmed", "Key
+  accepted") with the full sentence as its tooltip and as hidden text, "Applied before" neutral. The
+  "Review" button moves from a last column into the applicant's cell. The grid scrolls inside a
+  bounded frame with its heading row, selection and applicant columns fixed; the answers become one
+  line and the comment is clamped to two, each with its full text as a tooltip; below 576 px each
+  row is a card. The capacity panel is a band of tiles with the method's state as a status label,
+  the filters are smaller, the chips follow the Design System, and an empty queue is drawn as its
+  empty state. On the review page the status chips and meter counts lose their pill shape and
+  "Next" is a plain link. Strings `confirmusers_desc` and `queuewaitinglist` removed;
+  `keyoutcomegroupfullshort`, `keyoutcomenoplaceshort` and `keyoutcomeseatunconfirmedshort` added.
+  Nothing changes in what the queue posts or in its no-JavaScript path.
 - **A membership this plugin wrote on approval scopes a decider only through a deciding role**
   (C-D28, decided (b)). In a separate-groups course, a group membership stamped `enrol_apply` counts
   towards the groups whose applications somebody decides only when the role the same method gave

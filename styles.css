@@ -15,36 +15,121 @@
     --enrol-apply-fill: var(--bs-primary, #0f6cbf);
     --enrol-apply-warn: var(--bs-warning, #f0ad4e);
     --enrol-apply-track: var(--bs-secondary-bg, #e9ecef);
-    /* The foreground that pairs with --enrol-apply-track. Bootstrap designs the two together,
-       so they are read together; see .enrol_apply-fieldpill for what reading only one costs. */
+    /* The foreground that pairs with --enrol-apply-track and the surface. Bootstrap designs them
+       together, so they are read together: an ancestor that recolours text without moving the
+       --bs-* tokens would otherwise put light text on a light fill. */
     --enrol-apply-ink: var(--bs-body-color, #1d2125);
+    --enrol-apply-surface: var(--dimensions-surface, var(--bs-body-bg, #fff));
 }
 
-/* The decision context above the table. */
-.enrol_apply-capacity .card-body {
-    gap: 1.5rem 2.5rem;
+/* The fleet Design System's tokens the queue and the review page paint with (tokens.md): each the
+   family name theme_dimensions declares, then Bootstrap's, then Bootstrap 5.3's light default.
+   Declared on every root of both pages, including the history list core/modal copies into a
+   dialogue appended to body. The chooser further down declares its own on its own root. */
+.enrol_apply-queue,
+.enrol_apply-manage,
+.enrol_apply-capacity,
+.enrol_apply-filters,
+.enrol_apply-review,
+.enrol_apply-applicationnav,
+.enrol_apply-timeline {
+    --enrol-apply-surface-inset: var(--dimensions-surface-inset, var(--bs-secondary-bg, #e9ecef));
+    --enrol-apply-ink-muted: var(--dimensions-ink-muted, var(--bs-secondary-color, rgba(33, 37, 41, .75)));
+    --enrol-apply-brand-tint: var(--dimensions-brand-tint, var(--bs-primary-bg-subtle, #cfe2ff));
+    --enrol-apply-brand-edge: var(--dimensions-brand-edge, var(--bs-primary-border-subtle, #9ec5fe));
+    --enrol-apply-brand-ink: var(--dimensions-brand-ink, var(--bs-primary-text-emphasis, #052c65));
+    --enrol-apply-success-tint: var(--dimensions-success-tint, var(--bs-success-bg-subtle, #d1e7dd));
+    --enrol-apply-success-edge: var(--dimensions-success-edge, var(--bs-success-border-subtle, #a3cfbb));
+    --enrol-apply-success-ink: var(--dimensions-success-ink, var(--bs-success-text-emphasis, #0a3622));
+    --enrol-apply-warning-tint: var(--dimensions-warning-tint, var(--bs-warning-bg-subtle, #fff3cd));
+    --enrol-apply-warning-edge: var(--dimensions-warning-edge, var(--bs-warning-border-subtle, #ffe69c));
+    --enrol-apply-warning-ink: var(--dimensions-warning-ink, var(--bs-warning-text-emphasis, #664d03));
+    --enrol-apply-info-tint: var(--dimensions-info-tint, var(--bs-info-bg-subtle, #cff4fc));
+    --enrol-apply-info-edge: var(--dimensions-info-edge, var(--bs-info-border-subtle, #9eeaf9));
+    --enrol-apply-info-ink: var(--dimensions-info-ink, var(--bs-info-text-emphasis, #055160));
+    --enrol-apply-neutral-tint: var(--dimensions-neutral-tint, var(--bs-secondary-bg-subtle, #e2e3e5));
+    --enrol-apply-neutral-edge: var(--dimensions-neutral-edge, var(--bs-secondary-border-subtle, #c4c8cb));
+    --enrol-apply-neutral-ink: var(--dimensions-neutral-ink, var(--bs-secondary-text-emphasis, #2b2f32));
+    --enrol-apply-shadow: var(--dimensions-shadow, rgb(0 0 0 / 10%));
+    --enrol-apply-radius-xs: var(--dimensions-radius-xs, 4px);
+    --enrol-apply-radius-sm: var(--dimensions-radius-sm, 6px);
+    --enrol-apply-radius-lg: var(--dimensions-radius-lg, 12px);
 }
 
-.enrol_apply-tile {
+/* The status label (status-label.md): a static word in one tone, never colour alone, with every
+   fill's ink in the same rule. 6 px, a 1 px edge, 0.75rem at 600. */
+.enrol_apply-status {
+    align-items: center;
+    background-color: var(--enrol-apply-neutral-tint);
+    border: 1px solid var(--enrol-apply-neutral-edge);
+    border-radius: var(--enrol-apply-radius-sm);
+    color: var(--enrol-apply-neutral-ink);
+    display: inline-flex;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.4;
+    padding: 0.125rem 0.5rem;
+    white-space: nowrap;
+}
+
+.enrol_apply-status--success {
+    background-color: var(--enrol-apply-success-tint);
+    border-color: var(--enrol-apply-success-edge);
+    color: var(--enrol-apply-success-ink);
+}
+
+.enrol_apply-status--warning {
+    background-color: var(--enrol-apply-warning-tint);
+    border-color: var(--enrol-apply-warning-edge);
+    color: var(--enrol-apply-warning-ink);
+}
+
+.enrol_apply-status--info {
+    background-color: var(--enrol-apply-info-tint);
+    border-color: var(--enrol-apply-info-edge);
+    color: var(--enrol-apply-info-ink);
+}
+
+.enrol_apply-status--neutral {
+    background-color: var(--enrol-apply-neutral-tint);
+    border-color: var(--enrol-apply-neutral-edge);
+    color: var(--enrol-apply-neutral-ink);
+}
+
+/* The decision context above the table: a band of separate tiles, each a panel at 12 px. A plain
+   auto-fit, so a narrow column holds one tile a row and a wide one as many as fit. */
+.enrol_apply-capacity {
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+}
+
+.enrol_apply-capacity .enrol_apply-tile {
+    background-color: var(--enrol-apply-surface);
+    border: 1px solid var(--enrol-apply-line);
+    border-radius: var(--enrol-apply-radius-lg);
+    color: var(--enrol-apply-ink);
     display: flex;
     flex-direction: column;
+    gap: 0.25rem;
+    min-width: 0;
+    padding: 0.75rem;
 }
 
-.enrol_apply-tile-meter {
-    /* A percentage basis with a rem floor, not repeat(auto-fit, minmax(...)): Moodle's stylelint
-       csstree validator rejects minmax(max(...)), and a plain auto-fit yields an extra column on
-       a wide card. */
-    flex: 1 1 20%;
-    min-width: 11rem;
+.enrol_apply-tilestate {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.5rem;
 }
 
-.enrol_apply-tile-status {
-    flex: 1 1 30%;
-    min-width: 14rem;
+.enrol_apply-tilenote {
+    color: var(--enrol-apply-ink-muted);
+    font-size: 0.875rem;
 }
 
 .enrol_apply-tilevalue {
-    font-size: 1.5rem;
+    font-size: 1.25rem;
     font-weight: 600;
     line-height: 1.2;
     /* Digits that line up between tiles without switching to a monospace face. */
@@ -61,7 +146,7 @@
     border-radius: 2px;
     display: block;
     height: 4px;
-    margin-top: 0.35rem;
+    margin-top: 0.25rem;
     overflow: hidden;
 }
 
@@ -75,7 +160,8 @@
     background-color: var(--enrol-apply-warn);
 }
 
-/* The applicant's cell: picture, name and badges on one line, identity underneath. */
+/* The applicant's cell: picture, name and status labels on one line, identity underneath, and the
+   Review button at the cell's far edge (MQ-D7). */
 .enrol_apply-applicant {
     align-items: flex-start;
     display: flex;
@@ -83,7 +169,21 @@
 }
 
 .enrol_apply-applicanttext {
+    flex: 1 1 auto;
     min-width: 0;
+}
+
+.enrol_apply-applicantline {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.375rem;
+}
+
+.enrol_apply-applicant .enrol_apply-reviewbutton {
+    flex: 0 0 auto;
+    margin-left: auto;
+    white-space: nowrap;
 }
 
 .enrol_apply-applicantname {
@@ -102,20 +202,27 @@
     white-space: nowrap;
 }
 
-/* The controls that narrow the queue, sized by a percentage basis with a rem floor for the same
-   reason as .enrol_apply-tile-meter. */
+/* The controls that narrow the queue, a compact row of small controls: every field stays on the
+   page (the Behat scenarios set them), sized by a percentage basis with a rem floor, because
+   Moodle's stylelint csstree validator rejects minmax(max(...)). */
 .enrol_apply-filterrow {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.5rem 1rem;
+    gap: 0.5rem 0.75rem;
 }
 
 /* flex-grow 0: with grow 1 a control that wraps onto a line of its own stretches to the full
    width of the row, which reads as a layout fault rather than as a wrapped control. The queue
    can carry any number of field filters, so wrapping has to look deliberate. */
 .enrol_apply-filterfield {
-    flex: 0 1 30%;
-    min-width: 12rem;
+    flex: 0 1 15%;
+    min-width: 9rem;
+}
+
+.enrol_apply-filters .enrol_apply-filterfield .form-label {
+    color: var(--enrol-apply-ink-muted);
+    font-size: 0.8125rem;
+    margin-bottom: 0.125rem;
 }
 
 /* Boost sizes a bare select to its content, which would leave a gap inside a field that has
@@ -130,59 +237,84 @@
     min-width: 0;
 }
 
+/* The chips row of the filter bar (filter-bar.md, chip.md): the chips, "Clear all", then the
+   quiet result count at the row's end. */
 .enrol_apply-chiprow {
     align-items: center;
     display: flex;
     flex-wrap: wrap;
-    gap: 0.35rem 0.75rem;
+    gap: 0.375rem;
     margin-top: 0.5rem;
 }
 
-/* Fill and text from the same token family; see .enrol_apply-fieldpill. */
+/* A filter in force: 28 px, 6 px, the brand tone's tint, edge and ink. */
 .enrol_apply-chip {
-    background-color: var(--enrol-apply-track);
-    border-radius: 3px;
-    color: var(--enrol-apply-ink);
+    align-items: center;
+    background-color: var(--enrol-apply-brand-tint);
+    border: 1px solid var(--enrol-apply-brand-edge);
+    border-radius: var(--enrol-apply-radius-sm);
+    color: var(--enrol-apply-brand-ink);
+    display: inline-flex;
     font-size: 0.8125rem;
-    padding: 0.1rem 0.4rem;
+    font-weight: 500;
+    gap: 0.375rem;
+    height: 1.75rem;
+    padding: 0 0.375rem 0 0.5rem;
 }
 
 .enrol_apply-chipname {
-    color: var(--enrol-apply-muted);
     font-weight: 600;
 }
 
-.enrol_apply-chipremove {
-    margin-left: 0.35rem;
+.enrol_apply-chip .enrol_apply-chipremove {
+    border-radius: var(--enrol-apply-radius-xs);
+    color: var(--enrol-apply-brand-ink);
+    line-height: 1;
+    padding: 0.125rem;
     text-decoration: none;
 }
 
-.enrol_apply-filtercount {
+.enrol_apply-filters .enrol_apply-clearall {
+    color: var(--enrol-apply-ink);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    padding: 0 0.25rem;
+    text-decoration: underline;
+}
+
+.enrol_apply-filters .enrol_apply-filtercount {
+    color: var(--enrol-apply-ink-muted);
+    font-size: 0.875rem;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
     margin-left: auto;
 }
 
-/* The evidence cell: one pill per answer the applicant gave.
+/* The evidence cell: every answer on one flowing line of label and value pairs, clamped to two
+   lines (MQ-D8). Every answer stays in the markup and the whole set is the cell's title; the
+   review page shows them in full. The comment cell is clamped the same way. */
+.enrol_apply-answers,
+.enrol_apply-clamp {
+    display: -webkit-box;
+    font-size: 0.875rem;
+    line-clamp: 2;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+}
 
-   inline-flex rather than inline-block so a long value wraps under its own label instead of
-   under the label of the pill before it, and align-items: baseline so a wrapped value still
-   sits on the label's line. The pills themselves wrap within the cell, which is what lets an
-   instance offering five fields grow the row rather than push the column off the edge. */
-.enrol_apply-fieldpill {
-    align-items: baseline;
-    background-color: var(--enrol-apply-track);
-    /* The fill's own foreground from the same token family, never the inherited colour: an
-       ancestor that recolours text directly without moving the --bs-* tokens would otherwise put
-       light text on this light fill. Read together, the pair gives 13.66:1 in the light colour
-       mode and 8.84:1 under [data-bs-theme="dark"], where both flip. bootstrap_compat_test
-       requires a colour beside every background this stylesheet paints. */
-    color: var(--enrol-apply-ink);
-    border-radius: 3px;
-    display: inline-flex;
-    flex-wrap: wrap;
-    font-size: 0.8125rem;
-    gap: 0 0.3rem;
-    margin: 0 0.25rem 0.25rem 0;
-    padding: 0.1rem 0.4rem;
+/* format_text() wraps a plain comment in a block of its own, which would end the clamp's count. */
+.enrol_apply-clamp > * {
+    display: inline;
+}
+
+.enrol_apply-answers > .enrol_apply-answer + .enrol_apply-answer::before {
+    /* Drawn by the stylesheet, as the identity line's separator is, so each answer stays its own
+       node for a screen reader and for selection. */
+    color: var(--enrol-apply-ink-muted);
+    content: "\00b7";
+    padding: 0 0.375rem;
 }
 
 .enrol_apply-fieldname {
@@ -279,27 +411,10 @@ body.path-enrol-apply:not(.jsenabled) #page.drawers {
     display: block;
 }
 
-/* The navigation: the way back to the queue as a plain link with Moodle's own hover, and next
-   as the page's one dark pill. The pill reads the button's own variables, which outrank .btn-link
-   whatever the order of the sheets. */
+/* The navigation: the way back to the queue, previous and next, all plain links with Moodle's own
+   hover; next keeps its chevron after the name (D61) and is drawn as a link, not a pill. */
 .enrol_apply-applicationnav {
     margin-bottom: 1.25rem;
-}
-
-.enrol_apply-applicationnav .enrol_apply-navnext {
-    --bs-btn-bg: var(--enrol-apply-ink);
-    --bs-btn-color: var(--enrol-apply-surface);
-    --bs-btn-border-color: var(--enrol-apply-ink);
-    --bs-btn-hover-bg: var(--enrol-apply-accentink);
-    --bs-btn-hover-color: var(--enrol-apply-surface);
-    --bs-btn-hover-border-color: var(--enrol-apply-accentink);
-    --bs-btn-active-bg: var(--enrol-apply-accentink);
-    --bs-btn-active-color: var(--enrol-apply-surface);
-    --bs-btn-active-border-color: var(--enrol-apply-accentink);
-    border-radius: var(--bs-border-radius-pill, 50rem);
-    padding-left: 1rem;
-    padding-right: 1rem;
-    text-decoration: none;
 }
 
 /* On wide screens the button reads its full label; the one-word label is the phone's. */
@@ -447,25 +562,31 @@ body.path-enrol-apply:not(.jsenabled) #page.drawers {
     gap: 0.5rem;
 }
 
+/* The strip's chips are status labels (status-label.md): 6 px with a 1 px edge, not pills. The
+   size stays the strip's own, a step above the queue's labels, because they head the page. */
 .enrol_apply-reviewstrip .badge {
-    border-radius: var(--bs-border-radius-pill, 50rem);
+    border: 1px solid var(--enrol-apply-neutral-edge);
+    border-radius: var(--enrol-apply-radius-sm);
     font-size: 0.8125rem;
     font-weight: 600;
-    padding: 0.5em 0.9em;
+    padding: 0.25rem 0.5rem;
 }
 
 .enrol_apply-reviewstrip .enrol_apply-statuschip-pending {
-    background-color: var(--bs-warning-bg-subtle, #fff3cd);
-    color: var(--enrol-apply-ink);
+    background-color: var(--enrol-apply-warning-tint);
+    border-color: var(--enrol-apply-warning-edge);
+    color: var(--enrol-apply-warning-ink);
 }
 
 .enrol_apply-reviewstrip .enrol_apply-statuschip-deferred {
-    background-color: var(--bs-info-bg-subtle, #cff4fc);
-    color: var(--enrol-apply-ink);
+    background-color: var(--enrol-apply-info-tint);
+    border-color: var(--enrol-apply-info-edge);
+    color: var(--enrol-apply-info-ink);
 }
 
 .enrol_apply-reviewstrip .enrol_apply-keychip {
     background-color: var(--enrol-apply-ink);
+    border-color: var(--enrol-apply-ink);
     color: var(--enrol-apply-surface);
 }
 
@@ -530,7 +651,8 @@ body.path-enrol-apply:not(.jsenabled) #page.drawers {
 
 .enrol_apply-metercount {
     background-color: var(--enrol-apply-soft);
-    border-radius: var(--bs-border-radius-pill, 50rem);
+    border: 1px solid var(--enrol-apply-line);
+    border-radius: var(--enrol-apply-radius-sm);
     color: var(--enrol-apply-ink);
     font-size: 0.8125rem;
     font-variant-numeric: tabular-nums;
@@ -951,7 +1073,6 @@ body.path-enrol-apply:not(.jsenabled) .enrol_apply-accordion .collapse {
     --bs-btn-active-bg: var(--enrol-apply-accentink);
     --bs-btn-active-color: var(--enrol-apply-surface);
     --bs-btn-active-border-color: var(--enrol-apply-accentink);
-    border-radius: var(--bs-border-radius-pill, 50rem);
     display: block;
     padding: 0.6rem 1rem;
     width: 100%;
@@ -1021,6 +1142,129 @@ body.path-enrol-apply:not(.jsenabled) .enrol_apply-accordion .collapse {
     height: 0.35rem;
 }
 
+/* The grid (MQ-D12's table half): a bounded frame that scrolls both ways inside the page, its
+   heading row and its first two columns (selection, applicant) fixed while it does. The frame is
+   core's .table-responsive, which flexible_table draws around the table alone, so the paging bar
+   stays outside it. Sticky cells take the surface as their ground, so what scrolls under them does
+   not show through. */
+.enrol_apply-table .table-responsive {
+    background-color: var(--enrol-apply-surface);
+    border: 1px solid var(--enrol-apply-line);
+    border-radius: var(--enrol-apply-radius-lg);
+    color: var(--enrol-apply-ink);
+    max-height: 70vh;
+    overflow: auto;
+}
+
+.enrol_apply-table .table-responsive > table {
+    margin-bottom: 0;
+}
+
+.enrol_apply-table table thead th {
+    background-color: var(--enrol-apply-surface);
+    box-shadow: inset 0 -1px 0 var(--enrol-apply-line);
+    color: var(--enrol-apply-ink);
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+
+.enrol_apply-table table .enrol_apply-col-select,
+.enrol_apply-table table .enrol_apply-col-applicant {
+    background-color: var(--enrol-apply-surface);
+    color: var(--enrol-apply-ink);
+    left: 0;
+    position: sticky;
+    z-index: 1;
+}
+
+/* The selection column has a fixed width, so the applicant column knows where to stop. A general
+   sibling rather than :has(): the applicant is offset only where a selection column precedes it,
+   and a viewer's table has none. */
+.enrol_apply-table table .enrol_apply-col-select {
+    min-width: 2.75rem;
+    width: 2.75rem;
+}
+
+.enrol_apply-table table .enrol_apply-col-select ~ .enrol_apply-col-applicant {
+    left: 2.75rem;
+}
+
+.enrol_apply-table table .enrol_apply-col-applicant {
+    box-shadow: inset -1px 0 0 var(--enrol-apply-line);
+    min-width: 16rem;
+}
+
+.enrol_apply-table table thead .enrol_apply-col-select,
+.enrol_apply-table table thead .enrol_apply-col-applicant {
+    box-shadow: inset 0 -1px 0 var(--enrol-apply-line);
+    z-index: 3;
+}
+
+/* Compact rows: the answers and the comment are clamped, so a row is about two lines high. */
+.enrol_apply-table table td,
+.enrol_apply-table table th {
+    vertical-align: top;
+}
+
+.enrol_apply-table table .enrol_apply-col-answers {
+    min-width: 14rem;
+}
+
+.enrol_apply-table table .enrol_apply-col-comment {
+    min-width: 12rem;
+}
+
+/* The short cells (group, date, and the course on the spanning queues) keep a width of their own,
+   or the table's automatic layout gives the applicant cell their room and wraps them word by word. */
+.enrol_apply-table table td:not(.enrol_apply-col-select):not(.enrol_apply-col-applicant):not(.enrol_apply-col-answers):not(.enrol_apply-col-comment) {
+    min-width: 8rem;
+}
+
+/* An empty queue (empty-state.md): the full form for a queue with nothing in it, the compact line
+   for filters that match nothing. The icon is decorative; the words carry the meaning. */
+.enrol_apply-empty {
+    align-items: center;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 2rem 1.25rem;
+    text-align: center;
+}
+
+.enrol_apply-empty-icon {
+    align-items: center;
+    background-color: var(--enrol-apply-neutral-tint);
+    border-radius: 50%;
+    color: var(--enrol-apply-neutral-ink);
+    display: inline-flex;
+    height: 3.5rem;
+    justify-content: center;
+    width: 3.5rem;
+}
+
+.enrol_apply-empty-icon .icon {
+    margin: 0;
+}
+
+.enrol_apply-empty-title {
+    color: var(--enrol-apply-ink);
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.enrol_apply-empty--compact {
+    color: var(--enrol-apply-ink-muted);
+    margin: 0.5rem 0;
+}
+
+/* Whose applications a narrowed reader sees: a quiet line, not a notice. */
+.enrol_apply-scopeline {
+    color: var(--enrol-apply-ink-muted);
+    font-size: 0.875rem;
+}
+
 /* The per-cell heading the card view shows. It is real text in the markup rather than
    content: attr(...), because generated content is announced inconsistently and turning rows
    and cells into blocks costs the table its semantics, so the heading has to sit inside the
@@ -1029,13 +1273,24 @@ body.path-enrol-apply:not(.jsenabled) .enrol_apply-accordion .collapse {
     display: none;
 }
 
-/* Below the breakpoint each row becomes a card and every labelled cell shows its own heading.
+/* Below 576 px each row becomes a card (MQ-D12): checkbox, picture, name and status labels on the
+   first line, then the group, the date, the answers and the comment, the Review button at the foot.
 
    A media query and not a container query: Moodle's stylelint csstree validator rejects
    container-type and @container. #region-main is narrower than the window by the width of any
-   open drawer, which is why the breakpoint is set low: at 768px the drawers are closed on the
-   layouts this page uses, so the viewport and the content width agree there. */
-@media (max-width: 767.98px) {
+   open drawer, but no drawer stays open beside the content at this width, so the viewport and
+   the content width agree here. The frame stops scrolling: a phone scrolls the page, never the
+   grid sideways. */
+@media (max-width: 575.98px) {
+    .enrol_apply-table .table-responsive {
+        background-color: transparent;
+        border: 0;
+        border-radius: 0;
+        color: var(--enrol-apply-ink);
+        max-height: none;
+        overflow: visible;
+    }
+
     .enrol_apply-table table thead {
         /* Not display:none. The headings still name the columns for a screen reader reading the
            table as a table, and clip is the technique that keeps them available to one. */
@@ -1046,26 +1301,87 @@ body.path-enrol-apply:not(.jsenabled) .enrol_apply-accordion .collapse {
         width: 1px;
     }
 
-    .enrol_apply-table table tr {
+    .enrol_apply-table table tbody tr {
+        align-items: flex-start;
+        background-color: var(--enrol-apply-surface);
         border: 1px solid var(--enrol-apply-line);
-        border-radius: 4px;
-        display: block;
+        border-radius: var(--enrol-apply-radius-lg);
+        color: var(--enrol-apply-ink);
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
         margin-bottom: 0.75rem;
-        padding: 0.5rem;
+        padding: 0.75rem 0.75rem 3.25rem;
+        position: relative;
+    }
+
+    /* Core's padding rows, which fill a page to its size, stay what they are: nothing. */
+    .enrol_apply-table table tbody tr.emptyrow {
+        display: none;
     }
 
     .enrol_apply-table table td,
     .enrol_apply-table table th {
         border: 0;
         display: block;
-        padding: 0.25rem 0;
+        flex: 1 0 100%;
+        order: 1;
+        padding: 0;
+    }
+
+    /* The first line: the checkbox, then the applicant's cell beside it; neither stays fixed. */
+    .enrol_apply-table table .enrol_apply-col-select,
+    .enrol_apply-table table .enrol_apply-col-applicant {
+        background-color: transparent;
+        box-shadow: none;
+        color: var(--enrol-apply-ink);
+        min-width: 0;
+        order: 0;
+        position: static;
+    }
+
+    .enrol_apply-table table .enrol_apply-col-select {
+        flex: 0 0 auto;
+        width: auto;
+    }
+
+    /* A basis wide enough that nothing but the checkbox shares its line: the short cells after it
+       start the next one. */
+    .enrol_apply-table table .enrol_apply-col-applicant {
+        flex: 1 1 80%;
+    }
+
+    .enrol_apply-table table .enrol_apply-col-answers,
+    .enrol_apply-table table .enrol_apply-col-comment {
+        min-width: 0;
+    }
+
+    /* Boost stripes and hovers a cell with an inset box-shadow, which on a card paints every field
+       as a grey slab of its own; the card is the surface, so its cells carry none. */
+    .enrol_apply-table table.generaltable tbody tr > td {
+        background-color: transparent;
+        box-shadow: none;
+    }
+
+    /* The short cells (group, date, and the course on the spanning queues) share a line, two to
+       one, so a card reads in four lines rather than seven blocks. */
+    .enrol_apply-table table td:not(.enrol_apply-col-select):not(.enrol_apply-col-applicant):not(.enrol_apply-col-answers):not(.enrol_apply-col-comment) {
+        flex: 1 1 45%;
+        min-width: 8rem;
+    }
+
+    /* The Review button at the card's foot, which the row's bottom padding keeps clear. */
+    .enrol_apply-table .enrol_apply-applicant .enrol_apply-reviewbutton {
+        bottom: 0.75rem;
+        position: absolute;
+        right: 0.75rem;
     }
 
     .enrol_apply-cardlabel {
-        color: var(--enrol-apply-muted);
+        color: var(--enrol-apply-ink-muted);
         display: block;
         font-size: 0.75rem;
-        text-transform: uppercase;
+        font-weight: 600;
     }
 }
 

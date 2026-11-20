@@ -181,7 +181,6 @@ class enrol_apply_renderer extends plugin_renderer_base {
         $context = ($candecide ? $this->decision_controls_context($instance) : []) + [
             'candecide' => $candecide,
             'viewonlynotice' => get_string('queueviewonly', 'enrol_apply'),
-            'descriptiontext' => get_string('confirmusers_desc', 'enrol_apply'),
             'formurl' => $manageurl->out(false),
             'sesskey' => sesskey(),
             'capacityhtml' => $this->render_from_template(

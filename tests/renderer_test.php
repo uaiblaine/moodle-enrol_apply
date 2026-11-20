@@ -2462,14 +2462,55 @@ final class renderer_test extends \advanced_testcase {
     }
 
     /**
-     * The queue explains its waiting-list badge in a paragraph of the template's own.
+     * The queue opens on its capacity band, with no sentence explaining its labels.
+     *
+     * The description line explained a "waiting list" badge; the row now says "Deferred" itself,
+     * so the line and its string are gone (MQ-D2). Nothing stands between the queue's root and the
+     * band, which is also the control that the queue rendered at all: this fixture raises no
+     * notice to stand there.
      *
      * @return void
      */
-    public function test_the_queue_explains_its_waiting_list_badge(): void {
+    public function test_the_queue_opens_on_its_band_without_a_description(): void {
         $html = $this->render_queue();
 
-        $this->assertStringContainsString('<p>' . s(get_string('confirmusers_desc', 'enrol_apply')) . '</p>', $html);
+        $this->assertMatchesRegularExpression('~<div class="enrol_apply-queue">\s*<div class="enrol_apply-capacity~', $html);
+    }
+
+    /**
+     * The empty queue is the Design System's empty state, with core's own words.
+     *
+     * The full form for a queue holding nothing, the compact line for filters matching nothing
+     * (empty-state.md). Both stay inside the dynamic table's region, which an AJAX refresh replaces.
+     *
+     * @return void
+     */
+    public function test_an_empty_queue_is_drawn_as_the_empty_state(): void {
+        global $PAGE;
+
+        $this->setAdminUser();
+        $url = new \moodle_url('/enrol/apply/manage.php', ['id' => $this->instance->id]);
+        $PAGE->set_url($url);
+        $PAGE->set_context(\context_course::instance($this->course->id));
+
+        $table = \enrol_apply\table\applications::for_scope((int) $this->instance->id);
+        $empty = $PAGE->get_renderer('enrol_apply')->manage_form($table, $url, $this->instance);
+
+        $this->assertMatchesRegularExpression(
+            '~<div class="enrol_apply-empty" data-region="queueempty">.*?<p class="enrol_apply-empty-title">'
+                . preg_quote(s(get_string('nothingtodisplay')), '~') . '</p>~s',
+            $empty
+        );
+        $this->assertStringNotContainsString('enrol_apply-empty--compact', $empty);
+
+        // The control: a filter matching nothing gets the compact line instead.
+        $filtered = $this->render_filtered_queue('nothingmatchesthis');
+        $this->assertStringContainsString(
+            '<p class="enrol_apply-empty--compact" data-region="queueempty">'
+                . s(get_string('queuefilterempty', 'enrol_apply')) . '</p>',
+            $filtered
+        );
+        $this->assertStringNotContainsString('class="enrol_apply-empty"', $filtered);
     }
 
     /**

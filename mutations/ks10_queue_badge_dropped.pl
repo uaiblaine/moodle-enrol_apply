@@ -1,2 +1,2 @@
 # KS10: the queue carries no sign of what a valid key ran into.
-s|            \$badges .= html_writer::span\(\$keylabel, 'badge bg-primary text-white me-1'\);\n||;
+s|            \$labels\[\] = \$this->status_label\(submissionrecord::key_outcome_short_label\(\$keyoutcome\), 'info', \$keylabel\);\n||;

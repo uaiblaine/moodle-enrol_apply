@@ -966,7 +966,7 @@ class applications extends \table_sql implements dynamic_table {
 
            Joined on the user enrolment, not on courseid + userid, which is not unique: an
            applicant who was cancelled and applied again has two records for the course. */
-        /* Whether this applicant applied to this course before: a badge prompting the operator
+        /* Whether this applicant applied to this course before: a status label prompting the operator
            to open the review page.
 
            A correlated EXISTS rather than a join, so the row count cannot change: (courseid,
@@ -1195,13 +1195,22 @@ class applications extends \table_sql implements dynamic_table {
             ? get_string('applycomment', 'enrol_apply')
             : commentlabel::custom($this->scope->instance);
 
-        /* A link to each application's review page. The header is empty on purpose: every
-           button carries its own accessible name. */
-        $columns[] = 'review';
-        $headers[] = '';
+        /* No column of its own for the link to each application's review page: it is a button
+           in the applicant's cell (MQ-D7), so it stays on screen however far the grid scrolls. */
 
         $this->define_columns($columns);
         $this->define_headers($headers);
+
+        /* Stable classes for the cells styles.css fixes to the grid's left edge and clamps, rather
+           than core's positional c0, c1, ..., which shift with the scope's course column. */
+        if ($this->can_decide()) {
+            $this->column_class('checkboxcolumn', 'enrol_apply-col-select');
+        }
+        $this->column_class('fullname', 'enrol_apply-col-applicant');
+        if ($this->scope->identitycontext !== null) {
+            $this->column_class('snapshot', 'enrol_apply-col-answers');
+        }
+        $this->column_class('applycomment', 'enrol_apply-col-comment');
 
         /* Names the cell that identifies each row, so table_sql emits it as a
            <th scope="row"> and a screen reader announces every other cell of the row
@@ -1212,7 +1221,6 @@ class applications extends \table_sql implements dynamic_table {
            see also search_columns() on why it must stay out of SQL. */
         $this->no_sorting('snapshot');
         $this->no_sorting('applycomment');
-        $this->no_sorting('review');
         /* Not sortable, as the report's column is not (V-D1): an order by name would place a cell
            withheld from this reader among the names around it. The group filter stands in. */
         if ($this->groupcolumn) {
@@ -1227,24 +1235,36 @@ class applications extends \table_sql implements dynamic_table {
      * Core's "Nothing to display" is right for a queue with no applications, but a filter that
      * matched nothing gets a message naming the filter, so it does not read as an empty queue.
      *
-     * The unfiltered branch delegates to core rather than reproducing its markup. A Behat
-     * scenario in tests/behat/enrol_apply.feature asserts core's string on the unfiltered empty
-     * queue.
+     * Both are drawn as the fleet Design System's empty state (empty-state.md) inside core's
+     * dynamic-table region, so an AJAX refresh still finds the region it replaces: the empty queue
+     * as the full form, with core's own string (a Behat scenario in
+     * tests/behat/enrol_apply.feature asserts it), and the filtered one as the compact line, with
+     * no button of its own: the chip row's "Clear all" right above it is the way out. No initials
+     * bar: see initialbars().
      *
      * @return void
      */
     public function print_nothing_to_display() {
         global $OUTPUT;
 
-        if (!$this->is_narrowed()) {
-            parent::print_nothing_to_display();
-
-            return;
-        }
-
         echo $this->get_dynamic_table_html_start();
         echo $this->render_reset_button();
-        echo $OUTPUT->notification(get_string('queuefilterempty', 'enrol_apply'), 'info', false);
+
+        if (!$this->is_narrowed()) {
+            echo html_writer::div(
+                html_writer::span($OUTPUT->pix_icon('i/enrolusers', ''), 'enrol_apply-empty-icon')
+                    . html_writer::tag('p', s(get_string('nothingtodisplay')), ['class' => 'enrol_apply-empty-title']),
+                'enrol_apply-empty',
+                ['data-region' => 'queueempty']
+            );
+        } else {
+            echo html_writer::tag(
+                'p',
+                s(get_string('queuefilterempty', 'enrol_apply')),
+                ['class' => 'enrol_apply-empty--compact', 'data-region' => 'queueempty']
+            );
+        }
+
         echo $this->get_dynamic_table_html_end();
     }
 
@@ -1348,7 +1368,8 @@ class applications extends \table_sql implements dynamic_table {
     }
 
     /**
-     * The applicant: their picture, their name, what is unusual about them, and who they are.
+     * The applicant: their picture, their name, what is unusual about them, who they are, and the
+     * way into their application.
      *
      * One cell rather than four columns because the identity list varies per site and per
      * reader; as a second line it wraps instead of changing the table's shape.
@@ -1382,27 +1403,24 @@ class applications extends \table_sql implements dynamic_table {
             )
             : html_writer::span(fullname($user), 'enrol_apply-applicantname');
 
-        $badges = '';
+        /* Status labels of the fleet Design System (status-label.md), not Bootstrap badges: a
+           static word in a tone, its tint, edge and ink read from one token triple. */
+        $labels = [];
         if ($row->enrolstatus == ENROL_APPLY_USER_WAIT) {
-            /* An explicit text colour on every badge fill: Bootstrap 5's .badge defaults to white
-               text, which gives 1.95:1 on this light fill against the 4.5:1 floor. */
-            $badges .= html_writer::span(
-                get_string('queuewaitinglist', 'enrol_apply'),
-                'badge bg-warning text-dark me-1'
-            );
+            // The owner's word for the state, "Deferred", as everywhere else (MQ-D10).
+            $labels[] = $this->status_label(get_string('enrolmentwaiting', 'enrol_apply'), 'warning');
         }
         /* What a group key did, by the record's own label and without the group's name: the
            mentee scope spans courses whose groups a mentor may not see (see the review page's
-           choosers), and the review page names the group to a reader who may. */
-        $keylabel = \enrol_apply\local\submission::key_outcome_label((int) ($row->keyoutcome ?? 0));
+           choosers), and the review page names the group to a reader who may. The short form
+           shows (MQ-D11); the full sentence is the label's title and its hidden text. */
+        $keyoutcome = (int) ($row->keyoutcome ?? 0);
+        $keylabel = submissionrecord::key_outcome_label($keyoutcome);
         if ($keylabel !== '') {
-            $badges .= html_writer::span($keylabel, 'badge bg-primary text-white me-1');
+            $labels[] = $this->status_label(submissionrecord::key_outcome_short_label($keyoutcome), 'info', $keylabel);
         }
         if (!empty($row->appliedbefore)) {
-            $badges .= html_writer::span(
-                get_string('queueappliedbefore', 'enrol_apply'),
-                'badge bg-secondary text-dark me-1'
-            );
+            $labels[] = $this->status_label(get_string('queueappliedbefore', 'enrol_apply'), 'neutral');
         }
 
         $identity = [];
@@ -1413,7 +1431,7 @@ class applications extends \table_sql implements dynamic_table {
             }
         }
 
-        $lines = html_writer::div($name . ($badges !== '' ? ' ' . $badges : ''), 'enrol_apply-applicantline');
+        $lines = html_writer::div($name . ($labels ? ' ' . implode(' ', $labels) : ''), 'enrol_apply-applicantline');
         if ($identity) {
             $lines .= html_writer::div(
                 implode('', $identity),
@@ -1421,9 +1439,57 @@ class applications extends \table_sql implements dynamic_table {
             );
         }
 
+        /* The door to this one application, in the cell that names the applicant rather than in
+           a last column of its own, so it is on screen at any width and on every row (MQ-D7). A
+           link, which every queue reader may follow: the review page opens read-only for a viewer.
+           The aria-label names the applicant, as the visible word is "Review" on every row. Not a
+           title, which is not announced reliably and is invisible to a keyboard user. */
+        $review = html_writer::link(
+            new moodle_url('/enrol/apply/manage.php', ['userenrol' => $row->userenrolmentid]),
+            get_string('queuereview', 'enrol_apply'),
+            [
+                'class' => 'btn btn-sm btn-outline-secondary enrol_apply-reviewbutton',
+                'aria-label' => get_string('queuereviewapplicant', 'enrol_apply', fullname($user)),
+            ]
+        );
+
         return html_writer::div(
-            $OUTPUT->user_picture($user, ['popup' => true]) . html_writer::div($lines, 'enrol_apply-applicanttext'),
+            $OUTPUT->user_picture($user, ['popup' => true])
+                . html_writer::div($lines, 'enrol_apply-applicanttext')
+                . $review,
             'enrol_apply-applicant'
+        );
+    }
+
+    /**
+     * A status label of the fleet Design System: a short static word in one tone.
+     *
+     * The tone is one of the plugin's literal modifier classes, so the stylesheet pairs its tint,
+     * edge and ink from one token triple. A longer wording, when there is one, becomes the label's
+     * title for the pointer and visually hidden text after the short one, so a screen reader and a
+     * text search of the page still meet the whole sentence.
+     *
+     * @param string $text The visible word, plain spelling.
+     * @param string $tone One of warning, info or neutral.
+     * @param string $long The full wording, plain spelling; empty, or equal to $text, for none.
+     * @return string The label's markup.
+     */
+    protected function status_label(string $text, string $tone, string $long = ''): string {
+        $class = match ($tone) {
+            'warning' => 'enrol_apply-status enrol_apply-status--warning',
+            'info' => 'enrol_apply-status enrol_apply-status--info',
+            default => 'enrol_apply-status enrol_apply-status--neutral',
+        };
+
+        if ($long === '' || $long === $text) {
+            return html_writer::span(s($text), $class);
+        }
+
+        // Attribute values are escaped by html_writer, so the title takes the plain spelling.
+        return html_writer::span(
+            s($text) . html_writer::span(' ' . s($long), 'visually-hidden'),
+            $class,
+            ['title' => $long]
         );
     }
 
@@ -1459,27 +1525,6 @@ class applications extends \table_sql implements dynamic_table {
         return $label . format_string($row->keygroupname, true, [
             'context' => context_course::instance((int) $row->keygroupcourseid),
         ]);
-    }
-
-    /**
-     * The door to this one application.
-     *
-     * @param stdClass $row Row data.
-     * @return string Rendered cell.
-     */
-    public function col_review($row) {
-        $user = user_picture::unalias($row, ['username'], 'userid');
-
-        /* The aria-label names the applicant, as the visible word is "Review" on every row. Not a
-           title, which is not announced reliably and is invisible to a keyboard user. */
-        return html_writer::link(
-            new moodle_url('/enrol/apply/manage.php', ['userenrol' => $row->userenrolmentid]),
-            get_string('queuereview', 'enrol_apply'),
-            [
-                'class' => 'btn btn-secondary btn-sm',
-                'aria-label' => get_string('queuereviewapplicant', 'enrol_apply', fullname($user)),
-            ]
-        );
     }
 
     /**
@@ -1614,24 +1659,33 @@ class applications extends \table_sql implements dynamic_table {
     public function col_snapshot($row) {
         $visible = $this->visible_keys((int) $row->courseid);
 
-        $pills = '';
+        $separator = get_string('labelsep', 'langconfig');
+        $answers = [];
+        $whole = [];
         foreach ($this->snapshots[(int) ($row->submissionid ?? 0)] ?? [] as $entry) {
             if (!submissionformatter::shows($entry['key'], $visible)) {
                 // Dropped without a marker; see submissionformatter::visible_keys().
                 continue;
             }
 
-            $pills .= html_writer::span(
-                html_writer::span(s($entry['label']), 'enrol_apply-fieldname') . ' ' . s($entry['value']),
-                'enrol_apply-fieldpill'
+            $label = s($entry['label']);
+            $value = s($entry['value']);
+            $answers[] = html_writer::span(
+                html_writer::span($label . $separator, 'enrol_apply-fieldname') . $value,
+                'enrol_apply-answer'
             );
+            // Plain spelling: html_writer escapes the title attribute itself.
+            $whole[] = $entry['label'] . $separator . $entry['value'];
         }
 
-        if ($pills === '') {
+        if ($answers === []) {
             return '';
         }
 
-        return $this->card_label(s(get_string('queuesubmitted', 'enrol_apply'))) . $pills;
+        /* One flowing line of answers in one element, which styles.css clamps to two lines
+           (MQ-D8); every answer stays in the markup and the whole set is the title. */
+        return $this->card_label(s(get_string('queuesubmitted', 'enrol_apply')))
+            . html_writer::div(implode('', $answers), 'enrol_apply-answers', ['title' => implode(' · ', $whole)]);
     }
 
     /**
@@ -1647,6 +1701,14 @@ class applications extends \table_sql implements dynamic_table {
             ? s(get_string('applycomment', 'enrol_apply'))
             : commentlabel::custom($this->scope->instance);
 
-        return $this->card_label($label) . format_text($row->applycomment, FORMAT_PLAIN);
+        /* Clamped to two lines by styles.css; the whole comment stays in the markup and is the
+           cell's title, the plain spelling, which html_writer escapes. */
+        $comment = (string) ($row->applycomment ?? '');
+
+        return $this->card_label($label) . html_writer::div(
+            format_text($comment, FORMAT_PLAIN),
+            'enrol_apply-clamp',
+            $comment === '' ? [] : ['title' => $comment]
+        );
     }
 }

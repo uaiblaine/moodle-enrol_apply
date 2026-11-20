@@ -28,7 +28,6 @@
       enrol/apply:viewapplications alone: the table renders without the form, the decision
       controls and the sticky footer, and the table itself drops its selection column
     * viewonlynotice string - what such a reader is told above the table
-    * descriptiontext string - one sentence under the page heading explaining the queue's badges
     * formurl string - url the decision form posts back to
     * sesskey string - session key guarding the state change
     * capacityhtml string - the decision context above the table, already rendered. OUTSIDE the
@@ -73,7 +72,6 @@
     {
         "candecide": true,
         "viewonlynotice": "You can view these applications but not decide them.",
-        "descriptiontext": "Applications badged as on the waiting list have been deferred.",
         "formurl": "https://example.com/enrol/apply/manage.php?id=7",
         "sesskey": "Ab12Cd34Ef",
         "hasplacesnotice": true,
@@ -114,7 +112,6 @@
     }
 }}
 <div class="enrol_apply-queue">
-    <p>{{descriptiontext}}</p>
     {{#hasplacesnotice}}
         <div class="alert alert-warning" role="status">{{placesnotice}}</div>
     {{/hasplacesnotice}}
@@ -124,10 +121,10 @@
     {{#haskeyonlynotice}}
         <div class="alert alert-info" role="status">{{keyonlynotice}}</div>
     {{/haskeyonlynotice}}
+    {{{capacityhtml}}}
     {{#hasscopeline}}
         <p class="enrol_apply-scopeline">{{scopeline}}</p>
     {{/hasscopeline}}
-    {{{capacityhtml}}}
     {{{filtershtml}}}
     {{!
         A viewer who may not decide gets the table in a plain container with the form's id, which

@@ -1188,6 +1188,26 @@ class submission {
     }
 
     /**
+     * The short form of a group key outcome, for a status label in a queue row (MQ-D11).
+     *
+     * Names no group, as key_outcome_label() does not either. An outcome with no short form
+     * (an admission, which never waits in the queue) falls back to the full label, so a caller
+     * comparing the two knows there is nothing more to say.
+     *
+     * @param int $outcome One of the KEY_ constants.
+     * @return string Localised short label; empty for KEY_NONE.
+     */
+    public static function key_outcome_short_label(int $outcome): string {
+        return match ($outcome) {
+            self::KEY_NO_PLACE => get_string('keyoutcomenoplaceshort', 'enrol_apply'),
+            self::KEY_GROUP_FULL => get_string('keyoutcomegroupfullshort', 'enrol_apply'),
+            self::KEY_SEAT_UNCONFIRMED => get_string('keyoutcomeseatunconfirmedshort', 'enrol_apply'),
+            self::KEY_FOR_REVIEW => get_string('keyoutcomeforreviewshort', 'enrol_apply'),
+            default => self::key_outcome_label($outcome),
+        };
+    }
+
+    /**
      * Whether this key outcome still describes the user enrolment: an admission by the key that
      * no person has decided over since.
      *
