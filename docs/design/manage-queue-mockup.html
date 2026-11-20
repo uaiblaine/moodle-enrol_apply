@@ -1,0 +1,938 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Confirmation queue mockup</title>
+<meta name="description" content="Interactive mockup for docs/design/manage-queue-study.md: the enrol_apply confirmation queue (manage.php) restyled with the fleet Design System (concept A) beside today's page, at desktop and phone width, with JavaScript on or off, for a decider, a viewer and a moderator.">
+<style>
+:root {
+  --ea-bg: #f5f6f8; --ea-surface: #fff; --ea-surface-alt: #f8f9fa; --ea-surface-inset: #eef0f3;
+  --ea-hover: #eef4fb; --ea-line: #dee2e6; --ea-control-line: #8f959e;
+  --ea-ink: #1d2125; --ea-ink-strong: #000; --ea-ink-muted: #5b6470; --ea-ink-faint: #8a939c;
+  --ea-accent: #0f6cbf; --ea-brand-fill: #0f6cbf; --ea-on-brand-fill: #fff;
+  --ea-brand-tint: #e7f1fb; --ea-brand-edge: #a9cbee; --ea-brand-ink: #0a4f8c;
+  --ea-success-tint: #e8f5ee; --ea-success-edge: #a3cfb5; --ea-success-ink: #0f5132;
+  --ea-warning-tint: #fff6e0; --ea-warning-edge: #e9c46a; --ea-warning-ink: #664d03;
+  --ea-danger-tint: #fbeaea; --ea-danger-edge: #e3a1a1; --ea-danger-ink: #842029;
+  --ea-info-tint: #e6f6fa; --ea-info-edge: #9fd6e4; --ea-info-ink: #055160;
+  --ea-neutral-tint: #f1f3f5; --ea-neutral-edge: #ced4da; --ea-neutral-ink: #495057;
+  --ea-focus-ring: #1d2125; --ea-focus-width: 2px; --ea-shadow: rgb(0 0 0 / 10%);
+  --ea-radius-xs: 4px; --ea-radius-sm: 6px; --ea-radius-md: 8px; --ea-radius-lg: 12px; --ea-radius-xl: 16px;
+  --ea-elevation-sm: 0 1px 2px rgba(7, 0, 147, .08), 0 1px 3px rgba(7, 0, 147, .06);
+  --ea-elevation-md: 0 4px 12px rgba(7, 0, 147, .10);
+  --ea-elevation-lg: 0 12px 32px rgba(7, 0, 147, .14);
+  --ea-fast: 150ms; --ea-base: 250ms; --ea-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --ea-proposal: #8b5cf6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ea-bg: #15181c; --ea-surface: #1e2227; --ea-surface-alt: #252a30; --ea-surface-inset: #2b3035;
+    --ea-hover: #22303f; --ea-line: #343a40; --ea-control-line: #6c757d;
+    --ea-ink: #e6e8eb; --ea-ink-strong: #fff; --ea-ink-muted: #9aa3ad; --ea-ink-faint: #737d87;
+    --ea-accent: #6ea8fe; --ea-brand-fill: #3d8bfd; --ea-on-brand-fill: #fff;
+    --ea-brand-tint: #1b2a3d; --ea-brand-edge: #2f4f78; --ea-brand-ink: #9ec5fe;
+    --ea-success-tint: #0d2a1c; --ea-success-edge: #2f6b4c; --ea-success-ink: #75b798;
+    --ea-warning-tint: #2e2405; --ea-warning-edge: #7a6118; --ea-warning-ink: #ffda6a;
+    --ea-danger-tint: #2c0b0e; --ea-danger-edge: #6e2a30; --ea-danger-ink: #ea868f;
+    --ea-info-tint: #032830; --ea-info-edge: #1f6b7c; --ea-info-ink: #6edff6;
+    --ea-neutral-tint: #2b3035; --ea-neutral-edge: #495057; --ea-neutral-ink: #ced4da;
+    --ea-focus-ring: #fff; --ea-shadow: rgb(0 0 0 / 50%);
+    --ea-elevation-sm: 0 1px 2px rgba(0, 0, 0, .5);
+    --ea-elevation-md: 0 4px 12px rgba(0, 0, 0, .55);
+    --ea-elevation-lg: 0 12px 32px rgba(0, 0, 0, .6);
+  }
+}
+* { box-sizing: border-box; }
+html, body { overflow-x: hidden; }
+body { margin: 0; background: var(--ea-bg); color: var(--ea-ink);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 1240px; margin: 0 auto; padding: 24px 16px 80px; }
+h1 { font-size: 1.75rem; margin: 0 0 4px; }
+.lede { color: var(--ea-ink-muted); margin: 0 0 16px; max-width: 860px; }
+a { color: var(--ea-accent); }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: var(--ea-focus-width) solid var(--ea-focus-ring); outline-offset: 2px; }
+code { font-size: .8125rem; }
+.muted { color: var(--ea-ink-muted); }
+.sm { font-size: .875rem; }
+.xs { font-size: .75rem; }
+.num { font-variant-numeric: tabular-nums; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Mockup switches (not part of the design). */
+.switches { position: sticky; top: 0; z-index: 40; display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center;
+  background: var(--ea-surface); border: 1px solid var(--ea-line); border-radius: var(--ea-radius-lg);
+  padding: 8px 12px; box-shadow: var(--ea-elevation-sm); margin-bottom: 16px; }
+.switches .sw { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.switches .sw > span { font-size: .8125rem; color: var(--ea-ink-muted); }
+
+/* Segmented control (DS segmented-control.md). */
+.ea-seg { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: .1875rem; border-radius: var(--ea-radius-lg);
+  background: var(--ea-surface-inset); }
+.ea-seg button { border: 0; background: transparent; border-radius: var(--ea-radius-md); min-height: 2rem;
+  padding: 0 .75rem; cursor: pointer; font-size: .875rem; color: var(--ea-ink-muted);
+  transition: background var(--ea-base) var(--ea-ease), color var(--ea-base) var(--ea-ease); }
+.ea-seg button:hover { color: var(--ea-ink); }
+.ea-seg button[aria-checked="true"] { background: var(--ea-surface); color: var(--ea-ink); font-weight: 600; box-shadow: var(--ea-elevation-sm); }
+.ea-seg small { font-size: .75rem; font-weight: 600; color: var(--ea-ink-muted); margin-left: 4px; font-variant-numeric: tabular-nums; }
+.switches .ea-seg button { min-height: 1.75rem; padding: 0 .5rem; font-size: .8125rem; }
+
+/* Device frame. */
+.device { margin: 0 auto; transition: max-width var(--ea-base) var(--ea-ease); }
+.device.is-phone { max-width: 375px; }
+.page { background: var(--ea-surface); border: 1px solid var(--ea-line); border-radius: var(--ea-radius-lg); overflow: hidden; min-width: 0; }
+.device.is-phone .page { border-radius: var(--ea-radius-xl); box-shadow: var(--ea-elevation-lg); }
+.moodlebar { display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-bottom: 1px solid var(--ea-line);
+  font-size: .875rem; color: var(--ea-ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.moodlebar b { color: var(--ea-ink); }
+.pagebody { padding: 16px; min-width: 0; }
+.crumbs { font-size: .8125rem; color: var(--ea-ink-muted); margin-bottom: 4px; }
+.pagebody h2 { font-size: 1.5rem; margin: 0 0 4px; }
+.notein { font-size: .8125rem; color: var(--ea-ink-muted); border-left: 3px solid var(--ea-proposal); padding: 2px 0 2px 10px; margin: 16px 0 0; }
+
+/* Status label (DS status-label.md). */
+.ea-status { display: inline-flex; align-items: center; gap: .25rem; padding: .125rem .5rem; white-space: nowrap;
+  border: 1px solid var(--ea-neutral-edge); border-radius: var(--ea-radius-sm);
+  background: var(--ea-neutral-tint); color: var(--ea-neutral-ink); font-size: .75rem; font-weight: 600; line-height: 1.4; }
+.ea-status--success { border-color: var(--ea-success-edge); background: var(--ea-success-tint); color: var(--ea-success-ink); }
+.ea-status--warning { border-color: var(--ea-warning-edge); background: var(--ea-warning-tint); color: var(--ea-warning-ink); }
+.ea-status--danger { border-color: var(--ea-danger-edge); background: var(--ea-danger-tint); color: var(--ea-danger-ink); }
+.ea-status--info { border-color: var(--ea-info-edge); background: var(--ea-info-tint); color: var(--ea-info-ink); }
+.ea-status--brand { border-color: var(--ea-brand-edge); background: var(--ea-brand-tint); color: var(--ea-brand-ink); }
+
+/* Skeleton (DS skeleton.md). */
+.ea-sk-block { display: block; background: var(--ea-surface-inset); border-radius: var(--ea-radius-xs); height: .75rem; }
+.ea-sk-block.big { height: 1.5rem; width: 60%; margin: 6px 0; }
+.ea-sk-block.w40 { width: 40%; } .ea-sk-block.w60 { width: 60%; } .ea-sk-block.w80 { width: 80%; }
+.ea-sk-block.pill { height: 1.25rem; width: 7rem; border-radius: var(--ea-radius-sm); }
+@media (prefers-reduced-motion: no-preference) { .ea-sk { animation: ea-sk-pulse 1300ms ease-in-out infinite; } }
+@keyframes ea-sk-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+
+/* Summary band. */
+.ea-region { position: relative; }
+.ea-region[aria-busy="true"] .ea-dim { opacity: .55; transition: opacity var(--ea-fast) var(--ea-ease); }
+.ea-progress { position: absolute; left: 0; right: 0; top: 0; height: 2px; overflow: hidden; z-index: 6; border-radius: 2px; }
+.ea-progress::before { content: ""; position: absolute; top: 0; bottom: 0; width: 30%; background: var(--ea-brand-fill); }
+@media (prefers-reduced-motion: no-preference) { .ea-progress::before { animation: ea-indet 1100ms var(--ea-ease) infinite; } }
+@keyframes ea-indet { from { left: -30%; } to { left: 100%; } }
+.ea-band { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-bottom: 8px; }
+.ea-tile { border: 1px solid var(--ea-line); border-radius: var(--ea-radius-lg); padding: 12px; background: var(--ea-surface); min-width: 0; }
+.ea-tile .lbl { font-size: .75rem; font-weight: 600; color: var(--ea-ink-muted); }
+.ea-tile .val { font-size: 1.5rem; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; color: var(--ea-ink-strong); }
+.ea-tile .sub { font-size: .75rem; color: var(--ea-ink-muted); }
+.ea-tile.warn .val { color: var(--ea-warning-ink); }
+.ea-bandhead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.ea-bandhead .ttl { font-size: .875rem; font-weight: 600; }
+.ea-dist { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; margin-bottom: 16px; }
+.ea-dist.narrow { grid-template-columns: minmax(0, 1fr); }
+.ea-panel { border: 1px solid var(--ea-line); border-radius: var(--ea-radius-lg); padding: 12px; min-width: 0; }
+.ea-panel .ttl { font-size: .8125rem; font-weight: 600; margin-bottom: 8px; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; align-items: center; }
+.ea-hrow { display: grid; grid-template-columns: 5.5rem minmax(0, 1fr) 3rem; gap: 8px; align-items: center; font-size: .8125rem; margin: 4px 0; }
+.ea-hrow.wide { grid-template-columns: minmax(0, 8rem) minmax(0, 1fr) 5.5rem; }
+.ea-hrow .lab { color: var(--ea-ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ea-track { display: block; height: .5rem; border-radius: var(--ea-radius-xs); background: var(--ea-surface-inset); overflow: hidden; }
+.ea-fill { display: block; height: 100%; border-radius: var(--ea-radius-xs); background: var(--ea-brand-fill); }
+.ea-fill.late { background: var(--ea-warning-edge); }
+.ea-hrow .n { text-align: right; font-variant-numeric: tabular-nums; color: var(--ea-ink-muted); white-space: nowrap; }
+.ea-seg.mini button { min-height: 1.75rem; padding: 0 .5rem; font-size: .8125rem; }
+.ea-scrolllist { max-height: 16rem; overflow-y: auto; margin-top: 8px; padding-right: 4px; border-top: 1px solid var(--ea-line); padding-top: 6px; }
+
+/* Filter bar (DS filter-bar.md). */
+.ea-bar { --ea-bar-inner: 2rem; position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-bottom: 12px; }
+@media (pointer: coarse) { .ea-bar { --ea-bar-inner: 2.25rem; } }
+.ea-bar-spacer { flex: 1 1 0; }
+.ea-bar-cluster { display: inline-flex; align-items: center; border-radius: var(--ea-radius-lg); background: var(--ea-surface-inset); }
+.ea-bar-count { padding: 0 .5rem 0 .75rem; font-size: .875rem; font-weight: 600; color: var(--ea-ink-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ea-capsule { position: relative; display: inline-flex; align-items: center; gap: .125rem; padding: .1875rem;
+  border: 1px solid var(--ea-line); border-radius: var(--ea-radius-lg); background: var(--ea-surface); box-shadow: var(--ea-elevation-sm); }
+.ea-ib { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 2px;
+  min-width: var(--ea-bar-inner); height: var(--ea-bar-inner); padding: 0 .375rem; border: 0; border-radius: var(--ea-radius-md);
+  background: transparent; color: var(--ea-ink-muted); cursor: pointer;
+  transition: background var(--ea-base) var(--ea-ease), color var(--ea-base) var(--ea-ease); }
+.ea-ib:hover { background: var(--ea-surface-alt); color: var(--ea-ink); transition-duration: var(--ea-fast); }
+.ea-ib[aria-expanded="true"] { background: var(--ea-brand-tint); color: var(--ea-brand-ink); }
+.ea-ib svg { width: 16px; height: 16px; }
+.ea-ib .chev { width: 12px; height: 12px; }
+.ea-loud { position: absolute; top: -4px; right: -4px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 50rem;
+  background: var(--ea-brand-fill); color: var(--ea-on-brand-fill); font-size: .75rem; font-weight: 700; line-height: 16px; text-align: center; font-variant-numeric: tabular-nums; }
+.ea-search-field { display: inline-flex; align-items: center; gap: .375rem; height: var(--ea-bar-inner); padding: 0 .5rem;
+  border-radius: var(--ea-radius-md); background: var(--ea-surface-inset); color: var(--ea-ink-muted); }
+.ea-search-field svg { width: 16px; height: 16px; flex: none; }
+.ea-search-field input { border: 0; background: transparent; width: 190px; min-width: 60px; font-size: .875rem; outline: none; color: var(--ea-ink); }
+.ea-search-field:focus-within { outline: var(--ea-focus-width) solid var(--ea-focus-ring); outline-offset: 2px; }
+.ea-search-field .spin { width: 14px; height: 14px; border: 2px solid var(--ea-line); border-top-color: var(--ea-brand-fill); border-radius: 50%; flex: none; }
+@media (prefers-reduced-motion: no-preference) { .ea-search-field .spin { animation: ea-spin 700ms linear infinite; } }
+@keyframes ea-spin { to { transform: rotate(360deg); } }
+.ea-tip { position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); padding: 2px 8px;
+  border-radius: var(--ea-radius-sm); background: var(--ea-ink); color: var(--ea-surface); font-size: .75rem; white-space: nowrap;
+  opacity: 0; pointer-events: none; transition: opacity var(--ea-fast) var(--ea-ease) 100ms; z-index: 25; }
+.ea-ib:hover .ea-tip, .ea-ib:focus-visible .ea-tip { opacity: 1; }
+
+/* Chips (DS chip.md). */
+.ea-chips { flex: 1 0 100%; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.ea-chips[hidden] { display: none; }
+.ea-chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 6px 0 8px; border: 1px solid var(--ea-brand-edge);
+  border-radius: var(--ea-radius-sm); background: var(--ea-brand-tint); color: var(--ea-brand-ink); font-size: .8125rem; font-weight: 500; cursor: pointer; max-width: 100%; }
+.ea-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ea-chip svg { width: 12px; height: 12px; flex: none; }
+.ea-clearall { border: 0; background: none; padding: 0 4px; font-size: .8125rem; font-weight: 600; text-decoration: underline; cursor: pointer; }
+
+/* Menu and panel (DS menu.md, filter-panel.md, panel-popover-sheet.md). */
+.ea-menu { position: absolute; top: calc(100% + 6px); right: 0; z-index: 20; min-width: 260px; max-width: calc(100vw - 32px);
+  padding: 4px; border: 1px solid var(--ea-line); border-radius: var(--ea-radius-md); background: var(--ea-surface);
+  box-shadow: var(--ea-elevation-md); max-height: 70vh; overflow: auto; }
+.ea-menu[hidden] { display: none; }
+.ea-menu-head { padding: 6px 8px 2px; font-size: .75rem; font-weight: 600; color: var(--ea-ink-muted); }
+.ea-menu-sep { height: 1px; background: var(--ea-line); margin: 4px 0; }
+.ea-menu-item { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 32px; padding: 4px 8px; border: 0;
+  border-radius: var(--ea-radius-xs); background: transparent; font-size: .875rem; color: var(--ea-ink); text-align: left; cursor: pointer;
+  transition: background var(--ea-base) var(--ea-ease), color var(--ea-base) var(--ea-ease); }
+.ea-menu-item:hover { background: var(--ea-hover); color: var(--ea-brand-ink); transition-duration: var(--ea-fast); }
+.ea-menu-item:focus-visible { outline-offset: -2px; }
+.ea-menu-item[aria-disabled="true"] { color: var(--ea-ink-faint); cursor: default; }
+.ea-menu-item svg { width: 16px; height: 16px; flex: none; color: var(--ea-ink-muted); }
+.ea-menu-item .tick { margin-left: auto; color: var(--ea-brand-ink); visibility: hidden; display: inline-flex; }
+.ea-menu-item[aria-checked="true"] { font-weight: 600; }
+.ea-menu-item[aria-checked="true"] .tick { visibility: visible; }
+.ea-menu-item .box { width: 16px; height: 16px; flex: none; border: 1px solid var(--ea-control-line); border-radius: var(--ea-radius-xs);
+  display: inline-flex; align-items: center; justify-content: center; }
+.ea-menu-item[aria-checked="true"] .box { background: var(--ea-brand-fill); border-color: var(--ea-brand-fill); }
+.ea-menu-item .box svg { width: 12px; height: 12px; visibility: hidden; color: var(--ea-on-brand-fill); }
+.ea-menu-item[aria-checked="true"] .box svg { visibility: visible; }
+.ea-menu-item .hint { margin-left: auto; font-size: .75rem; color: var(--ea-ink-muted); font-weight: 400; }
+.ea-fpanel { position: absolute; top: calc(100% + 6px); right: 0; z-index: 20; width: 380px; max-width: 100%;
+  border: 1px solid var(--ea-line); border-radius: var(--ea-radius-lg); background: var(--ea-surface); box-shadow: var(--ea-elevation-md); }
+.ea-fpanel[hidden] { display: none; }
+.ea-fpanel .body { padding: 12px; max-height: 62vh; overflow: auto; }
+.ea-fgroup { margin-bottom: 12px; }
+.ea-fgroup .gl { font-size: .75rem; font-weight: 600; color: var(--ea-ink-muted); padding-bottom: 6px; display: flex; justify-content: space-between; gap: 8px; }
+.ea-opts { display: flex; flex-wrap: wrap; gap: 6px; }
+.ea-opt { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 0 8px; border: 1px solid var(--ea-control-line);
+  border-radius: var(--ea-radius-sm); background: var(--ea-surface); font-size: .8125rem; font-weight: 500; cursor: pointer; }
+.ea-opt[aria-pressed="true"] { border-color: var(--ea-brand-edge); background: var(--ea-brand-tint); color: var(--ea-brand-ink); }
+.ea-opt small { font-size: .75rem; font-weight: 600; color: var(--ea-ink-muted); font-variant-numeric: tabular-nums; }
+.ea-optlist { max-height: 15rem; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; margin-top: 6px;
+  border: 1px solid var(--ea-line); border-radius: var(--ea-radius-md); padding: 4px; }
+.ea-optrow { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 8px; border: 0; border-radius: var(--ea-radius-xs);
+  background: transparent; text-align: left; font-size: .8125rem; cursor: pointer; }
+.ea-optrow:hover { background: var(--ea-hover); }
+.ea-optrow .box { width: 16px; height: 16px; flex: none; border: 1px solid var(--ea-control-line); border-radius: var(--ea-radius-xs); display: inline-flex; align-items: center; justify-content: center; }
+.ea-optrow[aria-pressed="true"] .box { background: var(--ea-brand-fill); border-color: var(--ea-brand-fill); }
+.ea-optrow .box svg { width: 12px; height: 12px; visibility: hidden; color: var(--ea-on-brand-fill); }
+.ea-optrow[aria-pressed="true"] .box svg { visibility: visible; }
+.ea-optrow small { margin-left: auto; font-size: .75rem; font-weight: 600; color: var(--ea-ink-muted); font-variant-numeric: tabular-nums; }
+.ea-optrow.pinned { font-weight: 600; }
+.ea-inline { display: flex; gap: 6px; flex-wrap: wrap; }
+.ea-input, .ea-select { min-height: 2rem; padding: 0 .5rem; border: 1px solid var(--ea-control-line); border-radius: var(--ea-radius-md);
+  background: var(--ea-surface); font-size: .8125rem; min-width: 0; }
+.ea-input { flex: 1 1 10rem; }
+.ea-fpanel .foot { display: flex; justify-content: space-between; gap: 8px; padding: 12px; border-top: 1px solid var(--ea-line); }
+.btn { display: inline-flex; align-items: center; gap: 6px; min-height: 2rem; padding: 0 .75rem; border-radius: var(--ea-radius-md);
+  border: 1px solid var(--ea-control-line); background: var(--ea-surface); cursor: pointer; font-size: .875rem; }
+.btn[disabled] { opacity: .5; cursor: default; }
+.btn-primary { background: var(--ea-brand-fill); border-color: var(--ea-brand-fill); color: var(--ea-on-brand-fill); }
+.btn-link { border: 0; background: none; color: var(--ea-accent); text-decoration: underline; padding: 0 4px; cursor: pointer; }
+
+/* Page-specific parts of this mockup. overflow-x: clip, not hidden: hidden on html and body makes body a
+   scroll container and stops every sticky element (the switches and the footer). */
+html, body { overflow-x: visible; }
+body { overflow-x: clip; }
+.page { overflow: clip; }
+@media (max-width: 600px) { .switches { position: static; } }
+.ea-alert { border: 1px solid var(--ea-info-edge); background: var(--ea-info-tint); color: var(--ea-info-ink); border-radius: var(--ea-radius-md);
+  padding: 8px 12px; font-size: .875rem; margin-bottom: 12px; }
+.ea-alert.ok { border-color: var(--ea-success-edge); background: var(--ea-success-tint); color: var(--ea-success-ink); }
+.ea-alert.warn { border-color: var(--ea-warning-edge); background: var(--ea-warning-tint); color: var(--ea-warning-ink); }
+.ea-band.cap { grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); margin: 12px 0; }
+#footer { display: contents; }
+a.btn { text-decoration: none; color: var(--ea-ink); }
+.ea-tile .meter { display: block; height: .375rem; border-radius: var(--ea-radius-xs); background: var(--ea-surface-inset); overflow: hidden; margin-top: 6px; }
+.ea-tile .meter span { display: block; height: 100%; background: var(--ea-brand-fill); }
+.ea-tile .meter span.warn { background: var(--ea-warning-edge); }
+.ea-tile .val.sm { font-size: 1rem; }
+.scopeline { font-size: .8125rem; color: var(--ea-ink-muted); margin: -4px 0 12px; }
+.ea-seg button small.cnt { font-size: .75rem; font-weight: 600; color: var(--ea-ink-muted); margin-left: 6px; font-variant-numeric: tabular-nums; }
+
+/* Avatar: core's user_picture, round because it is a picture, not a control. */
+.ea-av { flex: none; width: 35px; height: 35px; border-radius: 50%; overflow: hidden; display: inline-flex; align-items: center; justify-content: center;
+  background: var(--ea-surface-inset); color: var(--ea-ink-muted); font-size: .8125rem; font-weight: 600; text-decoration: none; }
+.ea-av svg { width: 100%; height: 100%; display: block; }
+.ea-av.s24 { width: 24px; height: 24px; font-size: .625rem; }
+
+/* The queue's grid. */
+.ea-gridwrap { position: relative; border: 1px solid var(--ea-line); border-radius: var(--ea-radius-lg); overflow: auto; max-height: 36rem; overscroll-behavior-x: contain; }
+table.qt { border-collapse: separate; border-spacing: 0; table-layout: fixed; font-size: .875rem; width: max-content; min-width: 100%; }
+.qt th { position: sticky; top: 0; z-index: 2; text-align: left; font-size: .8125rem; font-weight: 600; color: var(--ea-ink-muted);
+  background: var(--ea-surface-alt); border-bottom: 1px solid var(--ea-line); padding: 8px 12px; white-space: nowrap; }
+.qt th button.sortbtn { border: 0; background: none; padding: 0; font: inherit; color: inherit; cursor: pointer; display: inline-flex; gap: 4px; align-items: center; }
+.qt th[aria-sort] { color: var(--ea-ink); }
+.qt th .arrow { font-size: .75rem; color: var(--ea-brand-ink); }
+.qt td { padding: 10px 12px; border-bottom: 1px solid var(--ea-line); vertical-align: top; background: var(--ea-surface); }
+.qt tr:last-child td { border-bottom: 0; }
+.qt tbody tr:hover td { background: var(--ea-hover); }
+.qt tbody tr.is-sel td { background: var(--ea-brand-tint); }
+.qt .fx0 { position: sticky; left: 0; z-index: 1; width: 44px; }
+.qt .fx1 { position: sticky; left: 44px; z-index: 1; }
+.qt th.fx0, .qt th.fx1 { z-index: 4; }
+.ea-gridwrap.is-scrolled .fx1 { box-shadow: 6px 0 8px -6px var(--ea-shadow); }
+.qt .one { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qt .sub { font-size: .8125rem; color: var(--ea-ink-muted); }
+.clamp2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.appl { display: flex; gap: 10px; align-items: flex-start; min-width: 0; }
+.appl .who { flex: 1 1 auto; min-width: 0; }
+.appl .l1 { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.appl .name { font-weight: 600; color: var(--ea-accent); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.appl .btn { flex: none; }
+.btn-sm { min-height: 1.75rem; padding: 0 .5rem; font-size: .8125rem; }
+.btn-outline-secondary { background: var(--ea-surface); border-color: var(--ea-control-line); color: var(--ea-ink); }
+.btn-outline-secondary:hover { background: var(--ea-surface-alt); }
+.btn-outline-danger { background: var(--ea-surface); border-color: var(--ea-danger-edge); color: var(--ea-danger-ink); }
+.btn-danger { background: var(--ea-danger-ink); border-color: var(--ea-danger-ink); color: #fff; }
+.btn[aria-disabled="true"] { opacity: .5; cursor: default; }
+.ea-check { width: 16px; height: 16px; margin: 2px 0 0; accent-color: var(--ea-brand-fill); }
+.ea-tipwrap { position: relative; display: inline-flex; }
+.ea-tipwrap .ea-tip { white-space: normal; width: max-content; max-width: 240px; }
+.ea-tipwrap:hover .ea-tip, .ea-tipwrap:focus-within .ea-tip { opacity: 1; }
+.ans .k { color: var(--ea-ink-muted); }
+
+/* Cards (container below 576 px). */
+.qcards { display: flex; flex-direction: column; gap: 8px; }
+.qcard { border: 1px solid var(--ea-line); border-radius: var(--ea-radius-lg); padding: 12px; background: var(--ea-surface); min-width: 0; }
+.qcard.is-sel { border-color: var(--ea-brand-edge); background: var(--ea-brand-tint); }
+.qcard .top { display: flex; gap: 10px; align-items: flex-start; }
+.qcard .top .who { flex: 1 1 auto; min-width: 0; }
+.qcard .name { font-weight: 600; color: var(--ea-accent); text-decoration: none; overflow-wrap: anywhere; }
+.qcard .ln { font-size: .8125rem; margin-top: 6px; min-width: 0; }
+.qcard .act { display: flex; justify-content: flex-end; margin-top: 8px; }
+
+/* The sticky footer: core's, here drawn sticky to the bottom of the viewport. */
+.ea-footer { position: sticky; bottom: 0; z-index: 30; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;
+  min-height: 64px; padding: 10px 16px; background: var(--ea-surface); border-top: 1px solid var(--ea-line); box-shadow: 0 -4px 12px var(--ea-shadow); }
+.ea-footer .cnt { font-size: .875rem; color: var(--ea-ink-muted); font-variant-numeric: tabular-nums; }
+.ea-footer .sp { flex: 1 1 0; }
+.ea-footer .acts { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.device.is-phone .ea-footer { flex-wrap: nowrap; padding: 10px 12px; gap: 8px; }
+.device.is-phone .ea-footer .acts { flex-wrap: nowrap; gap: 6px; }
+.device.is-phone .ea-footer .acts .btn { padding: 0 .5rem; }
+
+/* Decision sheet: core/modal, a dialogue on desktop, a bottom sheet on a phone. */
+.ea-scrim { position: fixed; inset: 0; z-index: 60; background: rgb(0 0 0 / 40%); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.ea-scrim[hidden] { display: none; }
+.ea-sheet { width: 560px; max-width: 100%; max-height: calc(100vh - 32px); display: flex; flex-direction: column; background: var(--ea-surface);
+  border-radius: var(--ea-radius-lg); box-shadow: var(--ea-elevation-lg); }
+.ea-scrim.phone { align-items: flex-end; padding: 0; }
+.ea-scrim.phone .ea-sheet { width: 375px; border-radius: var(--ea-radius-xl) var(--ea-radius-xl) 0 0; max-height: 85vh; }
+.ea-sheet .hd { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 14px 16px; border-bottom: 1px solid var(--ea-line); }
+.ea-sheet .hd h3 { margin: 0; font-size: 1.125rem; }
+.ea-sheet .bd { padding: 14px 16px; overflow: auto; }
+.ea-sheet .ft { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--ea-line); }
+.who-list { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 0 0 12px; padding: 0; list-style: none; font-size: .8125rem; }
+.who-list li { display: inline-flex; align-items: center; gap: 6px; }
+.ea-sheet .sub { font-size: .8125rem; color: var(--ea-ink-muted); }
+.msec { border: 1px solid var(--ea-line); border-radius: var(--ea-radius-lg); padding: 10px 12px 2px; margin-bottom: 10px; }
+.mhead { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-bottom: 8px; font-size: .875rem; }
+.fld { margin-bottom: 12px; }
+.fld label, .fld .lab { display: block; font-size: .8125rem; font-weight: 600; margin-bottom: 4px; }
+.fld .help { font-size: .75rem; color: var(--ea-ink-muted); margin-top: 4px; }
+.fld textarea { width: 100%; min-height: 4.5rem; padding: 6px 8px; border: 1px solid var(--ea-control-line); border-radius: var(--ea-radius-md);
+  background: var(--ea-surface); font: inherit; font-size: .875rem; color: inherit; resize: vertical; }
+.fld .ea-select { width: 100%; min-height: 2.25rem; }
+.gpicks { display: flex; flex-wrap: wrap; gap: 6px; }
+.dangerline { border-left: 3px solid var(--ea-danger-edge); padding: 4px 0 4px 10px; font-size: .875rem; color: var(--ea-danger-ink); margin-bottom: 12px; }
+.ea-x { border: 0; background: transparent; width: 2rem; height: 2rem; border-radius: var(--ea-radius-md); cursor: pointer; color: var(--ea-ink-muted); font-size: 1.125rem; }
+.ea-x:hover { background: var(--ea-surface-alt); }
+
+/* Without JavaScript: details in place of the panel and the sheet. */
+details.nojs { border: 1px solid var(--ea-line); border-radius: var(--ea-radius-lg); margin-bottom: 12px; background: var(--ea-surface); }
+details.nojs > summary { padding: 10px 12px; font-weight: 600; font-size: .875rem; cursor: pointer; }
+details.nojs .in { padding: 0 12px 12px; display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 0 12px; }
+
+/* Today's page, as measured. */
+.t-card { border: 1px solid var(--ea-line); border-radius: 8px; padding: 12px; display: flex; flex-wrap: wrap; gap: 12px 32px; margin-bottom: 16px; }
+.t-tile { display: flex; flex-direction: column; min-width: 8rem; }
+.t-tile b { font-size: 1.5rem; font-weight: 400; }
+.t-meter { display: block; width: 9rem; height: 4px; background: #e9ecef; border-radius: 4px; overflow: hidden; margin-top: 4px; }
+.t-meter span { display: block; height: 100%; background: #0f6cbf; }
+.t-badge { display: inline-block; padding: 2px 6px; border-radius: 8px; font-size: .75rem; font-weight: 700; }
+.t-badge.ok { background: #357a32; color: #fff; } .t-badge.wl { background: #f0ad4e; color: #1d2125; } .t-badge.pr { background: #0f6cbf; color: #fff; }
+.t-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); gap: 8px 16px; margin-bottom: 16px; }
+.t-form label { display: block; font-size: .875rem; margin-bottom: 4px; }
+.t-form .box { height: 2.25rem; border: 1px solid var(--ea-control-line); border-radius: 6px; background: var(--ea-surface); }
+.t-form .go { align-self: end; height: 2.25rem; border-radius: 6px; background: #ced4da; border: 0; padding: 0 12px; }
+.t-wrap { overflow-x: auto; border-top: 1px solid var(--ea-line); }
+table.t-table { border-collapse: collapse; font-size: .875rem; width: 928px; }
+.t-table th { text-align: left; padding: 8px; vertical-align: bottom; border-bottom: 2px solid var(--ea-line); color: var(--ea-accent); }
+.t-table td { padding: 8px; vertical-align: top; border-top: 1px solid var(--ea-line); }
+.t-table tbody tr:nth-child(odd) { background: var(--ea-surface-alt); }
+.t-pill { display: block; background: #e9ecef; border-radius: 4px; padding: 2px 6px; margin-bottom: 6px; font-size: .8125rem; }
+.t-pill b { display: block; font-weight: 400; color: var(--ea-ink-muted); }
+.t-opts { margin-top: 16px; }
+.t-opts .fld { max-width: 32rem; }
+.t-foot { position: sticky; bottom: 0; z-index: 30; display: flex; align-items: center; justify-content: flex-end; gap: 8px; height: 80px; padding: 0 16px;
+  background: var(--ea-surface); border-top: 1px solid var(--ea-line); font-size: .875rem; flex-wrap: wrap; overflow: hidden; }
+.t-foot select { height: 2.25rem; border-radius: 6px; border: 1px solid var(--ea-control-line); background: var(--ea-surface); }
+.flag { box-shadow: 0 0 0 2px var(--ea-danger-edge); border-radius: 4px; }
+.flagnote { font-size: .75rem; color: var(--ea-danger-ink); font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+  <h1>The confirmation queue, aligned to the Design System</h1>
+  <p class="lede">Mockup for <code>manage-queue-study.md</code>. <b>Concept A</b> (decided, MQ-D1): the same page, controls and post
+  contract as today, drawn with the fleet Design System: a compact capacity band, the filter bar with a status segmented control,
+  a bounded grid with the picture and a Review button in the fixed applicant column, cards on a phone, and the sticky footer's
+  three buttons opening a decision sheet. <b>Today</b>: the page as measured on m501. The data is invented; the "now" is
+  20 Nov 2026, 10:00. Switch JavaScript off to see the path that keeps working without it.</p>
+
+  <div class="switches" role="group" aria-label="Mockup switches">
+    <div class="sw"><span id="sw-concept">Concept</span>
+      <div class="ea-seg" role="radiogroup" aria-labelledby="sw-concept" data-switch="concept">
+        <button type="button" role="radio" data-v="A" aria-checked="true">A: restyled</button>
+        <button type="button" role="radio" data-v="T" aria-checked="false">Today</button>
+      </div></div>
+    <div class="sw"><span id="sw-size">Queue</span>
+      <div class="ea-seg" role="radiogroup" aria-labelledby="sw-size" data-switch="size">
+        <button type="button" role="radio" data-v="small" aria-checked="true">Small: 7</button>
+        <button type="button" role="radio" data-v="large" aria-checked="false">Large: 186, 240 groups</button>
+        <button type="button" role="radio" data-v="site" aria-checked="false">Site-wide: 3 methods</button>
+      </div></div>
+    <div class="sw"><span id="sw-vp">Viewport</span>
+      <div class="ea-seg" role="radiogroup" aria-labelledby="sw-vp" data-switch="vp">
+        <button type="button" role="radio" data-v="desktop" aria-checked="true">Desktop</button>
+        <button type="button" role="radio" data-v="phone" aria-checked="false">Phone</button>
+      </div></div>
+    <div class="sw"><span id="sw-reader">Reader</span>
+      <div class="ea-seg" role="radiogroup" aria-labelledby="sw-reader" data-switch="reader">
+        <button type="button" role="radio" data-v="decider" aria-checked="true">Decider</button>
+        <button type="button" role="radio" data-v="moderator" aria-checked="false">Moderator</button>
+        <button type="button" role="radio" data-v="viewer" aria-checked="false">Viewer</button>
+      </div></div>
+    <div class="sw"><span id="sw-js">JavaScript</span>
+      <div class="ea-seg" role="radiogroup" aria-labelledby="sw-js" data-switch="js">
+        <button type="button" role="radio" data-v="on" aria-checked="true">On</button>
+        <button type="button" role="radio" data-v="off" aria-checked="false">Off</button>
+      </div></div>
+  </div>
+
+  <div class="device" id="device">
+    <div class="page">
+      <div class="moodlebar"><b>Moodle</b><span>·</span><span>Python for data work 2027</span></div>
+      <div class="pagebody" id="pagebody"></div>
+      <div id="footer"></div>
+    </div>
+  </div>
+  <div class="notes" id="notes"></div>
+</main>
+<div class="ea-scrim" id="scrim" hidden></div>
+
+<script>
+'use strict';
+const NOW = Date.UTC(2026, 10, 20, 13, 0); // 10:00 in Brasília.
+const DAY = 86400000;
+const ICON = {
+  search: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg>',
+  filter: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2 3.5h12M4.5 8h7M7 12.5h2"/></svg>',
+  x: '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6"/></svg>',
+  tick: '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2.5 6.5 5 9l4.5-6"/></svg>',
+  chev: '<svg class="chev" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 4.5 6 7.5l3-3"/></svg>',
+};
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+
+/* ---------- Data ---------- */
+let seed = 20261121;
+const rnd = () => { seed = (seed + 0x6D2B79F5) | 0; let t = seed; t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+const pick = a => a[Math.floor(rnd() * a.length)];
+const FIRST = ['Ana', 'Bruno', 'Camila', 'Diego', 'Elisa', 'Fábio', 'Giovana', 'Heitor', 'Isabela', 'João', 'Larissa', 'Mateus', 'Natália',
+  'Otávio', 'Paula', 'Rafael', 'Sara', 'Tiago', 'Vitória', 'William', 'Yasmin', 'Lucas', 'Marina', 'Pedro', 'Renata', 'Caio', 'Débora'];
+const LAST = ['Almeida', 'Barbosa', 'Cardoso', 'Duarte', 'Esteves', 'Ferraz', 'Gomes', 'Hora', 'Ibarra', 'Jardim', 'Lacerda', 'Moraes',
+  'Nogueira', 'Oliveira', 'Pacheco', 'Queiroz', 'Ramos', 'Siqueira', 'Teles', 'Valente', 'Xavier', 'Zanetti'];
+const CITY = ['Recife', 'Salvador', 'Belém', 'Curitiba', 'Natal', 'Manaus', 'Goiânia', 'Vitória', 'Maceió', 'Fortaleza', 'Cuiabá', 'Palmas'];
+const PY = ['Never', 'A little', 'Some projects', 'Every day'];
+const USE = ['Teaching material', 'Research data', 'Office reports', 'A career change', 'Public data journalism'];
+const COMMENTS = ['I teach statistics and want to bring Python into class.', 'My team moved its reports from spreadsheets to notebooks.',
+  'I am finishing a master’s degree and need pandas for the analysis chapter.', 'I work with census tables every week.',
+  'I tried the online tutorials and want a structured course.', 'Our municipality publishes open data and nobody reads it yet.',
+  'I want to automate the monthly indicators of my department.', ''];
+const HUES = [205, 160, 25, 280, 340, 45, 120, 190, 10, 250];
+function person(i, photo) {
+  const f = FIRST[i % FIRST.length], l = LAST[(i * 7) % LAST.length];
+  return {name: f + ' ' + l, initials: f[0] + l[0], email: (f + '.' + l).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '') + '@example.invalid',
+    photo, hue: HUES[i % HUES.length]};
+}
+const SMALL_GROUPS = [{id: 1, name: 'Evening A', grouping: 'Evening'}, {id: 2, name: 'Evening B', grouping: 'Evening'},
+  {id: 3, name: 'Weekend', grouping: 'Weekend'}];
+function smallSet() {
+  const spec = [
+    [36.1, 2, null, 0, 0], [33.9, 2, null, 1, 1], [21.3, 1, 'groupfull', 2, 2], [12.6, 1, null, 3, 3],
+    [6.2, 1, 'forreview', 1, 4], [2.4, 1, null, 0, 5], [0.3, 1, null, 2, 7]];
+  return spec.map((s, i) => {
+    const p = person(i * 3 + 1, i % 3 !== 1);
+    return {id: 430 + i, ...p, applied: NOW - s[0] * DAY, status: s[1], key: s[2], group: s[3] ? [SMALL_GROUPS[s[3] - 1]] : [],
+      answers: [['City/town', CITY[i % CITY.length]], ['How much Python have you written?', PY[i % 4]], ['What would you like to use it for?', USE[i % 5]]],
+      comment: COMMENTS[s[4]]};
+  });
+}
+const BIG_GROUPS = [];
+CITY.concat(['Aracaju', 'Teresina', 'Macapá', 'Boa Vista', 'Rio Branco', 'Porto Velho', 'Campo Grande', 'Florianópolis']).forEach(c => {
+  for (let k = 1; k <= 12; k++) { BIG_GROUPS.push({id: BIG_GROUPS.length + 10, name: c + ' ' + String(k).padStart(2, '0'), grouping: c}); }
+});
+function largeSet() {
+  seed = 20261121;
+  const rows = [];
+  for (let i = 0; i < 186; i++) {
+    const p = person(i, rnd() > 0.25);
+    const g = rnd() < 0.15 ? [] : (rnd() < 0.1 ? [pick(BIG_GROUPS), pick(BIG_GROUPS), pick(BIG_GROUPS)] : [pick(BIG_GROUPS)]);
+    rows.push({id: 1000 + i, ...p, applied: NOW - Math.pow(rnd(), 1.6) * 60 * DAY, status: rnd() < 0.22 ? 2 : 1,
+      key: rnd() < 0.06 ? pick(['groupfull', 'noplace', 'forreview']) : null, group: g,
+      answers: [['City/town', pick(CITY)], ['How much Python have you written?', pick(PY)], ['What would you like to use it for?', pick(USE)]],
+      comment: pick(COMMENTS)});
+  }
+  return rows;
+}
+const KEY = {
+  groupfull: ['Key: no seat', 'Valid group key, but a group had no seat left'],
+  noplace: ['Key: no place', 'Valid group key, but no place was left'],
+  unconfirmed: ['Key: not confirmed', 'Valid group key, but a place or seat could not be confirmed in time'],
+  forreview: ['Key accepted', 'Key accepted, sent for review'],
+};
+
+const METHODS = {
+  stu: {name: 'Student applications', course: 'Python for data work 2027', deciding: false,
+    approval: 'Approval assigns Student and joins the chosen group.'},
+  mod: {name: 'Moderator recruitment', course: 'Python for data work 2027', deciding: true,
+    approval: 'Approval assigns Non-editing teacher and joins Moderadores and the chosen group.'},
+  pub: {name: 'Student applications', course: 'Statistics for public managers', deciding: false,
+    approval: 'Approval assigns Student and joins the method’s groups (Turma 1).'},
+};
+function siteSet() {
+  const spec = [['stu', 21.2, 1, 0], ['mod', 19.4, 1, 1], ['pub', 17.8, 1, 2], ['stu', 14.1, 2, 3], ['mod', 9.3, 1, 4],
+    ['pub', 8.7, 1, 5], ['stu', 6.6, 1, 6], ['stu', 4.2, 1, 7], ['mod', 3.9, 1, 7], ['pub', 1.4, 1, 8], ['stu', 0.6, 1, 9]];
+  return spec.map(([m, d, st, pi], i) => {
+    const p = person(pi * 5 + 2, pi % 4 !== 2);
+    return {id: 2000 + i, ...p, method: m, applied: NOW - d * DAY, status: st, key: null,
+      group: m === 'pub' ? [] : [SMALL_GROUPS[i % 3]],
+      answers: m === 'mod' ? [['Which group would you moderate?', SMALL_GROUPS[i % 3].name], ['Moderation experience', pick(['None', 'One term', 'Two years'])]]
+        : [['City/town', CITY[i % CITY.length]], ['How much Python have you written?', PY[i % 4]], ['What would you like to use it for?', USE[i % 5]]],
+      comment: m === 'mod' ? 'I took this course last year and would like to help the next class.' : COMMENTS[i % 7]};
+  });
+}
+
+/* ---------- State ---------- */
+const S = {concept: 'A', size: 'small', vp: 'desktop', reader: 'decider', js: 'on',
+  status: '', q: '', qApplied: '', groups: new Set(), grouping: '', groupq: '', from: '', to: '', city: '',
+  page: 0, sort: 'applied', dir: 1, sel: new Set(), panel: false, busy: false, flash: null, sheet: null};
+let DATA = {small: smallSet(), large: largeSet(), site: siteSet()};
+const MOD_GROUPS = {small: new Set([1]), large: new Set(BIG_GROUPS.filter(g => g.grouping === 'Recife').slice(0, 3).map(g => g.id)), site: new Set()};
+const groupsOf = () => S.size === 'large' ? BIG_GROUPS : SMALL_GROUPS;
+const site = () => S.size === 'site';
+const PER = 50;
+
+function scoped() {
+  let rows = DATA[S.size];
+  if (S.reader === 'moderator') { const mine = MOD_GROUPS[S.size]; rows = rows.filter(r => r.group.some(g => mine.has(g.id))); }
+  return rows;
+}
+function matches(r, opts = {}) {
+  if (!opts.noStatus && S.status && String(r.status) !== S.status) { return false; }
+  if (S.qApplied.length >= 2 && !fold(r.name).includes(fold(S.qApplied))) { return false; }
+  if (S.groups.size && !r.group.some(g => S.groups.has(g.id))) { return false; }
+  if (S.city && !fold(r.answers[0][1]).includes(fold(S.city))) { return false; }
+  if (S.from && r.applied < Date.parse(S.from)) { return false; }
+  if (S.to && r.applied > Date.parse(S.to) + DAY) { return false; }
+  return true;
+}
+const fold = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+function listed() {
+  const rows = scoped().filter(r => matches(r));
+  const k = S.sort, d = S.dir;
+  rows.sort((a, b) => (k === 'name' ? a.name.localeCompare(b.name) : a.applied - b.applied) * d || a.id - b.id);
+  return rows;
+}
+
+/* ---------- Small parts ---------- */
+function avatar(r, size) {
+  const cls = 'ea-av' + (size === 24 ? ' s24' : '');
+  const inner = r.photo
+    ? `<svg viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" fill="hsl(${r.hue} 45% 78%)"/><circle cx="20" cy="16" r="7.5" fill="hsl(${r.hue} 30% 42%)"/><path d="M6 40c1.5-9 7.5-13.5 14-13.5S32.5 31 34 40z" fill="hsl(${r.hue} 30% 42%)"/></svg>`
+    : esc(r.initials);
+  return size === 24 ? `<span class="${cls}" role="img" aria-label="${esc(r.name)}">${inner}</span>`
+    : `<a class="${cls}" href="#profile" role="img" aria-label="${esc(r.name)}" tabindex="-1">${inner}</a>`;
+}
+function statusLabel(r) {
+  let h = '';
+  if (r.status === 2) { h += '<span class="ea-status ea-status--warning">Deferred</span>'; }
+  if (r.key) {
+    const [short, long] = KEY[r.key];
+    h += `<span class="ea-tipwrap" tabindex="0"><span class="ea-status ea-status--info">${short}</span><span class="ea-tip" role="tooltip">${long}</span></span>`;
+  }
+  return h;
+}
+const age = t => { const d = (NOW - t) / DAY; return d >= 1 ? Math.floor(d) + ' d ' + Math.floor((d % 1) * 24) + ' h' : Math.max(1, Math.round(d * 24)) + ' h'; };
+const fdate = t => new Date(t).toLocaleString('en-GB', {day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo'});
+const shortAns = {'City/town': 'City', 'How much Python have you written?': 'Python', 'What would you like to use it for?': 'Use',
+  'Which group would you moderate?': 'Group', 'Moderation experience': 'Experience'};
+function methodCell(r) {
+  const m = METHODS[r.method];
+  return `<span class="one">${esc(m.course)}</span><span class="sub one">${esc(m.name)}</span>${m.deciding ? '<span class="ea-status ea-status--warning" style="margin-top:4px">Grants a deciding role</span>' : ''}`;
+}
+function answersLine(r) {
+  const shown = r.answers.slice(0, 2).map(([k, v]) => `<span class="k">${shortAns[k] || k}:</span> ${esc(v)}`).join(' · ');
+  const more = r.answers.length - 2;
+  return `<span class="ans">${shown}${more > 0 ? ` <span class="ea-more">+${more}</span>` : ''}</span>`;
+}
+function groupCell(r) {
+  if (!r.group.length) { return '<span class="sub">Without a group</span>'; }
+  const names = r.group.slice(0, 2).map(g => esc(g.name)).join(', ');
+  return names + (r.group.length > 2 ? ` <span class="ea-more">+${r.group.length - 2}</span>` : '');
+}
+const canDecide = () => S.reader !== 'viewer';
+
+/* ---------- Concept A ---------- */
+function renderA() {
+  const all = scoped(), rows = listed();
+  const phone = S.vp === 'phone';
+  const pending = all.filter(r => r.status === 1 && matches(r, {noStatus: true})).length;
+  const deferred = all.filter(r => r.status === 2 && matches(r, {noStatus: true})).length;
+  let h = site() ? '<div class="crumbs">Site administration / Confirm enrolments</div><h2>Confirm enrolments</h2>'
+    : '<div class="crumbs">Python for data work 2027 / Confirm enrolments</div><h2>Confirm enrolments</h2>';
+  if (S.flash) { h += `<div class="ea-alert ok" role="status">${S.flash}</div>`; }
+  if (site() && S.reader === 'moderator') {
+    return h + '<div class="ea-alert" role="status">A moderator narrowed by separate groups opens only their method’s queue (manage.php?id=); the site-wide queue needs a system-level grant, and a recruitment method is decided only by those who see every group (C-D20).</div>';
+  }
+  if (S.reader === 'viewer') { h += '<div class="ea-alert" role="status">You can view these applications but not decide them.</div>'; }
+  // Capacity band.
+  const note = S.reader === 'moderator' ? '<div class="sub">on this method</div>' : '';
+  const held = S.size === 'small' ? [11, 40] : [214, 400], places = S.size === 'small' ? [4, 30] : [28, 120];
+  if (!site()) { h += `<section class="ea-band cap" aria-label="Capacity">
+    <div class="ea-tile"><div class="lbl">Places taken</div><div class="val num">${places[0]} <span class="sub">of ${places[1]}</span></div>${note}<span class="meter"><span style="width:${places[0] / places[1] * 100}%"></span></span></div>
+    <div class="ea-tile"><div class="lbl">Applications held</div><div class="val num">${held[0]} <span class="sub">of ${held[1]}</span></div>${note}<span class="meter"><span class="${held[0] / held[1] > .85 ? 'warn' : ''}" style="width:${held[0] / held[1] * 100}%"></span></span></div>
+    <div class="ea-tile"><div class="lbl">Status</div><div class="val sm"><span class="ea-status ea-status--success">Open</span></div><div class="sub">Closes on 15 Dec 2026</div></div>
+  </section>`; } else { h += '<p class="scopeline" style="margin-top:8px">Every application you may decide, across courses and enrolment methods. No capacity band: there is no single method.</p>'; }
+  if (S.reader === 'moderator') {
+    h += `<p class="scopeline">You see the applications of: ${S.size === 'small' ? 'Evening A' : 'Recife 01, Recife 02, Recife 03'}</p>`;
+  }
+  // Filter bar.
+  const nfilters = (S.groups.size ? 1 : 0) + (S.city ? 1 : 0) + (S.from || S.to ? 1 : 0);
+  const seg = [['', 'All', pending + deferred], ['1', 'Pending', pending], ['2', 'Deferred', deferred]]
+    .map(([v, l, n]) => `<button type="button" role="radio" data-status="${v}" aria-checked="${S.status === v}">${l}<small class="cnt">${n}</small></button>`).join('');
+  h += `<div class="ea-bar">
+    <div class="ea-seg" role="radiogroup" aria-label="Status">${seg}</div>
+    <label class="ea-search-field">${ICON.search}<span class="visually-hidden">Search by name</span>
+      <input type="search" data-fk="q" placeholder="Search by name" value="${esc(S.q)}" autocomplete="off">${S.busy && S.q ? '<span class="spin" aria-hidden="true"></span>' : ''}</label>
+    <span class="ea-bar-spacer"></span>
+    <span class="ea-bar-cluster"><span class="ea-bar-count" aria-live="polite">${rows.length} of ${all.length}</span>
+      <span class="ea-capsule">${S.js === 'on' ? `<button type="button" class="ea-ib" data-act="panel" aria-expanded="${S.panel}" aria-label="Filters">${ICON.filter}${nfilters ? `<span class="ea-loud">${nfilters}</span>` : ''}<span class="ea-tip">Filters</span></button>` : `<span class="ea-ib" aria-hidden="true">${ICON.filter}</span>`}</span></span>
+    ${S.js === 'on' ? filterPanel() : ''}
+    ${chips()}
+  </div>`;
+  if (S.js === 'off') { h += noJsFilters(); }
+  if (S.js === 'off' && canDecide()) { h += decisionFields('confirm', true); }
+  // The rows.
+  const pages = Math.max(1, Math.ceil(rows.length / PER));
+  if (S.page >= pages) { S.page = pages - 1; }
+  const pageRows = rows.slice(S.page * PER, S.page * PER + PER);
+  h += `<div class="ea-region" aria-busy="${S.busy}">${S.busy ? '<div class="ea-progress"></div>' : ''}<div class="ea-dim">`;
+  if (!all.length) {
+    h += '<div class="ea-empty"><b>Nothing waits for a decision</b><div class="sm">New applications appear here as they arrive.</div></div>';
+  } else if (!rows.length) {
+    h += '<div class="ea-empty sm">No application matches these filters. <button type="button" class="btn-link" data-act="clearall">Clear filters</button></div>';
+  } else if (phone) {
+    h += cards(pageRows);
+  } else {
+    h += grid(pageRows);
+  }
+  h += '</div></div>';
+  if (rows.length > PER) {
+    let p = '';
+    for (let i = 0; i < pages; i++) { p += `<button type="button" data-page="${i}" ${i === S.page ? 'aria-current="page"' : ''}>${i + 1}</button>`; }
+    h += `<div class="ea-foot"><span>Showing ${S.page * PER + 1}&ndash;${Math.min(rows.length, S.page * PER + PER)} of ${rows.length}</span>
+      <nav class="ea-pager" aria-label="Pages"><button type="button" data-page="${S.page - 1}" ${S.page ? '' : 'disabled'}>Previous</button>${p}<button type="button" data-page="${S.page + 1}" ${S.page < pages - 1 ? '' : 'disabled'}>Next</button></nav></div>`;
+  }
+  return h;
+}
+function chips() {
+  const c = [];
+  if (S.qApplied.length >= 2) { c.push(['q', 'Name: ' + S.qApplied]); }
+  S.groups.forEach(id => { const g = groupsOf().find(x => x.id === id); c.push(['g' + id, 'Group: ' + g.name]); });
+  if (S.city) { c.push(['city', 'City/town: ' + S.city]); }
+  if (S.from || S.to) { c.push(['date', 'Applied: ' + (S.from || '…') + ' to ' + (S.to || '…')]); }
+  if (!c.length) { return '<div class="ea-chips" hidden></div>'; }
+  return `<div class="ea-chips">${c.map(([k, l]) => `<button type="button" class="ea-chip" data-chip="${k}" aria-label="Remove the filter ${esc(l)}"><span>${esc(l)}</span>${ICON.x}</button>`).join('')}<button type="button" class="ea-clearall" data-act="clearall">Clear all</button></div>`;
+}
+function groupFacet() {
+  const groups = groupsOf().filter(g => S.reader !== 'moderator' || MOD_GROUPS[S.size].has(g.id));
+  const count = id => scoped().filter(r => r.group.some(g => g.id === id)).length;
+  if (groups.length <= 8) {
+    return `<div class="ea-opts">${groups.map(g => `<button type="button" class="ea-opt" data-grp="${g.id}" aria-pressed="${S.groups.has(g.id)}">${esc(g.name)} <small>${count(g.id)}</small></button>`).join('')}</div>`;
+  }
+  const groupings = [...new Set(groups.map(g => g.grouping))];
+  let list = groups.filter(g => (!S.grouping || g.grouping === S.grouping) && (!S.groupq || fold(g.name).includes(fold(S.groupq))));
+  const pinned = groups.filter(g => S.groups.has(g.id));
+  list = list.filter(g => !S.groups.has(g.id));
+  const shown = list.slice(0, 50);
+  const row = g => `<button type="button" class="ea-optrow${S.groups.has(g.id) ? ' pinned' : ''}" data-grp="${g.id}" aria-pressed="${S.groups.has(g.id)}"><span class="box">${ICON.tick}</span>${esc(g.name)}<small>${count(g.id)}</small></button>`;
+  return `<div class="ea-inline"><input class="ea-input" type="search" data-fk="groupq" placeholder="Search ${groups.length} groups" value="${esc(S.groupq)}">
+    <select class="ea-select" data-fk="grouping" aria-label="Grouping"><option value="">Every grouping</option>${groupings.map(x => `<option ${S.grouping === x ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></div>
+    <div class="ea-optlist" data-keep="glist">${pinned.map(row).join('')}${shown.map(row).join('')}${list.length > 50 ? `<div class="sub" style="padding:6px 8px">${list.length - 50} more: search to narrow</div>` : ''}${!pinned.length && !shown.length ? '<div class="sub" style="padding:6px 8px">No group matches.</div>' : ''}</div>`;
+}
+function filterPanel() {
+  if (!S.panel) { return ''; }
+  return `<div class="ea-fpanel" role="dialog" aria-label="Filters"><div class="body">
+    <div class="ea-fgroup"><div class="gl"><span>Group</span>${S.groups.size ? `<span>${S.groups.size} chosen</span>` : ''}</div>${groupFacet()}</div>
+    <div class="ea-fgroup"><div class="gl">City/town</div><input class="ea-input" style="width:100%" data-fk="city" value="${esc(S.city)}" placeholder="Any"></div>
+    <div class="ea-fgroup"><div class="gl">Applied</div><div class="ea-inline"><input class="ea-input" type="date" data-fk="from" value="${S.from}" aria-label="Applied from"><input class="ea-input" type="date" data-fk="to" value="${S.to}" aria-label="Applied to"></div></div>
+    </div><div class="foot"><button type="button" class="btn btn-outline-secondary btn-sm" data-act="clearall">Clear filters</button><button type="button" class="btn btn-primary btn-sm" data-act="panel">Show ${listed().length}</button></div></div>`;
+}
+function noJsFilters() {
+  return `<details class="nojs"><summary>Filters${(S.groups.size || S.city || S.from || S.to) ? ' (in force)' : ''}</summary><div class="in">
+    <div class="fld"><label>Search by name</label><input class="ea-input" style="width:100%" data-fk="q" value="${esc(S.q)}"></div>
+    <div class="fld"><label>Group</label><select class="ea-select" style="width:100%" data-fk="nojsgroup"><option value="">Any group</option>${groupsOf().slice(0, 40).map(g => `<option value="${g.id}" ${S.groups.has(g.id) ? 'selected' : ''}>${esc(g.name)}</option>`).join('')}</select></div>
+    <div class="fld"><label>City/town</label><input class="ea-input" style="width:100%" data-fk="city" value="${esc(S.city)}"></div>
+    <div class="fld"><label>Applied from</label><input class="ea-input" style="width:100%" type="date" data-fk="from" value="${S.from}"></div>
+    <div class="fld"><label>Applied to</label><input class="ea-input" style="width:100%" type="date" data-fk="to" value="${S.to}"></div>
+    <div class="fld" style="align-self:end"><button type="button" class="btn btn-outline-secondary" data-act="applynojs">Apply filters</button></div>
+    </div></details>`;
+}
+function grid(rows) {
+  const cd = canDecide();
+  const allSel = rows.length && rows.every(r => S.sel.has(r.id));
+  const sortTh = (k, l, cls, w) => `<th class="${cls}" style="width:${w}px" ${S.sort === k ? `aria-sort="${S.dir > 0 ? 'ascending' : 'descending'}"` : ''}><button type="button" class="sortbtn" data-sort="${k}">${l}${S.sort === k ? `<span class="arrow">${S.dir > 0 ? '▲' : '▼'}</span>` : ''}</button></th>`;
+  let h = `<div class="ea-gridwrap" data-keep="grid"><table class="qt"><thead><tr>
+    ${cd ? `<th class="fx0"><input type="checkbox" class="ea-check" data-act="selall" aria-label="Select all on this page" ${allSel ? 'checked' : ''}></th>` : ''}
+    ${sortTh('name', 'Applicant', 'fx1' + (cd ? '' : ' fx1-0'), 330)}${site() ? '<th style="width:230px">Course and method</th>' : ''}<th style="width:170px">Group</th>${sortTh('applied', 'Applied', '', 130)}
+    <th style="width:300px">Answers</th><th style="width:300px">Comment</th></tr></thead><tbody>`;
+  rows.forEach(r => {
+    const sel = S.sel.has(r.id);
+    h += `<tr class="${sel ? 'is-sel' : ''}">
+      ${cd ? `<td class="fx0"><input type="checkbox" class="ea-check" data-sel="${r.id}" aria-label="Select ${esc(r.name)}" ${sel ? 'checked' : ''}></td>` : ''}
+      <td class="fx1" ${cd ? '' : 'style="left:0"'}><div class="appl">${avatar(r)}<div class="who"><div class="l1"><a class="name" href="#profile">${esc(r.name)}</a>${statusLabel(r)}</div>
+        <span class="sub one">${esc(r.email)}</span></div><a class="btn btn-sm btn-outline-secondary" href="#review-${r.id}">Review</a></div></td>
+      ${site() ? `<td>${methodCell(r)}</td>` : ''}<td><span class="one">${groupCell(r)}</span></td>
+      <td><span class="one num">${age(r.applied)}</span><span class="sub one">${fdate(r.applied)}</span></td>
+      <td><span class="one">${answersLine(r)}</span></td>
+      <td><span class="clamp2" title="${esc(r.comment)}">${r.comment ? esc(r.comment) : '<span class="sub">No comment</span>'}</span></td></tr>`;
+  });
+  return h + '</tbody></table></div>';
+}
+function cards(rows) {
+  const cd = canDecide();
+  return '<div class="qcards">' + rows.map(r => `<article class="qcard${S.sel.has(r.id) ? ' is-sel' : ''}"><div class="top">
+      ${cd ? `<input type="checkbox" class="ea-check" data-sel="${r.id}" aria-label="Select ${esc(r.name)}" ${S.sel.has(r.id) ? 'checked' : ''}>` : ''}
+      ${avatar(r)}<div class="who"><a class="name" href="#profile">${esc(r.name)}</a> ${statusLabel(r)}<div class="sub">${esc(r.email)}</div></div></div>
+      ${site() ? `<div class="ln">${esc(METHODS[r.method].course)} · ${esc(METHODS[r.method].name)}${METHODS[r.method].deciding ? ' <span class="ea-status ea-status--warning">Grants a deciding role</span>' : ''}</div>` : ''}
+      <div class="ln">${groupCell(r)} · <span class="num">applied ${age(r.applied)} ago</span></div>
+      <div class="ln">${answersLine(r)}</div>
+      ${r.comment ? `<div class="ln clamp2">${esc(r.comment)}</div>` : ''}
+      <div class="act"><a class="btn btn-sm btn-outline-secondary" href="#review-${r.id}">Review</a></div></article>`).join('') + '</div>';
+}
+function footerA() {
+  if (!canDecide()) { return ''; }
+  const n = [...S.sel].length, dis = n ? '' : 'aria-disabled="true"';
+  // Core's bar is 80 px with overflow hidden: on a phone it keeps one line, with the short labels.
+  const phone = S.vp === 'phone';
+  return `<div class="ea-footer" role="region" aria-label="Decide the selected applications">
+    <span class="cnt" aria-live="polite">${n} selected${phone ? '' : ' on this page'}</span>${n && !phone ? '<button type="button" class="btn-link sm" data-act="clearsel">Clear selection</button>' : ''}
+    <span class="sp"></span><div class="acts">
+      <button type="button" class="btn btn-outline-danger" data-decide="cancel" ${dis}>${phone ? 'Cancel' : 'Cancel applications'}</button>
+      <button type="button" class="btn btn-outline-secondary" data-decide="wait" ${dis}>Defer</button>
+      <button type="button" class="btn btn-primary" data-decide="confirm" ${dis}>Confirm</button></div></div>`;
+}
+
+/* ---------- The decision fields: the sheet's body with JavaScript, a details above the grid without. ---------- */
+function decisionFields(action, nojs, opt = {}) {
+  const groups = S.reader === 'moderator' ? groupsOf().filter(g => MOD_GROUPS[S.size].has(g.id)) : groupsOf();
+  const showGroups = action === 'confirm' && !site();
+  const gsel = groups.length > 8
+    ? `<input class="ea-input" style="width:100%" placeholder="Search ${groups.length} groups" aria-label="Search groups"><div class="help">Above 8 groups the chooser searches (RP-D18); the method's own groups are ticked.</div>`
+    : `<div class="gpicks">${groups.map((g, i) => `<button type="button" class="ea-opt" aria-pressed="${i === 0}" data-gpick>${esc(g.name)}</button>`).join('')}</div>`;
+  const f = `
+    ${showGroups || (nojs && !site()) ? `<div class="fld"><div class="lab">Groups to join on approval</div>${gsel}<div class="help">Leave as it is to use the groups configured on the enrolment method.${S.reader === 'moderator' ? ' The method’s other groups stay.' : ''}</div></div>
+    <div class="fld"><label for="f-role">Role to assign on approval</label><select class="ea-select" id="f-role"><option>Use the enrolment method’s role</option><option>Student</option><option>Non-editing teacher</option></select></div>` : ''}
+    ${opt.noMessage ? '' : `<div class="fld"><label for="f-msg">Message to the applicant${nojs ? '' : 's'}</label><textarea id="f-msg" placeholder="Optional"></textarea><div class="help">Included in the message they receive.${nojs && site() ? ' One message reaches every application you decide; decide each method’s applications separately to word them differently.' : ''}</div></div>`}
+    <div class="fld"><label for="f-note">Note for the record</label><textarea id="f-note"></textarea><div class="help">Kept with the application for whoever looks at it next. The applicant never sees it.</div></div>`;
+  if (nojs) {
+    return `<details class="nojs" open><summary>Decision options: applied to every application you decide</summary><div class="in">${f}</div></details>`;
+  }
+  return f;
+}
+function openSheet(action) {
+  const sel = DATA[S.size].filter(r => S.sel.has(r.id));
+  const n = sel.length;
+  const verb = {confirm: 'Confirm', wait: 'Defer', cancel: 'Cancel'}[action];
+  const noun = n === 1 ? 'application' : 'applications';
+  const names = rs => rs.slice(0, 5).map(r => `<li>${avatar(r, 24)}${esc(r.name)}${rs.twice && rs.twice.has(r.name) ? ' <span class="sub">(also in the other section)</span>' : ''}</li>`).join('') + (rs.length > 5 ? `<li class="sub">and ${rs.length - 5} more</li>` : '');
+  const byMethod = [];
+  if (site()) { sel.forEach(r => { let b = byMethod.find(x => x.m === r.method); if (!b) { b = {m: r.method, rows: []}; byMethod.push(b); } b.rows.push(r); }); }
+  const counts = {}; sel.forEach(r => { counts[r.name] = (counts[r.name] || 0) + 1; });
+  const twice = new Set(Object.keys(counts).filter(k => counts[k] > 1));
+  let body;
+  if (byMethod.length > 1) {
+    body = `<div class="ea-alert warn" role="status">This selection spans ${byMethod.length} enrolment methods. Each approval uses its own method’s role and groups.</div>`
+      + byMethod.map(b => { const m = METHODS[b.m]; b.rows.twice = twice; return `<section class="msec"><div class="mhead"><b>${esc(m.name)}</b> <span class="sub">· ${esc(m.course)} · ${b.rows.length}</span>${m.deciding ? ' <span class="ea-status ea-status--warning">Grants a deciding role</span>' : ''}</div>
+        <ul class="who-list">${names(b.rows)}</ul>${action === 'confirm' ? `<p class="sub" style="margin:0 0 8px">${esc(m.approval)}</p>` : ''}
+        <div class="fld"><label for="f-msg-${b.m}">Message to these applicants</label><textarea id="f-msg-${b.m}" placeholder="Optional"></textarea></div></section>`; }).join('')
+      + `<p class="sub">Choose groups or the role from each method’s own queue or the review page.</p>` + decisionFields(action, false, {noMessage: true});
+  } else {
+    const one = byMethod[0] ? METHODS[byMethod[0].m] : null;
+    body = `<ul class="who-list">${names(sel)}</ul>`
+      + (one ? `<p class="sub" style="margin:0 0 8px">${esc(one.name)} · ${esc(one.course)}${one.deciding ? ' <span class="ea-status ea-status--warning">Grants a deciding role</span>' : ''}${action === 'confirm' ? '<br>' + esc(one.approval) : ''}</p>` : '')
+      + (action === 'cancel' ? '' : '') + decisionFields(action, false);
+  }
+  const scrim = document.getElementById('scrim');
+  scrim.className = 'ea-scrim' + (S.vp === 'phone' ? ' phone' : '');
+  scrim.innerHTML = `<div class="ea-sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-t">
+    <div class="hd"><h3 id="sheet-t">${verb} ${n} ${noun}</h3><button type="button" class="ea-x" data-act="closesheet" aria-label="Back">✕</button></div>
+    <div class="bd">
+      ${action === 'cancel' ? `<div class="dangerline">Cancelling removes the enrolment and the applicant’s comment. The record of the application stays in the report.</div>` : ''}
+      ${action === 'wait' ? `<p class="sm muted" style="margin-top:0">Deferred applications stay in this queue and keep their place in the applicant limit until someone decides them.</p>` : ''}
+      ${body}</div>
+    <div class="ft"><button type="button" class="btn btn-outline-secondary" data-act="closesheet">Back</button>
+      <button type="button" class="btn ${action === 'cancel' ? 'btn-danger' : 'btn-primary'}" data-commit="${action}">${verb} ${n}</button></div></div>`;
+  scrim.hidden = false;
+  scrim.querySelector('textarea, button[data-commit]').focus();
+}
+function commit(action) {
+  const n = S.sel.size;
+  const rows = DATA[S.size];
+  if (action === 'wait') { rows.forEach(r => { if (S.sel.has(r.id)) { r.status = 2; } }); }
+  else { DATA[S.size] = rows.filter(r => !S.sel.has(r.id)); }
+  S.sel.clear();
+  S.flash = `${n} ${n === 1 ? 'application' : 'applications'} ${{confirm: 'confirmed', wait: 'deferred', cancel: 'cancelled'}[action]}.`;
+  document.getElementById('scrim').hidden = true;
+  render();
+  window.scrollTo({top: document.getElementById('device').offsetTop - 70});
+}
+
+/* ---------- Today ---------- */
+function renderToday() {
+  const rows = scoped();
+  let h = '<div class="crumbs">Enrol Confirm / Enrol Confirm</div><h2>Python for data work 2027</h2><h2 style="font-size:1.25rem;margin-top:12px">Enrol Confirm <span class="flagnote">title case</span></h2>';
+  h += '<p class="sm">Applications badged as on the waiting list have been deferred.</p>';
+  h += `<div class="t-card"><div class="t-tile"><b>${rows.filter(r => r.status === 1 || r.status === 2).length}</b>Awaiting decision</div><div class="t-tile"><b>${rows.filter(r => r.status === 2).length}</b>Deferred to the waiting list</div>
+    <div class="t-tile"><b>4 of 30</b>Places taken (approved)<span class="t-meter"><span style="width:13%"></span></span></div><div class="t-tile"><b>11 of 40</b>Applications held<span class="t-meter"><span style="width:27%"></span></span></div>
+    <div class="t-tile">Status<span><span class="t-badge ok">Open</span></span></div></div>`;
+  h += `<div class="t-form">${['Search', 'Application status', 'Group', 'Applied from', 'Applied to'].map(l => `<div><label>${l}</label><div class="box"></div></div>`).join('')}<button class="go" type="button">Apply filters</button></div>`;
+  h += `<p class="flagnote">The first row starts here: 723 px down on a desktop, 1,099 px on a phone (measured).</p><div class="t-wrap"><table class="t-table"><thead><tr><th>☐</th><th>First name / Last name</th><th>Group</th><th>Application date</th><th>Submitted with the application</th><th>Why would you like to join this course?</th><th class="flag"></th></tr></thead><tbody>`;
+  rows.slice(0, 8).forEach(r => {
+    h += `<tr><td>☐</td><td style="min-width:160px"><div style="display:flex;gap:8px">${avatar(r)}<div><a href="#profile">${esc(r.name)}</a> ${r.status === 2 ? '<span class="t-badge wl">Waiting list</span>' : ''}${r.key ? ` <span class="t-badge pr">${KEY[r.key][1]}</span>` : ''}<div class="sm"><b>${esc(r.email)}</b></div></div></div></td>
+      <td>${r.group.length ? esc(r.group[0].name) : 'Without a group'}</td><td>${age(r.applied)}<br>${fdate(r.applied)}</td>
+      <td style="width:150px">${r.answers.map(([k, v]) => `<span class="t-pill"><b>${esc(k)}</b>${esc(v)}</span>`).join('')}</td><td style="width:90px">${esc(r.comment)}</td><td class="flag"><a href="#review">Review</a></td></tr>`;
+  });
+  h += '</tbody></table></div><p class="flagnote">Rows of 264&ndash;283 px; the Review link is the last column, off screen at 804 px.</p>';
+  h += `<div class="t-opts"><p class="flagnote">The decision options start here: 2,855 px down with 7 rows.</p>${decisionFields('confirm', false)}</div>`;
+  return h;
+}
+function footerToday() {
+  return '<div class="t-foot"><span class="muted">0 selected on this page</span><span>With selected users...</span><select><option>Choose...</option><option>Confirm requests</option><option>Defer requests</option><option>Cancel requests</option></select><button class="btn btn-primary" type="button" aria-disabled="true">Go</button></div>';
+}
+
+/* ---------- Notes ---------- */
+function notes() {
+  const n = [
+    ['Read it like this', ['The picture is core’s <code>user_picture</code> (35 px, initials without a photo), linked to the profile; the name too (decided 2026-08-31).', 'The <b>Review</b> button sits in the fixed applicant cell, so it is on screen at any width (MQ-D7).', 'Status counts live in the segmented control and filter the queue (MQ-D3).']],
+    ['The sticky footer', ['Kept as core’s sticky footer (the owner’s request); three buttons replace the select and Go (MQ-D4).', 'With JavaScript a button opens the decision sheet: the options travel into it and back, so the page’s one form still posts (MQ-D5).', 'Cancelling asks, in the danger style (MQ-D6).']],
+    ['Mixed methods (Queue: Site-wide)', ['Only the site-wide and mentee queues can mix methods; a method’s own queue never does.', 'Select a student and a moderator application, then Confirm: the sheet splits by method, each with what approval does and its own message; the note is shared (MQ-D15).', 'A method whose role can decide carries “Grants a deciding role” (MQ-D16).']],
+    ['Without JavaScript', ['Filters are a details holding today’s GET form; chips stay links.', 'The decision options sit above the grid, open, and the footer’s three buttons post the selection directly, as today.']],
+  ];
+  return n.map(([t, l]) => `<div class="note"><h4>${t}</h4><ul>${l.map(x => `<li>${x}</li>`).join('')}</ul></div>`).join('');
+}
+
+/* ---------- Render ---------- */
+function render() {
+  const keepFocus = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.fk : null;
+  const caret = keepFocus ? document.activeElement.selectionStart : null;
+  const keep = {};
+  document.querySelectorAll('[data-keep]').forEach(e => { keep[e.dataset.keep] = [e.scrollLeft, e.scrollTop]; });
+  document.getElementById('device').classList.toggle('is-phone', S.vp === 'phone');
+  document.getElementById('pagebody').innerHTML = S.concept === 'A' ? renderA() : renderToday();
+  document.getElementById('footer').innerHTML = S.concept === 'A' ? footerA() : footerToday();
+  document.getElementById('notes').innerHTML = notes();
+  document.querySelectorAll('[data-keep]').forEach(e => { if (keep[e.dataset.keep]) { [e.scrollLeft, e.scrollTop] = keep[e.dataset.keep]; } });
+  const gw = document.querySelector('.ea-gridwrap');
+  if (gw) { const f = () => gw.classList.toggle('is-scrolled', gw.scrollLeft > 0); gw.addEventListener('scroll', f); f(); }
+  if (keepFocus) { const el = document.querySelector(`[data-fk="${keepFocus}"]`); if (el) { el.focus(); try { el.setSelectionRange(caret, caret); } catch (e) { /* Not a text field. */ } } }
+}
+let busyTimer = null, searchTimer = null;
+function refresh() {
+  // A refresh keeps the rows on screen, dimmed under a progress line; a newer one supersedes it.
+  if (S.js === 'off') { render(); return; }
+  S.busy = true; S.flash = null; render();
+  clearTimeout(busyTimer);
+  busyTimer = setTimeout(() => { S.busy = false; render(); }, 400);
+}
+
+document.addEventListener('click', e => {
+  const sw = e.target.closest('[data-switch] button');
+  if (sw) {
+    const k = sw.parentElement.dataset.switch; S[k] = sw.dataset.v;
+    sw.parentElement.querySelectorAll('button').forEach(b => b.setAttribute('aria-checked', b === sw));
+    if (k === 'size' || k === 'reader') { S.groups.clear(); S.sel.clear(); S.page = 0; S.grouping = ''; S.groupq = ''; S.flash = null; }
+    if (k === 'js') { S.panel = false; }
+    render(); return;
+  }
+  const t = e.target.closest('[data-status],[data-act],[data-sort],[data-page],[data-chip],[data-grp],[data-decide],[data-commit],[data-gpick],a[href^="#"]');
+  if (!t) { return; }
+  if (t.matches('a[href^="#"]')) { e.preventDefault(); return; }
+  if (t.dataset.status !== undefined) { S.status = t.dataset.status; S.page = 0; refresh(); return; }
+  if (t.dataset.sort) { S.dir = S.sort === t.dataset.sort ? -S.dir : 1; S.sort = t.dataset.sort; refresh(); return; }
+  if (t.dataset.page !== undefined) { if (!t.disabled) { S.page = +t.dataset.page; refresh(); } return; }
+  if (t.dataset.grp) { const id = +t.dataset.grp; S.groups.has(id) ? S.groups.delete(id) : S.groups.add(id); S.page = 0; refresh(); return; }
+  if (t.dataset.gpick !== undefined) { t.setAttribute('aria-pressed', t.getAttribute('aria-pressed') !== 'true'); return; }
+  if (t.dataset.chip) {
+    const k = t.dataset.chip;
+    if (k === 'q') { S.q = ''; S.qApplied = ''; } else if (k === 'city') { S.city = ''; } else if (k === 'date') { S.from = ''; S.to = ''; } else { S.groups.delete(+k.slice(1)); }
+    S.page = 0; refresh(); return;
+  }
+  if (t.dataset.decide) {
+    if (t.getAttribute('aria-disabled') === 'true') { return; }
+    if (S.js === 'on') { openSheet(t.dataset.decide); } else { commit(t.dataset.decide); }
+    return;
+  }
+  if (t.dataset.commit) { commit(t.dataset.commit); return; }
+  const a = t.dataset.act;
+  if (a === 'panel') { S.panel = !S.panel; render(); }
+  else if (a === 'clearall') { S.q = ''; S.qApplied = ''; S.groups.clear(); S.city = ''; S.from = ''; S.to = ''; S.panel = false; S.page = 0; refresh(); }
+  else if (a === 'clearsel') { S.sel.clear(); render(); }
+  else if (a === 'closesheet') { document.getElementById('scrim').hidden = true; document.querySelector('[data-decide]')?.focus(); }
+  else if (a === 'applynojs') { S.qApplied = S.q; S.page = 0; render(); }
+});
+document.addEventListener('change', e => {
+  const t = e.target;
+  if (t.dataset.sel) { const id = +t.dataset.sel; t.checked ? S.sel.add(id) : S.sel.delete(id); render(); return; }
+  if (t.dataset.act === 'selall') {
+    const rows = listed().slice(S.page * PER, S.page * PER + PER);
+    rows.forEach(r => t.checked ? S.sel.add(r.id) : S.sel.delete(r.id)); render(); return;
+  }
+  const k = t.dataset.fk;
+  if (k === 'grouping') { S.grouping = t.value; render(); }
+  else if (k === 'from' || k === 'to') { S[k] = t.value; if (S.js === 'on') { S.page = 0; refresh(); } }
+  else if (k === 'nojsgroup') { S.groups.clear(); if (t.value) { S.groups.add(+t.value); } }
+});
+document.addEventListener('input', e => {
+  const k = e.target.dataset.fk;
+  if (!k) { return; }
+  if (k === 'q') {
+    S.q = e.target.value;
+    if (S.js === 'off') { return; }
+    clearTimeout(searchTimer);
+    const want = S.q.trim().length >= 2 ? S.q.trim() : '';
+    if (want === S.qApplied) { return; }
+    searchTimer = setTimeout(() => { S.qApplied = want; S.page = 0; refresh(); }, 300);
+  } else if (k === 'groupq') { S.groupq = e.target.value; render(); }
+  else if (k === 'city') { S.city = e.target.value; if (S.js === 'on') { clearTimeout(searchTimer); searchTimer = setTimeout(() => { S.page = 0; refresh(); }, 300); } }
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    const scrim = document.getElementById('scrim');
+    if (!scrim.hidden) { scrim.hidden = true; return; }
+    if (S.panel) { S.panel = false; render(); }
+  }
+  if (e.key === 'Enter' && e.target.dataset && e.target.dataset.fk === 'q' && S.js === 'off') { S.qApplied = S.q; S.page = 0; render(); }
+});
+document.getElementById('scrim').addEventListener('click', e => { if (e.target.id === 'scrim') { e.currentTarget.hidden = true; } });
+render();
+</script>
+</body>
+</html>
