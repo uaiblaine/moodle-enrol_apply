@@ -626,6 +626,21 @@ backup/                      group mappings, comments and the durable trail, see
   `scope_deferred()`, over `scope_where()`, so it agrees with "awaiting decision" beside it.
   Gates `QG1`-`QG27`.
 
+- **Two narrowing rules came with the moderator recruitment method (G3, `docs/design/applicant-group-choice.md`
+  C-D20, C-D28), and both live in `groupscope` alone.** A membership stamped `enrol_apply` narrows a
+  decider only when the role assignment the same instance (itemid) gave them is of a deciding role
+  (`\enrol_apply\local\decidingrole`, the role's capability as core resolves it in the course,
+  overrides and prohibits included): a student-and-moderator decides only for the groups they
+  moderate. And a method whose "Who decides" is all groups (`instanceoptions` deciders) is seen by
+  no narrowed reader: `decided_by_groups_where()` is the SQL half, `decided_by_all_groups()` the
+  per-row half, applied in `where()`, `record_where()`, `allows()`, `allows_group()` and
+  `choosable_groups()`. **The filters use `group_where()` / `record_group_where()`, the group-only
+  predicates**, so a reader who sees every group still filters such a method's rows by group:
+  never swap one for the other. The lock beside them is `allow_apply()`'s: a learner method refuses
+  whoever holds an application or an active enrolment through a deciding method of the course,
+  and `submit_application()` takes `enrol_apply_course` on `<courseid>_<userid>` after the method's
+  lock, in that order.
+
 - **The mentee path is Moodle's mentor pattern, not groups.** With no `id` and no
   `userenrol`, the queue falls back to the users the current user holds a role assignment
   over *in those users' own contexts* — the same enumeration core uses in

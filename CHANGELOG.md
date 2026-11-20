@@ -4,10 +4,42 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased (2026112000)
+## Unreleased (2026112001)
 
 ### Added
 
+- **Who applies as a moderator cannot apply as a student** (`docs/design/applicant-group-choice.md`,
+  stage G3, C-D29). A method is a *deciding* method when the role it grants on approval holds
+  `enrol/apply:manageapplications` in the course (overrides and prohibits resolved as core resolves
+  a role's capability), and a *learner* method otherwise. A learner method refuses somebody who has
+  an application awaiting a decision, or an active enrolment, through a deciding method of the same
+  course: "You have applied to take part in this course in another role, so you cannot apply here."
+  The refusal is in `allow_apply()`, so the enrolment page, the form and the write door all apply
+  it. The other order stays open: a student may apply to moderate. The write door takes a second
+  lock, on the course and the applicant, so two applications sent at once to the two methods cannot
+  both pass.
+- **The Groups section asks one question** (C-D6): "How is an applicant's group decided?" A
+  decider chooses on approval, the applicant chooses from a list, or the applicant types a group
+  enrolment key. Under the list: the groups offered (a group only its members see is marked as never
+  offered), "Add the groups of a grouping" (copied once, on save), "The applicant must choose",
+  "Group seats apply to this method" (C-D26) and "And with a group key?" (no, or a valid key enrols
+  at once). Under the key: what the key does, as before. Always: **Who decides applications to this
+  method?** and the groups joined on approval. A required choice with nothing to offer, and a group
+  or grouping of another course, are refused. Nothing stored changes meaning: the answer maps onto
+  the key mode and the choice option, and a choice never comes with a key-only mode.
+- **"Who decides applications to this method?"** (C-D20). Set to "Only those who see every group",
+  a method's applications reach no decider narrowed by separate groups, whatever their group: not in
+  the queue, the review page, the previous/next walk, the group choosers, the new-application
+  notice or the course report. For a method that recruits moderators, so a moderator never decides
+  on another.
+- **Hide a method's card from people outside its cohort** (C-D25), in **Who may apply** once a
+  cohort is chosen. Somebody who already applied still sees theirs. `enrol_apply_plugin::hides_card_from()`
+  answers the same question for other plugins (theme_dimensions, for a visitor).
+- **Warnings in the Groups section** (C-D27): a method granting a role that decides, decided by each
+  group's deciders ("a moderator of a group could approve another moderator"); a group offered here
+  that another method of the course joins on approval with a role that decides; and the
+  separate-groups notice now covers "No preference". The summary strip says how many groups the
+  applicants choose among, and when only those who see every group decide.
 - **The applicant chooses a group when applying** (`docs/design/applicant-group-choice.md`, stage
   G4). Where a method lets its applicants choose (optional or required) and no key-only mode is on,
   the application form asks for a **Group** after the method's text and before the details: in the
@@ -33,6 +65,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **A membership this plugin wrote on approval scopes a decider only through a deciding role**
+  (C-D28, decided (b)). In a separate-groups course, a group membership stamped `enrol_apply` counts
+  towards the groups whose applications somebody decides only when the role the same method gave
+  them decides there; a student of Evening A who moderates Morning C decides Morning C alone.
+  Memberships made by hand or by another plugin keep core's rule.
 - **The method's settings form is redrawn in seven sections** (`docs/design/applicant-group-choice.md`,
   stage G1, C-D15 to C-D18; no new setting). General; When and how many; Who may apply;
   Application form; Groups; After approval; Notifications, each a collapsible section with its own

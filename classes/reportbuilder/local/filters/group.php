@@ -25,7 +25,7 @@ use enrol_apply\local\groupscope;
  *
  * A select over the groups the report offers the reader, matching a record whose keygroupid is the
  * chosen group or whose joinedgroups names it, with decidedgroups read where joinedgroups is not
- * known: the shape of the separate-groups narrowing, {@see groupscope::record_where()}, for one
+ * known: the shape of the separate-groups narrowing, {@see groupscope::record_group_where()}, for one
  * group, so the filter and the narrowing cannot disagree on which records belong to a group. Core's
  * core_group entity has no group-id filter, and a plain select compiles to "field = value", which
  * a comma-separated list cannot answer.
@@ -85,7 +85,7 @@ class group extends select {
         }
 
         $alias = database::generate_alias();
-        [$where, $params] = groupscope::record_where($alias, [(int) $value], database::generate_param_name());
+        [$where, $params] = groupscope::record_group_where($alias, [(int) $value], database::generate_param_name());
 
         return [
             "EXISTS (

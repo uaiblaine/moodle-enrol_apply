@@ -155,10 +155,27 @@ class enrol_apply_edit_form extends moodleform {
         if (count($cohorts) > 1) {
             $mform->addElement('select', 'customint5', get_string('cohortonly', 'enrol_apply'), $cohorts);
             $mform->addHelpButton('customint5', 'cohortonly', 'enrol_apply');
+
+            /* C-D25 G-b: the card is hidden from whoever is outside the cohort. Shown only once a
+               cohort is chosen, the one case it means anything (enrol_apply_plugin::hides_card_from()). */
+            /* A select rather than a checkbox: an unticked checkbox posts nothing, and a field that
+               posts nothing reads as its default, which here is the opposite answer. */
+            $mform->addElement('select', 'hidecard', get_string('hidecard', 'enrol_apply'), [
+                0 => get_string('hidecard_no', 'enrol_apply'),
+                1 => get_string('hidecard_yes', 'enrol_apply'),
+            ]);
+            $mform->setType('hidecard', PARAM_INT);
+            $mform->setDefault('hidecard', 0);
+            $mform->addHelpButton('hidecard', 'hidecard', 'enrol_apply');
+            $mform->hideIf('hidecard', 'customint5', 'eq', 0);
         } else {
             $mform->addElement('hidden', 'customint5');
             $mform->setType('customint5', PARAM_INT);
             $mform->setConstant('customint5', 0);
+            // With no cohort there is no card to hide, and the stored option is cleared with it.
+            $mform->addElement('hidden', 'hidecard');
+            $mform->setType('hidecard', PARAM_INT);
+            $mform->setConstant('hidecard', 0);
             // The section would otherwise be an empty fieldset.
             $mform->addElement(
                 'static',
@@ -241,44 +258,114 @@ class enrol_apply_edit_form extends moodleform {
         $mform->addHelpButton('sectiongroups', 'sectiongroups', 'enrol_apply');
         $mform->setExpanded('sectiongroups', true);
 
-        // Groups the applicant joins once their application is approved.
-        $groups = [];
-        foreach (groups_get_all_groups($instance->courseid) as $group) {
-            $groups[$group->id] = format_string($group->name, true, ['context' => $context]);
-        }
-        $groupselect = $mform->addElement('autocomplete', 'groupselect', get_string('group', 'enrol_apply'), $groups);
-        $groupselect->setMultiple(true);
-        $mform->addHelpButton('groupselect', 'group', 'enrol_apply');
+        $question = \enrol_apply\local\groupquestion::class;
+        $courseid = (int) $instance->courseid;
+        $separate = $this->separate_groups($courseid);
 
-        /* What a group's enrolment key does: nothing, admit, or send for review. The groups that
-           carry a key are listed beneath it, the keys themselves never; hideIf because the list
-           only matters while the option is on. */
+        /* One question for what used to be two independent selects (C-D6): who decides an
+           applicant's group. edit.php maps the answer onto the two stored settings, customchar1
+           and the groupchoice option, so no combination nobody meant can be saved. */
+        $answers = [];
+        foreach ($question::ANSWERS as $answer) {
+            $answers[] = $mform->createElement(
+                'radio',
+                'groupdecided',
+                '',
+                get_string('groupdecided_' . $answer, 'enrol_apply'),
+                $answer
+            );
+        }
+        $mform->addGroup($answers, 'groupdecidedgroup', get_string('groupdecided', 'enrol_apply'), ' ', false);
+        $mform->addHelpButton('groupdecidedgroup', 'groupdecided', 'enrol_apply');
+        $mform->setType('groupdecided', PARAM_ALPHA);
+        $mform->setDefault('groupdecided', $question::DECIDER);
+
+        // The applicant chooses from a list.
+        $groups = [];
+        $offered = [];
+        foreach (groups_get_all_groups($courseid) as $group) {
+            $groups[$group->id] = format_string($group->name, true, ['context' => $context]);
+            /* Kept in the list rather than refused, so the offer survives a visibility change, but
+               said: a group only its members see is never offered to an applicant (C-D7). */
+            $offered[$group->id] = (int) $group->visibility === GROUPS_VISIBILITY_ALL
+                ? $groups[$group->id]
+                : get_string('groupofferhidden', 'enrol_apply', $groups[$group->id]);
+        }
+        $offer = $mform->addElement('autocomplete', 'groupoffer', get_string('groupoffer', 'enrol_apply'), $offered);
+        $offer->setMultiple(true);
+        $mform->setType('groupoffer', PARAM_INT);
+        $mform->addHelpButton('groupoffer', 'groupoffer', 'enrol_apply');
+        $mform->hideIf('groupoffer', 'groupdecided', 'neq', $question::CHOICE);
+
+        /* A grouping's groups are copied into the offer once, on save (C-D3): a live grouping
+           would change the offer with no edit of the method, which nothing records. */
+        $groupings = [0 => get_string('choosedots')];
+        foreach (groups_get_all_groupings($courseid) as $grouping) {
+            $groupings[$grouping->id] = format_string($grouping->name, true, ['context' => $context]);
+        }
+        $mform->addElement('select', 'groupoffergrouping', get_string('groupoffergrouping', 'enrol_apply'), $groupings);
+        $mform->setType('groupoffergrouping', PARAM_INT);
+        $mform->setDefault('groupoffergrouping', 0);
+        $mform->addHelpButton('groupoffergrouping', 'groupoffergrouping', 'enrol_apply');
+        $mform->hideIf('groupoffergrouping', 'groupdecided', 'neq', $question::CHOICE);
+
+        $mform->addElement('select', 'groupchoicerequired', get_string('groupchoicerequired', 'enrol_apply'), [
+            \enrol_apply\local\instanceoptions::CHOICE_REQUIRED => get_string('groupchoicerequired_yes', 'enrol_apply'),
+            \enrol_apply\local\instanceoptions::CHOICE_OPTIONAL => get_string('groupchoicerequired_no', 'enrol_apply'),
+        ]);
+        $mform->setType('groupchoicerequired', PARAM_INT);
+        $mform->setDefault('groupchoicerequired', \enrol_apply\local\instanceoptions::CHOICE_REQUIRED);
+        $mform->addHelpButton('groupchoicerequired', 'groupchoicerequired', 'enrol_apply');
+        $mform->hideIf('groupchoicerequired', 'groupdecided', 'neq', $question::CHOICE);
+
+        // A select for the reason given at hidecard: an unticked checkbox posts nothing.
+        $mform->addElement('select', 'groupseats', get_string('groupseatsoption', 'enrol_apply'), [
+            1 => get_string('groupseatsoption_yes', 'enrol_apply'),
+            0 => get_string('groupseatsoption_no', 'enrol_apply'),
+        ]);
+        $mform->setType('groupseats', PARAM_INT);
+        $mform->setDefault('groupseats', 1);
+        $mform->addHelpButton('groupseats', 'groupseatsoption', 'enrol_apply');
+        $mform->hideIf('groupseats', 'groupdecided', 'neq', $question::CHOICE);
+
+        // Only the mode that leaves the applicant a choice: in the key-only modes the key decides (C-D5).
+        $mform->addElement('select', 'choicekey', get_string('choicekey', 'enrol_apply'), [
+            \enrol_apply\local\groupkey::MODE_OFF => get_string('no'),
+            \enrol_apply\local\groupkey::MODE_ANY => get_string('groupkeys_any', 'enrol_apply'),
+        ]);
+        $mform->setType('choicekey', PARAM_ALPHA);
+        $mform->addHelpButton('choicekey', 'choicekey', 'enrol_apply');
+        $mform->hideIf('choicekey', 'groupdecided', 'neq', $question::CHOICE);
+
+        /* The applicant types a group enrolment key: what the key does, admit or send for review.
+           The groups that carry a key are listed beneath it, the keys themselves never. */
         $mform->addElement('select', 'customchar1', get_string('groupkeys', 'enrol_apply'), [
-            \enrol_apply\local\groupkey::MODE_OFF => get_string('groupkeys_off', 'enrol_apply'),
             \enrol_apply\local\groupkey::MODE_ANY => get_string('groupkeys_any', 'enrol_apply'),
             \enrol_apply\local\groupkey::MODE_REQUIRED => get_string('groupkeys_required', 'enrol_apply'),
             \enrol_apply\local\groupkey::MODE_REVIEW => get_string('groupkeys_review', 'enrol_apply'),
         ]);
         $mform->setType('customchar1', PARAM_ALPHA);
         $mform->addHelpButton('customchar1', 'groupkeys', 'enrol_apply');
+        $mform->hideIf('customchar1', 'groupdecided', 'neq', $question::KEY);
 
-        /* Read only in key-only mode (groupkey::announces_admissions()), so shown only there. A
-           hidden element is not posted on 5.3, and update_instance() writes only what it is
-           given, so switching modes keeps the stored answer. */
+        /* Read only in key-only mode (groupkey::announces_admissions()), so shown only there.
+           update_instance() writes only what it is given, so switching modes keeps the stored
+           answer. */
         $mform->addElement('select', 'customchar2', get_string('admissionnotice', 'enrol_apply'), [
             '' => get_string('no'),
             \enrol_apply\local\groupkey::NOTICE_ON => get_string('yes'),
         ]);
         $mform->setType('customchar2', PARAM_ALPHANUM);
         $mform->addHelpButton('customchar2', 'admissionnotice', 'enrol_apply');
+        $mform->hideIf('customchar2', 'groupdecided', 'neq', $question::KEY);
         $mform->hideIf('customchar2', 'customchar1', 'neq', \enrol_apply\local\groupkey::MODE_REQUIRED);
         $mform->addElement(
             'static',
             'groupkeysummary',
             get_string('groupkeysingroups', 'enrol_apply'),
-            $this->group_key_summary((int) $instance->courseid, $context)
+            $this->group_key_summary($courseid, $context)
         );
-        $mform->hideIf('groupkeysummary', 'customchar1', 'eq', \enrol_apply\local\groupkey::MODE_OFF);
+        $mform->hideIf('groupkeysummary', 'groupdecided', 'neq', $question::KEY);
 
         /* What key-only mode would do with this course as it stands: enrol nobody, or leave the
            applications made earlier waiting. Shown only while that mode is selected, because only
@@ -287,36 +374,44 @@ class enrol_apply_edit_form extends moodleform {
         $warnings = $this->key_only_warnings($instance);
         if ($warnings !== '') {
             $mform->addElement('static', 'keyonlywarnings', '', $warnings);
+            $mform->hideIf('keyonlywarnings', 'groupdecided', 'neq', $question::KEY);
             $mform->hideIf('keyonlywarnings', 'customchar1', 'neq', \enrol_apply\local\groupkey::MODE_REQUIRED);
         }
         // The same facts for the mode that sends a keyed application for review, worded for applying.
         $reviewwarnings = $this->key_only_warnings($instance, true);
         if ($reviewwarnings !== '') {
             $mform->addElement('static', 'keyreviewwarnings', '', $reviewwarnings);
+            $mform->hideIf('keyreviewwarnings', 'groupdecided', 'neq', $question::KEY);
             $mform->hideIf('keyreviewwarnings', 'customchar1', 'neq', \enrol_apply\local\groupkey::MODE_REVIEW);
-        }
-        /* In a separate-groups course an application without a key belongs to no group, so it
-           reaches only those who can access all groups (S3). Shown while the selected mode lets
-           such an application in; the two key-only modes never make one. */
-        if ($this->separate_groups((int) $instance->courseid)) {
-            $mform->addElement('static', 'groupscopekeyless', '', $OUTPUT->render_from_template('enrol_apply/groupkey_warnings', [
-                'warnings' => [['danger' => false, 'message' => get_string('groupscopekeyless', 'enrol_apply')]],
-            ]));
-            $mform->hideIf(
-                'groupscopekeyless',
-                'customchar1',
-                'in',
-                \enrol_apply\local\groupkey::MODE_REQUIRED . '|' . \enrol_apply\local\groupkey::MODE_REVIEW
-            );
         }
 
         // Self enrolment reads the same keys (G1), so they would enrol there without the questions.
-        if ($this->self_enrolment_takes_group_keys((int) $instance->courseid)) {
-            $mform->addElement('static', 'groupkeyselfkeys', '', $OUTPUT->render_from_template('enrol_apply/groupkey_warnings', [
+        if ($this->self_enrolment_takes_group_keys($courseid)) {
+            $selfkeys = $OUTPUT->render_from_template('enrol_apply/groupkey_warnings', [
                 'warnings' => [['danger' => false, 'message' => get_string('groupkeyselfkeys', 'enrol_apply')]],
-            ]));
-            $mform->hideIf('groupkeyselfkeys', 'customchar1', 'eq', \enrol_apply\local\groupkey::MODE_OFF);
+            ]);
+            $mform->addElement('static', 'groupkeyselfkeys', '', $selfkeys);
+            $mform->hideIf('groupkeyselfkeys', 'groupdecided', 'neq', $question::KEY);
+            // A choice with "a valid key enrols at once" reads the same keys.
+            $mform->addElement('static', 'groupkeyselfkeyschoice', '', $selfkeys);
+            $mform->hideIf('groupkeyselfkeyschoice', 'groupdecided', 'neq', $question::CHOICE);
+            $mform->hideIf('groupkeyselfkeyschoice', 'choicekey', 'eq', \enrol_apply\local\groupkey::MODE_OFF);
         }
+
+        // Always: who decides (C-D20), and the groups an approval joins.
+        $mform->addElement('select', 'deciders', get_string('deciders', 'enrol_apply'), [
+            \enrol_apply\local\instanceoptions::DECIDERS_GROUP => get_string('deciders_group', 'enrol_apply'),
+            \enrol_apply\local\instanceoptions::DECIDERS_ALLGROUPS => get_string('deciders_allgroups', 'enrol_apply'),
+        ]);
+        $mform->setType('deciders', PARAM_INT);
+        $mform->setDefault('deciders', \enrol_apply\local\instanceoptions::DECIDERS_GROUP);
+        $mform->addHelpButton('deciders', 'deciders', 'enrol_apply');
+
+        $groupselect = $mform->addElement('autocomplete', 'groupselect', get_string('group', 'enrol_apply'), $groups);
+        $groupselect->setMultiple(true);
+        $mform->addHelpButton('groupselect', 'group', 'enrol_apply');
+
+        $this->add_group_notices($instance, $separate);
 
         // Section 6: After approval.
         $mform->addElement('header', 'sectionafter', get_string('sectionafter', 'enrol_apply'));
@@ -426,9 +521,11 @@ class enrol_apply_edit_form extends moodleform {
      *
      * Whether it accepts applications (in allow_apply()'s order: disabled, not accepting new
      * ones, not open yet, closed, the applicant limit reached, then open, until the closing date
-     * when there is one), how many places are taken of the limit, and what a group enrolment key
-     * does. Each fact comes from the instance row or an existing reader; the cohort restriction
-     * is left out, because whether it lets somebody in depends on who asks.
+     * when there is one), how many places are taken of the limit, what a group enrolment key
+     * does, and where they apply, how many groups an applicant chooses among and that only those
+     * who see every group decide (C-D16, C-D20). Each fact comes from the instance row or an
+     * existing reader; the cohort restriction is left out, because whether it lets somebody in
+     * depends on who asks.
      *
      * @param stdClass $instance The saved {enrol} record.
      * @return string[] The facts, plain text.
@@ -470,6 +567,19 @@ class enrol_apply_edit_form extends moodleform {
             $facts[] = get_string('summarykeysreview', 'enrol_apply');
         } else {
             $facts[] = get_string('summarykeysany', 'enrol_apply');
+        }
+
+        /* The applicant's choice as the application form reads it (groupchoice::mode(), off in the
+           key-only modes), counting the offered groups that still exist in the course. */
+        if (\enrol_apply\local\groupchoice::mode($instance) !== \enrol_apply\local\instanceoptions::CHOICE_OFF) {
+            $facts[] = get_string(
+                'summarychoice',
+                'enrol_apply',
+                count(\enrol_apply\local\groupoffer::group_ids((int) $instance->id))
+            );
+        }
+        if (\enrol_apply\local\groupscope::decided_by_all_groups((int) $instance->id)) {
+            $facts[] = get_string('summarydecidersallgroups', 'enrol_apply');
         }
 
         return $facts;
@@ -598,6 +708,74 @@ class enrol_apply_edit_form extends moodleform {
         }
         if (!in_array((string) ($data['customchar2'] ?? ''), ['', \enrol_apply\local\groupkey::NOTICE_ON], true)) {
             $errors['customchar2'] = get_string('invaliddata', 'error');
+        }
+
+        return $this->validate_groups($data, $errors);
+    }
+
+    /**
+     * Reject a Groups section whose answer cannot be stored as meant (C-D6).
+     *
+     * The answer must be one of the three, and only the elements it reads are judged: a key mode
+     * for the key answer; for a choice, its key question (never a key-only mode, C-D5), whether
+     * the applicant must choose, groups and a grouping of this course, and at least one group to
+     * offer where the applicant must choose (the picked ones and the grouping's together). "Who
+     * decides" is judged whatever the answer. The groups are read again from the course rather
+     * than trusted from the element: an autocomplete with fixed options is the one element that
+     * could be turned into a free one, and groupoffer::set() refuses a foreign group too.
+     *
+     * @param array $data Submitted form data.
+     * @param array $errors Errors found so far.
+     * @return array The errors, with the Groups section's added.
+     */
+    protected function validate_groups(array $data, array $errors): array {
+        [$instance] = $this->_customdata;
+        $question = \enrol_apply\local\groupquestion::class;
+        $options = \enrol_apply\local\instanceoptions::class;
+        $courseid = (int) $instance->courseid;
+
+        $deciders = (string) ($data['deciders'] ?? '');
+        if (!in_array($deciders, [(string) $options::DECIDERS_GROUP, (string) $options::DECIDERS_ALLGROUPS], true)) {
+            $errors['deciders'] = get_string('invaliddata', 'error');
+        }
+
+        $answer = (string) ($data['groupdecided'] ?? '');
+        if (!in_array($answer, $question::ANSWERS, true)) {
+            $errors['groupdecidedgroup'] = get_string('invaliddata', 'error');
+            return $errors;
+        }
+
+        if ($answer === $question::KEY && !in_array((string) ($data['customchar1'] ?? ''), $question::KEY_MODES, true)) {
+            $errors['customchar1'] = get_string('invaliddata', 'error');
+        }
+        if ($answer !== $question::CHOICE) {
+            return $errors;
+        }
+
+        if (!in_array((string) ($data['choicekey'] ?? ''), $question::CHOICE_KEY_MODES, true)) {
+            $errors['choicekey'] = get_string('invaliddata', 'error');
+        }
+        $required = (string) ($data['groupchoicerequired'] ?? '');
+        if (!in_array($required, [(string) $options::CHOICE_REQUIRED, (string) $options::CHOICE_OPTIONAL], true)) {
+            $errors['groupchoicerequired'] = get_string('invaliddata', 'error');
+        }
+
+        $coursegroups = array_map('intval', array_keys(groups_get_all_groups($courseid)));
+        $picked = array_map('intval', (array) ($data['groupoffer'] ?? []));
+        if (array_diff($picked, $coursegroups)) {
+            $errors['groupoffer'] = get_string('invaliddata', 'error');
+        }
+        $grouping = (int) ($data['groupoffergrouping'] ?? 0);
+        if ($grouping !== 0 && !array_key_exists($grouping, groups_get_all_groupings($courseid))) {
+            $errors['groupoffergrouping'] = get_string('invaliddata', 'error');
+        }
+
+        $offer = \enrol_apply\local\groupquestion::offer($courseid, (object) [
+            'groupoffer' => $picked,
+            'groupoffergrouping' => isset($errors['groupoffergrouping']) ? 0 : $grouping,
+        ]);
+        if (!isset($errors['groupoffer']) && !$offer && (int) $required === $options::CHOICE_REQUIRED) {
+            $errors['groupoffer'] = get_string('groupofferempty', 'enrol_apply');
         }
 
         return $errors;
@@ -743,6 +921,169 @@ class enrol_apply_edit_form extends moodleform {
     }
 
     /**
+     * The notices at the foot of the Groups section: who an application reaches, and the warnings of C-D27.
+     *
+     * In a separate-groups course, an application without a group reaches only those who can
+     * access all groups (S3): said for the answers that make one (a decider chooses, a key in
+     * "a valid key enrols at once", a choice with "No preference", C-D11), and replaced by one
+     * sentence when "Who decides" leaves every application to them (C-D20). Then the warnings
+     * {@see decider_warnings()} computes from the saved method, each shown while the answers being
+     * edited still recreate its problem.
+     *
+     * @param stdClass $instance The instance being edited, or the defaults for a new one.
+     * @param bool $separate Whether the course is in separate groups mode.
+     * @return void
+     */
+    protected function add_group_notices(stdClass $instance, bool $separate): void {
+        $mform = $this->_form;
+        $question = \enrol_apply\local\groupquestion::class;
+        $allgroups = \enrol_apply\local\instanceoptions::DECIDERS_ALLGROUPS;
+
+        if ($separate) {
+            $keyless = $this->group_notice(get_string('groupscopekeyless', 'enrol_apply'));
+
+            $mform->addElement('static', 'groupscopekeyless', '', $keyless);
+            $mform->hideIf('groupscopekeyless', 'groupdecided', 'neq', $question::DECIDER);
+            $mform->hideIf('groupscopekeyless', 'deciders', 'eq', $allgroups);
+
+            // The key-only modes never make an application without a group.
+            $mform->addElement('static', 'groupscopekeylesskey', '', $keyless);
+            $mform->hideIf('groupscopekeylesskey', 'groupdecided', 'neq', $question::KEY);
+            $mform->hideIf(
+                'groupscopekeylesskey',
+                'customchar1',
+                'in',
+                \enrol_apply\local\groupkey::MODE_REQUIRED . '|' . \enrol_apply\local\groupkey::MODE_REVIEW
+            );
+            $mform->hideIf('groupscopekeylesskey', 'deciders', 'eq', $allgroups);
+
+            $mform->addElement('static', 'groupscopenopreference', '', $this->group_notice(
+                get_string('groupscopenopreference', 'enrol_apply')
+            ));
+            $mform->hideIf('groupscopenopreference', 'groupdecided', 'neq', $question::CHOICE);
+            $mform->hideIf(
+                'groupscopenopreference',
+                'groupchoicerequired',
+                'eq',
+                \enrol_apply\local\instanceoptions::CHOICE_REQUIRED
+            );
+            $mform->hideIf('groupscopenopreference', 'deciders', 'eq', $allgroups);
+
+            $mform->addElement('static', 'decidersallgroups', '', $this->group_notice(
+                get_string('decidersallgroupsinfo', 'enrol_apply')
+            ));
+            $mform->hideIf('decidersallgroups', 'deciders', 'neq', $allgroups);
+        }
+
+        $warnings = $this->decider_warnings($instance);
+        if ($warnings['decidingbygroups'] !== '') {
+            $mform->addElement('static', 'decidingbygroups', '', $this->group_notice($warnings['decidingbygroups'], true));
+            $mform->hideIf('decidingbygroups', 'deciders', 'eq', $allgroups);
+        }
+        if ($warnings['offerleak'] !== '') {
+            $mform->addElement('static', 'offerleak', '', $this->group_notice($warnings['offerleak'], true));
+            $mform->hideIf('offerleak', 'groupdecided', 'neq', $question::CHOICE);
+            $mform->hideIf('offerleak', 'deciders', 'eq', $allgroups);
+        }
+    }
+
+    /**
+     * One notice of the Groups section, rendered.
+     *
+     * @param string $message The sentence, in its plain spelling: the template escapes it.
+     * @param bool $danger True for a configuration that recreates a problem, false for a caution.
+     * @return string HTML for a static element, which renders it raw.
+     */
+    protected function group_notice(string $message, bool $danger = false): string {
+        global $OUTPUT;
+
+        return $OUTPUT->render_from_template('enrol_apply/groupkey_warnings', [
+            'warnings' => [['danger' => $danger, 'message' => $message]],
+        ]);
+    }
+
+    /**
+     * The configurations that let a moderator decide on another moderator (C-D27), as the method is saved.
+     *
+     * Only in a separate-groups course, the one mode in which a group's members decide its
+     * applications; everywhere else every decider sees every application and "Who decides" changes
+     * nothing. Two facts, each read from what the method and the course hold, the way
+     * {@see key_only_warnings()} reads them, so the teacher is warned before switching to the
+     * answer that would make them true:
+     *
+     * - decidingbygroups: the method grants a role that decides ({@see \enrol_apply\local\decidingrole}),
+     *   so whoever it approves is a decider, and each group's deciders decide it: a moderator of a
+     *   group could approve another moderator. Read from the saved role, or the default role of a
+     *   new method.
+     * - offerleak: a group this method offers is one another apply method of the course joins on
+     *   approval with a deciding role, so the people that method approves would decide every
+     *   application to it. Groups are named only where the reader may see them
+     *   ({@see \enrol_apply\local\groupvisibility::visible_to()}).
+     *
+     * @param stdClass $instance The instance being edited, or the defaults for a new one.
+     * @return array The two sentences in their plain spelling, '' for a fact that does not hold,
+     *     under 'decidingbygroups' and 'offerleak'.
+     */
+    protected function decider_warnings(stdClass $instance): array {
+        global $DB, $USER;
+
+        $warnings = ['decidingbygroups' => '', 'offerleak' => ''];
+        $courseid = (int) $instance->courseid;
+        if (!$this->separate_groups($courseid)) {
+            return $warnings;
+        }
+
+        if (\enrol_apply\local\decidingrole::method_decides($instance)) {
+            $warnings['decidingbygroups'] = get_string('warndecidingbygroups', 'enrol_apply');
+        }
+
+        if (empty($instance->id)) {
+            return $warnings;
+        }
+        $offer = \enrol_apply\local\groupoffer::groups((int) $instance->id);
+        if (!$offer) {
+            return $warnings;
+        }
+
+        $others = $DB->get_records_select(
+            'enrol',
+            'courseid = :courseid AND enrol = :apply AND id <> :id',
+            ['courseid' => $courseid, 'apply' => 'apply', 'id' => (int) $instance->id],
+            'id',
+            'id, courseid, roleid'
+        );
+        $deciding = array_keys(array_filter(
+            $others,
+            static fn(stdClass $other): bool => \enrol_apply\local\decidingrole::method_decides($other)
+        ));
+        if (!$deciding) {
+            return $warnings;
+        }
+
+        [$insql, $params] = $DB->get_in_or_equal($deciding, SQL_PARAMS_NAMED);
+        $joined = array_map('intval', $DB->get_fieldset_select('enrol_apply_groups', 'groupid', "enrolid {$insql}", $params));
+        $leaked = array_intersect_key($offer, array_flip($joined));
+        if (!$leaked) {
+            return $warnings;
+        }
+
+        $context = context_course::instance($courseid);
+        $names = [];
+        foreach ($leaked as $group) {
+            if (\enrol_apply\local\groupvisibility::visible_to($group, (int) $USER->id)) {
+                // Plain: the template double-stashes the sentence.
+                $names[] = format_string($group->name, true, ['context' => $context, 'escape' => false]);
+            }
+        }
+        \core_collator::asort($names, \core_collator::SORT_NATURAL);
+        $warnings['offerleak'] = $names
+            ? get_string('warnofferleak', 'enrol_apply', implode(', ', $names))
+            : get_string('warnofferleakunnamed', 'enrol_apply');
+
+        return $warnings;
+    }
+
+    /**
      * Whether the course is in separate groups mode, the one mode that narrows deciders.
      *
      * @param int $courseid Course id.
@@ -848,6 +1189,24 @@ class enrol_apply_edit_form extends moodleform {
                 ])
             );
         }
+
+        /* The Groups section's question and the per-method options (C-D6). instanceoptions and
+           groupoffer answer the defaults and nothing before the upgrade that creates them has run. */
+        $options = $instance->id
+            ? \enrol_apply\local\instanceoptions::get((int) $instance->id)
+            : \enrol_apply\local\instanceoptions::defaults();
+        $data->groupdecided = \enrol_apply\local\groupquestion::answer($instance, $options);
+        $data->deciders = $options->deciders;
+        $data->groupseats = $options->groupseats;
+        $data->hidecard = $options->hidecard;
+        if ((int) $options->groupchoice !== \enrol_apply\local\instanceoptions::CHOICE_OFF) {
+            $data->groupchoicerequired = $options->groupchoice;
+        }
+        // A choice comes with "a valid key enrols at once" or with no key (C-D5).
+        $data->choicekey = \enrol_apply\local\groupkey::enabled($instance) && !\enrol_apply\local\groupkey::mandatory($instance)
+            ? \enrol_apply\local\groupkey::MODE_ANY
+            : \enrol_apply\local\groupkey::MODE_OFF;
+        $data->groupoffer = $instance->id ? \enrol_apply\local\groupoffer::group_ids((int) $instance->id) : [];
 
         // The stored pair of flags collapses into the tri-state expirynotify select.
         if (!empty($data->notifyall) && !empty($data->expirynotify)) {

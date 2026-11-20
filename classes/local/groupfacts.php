@@ -49,11 +49,13 @@ final class groupfacts {
      *
      * @param int $courseid Course id.
      * @param context_course $coursecontext Its context.
+     * @param int $enrolid The method the decision belongs to, 0 where the chooser spans methods
+     *     ({@see groupscope::choosable_groups()}).
      * @return array Group id => object with id, name (plain), idnumber, hasseats, members, seats,
      *     full and percent (whole, clamped to the bar).
      */
-    public static function for_course(int $courseid, context_course $coursecontext): array {
-        $coursegroups = groupscope::choosable_groups($courseid);
+    public static function for_course(int $courseid, context_course $coursecontext, int $enrolid = 0): array {
+        $coursegroups = groupscope::choosable_groups($courseid, $enrolid);
         \core_collator::asort_objects_by_property($coursegroups, 'name', \core_collator::SORT_NATURAL);
         $seats = groupseats::for_groups(array_keys($coursegroups));
 

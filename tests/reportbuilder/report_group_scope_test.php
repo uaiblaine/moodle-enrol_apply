@@ -297,4 +297,92 @@ final class report_group_scope_test extends \core_reportbuilder\tests\core_repor
         $report = course_applications::for_method(context_course::instance($this->course->id), (int) $this->instance->id);
         $this->assertSame([], $report->narrowed_groups());
     }
+
+    /**
+     * A record of a method only those who see every group decide (C-D20) is not read by a narrowed
+     * reader, though keyed to their group, on either path; a reader who sees every group reads it.
+     *
+     * Changes that must make it fail: the "Who decides" clause dropped from record_where().
+     *
+     * @return void
+     */
+    public function test_a_method_decided_by_those_who_see_every_group_is_not_reported_to_a_narrowed_reader(): void {
+        global $DB;
+
+        $plugin = enrol_get_plugin('apply');
+        $recruitid = (int) $plugin->add_instance($this->course, $plugin->get_instance_defaults());
+        \enrol_apply\local\instanceoptions::set($recruitid, [
+            'deciders' => \enrol_apply\local\instanceoptions::DECIDERS_ALLGROUPS,
+        ]);
+        $candidate = $this->seed((int) $this->mine->id, null, '', submission::STATUS_PENDING);
+        $DB->set_field('enrol_apply_submission', 'enrolid', $recruitid, ['userid' => $candidate]);
+
+        $this->setUser($this->reader('narrowrecruit'));
+        $expected = $this->applicants_of(['keyed', 'joined', 'fallback']);
+        [$page, $refresh] = $this->both_paths();
+        $this->assertSame($expected, $page);
+        $this->assertSame($expected, $refresh);
+
+        $this->setUser($this->reader('allrecruit', true));
+        [$page] = $this->both_paths();
+        $this->assertContains($candidate, $page);
+    }
+
+    /**
+     * A membership written by an approval that granted a learner role gives a narrowed report
+     * reader no scope (C-D28).
+     *
+     * One report per test: core's report manager keeps a report built in a request, so a second
+     * build in the same test would read the first one's narrowing.
+     *
+     * Changes that must make it fail: member_groups() counting every enrol_apply membership.
+     *
+     * @return void
+     */
+    public function test_a_membership_written_by_a_learner_approval_gives_no_report_scope(): void {
+        global $DB;
+
+        $reader = $this->stamped_reader();
+        $student = (int) $DB->get_field('role', 'id', ['shortname' => 'student'], MUST_EXIST);
+        $contextid = context_course::instance($this->course->id)->id;
+        role_assign($student, $reader->id, $contextid, 'enrol_apply', (int) $this->instance->id);
+
+        $this->setUser($reader);
+        [$page] = $this->both_paths();
+        $this->assertSame([], $page);
+    }
+
+    /**
+     * The same membership, written by an approval that granted a role deciding in the course,
+     * narrows the reader to its group.
+     *
+     * Changes that must make it fail: member_groups() counting no enrol_apply membership at all.
+     *
+     * @return void
+     */
+    public function test_a_membership_written_by_a_deciding_approval_gives_report_scope(): void {
+        $reader = $this->stamped_reader();
+        $moderator = $this->getDataGenerator()->create_role(['shortname' => 'stampedmoderator']);
+        assign_capability('enrol/apply:manageapplications', CAP_ALLOW, $moderator, \context_system::instance()->id, true);
+        $contextid = context_course::instance($this->course->id)->id;
+        role_assign($moderator, $reader->id, $contextid, 'enrol_apply', (int) $this->instance->id);
+
+        $this->setUser($reader);
+        [$page] = $this->both_paths();
+        $this->assertSame($this->applicants_of(['keyed', 'joined', 'fallback']), $page);
+    }
+
+    /**
+     * A narrowed report reader enrolled in the course whose only membership of "mine" was written
+     * by this plugin's method.
+     *
+     * @return \stdClass The reader.
+     */
+    private function stamped_reader(): \stdClass {
+        $reader = $this->reader('stampedreader', false, false);
+        $this->getDataGenerator()->enrol_user($reader->id, $this->course->id);
+        $this->assertTrue(groups_add_member($this->mine, $reader, 'enrol_apply', (int) $this->instance->id));
+
+        return $reader;
+    }
 }

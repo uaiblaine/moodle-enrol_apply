@@ -22,6 +22,7 @@ Feature: Application with a group key, sent for review
     And I log in as "admin"
     # No instance name: an unnamed method is called after what it does.
     And I add "Course enrol confirmation" enrolment method in "Course 1" with:
+      | The applicant types a group enrolment key | 1 |
       | What a group enrolment key does | Key only, reviewed: a valid key sends the application for review, and nobody can apply without one |
     And I log out
     # The field set has no generator behind it: without this the method asks for the default fields.
