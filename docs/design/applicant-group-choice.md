@@ -1,9 +1,8 @@
 # Applicant group choice, and a redrawn instance form
 
-Status: **brainstorm, 2026-11-19, round 3. G2 (the storage) written 2026-11-19 on
-`feat/instance-options`, not merged**; the owner chose M2 with two methods and asked for the table.
-The other decisions are open.
-Decisions C-D1&ndash;C-D27 below each carry a recommendation; the owner accepts, changes or refuses each one. Interactive mockup:
+Status: **decided 2026-11-19** (see "Decisions taken" below; C-D28 and C-D29 were raised and decided the same day). G2 (the storage) **merged in #145**
+(2026111900). G1 and G3&ndash;G6 not started.
+Decisions C-D1&ndash;C-D27 below each keep the recommendation they were decided on. Interactive mockup:
 [`applicant-group-choice-mockup.html`](applicant-group-choice-mockup.html) (open in a browser; its
 decision switches change every screen).
 Builds on [`group-enrolment-key.md`](group-enrolment-key.md),
@@ -301,6 +300,109 @@ The mockup's screen 2 shows the whole page for both methods, with a purple bar o
 "Apply as a moderator" sets differently from "Apply as a student": that list is the recipe the README
 gets (C-D19).
 
+### Decisions taken (2026-11-19)
+
+The owner accepted every recommendation of this document, with two refinements, in their words
+(kept verbatim):
+
+> C-D5 – O recomendado só precisaria que na página de análise mostrasse essa informação, a chave
+> já inscreveu em um grupo e ele aguarda para entrar no próximo. Quem aprova precisa ter essa visão
+> clara.
+> C-D25 – A recomendação é boa, mas não conflita com o que o plugin Dimensions já faz em sua página
+> de inscrição (landing page)? Penso que o plugin pode implementar, mas no tema precisar checar se o
+> comportamento atual dele requer ajustes também par anão haver quebra.
+>
+> Demais decisões, seguir as recomendações
+
+Asked which case C-D5 means, the owner chose the one across methods: somebody already enrolled in
+the course by a group key through the student method applies through the recruitment method. Asked
+how the theme should treat a hidden card for a visitor, the owner chose not to advertise it.
+
+**C-D5, refined: the review page shows the applicant's other enrolments in the course.** Beside the
+application, the decider reads a panel "Already in this course": each other enrolment of the
+applicant there, with its method's name, its status, the role it gave, the groups it joined
+through that method and how it was admitted (by a group key, or by whom and when), from the
+durable record (`keyoutcome`, `joinedgroups`, `decidedby`) rather than recomputed. So "enrolled by
+key in Evening A through Apply as a student; asks to moderate Morning C" is on screen before the
+decision. Group names follow `groupvisibility::visible_to()` for the decider, like every other name
+on the page. Stage G5.
+
+A consequence measured in core, which the README recipe (C-D19) has to say:
+`enrol/index.php` redirects anybody actively enrolled in the course to the course (5.3,
+`enrol/index.php:87-94`), and theme_dimensions' landing page resolves an enrolled viewer to
+`STATE_ENROLLED`, so **a student already in the course never sees the recruitment card**. Their way in
+is the method's own form, `enrol/apply/apply.php?instance=<id>`, a link the coordination sends in the
+invitation; G4 checks that the form admits an applicant enrolled through another method of the
+same course and refuses nothing for that reason.
+
+**C-D25, refined: G-a with G-b, and theme_dimensions stops advertising a hidden card to visitors.**
+Read in theme_dimensions (main):
+
+- A logged-in viewer is already consistent. `landing\resolver::resolve_apply()` keeps an apply
+  method only when `allow_apply()` is true, and a cohort outsider fails it, so the theme already
+  hides from them what G-b hides on core's enrolment page. Nothing changes there.
+- The category classifier (`category\classifier`, case `'apply'`) judges the cohort per viewer from
+  `customint5` and its `-1` sentinel; it never offers a cohort outsider anything. Nothing changes.
+- **A visitor who is not logged in is the conflict.** `resolver::visitor_offers()` advertises every
+  method `open_to_anybody()` passes, and that predicate deliberately ignores the cohort ("without a
+  login the cohort cannot be known"). A recruitment method with its card hidden would be advertised
+  to anybody who opens the course. The theme leaves such a method out of the visitor's offers (and
+  so out of `login_way_in()`, which shares the predicate).
+- The fact crosses through a public method of `enrol_apply_plugin`, `hides_card_from($instance,
+  ?int $userid)`: true when the method's option is on, it restricts to a cohort and the user (null:
+  a visitor) is not a member. The theme calls it behind `is_callable()`, as it already reaches
+  `allow_apply()` and `is_full()`, so an older enrol_apply build keeps today's behaviour. It reads
+  `instanceoptions`, which answers the defaults before the G2 upgrade has run.
+- A separate theme_dimensions pull request after the enrol_apply one that adds the method, with a
+  test of each side of the visitor predicate. The theme supports 5.3 only.
+
+**C-D28. A decider who is also a learner in the course (raised and decided by the owner 2026-11-19: (b), with the lock of C-D29).**
+The owner asked whether somebody who is a student in one group and a moderator in another of the
+same course approves the applications of both, and hoped not. Today they do.
+`groupscope::member_groups()` narrows a decider to every group they belong to in the course, read
+from `{groups_members}` alone, whatever role or route put them there; and a role is held in the
+course, not in a group. So the C-D5 case (enrolled by key in Evening A through the student method,
+then a moderator of Morning C through the recruitment method) decides Evening A's applications too.
+Core behaves the same way in separate-groups activities (that moderator sees Evening A's forum
+and submissions); the question is whether approvals should be stricter than core.
+
+| | Rule | Effect |
+|---|---|---|
+| (a) | Policy only: a moderator holds no learner enrolment in the course; the README recipe says so and the recruitment approval warns when the applicant already has one | Nothing enforced; one forgotten warning reopens it |
+| (b) | **A membership written by an enrol_apply method narrows a decider only when the role that same method gave them can decide** (holds `enrol/apply:manageapplications` in the course). The membership and the role assignment are both stamped `enrol_apply` + the instance id, so the rule reads recorded facts; memberships of other origins (manual, other plugins) keep today's rule | The student-in-Evening-A membership, written by the student method with the Student role, gives no scope; the Morning C one, written by the recruitment method with Non-editing teacher, does |
+| (c) | Scope only from memberships written by a method whose "Who decides" is "only those who see every group" (the recruitment method) | Precise for this fleet's set-up, but moderators placed in groups by hand would lose their scope |
+
+**Decided: (b)**, with (a)'s warning on the review page (the C-D5 panel already shows the other
+enrolment). It belongs to `groupscope`, so it reaches every reader through one helper (queue,
+review, walk, choosers, notices, report), and needs gates on both halves: a learner membership
+gives no scope, a deciding one still does. Stage G3.
+
+**C-D29. The lock: who applies as a moderator cannot apply as a student (owner, 2026-11-19).**
+The owner's words, kept verbatim:
+
+> Então, uma trava de segurança. Quem se candidata como moderador não pode se candidatar como
+> estudante.
+
+- **Which method is which is read from the role, not from a new setting.** A method is a *deciding*
+  method when the role it grants on approval holds `enrol/apply:manageapplications` in the course,
+  and a *learner* method otherwise. A setting would be one more thing a teacher must remember;
+  the role is what makes somebody a decider in the first place.
+- **The lock lives in `allow_apply($instance, $userid)`**, the eligibility predicate the card, the
+  form and the write door (`submit_application()`, inside its lock) already share, and which
+  theme_dimensions' resolver asks too. A learner method refuses a user who holds, in the same
+  course, an application or an enrolment through a deciding method (pending, deferred or
+  active, as the queue's predicate and `is_enrolled()` read them). The refusal is a lang string
+  that names nothing: "You have applied to take part in this course in another role, so you
+  cannot apply here."
+- **Two applications at once.** The submission lock is per method and user, so a moderator
+  application and a student one sent together would both pass. The check takes a second lock on
+  the course and user, around the read and the write, as the key admission does for places.
+- **The other order stays open on purpose** (C-D5): a student who got in by key may apply as a
+  moderator, and the decider sees that enrolment in the "Already in this course" panel. What that
+  approval leaves (a person holding both roles in one course) is C-D28.
+- Gates on both directions: a moderator applicant refused by the student method; a student
+  admitted to the moderator method; the race held by the course lock. Stage G3, beside C-D28.
+
 ### The applicant's list
 
 **C-D23. A combobox of the plugin's own, enhancing a plain `select`.** Measured in core 5.3
@@ -343,17 +445,17 @@ export, named as the group's name where the subject may see it.
 
 | Stage | Content | Tier |
 |---|---|---|
-| G0 | Spike: single `autocomplete` inside the modal on 5.1, 5.2 and 5.3 (render, value kept after a validation error, the footer submit), and on `apply.php` without JavaScript | none, a scratch branch |
+| G0 | Spike: the combobox of C-D23 inside the modal on 5.1, 5.2 and 5.3 (render, value kept after a validation error, the footer submit), and the plain `select` on `apply.php` without JavaScript | none, a scratch branch |
 | G1 | The instance form alone: C-D15&ndash;C-D18, no new setting; Behat on the form | 2 |
-| G2 | **Written.** Schema: `enrol_apply_options` (groupchoice, deciders, groupseats, hidecard), `enrol_apply_offer`, `chosengroupid`, the deploy-window gate (`options_schema_ready()`), upgrade step, backup and restore, privacy | 3 |
-| G3 | The Groups section's new question, the offer list, "Who decides" (C-D20) with its clause in `groupscope`, seats per method (C-D26), the hidden card (C-D25 G-b), the warnings (C-D27), validation (choice with a key-only mode, an empty offer in required mode) | 3 |
+| G2 | **Merged, #145 (2026111900).** Schema: `enrol_apply_options` (groupchoice, deciders, groupseats, hidecard), `enrol_apply_offer`, `chosengroupid`, the deploy-window gate (`options_schema_ready()`), upgrade step, backup and restore, privacy | 3 |
+| G3 | The lock (C-D29) in `allow_apply()`; C-D28's scope rule (b) in `groupscope`; `hides_card_from()` and the hidden card on core's enrolment page (C-D25); the Groups section's new question, the offer list, "Who decides" (C-D20) with its clause in `groupscope`, seats per method (C-D26), the hidden card (C-D25 G-b), the warnings (C-D27), validation (choice with a key-only mode, an empty offer in required mode) | 3 |
 | G4 | The applicant's form and its combobox (C-D23, C-D24: AMD module, template, `mdl grunt`), the submission's re-resolution, `applicantstate` wording | 3 |
-| G5 | The decision side: the helper and its six SQL readers, review chip, pre-ticked chooser, bulk form, report column and filter | 3 |
-| G6 | Behat for the modal, README (the table, the setting), screenshots | 1 |
+| G5 | The decision side: the "Already in this course" panel (C-D5), the helper and its six SQL readers, review chip, pre-ticked chooser, bulk form, report column and filter | 3 |
+| G6 | Behat for the modal, README (the table, the setting, the "Recruiting moderators" recipe with the invitation link), screenshots | 1 |
+| T1 | theme_dimensions: leave an apply method whose card is hidden out of the visitor's offers, through `hides_card_from()` (C-D25); after G3 | 2 |
 
-G1 can go first and on its own. G2&ndash;G5 need the owner's answers to C-D2, C-D4, C-D5, C-D6 and
-C-D10 and C-D20 first; the others have safe defaults. The README's "Recruiting moderators"
-recipe (C-D19) can go with G1.
+G1 can go first and on its own; G3&ndash;G6 follow in order, and T1 after G3. Every decision they need is
+taken ("Decisions taken" above).
 
 ### What G2 leaves to the later stages
 
