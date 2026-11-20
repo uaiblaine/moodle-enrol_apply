@@ -162,8 +162,63 @@ final class snapshot_visibility_test extends \advanced_testcase {
 
         $all = $this->reader(['moodle/site:viewuseridentity', 'moodle/user:viewalldetails']);
         $this->assertTrue($this->shows($keys[PROFILE_VISIBLE_PRIVATE], $all));
-        $this->assertTrue($this->shows($keys[PROFILE_VISIBLE_NONE], $all));
         $this->assertTrue($this->shows($gone, $all));
+    }
+
+    /**
+     * A field nobody may see is judged at the system context, as core judges it on a profile.
+     *
+     * A holder of moodle/user:viewalldetails in the course alone sees a private field but not this
+     * one; a holder across the site sees both. Changes that must make it fail: the field judged in
+     * the course, which any teacher role granted the capability there would pass.
+     *
+     * @return void
+     */
+    public function test_a_field_nobody_may_see_needs_the_capability_at_the_site(): void {
+        global $CFG;
+
+        require_once($CFG->dirroot . '/user/profile/lib.php');
+        $generator = $this->getDataGenerator();
+        $private = $generator->create_custom_profile_field([
+            'datatype' => 'text', 'shortname' => 'vprivate', 'name' => 'Private', 'visible' => PROFILE_VISIBLE_PRIVATE,
+        ]);
+        $none = $generator->create_custom_profile_field([
+            'datatype' => 'text', 'shortname' => 'vnone', 'name' => 'Nobody', 'visible' => PROFILE_VISIBLE_NONE,
+        ]);
+        $privatekey = \enrol_apply\local\fields::custom_key((int) $private->id);
+        $nonekey = \enrol_apply\local\fields::custom_key((int) $none->id);
+
+        $incourse = $this->reader(['moodle/site:viewuseridentity', 'moodle/user:viewalldetails']);
+        $this->assertTrue($this->shows($privatekey, $incourse), 'the control: the course grant opens a private field');
+        $this->assertFalse($this->shows($nonekey, $incourse));
+
+        $sitewide = $generator->create_user();
+        $roleid = $generator->create_role();
+        foreach (['moodle/site:viewuseridentity', 'moodle/user:viewalldetails'] as $capability) {
+            assign_capability($capability, CAP_ALLOW, $roleid, \context_system::instance()->id, true);
+        }
+        role_assign($roleid, $sitewide->id, \context_system::instance()->id);
+        $this->assertTrue($this->shows($nonekey, $sitewide));
+        $this->assertTrue($this->shows($privatekey, $sitewide));
+    }
+
+    /**
+     * A snapshot key that is not an s_, c_ or a_ key is never shown, whatever the reader may see.
+     *
+     * Changes that must make it fail: shows() answering true for an unknown shape under ALL_FIELDS
+     * or an EXCEPT rule.
+     *
+     * @return void
+     */
+    public function test_a_key_of_an_unknown_shape_is_never_shown(): void {
+        $all = $this->reader(['moodle/site:viewuseridentity', 'moodle/user:viewalldetails']);
+        $this->assertTrue($this->shows('s_city', $all), 'the control: a known key shows');
+        $this->assertTrue($this->shows('a_5', $all));
+        $this->assertFalse($this->shows('password', $all));
+        $this->assertFalse($this->shows('x_city', $all));
+        $this->assertTrue(formatter::shows('s_city', formatter::ALL_FIELDS));
+        $this->assertFalse(formatter::shows('city', formatter::ALL_FIELDS));
+        $this->assertFalse(formatter::shows('', formatter::ALL_FIELDS));
     }
 
     /**

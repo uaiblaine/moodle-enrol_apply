@@ -152,6 +152,20 @@ class fields {
     }
 
     /**
+     * Whether a key names a standard column a snapshot can hold.
+     *
+     * The columns the form offers, and the two identity columns older snapshots recorded
+     * (email, idnumber), which the form no longer offers but readers still mask.
+     *
+     * @param string $key Field key.
+     * @return bool True for a known s_ key.
+     */
+    public static function is_snapshot_standard_key(string $key): bool {
+        return in_array($key, self::DEFAULT_SET, true)
+            || in_array($key, [self::standard_key('email'), self::standard_key('idnumber')], true);
+    }
+
+    /**
      * The column or custom field id a key names.
      *
      * @param string $key Field key.

@@ -215,7 +215,10 @@ class submission {
     public static function joined_groups($value, stdClass $row): string {
         global $USER;
 
-        $groups = submissionhelper::parse_joined_groups($value === null ? null : (string) $value);
+        $groups = submissionhelper::parse_joined_groups(
+            $value === null ? null : (string) $value,
+            isset($row->courseid) ? (int) $row->courseid : null
+        );
         if (!$groups) {
             return '';
         }
@@ -226,7 +229,10 @@ class submission {
 
         $names = [];
         foreach ($groups as $group) {
-            $names[] = format_string($group->name, true, ['context' => \context_course::instance($group->courseid)]);
+            $context = \context_course::instance($group->courseid, IGNORE_MISSING);
+            if ($context) {
+                $names[] = format_string($group->name, true, ['context' => $context]);
+            }
         }
 
         return implode(', ', $names);
@@ -511,11 +517,14 @@ class submission {
         }
 
         $viewalldetails = has_capability('moodle/user:viewalldetails', $context, $userid);
+        // A PROFILE_VISIBLE_NONE field is judged at the system, as core does for a field of a user.
+        $viewsystem = $viewalldetails
+            && has_capability('moodle/user:viewalldetails', \context_system::instance(), $userid);
         $knowncustom = [];
         foreach ($DB->get_records('user_info_field', null, '', 'id, visible') as $field) {
             $key = applyfields::custom_key((int) $field->id);
             $knowncustom[] = $key;
-            if (!self::custom_visible((int) $field->visible, $viewalldetails)) {
+            if (!self::custom_visible((int) $field->visible, $viewalldetails, $viewsystem)) {
                 $except[] = $key;
             }
         }
@@ -544,16 +553,18 @@ class submission {
      * reader's context, which is how core_user\fields::get_identity_fields() calls it: everyone
      * sees a PROFILE_VISIBLE_ALL field, a PROFILE_VISIBLE_TEACHERS one follows
      * moodle/site:viewuseridentity (already held here), and PROFILE_VISIBLE_PRIVATE and
-     * PROFILE_VISIBLE_NONE need moodle/user:viewalldetails. Inlined rather than called because
+     * PROFILE_VISIBLE_NONE need moodle/user:viewalldetails, the latter judged at the system context as
+     * core judges a field it reads for a user. Inlined rather than called because
      * is_visible() judges the current user only, and the e-mail judges each recipient. The
      * applicant's own-field exception does not arise: a reader is never judged on their own
      * application here.
      *
      * @param int $visibility The field's user_info_field.visible.
      * @param bool $viewalldetails Whether the reader holds moodle/user:viewalldetails in the context.
+     * @param bool $viewsystem Whether the reader holds it at the system context, which judges NONE.
      * @return bool True when the field may be shown.
      */
-    protected static function custom_visible(int $visibility, bool $viewalldetails): bool {
+    protected static function custom_visible(int $visibility, bool $viewalldetails, bool $viewsystem): bool {
         global $CFG;
 
         require_once($CFG->dirroot . '/user/profile/lib.php');
@@ -563,22 +574,31 @@ class submission {
             return true;
         }
 
-        return $viewalldetails;
+        return $visibility === (int) PROFILE_VISIBLE_NONE ? $viewsystem : $viewalldetails;
     }
 
     /**
      * Whether one snapshot key may be shown, given what visible_keys() returned.
      *
      * The one reader of every shape that value takes, so no caller repeats the rule: ALL_FIELDS
-     * shows everything; an EXCEPT rule shows every key it does not list, except a c_ key naming a
+     * shows every key; an EXCEPT rule shows every key it does not list, except a c_ key naming a
      * field that no longer exists when KNOWNCUSTOM is a list; a plain list shows its own keys; and
-     * anything else, null included, shows the name fields only.
+     * anything else, null included, shows the name fields only. Before all of those, a key that is
+     * not an s_, c_ or a_ key is never shown.
      *
      * @param string $key Snapshot key.
      * @param mixed $visible What visible_keys() returned.
      * @return bool True when the key may be shown.
      */
     public static function shows(string $key, $visible): bool {
+        // Fail closed on a key no rule here was written for, whatever the reader may see.
+        if (
+            !str_starts_with($key, applyfields::SOURCE_STANDARD)
+            && !str_starts_with($key, applyfields::SOURCE_CUSTOM)
+            && !str_starts_with($key, \enrol_apply\local\answers::SOURCE_ANSWER)
+        ) {
+            return false;
+        }
         if ($visible === self::ALL_FIELDS) {
             return true;
         }

@@ -307,6 +307,15 @@ final class backup_test extends \advanced_testcase {
     ): void {
         global $DB;
 
+        /* A waiting application, the status that may carry a choice: a restore zeroes the decided role
+           and groups of a pending one, which has no decision. */
+        $DB->set_field_select(
+            'enrol_apply_submission',
+            'status',
+            submission::STATUS_WAITING,
+            'courseid = :courseid AND userid = :userid',
+            ['courseid' => $course->id, 'userid' => $applicant->id]
+        );
         $DB->set_field_select(
             'enrol_apply_submission',
             'decidedgroups',
@@ -465,6 +474,8 @@ final class backup_test extends \advanced_testcase {
         $joined = $this->getDataGenerator()->create_group(['courseid' => $course->id, 'name' => 'Joined on approval']);
         $elsewhere = $this->getDataGenerator()->create_course();
         $foreign = $this->getDataGenerator()->create_group(['courseid' => $elsewhere->id, 'name' => 'Another course']);
+        // Approved: a pending record has joined nothing, and a restore does not carry joined groups for it.
+        $DB->set_field('enrol_apply_submission', 'status', submission::STATUS_APPROVED, ['userid' => $applicant->id]);
         $DB->set_field_select(
             'enrol_apply_submission',
             'joinedgroups',
@@ -1946,5 +1957,311 @@ final class backup_test extends \advanced_testcase {
         $this->assertSame(0, (int) $restored->chosengroupid);
         // The control: the record itself travelled.
         $this->assertSame('I would like to join this course', $restored->comment);
+    }
+
+    /**
+     * Rewrite the submissions block of the extracted archive, leaving every other element alone.
+     *
+     * @param string $basepath Path of the extracted archive.
+     * @param callable $edit Takes the block's XML and returns it edited.
+     * @return void
+     */
+    protected function edit_submissions(string $basepath, callable $edit): void {
+        $path = $basepath . '/course/enrolments.xml';
+        $xml = file_get_contents($path);
+        $edited = preg_replace_callback('#<submissions>.*?</submissions>#s', static fn(array $m): string => $edit($m[0]), $xml);
+        $this->assertNotSame($xml, $edited, 'the premise: the edit changed the archive');
+        file_put_contents($path, $edited);
+    }
+
+    /**
+     * Edit one applicant's submission element in the extracted archive.
+     *
+     * @param string $basepath Path of the extracted archive.
+     * @param int $userid The applicant, as the archive names them.
+     * @param callable $edit Takes the element's XML and returns it edited.
+     * @return void
+     */
+    protected function edit_submission_of(string $basepath, int $userid, callable $edit): void {
+        $this->edit_submissions($basepath, static function (string $block) use ($userid, $edit): string {
+            return preg_replace_callback(
+                '#<submission id="\d+">(?:(?!</submission>).)*?<userid>' . $userid . '</userid>.*?</submission>#s',
+                static fn(array $m): string => $edit($m[0]),
+                $block
+            );
+        });
+    }
+
+    /**
+     * The restored record of an applicant.
+     *
+     * @param int $courseid Restored course id.
+     * @param \stdClass $user The applicant.
+     * @return \stdClass|false The record, false when none was restored.
+     */
+    protected function restored_record_of(int $courseid, \stdClass $user) {
+        global $DB;
+
+        return $DB->get_record('enrol_apply_submission', ['courseid' => $courseid, 'userid' => $user->id]);
+    }
+
+    /**
+     * A record naming another applicant's user enrolment restores without the reference.
+     *
+     * The mapping is by archive id, so a crafted archive can hang a record on any enrolment this
+     * restore created. The control is the other applicant, untouched, who keeps their own.
+     *
+     * Changes that must make it fail: the user enrolment kept without checking whose it is.
+     *
+     * @return void
+     */
+    public function test_a_record_naming_another_applicants_enrolment_loses_the_reference(): void {
+        global $DB;
+
+        [$course, $instance, $first] = $this->create_course_with_application();
+        $second = $this->add_applicant($course, $instance, 'Second', 'student');
+        $secondue = (int) $DB->get_field('user_enrolments', 'id', ['enrolid' => $instance->id, 'userid' => $second->id]);
+
+        $swap = function (string $basepath) use ($first, $secondue): void {
+            $this->edit_submission_of($basepath, (int) $first->id, static fn(string $xml): string => preg_replace(
+                '#<userenrolmentid>\d+</userenrolmentid>#',
+                '<userenrolmentid>' . $secondue . '</userenrolmentid>',
+                $xml
+            ));
+        };
+        $newcourseid = $this->backup_and_restore($course, true, false, null, backup::ENROL_ALWAYS, $swap);
+
+        $newenrolid = (int) $DB->get_field('enrol', 'id', ['courseid' => $newcourseid, 'enrol' => 'apply'], MUST_EXIST);
+        $this->assertSame(0, (int) $this->restored_record_of($newcourseid, $first)->userenrolmentid);
+        $this->assertSame(
+            (int) $DB->get_field('user_enrolments', 'id', ['enrolid' => $newenrolid, 'userid' => $second->id], MUST_EXIST),
+            (int) $this->restored_record_of($newcourseid, $second)->userenrolmentid,
+            'the control: an untouched record keeps its enrolment'
+        );
+    }
+
+    /**
+     * A comment is restored onto an enrolment of the restored method only.
+     *
+     * Two apply methods in the course: the second's comment, repointed at the first's applicant
+     * in the archive, would otherwise be written onto an enrolment of another method.
+     *
+     * Changes that must make it fail: the enrolment's method not compared with the restored one.
+     *
+     * @return void
+     */
+    public function test_a_comment_is_not_restored_onto_another_methods_enrolment(): void {
+        global $DB;
+
+        [$course, $first, $firstuser] = $this->create_course_with_application();
+        $secondid = $this->plugin->add_instance($course, $this->plugin->get_instance_defaults());
+        $second = $DB->get_record('enrol', ['id' => $secondid], '*', MUST_EXIST);
+        $seconduser = $this->add_applicant($course, $second, 'Other', 'student');
+        $firstue = (int) $DB->get_field('user_enrolments', 'id', ['enrolid' => $first->id, 'userid' => $firstuser->id]);
+        $secondue = (int) $DB->get_field('user_enrolments', 'id', ['enrolid' => $second->id, 'userid' => $seconduser->id]);
+        // Both comments are repointed at the other method's enrolment, so whichever method restores
+        // second finds the other's mapping; their own rows are gone so none is skipped as a repeat.
+        $DB->delete_records('enrol_apply_applicationinfo', ['userenrolmentid' => $firstue]);
+        $DB->delete_records('enrol_apply_applicationinfo', ['userenrolmentid' => $secondue]);
+        $DB->insert_record('enrol_apply_applicationinfo', (object) ['userenrolmentid' => $firstue, 'comment' => 'FirstMark']);
+        $DB->insert_record('enrol_apply_applicationinfo', (object) ['userenrolmentid' => $secondue, 'comment' => 'OtherMark']);
+
+        $repoint = function (string $basepath) use ($firstue, $secondue): void {
+            $path = $basepath . '/course/enrolments.xml';
+            $xml = file_get_contents($path);
+            foreach (['FirstMark' => $secondue, 'OtherMark' => $firstue] as $mark => $target) {
+                $edited = preg_replace_callback(
+                    '#<application id="\d+">(?:(?!</application>).)*' . $mark . '.*?</application>#s',
+                    static fn(array $m): string => preg_replace(
+                        '#<userenrolmentid>\d+</userenrolmentid>#',
+                        '<userenrolmentid>' . $target . '</userenrolmentid>',
+                        $m[0]
+                    ),
+                    $xml
+                );
+                $this->assertNotSame($xml, $edited, 'the premise: ' . $mark . ' was repointed');
+                $xml = $edited;
+            }
+            file_put_contents($path, $xml);
+        };
+        $newcourseid = $this->backup_and_restore($course, true, false, null, backup::ENROL_ALWAYS, $repoint);
+
+        $this->assertNotEmpty($this->restored_record_of($newcourseid, $seconduser), 'the control: the record travelled');
+        $this->assertSame(
+            0,
+            $DB->count_records_select(
+                'enrol_apply_applicationinfo',
+                $DB->sql_compare_text('comment') . ' IN (:a, :b)',
+                ['a' => 'FirstMark', 'b' => 'OtherMark']
+            ) - 2,
+            'no comment is hung on the other method\'s enrolment (the two originals remain)'
+        );
+    }
+
+    /**
+     * A record with a status outside the vocabulary is not restored; the applicant beside it is.
+     *
+     * Changes that must make it fail: the status copied through.
+     *
+     * @return void
+     */
+    public function test_a_record_with_an_unknown_status_is_not_restored(): void {
+        [$course, $instance, $first] = $this->create_course_with_application();
+        $second = $this->add_applicant($course, $instance, 'Second', 'student');
+
+        $forge = function (string $basepath) use ($first): void {
+            $this->edit_submission_of($basepath, (int) $first->id, static fn(string $xml): string => preg_replace(
+                '#<status>\d+</status>#',
+                '<status>99</status>',
+                $xml
+            ));
+        };
+        $newcourseid = $this->backup_and_restore($course, true, false, null, backup::ENROL_ALWAYS, $forge);
+
+        $this->assertFalse($this->restored_record_of($newcourseid, $first));
+        $this->assertNotFalse($this->restored_record_of($newcourseid, $second), 'the control');
+    }
+
+    /**
+     * A pending record restores without a decided role or groups; a waiting one keeps them.
+     *
+     * Changes that must make it fail: the decision columns restored for a record nobody decided.
+     *
+     * @return void
+     */
+    public function test_a_pending_record_carries_no_decision_through_a_restore(): void {
+        global $DB;
+
+        [$course, $instance, $pending] = $this->create_course_with_application();
+        $waiting = $this->add_applicant($course, $instance, 'Second', 'student');
+        $group = $this->getDataGenerator()->create_group(['courseid' => $course->id, 'name' => 'Decided']);
+        $roleid = (int) $DB->get_field('role', 'id', ['shortname' => 'editingteacher'], MUST_EXIST);
+        foreach ([$pending, $waiting] as $user) {
+            $DB->set_field('enrol_apply_submission', 'decidedgroups', (string) $group->id, ['userid' => $user->id]);
+            $DB->set_field('enrol_apply_submission', 'decidedrole', $roleid, ['userid' => $user->id]);
+            $DB->set_field('enrol_apply_submission', 'joinedgroups', (string) $group->id, ['userid' => $user->id]);
+        }
+        $DB->set_field('enrol_apply_submission', 'status', submission::STATUS_WAITING, ['userid' => $waiting->id]);
+
+        $newcourseid = $this->backup_and_restore($course, true);
+
+        $restoredpending = $this->restored_record_of($newcourseid, $pending);
+        $this->assertSame('', (string) $restoredpending->decidedgroups);
+        $this->assertSame(0, (int) $restoredpending->decidedrole);
+        $this->assertNull($restoredpending->joinedgroups);
+        $restoredwaiting = $this->restored_record_of($newcourseid, $waiting);
+        $this->assertNotSame('', (string) $restoredwaiting->decidedgroups, 'the control: a waiting record keeps its choice');
+        $this->assertSame($roleid, (int) $restoredwaiting->decidedrole);
+        $this->assertNotNull($restoredwaiting->joinedgroups);
+    }
+
+    /**
+     * An answer under a key of a shape nothing reads is not restored; the known shapes are.
+     *
+     * Changes that must make it fail: restored_answer_key() returning any other key as it is.
+     *
+     * @return void
+     */
+    public function test_an_answer_under_an_unknown_key_is_not_restored(): void {
+        global $DB;
+
+        [$course, , $applicant] = $this->create_course_with_application();
+        $profilefield = $this->getDataGenerator()->create_custom_profile_field([
+            'datatype' => 'text', 'shortname' => 'kept', 'name' => 'Kept', 'visible' => PROFILE_VISIBLE_ALL,
+        ]);
+        $recordid = (int) $DB->get_field('enrol_apply_submission', 'id', ['userid' => $applicant->id], MUST_EXIST);
+        $keys = ['s_email', 'c_' . $profilefield->id, 's_password', 's_nosuchcolumn', 'c_x', 'a_x', 'bogus', 'x_city', 's_'];
+        foreach ($keys as $position => $key) {
+            $DB->insert_record(submission::ANSWER_TABLE, (object) [
+                'submissionid' => $recordid,
+                'fieldkey' => $key,
+                'label' => 'Label',
+                'value' => 'Value',
+                'sortorder' => 10 + $position,
+            ]);
+        }
+
+        $newcourseid = $this->backup_and_restore($course, true);
+
+        $restored = array_column(submission::read_snapshot((int) $this->restored_record($newcourseid)->id), 'key');
+        $this->assertEqualsCanonicalizing(['s_city', 'a_7', 's_email', 'c_' . $profilefield->id], $restored);
+    }
+
+    /**
+     * A category with no name maps to nothing, so its fields are not attached to the one before it.
+     *
+     * The second category is the one made nameless in the archive; without its own mapping the
+     * latest parent is still the first category, which would take the second one's field.
+     *
+     * Changes that must make it fail: the empty category returning without registering a mapping.
+     *
+     * @return void
+     */
+    public function test_a_nameless_category_does_not_lend_its_predecessor_to_its_fields(): void {
+        global $DB;
+
+        [$course, $instance] = $this->create_course_with_application();
+        $generator = $this->getDataGenerator()->get_plugin_generator('core_customfield');
+        $areas = ['component' => 'enrol_apply', 'area' => 'application', 'itemid' => $instance->id];
+        $kept = $generator->create_category(['name' => 'Kept category'] + $areas);
+        $generator->create_field([
+            'categoryid' => $kept->get('id'), 'type' => 'text', 'shortname' => 'inkept', 'name' => 'In kept',
+        ]);
+        $nameless = $generator->create_category(['name' => 'Nameless category'] + $areas);
+        $generator->create_field([
+            'categoryid' => $nameless->get('id'), 'type' => 'text', 'shortname' => 'innameless', 'name' => 'In nameless',
+        ]);
+
+        $blank = function (string $basepath): void {
+            $path = $basepath . '/course/enrolments.xml';
+            $xml = file_get_contents($path);
+            $edited = str_replace('<name>Nameless category</name>', '<name></name>', $xml);
+            $this->assertNotSame($xml, $edited, 'the premise: the category was blanked');
+            file_put_contents($path, $edited);
+        };
+        $newcourseid = $this->backup_and_restore($course, true, false, null, backup::ENROL_ALWAYS, $blank);
+
+        $newenrolid = (int) $DB->get_field('enrol', 'id', ['courseid' => $newcourseid, 'enrol' => 'apply'], MUST_EXIST);
+        $shortnames = $DB->get_fieldset_sql(
+            "SELECT f.shortname
+               FROM {customfield_field} f
+               JOIN {customfield_category} c ON c.id = f.categoryid
+              WHERE c.component = 'enrol_apply' AND c.area = 'application' AND c.itemid = :enrolid",
+            ['enrolid' => $newenrolid]
+        );
+        $this->assertSame(['inkept'], $shortnames);
+    }
+
+    /**
+     * A restored question does not keep the text field's password switch.
+     *
+     * The control is another setting of the same configuration, which travels.
+     *
+     * Changes that must make it fail: configdata restored as the archive carries it.
+     *
+     * @return void
+     */
+    public function test_a_restored_question_loses_the_password_switch(): void {
+        global $DB;
+
+        [$course, $instance] = $this->create_course_with_application();
+        $generator = $this->getDataGenerator()->get_plugin_generator('core_customfield');
+        $category = $generator->create_category([
+            'name' => 'About you', 'component' => 'enrol_apply', 'area' => 'application', 'itemid' => $instance->id,
+        ]);
+        $field = $generator->create_field([
+            'categoryid' => $category->get('id'), 'type' => 'text', 'shortname' => 'secretq', 'name' => 'Secret question',
+            'configdata' => ['ispassword' => 1, 'required' => 1],
+        ]);
+        $stored = json_decode($DB->get_field('customfield_field', 'configdata', ['id' => $field->get('id')]), true);
+        $this->assertSame(1, (int) $stored['ispassword'], 'the premise: the switch was stored');
+
+        $newcourseid = $this->backup_and_restore($course, true);
+
+        $restored = json_decode($DB->get_field('customfield_field', 'configdata', [
+            'id' => $this->restored_question($newcourseid, 'secretq'),
+        ]), true);
+        $this->assertArrayNotHasKey('ispassword', $restored);
+        $this->assertSame(1, (int) $restored['required']);
     }
 }

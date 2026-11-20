@@ -78,6 +78,7 @@ $string['applycomment_required'] = 'A comment for your teacher';
 $string['applycourselocked'] = 'Another application of yours to this course is being sent. Try again in a moment.';
 $string['applydate'] = 'Application date';
 $string['applydecidingelsewhere'] = 'You have applied to take part in this course in another role, so you cannot apply here.';
+$string['applylimitlocked'] = 'Applications to this course are being processed. Try again in a moment.';
 $string['applymanage'] = 'Manage enrolment applications';
 $string['applyuser'] = 'First name / Surname';
 $string['applywithkey'] = 'Apply with a key';

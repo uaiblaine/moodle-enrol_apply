@@ -76,6 +76,7 @@ $string['applycomment_required'] = 'Um comentário para o professor';
 $string['applycourselocked'] = 'Outra solicitação sua para este curso está sendo enviada. Tente novamente em instantes.';
 $string['applydate'] = 'Data da solicitação';
 $string['applydecidingelsewhere'] = 'Você já se candidatou a participar deste curso em outro papel, por isso não pode se candidatar aqui.';
+$string['applylimitlocked'] = 'As solicitações deste curso estão sendo processadas. Tente novamente em instantes.';
 $string['applymanage'] = 'Gerenciar solicitações de inscrição';
 $string['applyuser'] = 'Nome / Sobrenome';
 $string['applywithkey'] = 'Solicitar inscrição com chave';

@@ -211,7 +211,10 @@ final class backup_fields_test extends \advanced_testcase {
         foreach ($categories as $category) {
             $out[$category->name] = [];
             foreach ($DB->get_records('customfield_field', ['categoryid' => $category->id], 'sortorder, id') as $field) {
-                $out[$category->name][$field->shortname] = [$field->type, $field->name, json_decode($field->configdata, true)];
+                $configdata = json_decode($field->configdata, true);
+                // A restore strips the password switch, which the form no longer offers: not compared.
+                unset($configdata['ispassword']);
+                $out[$category->name][$field->shortname] = [$field->type, $field->name, $configdata];
             }
         }
 

@@ -162,10 +162,26 @@ class restore_enrol_apply_plugin extends restore_enrol_plugin {
            lands in, whatever course it was taken from. */
         $courseid = (int) $DB->get_field('enrol', 'courseid', ['id' => $enrolid], MUST_EXIST);
 
+        $status = (int) $data->status;
+        if (!in_array($status, submission::STATUSES, true)) {
+            $this->step->log('Application record with status ' . $status . ' not restored', backup::LOG_WARNING);
+            return 0;
+        }
+
         /* Best effort. The mapping exists only for enrolments this plugin itself restored,
            so a cancelled application - whose user enrolment was deleted long before the
-           backup was taken - legitimately has none, and the reference is simply left empty. */
+           backup was taken - legitimately has none, and the reference is simply left empty.
+           Kept only when the row is this applicant's enrolment in the instance just restored:
+           a mapping naming anything else would hang this record on somebody's other enrolment. */
         $userenrolmentid = (int) $this->get_mappingid('enrol_apply_userenrolment', $data->userenrolmentid);
+        if (
+            $userenrolmentid
+            && !$DB->record_exists('user_enrolments', ['id' => $userenrolmentid, 'enrolid' => $enrolid, 'userid' => $userid])
+        ) {
+            $userenrolmentid = 0;
+        }
+        // A pending application has no decision to carry: those columns are written at the decision.
+        $pending = $status === submission::STATUS_PENDING;
 
         /* A repeated restore into the same course must not double the trail. The check keys
            on the course, not on $enrolid: enrol_apply_plugin::restore_instance() always calls
@@ -188,7 +204,7 @@ class restore_enrol_apply_plugin extends restore_enrol_plugin {
             'enrolid' => $enrolid,
             'userenrolmentid' => $userenrolmentid,
             'comment' => $data->comment,
-            'status' => (int) $data->status,
+            'status' => $status,
             'outcomemessage' => $data->outcomemessage,
             /* An empty element parses back as NULL, not as the '' it was written from, so the
                ?? here and on the two below is the ordinary path (every decision without a
@@ -198,15 +214,15 @@ class restore_enrol_apply_plugin extends restore_enrol_plugin {
             'decisionnote' => $data->decisionnote ?? '',
             /* Without the ??, mapped_groups() would get NULL for its string parameter, and the
                TypeError would abort the restore. */
-            'decidedgroups' => $this->mapped_groups($data->decidedgroups ?? ''),
+            'decidedgroups' => $pending ? '' : $this->mapped_groups($data->decidedgroups ?? ''),
             /* Mapped like the decided groups, an id that did not travel dropped. An empty or absent
                element is NULL, "not known": the archive cannot tell a NULL from an approval that
                joined none (both parse back as null), and claiming "none" for every record decided
                before the column would be the false one of the two. */
-            'joinedgroups' => trim((string) ($data->joinedgroups ?? '')) === ''
+            'joinedgroups' => $pending || trim((string) ($data->joinedgroups ?? '')) === ''
                 ? null
                 : $this->mapped_groups((string) $data->joinedgroups),
-            'decidedrole' => (int) $this->get_mappingid('role', $data->decidedrole ?? 0),
+            'decidedrole' => $pending ? 0 : (int) $this->get_mappingid('role', $data->decidedrole ?? 0),
             'timecreated' => (int) $data->timecreated,
             'timedecided' => (int) $data->timedecided,
             'decidedby' => (int) $this->get_mappingid('user', $data->decidedby),
@@ -284,7 +300,9 @@ class restore_enrol_apply_plugin extends restore_enrol_plugin {
      * what the report's masking judges against that profile field's visibility on THIS site; on
      * another site the id names an unrelated field, possibly one everybody may see, and the
      * archive does not say which field it was, so the answer is dropped rather than shown under
-     * a rule that was never its own. Standard s_ keys name {user} columns and travel as they are.
+     * a rule that was never its own. Standard s_ keys name {user} columns and travel as they are,
+     * when the column is one a snapshot can hold. A key of any other shape is dropped: the readers
+     * mask by key, and one they cannot classify is not theirs to show.
      *
      * @param string $key Field key as the archive carries it.
      * @return string|null The key to store, or null to skip the answer.
@@ -299,12 +317,20 @@ class restore_enrol_apply_plugin extends restore_enrol_plugin {
             }
             return answers::key($newid);
         }
-        if (str_starts_with($key, fields::SOURCE_CUSTOM) && !$this->task->is_samesite()) {
-            $this->step->log('Answer to profile field ' . s($key) . ' from another site not restored', backup::LOG_WARNING);
-            return null;
+        if (str_starts_with($key, fields::SOURCE_CUSTOM) && ctype_digit(substr($key, strlen(fields::SOURCE_CUSTOM)))) {
+            if (!$this->task->is_samesite()) {
+                $this->step->log('Answer to profile field ' . s($key) . ' from another site not restored', backup::LOG_WARNING);
+                return null;
+            }
+            return $key;
+        }
+        if (fields::is_snapshot_standard_key($key)) {
+            return $key;
         }
 
-        return $key;
+        // Any other shape names nothing a reader knows how to judge.
+        $this->step->log('Answer under key ' . s($key) . ' not restored', backup::LOG_WARNING);
+        return null;
     }
 
     /**
@@ -404,6 +430,13 @@ class restore_enrol_apply_plugin extends restore_enrol_plugin {
             return;
         }
 
+        /* The mapping is by archive id and spans every apply method of the course: the comment goes
+           onto an enrolment of THIS method or nowhere. */
+        $enrolid = $this->get_apply_instanceid();
+        if (!$enrolid || !$DB->record_exists('user_enrolments', ['id' => $userenrolmentid, 'enrolid' => $enrolid])) {
+            return;
+        }
+
         // The table is unique on userenrolmentid, so a repeated restore must not insert twice.
         if ($DB->record_exists('enrol_apply_applicationinfo', ['userenrolmentid' => $userenrolmentid])) {
             return;
@@ -439,6 +472,9 @@ class restore_enrol_apply_plugin extends restore_enrol_plugin {
 
         $name = trim(clean_param((string) ($data->name ?? ''), PARAM_TEXT));
         if ($name === '') {
+            /* Mapped to nothing, so its fields find no category: left unset, the latest parent
+               would still be the category restored before this one. */
+            $this->set_mapping('enrol_apply_appcategory', $data->id, 0);
             return;
         }
 
@@ -498,6 +534,10 @@ class restore_enrol_apply_plugin extends restore_enrol_plugin {
         }
 
         $configdata = json_decode((string) ($data->configdata ?? ''), true);
+        if (is_array($configdata)) {
+            // The text field's password switch is not offered here; see application_handler.
+            unset($configdata['ispassword']);
+        }
         $category = category_controller::create($categoryid, null, $handler);
         $field = field_controller::create(0, (object) ['type' => $type], $category);
         api::save_field_configuration($field, (object) [

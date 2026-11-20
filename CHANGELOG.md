@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased (2026112009)
+## Unreleased (2026112010)
 
 ### Security
 
@@ -87,6 +87,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **A required question is no longer answered by spaces alone** (audit B-03). Only a question
   shown on a condition was checked; with `strictformsrequired` off, core's default, a single space
   satisfied any other required text question.
+- **The applicant limit holds under concurrent applications** (audit M-03). A method with a limit takes
+  its admission lock in `submit_application()`, after the submit and course locks, and counts under it, so
+  two different applicants can no longer both take the last place. `apply_or_admit()` reads the method again
+  once the locks are held and judges that copy: a mode switched to review meanwhile sends a valid key to
+  the queue, and an instance disabled or closed meanwhile refuses.
+- **A teacher cannot forge a group in the course report** (audit M-06). A group name carrying the report's
+  separator characters could add a part naming a group of another course, whose context made the report
+  throw for every reader. The part is dropped, and a missing course context skips the group.
+- **A custom field hidden from everybody is judged at the site** (audit B-05.5). A `PROFILE_VISIBLE_NONE`
+  field in an application's snapshot needs `moodle/user:viewalldetails` at the system context, as core
+  judges it on a profile; a snapshot key of an unknown shape is never shown.
+
+### Fixed
+
+- **A restore is stricter about what an archive may claim** (audit M-02): the user enrolment a record
+  points to must be the applicant's in the restored method, a status outside the known ones skips the
+  record, a pending record carries no decided role or groups, an answer key must be `a_<id>`, `c_<id>` or
+  a known `s_` column, and a category with no name no longer lends its predecessor to its fields.
+- The upgrade removes `ispassword` from the configuration of this plugin's own text questions, and a restore
+  strips it; a pending record also restores without `joinedgroups`.
+- `manage.php` changes state only on a POST; a repeated id in a decision is deferred once; a `{placeholder}`
+  inside an applicant's first name is no longer expanded by the next one, and the course name in a notice
+  is formatted in its course; the text field's "password" switch is gone from the question form (the
+  answer is stored as plain text); `application_admitted_by_key` maps its object on a log restore; the
+  privacy export names only groups of the course.
 
 ### Added
 

@@ -376,7 +376,8 @@ course report and the approver's e-mail, judged for each reader in the course: t
 phone numbers, institution and department appear only where *Show user identity*
 (`showuseridentity`) names them; a field listed in *Hide user fields* (`hiddenuserfields`), such
 as the city or country, needs `moodle/course:viewhiddenuserfields`; and a custom profile field
-whose visibility is private or nobody needs `moodle/user:viewalldetails`. To let approvers read a
+whose visibility is private needs `moodle/user:viewalldetails` in the course, and one whose visibility is nobody
+needs it on the whole site, as on a profile page. To let approvers read a
 department they asked for, add it to *Show user identity*.
 
 ### Separate groups

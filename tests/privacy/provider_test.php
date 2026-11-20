@@ -601,6 +601,35 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
     }
 
     /**
+     * A decided group id naming another course's group is not exported by name.
+     *
+     * The control is a group of this course in the same record, which is.
+     *
+     * Changes that must make it fail: the groups read by id alone.
+     *
+     * @return void
+     */
+    public function test_a_group_of_another_course_is_not_named_in_the_export(): void {
+        $applicant = $this->create_application('Please approve me');
+        $context = context_course::instance($this->course->id);
+        $own = $this->getDataGenerator()->create_group(['courseid' => $this->course->id, 'name' => 'Own group']);
+        $other = $this->getDataGenerator()->create_group([
+            'courseid' => $this->getDataGenerator()->create_course()->id,
+            'name' => 'Other course group',
+        ]);
+        $this->record_decision($applicant, [(int) $own->id, (int) $other->id], 0);
+
+        $this->export_context_data_for_user((int) $applicant->id, $context, 'enrol_apply');
+        $exported = writer::with_context($context)->get_data([
+            get_string('privacy:trailpath', 'enrol_apply'),
+            get_string('privacy:roleapplicant', 'enrol_apply'),
+            get_string('privacy:recordpath', 'enrol_apply', $this->submission_id_of($applicant)),
+        ]);
+
+        $this->assertSame(['Own group'], $exported->decidedgroups);
+    }
+
+    /**
      * A role a stock site ships is exported by its localised name.
      *
      * The other branch of role_name(). Every role Moodle installs has an empty role.name, so

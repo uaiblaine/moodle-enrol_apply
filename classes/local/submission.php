@@ -666,12 +666,16 @@ class submission {
      * Split what joined_groups_sql() produced back into group records.
      *
      * A part whose id, course or visibility is not a number is dropped, which is what a row cut by
-     * MySQL's group_concat_max_len, or a name carrying the record separator, looks like.
+     * MySQL's group_concat_max_len, or a name carrying the record separator, looks like. A group name
+     * may carry both separators, so a teacher can forge a whole part inside a name: the SQL only
+     * finds groups of the record's own course, so a part whose course differs from the first one's,
+     * which is always generated, or from the caller's, is dropped.
      *
      * @param string|null $aggregate The aggregated string, null when the record names no group.
+     * @param int|null $courseid The record's course when the caller knows it; else the first part's.
      * @return array The {groups} records, each carrying id, courseid, visibility and name, keyed by id.
      */
-    public static function parse_joined_groups(?string $aggregate): array {
+    public static function parse_joined_groups(?string $aggregate, ?int $courseid = null): array {
         if ($aggregate === null || $aggregate === '') {
             return [];
         }
@@ -680,6 +684,10 @@ class submission {
         foreach (explode(self::AGGREGATE_RECORD, $aggregate) as $row) {
             $parts = explode(self::AGGREGATE_UNIT, $row, 4);
             if (count($parts) !== 4 || !ctype_digit($parts[0]) || !ctype_digit($parts[1]) || !ctype_digit($parts[2])) {
+                continue;
+            }
+            $courseid ??= (int) $parts[1];
+            if ((int) $parts[1] !== $courseid) {
                 continue;
             }
             $groups[(int) $parts[0]] = (object) [
