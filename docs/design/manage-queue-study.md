@@ -1,7 +1,7 @@
 # The confirmation queue, aligned to the Design System
 
-Status: **decided** (2026-11-20). The owner accepted every recommendation of MQ-D1&ndash;MQ-D16 as
-written; nothing is started. Next: Q1, then Q2.
+Status: **delivered** (2026-11-20). The owner accepted every recommendation of MQ-D1&ndash;MQ-D16 as
+written; Q1 merged in #153 (2026112003), Q2 in #154 (2026112004), Q3 measured below (section 9).
 Interactive mockup: [`manage-queue-mockup.html`](manage-queue-mockup.html) (open in a browser; its
 switches change concept, queue size, viewport, reader and JavaScript on or off).
 Builds on [`applications-desk.html`](applications-desk.html) (the queue's decisions of 2026-08-31,
@@ -397,10 +397,42 @@ extra confirmation step beyond the sheet itself.
 |---|---|---|
 | Q1 | The look: heading, band, status labels and short key outcomes, chips, the filter bar's look over today's controls, the grid (fixed header and Applicant column, picture, Review button, answers line, comment clamp), cards, empty states; the review page's gaps (section 6) | 1 to 2 |
 | Q2 | The controls: status segmented control, the Filters panel (a `<details>` without JavaScript), the footer's three buttons, the decision sheet and the queue's cancel confirmation, the options above the grid without JavaScript, superseded refreshes, the sheet's sections for a selection across methods with one message per method (MQ-D15, MQ-D16); Behat on 5.3 (with and without JavaScript, the site-wide queue included) | 2 |
-| Q3 | A look at a seeded queue (500 applications, 240 groups) on m503 and the mini cluster: render time of a page of 50, refresh time, the sheet with 50 selected | 1 |
+| Q3 | A look at a seeded queue (500 applications, 240 groups) on m503 and the mini cluster: render time of a page of 50, refresh time, the sheet with 50 selected. **Done 2026-11-20, section 9** | 1 |
 
 Q1 can start at once; Q2 follows Q1. Neither waits on the audit report's stages; both read the same
 tokens, so whichever lands first declares them in `styles.css` for the other.
+
+## 9. Q3: the seeded queue, measured (2026-11-20)
+
+A course Q3SEED on m503 (enrol_apply 2026112004, PHP 8.4, PostgreSQL, `perfdebug` on) and the same course on
+the mini cluster (two web nodes behind a round-robin balancer, MUC and sessions in Redis): 240 groups in 20
+groupings, 500 applications filed through the plugin's own `apply()` (80 % with a chosen group, 5 % sent for
+review by a group key, 15 % with no group), 91 of them deferred through `wait_enrolment()`, applied over the last
+60 days. The seeding script is the one in this study's PR description; it refuses a second run.
+
+| Measure | m503 | Mini cluster | Budget (AR-D16, reused) |
+|---|---|---|---|
+| A page of 50 rows, server time | 130&ndash;135 ms warm, 217 ms cold | 127&ndash;272 ms end to end, both nodes | under 300 ms |
+| Database reads for that page | 225 (73 with 0 rows, 80 with 1, 122 with 15) | not printed (no `perfdebug`) | constant per call |
+| A refresh (status cell, `core_table_get_dynamic_table_content`) | 126&ndash;132 ms, click to response 142&ndash;167 ms | 60&ndash;86 ms, click to response 63&ndash;93 ms | under 300 ms |
+| Select all 50 on the page | 54 ms | not measured | under 100 ms |
+| The decision sheet with 50 selected | open in 83 ms: "Confirm 50 applications", five names, "and 45 more" | not measured | under 200 ms |
+| The status counts | All 500, Pending 409, Deferred 91, right | the same | |
+
+**Every timing is within its budget. The read count is not constant per call.** Each row adds about three
+reads, and they come from one place: `profilelink::viewable_ids()` costs 8 reads for 1 applicant, 45 for 15 and
+136 for 50 (measured by calling it alone on the seeded course). Its batch path is skipped whenever a plugin
+implements `control_view_profile`, because that callback is per user by core's contract, and theme_dimensions,
+the production theme, implements it (`theme_dimensions_control_view_profile`). Without such a plugin the batch
+runs and the count stays flat. The columns themselves read nothing per row (`read_snapshots()` is one read for
+the page), and the page held its timings with the extra reads, so nothing is changed in this plugin.
+
+The follow-up, if a larger page or a slower database ever needs it, belongs to theme_dimensions: a batch form of
+its profile rule (one query for a page of users) that `profilelink` could call when that theme answers, instead
+of one `control_view_profile` call per row.
+
+Left on the stacks: the course Q3SEED with its 500 users `q3user001`&ndash;`q3user500` on m503 (course 148,
+instance 100447) and on the mini cluster (instance 23987), as demo data for later checks.
 
 ## Sources read
 
