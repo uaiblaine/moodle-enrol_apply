@@ -9,7 +9,8 @@
 .enrol_apply-queue,
 .enrol_apply-manage,
 .enrol_apply-capacity,
-.enrol_apply-filters {
+.enrol_apply-filters,
+.enrol_apply-sheet {
     --enrol-apply-line: var(--bs-border-color, #dee2e6);
     --enrol-apply-muted: var(--bs-secondary-color, #6c757d);
     --enrol-apply-fill: var(--bs-primary, #0f6cbf);
@@ -32,7 +33,8 @@
 .enrol_apply-filters,
 .enrol_apply-review,
 .enrol_apply-applicationnav,
-.enrol_apply-timeline {
+.enrol_apply-timeline,
+.enrol_apply-sheet {
     --enrol-apply-surface-inset: var(--dimensions-surface-inset, var(--bs-secondary-bg, #e9ecef));
     --enrol-apply-ink-muted: var(--dimensions-ink-muted, var(--bs-secondary-color, rgba(33, 37, 41, .75)));
     --enrol-apply-brand-tint: var(--dimensions-brand-tint, var(--bs-primary-bg-subtle, #cfe2ff));
@@ -53,7 +55,13 @@
     --enrol-apply-shadow: var(--dimensions-shadow, rgb(0 0 0 / 10%));
     --enrol-apply-radius-xs: var(--dimensions-radius-xs, 4px);
     --enrol-apply-radius-sm: var(--dimensions-radius-sm, 6px);
+    --enrol-apply-radius-md: var(--dimensions-radius-md, 8px);
     --enrol-apply-radius-lg: var(--dimensions-radius-lg, 12px);
+    --enrol-apply-control-line: var(--dimensions-control-line, var(--bs-gray-500, #8f959e));
+    --enrol-apply-brand-fill: var(--dimensions-brand-fill, var(--bs-primary, #0f6cbf));
+    --enrol-apply-on-brand-fill: var(--dimensions-on-brand-fill, #fff);
+    --enrol-apply-elevation-sm: var(--dimensions-elevation-sm, 0 1px 2px rgba(7, 0, 147, .08));
+    --enrol-apply-elevation-md: var(--dimensions-elevation-md, 0 4px 12px rgba(7, 0, 147, .10));
 }
 
 /* The status label (status-label.md): a static word in one tone, never colour alone, with every
@@ -202,9 +210,154 @@
     white-space: nowrap;
 }
 
-/* The controls that narrow the queue, a compact row of small controls: every field stays on the
-   page (the Behat scenarios set them), sized by a percentage basis with a rem floor, because
-   Moodle's stylelint csstree validator rejects minmax(max(...)). */
+/* The filter bar (filter-bar.md): the status control, the search box, the count and the Filters
+   control on one line that wraps, the panel positioned under it. */
+.enrol_apply-filterbar {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 0.75rem;
+    position: relative;
+}
+
+/* The status control (segmented-control.md): cells on an inset platter, the current one raised.
+   The cells are links, so the control works without JavaScript; aria-current marks the value in
+   force, which enrol_apply/manage moves on a click. */
+.enrol_apply-seg {
+    background: var(--enrol-apply-surface-inset);
+    border: 1px solid transparent;
+    border-radius: var(--enrol-apply-radius-lg);
+    color: var(--enrol-apply-ink);
+    display: inline-flex;
+    gap: 0.125rem;
+    padding: 0.1875rem;
+}
+
+.enrol_apply-seg .enrol_apply-seg-cell {
+    align-items: center;
+    border-radius: var(--enrol-apply-radius-md);
+    color: var(--enrol-apply-ink-muted);
+    display: inline-flex;
+    font-size: 0.875rem;
+    font-weight: 500;
+    gap: 0.375rem;
+    height: 2rem;
+    padding: 0 0.75rem;
+    text-decoration: none;
+}
+
+.enrol_apply-seg .enrol_apply-seg-cell[aria-current="true"] {
+    background: var(--enrol-apply-surface);
+    box-shadow: var(--enrol-apply-elevation-sm);
+    color: var(--enrol-apply-ink);
+    font-weight: 600;
+}
+
+/* The quiet counter (counter.md). */
+.enrol_apply-seg .enrol_apply-seg-count {
+    color: var(--enrol-apply-ink-muted);
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+}
+
+@media (pointer: coarse) {
+    .enrol_apply-seg .enrol_apply-seg-cell {
+        height: 2.25rem;
+    }
+}
+
+.enrol_apply-searchfield {
+    align-items: center;
+    display: flex;
+    flex: 1 1 12rem;
+    gap: 0.25rem;
+    max-width: 24rem;
+}
+
+/* The Filters control: a native details whose summary is an icon button with the loud counter.
+   The marker is dropped, the icon says what it is. */
+.enrol_apply-filterpanel > .enrol_apply-filterstoggle {
+    align-items: center;
+    border: 1px solid var(--enrol-apply-control-line);
+    border-radius: var(--enrol-apply-radius-md);
+    cursor: pointer;
+    display: inline-flex;
+    height: 2rem;
+    justify-content: center;
+    list-style: none;
+    position: relative;
+    width: 2.25rem;
+}
+
+.enrol_apply-filterpanel > .enrol_apply-filterstoggle::-webkit-details-marker {
+    display: none;
+}
+
+.enrol_apply-filterpanel > .enrol_apply-filterstoggle .icon {
+    margin: 0;
+}
+
+.enrol_apply-filterpanel[open] > .enrol_apply-filterstoggle {
+    background: var(--enrol-apply-brand-tint);
+    border-color: var(--enrol-apply-brand-edge);
+    color: var(--enrol-apply-brand-ink);
+}
+
+/* The loud counter (counter.md), the only round shape on the bar. */
+.enrol_apply-filterstoggle .enrol_apply-filtersbadge {
+    background: var(--enrol-apply-brand-fill);
+    border-radius: 50rem;
+    color: var(--enrol-apply-on-brand-fill);
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    height: 1rem;
+    line-height: 1rem;
+    min-width: 1rem;
+    padding: 0 0.25rem;
+    position: absolute;
+    right: -0.25rem;
+    text-align: center;
+    top: -0.25rem;
+}
+
+.enrol_apply-filterstoggle .enrol_apply-filtersbadge[hidden] {
+    display: none;
+}
+
+/* The panel (filter-panel.md), anchored under the bar's real bottom. */
+/* A popover under the bar (filter-panel.md). It lies over the chip row while open, which is why the
+   page never renders it open and enrol_apply/manage closes it on a click outside it. */
+.enrol_apply-filterpanel > .enrol_apply-filterpanel-body {
+    background: var(--enrol-apply-surface);
+    border: 1px solid var(--enrol-apply-line);
+    border-radius: var(--enrol-apply-radius-lg);
+    box-shadow: var(--enrol-apply-elevation-md);
+    color: var(--enrol-apply-ink);
+    left: 0;
+    padding: 0.75rem;
+    position: absolute;
+    right: 0;
+    top: calc(100% + 0.375rem);
+    z-index: 20;
+}
+
+.enrol_apply-filterpanel-foot {
+    border-top: 1px solid var(--enrol-apply-line);
+    display: flex;
+    gap: 0.5rem;
+    justify-content: space-between;
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+}
+
+.enrol_apply-filterpanel-foot .btn {
+    min-height: 2rem;
+}
+
+/* The panel's fields, a row of small controls that wraps, sized by a percentage basis with a rem
+   floor, because Moodle's stylelint csstree validator rejects minmax(max(...)). */
 .enrol_apply-filterrow {
     display: flex;
     flex-wrap: wrap;
@@ -231,14 +384,7 @@
     width: 100%;
 }
 
-.enrol_apply-filtersubmit {
-    align-self: flex-end;
-    flex: 0 0 auto;
-    min-width: 0;
-}
-
-/* The chips row of the filter bar (filter-bar.md, chip.md): the chips, "Clear all", then the
-   quiet result count at the row's end. */
+/* The chips row of the filter bar (filter-bar.md, chip.md): the chips, then "Clear all". */
 .enrol_apply-chiprow {
     align-items: center;
     display: flex;
@@ -342,6 +488,119 @@ body.path-enrol-apply:not(.jsenabled) #page.drawers {
        80px unless the base font size passes about 26.7px. Stylelint's csstree validator rejects
        max() in a length-valued property, so the floor is written literally. */
     margin-bottom: 80px;
+}
+
+/* The footer's three decisions (MQ-D4). Each carries its full label and a short one; below 576 px
+   the short one shows and the bar keeps one line, because core's footer is 80 px with overflow
+   hidden. The full label stays the button's accessible name at every width (its aria-label). */
+.enrol_apply-formaction .enrol_apply-decide {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+.enrol_apply-formaction .enrol_apply-decide-short {
+    display: none;
+}
+
+.enrol_apply-formaction .enrol_apply-selectedcount {
+    white-space: nowrap;
+}
+
+@media (max-width: 575.98px) {
+    .enrol_apply-formaction {
+        flex-wrap: nowrap;
+    }
+
+    .enrol_apply-formaction .enrol_apply-decide-long {
+        display: none;
+    }
+
+    .enrol_apply-formaction .enrol_apply-decide-short {
+        display: inline;
+    }
+
+    .enrol_apply-formaction .enrol_apply-decide {
+        padding-left: 0.5rem;
+        padding-right: 0.5rem;
+    }
+}
+
+/* The decision options above the grid without JavaScript (MQ-D5): a panel whose summary says they
+   apply to every application decided. With JavaScript enrol_apply/manage hides it and the fields
+   travel into the decision sheet. */
+.enrol_apply-decisionoptions {
+    background: var(--enrol-apply-surface);
+    border: 1px solid var(--enrol-apply-line);
+    border-radius: var(--enrol-apply-radius-lg);
+    color: var(--enrol-apply-ink);
+    padding: 0.625rem 0.75rem;
+}
+
+.enrol_apply-decisionoptions > summary {
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.enrol_apply-decisionoptions-body {
+    padding-top: 0.25rem;
+}
+
+/* The decision sheet (MQ-D5): core/modal's dialogue, its body the selected applicants and the page's
+   own decision fields. */
+.enrol_apply-sheet .enrol_apply-sheetwho {
+    list-style: none;
+    margin: 0 0 0.75rem;
+    padding: 0;
+}
+
+.enrol_apply-sheet .enrol_apply-sheetwho > li {
+    align-items: center;
+    display: flex;
+    gap: 0.5rem;
+    padding: 0.125rem 0;
+}
+
+/* The picture at 24 px in the sheet's list (MQ-D9), core's own markup copied off the row. */
+.enrol_apply-sheet .enrol_apply-sheetwho .userpicture,
+.enrol_apply-sheet .enrol_apply-sheetwho .userinitials {
+    font-size: 0.625rem;
+    height: 1.5rem;
+    margin: 0;
+    width: 1.5rem;
+}
+
+.enrol_apply-sheet .enrol_apply-sheetmore {
+    color: var(--enrol-apply-ink-muted);
+    font-size: 0.875rem;
+}
+
+.enrol_apply-sheet .enrol_apply-sheetsection {
+    border-top: 1px solid var(--enrol-apply-line);
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+}
+
+.enrol_apply-sheet .enrol_apply-sheetsectionhead {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+    margin-bottom: 0.375rem;
+}
+
+.enrol_apply-sheet .enrol_apply-sheetcourse {
+    color: var(--enrol-apply-ink-muted);
+    font-size: 0.875rem;
+}
+
+/* The method under the course on the queues that span methods (MQ-D15). */
+.enrol_apply-methodline {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.375rem;
+    margin-top: 0.125rem;
 }
 
 .enrol_apply-linebreaks {
@@ -1217,7 +1476,7 @@ body.path-enrol-apply:not(.jsenabled) .enrol_apply-accordion .collapse {
 
 /* The short cells (group, date, and the course on the spanning queues) keep a width of their own,
    or the table's automatic layout gives the applicant cell their room and wraps them word by word. */
-.enrol_apply-table table td:not(.enrol_apply-col-select):not(.enrol_apply-col-applicant):not(.enrol_apply-col-answers):not(.enrol_apply-col-comment) {
+.enrol_apply-table table td.enrol_apply-col-short {
     min-width: 8rem;
 }
 
@@ -1361,11 +1620,12 @@ body.path-enrol-apply:not(.jsenabled) .enrol_apply-accordion .collapse {
     .enrol_apply-table table.generaltable tbody tr > td {
         background-color: transparent;
         box-shadow: none;
+        color: var(--enrol-apply-ink);
     }
 
     /* The short cells (group, date, and the course on the spanning queues) share a line, two to
        one, so a card reads in four lines rather than seven blocks. */
-    .enrol_apply-table table td:not(.enrol_apply-col-select):not(.enrol_apply-col-applicant):not(.enrol_apply-col-answers):not(.enrol_apply-col-comment) {
+    .enrol_apply-table table td.enrol_apply-col-short {
         flex: 1 1 45%;
         min-width: 8rem;
     }

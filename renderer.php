@@ -91,10 +91,29 @@ class enrol_apply_renderer extends plugin_renderer_base {
            the page from offering what it cannot do. */
         $candecide = $table->can_decide();
 
+        /* The three decisions as three submit buttons named formaction, in the review page's
+           order and styles (MQ-D4), so the POST contract is the review page's and a decision is
+           one press without JavaScript. Each carries a short label too, the one shown below
+           576 px, where core's 80 px footer has to keep one line. */
         $actions = [
-            ['value' => 'confirm', 'label' => get_string('btnconfirm', 'enrol_apply')],
-            ['value' => 'wait', 'label' => get_string('btnwait', 'enrol_apply')],
-            ['value' => 'cancel', 'label' => get_string('btncancel', 'enrol_apply')],
+            [
+                'value' => 'cancel',
+                'label' => get_string('btncancel', 'enrol_apply'),
+                'short' => get_string('btncancelshort', 'enrol_apply'),
+                'classes' => 'btn-outline-danger',
+            ],
+            [
+                'value' => 'wait',
+                'label' => get_string('btnwait', 'enrol_apply'),
+                'short' => get_string('btnwaitshort', 'enrol_apply'),
+                'classes' => 'btn-outline-secondary',
+            ],
+            [
+                'value' => 'confirm',
+                'label' => get_string('btnconfirm', 'enrol_apply'),
+                'short' => get_string('btnconfirmshort', 'enrol_apply'),
+                'classes' => 'btn-primary',
+            ],
         ];
 
         /* The action bar goes into a core sticky footer that the template interpolates inside
@@ -111,9 +130,6 @@ class enrol_apply_renderer extends plugin_renderer_base {
             $bar = $this->render_from_template('enrol_apply/manage_actions', [
                 'togglegroup' => \enrol_apply\table\applications::TOGGLE_GROUP,
                 'selectedlabel' => get_string('queueselectedonpage', 'enrol_apply', 0),
-                'actionlabel' => get_string('withselectedusers'),
-                'choosedots' => get_string('choosedots'),
-                'golabel' => get_string('go'),
                 'actions' => $actions,
             ]);
             $stickyfooter = $this->render(new \core\output\sticky_footer($bar, 'justify-content-end'));
@@ -183,18 +199,12 @@ class enrol_apply_renderer extends plugin_renderer_base {
             'viewonlynotice' => get_string('queueviewonly', 'enrol_apply'),
             'formurl' => $manageurl->out(false),
             'sesskey' => sesskey(),
-            'capacityhtml' => $this->render_from_template(
+            /* The method's own numbers, on a method's queue only: the site-wide and mentee queues
+               span methods and get no band. The two plain counts it used to carry are the status
+               control's now (MQ-D3), in queue_filters_context(). */
+            'capacityhtml' => $instance === null ? '' : $this->render_from_template(
                 'enrol_apply/queue_capacity',
-                /* The scope's totals, never the filtered ones, and both over the same scope: the
-                   waiting count and the deferred count beside it ignore the filters, so a filtered
-                   count would render impossible pairs such as "4 awaiting decision" beside "12
-                   deferred", and a narrowed decider's deferred count is their groups' (V-D3). */
-                $this->queue_capacity_context(
-                    $instance,
-                    $table->scope_total(),
-                    $instance !== null ? $table->scope_deferred() : null,
-                    $table->scope_groups() !== null
-                )
+                $this->queue_capacity_context($instance, $table->scope_groups() !== null)
             ),
             'filtershtml' => $this->render_from_template(
                 'enrol_apply/queue_filters',
@@ -204,6 +214,11 @@ class enrol_apply_renderer extends plugin_renderer_base {
             'hasshowing' => $showing !== '',
             'showingtext' => $showing,
             'stickyfooter' => $stickyfooter,
+            'decisionoptionslabel' => get_string('queuedecisionoptions', 'enrol_apply'),
+            /* The queues that span methods: without JavaScript one message reaches every method's
+               applicants, which the decision sheet splits by method (MQ-D15). */
+            'hasspansnote' => $instance === null,
+            'spansnote' => get_string('queuedecisionspans', 'enrol_apply'),
             'hasplacesnotice' => $placesnotice !== '',
             'placesnotice' => $placesnotice,
             'hasclosednotice' => $closednotice !== '',
@@ -242,6 +257,11 @@ class enrol_apply_renderer extends plugin_renderer_base {
      * removable on a page with a single GET form - a form cannot express "submit without this one
      * field", and a link can.
      *
+     * The status is a segmented control rather than a field (MQ-D3): each value is a link to this
+     * listing with that status, so it works without JavaScript and amd/src/manage.js only takes
+     * over the click. Every other filter lives in the Filters panel, a native details element whose
+     * fields stay in this one GET form.
+     *
      * @param \enrol_apply\table\applications $table The queue, after capture_table().
      * @param moodle_url $manageurl The page's own url, carrying the filters already applied.
      * @return array Template context.
@@ -271,9 +291,9 @@ class enrol_apply_renderer extends plugin_renderer_base {
         $search = $table->get_search();
         $status = $table->get_status();
 
-        /* The vocabulary comes from the table, so the select can only offer what manage.php will
-           accept back and what the predicate can match. The labels are literal string ids, the
-           same wording as {@see \enrol_apply\local\submission::status_label()}. */
+        /* The vocabulary comes from the table, so the status control can only offer what
+           manage.php will accept back and what the predicate can match. The labels are literal
+           string ids, the same wording as {@see \enrol_apply\local\submission::status_label()}. */
         $statuses = [];
         foreach (\enrol_apply\table\applications::filterable_statuses() as $value) {
             $statuses[$value] = match ($value) {
@@ -282,22 +302,48 @@ class enrol_apply_renderer extends plugin_renderer_base {
             };
         }
 
-        /* Kept apart from the per-field $fieldoptions below: a shared variable would make the
-           status select publish the last offered field's vocabulary. */
-        $statusoptions = [[
-            'value' => '',
-            'label' => get_string('queuestatusany', 'enrol_apply'),
-            'selected' => $status === null,
-        ]];
-        foreach ($statuses as $value => $label) {
-            $statusoptions[] = [
+        /* The status control's three values and their counts, which are the scope's and no filter
+           changes them: the counts used to be the band's "awaiting decision" and "deferred" tiles,
+           and they keep those tiles' rule, the scope's totals over the same scope_where(), so a
+           narrowed decider is counted in their groups (V-D3) and a search never makes "All" smaller
+           than "Deferred". Pending is what is left, the two statuses being the only ones a queued
+           row holds (filterable_statuses()). */
+        $total = $table->scope_total();
+        $deferred = $table->scope_deferred();
+        $counts = [
+            '' => $total,
+            ENROL_USER_SUSPENDED => max(0, $total - $deferred),
+            ENROL_APPLY_USER_WAIT => $deferred,
+        ];
+
+        /* Each value is the url of this listing with that status and every other filter kept, as a
+           chip's remove link is built; url_params() carries no paging, so a status change starts at
+           page one. A value counting nothing is not drawn unless it is the current one
+           (segmented-control.md); All always is. */
+        $statuscells = [];
+        foreach ($counts as $value => $count) {
+            $current = $value === '' ? $status === null : $status === (int) $value;
+            if ($value !== '' && $count === 0 && !$current) {
+                continue;
+            }
+            $cellparams = $params;
+            unset($cellparams['status']);
+            if ($value !== '') {
+                $cellparams['status'] = $value;
+            }
+            $statuscells[] = [
                 'value' => (string) $value,
-                'label' => $label,
-                'selected' => $status === $value,
+                'label' => $value === '' ? get_string('queuestatusall', 'enrol_apply') : $statuses[(int) $value],
+                'count' => $count,
+                'current' => $current,
+                'url' => (new moodle_url('/enrol/apply/manage.php', $cellparams))->out(false),
             ];
         }
 
         $chips = [];
+        /* How many of the Filters panel's own filters are in force, for its loud counter: every chip
+           but the search's, which the bar shows in place. */
+        $panelcount = 0;
         if ($search !== '') {
             $chips[] = $this->queue_filter_chip(
                 'search',
@@ -306,14 +352,8 @@ class enrol_apply_renderer extends plugin_renderer_base {
                 $without('search')
             );
         }
-        if ($status !== null) {
-            $chips[] = $this->queue_filter_chip(
-                'status',
-                get_string('queuefilterstatus', 'enrol_apply'),
-                $statuses[$status] ?? (string) $status,
-                $without('status')
-            );
-        }
+        /* No chip for the status: the segmented control says which value is current, and a chip
+           would say it a second time. */
 
         /* The group filter, on the instance queue alone and with the values this reader is offered
            (\enrol_apply\local\groupfilter). Where the page defaults it to the reader's own groups
@@ -347,6 +387,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
                 } else {
                     unset($removeparams[\enrol_apply\local\groupfilter::NAME]);
                 }
+                $panelcount++;
                 $chips[] = $this->queue_filter_chip(
                     \enrol_apply\local\groupfilter::NAME,
                     get_string('queuegroup', 'enrol_apply'),
@@ -406,6 +447,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
             ];
 
             if ($value !== '') {
+                $panelcount++;
                 $chips[] = $this->queue_filter_chip(
                     $token,
                     $label,
@@ -423,6 +465,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
                    not through userdate(): the chip is redrawn client-side from the input's value
                    on every refresh, where Moodle's language-pack date format is not reproducible,
                    so a formatted chip would change spelling on the first refresh. */
+                $panelcount++;
                 $chips[] = $this->queue_filter_chip(
                     $bound,
                     get_string($stringid, 'enrol_apply'),
@@ -470,6 +513,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
             }
 
             if ($categoryid !== null) {
+                $panelcount++;
                 $chips[] = $this->queue_filter_chip(
                     'category',
                     get_string('queuefiltercategory', 'enrol_apply'),
@@ -478,6 +522,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
                 );
             }
             if ($courseid !== null) {
+                $panelcount++;
                 $chips[] = $this->queue_filter_chip(
                     'course',
                     get_string('queuefiltercourse', 'enrol_apply'),
@@ -512,7 +557,12 @@ class enrol_apply_renderer extends plugin_renderer_base {
             'searchvalue' => $search,
             'searchhelp' => $this->output->help_icon('queuesearch', 'enrol_apply'),
             'statuslabel' => get_string('queuefilterstatus', 'enrol_apply'),
-            'statusoptions' => $statusoptions,
+            'statuscells' => $statuscells,
+            /* A narrowed decider's counts are their groups' (V-D3), which the cells alone would not
+               say. Plain spelling. */
+            'countnote' => $table->scope_groups() !== null ? get_string('queueinyourgroups', 'enrol_apply') : '',
+            'filterslabel' => get_string('queuefilters', 'enrol_apply'),
+            'panelcount' => $panelcount,
             'groupheading' => get_string('queuefiltersgroup', 'enrol_apply'),
             'hasfields' => (bool) $fields,
             'fields' => $fields,
@@ -533,7 +583,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
             'haschips' => (bool) $chips,
             'chips' => $chips,
             /* Every filter off, the group default included: where the page would apply it again,
-               the url says `all` instead. */
+               the url says `all` instead. The panel's "Clear filters" is the same url. */
             'clearurl' => $groupdefault !== null
                 ? (new moodle_url('/enrol/apply/manage.php', [
                     'id' => $params['id'],
@@ -543,12 +593,12 @@ class enrol_apply_renderer extends plugin_renderer_base {
             'clearlabel' => get_string('queueclearfilters', 'enrol_apply'),
             'counttext' => get_string('queuefiltercount', 'enrol_apply', (object) [
                 'matched' => (int) $table->totalrows,
-                'total' => $table->scope_total(),
+                'total' => $total,
             ]),
             /* The total on its own, for the module to recompose the line after an as-you-type
                refresh: the refreshed table reports only the matched count, in its
                data-table-total-rows, and the scope's total does not change with the filters. */
-            'scopetotal' => $table->scope_total(),
+            'scopetotal' => $total,
         ];
     }
 
@@ -579,7 +629,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
     }
 
     /**
-     * The decision context above the queue: how many are waiting, and how full the method is.
+     * The decision context above a method's queue: how full the method is, and whether it is open.
      *
      * The open/closed status is not built from allow_apply(), whose cohort clause asks whether
      * the current user may apply: a manager outside a restricted cohort would be told the method
@@ -588,42 +638,25 @@ class enrol_apply_renderer extends plugin_renderer_base {
      * checks beside it. A new instance-level clause in allow_apply() belongs here as well.
      *
      * The counts come from \enrol_apply\local\capacity, as on every other surface, so the queue
-     * header and the review page cannot report different numbers.
+     * header and the review page cannot report different numbers. How many applications wait and
+     * how many are deferred are the status control's counts (MQ-D3), not tiles of this band; see
+     * queue_filters_context().
      *
-     * A decider narrowed by separate groups (V-D3) is told the deferred count of their own groups,
-     * like the waiting count, and keeps the method's capacity numbers, labelled as the method's:
-     * those are what tell a moderator they are about to overbook.
+     * A decider narrowed by separate groups (V-D3) keeps the method's capacity numbers, labelled as
+     * the method's: those are what tell a moderator they are about to overbook.
      *
-     * @param stdClass|null $instance Enrol instance the queue is scoped to, null when it spans them.
-     * @param int $awaiting How many applications the queue is listing.
-     * @param int|null $deferred How many of them are deferred, over the same scope; null for the
-     *     method's own figure, capacity::deferred().
+     * @param stdClass $instance Enrol instance the queue is scoped to.
      * @param bool $narrowed Whether the queue is narrowed to the reader's groups.
      * @return array Context for the enrol_apply/queue_capacity template.
      */
-    protected function queue_capacity_context($instance, int $awaiting, ?int $deferred = null, bool $narrowed = false): array {
+    protected function queue_capacity_context(stdClass $instance, bool $narrowed = false): array {
         $capacity = \enrol_apply\local\capacity::class;
 
         $context = [
-            'tiles' => [[
-                'value' => (string) $awaiting,
-                'label' => get_string('queueawaiting', 'enrol_apply'),
-            ]],
             'meters' => [],
             'hasstatus' => false,
         ];
 
-        /* Everything below is about one enrolment method. The site-wide and mentee queues span
-           methods, each with its own limits and dates, so they get the waiting count only. */
-        if ($instance === null) {
-            return $context;
-        }
-
-        $context['tiles'][] = [
-            'value' => (string) ($deferred ?? $capacity::deferred($instance)),
-            'label' => get_string('queuedeferred', 'enrol_apply'),
-            'note' => $narrowed ? get_string('queueinyourgroups', 'enrol_apply') : '',
-        ];
         // The method's numbers below are not the queue's when the queue is narrowed; say whose.
         $methodnote = $narrowed ? get_string('queueonthismethod', 'enrol_apply') : '';
 
@@ -1912,8 +1945,8 @@ class enrol_apply_renderer extends plugin_renderer_base {
                claiming nothing was sent, and it cannot tell a masked reader that something was. */
             'hasnothing' => !$hascomment && !$snapshot['hassnapshot'],
             'nothingsent' => get_string('reviewnothingsent', 'enrol_apply'),
-            /* Singular labels of their own: the queue's btnconfirm and its siblings read
-               "Confirm requests", which is wrong above one application.
+            /* Labels of their own, naming the one application: the queue's btnconfirm and its
+               siblings name a decision over a selection.
 
                Order is the layout: the bar spreads these with justify-content-between, so the
                destructive decision sits at the far edge, away from the others, and the approval

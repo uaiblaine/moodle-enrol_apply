@@ -17,54 +17,55 @@
 {{!
     @template enrol_apply/manage_actions
 
-    The bulk action control of the applications queue, rendered into a core sticky footer.
+    The decisions of the applications queue, rendered into a core sticky footer: the live count
+    of the selection, then Cancel applications, Defer and Confirm (MQ-D4), the review page's order
+    and styles.
 
-    Only the action itself lives here. The decision's own inputs - the groups, the role, the
-    message and the note - stay in the page body, because a core sticky footer is a fixed 80px
-    bar whose .sticky-footer-content carries overflow hidden, so a textarea would be clipped.
+    Only the actions live here. The decision's own inputs - the groups, the role, the message and
+    the note - stay in the page body, because a core sticky footer is a fixed 80px bar whose
+    .sticky-footer-content carries overflow hidden, so a textarea would be clipped.
 
-    Both controls carry the toggle-all action vocabulary: data-action toggle, data-toggle action,
-    and the group name, which core matches exactly rather than by prefix. Neither ships the
-    disabled attribute, unlike core's own participants page: the queue is operable without
-    JavaScript, so amd/src/manage.js disables them on init instead (see its docblock). That
-    depends on the rule in styles.css that brings the sticky footer on screen when no script ran,
-    because core parks one off screen until its own JavaScript slides it in.
+    Each button is a submit named formaction with its decision as the value, so without JavaScript
+    one press posts the selection, the queue's POST contract unchanged. With JavaScript
+    enrol_apply/manage takes the click over and opens the decision sheet instead (MQ-D5, MQ-D6).
+
+    Every button carries the toggle-all action vocabulary: data-action toggle, data-toggle action,
+    and the group name, which core matches exactly rather than by prefix. None ships the disabled
+    attribute, unlike core's own participants page: the queue is operable without JavaScript, so
+    amd/src/manage.js disables them on init instead (see its docblock). That depends on the rule in
+    styles.css that brings the sticky footer on screen when no script ran, because core parks one
+    off screen until its own JavaScript slides it in.
+
+    Each button carries its full label and a short one, and the stylesheet shows the short one below
+    576 px, where the bar must keep one line. The full label is the button's accessible name at
+    every width, and contains the short one.
 
     Context variables required for this template:
     * togglegroup string - name of the core/checkbox-toggleall group the table's rows belong to
     * selectedlabel string - the count of selected rows, worded "on this page" because that is
       what a selection is: refreshTableContent() replaces the whole table region on a page turn,
       a sort or a filter change, so every checkbox in it is destroyed and the count starts again
-    * actionlabel string - label of the bulk action select
-    * choosedots string - placeholder option of the bulk action select
-    * golabel string - label of the submit button
-    * actions array - list of value and label pairs, one per bulk action
+    * actions array - value, label, short and classes (the button's style) for each decision
 
     Example context (json):
     {
         "togglegroup": "enrol-apply-queue",
         "selectedlabel": "0 selected on this page",
-        "actionlabel": "With selected users...",
-        "choosedots": "Choose...",
-        "golabel": "Go",
         "actions": [
-            {"value": "confirm", "label": "Confirm requests"},
-            {"value": "wait", "label": "Defer requests"},
-            {"value": "cancel", "label": "Cancel requests"}
+            {"value": "cancel", "label": "Cancel applications", "short": "Cancel", "classes": "btn-outline-danger"},
+            {"value": "wait", "label": "Defer", "short": "Defer", "classes": "btn-outline-secondary"},
+            {"value": "confirm", "label": "Confirm", "short": "Confirm", "classes": "btn-primary"}
         ]
     }
 }}
-<div class="enrol_apply-formaction d-flex flex-wrap align-items-center gap-2">
+<div class="enrol_apply-formaction d-flex align-items-center gap-2">
     <span class="enrol_apply-selectedcount small text-muted" data-region="selectedcount"
         aria-live="polite">{{selectedlabel}}</span>
-    <label class="mb-0" for="enrol_apply_formaction">{{actionlabel}}</label>
-    <select class="form-select w-auto" id="enrol_apply_formaction" name="formaction"
-        data-action="toggle" data-toggle="action" data-togglegroup="{{togglegroup}}">
-        <option value="">{{choosedots}}</option>
-        {{#actions}}
-            <option value="{{value}}">{{label}}</option>
-        {{/actions}}
-    </select>
-    <button type="submit" class="btn btn-primary"
-        data-action="toggle" data-toggle="action" data-togglegroup="{{togglegroup}}">{{golabel}}</button>
+    {{#actions}}
+        <button type="submit" class="btn {{classes}} enrol_apply-decide" name="formaction" value="{{value}}"
+            aria-label="{{label}}" data-region="decide"
+            data-action="toggle" data-toggle="action" data-togglegroup="{{togglegroup}}"><span
+            class="enrol_apply-decide-long" aria-hidden="true">{{label}}</span><span
+            class="enrol_apply-decide-short" aria-hidden="true">{{short}}</span></button>
+    {{/actions}}
 </div>

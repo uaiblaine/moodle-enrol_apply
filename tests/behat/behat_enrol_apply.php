@@ -284,6 +284,44 @@ class behat_enrol_apply extends behat_base {
     }
 
     /**
+     * Open the queue's Filters panel, unless it is open already.
+     *
+     * The panel is a details element whose summary carries an icon and visually hidden text, which
+     * no named selector reaches; and a click on it while it is open (a panel filter applied on load
+     * opens it) would close it, so the state is read first. For @javascript scenarios: the
+     * non-JavaScript driver sets a field inside a closed panel as it is.
+     *
+     * @When I open the filters of the applications queue
+     * @return void
+     */
+    public function i_open_the_filters_of_the_applications_queue(): void {
+        $open = (bool) $this->getSession()->evaluateScript(
+            "!!(document.querySelector('[data-region=\"filterpanel\"]') || {}).open"
+        );
+        if (!$open) {
+            $this->execute('behat_general::i_click_on', ['[data-region="filterpanel"] > summary', 'css_element']);
+        }
+    }
+
+    /**
+     * Close the queue's Filters panel when it is open, as a press outside it does.
+     *
+     * The panel is a popover over the chip row, so a scenario that removes a chip after setting a
+     * panel field closes it first. JavaScript scenarios only.
+     *
+     * @When I close the filters of the applications queue
+     * @return void
+     */
+    public function i_close_the_filters_of_the_applications_queue(): void {
+        $open = (bool) $this->getSession()->evaluateScript(
+            "!!(document.querySelector('[data-region=\"filterpanel\"]') || {}).open"
+        );
+        if ($open) {
+            $this->execute('behat_general::i_click_on', ['[data-region="filterpanel"] > summary', 'css_element']);
+        }
+    }
+
+    /**
      * Put an application on a course's queue, with the key of one of its groups or with none.
      *
      * Through the plugin's own apply(), so the application carries its durable record and its key

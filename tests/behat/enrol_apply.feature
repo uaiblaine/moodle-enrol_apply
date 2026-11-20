@@ -36,10 +36,10 @@ Feature: Enrolment upon approval
     And I am on "Course 1" course homepage
     And I should not see "New section"
 
-  # With JavaScript, because two paths exist only there: the application modal, which is what a
-  # browser with JavaScript gets, and the queue's bulk bar, which starts disabled only because
-  # enrol_apply/manage disables it on init. Only the @javascript scenarios execute the plugin's
-  # JavaScript at all.
+  # With JavaScript, because three paths exist only there: the application modal, which is what a
+  # browser with JavaScript gets, the queue's decisions, which start disabled only because
+  # enrol_apply/manage disables them on init, and the decision sheet they open. Only the
+  # @javascript scenarios execute the plugin's JavaScript at all.
   @javascript
   Scenario: A teacher approves a pending application and the student gains access
     Given I log in as "student1"
@@ -50,19 +50,74 @@ Feature: Enrolment upon approval
     When I log in as "teacher1"
     And I am on the "C1" "enrol_apply > manage applications" page
     Then I should see "Student 1"
-    # The bar lives in core's sticky footer, and the rows, the header checkbox and the bar are
-    # one core/checkbox-toggleall group. Selecting through the header is what proves it.
-    And I should see "Go" in the "sticky-footer" "region"
-    And the "With selected users..." "field" should be disabled
+    # The decisions live in core's sticky footer, and the rows, the header checkbox and the three
+    # buttons are one core/checkbox-toggleall group. Selecting through the header is what proves it.
+    And I should see "Confirm" in the "sticky-footer" "region"
+    And the "Confirm" "button" should be disabled
     And I click on "Select all" "checkbox"
-    And the "With selected users..." "field" should be enabled
-    And I set the field "With selected users..." to "Confirm requests"
-    And I press "Go"
+    And the "Confirm" "button" should be enabled
+    # The button opens the decision sheet, which names the selection and holds the options.
+    And I press "Confirm"
+    And I should see "Student 1" in the "Confirm 1 application" "dialogue"
+    And I should see "Message to the applicant" in the "Confirm 1 application" "dialogue"
+    And I set the field "Message to the applicant" to "Welcome to the course."
+    And I click on "Confirm 1" "button" in the "Confirm 1 application" "dialogue"
     Then I should see "The selected enrolment applications have been updated."
     And I log out
     And I log in as "student1"
     And I am on "Course 1" course homepage
     Then I should see "New section"
+
+  # Cancelling from the queue asks (MQ-D6): with JavaScript the footer's button opens the decision
+  # sheet, which says what cancelling removes, and Back posts nothing. It needs @javascript: the
+  # sheet is the module's.
+  @javascript
+  Scenario: Cancelling from the queue asks first, and backing out changes nothing
+    Given "student1" has applied to "C1" with the key of ""
+    When I log in as "teacher1"
+    And I am on the "C1" "enrol_apply > manage applications" page
+    And I click on "Select all" "checkbox"
+    And I press "Cancel applications"
+    Then I should see "Cancelling removes the enrolment and the applicant's comment." in the "Cancel 1 application" "dialogue"
+    # Deferring and cancelling choose no group and no role, so the sheet does not offer them.
+    And I should see "Note for the record" in the "Cancel 1 application" "dialogue"
+    And I click on "Back" "button" in the "Cancel 1 application" "dialogue"
+    And I should see "Student 1"
+    And I should see "1 of 1 applications"
+    And I press "Cancel applications"
+    And I click on "Cancel 1" "button" in the "Cancel 1 application" "dialogue"
+    And I should see "The selected enrolment applications have been updated."
+    And I should see "Nothing to display"
+
+  # A selection on the site-wide queue that spans two enrolment methods (MQ-D15, MQ-D16): the sheet
+  # splits it by method, each with a message box of its own, and the course cell names the method.
+  @javascript
+  Scenario: A selection across enrolment methods is decided method by method
+    Given the following "users" exist:
+      | username | firstname | lastname | email                |
+      | student2 | Student   | 2        | student2@example.com |
+    And the following "courses" exist:
+      | fullname | shortname | format |
+      | Course 2 | C2        | topics |
+    And I log in as "admin"
+    And I add "Course enrol confirmation" enrolment method in "Course 2" with:
+      | Custom instance name | Moderator recruitment |
+    And I log out
+    And "student1" has applied to "C1" with the key of ""
+    And "student2" has applied to "C2" with the key of ""
+    When I log in as "admin"
+    And I am on the "enrol_apply > manage applications" page
+    Then I should see "Apply for this course"
+    And I should see "Moderator recruitment"
+    And I click on "Select all" "checkbox"
+    And I press "Confirm"
+    And I should see "This selection spans 2 enrolment methods." in the "Confirm 2 applications" "dialogue"
+    And I should see "Moderator recruitment" in the "Confirm 2 applications" "dialogue"
+    And I should see "Student 2" in the "Confirm 2 applications" "dialogue"
+    And I set the field "Message to these applicants" to "Welcome to the course."
+    And I click on "Confirm 2" "button" in the "Confirm 2 applications" "dialogue"
+    And I should see "The selected enrolment applications have been updated."
+    And I should not see "Student 2"
 
   Scenario: A teacher cancels a pending application and the student stays out
     Given I log in as "student1"
@@ -73,8 +128,8 @@ Feature: Enrolment upon approval
     When I log in as "teacher1"
     And I am on the "C1" "enrol_apply > manage applications" page
     And I set the field "Select Student 1" to "1"
-    And I set the field "With selected users..." to "Cancel requests"
-    And I press "Go"
+    # Without JavaScript the footer's button posts at once, as the queue always has (MQ-D6).
+    And I press "Cancel applications"
     Then I should see "The selected enrolment applications have been updated."
     And I should see "Nothing to display"
     And I log out
@@ -113,8 +168,7 @@ Feature: Enrolment upon approval
     # The decision returns through manage.php's own redirect, which is where the search is lost
     # if the url does not carry it.
     When I set the field "Select Zephyrina Quillsworth" to "1"
-    And I set the field "With selected users..." to "Confirm requests"
-    And I press "Go"
+    And I press "Confirm"
     Then I should see "Search quillsworth"
     And I should see "No application matches the filters applied"
     # And clearing it brings back the application the filter was hiding all along.
@@ -272,12 +326,14 @@ Feature: Enrolment upon approval
     Then I should see "0 selected on this page"
     And I click on "Select all" "checkbox"
     And I should see "1 selected on this page"
-    And the "With selected users..." "field" should be enabled
+    And the "Confirm" "button" should be enabled
+    And the "Cancel applications" "button" should be enabled
     # The refresh. The row comes back, and with it a checkbox nobody has ticked.
     And I click on "Application date" "link"
     And I should see "Student 1"
     And I should see "0 selected on this page"
-    And the "With selected users..." "field" should be disabled
+    And the "Confirm" "button" should be disabled
+    And the "Cancel applications" "button" should be disabled
 
   # The as-you-type half. The debounce, the refresh, the chip and the count are all the module's,
   # so it needs @javascript; with scripting off the queue narrows through a page load, which the
@@ -316,7 +372,7 @@ Feature: Enrolment upon approval
     And I should see "Showing 1-1 of 1"
     And I should see "Search quillsworth"
     And I should see "0 selected on this page"
-    And the "With selected users..." "field" should be disabled
+    And the "Confirm" "button" should be disabled
     # And removing it puts the queue back, chip and all, still without a page load.
     When I click on "Remove the filter Search: quillsworth" "link"
     Then I should see "Student 1"
@@ -393,6 +449,7 @@ Feature: Enrolment upon approval
     And I log out
     When I log in as "teacher1"
     And I am on the "C1" "enrol_apply > manage applications" page
+    And I open the filters of the applications queue
     And I set the field "Applied from" to "2020-01-01"
     And I press "Apply filters"
     # The server's spelling, from a real page load. Asserted against the control's own value
