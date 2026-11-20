@@ -116,11 +116,18 @@ group too), sorts and downloads as CSV or Excel.
 
 ![The enrolment method's settings: instance name, role, groups, group enrolment keys with the keyed groups and their seats, dates, comment label, maximum applicants and places](docs/screenshots/settings.png)
 
-Per course: whether applications are open, the role and groups an approval gives, whether group
-enrolment keys are accepted (with the groups that carry a key and their seats, never the keys),
-the application window, the comment label, the maximum applicants and the places. Below come the
-profile fields to ask for and who is told of a new application; **Save and edit application
-fields** leads on to the method's own questions.
+Per course, in seven sections, after a one-line summary of a saved method (whether it accepts
+applications, the closing date, the places taken and what a group key does): **General** (the
+name, **Allow existing enrolments**, **Accept new applications**, **Role on approval**); **When
+and how many** (the application window, the maximum applicants, the places and the places taken);
+**Who may apply** (the cohort); **Application form** (the **Text shown to applicants**, **Ask for
+a comment** and its **Comment prompt**, the profile fields to ask for, and how many questions the
+method asks); **Groups** (**Groups joined on approval**, and what a group enrolment key does, with
+the groups that carry a key and their seats, never the keys); **After approval** (the enrolment
+duration, the expiry notice, the offer to save details to the profile); **Notifications**
+(**Notify of new applications**). Who may apply and the last two stay closed unless they hold
+something other than the default. **Save and edit application fields** leads on to the method's
+own questions.
 
 ## Installation
 
