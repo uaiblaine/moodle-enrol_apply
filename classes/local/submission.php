@@ -395,6 +395,49 @@ class submission {
     }
 
     /**
+     * Discard everything personal in the applications of one deleted user, keeping the shape.
+     *
+     * Runs from the user_deleted observer: delete_user() calls no privacy provider, so without
+     * this a record keyed to the user outlives the account until the retention sweep or the
+     * course's deletion. The records the user applied for lose their userid, their texts and
+     * their frozen answers, as {@see self::pseudonymise()} does for a course. Their decidedby
+     * stays: it names another person. The records the user decided only lose that name, because
+     * the record is the applicant's, as the provider's erasure of a decider has it.
+     *
+     * Idempotent and cheap with nothing to do: two existence probes, and no write.
+     *
+     * @param int $userid User being deleted.
+     * @return void
+     */
+    public static function pseudonymise_user(int $userid): void {
+        global $DB;
+
+        $applied = $DB->record_exists('enrol_apply_submission', ['userid' => $userid]);
+        $decided = $DB->record_exists('enrol_apply_submission', ['decidedby' => $userid]);
+        if (!$applied && !$decided) {
+            return;
+        }
+
+        $transaction = $DB->start_delegated_transaction();
+        if ($applied) {
+            self::delete_answers('userid = :userid', ['userid' => $userid]);
+            $DB->execute(
+                "UPDATE {enrol_apply_submission}
+                    SET userid = 0, comment = :comment, outcomemessage = :outcome, decisionnote = :note
+                  WHERE userid = :userid",
+                ['comment' => '', 'outcome' => '', 'note' => '', 'userid' => $userid]
+            );
+        }
+        if ($decided) {
+            $DB->execute(
+                "UPDATE {enrol_apply_submission} SET decidedby = 0 WHERE decidedby = :userid",
+                ['userid' => $userid]
+            );
+        }
+        $transaction->allow_commit();
+    }
+
+    /**
      * Delete the frozen answers of the records a condition on enrol_apply_submission selects.
      *
      * The one way every delete path removes answers, so none of them can forget the second

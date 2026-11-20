@@ -1646,7 +1646,10 @@ backup/                      group mappings, comments and the durable trail, see
   `enrol_apply_applicationinfo` row goes on approval, on cancellation and in `unenrol_user()`,
   and the `user_enrolments` row goes with the enrolment. So the durable record is keyed by
   `courseid` + `userid`, with `enrolid` and `userenrolmentid` as references that are allowed to
-  dangle. Two consequences a reader keeps rediscovering:
+  dangle. Deleting the user does pseudonymise it: the `user_deleted` observer calls
+  `submission::pseudonymise_user()` (applicant records: userid 0, blank texts, no answers; records
+  they decided: `decidedby` 0 only), because `delete_user()` calls no privacy provider; gates
+  `XA90`-`XA95`. Two consequences a reader keeps rediscovering:
 
   **`delete_instance()` no longer deletes it**, which inverts what that method used to do to
   the plugin's data as a whole. It stays responsible for `enrol_apply_applicationinfo` and
@@ -1826,7 +1829,8 @@ backup/                      group mappings, comments and the durable trail, see
   decider's subject access export gets the decision — status, dates, which method — and never
   the applicant's words, and an erasure request from a decider only zeroes `decidedby` rather
   than deleting the row. Deleting it would destroy a third party's data under a request that
-  third party never made. An applicant's own erasure does delete the row whole.
+  third party never made. An applicant's own erasure does delete the row whole. Deleting the
+  user account (no privacy request) pseudonymises the same way: `submission::pseudonymise_user()`.
 
 - **The export path needs a per-record discriminator, not a per-instance one.** The state
   machine deliberately produces more than one record per course and user — cancelling and
