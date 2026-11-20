@@ -17,12 +17,14 @@
 {{!
     @template enrol_apply/groupkey_warnings
 
-    Warnings under the instance's group key setting: what a mode would do with the course as it
-    stands. Each sentence is a language string with no user data in it.
+    Warnings in the instance's Groups section: what a key mode would do with the course as it
+    stands, who an application without a group reaches, and the configurations that let a
+    moderator decide on another (C-D27). Each sentence is a language string, filled at most with
+    group names the reader may see, in their plain spelling: the double stash escapes them.
 
     Context variables required for this template:
     * warnings array - one object per warning, in the order they are read:
-      * danger boolean - whether the method would enrol nobody (otherwise a caution)
+      * danger boolean - whether the configuration defeats itself (otherwise a caution)
       * message string - the sentence
 
     Example context (json):

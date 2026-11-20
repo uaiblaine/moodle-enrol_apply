@@ -127,12 +127,39 @@ name, **Allow existing enrolments**, **Accept new applications**, **Role on appr
 and how many** (the application window, the maximum applicants, the places and the places taken);
 **Who may apply** (the cohort); **Application form** (the **Text shown to applicants**, **Ask for
 a comment** and its **Comment prompt**, the profile fields to ask for, and how many questions the
-method asks); **Groups** (**Groups joined on approval**, and what a group enrolment key does, with
-the groups that carry a key and their seats, never the keys); **After approval** (the enrolment
+method asks); **Groups** (see below); **After approval** (the enrolment
 duration, the expiry notice, the offer to save details to the profile); **Notifications**
 (**Notify of new applications**). Who may apply and the last two stay closed unless they hold
 something other than the default. **Save and edit application fields** leads on to the method's
 own questions.
+
+**Who may apply** also offers, once a cohort is chosen, **Hide this card from people outside the
+cohort**: they then see no card for the method on the course's enrolment page (somebody who already
+applied always sees theirs). Without it they see the card and are told they may not apply.
+
+**Groups** starts with one question, **How is an applicant's group decided?**
+
+- **A decider chooses on approval**: the applicant names no group; whoever approves picks the groups.
+- **The applicant chooses from a list**: **Groups offered** (a group only its members can see is
+  marked "never offered", and is never shown to an applicant), **Add the groups of a grouping**
+  (copied into the list when you save; a group added to the grouping later is not offered until
+  you add it), **The applicant must choose** (or answer "No preference"), **Group seats apply to
+  this method** (with `local_groupdist`: the list shows each group's places and refuses a full
+  one; off, the method neither shows nor checks seats) and **And with a group key?** (no, or "a
+  valid key enrols at once", where a valid key wins over the chosen group). A required choice with
+  nothing to offer is refused.
+- **The applicant types a group enrolment key**: what the key does (enrol at once, beside the
+  review; key only; key only, reviewed), with the groups that carry a key and their seats, never
+  the keys.
+
+Then, whatever the answer, **Who decides applications to this method?** ("The deciders of the
+application's group", or "Only those who see every group", see [Separate groups](#separate-groups))
+and **Groups joined on approval**. In a separate-groups course the section warns when a method
+granting a role that decides applications is decided by each group's deciders (a moderator of a
+group could approve another moderator), when a group offered here is joined on approval, through
+another method of the course, with a role that decides, and which applications reach only those
+who see every group (without a group, or with "No preference"). The summary strip says how many
+groups the applicants choose among, and when only those who see every group decide.
 
 ## Installation
 
@@ -371,6 +398,16 @@ the *Deferred to the waiting list* tile counts their groups, while the method's 
 applications held stay the method's and say so. In a *Visible groups* course the filter starts on
 the reader's own groups, as a filter they can remove, never as a restriction.
 
+Two refinements, for courses where moderators are recruited through the plugin itself. A method
+whose **Who decides applications to this method?** is *Only those who see every group* gives a
+narrowed reader none of its applications, whatever their group: not in the queue, on the review
+page, in the previous/next links, in the choosers, in the new-application notice or in the course
+report. And a group membership this plugin wrote on approval narrows a decider to that group only
+when the role the same method gave them decides applications in the course (holds
+`enrol/apply:manageapplications` there): somebody who studies in Evening A through a student method
+and moderates Morning C through a recruitment method decides Morning C's applications alone. A
+membership made by hand, or by another plugin, counts as core counts it.
+
 A holder of `enrol/apply:viewapplications` is narrowed by the same rule, and so is a holder of
 `enrol/apply:viewreports` on the course report: in a separate-groups course, without
 `moodle/site:accessallgroups`, the report lists only the records whose key group is one of
@@ -396,6 +433,37 @@ A moderator decides the applications of their own groups and nobody else's:
    **Unenrol** routes refuse a moderator an application outside their groups anyway, but leaving
    both out keeps the role to this plugin's own screens.
 5. Assign the role in the course and add each moderator to their groups.
+
+### Recruiting moderators
+
+Moderators can apply through the plugin too, with a second method in the same course whose role
+makes them deciders. Set up the moderator role first ([Setting up a group
+moderator](#setting-up-a-group-moderator), steps 2 and 3), then add a second **Course enrol
+confirmation** method beside the students' one, set differently in five places:
+
+1. **General**: a name the candidates recognise ("Apply as a moderator") and **Role on approval**
+   the moderator role. The role is what makes this a *deciding* method.
+2. **Who may apply**: the cohort of the candidates ("Moderator candidates"), and **Hide this card
+   from people outside the cohort**. Filling the cohort needs `moodle/cohort:assign`, or a
+   rule-based cohort.
+3. **Groups**: either a decider places the moderator on approval, or the candidates choose among
+   the groups they would moderate (never the moderators' own group). Switch **Group seats apply to
+   this method** off, so a moderator takes no student's seat.
+4. **Who decides applications to this method?**: *Only those who see every group*, so no moderator
+   decides on another (the form warns until it is set).
+5. **Groups joined on approval**: the moderators' own group, if they have one. **Notifications**:
+   the coordination only.
+
+The two methods hold each other in check. Somebody with a moderator application waiting, or
+approved, cannot apply through the students' method ("You have applied to take part in this course
+in another role, so you cannot apply here."). The other way round is open: a student may apply to
+moderate, and the review page shows their student enrolment. A group membership the students'
+method gave them never makes them a decider of that group.
+
+A student already enrolled in the course never sees the recruitment card: Moodle sends anybody
+enrolled straight to the course. Send them the method's own form instead,
+`/enrol/apply/apply.php?instance=<id>` (the method's id is in the **Edit** link of the enrolment
+methods page).
 
 ## The applications report
 

@@ -188,6 +188,8 @@ final class edit_form_test extends \advanced_testcase {
             'customint4' => '0',
             'id' => $this->instance->id,
             'courseid' => $this->course->id,
+            'groupdecided' => \enrol_apply\local\groupquestion::DECIDER,
+            'deciders' => '0',
         ], $values);
 
         try {
@@ -249,7 +251,11 @@ final class edit_form_test extends \advanced_testcase {
             $this->assertArrayHasKey('customchar2', $errors, "'{$value}' should be refused");
         }
 
-        $data = $this->submit(['customchar1' => 'required', 'customchar2' => '1']);
+        $data = $this->submit([
+            'groupdecided' => \enrol_apply\local\groupquestion::KEY,
+            'customchar1' => 'required',
+            'customchar2' => '1',
+        ]);
         $this->assertNotNull($data);
         $this->assertSame('required', $data->customchar1);
         $this->assertSame('1', $data->customchar2);

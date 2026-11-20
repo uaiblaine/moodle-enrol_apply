@@ -166,8 +166,13 @@ class enrol_apply_plugin extends enrol_plugin {
      *
      * The applicant defaults to the current user, the contract plugins outside this
      * repository rely on when they reach this method through is_callable() with one argument.
-     * submit_application() passes its own $userid, because the cohort clause is the one
-     * restriction that asks about a person rather than about the instance.
+     * submit_application() passes its own $userid, because the cohort clause and the lock below
+     * are the restrictions that ask about a person rather than about the instance.
+     *
+     * The lock (docs/design/applicant-group-choice.md, C-D29): a learner method refuses somebody
+     * who applied to take part in the same course in a deciding role, see
+     * {@see holds_deciding_application()}. The other order stays open on purpose (C-D5): a deciding
+     * method admits an applicant already enrolled as a learner, and the decider sees that enrolment.
      *
      * @param stdClass $instance Course enrol instance.
      * @param int|null $userid Applicant to judge, or null for the current user.
@@ -224,7 +229,129 @@ class enrol_apply_plugin extends enrol_plugin {
             }
         }
 
+        /* Last, because it reads every apply method of the course. The refusal names neither the
+           other method nor its role: like the cohort refusal, it is a fixed sentence. */
+        if (
+            !\enrol_apply\local\decidingrole::method_decides($instance)
+            && $this->holds_deciding_application($instance, $userid)
+        ) {
+            return get_string('applydecidingelsewhere', 'enrol_apply');
+        }
+
         return true;
+    }
+
+    /**
+     * Whether a user holds, in this method's course, an application or an enrolment through a deciding method.
+     *
+     * Another apply method of the same course whose role on approval decides
+     * ({@see \enrol_apply\local\decidingrole::method_decides()}), where the user has an application
+     * awaiting a decision (pending or deferred, {@see \enrol_apply\local\queue::is_awaiting_decision()},
+     * the queue's own predicate) or an active enrolment that has not ended. Read from the rows the
+     * applications and approvals wrote, whatever the methods' status: a deciding method switched off
+     * after approving its moderators still recorded that they applied as moderators, so the lock
+     * holds (fail closed). An application cancelled or an enrolment ended lifts it, as either leaves
+     * nothing awaiting and nothing active.
+     *
+     * @param stdClass $instance The method being applied to.
+     * @param int $userid The applicant.
+     * @return bool True when the user applied to take part in the course in a deciding role.
+     */
+    protected function holds_deciding_application(stdClass $instance, int $userid): bool {
+        global $DB;
+
+        $rows = $DB->get_records_sql(
+            "SELECT ue.id, ue.status, ue.timeend, e.id AS enrolid, e.courseid, e.roleid
+               FROM {user_enrolments} ue
+               JOIN {enrol} e ON e.id = ue.enrolid
+              WHERE e.courseid = :courseid
+                AND e.enrol = :apply
+                AND e.id <> :self
+                AND ue.userid = :userid",
+            [
+                'courseid' => (int) $instance->courseid,
+                'apply' => 'apply',
+                'self' => (int) ($instance->id ?? 0),
+                'userid' => $userid,
+            ]
+        );
+
+        $now = time();
+        $context = context_course::instance((int) $instance->courseid);
+        foreach ($rows as $row) {
+            $timeend = (int) $row->timeend;
+            $active = (int) $row->status === ENROL_USER_ACTIVE && ($timeend === 0 || $timeend > $now);
+            if ($active) {
+                /* An approval records the role it gave, which a decider may have chosen against the
+                   method's own (and the method's role may have been edited since): the recorded
+                   assignment is the fact, not the method's setting. */
+                $roles = \enrol_apply\local\decidingrole::roles((int) $instance->courseid);
+                if ($roles) {
+                    [$insql, $params] = $DB->get_in_or_equal($roles, SQL_PARAMS_NAMED, 'deciding');
+                    $stamped = $DB->record_exists_select(
+                        'role_assignments',
+                        "userid = :userid AND contextid = :contextid AND component = :component
+                         AND itemid = :itemid AND roleid {$insql}",
+                        $params + [
+                            'userid' => $userid,
+                            'contextid' => $context->id,
+                            'component' => 'enrol_apply',
+                            'itemid' => (int) $row->enrolid,
+                        ]
+                    );
+                    if ($stamped) {
+                        return true;
+                    }
+                }
+            } else if (
+                \enrol_apply\local\queue::is_awaiting_decision($row)
+                && \enrol_apply\local\decidingrole::method_decides($row)
+            ) {
+                // A pending application has no role yet: the method's role is what it applies for.
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Whether this method's card is hidden from a user on the course enrolment page (C-D25, G-b).
+     *
+     * True when the method's "Hide this card from people outside the cohort" option is on
+     * ({@see \enrol_apply\local\instanceoptions}, hidecard), the method restricts applications to a
+     * cohort (customint5 non-zero, the -1 sentinel a cross-site restore writes included) and the
+     * user is not a member of it. A visitor (null) is a member of no cohort. The sentinel and a
+     * cohort deleted since have no members, so the card stays hidden there, as allow_apply()
+     * refuses everybody.
+     *
+     * Public and kept stable for theme_dimensions (stage T1), which calls it through is_callable()
+     * to leave such a method out of a visitor's offers; an older build without it keeps the card
+     * advertised there. The option reads its default (off) before the upgrade that creates it has
+     * run, so the answer is false there.
+     *
+     * @param stdClass $instance The {enrol} record of an apply method.
+     * @param int|null $userid The viewer, or null for a visitor who is not logged in.
+     * @return bool True when the card is hidden from this user.
+     */
+    public function hides_card_from(stdClass $instance, ?int $userid): bool {
+        global $CFG, $DB;
+
+        $cohortid = (int) ($instance->customint5 ?? 0);
+        if ($cohortid === 0 || empty($instance->id)) {
+            return false;
+        }
+        if ((int) \enrol_apply\local\instanceoptions::get((int) $instance->id)->hidecard !== 1) {
+            return false;
+        }
+
+        require_once($CFG->dirroot . '/cohort/lib.php');
+
+        /* A visitor is a member of nothing. The -1 sentinel names no cohort and a deleted cohort has
+           no row, so neither has a member. */
+        return $userid === null
+            || !$DB->record_exists('cohort', ['id' => $cohortid])
+            || !cohort_is_member($cohortid, $userid);
     }
 
     /**
@@ -263,7 +390,8 @@ class enrol_apply_plugin extends enrol_plugin {
      * every profile element twice, duplicating their ids.
      *
      * @param stdClass $instance Course enrol instance.
-     * @return string|null Rendered markup, or null when the current user may not apply.
+     * @return string|null Rendered markup, or null for a guest and for a user the card is hidden
+     *     from ({@see hides_card_from()}).
      */
     public function enrol_page_hook(stdClass $instance) {
         global $DB, $OUTPUT, $PAGE, $USER;
@@ -288,6 +416,13 @@ class enrol_apply_plugin extends enrol_plugin {
             'id, status, timeend',
             IGNORE_MULTIPLE
         );
+
+        /* A card hidden from people outside the method's cohort (C-D25) is not shown to them at
+           all. Somebody with a row of their own always sees it: it tells them about their
+           application, whoever they are now. */
+        if (!$ownrow && $this->hides_card_from($instance, (int) $USER->id)) {
+            return null;
+        }
 
         $notifytype = \core\output\notification::NOTIFY_INFO;
         $allowapply = $ownrow ? true : $this->allow_apply($instance);
@@ -469,7 +604,9 @@ class enrol_apply_plugin extends enrol_plugin {
      * has the same race with no key behind it.
      *
      * The lock is per instance and per user, so two people applying at once never wait on
-     * each other.
+     * each other. A second lock, per course and user, keeps one person's applications to two
+     * methods of a course apart, because the lock of C-D29 in allow_apply() reads the other
+     * methods: the first lock is always taken first.
      *
      * The three outcomes are distinguished because two of them need opposite treatment: an
      * application that was already there is benign, while a refusal has to be explained. See
@@ -490,6 +627,20 @@ class enrol_apply_plugin extends enrol_plugin {
                "already applied" rather than refused: that request almost certainly writes the
                application, and applied.php's own gate covers the case where it did not. */
             return \enrol_apply\local\application_result::already_applied();
+        }
+
+        /* The second lock, on the course and the applicant (C-D29). The first is per method, so an
+           application to a deciding method and one to a learner method of the same course, sent
+           together, would each pass allow_apply()'s lock before either is written. Held around
+           the check and the write, and always taken after the first, so two requests never wait
+           on each other in opposite orders. Not obtained, nothing is written: another application
+           of the same person to this course is being written, and this one is refused until it
+           has been. */
+        $courselock = \core\lock\lock_config::get_lock_factory('enrol_apply_course')
+            ->get_lock((int) $instance->courseid . '_' . (int) $userid, 10);
+        if (!$courselock) {
+            $lock->release();
+            return \enrol_apply\local\application_result::refused(get_string('applycourselocked', 'enrol_apply'));
         }
 
         try {
@@ -529,6 +680,7 @@ class enrol_apply_plugin extends enrol_plugin {
 
             return $this->apply_or_admit($instance, (int) $userid, $data);
         } finally {
+            $courselock->release();
             $lock->release();
         }
     }
@@ -1773,7 +1925,7 @@ class enrol_apply_plugin extends enrol_plugin {
                may choose every group the set is empty. An empty choice is left empty, so it still
                reads as "the method's defaults", whole. */
             if ($rowdecision !== null && array_key_exists('groups', $rowdecision)) {
-                $allowed = \enrol_apply\local\groupscope::choosable_groups((int) $instance->courseid);
+                $allowed = \enrol_apply\local\groupscope::choosable_groups((int) $instance->courseid, (int) $instance->id);
                 $chosen = array_values(array_filter(
                     array_map('intval', (array) $rowdecision['groups']),
                     static function (int $groupid) use ($allowed): bool {
@@ -2187,10 +2339,10 @@ class enrol_apply_plugin extends enrol_plugin {
      * same recipients and by the same rule as an admission.
      *
      * A course recipient narrowed by separate groups ({@see \enrol_apply\local\groupscope}) is
-     * told only of an application whose key group is one of theirs, judged for the recipient and
-     * never for the applicant whose request sends the notice: the queue would show them nothing
-     * else. The mentors and the site-wide recipients are not narrowed, as their delegation does
-     * not come from the course.
+     * told only of an application whose key group is one of theirs, on a method its groups' deciders
+     * decide (C-D20), judged for the recipient and never for the applicant whose request sends the
+     * notice: the queue would show them nothing else. The mentors and the site-wide recipients are
+     * not narrowed, as their delegation does not come from the course.
      *
      * @param stdClass $instance Course enrol instance.
      * @param int $userid Applicant user id.
@@ -2257,7 +2409,15 @@ class enrol_apply_plugin extends enrol_plugin {
             foreach ($recipients as $user) {
                 /* Not marked as notified: a recipient narrowed out here who also mentors the
                    applicant is still told below, by the level that is theirs. */
-                if (!\enrol_apply\local\groupscope::allows_group((int) $instance->courseid, $keygroupid, (int) $user->id)) {
+                if (
+                    !\enrol_apply\local\groupscope::allows_group(
+                        (int) $instance->courseid,
+                        $keygroupid,
+                        (int) $user->id,
+                        \enrol_apply\local\groupscope::DECIDE,
+                        (int) $instance->id
+                    )
+                ) {
                     continue;
                 }
                 $content = $this->application_notification_body(

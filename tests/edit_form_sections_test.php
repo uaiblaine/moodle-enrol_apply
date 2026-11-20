@@ -183,9 +183,21 @@ final class edit_form_sections_test extends \advanced_testcase {
         $expected = [
             'sectiongeneral' => ['name', 'status', 'customint6', 'roleid'],
             'sectionwhen' => ['enrolstartdate', 'enrolenddate', 'customint3', 'customint4', 'currentoccupancy'],
-            'sectionwho' => ['customint5'],
+            'sectionwho' => ['customint5', 'hidecard'],
             'sectionform' => ['customtext1', 'customint7', 'customtext2', 'questions'],
-            'sectiongroups' => ['groupselect', 'customchar1', 'customchar2', 'groupkeysummary'],
+            'sectiongroups' => [
+                'groupdecidedgroup',
+                'groupoffer',
+                'groupoffergrouping',
+                'groupchoicerequired',
+                'groupseats',
+                'choicekey',
+                'customchar1',
+                'customchar2',
+                'groupkeysummary',
+                'deciders',
+                'groupselect',
+            ],
             'sectionafter' => ['enrolperiod', 'expirynotify', 'expirythreshold', 'customint8'],
             'sectionnotify' => ['notify'],
         ];
@@ -197,6 +209,7 @@ final class edit_form_sections_test extends \advanced_testcase {
             }
         }
         $this->assertSame('select', $mform->getElementType('customint5'));
+        $this->assertSame('select', $mform->getElementType('hidecard'));
         $this->assertSame('advcheckbox', $mform->getElementType('customint8'));
         $this->assertArrayNotHasKey('nocohorts', $sections);
 
@@ -248,6 +261,9 @@ final class edit_form_sections_test extends \advanced_testcase {
         $this->assertSame('sectionwho', $sections['nocohorts']);
         $this->assertSame('hidden', $mform->getElementType('customint8'));
         $this->assertSame('sectionafter', $sections['customint8']);
+        // With no cohort to restrict to there is no card to hide, and a stored option is cleared.
+        $this->assertSame('hidden', $mform->getElementType('hidecard'));
+        $this->assertSame('sectionwho', $sections['hidecard']);
     }
 
     /**

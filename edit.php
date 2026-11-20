@@ -101,12 +101,25 @@ if ($mform->is_cancelled()) {
     $data->expirynotify = ($data->expirynotify > 0) ? 1 : 0;
     $data->expirythreshold = max((int) $data->expirythreshold, DAYSECS);
 
+    /* The Groups section's question onto the two stored settings (C-D6): the key mode lives on
+       the instance, the choice among the options, written below once the instance exists. */
+    $groupsetup = \enrol_apply\local\groupquestion::storage($data);
+    $data->customchar1 = $groupsetup->customchar1;
+
+    /* One transaction for the method, its options, its offer and its groups: a method saved
+       without its options would read the defaults, "the group's deciders" among them, which is
+       the unsafe one for a method recruiting deciders. */
+    $transaction = $DB->start_delegated_transaction();
     if ($instance->id) {
         $plugin->update_instance($instance, $data);
         $instanceid = $instance->id;
     } else {
         $instanceid = $plugin->add_instance($course, (array) $data);
     }
+
+    /* The per-method options and the offer, for a new method as for a saved one and before the
+       redirect of "Save and edit", so every way out of the form saves them. */
+    \enrol_apply\local\groupquestion::save((int) $instanceid, $data);
 
     // Replace the configured group set wholesale; it is small and always fully submitted.
     $DB->delete_records('enrol_apply_groups', ['enrolid' => $instanceid]);
@@ -116,6 +129,7 @@ if ($mform->is_cancelled()) {
             'groupid' => (int) $groupid,
         ]);
     }
+    $transaction->allow_commit();
 
     if (!empty($data->savefields)) {
         redirect(new moodle_url('/enrol/apply/fields.php', ['id' => $instanceid]));

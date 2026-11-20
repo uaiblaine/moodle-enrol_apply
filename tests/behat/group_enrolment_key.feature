@@ -18,6 +18,7 @@ Feature: Group enrolment keys
     And I log in as "admin"
     And I add "Course enrol confirmation" enrolment method in "Course 1" with:
       | Custom instance name            | Apply for this course                                                 |
+      | The applicant types a group enrolment key | 1 |
       | What a group enrolment key does | A valid key enrols at once; without one, the application is reviewed |
     And I log out
     # No profile fields: what the key does is the subject here, and the default field set would

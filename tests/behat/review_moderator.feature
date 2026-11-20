@@ -31,6 +31,7 @@ Feature: A moderator's approval keeps the method's groups outside their own
     And I enable "apply" "enrol" plugin
     And I log in as "admin"
     And I add "Course enrol confirmation" enrolment method in "Course 1" with:
+      | The applicant types a group enrolment key | 1 |
       | What a group enrolment key does | Key only, reviewed: a valid key sends the application for review, and nobody can apply without one |
     And I log out
     And the "C1" apply enrolment method asks for ""

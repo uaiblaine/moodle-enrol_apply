@@ -156,8 +156,11 @@ final class groupfilter {
     /**
      * The predicate one cleaned value adds, over a user enrolment aliased "ue".
      *
-     * A group id and {@see MINE} reuse {@see groupscope::where()}, so "which group an application
-     * belongs to" is the newest record's key group here exactly as in the separate-groups scope.
+     * A group id and {@see MINE} reuse {@see groupscope::group_where()}, so "which group an
+     * application belongs to" is the newest record's key group here exactly as in the
+     * separate-groups scope. Not {@see groupscope::where()}, which also drops the methods only those
+     * who see every group decide: that is the scope's, already applied before this filter, and a
+     * reader who sees every group filtering by a group must still find those methods' applications.
      * {@see NONE} is its complement over the groups that exist: no newest record naming a group of
      * the course. An application whose group has been deleted since lands there, beside the ones
      * without a key, so every row is reached by exactly one value of the filter (or by none, when
@@ -169,7 +172,7 @@ final class groupfilter {
      */
     public static function where(stdClass $listing, string $value): array {
         if ($value === self::MINE) {
-            return groupscope::where(self::own_groups($listing));
+            return groupscope::group_where(self::own_groups($listing));
         }
 
         if ($value === self::NONE) {
@@ -191,7 +194,7 @@ final class groupfilter {
             ];
         }
 
-        return groupscope::where([(int) $value]);
+        return groupscope::group_where([(int) $value]);
     }
 
     /**

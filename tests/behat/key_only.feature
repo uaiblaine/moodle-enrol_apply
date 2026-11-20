@@ -18,6 +18,7 @@ Feature: Enrolment with a group key only
     And I log in as "admin"
     # No instance name: an unnamed key-only method is called after what it does.
     And I add "Course enrol confirmation" enrolment method in "Course 1" with:
+      | The applicant types a group enrolment key | 1 |
       | What a group enrolment key does | Key only: a valid key enrols at once, and nobody can enrol without one |
     And I log out
     And the "C1" apply enrolment method asks for ""

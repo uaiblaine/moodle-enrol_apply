@@ -40,6 +40,13 @@ use context_system;
  * {@see \enrol_apply_plugin::can_manage_application()} and
  * {@see \enrol_apply_plugin::can_view_application()} apply this to their course branch alone.
  *
+ * Two refinements narrow a narrowed reader further (docs/design/applicant-group-choice.md). A
+ * method whose "Who decides" is only those who see every group (C-D20,
+ * {@see decided_by_all_groups()}) gives a narrowed reader none of its applications, whatever their
+ * group. And a membership this plugin wrote on approval scopes its member only when the same
+ * method gave them a role that decides (C-D28, {@see member_groups()}), so a moderator who is also
+ * a student of the course decides nothing for the group they study in.
+ *
  * Every reader of the rule comes here: can_manage_application() (the per-row backstop of every
  * decision and of the review page), can_view_application(), the queue's listing, its
  * previous/next walk, the group choosers and their allowlist, the managers' notice, the
@@ -176,14 +183,27 @@ final class groupscope {
     }
 
     /**
-     * The groups of this course the user belongs to and may see.
+     * The groups of this course whose applications this user decides (or looks at) when narrowed.
      *
-     * The same answer as array_keys(groups_get_all_groups($courseid, $userid)), which is what
-     * core's participants page asks for $USER (user/index.php, participants_search.php), written
-     * out because that helper judges moodle/course:viewhiddengroups for $USER whatever $userid
-     * says, while a notice is judged for its recipient. The visibility half is
-     * {@see groupvisibility::visible_to()}, the plugin's copy of that clause for an explicit
-     * reader, so a group hidden from its own member does not scope them into it.
+     * The groups they belong to and may see: the answer of array_keys(groups_get_all_groups($courseid,
+     * $userid)), which is what core's participants page asks for $USER (user/index.php,
+     * participants_search.php), written out because that helper judges
+     * moodle/course:viewhiddengroups for $USER whatever $userid says, while a notice is judged for
+     * its recipient. The visibility half is {@see groupvisibility::visible_to()}, the plugin's copy
+     * of that clause for an explicit reader, so a group hidden from its own member does not scope
+     * them into it.
+     *
+     * Less one kind of membership (C-D28, decided (b)): one this plugin wrote on an approval
+     * (component enrol_apply, itemid the method) counts only when the role assignment the same
+     * method gave the same user in the course (role_assignments stamped enrol_apply with the same
+     * itemid, at the course context) is of a role that decides there ({@see decidingrole}). So the
+     * membership a student method left a student in decides nothing, while the one a recruitment
+     * method left a moderator in does; a membership written by hand or by another plugin keeps
+     * core's rule. Both facts are the ones the approval recorded (groups_add_member() and
+     * role_assign() in complete_approval(), each stamped), never the method's current settings.
+     *
+     * Read once here and handed to both the per-row check ({@see allows()}) and the listing
+     * ({@see where()}), so the two cannot disagree on it.
      *
      * @param int $courseid Course id.
      * @param int $userid The member.
@@ -192,14 +212,43 @@ final class groupscope {
     public static function member_groups(int $courseid, int $userid): array {
         global $DB;
 
+        $params = [
+            'courseid' => $courseid,
+            'userid' => $userid,
+            'gmcomponent' => 'enrol_apply',
+            'racomponent' => 'enrol_apply',
+        ];
+
+        /* A membership of this plugin's narrows only through a deciding role the same method
+           assigned. get_in_or_equal() throws on an empty array, so a course where no role decides
+           lets none of them through. */
+        $deciding = decidingrole::roles($courseid);
+        $coursecontext = context_course::instance($courseid, IGNORE_MISSING);
+        if ($deciding && $coursecontext) {
+            [$rolesql, $roleparams] = $DB->get_in_or_equal($deciding, SQL_PARAMS_NAMED, 'scoperole');
+            $params += $roleparams + ['coursecontextid' => $coursecontext->id];
+            $ownmembership = "EXISTS (
+                    SELECT 1
+                      FROM {role_assignments} ra
+                     WHERE ra.userid = gm.userid
+                       AND ra.component = :racomponent
+                       AND ra.itemid = gm.itemid
+                       AND ra.contextid = :coursecontextid
+                       AND ra.roleid {$rolesql}
+                )";
+        } else {
+            $ownmembership = '1 = 0';
+        }
+
         // DISTINCT: {groups_members} carries no unique key on (groupid, userid).
         $groups = $DB->get_records_sql(
             "SELECT DISTINCT g.id, g.courseid, g.visibility
                FROM {groups} g
                JOIN {groups_members} gm ON gm.groupid = g.id
               WHERE g.courseid = :courseid AND gm.userid = :userid
+                AND (gm.component <> :gmcomponent OR {$ownmembership})
            ORDER BY g.id",
-            ['courseid' => $courseid, 'userid' => $userid]
+            $params
         );
 
         $ids = [];
@@ -210,6 +259,49 @@ final class groupscope {
         }
 
         return $ids;
+    }
+
+    /**
+     * Whether a method is decided only by those groupscope does not narrow (C-D20).
+     *
+     * The method's "Who decides" option ({@see instanceoptions::DECIDERS_ALLGROUPS}), read strictly
+     * by {@see instanceoptions::get()}, which answers the default (the group's deciders) before the
+     * upgrade that creates the options has run. A narrowed reader gets none of such a method's
+     * applications, whatever their group: in the listing ({@see where()}), the per-row check
+     * ({@see allows()}), the notices ({@see allows_group()}), the choosers
+     * ({@see choosable_groups()}) and the course report ({@see record_where()}).
+     *
+     * @param int $enrolid Enrol instance id.
+     * @return bool True when only readers who see every group decide it.
+     */
+    public static function decided_by_all_groups(int $enrolid): bool {
+        return (int) instanceoptions::get($enrolid)->deciders === instanceoptions::DECIDERS_ALLGROUPS;
+    }
+
+    /**
+     * The SQL form of {@see decided_by_all_groups()}, negated: true for a method its groups' deciders decide.
+     *
+     * Over a column holding the enrol instance id. The option's value is a class constant, written
+     * into the SQL rather than bound, so the fragment can sit twice in one statement without two
+     * placeholders of one name. Read as instanceoptions reads it: a value other than
+     * DECIDERS_ALLGROUPS, or no row, is the group's deciders. Before the upgrade that creates the
+     * table nothing can be stored there, so the fragment is the always-true one rather than a
+     * query of a table that does not exist yet.
+     *
+     * @param string $enrolidcolumn The column, such as "ue.enrolid" or "s.enrolid".
+     * @return string The where fragment; it takes no parameters.
+     */
+    public static function decided_by_groups_where(string $enrolidcolumn): string {
+        if (!instanceoptions::schema_ready()) {
+            return '1 = 1';
+        }
+
+        return "NOT EXISTS (
+                SELECT 1
+                  FROM {enrol_apply_options} scopeoption
+                 WHERE scopeoption.enrolid = {$enrolidcolumn}
+                   AND scopeoption.deciders = " . instanceoptions::DECIDERS_ALLGROUPS . "
+            )";
     }
 
     /**
@@ -249,12 +341,25 @@ final class groupscope {
      * @param int $groupid The group, 0 for an application without one.
      * @param int $userid The decider, or the recipient of a notice.
      * @param string $capability The capability exercised, see {@see narrowed_to()}.
-     * @return bool True when the user is not narrowed, or the group is one of theirs.
+     * @param int $enrolid The method the application was made to, whose "Who decides" a narrowed
+     *     user is judged by too ({@see decided_by_all_groups()}); 0 for a group with no method.
+     * @return bool True when the user is not narrowed, or the group is one of theirs on a method its
+     *     groups' deciders decide.
      */
-    public static function allows_group(int $courseid, int $groupid, int $userid, string $capability = self::DECIDE): bool {
+    public static function allows_group(
+        int $courseid,
+        int $groupid,
+        int $userid,
+        string $capability = self::DECIDE,
+        int $enrolid = 0
+    ): bool {
         $groups = self::narrowed_to($courseid, $userid, $capability);
         if ($groups === null) {
             return true;
+        }
+
+        if ($enrolid > 0 && self::decided_by_all_groups($enrolid)) {
+            return false;
         }
 
         // No group id is 0, so an application without a key is never in the list.
@@ -270,12 +375,21 @@ final class groupscope {
      * @param int $userenrolmentid User enrolment the application belongs to.
      * @param int $userid The decider or viewer.
      * @param string $capability The capability exercised, see {@see narrowed_to()}.
-     * @return bool True when the user is not narrowed, or the application's group is theirs.
+     * @return bool True when the user is not narrowed, or the application's group is theirs on a
+     *     method its groups' deciders decide.
      */
     public static function allows(int $courseid, int $userenrolmentid, int $userid, string $capability = self::DECIDE): bool {
+        global $DB;
+
         $groups = self::narrowed_to($courseid, $userid, $capability);
         if ($groups === null) {
             return true;
+        }
+
+        // A method only those who see every group decide (C-D20); a missing enrolment is no method.
+        $enrolid = (int) $DB->get_field('user_enrolments', 'enrolid', ['id' => $userenrolmentid]);
+        if ($enrolid > 0 && self::decided_by_all_groups($enrolid)) {
+            return false;
         }
 
         $groupid = self::application_group($userenrolmentid);
@@ -287,6 +401,26 @@ final class groupscope {
     /**
      * The SQL form of {@see allows()} for a narrowed reader, over a user enrolment aliased "ue".
      *
+     * {@see group_where()}, on a method its groups' deciders decide
+     * ({@see decided_by_groups_where()}, C-D20): the scope of the listing, its counts and its walk.
+     * An operator's filter on one group, which adds to the scope and never narrows a reader, is
+     * {@see group_where()} alone.
+     *
+     * @param array $groupids The reader's groups, as {@see narrowed_to()} returns them.
+     * @return array Two elements: the where fragment and its named parameters.
+     */
+    public static function where(array $groupids): array {
+        [$where, $params] = self::group_where($groupids);
+        if ($where === '1 = 0') {
+            return [$where, $params];
+        }
+
+        return ['(' . $where . ' AND ' . self::decided_by_groups_where('ue.enrolid') . ')', $params];
+    }
+
+    /**
+     * Whether an application belongs to one of the groups, over a user enrolment aliased "ue".
+     *
      * True when the newest record of the user enrolment names one of the groups. Written with
      * NOT EXISTS rather than a LIMIT inside a subquery, which not every supported database
      * accepts; "newest" is (timecreated, id), as {@see application_group()} orders. An
@@ -296,10 +430,10 @@ final class groupscope {
      * get_in_or_equal() throws on an empty array, so a reader in no group gets a never-true
      * predicate rather than a query.
      *
-     * @param array $groupids The reader's groups, as {@see narrowed_to()} returns them.
+     * @param array $groupids Group ids: the reader's, as {@see narrowed_to()} returns them, or a filter's.
      * @return array Two elements: the where fragment and its named parameters.
      */
-    public static function where(array $groupids): array {
+    public static function group_where(array $groupids): array {
         global $DB;
 
         if (!$groupids) {
@@ -329,6 +463,29 @@ final class groupscope {
     /**
      * The SQL form of the report's narrowing (S8), over the durable record aliased $alias.
      *
+     * {@see record_group_where()}, on a method its groups' deciders decide
+     * ({@see decided_by_groups_where()} over the record's enrolid, C-D20), so a narrowed reader of
+     * the report reads none of the records of a method only those who see every group decide. The
+     * report's group filter, which adds to the narrowing and never replaces it, is
+     * {@see record_group_where()} alone.
+     *
+     * @param string $alias Alias of {enrol_apply_submission} in the caller's query.
+     * @param array $groupids The reader's groups, as {@see narrowed_to()} returns them.
+     * @param string $prefix Prefix for the placeholder names, unique in the caller's statement.
+     * @return array Two elements: the where fragment and its named parameters.
+     */
+    public static function record_where(string $alias, array $groupids, string $prefix): array {
+        [$where, $params] = self::record_group_where($alias, $groupids, $prefix);
+        if ($where === '1 = 0') {
+            return [$where, $params];
+        }
+
+        return ['(' . $where . ' AND ' . self::decided_by_groups_where("{$alias}.enrolid") . ')', $params];
+    }
+
+    /**
+     * Whether a durable record belongs to one of the groups, over the record aliased $alias.
+     *
      * A record belongs to a group by its key while it waits and, once approved, also by the groups
      * the approval left the applicant in: true when keygroupid is one of the groups, or when the
      * comma-separated joinedgroups names one ({@see submission::record_joined_groups()} writes it).
@@ -354,11 +511,11 @@ final class groupscope {
      * predicate rather than a query, and the report shows core's notice (S4).
      *
      * @param string $alias Alias of {enrol_apply_submission} in the caller's query.
-     * @param array $groupids The reader's groups, as {@see narrowed_to()} returns them.
+     * @param array $groupids Group ids: the reader's, as {@see narrowed_to()} returns them, or a filter's.
      * @param string $prefix Prefix for the placeholder names, unique in the caller's statement.
      * @return array Two elements: the where fragment and its named parameters.
      */
-    public static function record_where(string $alias, array $groupids, string $prefix): array {
+    public static function record_group_where(string $alias, array $groupids, string $prefix): array {
         global $DB;
 
         $groupids = array_values(array_map('intval', $groupids));
@@ -383,21 +540,27 @@ final class groupscope {
      * The groups of this course the current user may choose for an approval (S6).
      *
      * Every group of the course groups_get_all_groups() lists to $USER, narrowed to their own
-     * for a narrowed decider. The group choosers (the queue, the review page, the participants
-     * page's bulk form) offer this list and confirm_enrolment() allowlists the posted ids against
-     * it, so a control cannot offer a group the decision would drop, and a forged post naming a
-     * foreign group joins nothing.
+     * for a narrowed decider, and to none on a method only those who see every group decide
+     * (C-D20), whose applications a narrowed decider decides none of. The group choosers (the
+     * queue, the review page, the participants page's bulk form) offer this list and
+     * confirm_enrolment() allowlists the posted ids against it, so a control cannot offer a group
+     * the decision would drop, and a forged post naming a foreign group joins nothing.
      *
      * @param int $courseid Course id.
+     * @param int $enrolid The method the decision belongs to; 0 where the chooser spans methods
+     *     (the bulk form), whose decisions the per-row check judges method by method.
      * @return array The {groups} records, keyed by group id.
      */
-    public static function choosable_groups(int $courseid): array {
+    public static function choosable_groups(int $courseid, int $enrolid = 0): array {
         global $USER;
 
         $groups = groups_get_all_groups($courseid);
         $own = self::narrowed_to($courseid, (int) $USER->id);
         if ($own === null) {
             return $groups;
+        }
+        if ($enrolid > 0 && self::decided_by_all_groups($enrolid)) {
+            return [];
         }
 
         return array_intersect_key($groups, array_flip($own));

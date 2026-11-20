@@ -847,7 +847,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
      *     full and percent (whole, clamped to the bar).
      */
     protected function group_facts(stdClass $instance, \context_course $coursecontext): array {
-        return \enrol_apply\local\groupfacts::for_course((int) $instance->courseid, $coursecontext);
+        return \enrol_apply\local\groupfacts::for_course((int) $instance->courseid, $coursecontext, (int) $instance->id);
     }
 
     /**
