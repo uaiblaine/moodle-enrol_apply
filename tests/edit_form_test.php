@@ -614,4 +614,30 @@ final class edit_form_test extends \advanced_testcase {
         $this->assertSame(1, preg_match('~id="enrol_apply_groupkeys_body"(.*)~s', $html, $folded));
         $this->assertSame($threshold + 1, substr_count($folded[1], '<li'));
     }
+
+    /**
+     * A decider's name reaches the notification list escaped exactly once.
+     *
+     * element-select.mustache renders an option's text through a triple stash.
+     *
+     * @return void
+     */
+    public function test_a_deciders_name_is_escaped_once_in_the_notification_list(): void {
+        global $DB;
+
+        /* Written straight to {user}, as an external directory sync may store it: the user
+           generator cleans a name of anything that looks like a tag. */
+        $teacher = $this->getDataGenerator()->create_and_enrol($this->course, 'editingteacher');
+        $DB->update_record('user', (object) ['id' => $teacher->id, 'firstname' => 'R&D', 'lastname' => '<Lab>']);
+        $teacher = \core_user::get_user($teacher->id, '*', MUST_EXIST);
+
+        $mform = (new \ReflectionProperty(\moodleform::class, '_form'))->getValue($this->form());
+        $texts = [];
+        foreach ($mform->getElement('notify')->_options as $option) {
+            $texts[(string) $option['attr']['value']] = $option['text'];
+        }
+
+        $this->assertSame(s(fullname($teacher)), $texts[(string) $teacher->id] ?? null);
+        $this->assertStringContainsString('R&amp;D &lt;Lab&gt;', $texts[(string) $teacher->id]);
+    }
 }

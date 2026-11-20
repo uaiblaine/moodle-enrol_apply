@@ -1814,4 +1814,33 @@ final class applications_test extends \advanced_testcase {
         $this->setAdminUser();
         $this->assertNotSame([], applications::for_scope((int) $this->instance->id)->get_offered_filters());
     }
+
+    /**
+     * The applicant's name is escaped exactly once in the queue, linked or not.
+     *
+     * flexible_table writes a cell into the markup unescaped, and html_writer::link() and span()
+     * do not escape their content.
+     *
+     * @return void
+     */
+    public function test_the_applicants_name_is_escaped_once(): void {
+        global $DB;
+
+        $this->setAdminUser();
+        $applicant = $this->applicant();
+        // Written straight to {user}, as an external directory sync may store it; the generator cleans tags.
+        $DB->update_record('user', (object) ['id' => $applicant->id, 'firstname' => 'R&D', 'lastname' => '<Lab>']);
+        $escaped = 'R&amp;D &lt;Lab&gt;';
+
+        // Linked: the administrator may open the profile.
+        $cell = $this->applicant_cell($this->rendered((int) $this->instance->id));
+        $link = '~<a [^>]*class="enrol_apply-applicantname"[^>]*>' . preg_quote($escaped, '~') . '</a>~';
+        $this->assertMatchesRegularExpression($link, $cell);
+
+        // Not linked: nobody opens a deleted user's profile.
+        $DB->set_field('user', 'deleted', 1, ['id' => $applicant->id]);
+        $cell = $this->applicant_cell($this->rendered((int) $this->instance->id));
+        $this->assertStringContainsString('<span class="enrol_apply-applicantname">' . $escaped . '</span>', $cell);
+        $this->assertStringNotContainsString('<Lab>', $cell);
+    }
 }

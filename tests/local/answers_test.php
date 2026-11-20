@@ -300,6 +300,67 @@ final class answers_test extends \advanced_testcase {
     }
 
     /**
+     * A whitespace answer does not answer a required question that has no condition.
+     *
+     * With $CFG->strictformsrequired off, its default, core's required rule does not strip
+     * whitespace, so the form's own rule lets a single space through.
+     *
+     * @return void
+     */
+    public function test_a_whitespace_answer_does_not_answer_a_required_question(): void {
+        global $CFG;
+        require_once($CFG->libdir . '/formslib.php');
+
+        set_config('strictformsrequired', 0);
+        $this->create_field('text', 'motivation', ['required' => 1]);
+        // The precondition: core's required rule really is satisfied by the spaces.
+        $this->assertTrue((new \MoodleQuickForm_Rule_Required())->validate('   '));
+
+        $errors = answers::validate($this->instance, ['customfield_motivation' => '   '], []);
+        $this->assertSame(get_string('required'), $errors['customfield_motivation'] ?? null);
+
+        // The control: a real answer passes.
+        $this->assertSame([], answers::validate($this->instance, ['customfield_motivation' => 'Training'], []));
+    }
+
+    /**
+     * Every other offered type of required question with no condition takes a real answer and refuses an empty one.
+     *
+     * Each value is what formslib exports for the type: a checkbox 1 or 0, a select its option
+     * position, a date a timestamp, a number its text, where 0 is an answer.
+     *
+     * @return void
+     */
+    public function test_each_required_type_takes_a_real_answer_and_refuses_an_empty_one(): void {
+        $this->create_field('checkbox', 'agree', ['required' => 1]);
+        $this->create_field('select', 'shift', ['required' => 1, 'options' => "Morning\nNight", 'defaultvalue' => '']);
+        $this->create_field('date', 'start', ['required' => 1, 'includetime' => 0]);
+        $this->create_field('number', 'years', ['required' => 1]);
+        $answered = [
+            'customfield_agree' => 1,
+            'customfield_shift' => 2,
+            'customfield_start' => make_timestamp(2026, 10, 12),
+            'customfield_years' => '0',
+        ];
+        $empty = [
+            'customfield_agree' => 0,
+            'customfield_shift' => 0,
+            'customfield_start' => 0,
+            'customfield_years' => '',
+        ];
+        if (class_exists(\customfield_pattern\field_controller::class)) {
+            $this->create_field('pattern', 'cpf', ['required' => 1, 'preset' => 'cpf', 'storeformat' => 'masked']);
+            $answered['customfield_cpf'] = '52998224725';
+            $empty['customfield_cpf'] = '';
+        }
+
+        $this->assertSame([], answers::validate($this->instance, $answered, []));
+
+        $errors = answers::validate($this->instance, $empty, []);
+        $this->assertEqualsCanonicalizing(array_keys($empty), array_keys($errors));
+    }
+
+    /**
      * The application form asks the instance's questions, and only them.
      *
      * @return void

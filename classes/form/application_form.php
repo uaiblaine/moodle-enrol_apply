@@ -815,7 +815,12 @@ class application_form extends dynamic_form {
             $countries = ['' => get_string('selectacountry')] + get_string_manager()->get_list_of_countries();
             $mform->addElement('select', $name, $label, $countries);
         } else {
-            $mform->addElement('text', $name, $label, 'maxlength="255" size="30"');
+            // The column's own length, which validation() holds the post to.
+            $attributes = ['size' => 30];
+            if (fields::max_length($key) > 0) {
+                $attributes['maxlength'] = fields::max_length($key);
+            }
+            $mform->addElement('text', $name, $label, $attributes);
             $mform->setType($name, PARAM_TEXT);
         }
 
@@ -831,7 +836,7 @@ class application_form extends dynamic_form {
                 'advcheckbox',
                 'confirm_' . $key,
                 '',
-                get_string('confirmfield', 'enrol_apply', fields::label($key, false))
+                get_string('confirmfield', 'enrol_apply', fields::label($key, true))
             );
         }
     }
@@ -871,6 +876,13 @@ class application_form extends dynamic_form {
                    off MoodleQuickForm_Rule_Required::validate() does not strip whitespace at all,
                    so a single space satisfies a required field. */
                 $value = trim((string) ($data[$name] ?? ''));
+                /* The browser's maxlength is a hint a post ignores; past the column's length the
+                   write would throw halfway through. Trimmed, as the write stores it. */
+                $maxlength = fields::max_length($key);
+                if ($maxlength > 0 && \core_text::strlen($value) > $maxlength) {
+                    $errors[$name] = get_string('maximumchars', '', $maxlength);
+                    continue;
+                }
             } else {
                 $field = customfield::field((int) fields::key_target($key), (int) $USER->id, $resolved->is_required($key));
                 if ($field === null) {
@@ -894,7 +906,7 @@ class application_form extends dynamic_form {
             }
             $anyvalue = true;
             if ($confirmeach && empty($data['confirm_' . $key])) {
-                $errors['confirm_' . $key] = get_string('confirmfield', 'enrol_apply', fields::label($key, false));
+                $errors['confirm_' . $key] = get_string('confirmfield', 'enrol_apply', fields::label($key, true));
             }
         }
 

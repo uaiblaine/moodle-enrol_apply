@@ -262,6 +262,7 @@ $string['expirynotifyall'] = 'Teacher and enrolled user';
 $string['expirynotifyenroller'] = 'Teacher only';
 $string['expirynotifyhour_desc'] = 'Hour of the day at which the enrolment expiry notifications are sent.';
 $string['fieldrequired'] = 'Required';
+$string['fieldtypenotallowed'] = 'This type of question cannot be asked on an application form.';
 $string['gotocourse'] = 'Go to the course';
 $string['gotoprofile'] = 'Go to my profile';
 $string['group'] = 'Groups joined on approval';

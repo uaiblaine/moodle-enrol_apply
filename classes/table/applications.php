@@ -1438,10 +1438,10 @@ class applications extends \table_sql implements dynamic_table {
         $name = isset($this->profilelinks[(int) $row->courseid . ':' . (int) $user->id])
             ? html_writer::link(
                 new moodle_url('/user/view.php', ['id' => $user->id, 'course' => $row->courseid]),
-                fullname($user),
+                s(fullname($user)),
                 ['class' => 'enrol_apply-applicantname']
             )
-            : html_writer::span(fullname($user), 'enrol_apply-applicantname');
+            : html_writer::span(s(fullname($user)), 'enrol_apply-applicantname');
 
         /* Status labels of the fleet Design System (status-label.md), not Bootstrap badges: a
            static word in a tone, its tint, edge and ink read from one token triple. */

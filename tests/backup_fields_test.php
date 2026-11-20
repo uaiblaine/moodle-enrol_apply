@@ -309,8 +309,19 @@ final class backup_fields_test extends \advanced_testcase {
         global $DB;
 
         [$course, $enrolid, $first] = $this->create_source();
-        $this->getDataGenerator()->get_plugin_generator('core_customfield')->create_field([
-            'categoryid' => $first->get('id'), 'type' => 'textarea', 'shortname' => 'bio', 'name' => 'Bio',
+        /* Written as a row, as an archive from another site or a build before the handler refused
+           the type would leave it: the generator saves through the handler, which refuses it. */
+        $DB->insert_record('customfield_field', (object) [
+            'categoryid' => $first->get('id'),
+            'type' => 'textarea',
+            'shortname' => 'bio',
+            'name' => 'Bio',
+            'description' => '',
+            'descriptionformat' => FORMAT_HTML,
+            'sortorder' => 99,
+            'configdata' => '{}',
+            'timecreated' => time(),
+            'timemodified' => time(),
         ]);
         $this->assertTrue($DB->record_exists('customfield_field', ['categoryid' => $first->get('id'), 'type' => 'textarea']));
 

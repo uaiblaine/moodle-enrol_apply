@@ -752,6 +752,71 @@ final class application_form_test extends \advanced_testcase {
     }
 
     /**
+     * A standard field is held to its {user} column's length, in characters, in the browser and on the server.
+     *
+     * Past the column's length the profile write throws halfway through, after the auth plugin
+     * was told. phone1 is 20 long and city 120, so one maxlength for every field fits neither.
+     *
+     * @return void
+     */
+    public function test_a_value_longer_than_its_column_is_refused(): void {
+        $this->ask_for(['s_city', 's_phone1']);
+        $mform = (new \ReflectionProperty(\moodleform::class, '_form'))->getValue($this->make_form());
+        $this->assertEquals(20, $mform->getElement('phone1')->getAttribute('maxlength'));
+        $this->assertEquals(120, $mform->getElement('city')->getAttribute('maxlength'));
+
+        $submitted = ['city' => 'Campinas', 'confirm_s_city' => 1, 'confirm_s_phone1' => 1];
+        $errors = $this->make_form()->validation($submitted + ['phone1' => str_repeat('9', 21)], []);
+        $this->assertSame(get_string('maximumchars', '', 20), $errors['phone1'] ?? null);
+        $errors = $this->make_form()->validation(['city' => str_repeat('ã', 121)] + $submitted + ['phone1' => ''], []);
+        $this->assertSame(get_string('maximumchars', '', 120), $errors['city'] ?? null);
+
+        // The control: at the column's length, in characters rather than bytes, both pass.
+        $atlength = ['city' => str_repeat('ã', 120), 'phone1' => str_repeat('9', 20)];
+        $errors = $this->make_form()->validation($atlength + $submitted, []);
+        $this->assertArrayNotHasKey('phone1', $errors);
+        $this->assertArrayNotHasKey('city', $errors);
+    }
+
+    /**
+     * A custom field's name reaches its confirmation checkbox and that checkbox's error escaped exactly once.
+     *
+     * element-advcheckbox.mustache renders both the text and the error through a triple stash.
+     *
+     * @return void
+     */
+    public function test_a_field_name_is_escaped_once_in_its_confirmation(): void {
+        global $CFG, $DB;
+        require_once($CFG->dirroot . '/user/profile/lib.php');
+
+        $categoryid = $DB->insert_record('user_info_category', (object) ['name' => 'Extra', 'sortorder' => 1]);
+        $fieldid = (int) $DB->insert_record('user_info_field', (object) [
+            'shortname' => 'lab',
+            'name' => 'R&D < Lab',
+            'datatype' => 'text',
+            'categoryid' => $categoryid,
+            'sortorder' => 1,
+            'required' => 0,
+            'locked' => 0,
+            'visible' => PROFILE_VISIBLE_ALL,
+            'forceunique' => 0,
+            'signup' => 0,
+            'defaultdata' => '',
+            'param1' => 30,
+            'param2' => 2048,
+        ]);
+        $key = fields::custom_key($fieldid);
+        $this->ask_for([$key]);
+        $expected = get_string('confirmfield', 'enrol_apply', 'R&amp;D &lt; Lab');
+
+        $mform = (new \ReflectionProperty(\moodleform::class, '_form'))->getValue($this->make_form());
+        $this->assertSame($expected, $mform->getElement('confirm_' . $key)->getText());
+
+        $errors = $this->make_form()->validation(['profile_field_lab' => 'Physics', 'confirm_' . $key => 0], []);
+        $this->assertSame($expected, $errors['confirm_' . $key] ?? null);
+    }
+
+    /**
      * A second submission by the same user creates nothing, and is not a refusal.
      *
      * @return void

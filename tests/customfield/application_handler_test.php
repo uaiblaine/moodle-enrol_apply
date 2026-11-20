@@ -316,4 +316,107 @@ final class application_handler_test extends \advanced_testcase {
         $this->setUser($nonediting);
         $this->assertStringNotContainsString('/enrol/apply/fields.php', implode('', $plugin->get_action_icons($instance)));
     }
+
+    /**
+     * Nobody edits field data through the handler, which keeps none, and the form still asks every field.
+     *
+     * Core's callers that take can_edit() as their only barrier build the handler from a request.
+     *
+     * @return void
+     */
+    public function test_nobody_edits_through_the_handler(): void {
+        $this->setAdminUser();
+        [, $instance] = $this->create_instance();
+        $this->create_local_category((int) $instance->id);
+        $handler = application_handler::create((int) $instance->id);
+        $fields = $handler->get_fields();
+        $this->assertCount(1, $fields);
+
+        $this->assertFalse($handler->can_edit(reset($fields), 0));
+        $this->assertSame([], $handler->get_editable_fields(0));
+        // The control: the application form asks the field all the same.
+        $this->assertSame(array_keys($fields), array_keys(\enrol_apply\local\answers::fields($instance)));
+    }
+
+    /**
+     * A field of a type the handler does not offer is not saved, however the type arrives.
+     *
+     * Core's field form builds whatever type its post names; the "Add a new field" menu is the only
+     * place the list of offered types applied.
+     *
+     * @return void
+     */
+    public function test_a_type_outside_the_list_is_not_saved(): void {
+        global $DB;
+
+        $this->setAdminUser();
+        [, $instance] = $this->create_instance();
+        $handler = application_handler::create((int) $instance->id);
+        $categoryid = $this->create_local_category((int) $instance->id);
+        $category = \core_customfield\category_controller::create($categoryid, null, $handler);
+
+        $textarea = \core_customfield\field_controller::create(0, (object) ['type' => 'textarea'], $category);
+        try {
+            $handler->save_field_configuration($textarea, (object) ['name' => 'Essay', 'shortname' => 'essay']);
+            $this->fail('A textarea field was saved.');
+        } catch (\moodle_exception $e) {
+            $this->assertSame('fieldtypenotallowed', $e->errorcode);
+        }
+
+        // A new field's type is also taken from the form data, so a text field cannot be saved as one.
+        $forged = \core_customfield\field_controller::create(0, (object) ['type' => 'text'], $category);
+        try {
+            $data = (object) ['name' => 'Essay', 'shortname' => 'essay', 'type' => 'textarea'];
+            $handler->save_field_configuration($forged, $data);
+            $this->fail('A text field was saved as a textarea.');
+        } catch (\moodle_exception $e) {
+            $this->assertSame('fieldtypenotallowed', $e->errorcode);
+        }
+        $this->assertFalse($DB->record_exists('customfield_field', ['shortname' => 'essay']));
+
+        // The control: an offered type is saved.
+        $text = \core_customfield\field_controller::create(0, (object) ['type' => 'text'], $category);
+        $handler->save_field_configuration($text, (object) ['name' => 'Essay', 'shortname' => 'essay']);
+        $this->assertSame('text', $DB->get_field('customfield_field', 'type', ['shortname' => 'essay'], MUST_EXIST));
+    }
+
+    /**
+     * The management page leaves out a shared category's field of a type the handler does not offer.
+     *
+     * Core's shared handler lets an administrator put any type in a shared category, and core's
+     * management page names each field's type from the handler's offered types.
+     *
+     * @return void
+     */
+    public function test_the_management_page_leaves_out_a_field_it_cannot_name(): void {
+        global $PAGE;
+
+        $this->setAdminUser();
+        [$course, $instance] = $this->create_instance();
+        $local = $this->create_local_category((int) $instance->id);
+        $shared = $this->create_shared_category();
+        /** @var \core_customfield_generator $generator */
+        $generator = $this->getDataGenerator()->get_plugin_generator('core_customfield');
+        $document = $generator->create_field(['categoryid' => $shared, 'type' => 'text', 'shortname' => 'document']);
+        $essay = $generator->create_field(['categoryid' => $shared, 'type' => 'textarea', 'shortname' => 'essay']);
+        $PAGE->set_url(new \moodle_url('/enrol/apply/fields.php', ['id' => $instance->id]));
+        $PAGE->set_context(\context_course::instance($course->id));
+
+        $management = new \core_customfield\output\management(application_handler::create((int) $instance->id));
+        $data = $management->export_for_template($PAGE->get_renderer('core'));
+
+        $types = [];
+        $categories = [];
+        foreach ($data->categories as $category) {
+            $categories[] = (int) $category['id'];
+            foreach ($category['fields'] as $field) {
+                $types[(int) $field['id']] = $field['type'];
+            }
+        }
+        $this->assertEqualsCanonicalizing([$local, $shared], $categories);
+        $this->assertArrayNotHasKey((int) $essay->get('id'), $types);
+        // The control: the same category's text field is listed, under its type's name.
+        $this->assertSame(get_string('pluginname', 'customfield_text'), $types[(int) $document->get('id')] ?? null);
+        $this->assertNotContains(null, $types);
+    }
 }

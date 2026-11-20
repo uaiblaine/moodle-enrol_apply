@@ -27,6 +27,7 @@ namespace enrol_apply\customfield;
 use context;
 use context_course;
 use core_customfield\api;
+use core_customfield\category_controller;
 use core_customfield\field_controller;
 use moodle_url;
 use stdClass;
@@ -104,17 +105,19 @@ class application_handler extends \core_customfield\handler {
     }
 
     /**
-     * Anybody shown the application form may answer it.
+     * Nobody edits field data through this handler, because it keeps none.
      *
-     * The form's own access check (application_form::check_access_for_dynamic_submission()) is
-     * the gate; core calls this only to decide which fields to add to that form.
+     * The application form draws its questions from get_fields() (answers::fields()) behind its
+     * own access check, and the answers are frozen into the submission, never written as
+     * customfield_data. Core's callers that take this as their only authorisation barrier, for
+     * a component, area and itemid read from a request, are therefore refused.
      *
      * @param field_controller $field The field.
      * @param int $instanceid The application, or 0 for a new one.
-     * @return bool
+     * @return bool Always false.
      */
     public function can_edit(field_controller $field, int $instanceid = 0): bool {
-        return true;
+        return false;
     }
 
     /**
@@ -168,6 +171,72 @@ class application_handler extends \core_customfield\handler {
      */
     public function get_available_field_types(): array {
         return array_intersect_key(parent::get_available_field_types(), array_flip(self::ALLOWED_TYPES));
+    }
+
+    /**
+     * Refuse to save a field of a type the handler does not offer.
+     *
+     * get_available_field_types() only shapes core's "Add a new field" menu; core's field form
+     * builds whatever type its post names and saves it through this method. A type outside the
+     * list cannot be frozen into a snapshot, and the management page has no name to show for it.
+     *
+     * @param field_controller $field The field.
+     * @param stdClass $data Data from the field configuration form.
+     * @return void
+     * @throws \moodle_exception When the field, or the type a new field is saved as, is not offered.
+     */
+    public function save_field_configuration(field_controller $field, stdClass $data) {
+        $types = [(string) $field->get('type')];
+        if (!$field->get('id') && isset($data->type)) {
+            // Core's api::save_field_configuration() sets a new field's type from the form data.
+            $types[] = (string) $data->type;
+        }
+        $available = $this->get_available_field_types();
+        foreach ($types as $type) {
+            if (!array_key_exists($type, $available)) {
+                throw new \moodle_exception('fieldtypenotallowed', 'enrol_apply');
+            }
+        }
+
+        parent::save_field_configuration($field, $data);
+    }
+
+    /**
+     * The categories, local and shared, each holding only the fields of the offered types.
+     *
+     * A shared category is the site's, and core's shared handler lets an administrator put any
+     * type in it, a textarea or a picture included. Such a field is never asked on an application,
+     * and core's management page names each field's type from get_available_field_types(), so
+     * left in it would warn on an undefined index there. A category holding one is replaced by a
+     * copy without it, built as api::get_categories_with_fields() builds its own; the category
+     * itself and the fields kept are untouched.
+     *
+     * @param bool $ismanagementpage Whether every shared category is listed, enabled or not.
+     * @return category_controller[]
+     */
+    public function get_categories_with_fields(bool $ismanagementpage = false): array {
+        $available = $this->get_available_field_types();
+        $categories = parent::get_categories_with_fields($ismanagementpage);
+        foreach ($categories as $index => $category) {
+            $kept = array_filter(
+                $category->get_fields(),
+                static fn(field_controller $field): bool => array_key_exists($field->get('type'), $available)
+            );
+            if (count($kept) === count($category->get_fields())) {
+                continue;
+            }
+            $copy = category_controller::create(0, $category->to_record());
+            $copy->set_handler($category->get_handler());
+            $copy->set_original_component($category->get_original_component());
+            $copy->set_original_area($category->get_original_area());
+            $copy->set_original_itemid($category->get_original_itemid());
+            foreach ($kept as $field) {
+                $copy->add_field($field);
+            }
+            $categories[$index] = $copy;
+        }
+
+        return $categories;
     }
 
     /**
