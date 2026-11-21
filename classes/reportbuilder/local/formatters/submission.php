@@ -545,18 +545,25 @@ class submission {
     }
 
     /**
-     * How long an application waited, in calendar days and hours (AR-D6).
+     * How long an application waited for a first response, in calendar days and hours (AR-D4,
+     * AR-D6).
      *
-     * Measured to the last decision as the record holds it, and to now while it holds none, in
-     * which case the wait is still running and says so ("4 d, open"). An admission by a key had no
-     * person to wait for and reads as such rather than as a turnaround of a few seconds.
+     * Measured to the first decision, and to now while there is none, in which case the wait is
+     * still running and says so ("4 d, open"). Under the value, on lines of their own: a record
+     * decided before its first decision was recorded says it was measured to its last decision;
+     * a deferred one says how long it has been open since it was submitted; one resolved later
+     * than its first response says after how long. An admission by a key had no person to wait
+     * for and reads as such rather than as a turnaround of a few seconds.
      *
      * An aggregated value (a custom report's average, minimum or maximum) arrives without the
      * row's other fields, so it is worded as a duration and nothing more.
      *
+     * The lines carry no markup, for the reason {@see decided()} gives.
+     *
      * @param mixed $value Seconds waited, as the column's SQL computes them.
      * @param stdClass $row Row being rendered, carrying waitdecided, waitstatus, waitkeyoutcome,
-     *     waitapplicant and waitdecidedby.
+     *     waitapplicant, waitdecidedby and waitresolution, and waitfirst once the first decision's
+     *     column exists.
      * @param mixed $argument Unused; core passes the column's callback argument.
      * @param string|null $aggregation The aggregation applied to the column, null for none.
      * @return string The wait, or empty when there is none.
@@ -581,7 +588,60 @@ class submission {
             return get_string('waitbykey', 'enrol_apply');
         }
 
-        if ((int) ($row->waitdecided ?? 0) <= 0) {
+        $decided = (int) ($row->waitdecided ?? 0);
+        if ($decided <= 0) {
+            return get_string('waitopen', 'enrol_apply', $text);
+        }
+
+        $lines = [$text];
+        $first = (int) ($row->waitfirst ?? 0);
+        if ($first <= 0) {
+            $lines[] = get_string('waitlastdecision', 'enrol_apply');
+        }
+        $resolution = self::duration((int) ($row->waitresolution ?? 0));
+        if ((int) ($row->waitstatus ?? -1) === submissionhelper::STATUS_WAITING) {
+            $lines[] = get_string('waitdeferredopen', 'enrol_apply', $resolution);
+        } else if ($first > 0 && $first !== $decided) {
+            $lines[] = get_string('waitresolvedafter', 'enrol_apply', $resolution);
+        }
+
+        return implode("\n", $lines);
+    }
+
+    /**
+     * How long an application waited for a resolution: an approval or a cancellation.
+     *
+     * Worded as {@see wait()} words its value, "open" for a pending or deferred application and
+     * "By key" for an admission by a key; an aggregated value as a bare duration.
+     *
+     * @param mixed $value Seconds waited, as the column's SQL computes them.
+     * @param stdClass $row Row being rendered, carrying resolutionstatus, resolutionkeyoutcome,
+     *     resolutionapplicant and resolutiondecidedby.
+     * @param mixed $argument Unused; core passes the column's callback argument.
+     * @param string|null $aggregation The aggregation applied to the column, null for none.
+     * @return string The wait, or empty when there is none.
+     */
+    public static function resolution($value, stdClass $row, $argument = null, ?string $aggregation = null): string {
+        if ($value === null || $value === '') {
+            return '';
+        }
+
+        $text = self::duration((int) round((float) $value));
+        if ($aggregation !== null) {
+            return $text;
+        }
+
+        $status = (int) ($row->resolutionstatus ?? -1);
+        $keyadmission = self::is_key_admission(
+            $status,
+            $row->resolutionkeyoutcome ?? null,
+            $row->resolutionapplicant ?? null,
+            $row->resolutiondecidedby ?? null
+        );
+        if ($keyadmission) {
+            return get_string('waitbykey', 'enrol_apply');
+        }
+        if ($status === submissionhelper::STATUS_PENDING || $status === submissionhelper::STATUS_WAITING) {
             return get_string('waitopen', 'enrol_apply', $text);
         }
 

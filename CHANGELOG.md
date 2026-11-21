@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased (2026112100)
+## Unreleased (2026112101)
 
 ### Security
 
@@ -122,6 +122,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **The first response, apart from the resolution** (`docs/design/audit-report-study.md`, stage R2,
+  decision AR-D4). Each record now keeps the date of its first decision (`timefirstdecided`, a new
+  column of `enrol_apply_submission`), stamped once and never moved: a deferral is a response, and a
+  re-decision is not a slow one. The report's **Wait** is now the wait for that first response; under
+  it, a deferred application says how long it has been open ("Deferred, open 5 d") and one settled
+  later says after how long ("Resolved after 3 d"). A record decided before this version has no first
+  decision to read and is measured to its last one, labelled "To the last decision". Two new columns
+  for custom reports, **Wait for a resolution** (to the approval or cancellation, "open" while pending
+  or deferred, with a filter) and **First decided on**, a date filter beside it. The date travels in
+  backups and is in both subjects' privacy exports. Mutation gates `FD1`-`FD15`.
 - **The course report shows each fact once** (`docs/design/audit-report-study.md`, stage R1,
   decisions AR-D3, AR-D5, AR-D6, AR-D11 and AR-D18). Its columns are now the applicant and their
   identity fields, **Outcome** (a status label, with the record's own decision under it where the

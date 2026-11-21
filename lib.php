@@ -47,6 +47,14 @@ define('ENROL_APPLY_USER_WAIT', 2);
 define('ENROL_APPLY_OPTIONS_SCHEMA', 2026111900);
 
 /**
+ * The plugin version whose upgrade step created enrol_apply_submission.timefirstdecided.
+ *
+ * The same window as {@see ENROL_APPLY_OPTIONS_SCHEMA}: what reads or writes the column from a
+ * path that existed before it asks {@see enrol_apply_plugin::first_response_schema_ready()}.
+ */
+define('ENROL_APPLY_FIRST_RESPONSE_SCHEMA', 2026112101);
+
+/**
  * Enrolment upon approval plugin implementation.
  *
  * @package    enrol_apply
@@ -1732,6 +1740,17 @@ class enrol_apply_plugin extends enrol_plugin {
      */
     public function options_schema_ready(): bool {
         return (int) get_config('enrol_apply', 'version') >= ENROL_APPLY_OPTIONS_SCHEMA;
+    }
+
+    /**
+     * Whether the upgrade that created the first decision's date has run.
+     *
+     * Read as {@see options_schema_ready()} is, from the stored plugin version every node shares.
+     *
+     * @return bool True once the stored version reaches ENROL_APPLY_FIRST_RESPONSE_SCHEMA.
+     */
+    public function first_response_schema_ready(): bool {
+        return (int) get_config('enrol_apply', 'version') >= ENROL_APPLY_FIRST_RESPONSE_SCHEMA;
     }
 
     /**

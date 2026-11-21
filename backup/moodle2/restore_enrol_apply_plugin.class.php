@@ -226,7 +226,7 @@ class restore_enrol_apply_plugin extends restore_enrol_plugin {
             'timecreated' => (int) $data->timecreated,
             'timedecided' => (int) $data->timedecided,
             'decidedby' => (int) $this->get_mappingid('user', $data->decidedby),
-        ] + $this->group_route_fields($data)));
+        ] + $this->group_route_fields($data) + $this->first_decision_fields($data)));
 
         if (isset($data->userinfodata) && is_string($data->userinfodata)) {
             $entries = [];
@@ -406,6 +406,23 @@ class restore_enrol_apply_plugin extends restore_enrol_plugin {
             ? (int) $this->get_mappingid('group', $data->chosengroupid ?? 0)
             : 0;
         return $fields;
+    }
+
+    /**
+     * The first decision's date of a restored application record.
+     *
+     * As the archive has it, 0 for an archive taken before the column existed (the element is
+     * absent) or for a record no decision has touched. Before the upgrade that adds the column
+     * here, nothing: ENROL_APPLY_FIRST_RESPONSE_SCHEMA.
+     *
+     * @param stdClass $data Backup data of the application record.
+     * @return array The timefirstdecided column, or nothing before the upgrade.
+     */
+    protected function first_decision_fields(stdClass $data): array {
+        if (!enrol_get_plugin('apply')->first_response_schema_ready()) {
+            return [];
+        }
+        return ['timefirstdecided' => (int) ($data->timefirstdecided ?? 0)];
     }
 
     /**

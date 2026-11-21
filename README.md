@@ -498,9 +498,13 @@ Excel download. Its columns, in order:
   decision under it where the enrolment has moved since ("Unenrolled", then "Approved, now
   unenrolled");
 - **Submitted on**, as a short date with the full one on hover;
-- **Wait**: how long the application waited for its last decision, in days and hours, or how long
-  it has been waiting ("4 d, open"); "By key" for an admission by a group key. A **Wait** filter
-  finds the applications that waited more (or less) than a number of minutes, hours or days;
+- **Wait**: how long the application waited for a first response (an approval, a deferral or a
+  cancellation), in days and hours, or how long it has been waiting ("4 d, open"); "By key" for an
+  admission by a group key. Under it, a deferred application says how long it has been open
+  ("Deferred, open 5 d") and one settled after its first response says when ("Resolved after 3 d");
+  an application decided before version 2026112101, whose first decision was not recorded, is
+  measured to its last decision and says so. A **Wait** filter finds the applications that waited
+  more (or less) than a number of minutes, hours or days;
 - **Decided**: the date, and under it the person who decided ("by Maria Souza"), or "By key" and
   the key's group; "Not yet" for an undecided one;
 - **Group**: the group of the key ("Key: Evening A") or the group chosen ("Chose: Morning C"),
@@ -534,7 +538,10 @@ such filter, and its report lists that course's applications as it always did.
 
 Site administration → Reports → Report builder offers **Enrolment applications** as a report
 source, for building ad-hoc reports across every course. It adds a course filter and a course
-name column that the course report deliberately does not have. It carries the **Groups joined**
+name column that the course report deliberately does not have, and two measures of turnaround it
+does not show: **Wait for a resolution** (to the approval or cancellation that settled the
+application, still open while it is pending or deferred, with a filter; it averages like the Wait)
+and **First decided on**, the first decision's date. It carries the **Groups joined**
 column too, with the same visibility rule, but no group filter: a site-wide list of every group is
 unbounded, and a filter by group name would let a reader find the applications of a group whose
 name the cell withholds from them.
@@ -686,7 +693,8 @@ Five tables. Three hold personal data:
   with the enrolment method and with the course.
 - `enrol_apply_submission` — the durable record of each application: the applicant, the comment,
   the decision, its message to the applicant, the decider's note, the groups and role chosen, the
-  groups the approval actually joined, who decided and when, the group whose enrolment key was
+  groups the approval actually joined, who decided and when (the first decision's date and the
+  last one's), the group whose enrolment key was
   entered with what it did (never the key), and the group the applicant chose from the method's
   offer. Kept for the retention period (`enrol_apply/retentiondays`, 30 days by default; a record
   still in the queue is never swept), pseudonymised when the course is deleted, and kept when the

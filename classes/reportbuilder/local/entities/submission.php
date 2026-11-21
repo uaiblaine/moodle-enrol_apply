@@ -135,8 +135,12 @@ class submission extends base {
     }
 
     /**
-     * SQL giving how many seconds a record waited: to its last decision, or to now while it has
-     * none.
+     * SQL giving how many seconds a record waited for a first response: to its first decision, to
+     * its last one on a record decided before the first was recorded, or to now while it has none.
+     *
+     * A deferral is a response and a re-decision is not slowness (AR-D4), so a record deferred
+     * and approved later waited as long as it took to defer it; {@see resolution_sql()} measures
+     * the other wait.
      *
      * Plain integer arithmetic in a CASE, which every supported database runs alike. "Now" is
      * core's clock, read once per call and bound as a parameter, so a test can freeze it and the
@@ -149,13 +153,48 @@ class submission extends base {
     protected function wait_sql(): array {
         $alias = $this->get_table_alias('enrol_apply_submission');
         $now = database::generate_param_name();
+        $first = $this->first_response_ready()
+            ? "WHEN {$alias}.timefirstdecided > 0 THEN {$alias}.timefirstdecided - {$alias}.timecreated"
+            : '';
 
         return [
-            "CASE WHEN {$alias}.timedecided > 0
+            "CASE {$first}
+                  WHEN {$alias}.timedecided > 0 THEN {$alias}.timedecided - {$alias}.timecreated
+                  ELSE :{$now} - {$alias}.timecreated END",
+            [$now => \core\di::get(\core\clock::class)->time()],
+        ];
+    }
+
+    /**
+     * SQL giving how many seconds a record waited for a resolution: to the decision that settled
+     * it (an approval or a cancellation, the last one when there were several), or to now while
+     * it is pending or deferred.
+     *
+     * The clock and the parameter naming as {@see wait_sql()} has them.
+     *
+     * @return array The SQL and its parameters.
+     */
+    protected function resolution_sql(): array {
+        $alias = $this->get_table_alias('enrol_apply_submission');
+        $now = database::generate_param_name();
+        // Class constants, integers: interpolated rather than bound, so the expression stays one parameter.
+        $settled = submissionhelper::STATUS_APPROVED . ', ' . submissionhelper::STATUS_CANCELLED;
+
+        return [
+            "CASE WHEN {$alias}.status IN ({$settled}) AND {$alias}.timedecided > 0
                   THEN {$alias}.timedecided - {$alias}.timecreated
                   ELSE :{$now} - {$alias}.timecreated END",
             [$now => \core\di::get(\core\clock::class)->time()],
         ];
+    }
+
+    /**
+     * Whether the first decision's column exists yet ({@see \enrol_apply_plugin::first_response_schema_ready()}).
+     *
+     * @return bool True once the upgrade that adds it has run.
+     */
+    protected function first_response_ready(): bool {
+        return enrol_get_plugin('apply')->first_response_schema_ready();
     }
 
     /**
@@ -235,6 +274,22 @@ class submission extends base {
             ->set_is_sortable(true)
             // An undecided record carries 0, which userdate() would render as 1970.
             ->add_callback([formatter::class, 'timeornever']);
+
+        /* The first decision's date, apart from the last one's (AR-D4). Offered once the column
+           exists; a record decided before it carries 0 and reads as never, which is what the
+           record knows. */
+        if ($this->first_response_ready()) {
+            $columns[] = (new column(
+                'timefirstdecided',
+                new lang_string('submissiontimefirstdecided', 'enrol_apply'),
+                $this->get_entity_name()
+            ))
+                ->add_joins($this->get_joins())
+                ->set_type(column::TYPE_TIMESTAMP)
+                ->add_field("{$alias}.timefirstdecided")
+                ->set_is_sortable(true)
+                ->add_callback([formatter::class, 'timeornever']);
+        }
 
         $columns[] = (new column(
             'comment',
@@ -316,11 +371,13 @@ class submission extends base {
             ->add_attributes(['class' => 'enrol_apply-linebreaks'])
             ->add_callback([formatter::class, 'outcome_label']);
 
-        /* How long the application waited: to the last decision as the record holds it, or to now
-           while it holds none (AR-D4 (a) until the first response has a column of its own). SQL,
+        /* How long the application waited for a first response (wait_sql()), with the
+           resolution under it when the two differ, a deferral's open wait, or a note that a
+           record older than the first decision's column was measured to its last decision. SQL,
            so it sorts and filters, and a custom report can average it. */
         [$waitsql, $waitparams] = $this->wait_sql();
-        $columns[] = (new column(
+        [$resolutionsql, $resolutionparams] = $this->resolution_sql();
+        $wait = (new column(
             'waittime',
             new lang_string('waittime', 'enrol_apply'),
             $this->get_entity_name()
@@ -333,8 +390,32 @@ class submission extends base {
             ->add_field("{$alias}.keyoutcome", 'waitkeyoutcome')
             ->add_field("{$alias}.userid", 'waitapplicant')
             ->add_field("{$alias}.decidedby", 'waitdecidedby')
+            ->add_field($resolutionsql, 'waitresolution', $resolutionparams);
+        if ($this->first_response_ready()) {
+            $wait->add_field("{$alias}.timefirstdecided", 'waitfirst');
+        }
+        $columns[] = $wait
             ->set_is_sortable(true, ['waittime'])
+            ->add_attributes(['class' => 'enrol_apply-linebreaks'])
             ->add_callback([formatter::class, 'wait']);
+
+        /* How long the application waited for a resolution (resolution_sql()): a deferred one is
+           still open. For a custom report that measures turnaround to the settling decision. */
+        [$resolutionsql, $resolutionparams] = $this->resolution_sql();
+        $columns[] = (new column(
+            'resolutiontime',
+            new lang_string('resolutiontime', 'enrol_apply'),
+            $this->get_entity_name()
+        ))
+            ->add_joins($this->get_joins())
+            ->set_type(column::TYPE_INTEGER)
+            ->add_field($resolutionsql, 'resolutiontime', $resolutionparams)
+            ->add_field("{$alias}.status", 'resolutionstatus')
+            ->add_field("{$alias}.keyoutcome", 'resolutionkeyoutcome')
+            ->add_field("{$alias}.userid", 'resolutionapplicant')
+            ->add_field("{$alias}.decidedby", 'resolutiondecidedby')
+            ->set_is_sortable(true, ['resolutiontime'])
+            ->add_callback([formatter::class, 'resolution']);
 
         /* The decision in one cell: the date and, under it, who took it, or the key that admitted
            the applicant (formatter::decided()). The decider's name comes from a join of this
@@ -664,6 +745,23 @@ class submission extends base {
                 date::DATE_RANGE,
             ]);
 
+        if ($this->first_response_ready()) {
+            $filters[] = (new filter(
+                date::class,
+                'timefirstdecided',
+                new lang_string('submissiontimefirstdecided', 'enrol_apply'),
+                $this->get_entity_name(),
+                "{$alias}.timefirstdecided"
+            ))
+                ->add_joins($this->get_joins())
+                ->set_limited_operators([
+                    date::DATE_ANY,
+                    date::DATE_EMPTY,
+                    date::DATE_NOT_EMPTY,
+                    date::DATE_RANGE,
+                ]);
+        }
+
         /* "Waited more than N days": core's duration filter over the column's own expression, so
            the filter and the sort agree on every row, the open ones included. */
         [$waitsql, $waitparams] = $this->wait_sql();
@@ -674,6 +772,17 @@ class submission extends base {
             $this->get_entity_name(),
             $waitsql,
             $waitparams
+        ))
+            ->add_joins($this->get_joins());
+
+        [$resolutionsql, $resolutionparams] = $this->resolution_sql();
+        $filters[] = (new filter(
+            duration::class,
+            'resolutiontime',
+            new lang_string('resolutiontime', 'enrol_apply'),
+            $this->get_entity_name(),
+            $resolutionsql,
+            $resolutionparams
         ))
             ->add_joins($this->get_joins());
 

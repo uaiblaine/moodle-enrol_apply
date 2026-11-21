@@ -1930,6 +1930,71 @@ final class backup_test extends \advanced_testcase {
     }
 
     /**
+     * The first decision's date travels with the record, and an archive taken before the column
+     * existed restores as 0, never as the last decision's date.
+     *
+     * Changes that must make it fail: the element left out of the backup, or the restore not
+     * writing it (gate FD5).
+     *
+     * @return void
+     */
+    public function test_the_first_decision_survives_a_restore(): void {
+        global $DB;
+
+        [$course, , $applicant] = $this->create_course_with_application();
+        $where = ['courseid' => $course->id, 'userid' => $applicant->id];
+        $DB->set_field('enrol_apply_submission', 'status', submission::STATUS_WAITING, $where);
+        $DB->set_field('enrol_apply_submission', 'timefirstdecided', self::SUBMITTED_AT + 100, $where);
+        $DB->set_field('enrol_apply_submission', 'timedecided', self::SUBMITTED_AT + 200, $where);
+
+        $restored = $this->restored_record($this->backup_and_restore($course, true));
+        $this->assertSame(self::SUBMITTED_AT + 100, (int) $restored->timefirstdecided);
+        $this->assertSame(self::SUBMITTED_AT + 200, (int) $restored->timedecided);
+
+        // An archive from before the column: no element at all.
+        $strip = function (string $basepath): void {
+            $this->edit_submissions($basepath, static fn(string $block): string =>
+                preg_replace('#\s*<timefirstdecided>.*?</timefirstdecided>#s', '', $block));
+        };
+        $newcourseid = $this->backup_and_restore($course, true, false, null, backup::ENROL_ALWAYS, $strip);
+        $restored = $this->restored_record($newcourseid);
+        $this->assertSame(0, (int) $restored->timefirstdecided);
+        $this->assertSame(self::SUBMITTED_AT + 200, (int) $restored->timedecided, 'the control: the record travelled');
+    }
+
+    /**
+     * Before the upgrade that adds the first decision's column, the backup does not read it and
+     * the restore does not write it.
+     *
+     * Changes that must make it fail: the backup's gate dropped (gate FD6), or the restore's
+     * (gate FD7).
+     *
+     * @return void
+     */
+    public function test_before_the_upgrade_the_first_decision_is_left_alone(): void {
+        global $DB;
+
+        [$course, , $applicant] = $this->create_course_with_application();
+        $where = ['courseid' => $course->id, 'userid' => $applicant->id];
+        $DB->set_field('enrol_apply_submission', 'timefirstdecided', self::SUBMITTED_AT + 100, $where);
+        set_config('version', ENROL_APPLY_FIRST_RESPONSE_SCHEMA - 1, 'enrol_apply');
+
+        $xml = $this->backup_enrolments_xml($course, true);
+        $this->assertStringNotContainsString('timefirstdecided', $xml);
+        // The control: the record itself is written.
+        $this->assertStringContainsString('<timedecided>', $xml);
+
+        // An archive taken after the upgrade, restored on a node still before it.
+        set_config('version', ENROL_APPLY_FIRST_RESPONSE_SCHEMA, 'enrol_apply');
+        $newcourseid = $this->backup_and_restore($course, true, false, null, backup::ENROL_ALWAYS, function () {
+            set_config('version', ENROL_APPLY_FIRST_RESPONSE_SCHEMA - 1, 'enrol_apply');
+        });
+        $restored = $this->restored_record($newcourseid);
+        $this->assertSame(0, (int) $restored->timefirstdecided);
+        $this->assertSame('I would like to join this course', $restored->comment, 'the control: the record travelled');
+    }
+
+    /**
      * A record restored before the upgrade has run carries no chosen group, and its key route
      * still travels.
      *

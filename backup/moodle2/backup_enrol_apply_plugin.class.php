@@ -67,6 +67,7 @@ class backup_enrol_apply_plugin extends backup_enrol_plugin {
         /* A backup taken between the deploy and the upgrade (the recycle bin takes one before every
            course deletion) must not read a table or a column the upgrade has not created yet. */
         $schemaready = enrol_get_plugin('apply')->options_schema_ready();
+        $firstready = enrol_get_plugin('apply')->first_response_schema_ready();
 
         $pluginwrapper = new backup_nested_element($this->get_recommended_name());
         $plugin->add_child($pluginwrapper);
@@ -98,7 +99,7 @@ class backup_enrol_apply_plugin extends backup_enrol_plugin {
             'decidedby',
             'keygroupid',
             'keyoutcome',
-        ], $schemaready ? ['chosengroupid'] : []));
+        ], $schemaready ? ['chosengroupid'] : [], $firstready ? ['timefirstdecided'] : []));
 
         /* What the applicant submitted, frozen, as children of their record: they travel exactly
            when the record does, inside the users gate below, with no source of their own to gate.
