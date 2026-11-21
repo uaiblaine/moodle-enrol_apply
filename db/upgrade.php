@@ -569,5 +569,28 @@ function xmldb_enrol_apply_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026111900, 'enrol', 'apply');
     }
 
+    if ($oldversion < 2026112010) {
+        /* The question form no longer offers the text field's password switch: the answer is frozen
+           as plain text, so a field stored as "masked" promised what is not kept. Only this plugin's own
+           questions; a changed row is written, a row without the key is left alone, so a re-run
+           changes nothing. */
+        $sql = "SELECT f.id, f.configdata
+                  FROM {customfield_field} f
+                  JOIN {customfield_category} c ON c.id = f.categoryid
+                 WHERE c.component = :component AND c.area = :area";
+        $fields = $DB->get_recordset_sql($sql, ['component' => 'enrol_apply', 'area' => 'application']);
+        foreach ($fields as $field) {
+            $configdata = json_decode((string) $field->configdata, true);
+            if (!is_array($configdata) || !array_key_exists('ispassword', $configdata)) {
+                continue;
+            }
+            unset($configdata['ispassword']);
+            $DB->set_field('customfield_field', 'configdata', json_encode($configdata), ['id' => $field->id]);
+        }
+        $fields->close();
+
+        upgrade_plugin_savepoint(true, 2026112010, 'enrol', 'apply');
+    }
+
     return true;
 }

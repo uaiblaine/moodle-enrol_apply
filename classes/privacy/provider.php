@@ -412,7 +412,7 @@ class provider implements
      * so the escaped spelling would reach the subject as the literal "R&amp;D".
      *
      * @param string $decidedgroups Comma-separated group ids as the record stores them.
-     * @param context $context Course context the groups belong to.
+     * @param context $context Course context the groups belong to, and the only course whose groups are named.
      * @return array Group names, empty when none were recorded or none still exist.
      */
     protected static function group_names(string $decidedgroups, context $context): array {
@@ -424,7 +424,9 @@ class provider implements
         }
 
         [$insql, $params] = $DB->get_in_or_equal($ids, SQL_PARAMS_NAMED, 'gid');
-        $groups = $DB->get_records_select('groups', "id {$insql}", $params, '', 'id, name');
+        // Of this course only: a stored id naming another course's group is not this record's to name.
+        $params['gcourseid'] = (int) $context->instanceid;
+        $groups = $DB->get_records_select('groups', "id {$insql} AND courseid = :gcourseid", $params, '', 'id, name');
 
         $names = [];
         foreach ($groups as $group) {

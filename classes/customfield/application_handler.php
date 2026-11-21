@@ -240,7 +240,12 @@ class application_handler extends \core_customfield\handler {
     }
 
     /**
-     * Remove core's "unique data" switch, which has nothing to compare against here.
+     * Remove core's "unique data" switch, which has nothing to compare against here, and the text
+     * field's password switch.
+     *
+     * The password switch would only mask an answer's input: the answer is frozen as plain text
+     * into the snapshot and shown to every reader of it, so it would promise a secrecy it does
+     * not keep.
      *
      * Core checks uniqueness against customfield_data, which this plugin never writes. Fields of
      * a shared category are configured through core's shared handler, which never calls this
@@ -252,6 +257,9 @@ class application_handler extends \core_customfield\handler {
     public function config_form_definition(\MoodleQuickForm $mform) {
         if ($mform->elementExists('configdata[uniquevalues]')) {
             $mform->removeElement('configdata[uniquevalues]');
+        }
+        if ($mform->elementExists('configdata[ispassword]')) {
+            $mform->removeElement('configdata[ispassword]');
         }
     }
 

@@ -194,6 +194,10 @@ if ($formaction !== '' && $userenrolments) {
        the whole queue can be confirmed by getting a manager to follow a crafted link,
        because optional_param() reads GET just as happily as POST. */
     require_sesskey();
+    // And only a POST: a state change never rides on a link, whatever sesskey it carries.
+    if (!data_submitted()) {
+        throw new moodle_exception('invalidrequest');
+    }
 
     /* PARAM_TEXT and not PARAM_RAW: this reaches the applicant's notification, and the only
        formatting it is allowed is the line breaks the decider typed. It is escaped again at

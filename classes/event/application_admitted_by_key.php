@@ -86,7 +86,7 @@ class application_admitted_by_key extends base {
      * @return array The mapping.
      */
     public static function get_objectid_mapping() {
-        return ['db' => 'enrol_apply_submission', 'restore' => base::NOT_MAPPED];
+        return ['db' => 'enrol_apply_submission', 'restore' => 'enrol_apply_submission'];
     }
 
     /**

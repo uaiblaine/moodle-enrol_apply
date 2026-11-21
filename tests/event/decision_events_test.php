@@ -832,6 +832,25 @@ final class decision_events_test extends \advanced_testcase {
     }
 
     /**
+     * The admission by key maps its object on a log restore, as the decisions do.
+     *
+     * Changes that must make it fail: the object left unmapped, which restores the log row with the
+     * source site's submission id.
+     *
+     * @return void
+     */
+    public function test_the_admission_by_key_maps_its_object_for_the_restore(): void {
+        $this->assertSame(
+            ['db' => 'enrol_apply_submission', 'restore' => 'enrol_apply_submission'],
+            application_admitted_by_key::get_objectid_mapping()
+        );
+        $this->assertSame(
+            application_decided::get_objectid_mapping(),
+            application_admitted_by_key::get_objectid_mapping()
+        );
+    }
+
+    /**
      * An event missing one of its keys is refused.
      *
      * @return void

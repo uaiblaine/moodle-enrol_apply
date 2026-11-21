@@ -192,6 +192,33 @@ final class decision_test extends \advanced_testcase {
     }
 
     /**
+     * An id posted twice is decided, and its applicant told, once.
+     *
+     * The control is the same selection without the repeat, which sends the same single message.
+     *
+     * Changes that must make it fail: the ids not deduplicated before they are decided.
+     *
+     * @return void
+     */
+    public function test_an_id_posted_twice_is_decided_once(): void {
+        $this->setAdminUser();
+        $ids = [(int) $this->studentue, (int) $this->studentue, (int) $this->moderatorue];
+
+        $this->assertSame(
+            [['ids' => [(int) $this->studentue, (int) $this->moderatorue], 'message' => 'Plain']],
+            decision::groups($ids, 'Plain', [])
+        );
+        $grouped = decision::groups($ids, 'Plain', [(int) $this->students->id => 'Students']);
+        $this->assertSame([[(int) $this->studentue], [(int) $this->moderatorue]], array_column($grouped, 'ids'));
+
+        $sink = $this->redirectMessages();
+        $decided = decision::apply('wait', $ids, 'Plain', [], ['note' => '']);
+        $this->assertSame(2, $decided);
+        $this->assertCount(2, $sink->get_messages());
+        $sink->close();
+    }
+
+    /**
      * A row the operator may not decide is still skipped, and counted as left alone.
      *
      * A teacher of the first course posts both ids with a message for each method: grouping the

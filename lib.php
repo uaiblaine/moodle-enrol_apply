@@ -71,6 +71,9 @@ class enrol_apply_plugin extends enrol_plugin {
     /** @var int[] User enrolment ids the last confirm_enrolment() call decided, see get_confirmed_enrolment_ids(). */
     protected $confirmedids = [];
 
+    /** @var \core\lock\lock|null The method's admission lock while submit_application() holds it for a capped method. */
+    protected $instancelock = null;
+
     /**
      * Add new instance of enrol plugin with default settings.
      *
@@ -609,13 +612,16 @@ class enrol_apply_plugin extends enrol_plugin {
      *
      * Without the lock, two simultaneous submissions would both pass the form's already-applied
      * check and reach apply(): the second insert would fail on the foreign-unique key of
-     * enrol_apply_applicationinfo with a database error, and the customint3 applicant limit
-     * has the same race with no key behind it.
+     * enrol_apply_applicationinfo with a database error.
      *
      * The lock is per instance and per user, so two people applying at once never wait on
-     * each other. A second lock, per course and user, keeps one person's applications to two
-     * methods of a course apart, because the lock of C-D29 in allow_apply() reads the other
-     * methods: the first lock is always taken first.
+     * each other, and it does NOT cover the customint3 applicant limit: two different people
+     * would both read the last place free. A second lock, per course and user, keeps one person's
+     * applications to two methods of a course apart, because the lock of C-D29 in allow_apply()
+     * reads the other methods: the first lock is always taken first. A third, the instance's
+     * admission lock, is taken only when the method has an applicant limit, after the other two,
+     * and held through the cap check and the write, so applicants of a capped method are
+     * serialised on it and the limit holds.
      *
      * The three outcomes are distinguished because two of them need opposite treatment: an
      * application that was already there is benign, while a refusal has to be explained. See
@@ -653,6 +659,23 @@ class enrol_apply_plugin extends enrol_plugin {
         }
 
         try {
+            /* The method as it is now: the caller's object may be older than the time the locks took
+               to obtain, and the limit, the window and the status are decided on this copy. */
+            $instance = $DB->get_record('enrol', ['id' => (int) $instance->id, 'enrol' => 'apply'], '*', MUST_EXIST);
+
+            if (\enrol_apply\local\capacity::applicant_limit($instance) > 0) {
+                /* The applicant limit counts rows across every applicant, which no per-user lock
+                   orders: the same lock a key admission takes, so the two never count apart.
+                   Not obtained, nothing is written. */
+                $this->instancelock = \core\lock\lock_config::get_lock_factory('enrol_apply_keyadmission')
+                    ->get_lock('instance_' . (int) $instance->id, 10);
+                if (!$this->instancelock) {
+                    return \enrol_apply\local\application_result::refused(
+                        get_string('applylimitlocked', 'enrol_apply')
+                    );
+                }
+            }
+
             /* The eligibility predicate on the write path, inside the lock beside the duplicate
                and cap checks, so callers other than the form (a task, a web service, an
                import) cannot bypass the instance status, the new-applications flag, the
@@ -689,6 +712,10 @@ class enrol_apply_plugin extends enrol_plugin {
 
             return $this->apply_or_admit($instance, (int) $userid, $data);
         } finally {
+            if ($this->instancelock) {
+                $this->instancelock->release();
+                $this->instancelock = null;
+            }
             $courselock->release();
             $lock->release();
         }
@@ -783,6 +810,11 @@ class enrol_apply_plugin extends enrol_plugin {
                A key that now names no group, or another one, reads as a wrong key. The method is
                read again too, so the option switched off meanwhile is seen. */
             $current = $DB->get_record('enrol', ['id' => (int) $instance->id]);
+            if ($current) {
+                /* Everything below judges the method as it is now, not as it was when the form
+                   resolved the key. */
+                $instance = $current;
+            }
             if (!$current || \enrol_apply\local\groupkey::resolve($current, $posted) !== $keygroupid) {
                 if ($mandatory) {
                     return \enrol_apply\local\application_result::refused(
@@ -791,6 +823,19 @@ class enrol_apply_plugin extends enrol_plugin {
                 }
                 // The method as just read: a key-only mode switched on meanwhile offers no choice.
                 return $this->apply_without_key($current ?: $instance, $userid, $data);
+            }
+
+            /* The mode and the eligibility, again: either may have changed while the locks were
+               awaited. A mode switched to review sends the key to the queue instead of admitting;
+               an instance disabled, closed or out of its window refuses. */
+            if (!\enrol_apply\local\groupkey::admits($current)) {
+                return $this->apply_for_review($current, $userid, $data, $keygroupid, $targets);
+            }
+            $allowapply = $this->allow_apply($current, $userid);
+            if ($allowapply !== true) {
+                return \enrol_apply\local\application_result::refused(
+                    is_string($allowapply) ? $allowapply : get_string('cantenrol', 'enrol_apply')
+                );
             }
 
             /* Both capacities are read under the locks, so two key holders cannot both take the
@@ -1038,10 +1083,11 @@ class enrol_apply_plugin extends enrol_plugin {
      */
     protected function lock_admission(stdClass $instance, array $groupids): ?array {
         $factory = \core\lock\lock_config::get_lock_factory('enrol_apply_keyadmission');
-        $resources = array_merge(
-            ['instance_' . (int) $instance->id],
-            array_map(static fn(int $groupid): string => 'group_' . $groupid, $groupids)
-        );
+        $resources = array_map(static fn(int $groupid): string => 'group_' . $groupid, $groupids);
+        if (!$this->instancelock) {
+            // A capped method's submission already holds the method's lock, which is not reentrant.
+            array_unshift($resources, 'instance_' . (int) $instance->id);
+        }
 
         $locks = [];
         foreach ($resources as $resource) {
@@ -2780,17 +2826,14 @@ class enrol_apply_plugin extends enrol_plugin {
      * @return string The message body with placeholders replaced.
      */
     protected function update_mail_content($content, $course, $user, $userenrolment) {
-        $replace = [
-            'firstname' => s($user->firstname),
-            'content' => format_string($course->fullname),
-            'lastname' => s($user->lastname),
-            'username' => s($user->username),
-            'timeend' => !empty($userenrolment->timeend) ? userdate($userenrolment->timeend) : '',
-        ];
-        foreach ($replace as $key => $val) {
-            $content = str_replace('{' . $key . '}', $val, $content);
-        }
-        return $content;
+        // One pass: a value that itself holds a placeholder is never expanded again.
+        return strtr($content, [
+            '{firstname}' => s($user->firstname),
+            '{content}' => format_string($course->fullname, true, ['context' => context_course::instance($course->id)]),
+            '{lastname}' => s($user->lastname),
+            '{username}' => s($user->username),
+            '{timeend}' => !empty($userenrolment->timeend) ? userdate($userenrolment->timeend) : '',
+        ]);
     }
 
     /**

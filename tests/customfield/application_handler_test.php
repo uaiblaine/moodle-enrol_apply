@@ -197,6 +197,30 @@ final class application_handler_test extends \advanced_testcase {
     }
 
     /**
+     * The text field's "password" switch is removed from the field form.
+     *
+     * The answer is frozen as plain text for every reader of the snapshot, so a switch that only
+     * masks the input would promise what is not kept. Changes that must make it fail: the switch
+     * left on the form.
+     *
+     * @return void
+     */
+    public function test_the_password_switch_is_removed(): void {
+        global $CFG;
+        require_once($CFG->libdir . '/formslib.php');
+
+        [, $instance] = $this->create_instance();
+        $mform = new \MoodleQuickForm('test', 'post', '');
+        $mform->addElement('selectyesno', 'configdata[ispassword]', 'Password');
+        $mform->addElement('selectyesno', 'configdata[required]', 'Required');
+
+        application_handler::create((int) $instance->id)->config_form_definition($mform);
+
+        $this->assertFalse($mform->elementExists('configdata[ispassword]'));
+        $this->assertTrue($mform->elementExists('configdata[required]'), 'the control: other switches stay');
+    }
+
+    /**
      * The configuration page is the instance's own, and so is the context.
      *
      * @return void

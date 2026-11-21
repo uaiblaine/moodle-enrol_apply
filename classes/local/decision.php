@@ -109,7 +109,8 @@ final class decision {
     public static function groups(array $userenrolmentids, string $message, array $messages): array {
         global $DB;
 
-        $ids = array_map('intval', array_values($userenrolmentids));
+        // Each id once: a repeated one would defer, and message the applicant, twice.
+        $ids = array_values(array_unique(array_map('intval', array_values($userenrolmentids))));
         if (!$messages || !$ids) {
             return [['ids' => $ids, 'message' => $message]];
         }
@@ -121,7 +122,7 @@ final class decision {
 
         // The method of each row, from the database: a post names ids, never what they belong to.
         $methodof = [];
-        foreach (array_chunk(array_unique($ids), 1000) as $chunk) {
+        foreach (array_chunk($ids, 1000) as $chunk) {
             [$insql, $params] = $DB->get_in_or_equal($chunk);
             $methodof += $DB->get_records_select_menu('user_enrolments', "id {$insql}", $params, '', 'id, enrolid');
         }

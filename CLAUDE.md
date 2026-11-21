@@ -785,7 +785,11 @@ backup/                      group mappings, comments and the durable trail, see
   that second read narrows the gap to the write without closing it (gate `SR4`). A ticked
   `withoutkey` wins over
   a posted key (the no-JavaScript transport posts both). Places and seats are checked and the
-  admission written under `lock_admission()` (the method, then each group ascending), because the
+  admission written under `lock_admission()` (the method, then each group ascending; a method with an
+  applicant limit has `submit_application()` take the method's lock first, after the submit and course locks,
+  and `lock_admission()` then skips it: the lock is not reentrant, and the cap counts every applicant, which no
+  per-user lock orders; under the locks `apply_or_admit()` reads the method again and re-tests the mode and
+  `allow_apply()`), because the
   submission lock is per applicant and two key holders racing for one seat both got it without
   them (measured, K0.5 in `docs/design/group-enrolment-key.md`); no PHPUnit gate can hold that, so
   keep both checks inside the locks.
@@ -1801,8 +1805,14 @@ backup/                      group mappings, comments and the durable trail, see
   answers up by key), keeps an unmapped one only on the same site (a shared question, as
   `restored_field_id()` says), and drops a `c_<id>` key from another site: the masking judges it
   against the visibility of whatever profile field has that id HERE, and the archive does not say
-  which field it was. `s_` keys travel as they are. The old envelope goes through the same rule.
-  Gates `SR5`-`SR8`.
+  which field it was. `s_` keys travel only for a column a snapshot can hold
+  (`fields::is_snapshot_standard_key()`); any other shape is dropped, and `formatter::shows()` hides a key
+  that is not `s_`, `c_` or `a_`. The old envelope goes through the same rule. Gates `SR5`-`SR8`.
+  A restored record keeps `userenrolmentid` only when that row is the applicant's in the restored instance,
+  is skipped for a status outside `submission::STATUSES`, and carries no decided role or groups while
+  pending. The restored field configuration is NOT re-validated with `config_form_validation()`: the core
+  generator's default `configdata` (displaysize 0) fails the text type's own validator, and the validators
+  index keys without guarding them. Gates `XA60`-`XA79`.
 
   **The custom report's snapshot column aggregates the rows in SQL** (`submission::aggregate_sql()`,
   `sql_group_concat()` with two control characters as separators, which `answer_record()` keeps
