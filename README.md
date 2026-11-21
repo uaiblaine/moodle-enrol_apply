@@ -534,6 +534,29 @@ the one whose icon you clicked, clearing the method filter widens it to every ap
 course, and each method remembers your filters separately. A course with a single method offers no
 such filter, and its report lists that course's applications as it always did.
 
+### Web services
+
+The report can also be read without its page, through three AJAX web services that the report's
+coming view uses. Each takes the enrolment method's id, derives the course from it, and refuses a
+reader the report refuses (`enrol/apply:viewreports`, an active enrolment or access to the course,
+no guest):
+
+- `enrol_apply_report_rows`: a page of the report's rows (30, 50 or 100), sorted by one of its
+  columns, optionally narrowed to the applications still awaiting a response (or a resolution) or
+  to the decided ones, and by part of the applicant's name. The cells are the report's own, and the
+  reader's filters, their group narrowing and the masking of what they may not see apply as on the
+  page. The answer also lists the columns the reader may choose and the report's filters.
+- `enrol_apply_report_summary`: for the same rows, how many were decided by a person, are still
+  open (and how many for more than a week, and the oldest), or were decided without a person (a
+  key admission); the median wait; and, for a reader not narrowed by separate groups, the 90th
+  percentile, a histogram and the median by method and by group. A group the reader may not see is
+  not named in it.
+- `enrol_apply_set_report_preference`: stores the columns the reader chose and the widths they gave
+  them, in the user preference `enrol_apply_report_columns`, the same on every course of the site.
+  The report reads it on every request, the download included, and shows only the columns it offers
+  that reader: a stored column the reader may not see adds nothing. Until a reader chooses, the
+  report shows the columns listed above. **Admission route** is a column a reader can add.
+
 ## Site-wide custom reports
 
 Site administration → Reports → Report builder offers **Enrolment applications** as a report
@@ -686,7 +709,7 @@ report is the place for that.
 
 ## Data stored
 
-Five tables. Three hold personal data:
+Seven tables. Three hold personal data:
 
 - `enrol_apply_applicationinfo` — the comment written with an application still awaiting a
   decision, keyed by the user enrolment. Deleted on approval, on cancellation, on unenrolment,
@@ -709,6 +732,10 @@ joins, per method), `enrol_apply_offer` (the groups an applicant may choose from
 method without a row uses the defaults) and `enrol_apply_fieldcond` (when a question is shown). All
 four are deleted with the method.
 
+One user preference, `enrol_apply_report_columns`, holds the columns a reader chose for the
+applications report and their widths (column names and pixels, never data about anybody else). It
+is exported with the user's data and deleted with the user.
+
 An approval also writes core rows: a role assignment and group memberships stamped with
 `enrol_apply`, and the enrolment itself. The plugin never writes the applicant's profile unless
 the site allows it (`enrol_apply/allowprofilewrite`) and the applicant accepts the offer. A custom
@@ -721,7 +748,8 @@ The plugin implements the full privacy API — metadata, data export, and deleti
 user, for a list of users, and for a whole context — over its three personal-data tables and
 the group memberships its approvals add.
 
-- **A data export** gives the applicant their pending comment, every application record they
+- **A data export** includes the user's choice of columns for the applications report, and gives
+  the applicant their pending comment, every application record they
   submitted with the details and answers it carried and the decision taken on it, and the groups
   an approval added them to. Somebody who decided applications gets each decision they took,
   never the applicant's comment or answers.

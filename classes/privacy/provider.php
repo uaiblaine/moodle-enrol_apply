@@ -25,6 +25,7 @@ use core_privacy\local\request\contextlist;
 use core_privacy\local\request\transform;
 use core_privacy\local\request\userlist;
 use core_privacy\local\request\writer;
+use enrol_apply\local\reportpreference;
 use enrol_apply\local\submission;
 
 /**
@@ -58,7 +59,8 @@ use enrol_apply\local\submission;
 class provider implements
     \core_privacy\local\metadata\provider,
     \core_privacy\local\request\core_userlist_provider,
-    \core_privacy\local\request\plugin\provider {
+    \core_privacy\local\request\plugin\provider,
+    \core_privacy\local\request\user_preference_provider {
     /**
      * Describe the personal data held by this plugin.
      *
@@ -110,6 +112,8 @@ class provider implements
             ],
             'privacy:metadata:enrol_apply_answer'
         );
+
+        $items->add_user_preference(reportpreference::NAME, 'privacy:metadata:preference:reportcolumns');
 
         $items->add_subsystem_link('core_group', [], 'privacy:metadata:core_group');
         // The group conversations of the memberships it added are exported and erased with them.
@@ -681,5 +685,25 @@ class provider implements
 
         [$insql, $params] = $DB->get_in_or_equal($ids, SQL_PARAMS_NAMED, 'id');
         $DB->delete_records_select('enrol_apply_applicationinfo', "id {$insql}", $params);
+    }
+
+    /**
+     * Export the user's grid on the course report, the one preference this plugin keeps.
+     *
+     * Exported as stored (column keys and pixel widths), which is what the preference is.
+     *
+     * @param int $userid The user.
+     * @return void
+     */
+    public static function export_user_preferences(int $userid) {
+        $value = get_user_preferences(reportpreference::NAME, null, $userid);
+        if ($value !== null) {
+            writer::export_user_preference(
+                'enrol_apply',
+                reportpreference::NAME,
+                $value,
+                get_string('privacy:request:preference:reportcolumns', 'enrol_apply')
+            );
+        }
     }
 }

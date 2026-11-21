@@ -76,9 +76,10 @@ class course_applications_every_column extends course_applications {
      *
      * @param context $context Course context the report belongs to.
      * @param int $enrolid Enrol instance the reader opened it from.
+     * @param array $parameters Report parameters.
      * @return \core_reportbuilder\system_report The report.
      */
-    public static function for_method(context $context, int $enrolid): \core_reportbuilder\system_report {
-        return system_report_factory::create(self::class, $context, 'enrol_apply', 'method', $enrolid);
+    public static function for_method(context $context, int $enrolid, array $parameters = []): \core_reportbuilder\system_report {
+        return system_report_factory::create(self::class, $context, 'enrol_apply', 'method', $enrolid, $parameters);
     }
 }
