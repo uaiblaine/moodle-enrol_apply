@@ -27,6 +27,11 @@ namespace enrol_apply\local;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 
+defined('MOODLE_INTERNAL') || die();
+
+global $CFG;
+require_once($CFG->dirroot . '/enrol/apply/tests/fixtures/profile_elsewhere.php');
+
 /**
  * Tests for the profile field set an enrolment application collects.
  *
@@ -38,6 +43,8 @@ use PHPUnit\Framework\Attributes\CoversClass;
 #[CoversClass(fields::class)]
 #[CoversClass(fieldset::class)]
 final class fields_test extends \advanced_testcase {
+    use \enrol_apply\profile_elsewhere;
+
     /** @var \stdClass The course the apply instance belongs to. */
     protected $course;
 
@@ -465,6 +472,49 @@ final class fields_test extends \advanced_testcase {
 
         $this->assertSame(fields::STATE_ABSENT, fields::classify('s_password', $user));
         $this->assertSame(fields::STATE_ABSENT, fields::classify('s_auth', $user));
+    }
+
+    /**
+     * Every field of a user whose auth plugin edits the profile elsewhere is locked, custom ones included.
+     *
+     * Core's user/edit.php sends such a user to the plugin's page before it edits anything. A
+     * field the form would not show at all stays absent.
+     *
+     * @return void
+     */
+    public function test_a_profile_edited_elsewhere_locks_every_field(): void {
+        global $DB;
+
+        $user = $this->getDataGenerator()->create_user(['city' => 'Campinas']);
+        $custom = fields::custom_key((int) $this->create_custom_field('unit')->id);
+        $hidden = $this->create_custom_field('hiddenunit');
+        $DB->set_field('user_info_field', 'visible', PROFILE_VISIBLE_NONE, ['id' => $hidden->id]);
+
+        // The control: with core's own manual plugin both fields are editable.
+        $this->assertSame(fields::STATE_EDITABLE, fields::classify('s_city', $user));
+        $this->assertSame(fields::STATE_EDITABLE, fields::classify($custom, $user));
+
+        $this->send_manual_users_elsewhere();
+
+        $this->assertSame(fields::STATE_LOCKED, fields::classify('s_city', $user));
+        $this->assertSame(fields::STATE_LOCKED, fields::classify($custom, $user));
+        $this->assertSame(fields::STATE_ABSENT, fields::classify(fields::custom_key((int) $hidden->id), $user));
+        $this->assertSame(fields::STATE_ABSENT, fields::classify('s_password', $user));
+    }
+
+    /**
+     * The length of a standard field is its {user} column's, which is not the same for every column.
+     *
+     * @return void
+     */
+    public function test_a_standard_field_is_as_long_as_its_column(): void {
+        $this->assertSame(20, fields::max_length('s_phone1'));
+        $this->assertSame(20, fields::max_length('s_phone2'));
+        $this->assertSame(100, fields::max_length('s_firstname'));
+        $this->assertSame(120, fields::max_length('s_city'));
+        $this->assertSame(255, fields::max_length('s_institution'));
+        // A custom field is measured by its own type, never here.
+        $this->assertSame(0, fields::max_length(fields::custom_key(1)));
     }
 
     /**

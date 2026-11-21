@@ -2802,7 +2802,8 @@ class enrol_apply_renderer extends plugin_renderer_base {
         /* Both buttons are labelled explicitly: core's confirm() would label the second one
            "Cancel", beside a destructive primary button that also starts with "Cancel". */
         $output .= $this->confirm(
-            get_string('reviewcancelconfirm_desc', 'enrol_apply', fullname($applicant)),
+            // Escaped: confirm() writes the message into the page raw.
+            get_string('reviewcancelconfirm_desc', 'enrol_apply', s(fullname($applicant))),
             new single_button(
                 /* The queue's own decision contract. single_button names each hidden input by the
                    raw key, so `userenrolments[0]` is what optional_param_array() reads back. */

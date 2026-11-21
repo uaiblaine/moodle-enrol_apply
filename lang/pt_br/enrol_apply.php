@@ -260,6 +260,7 @@ $string['expirynotifyall'] = 'Professor e usuário inscrito';
 $string['expirynotifyenroller'] = 'Somente o professor';
 $string['expirynotifyhour_desc'] = 'Hora do dia em que as notificações de expiração de inscrição são enviadas.';
 $string['fieldrequired'] = 'Obrigatório';
+$string['fieldtypenotallowed'] = 'Este tipo de pergunta não pode ser feito no formulário de solicitação.';
 $string['gotocourse'] = 'Ir para o curso';
 $string['gotoprofile'] = 'Ir para o meu perfil';
 $string['group'] = 'Grupos atribuídos na aprovação';

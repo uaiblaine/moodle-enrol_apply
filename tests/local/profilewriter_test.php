@@ -31,6 +31,7 @@ defined('MOODLE_INTERNAL') || die();
 
 global $CFG;
 require_once($CFG->dirroot . '/enrol/apply/tests/fixtures/municipality_field.php');
+require_once($CFG->dirroot . '/enrol/apply/tests/fixtures/profile_elsewhere.php');
 
 /**
  * Tests for the optional write of an application's answers to the applicant's profile.
@@ -49,6 +50,7 @@ require_once($CFG->dirroot . '/enrol/apply/tests/fixtures/municipality_field.php
 #[CoversClass(completeness::class)]
 final class profilewriter_test extends \advanced_testcase {
     use \enrol_apply\municipality_field;
+    use \enrol_apply\profile_elsewhere;
 
     /** @var \stdClass Course the instance belongs to. */
     protected $course;
@@ -634,5 +636,69 @@ final class profilewriter_test extends \advanced_testcase {
             [fields::custom_key((int) $field->id)],
             array_column(completeness::missing($this->instance, $this->user), 'key')
         );
+    }
+
+    /**
+     * An unlockedifempty field is written once, and the user object handed in again cannot write it twice.
+     *
+     * profile.php hands over the session's $USER, which still says the field is empty after the
+     * first write unless something refreshes it. The write reads the user from the database, so
+     * the stale copy passed here, still empty, changes nothing.
+     *
+     * @return void
+     */
+    public function test_an_unlockedifempty_field_is_written_only_once(): void {
+        set_config('field_lock_institution', 'unlockedifempty', 'auth_manual');
+        $stale = clone $this->user;
+        $this->assertSame('', $stale->institution);
+
+        // The control: while it is empty, the field is written.
+        $this->assertNotSame([], profilewriter::write($this->instance, $stale, ['institution' => 'UFMG']));
+        $this->assertSame('UFMG', $this->stored()->institution);
+
+        $this->assertSame([], profilewriter::write($this->instance, $stale, ['institution' => 'UFOP']));
+        $this->assertSame('UFMG', $this->stored()->institution);
+    }
+
+    /**
+     * The session's own user reflects a write to it, as core's profile page leaves it.
+     *
+     * @return void
+     */
+    public function test_the_session_user_reflects_the_write(): void {
+        global $USER;
+
+        $this->assertSame('Campinas', $USER->city);
+        $this->assertSame('', $USER->institution);
+
+        profilewriter::write($this->instance, $USER, ['city' => 'Belo Horizonte', 'institution' => 'UFMG']);
+
+        $this->assertSame('Belo Horizonte', $USER->city);
+        $this->assertSame('UFMG', $USER->institution);
+        // The session copy never gains the credential columns core keeps out of it.
+        $this->assertObjectNotHasProperty('password', $USER);
+    }
+
+    /**
+     * A user whose auth plugin edits the profile elsewhere has nothing written here.
+     *
+     * Core's user/edit.php redirects such a user to the plugin's page before it edits anything.
+     * The stand-in auth plugin is core's manual one with an edit_profile_url(), put in place
+     * through core's dependency container ({@see \enrol_apply\profile_elsewhere}), so the test
+     * runs on Moodle 5.3 and later only.
+     *
+     * @return void
+     */
+    public function test_a_profile_edited_elsewhere_is_not_written(): void {
+        $submitted = ['city' => 'Belo Horizonte', 'institution' => 'UFMG'];
+        // The control: with core's own manual plugin the same submission is a change to write.
+        $this->assertCount(2, diff::compute($this->instance, $this->stored(), $submitted));
+
+        $this->send_manual_users_elsewhere();
+
+        $this->assertSame([], profilewriter::write($this->instance, $this->user, $submitted));
+        $stored = $this->stored();
+        $this->assertSame('Campinas', $stored->city);
+        $this->assertSame('', $stored->institution);
     }
 }

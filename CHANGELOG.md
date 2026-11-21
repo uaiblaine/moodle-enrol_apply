@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased (2026112008)
+## Unreleased (2026112009)
 
 ### Security
 
@@ -62,7 +62,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **A user deleted while the plugin is disabled no longer leaves the application comment behind.**
   Core skips disabled plugins when unenrolling a deleted user; a `user_deleted` observer now runs the
   same orphan sweep as the course deletion one.
-
+- **The profile write reads the applicant again before it decides what it may write** (audit
+  M-01). `profile.php` hands over the session's `$USER`, which core refreshes only on its own
+  profile page, so a field locked "unless empty" read as empty after the first write and could be
+  overwritten again in the same session. The write now classifies the user row it reads from the
+  database, and copies what it wrote into `$USER` afterwards, as `user/edit.php` does.
+- **A user whose authentication method edits the profile elsewhere has nothing written** (audit
+  M-01). Where the auth plugin names an `edit_profile_url()`, core's own profile page redirects
+  there; the application form now shows every field of such a user read-only, custom fields
+  included, and the write therefore writes nothing.
+- **A profile value longer than its column is refused by the form** (audit M-01). Every standard
+  text field carried `maxlength="255"`, while phone numbers hold 20 characters, first and last
+  names 100 and the city 120; a longer value was accepted and made the later profile write fail
+  half way. Each field now takes its column's length, in the browser and on the server.
+- **The application fields' handler lets nobody edit through it** (audit A-05). `can_edit()` was
+  true for anybody, and core's callers that take it as their only check build the handler from a
+  request; the handler keeps no data, so it now answers false and the form reads every field it
+  defines. A field of a type the handler does not offer (a textarea or a picture) is refused when
+  saved, and one an administrator put in a shared category is left off the management page,
+  where core could not name its type and warned.
+- **A name or field label shown in four more places is escaped exactly once** (audit B-01): the
+  confirmation checkbox under a profile field and its error, the notification list on the method's
+  settings, the applicant's name on the queue and the question before cancelling an application.
+- **A required question is no longer answered by spaces alone** (audit B-03). Only a question
+  shown on a condition was checked; with `strictformsrequired` off, core's default, a single space
+  satisfied any other required text question.
 
 ### Added
 

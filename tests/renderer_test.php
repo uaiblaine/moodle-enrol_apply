@@ -2630,6 +2630,41 @@ final class renderer_test extends \advanced_testcase {
     }
 
     /**
+     * The cancellation question names the applicant escaped exactly once.
+     *
+     * confirm() writes its message into the page raw, so the name is escaped before it goes in.
+     *
+     * @return void
+     */
+    public function test_the_cancellation_question_escapes_the_applicants_name_once(): void {
+        global $DB, $PAGE;
+
+        $this->render_review();
+        $ueid = (int) $DB->get_field_sql(
+            "SELECT MAX(id) FROM {user_enrolments} WHERE enrolid = :enrolid",
+            ['enrolid' => $this->instance->id]
+        );
+        $applicantid = (int) $DB->get_field('user_enrolments', 'userid', ['id' => $ueid], MUST_EXIST);
+        // Written straight to {user}, as an external directory sync may store it; the generator cleans tags.
+        $DB->update_record('user', (object) ['id' => $applicantid, 'firstname' => 'R&D', 'lastname' => '<Lab>']);
+        $applicant = \core_user::get_user($applicantid, '*', MUST_EXIST);
+
+        $html = $PAGE->get_renderer('enrol_apply')->cancel_confirmation(
+            $applicant,
+            new \moodle_url('/enrol/apply/manage.php', ['userenrol' => $ueid]),
+            $ueid,
+            '',
+            ''
+        );
+
+        $this->assertStringContainsString(
+            get_string('reviewcancelconfirm_desc', 'enrol_apply', 'R&amp;D &lt;Lab&gt;'),
+            $html
+        );
+        $this->assertStringNotContainsString('<Lab>', $html);
+    }
+
+    /**
      * The form a button of the given label submits.
      *
      * @param string $html Rendered markup holding one or more single-button forms.

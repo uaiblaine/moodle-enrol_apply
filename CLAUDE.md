@@ -1592,6 +1592,14 @@ backup/                      group mappings, comments and the durable trail, see
   as an input at all, so there is no constant to win. `\enrol_apply\local\profilewriter`
   therefore recomputes the writable set from the instance and the user and never trusts the
   keys it was handed — that recomputation *is* the guard, and deleting it reddens six tests.
+  **The user is read again from the database, never taken from the caller**: `profile.php` hands
+  over the session's `$USER`, which core refreshes only on `user/edit.php`, so an
+  `unlockedifempty` field the write had just filled read as empty and could be overwritten again
+  in the same session (gate `XA40`; the write copies what it wrote back into `$USER`, `XA41`). A
+  user whose auth plugin names an `edit_profile_url()` has every field locked in
+  `fields::classify()`, custom ones included, because core's profile page redirects them before
+  editing anything; the write needs no check of its own, since it writes only what `classify()`
+  calls editable (`XA42`/`XA43`, held on 5.3+ only: the stand-in auth plugin needs core's DI).
 
 - **An enrolment form may add to a profile but never empty it.** Core's own boundary would
   erase: `profile_field_base::edit_save_data()` ignores a value only when the property is

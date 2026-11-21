@@ -67,8 +67,15 @@ class profilewriter {
      * details as a side effect of applying for a course is not something an applicant asked
      * for, and the profile page is where clearing a field belongs.
      *
+     * The user is read again from the database, never taken as handed over. The caller's copy is
+     * the session's $USER, which core refreshes only on its own profile page (user/edit.php copies
+     * the reloaded row into it): an unlockedifempty field filled in by this write would still read
+     * as empty there and could be overwritten again in the same session, and an auth plugin or a
+     * locked value an administrator changed since the login would not be seen. For the same
+     * reason the session's own copy is refreshed after a write.
+     *
      * @param \stdClass $instance Enrol instance the application was submitted to.
-     * @param \stdClass $user The applicant.
+     * @param \stdClass $user The applicant; only the id is read.
      * @param array $submitted Submitted values keyed by form element name.
      * @return array The changes actually written, in the shape diff::compute() returns.
      */
@@ -79,6 +86,11 @@ class profilewriter {
         require_once($CFG->dirroot . '/user/profile/lib.php');
 
         if (!self::is_enabled($instance)) {
+            return [];
+        }
+
+        $user = $DB->get_record('user', ['id' => (int) $user->id]);
+        if (!$user) {
             return [];
         }
 
@@ -127,7 +139,7 @@ class profilewriter {
            custom field is written by its own type's edit_save_data(), one field at a time
            rather than through profile_save_data(), so each type finds its own elements in the
            request (customfield::save()); and one event is fired at the end. */
-        if ($wrotestandard && !$authplugin->user_update($DB->get_record('user', ['id' => $user->id]), $usernew)) {
+        if ($wrotestandard && !$authplugin->user_update($user, $usernew)) {
             throw new \moodle_exception('cannotupdateprofile');
         }
         if ($wrotestandard) {
@@ -145,9 +157,39 @@ class profilewriter {
             return [];
         }
 
+        self::refresh_session_user((int) $user->id, array_keys((array) $usernew), (bool) $custom);
+
         /* Ids only, as core's own profile edit fires it: no field value goes into the log. */
         \core\event\user_updated::create_from_userid($user->id)->trigger();
 
         return $written;
+    }
+
+    /**
+     * Copy what was just written into the session's $USER, when the write was to the session's user.
+     *
+     * The values come from the row as stored, as user/edit.php copies them, so $USER holds what
+     * core kept rather than what was sent.
+     *
+     * @param int $userid The user written to.
+     * @param array $columns The {user} columns written.
+     * @param bool $custom Whether a custom profile field was written.
+     * @return void
+     */
+    protected static function refresh_session_user(int $userid, array $columns, bool $custom): void {
+        global $DB, $USER;
+
+        if ((int) ($USER->id ?? 0) !== $userid) {
+            return;
+        }
+        $stored = $DB->get_record('user', ['id' => $userid], '*', MUST_EXIST);
+        foreach ($columns as $column) {
+            if ($column !== 'id' && property_exists($stored, $column)) {
+                $USER->{$column} = $stored->{$column};
+            }
+        }
+        if ($custom) {
+            profile_load_custom_fields($USER);
+        }
     }
 }

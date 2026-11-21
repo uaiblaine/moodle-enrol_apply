@@ -466,7 +466,8 @@ class enrol_apply_edit_form extends moodleform {
             '$@ALL@$' => get_string('everyonewhocan', 'admin', get_capability_string('enrol/apply:manageapplications')),
         ];
         foreach (get_enrolled_users($context, 'enrol/apply:manageapplications') as $userid => $user) {
-            $choices[$userid] = fullname($user);
+            // Escaped: element-select.mustache renders an option's text raw.
+            $choices[$userid] = s(fullname($user));
         }
         $notify = $mform->addElement('select', 'notify', get_string('notify', 'enrol_apply'), $choices);
         $notify->setMultiple(true);

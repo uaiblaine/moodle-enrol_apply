@@ -280,6 +280,11 @@ class fields {
      * still exists - so any add-then-remove technique leaves the form permanently unsubmittable
      * with no visible field to explain why.
      *
+     * It is also the write's guard: profilewriter::write() writes only what this calls editable,
+     * for the user row it has just re-read. A user whose auth plugin names an edit_profile_url()
+     * edits their profile somewhere else - core's user/edit.php redirects them there and edits
+     * nothing, custom fields included - so every field they are asked for is locked.
+     *
      * @param string $key Field key.
      * @param \stdClass $user User the form is being built for.
      * @return string One of the STATE_ constants.
@@ -300,6 +305,7 @@ class fields {
         if (!$authplugin->can_edit_profile()) {
             return self::STATE_ABSENT;
         }
+        $elsewhere = self::edits_profile_elsewhere($authplugin);
 
         if (self::is_standard($key)) {
             $column = self::key_target($key);
@@ -307,7 +313,7 @@ class fields {
                 return self::STATE_ABSENT;
             }
 
-            return self::is_locked($authplugin, 'field_lock_' . $column, $user->{$column} ?? '')
+            return $elsewhere || self::is_locked($authplugin, 'field_lock_' . $column, $user->{$column} ?? '')
                 ? self::STATE_LOCKED
                 : self::STATE_EDITABLE;
         }
@@ -322,7 +328,7 @@ class fields {
         if ((int) $field->visible === (int) PROFILE_VISIBLE_NONE) {
             return self::STATE_ABSENT;
         }
-        if (!empty($field->locked)) {
+        if (!empty($field->locked) || $elsewhere) {
             return self::STATE_LOCKED;
         }
 
@@ -364,6 +370,43 @@ class fields {
         }
 
         return false;
+    }
+
+    /**
+     * Whether an auth plugin sends its users to another page to edit their profile.
+     *
+     * Read as core's user/edit.php reads it: any non-empty edit_profile_url() and the page
+     * redirects there before it edits anything.
+     *
+     * @param \auth_plugin_base $authplugin Auth plugin the user authenticates through.
+     * @return bool True when the profile is edited elsewhere.
+     */
+    public static function edits_profile_elsewhere($authplugin): bool {
+        return !empty($authplugin->edit_profile_url());
+    }
+
+    /**
+     * The longest value a standard field's {user} column holds, in characters.
+     *
+     * Read from the database's own description of the table rather than a copy of
+     * lib/db/install.xml: the lengths differ by column (phone1 and phone2 20, firstname and
+     * lastname 100, city 120, most others 255), and a value past the column's length makes the
+     * write throw a dml_write_exception halfway through profilewriter::write(), after the auth
+     * plugin was told.
+     *
+     * @param string $key Field key of a standard field.
+     * @return int The length, or 0 when the key names no text column.
+     */
+    public static function max_length(string $key): int {
+        global $DB;
+
+        if (!self::is_standard($key)) {
+            return 0;
+        }
+        $columns = $DB->get_columns('user');
+        $column = $columns[self::key_target($key)] ?? null;
+
+        return $column ? max(0, (int) $column->max_length) : 0;
     }
 
     /**

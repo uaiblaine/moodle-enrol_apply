@@ -74,20 +74,17 @@ class answers {
     /**
      * The fields the instance asks, local and enabled shared ones, in form order.
      *
-     * Only types the handler allows: a shared category can hold a textarea or a picture, which
-     * this plugin cannot freeze, and those are left off the application form.
+     * Every field the handler defines, not get_editable_fields(): the handler keeps no data, so
+     * nobody may edit through it (application_handler::can_edit()), and the form's own access
+     * check is the gate. Only types the handler allows: a shared category can hold a textarea or
+     * a picture, which this plugin cannot freeze, and application_handler::get_categories_with_fields()
+     * leaves those out.
      *
      * @param stdClass $instance Enrol instance.
      * @return field_controller[] Keyed by field id.
      */
     public static function fields(stdClass $instance): array {
-        $handler = application_handler::create((int) $instance->id);
-        $allowed = $handler->get_available_field_types();
-
-        return array_filter(
-            $handler->get_editable_fields(0),
-            static fn(field_controller $field): bool => array_key_exists($field->get('type'), $allowed)
-        );
+        return application_handler::create((int) $instance->id)->get_fields();
     }
 
     /**
@@ -221,8 +218,10 @@ class answers {
      * components' data and refuse an applicant over a value they never saw.
      *
      * A question hidden by its condition is not validated at all, judged from the submitted data
-     * and never from what the browser hid. A conditional question that is shown and configured as
-     * required is checked here, because conditions::add_to_form() took core's required rule off it.
+     * and never from what the browser hid. Every shown question configured as required is checked
+     * here: a conditional one because conditions::add_to_form() took core's required rule off it,
+     * and every other one because that rule does not strip whitespace while
+     * $CFG->strictformsrequired is off (its default), so a single space would answer it.
      *
      * @param stdClass $instance Enrol instance.
      * @param array $data Submitted form data.
@@ -248,8 +247,7 @@ class answers {
                 }
             }
             if (
-                isset($conditions[(int) $id])
-                && $field->get_configdata_property('required')
+                $field->get_configdata_property('required')
                 && !isset($errors[$element])
                 && !conditions::is_answered($field, $data[$element])
             ) {
