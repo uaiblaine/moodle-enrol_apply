@@ -823,7 +823,7 @@ class enrol_apply_plugin extends enrol_plugin {
         }
 
         // After the commit: the cache is not part of the transaction.
-        \enrol_apply\local\keyattempts::clear((int) $instance->id, $userid);
+        \enrol_apply\local\keyattempts::clear((int) $instance->courseid, $userid);
 
         return \enrol_apply\local\application_result::created(\enrol_apply\local\submission::KEY_ADMITTED, $keygroupid);
     }
@@ -929,7 +929,7 @@ class enrol_apply_plugin extends enrol_plugin {
 
         $this->apply($instance, $userid, $data, $keygroupid, \enrol_apply\local\submission::KEY_FOR_REVIEW);
         // A valid key ends the tries, as an admission does.
-        \enrol_apply\local\keyattempts::clear((int) $instance->id, $userid);
+        \enrol_apply\local\keyattempts::clear((int) $instance->courseid, $userid);
 
         return \enrol_apply\local\application_result::created(\enrol_apply\local\submission::KEY_FOR_REVIEW, $keygroupid);
     }

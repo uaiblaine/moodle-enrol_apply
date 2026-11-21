@@ -271,11 +271,11 @@ key's group to a recipient who may see it.
 
 On every mode that reads a key, the key is trimmed of the whitespace the group page never stores. A key ending in
 an unusual space, as a copied one often does, gets its own message and costs no try. Wrong keys are
-counted per applicant and instance in the `keyattempts` application cache, for 15 minutes. After
+counted per applicant and course in the `keyattempts` application cache, for 15 minutes. After
 five, the field gives way to a sentence for the rest of that time, so the form cannot be used to
 guess keys without limit. On a key-only method that also means the form cannot be sent at all
 until then. Several sessions of one account are counted together: each request checks the key
-under a lock on the applicant and the method, and one that cannot obtain it within a few seconds
+under a lock on the applicant and the course, and one that cannot obtain it within a few seconds
 is treated as locked. The count is per account: on a site where anybody may create an account, it
 does not stop somebody with many accounts, so keys there should not be easy to guess. The key is read
 from the database when the application is written, and again once the locks that admit it are held,

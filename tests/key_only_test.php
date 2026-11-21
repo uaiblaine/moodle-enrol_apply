@@ -153,7 +153,7 @@ final class key_only_test extends \advanced_testcase {
         $this->assertFalse($DB->record_exists('enrol_apply_submission', ['userid' => $applicant->id]));
         $this->assertSame(0, $DB->count_records('enrol_apply_applicationinfo'));
         $this->assertSame([], $messages);
-        $this->assertFalse(keyattempts::locked((int) $this->instance->id, (int) $applicant->id));
+        $this->assertFalse(keyattempts::locked((int) $this->course->id, (int) $applicant->id));
     }
 
     /**

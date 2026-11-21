@@ -183,7 +183,7 @@ final class key_review_test extends \advanced_testcase {
         $this->assertSame(0, $DB->count_records('enrol_apply_answer'));
         $this->assertSame(0, $DB->count_records('enrol_apply_applicationinfo'));
         $this->assertSame([], $messages);
-        $this->assertFalse(keyattempts::locked((int) $this->instance->id, (int) $applicant->id));
+        $this->assertFalse(keyattempts::locked((int) $this->course->id, (int) $applicant->id));
     }
 
     /**
@@ -220,7 +220,7 @@ final class key_review_test extends \advanced_testcase {
 
         $applicant = $this->getDataGenerator()->create_user();
         for ($i = 0; $i < keyattempts::LIMIT; $i++) {
-            keyattempts::record_failure((int) $this->instance->id, (int) $applicant->id);
+            keyattempts::record_failure((int) $this->course->id, (int) $applicant->id);
         }
         $events = $this->redirectEvents();
 
@@ -253,7 +253,7 @@ final class key_review_test extends \advanced_testcase {
         $told = $this->sent_to($messages, $this->teacher);
         $this->assertCount(1, $told);
         $this->assertSame(get_string('mailtoteacher_subject', 'enrol_apply'), $told[0]->subject, 'asked to decide');
-        $this->assertFalse(keyattempts::locked((int) $this->instance->id, (int) $applicant->id));
+        $this->assertFalse(keyattempts::locked((int) $this->course->id, (int) $applicant->id));
     }
 
     /**

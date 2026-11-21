@@ -180,7 +180,7 @@ final class key_admission_test extends \advanced_testcase {
 
         $applicant = $this->getDataGenerator()->create_user();
         for ($i = 0; $i < keyattempts::LIMIT; $i++) {
-            keyattempts::record_failure((int) $this->instance->id, (int) $applicant->id);
+            keyattempts::record_failure((int) $this->course->id, (int) $applicant->id);
         }
         $events = $this->redirectEvents();
 
@@ -206,7 +206,7 @@ final class key_admission_test extends \advanced_testcase {
             $told[0]->subject,
             'the manager is told, not asked to decide'
         );
-        $this->assertFalse(keyattempts::locked((int) $this->instance->id, (int) $applicant->id));
+        $this->assertFalse(keyattempts::locked((int) $this->course->id, (int) $applicant->id));
 
         $admitted = array_values(array_filter(
             $events->get_events(),

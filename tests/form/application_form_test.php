@@ -987,7 +987,7 @@ final class application_form_test extends \advanced_testcase {
     public function test_too_many_wrong_keys_replace_the_field(): void {
         $this->accept_group_keys();
         for ($i = 0; $i < keyattempts::LIMIT; $i++) {
-            keyattempts::record_failure((int) $this->instance->id, (int) $this->applicant->id);
+            keyattempts::record_failure((int) $this->course->id, (int) $this->applicant->id);
         }
 
         $names = $this->element_names($this->make_form());
@@ -1014,10 +1014,10 @@ final class application_form_test extends \advanced_testcase {
         $this->assertStringContainsString('name="withoutkey"', $result['html']);
 
         for ($i = 1; $i < keyattempts::LIMIT; $i++) {
-            $this->assertFalse(keyattempts::locked((int) $this->instance->id, (int) $this->applicant->id), "after {$i}");
+            $this->assertFalse(keyattempts::locked((int) $this->course->id, (int) $this->applicant->id), "after {$i}");
             $this->submit_through_the_modal(['groupkey' => 'Turma-Z-2027']);
         }
-        $this->assertTrue(keyattempts::locked((int) $this->instance->id, (int) $this->applicant->id));
+        $this->assertTrue(keyattempts::locked((int) $this->course->id, (int) $this->applicant->id));
     }
 
     /**
@@ -1113,7 +1113,7 @@ final class application_form_test extends \advanced_testcase {
 
         $this->accept_group_keys(groupkey::MODE_REQUIRED);
         for ($i = 0; $i < keyattempts::LIMIT; $i++) {
-            keyattempts::record_failure((int) $this->instance->id, (int) $this->applicant->id);
+            keyattempts::record_failure((int) $this->course->id, (int) $this->applicant->id);
         }
 
         $result = $this->submit_through_the_modal([]);
@@ -1200,9 +1200,176 @@ final class application_form_test extends \advanced_testcase {
 
         $this->assertStringContainsString(s(get_string('groupkeyinvalid_required', 'enrol_apply')), $result['html']);
         $this->assertSame(
-            [$this->instance->id . '_' . $this->applicant->id],
+            [$this->course->id . '_' . $this->applicant->id],
             \enrol_apply\fake_lock_factory::requests_for(keyattempts::LOCK_TYPE)
         );
+    }
+
+    /**
+     * Build the form from a post, the way a page transport reads one.
+     *
+     * @param array $posted Posted values on top of the instance id and sesskey.
+     * @param int|string $marker The value of the form's submission marker.
+     * @return application_form The form, built from that post.
+     */
+    protected function form_from_post(array $posted, $marker): application_form {
+        return $this->rendered_from_post($posted, $marker)[0];
+    }
+
+    /**
+     * Build the form from a post and render it while that post is still the request's.
+     *
+     * Rendering runs definition_after_data(), which reads the submission again, so it has to
+     * happen before the post is put back.
+     *
+     * @param array $posted Posted values on top of the instance id and sesskey.
+     * @param int|string $marker The value of the form's submission marker.
+     * @return array The form and its rendered markup.
+     */
+    protected function rendered_from_post(array $posted, $marker): array {
+        $saved = $_POST;
+        try {
+            $_POST = $posted + [
+                'instance' => $this->instance->id,
+                'sesskey' => sesskey(),
+                '_qf__enrol_apply_form_application_form' => $marker,
+            ];
+            $form = new application_form(null, ['showbuttons' => true]);
+            return [$form, $form->render()];
+        } finally {
+            $_POST = $saved;
+        }
+    }
+
+    /**
+     * Modes that read a key, for the marker test.
+     *
+     * @return array Mode name to the mode argument.
+     */
+    public static function key_modes(): array {
+        return [
+            'any' => [groupkey::MODE_ANY],
+            'required' => [groupkey::MODE_REQUIRED],
+            'review' => [groupkey::MODE_REVIEW],
+        ];
+    }
+
+    /**
+     * A marker that is not 1 is no submission: a valid key and a wrong one render the same, and
+     * no try is counted.
+     *
+     * Formslib processes a submission only when the marker equals 1; a 2 once built step 2 for a
+     * valid key (or left the way out off a wrong one) with no sesskey check and no count, so the
+     * form told a guesser whether a key exists for free.
+     *
+     * Changes that must make it fail: submission() accepting any truthy marker.
+     *
+     * @param string $mode The key mode.
+     * @return void
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('key_modes')]
+    public function test_a_marker_that_is_not_one_is_no_submission(string $mode): void {
+        $this->accept_group_keys($mode);
+        $city = fields::standard_key('city');
+        $this->ask_for([$city], [$city]);
+        $cityname = fields::form_element_name($city);
+        $this->settle_the_no_submit_cache();
+
+        // Rendering runs definition_after_data(), which is where the way out is added.
+        [$valid, $validhtml] = $this->rendered_from_post(['groupkey' => 'Turma-B-2027'], 2);
+        [$wrong, $wronghtml] = $this->rendered_from_post(['groupkey' => 'Turma-Z-2027'], 2);
+
+        // Formslib gives the hidden expand-state elements a random suffix on every build.
+        $stable = static fn(array $names): array => array_values(array_filter(
+            $names,
+            static fn(string $name): bool => strpos($name, 'mform_isexpanded_') !== 0
+        ));
+        $this->assertSame(
+            $stable($this->element_names($valid)),
+            $stable($this->element_names($wrong)),
+            'the same form for both keys'
+        );
+        $this->assertStringNotContainsString('name="withoutkey"', $wronghtml);
+        if ($mode !== groupkey::MODE_ANY) {
+            $this->assertNotContains($cityname, $this->element_names($valid), 'no step 2');
+        }
+        $this->assertStringNotContainsString('Turma B', $validhtml, 'no group name');
+        for ($i = 0; $i < keyattempts::LIMIT; $i++) {
+            $this->form_from_post(['groupkey' => 'Turma-Z-2027'], 2);
+        }
+        $this->assertFalse(keyattempts::locked((int) $this->course->id, (int) $this->applicant->id));
+
+        // The control: the marker 1 is a submission, and a valid key does build what the 2 did not.
+        keyattempts::release_all();
+        if ($mode !== groupkey::MODE_ANY) {
+            $this->assertContains($cityname, $this->element_names($this->form_from_post(['groupkey' => 'Turma-B-2027'], 1)));
+        } else {
+            $this->assertStringContainsString(
+                'name="withoutkey"',
+                $this->rendered_from_post(['groupkey' => 'Turma-Z-2027'], 1)[1]
+            );
+            keyattempts::release_all();
+            $this->assertStringNotContainsString(
+                'name="withoutkey"',
+                $this->rendered_from_post(['groupkey' => 'Turma-B-2027'], 1)[1],
+                'the control: with marker 1 a valid key adds no way out'
+            );
+        }
+    }
+
+    /**
+     * Posting the way out with a field missing renders the way out for a valid key as for a wrong
+     * one, so the page never shows which the key was.
+     *
+     * Changes that must make it fail: the checkbox added only for a wrong key.
+     *
+     * @return void
+     */
+    public function test_the_way_out_is_rendered_the_same_for_a_valid_and_a_wrong_key(): void {
+        $this->accept_group_keys();
+        $city = fields::standard_key('city');
+        $this->ask_for([$city], [$city]);
+
+        $valid = $this->submit_through_the_modal(['groupkey' => 'Turma-B-2027', 'withoutkey' => 1]);
+        $wrong = $this->submit_through_the_modal(['groupkey' => 'Turma-Z-2027', 'withoutkey' => 1]);
+
+        $this->assertFalse($valid['submitted']);
+        $this->assertFalse($wrong['submitted']);
+        $this->assertStringContainsString('name="withoutkey"', $wrong['html']);
+        $this->assertStringContainsString('name="withoutkey"', $valid['html']);
+        $this->assertFalse(keyattempts::locked((int) $this->course->id, (int) $this->applicant->id));
+    }
+
+    /**
+     * Two keyed apply instances of one course share one wrong-key budget: keys are course-wide.
+     *
+     * Changes that must make it fail: the count and lock kept per instance.
+     *
+     * @return void
+     */
+    public function test_two_instances_of_one_course_share_the_wrong_key_budget(): void {
+        global $DB;
+
+        $this->accept_group_keys();
+        $first = $this->instance;
+        $secondid = $this->plugin->add_instance($this->course, $this->plugin->get_instance_defaults());
+        $DB->set_field('enrol', 'customchar1', groupkey::MODE_ANY, ['id' => $secondid]);
+        $second = $DB->get_record('enrol', ['id' => $secondid], '*', MUST_EXIST);
+
+        $this->instance = $second;
+        $this->assertContains('groupkey', $this->element_names($this->make_form()), 'the control: the second is open');
+        keyattempts::release_all();
+
+        $this->instance = $first;
+        for ($i = 0; $i < keyattempts::LIMIT; $i++) {
+            $this->submit_through_the_modal(['groupkey' => 'Turma-Z-2027']);
+        }
+        keyattempts::release_all();
+
+        $this->instance = $second;
+        $names = $this->element_names($this->make_form());
+        $this->assertNotContains('groupkey', $names);
+        $this->assertContains('groupkeylocked', $names);
     }
 
     /**
@@ -1221,7 +1388,7 @@ final class application_form_test extends \advanced_testcase {
             $result = $this->submit_through_the_modal(['groupkey' => "Turma-B-2027\u{00A0}"]);
             $this->assertFalse($result['submitted']);
         }
-        $this->assertFalse(keyattempts::locked((int) $this->instance->id, (int) $this->applicant->id));
+        $this->assertFalse(keyattempts::locked((int) $this->course->id, (int) $this->applicant->id));
         $this->assertStringContainsString(s(get_string('groupkeyunusualspace', 'enrol_apply')), $result['html']);
 
         $sink = $this->redirectMessages();
@@ -1345,13 +1512,13 @@ final class application_form_test extends \advanced_testcase {
 
         for ($i = 1; $i < keyattempts::LIMIT; $i++) {
             $result = $this->submit_through_the_modal(['groupkey' => 'Turma-Z-2027', 'keycontinue' => 'Continue']);
-            $this->assertFalse(keyattempts::locked((int) $this->instance->id, (int) $this->applicant->id), "after {$i}");
+            $this->assertFalse(keyattempts::locked((int) $this->course->id, (int) $this->applicant->id), "after {$i}");
         }
         $this->assertStringContainsString('data-enrol-apply-step="1"', $result['html']);
         $this->assertStringContainsString(s(get_string('groupkeyinvalid_required', 'enrol_apply')), $result['html']);
 
         $this->submit_through_the_modal(['groupkey' => 'Turma-Z-2027', 'keycontinue' => 'Continue']);
-        $this->assertTrue(keyattempts::locked((int) $this->instance->id, (int) $this->applicant->id));
+        $this->assertTrue(keyattempts::locked((int) $this->course->id, (int) $this->applicant->id));
     }
 
     /**
@@ -1374,7 +1541,7 @@ final class application_form_test extends \advanced_testcase {
 
         $this->assertStringContainsString('data-enrol-apply-step="1"', $result['html']);
         $this->assertStringContainsString(s(get_string('keynoplace', 'enrol_apply')), $result['html']);
-        $this->assertFalse(keyattempts::locked((int) $this->instance->id, (int) $this->applicant->id));
+        $this->assertFalse(keyattempts::locked((int) $this->course->id, (int) $this->applicant->id));
     }
 
     /**
