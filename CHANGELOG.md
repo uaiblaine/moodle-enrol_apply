@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased (2026112010)
+## Unreleased (2026112011)
 
 ### Security
 
@@ -98,6 +98,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **A custom field hidden from everybody is judged at the site** (audit B-05.5). A `PROFILE_VISIBLE_NONE`
   field in an application's snapshot needs `moodle/user:viewalldetails` at the system context, as core
   judges it on a profile; a snapshot key of an unknown shape is never shown.
+- **A deleted user's applications are pseudonymised at once** (external audit 2026-11-20, P7).
+  `delete_user()` calls no privacy provider, so an application record (the comment, the outcome
+  message, the decision note and the frozen profile answers) outlived the account until the retention
+  sweep or the course's deletion. The `user_deleted` observer now gives the applicant's records
+  `userid` 0, blank texts and no answers, and clears `decidedby` on the records the user decided,
+  which stay the applicant's. Status, dates and course are kept. It runs whatever the plugin's
+  state, is idempotent, and costs two indexed probes when the user has no record.
 
 ### Fixed
 

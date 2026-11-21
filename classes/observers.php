@@ -25,6 +25,7 @@ use core_customfield\event\field_deleted;
 use enrol_apply\customfield\application_handler;
 use enrol_apply\local\conditions;
 use enrol_apply\local\approvalwrite;
+use enrol_apply\local\submission;
 
 /**
  * Event observers cleaning up after core has deleted rows this plugin hangs data off.
@@ -120,14 +121,21 @@ class observers {
      * unenrol the user (so the unenrol_user() of this plugin, which deletes the comment, is
      * skipped) and then deletes every {user_enrolments} row regardless. The comment of the
      * application would stay behind, keyed to an enrolment that no longer exists. Observers run
-     * whatever the plugin's state. The durable trail in enrol_apply_submission is not touched:
-     * it is not keyed to the enrolment and follows its own retention.
+     * whatever the plugin's state.
+     *
+     * The durable trail in enrol_apply_submission is pseudonymised here too, because
+     * delete_user() calls no privacy provider: the applicant's records lose their userid, texts
+     * and frozen answers, and the records they decided lose their name
+     * ({@see submission::pseudonymise_user()}). The dates, the status and the course stay, and
+     * the rest follows the retention period. Idempotent, and a pair of probes when the user has
+     * no record.
      *
      * @param user_deleted $event The dispatched event.
      * @return void
      */
     public static function user_deleted(user_deleted $event): void {
         self::sweep_orphaned_applicationinfo();
+        submission::pseudonymise_user((int) $event->objectid);
     }
 
     /**

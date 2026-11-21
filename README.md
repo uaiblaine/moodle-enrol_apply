@@ -699,6 +699,10 @@ the group memberships its approvals add.
   approvals gave them in the course; for a decider it only clears their name from the records,
   which stay the applicant's. Role assignments and the enrolment itself are core's, covered by
   core's own privacy providers.
+- **A deleted user** is pseudonymised at once, without waiting for the retention period: core's
+  `delete_user()` calls no privacy provider, so the plugin observes the deletion and gives the
+  applicant's records no user, no comment, no messages and no frozen answers, keeping the status,
+  the dates and the course. Records the user decided only lose their name.
 
 The decision events (see "Audit trail") are rows of the site's log store, declared by the log
 store's own privacy provider, so the plugin declares nothing for them. Core's standard log store

@@ -312,4 +312,130 @@ final class observers_test extends \advanced_testcase {
         $this->assertSame(0, $DB->count_records(local\submission::ANSWER_TABLE, ['submissionid' => $orphaned]));
         $this->assertSame(1, $DB->count_records(local\submission::ANSWER_TABLE, ['submissionid' => $live]));
     }
+
+    /**
+     * Insert a decided application record with one frozen answer.
+     *
+     * @param int $courseid Course of the record.
+     * @param int $userid Applicant.
+     * @param int $decidedby Decider.
+     * @return int Record id.
+     */
+    protected function make_record(int $courseid, int $userid, int $decidedby): int {
+        global $DB;
+
+        $id = (int) $DB->insert_record('enrol_apply_submission', (object) [
+            'courseid' => $courseid,
+            'userid' => $userid,
+            'enrolid' => 7,
+            'userenrolmentid' => 8,
+            'comment' => 'My reason',
+            'outcomemessage' => 'Welcome',
+            'decisionnote' => 'Internal',
+            'status' => local\submission::STATUS_APPROVED,
+            'decidedby' => $decidedby,
+            'timecreated' => 1000,
+            'timedecided' => 2000,
+        ]);
+        local\submission::write_answers($id, [['key' => 's_city', 'label' => 'City', 'value' => 'Recife']]);
+
+        return $id;
+    }
+
+    /**
+     * Deleting an applicant pseudonymises their records and leaves everybody else's alone.
+     *
+     * Runs with the plugin disabled, since observers fire whatever the plugin's state. The second
+     * applicant is the control: an update without its WHERE would blank that record too.
+     *
+     * Changes that must make it fail: the observer not calling pseudonymise_user(), the userid
+     * branch skipped, the answers left in place, or an update written without the WHERE.
+     *
+     * @return void
+     */
+    public function test_deleting_an_applicant_pseudonymises_their_records(): void {
+        global $DB;
+
+        $generator = $this->getDataGenerator();
+        $course = $generator->create_course();
+        $leaving = $generator->create_user();
+        $staying = $generator->create_user();
+        $decider = $generator->create_user();
+        $mine = $this->make_record((int) $course->id, (int) $leaving->id, (int) $decider->id);
+        $other = $this->make_record((int) $course->id, (int) $staying->id, (int) $decider->id);
+
+        set_config('enrol_plugins_enabled', '');
+        delete_user($leaving);
+
+        $row = $DB->get_record('enrol_apply_submission', ['id' => $mine], '*', MUST_EXIST);
+        $this->assertSame(0, (int) $row->userid);
+        $this->assertSame('', $row->comment);
+        $this->assertSame('', $row->outcomemessage);
+        $this->assertSame('', $row->decisionnote);
+        $this->assertSame((int) $decider->id, (int) $row->decidedby);
+        $this->assertSame(local\submission::STATUS_APPROVED, (int) $row->status);
+        $this->assertSame((int) $course->id, (int) $row->courseid);
+        $this->assertSame(1000, (int) $row->timecreated);
+        $this->assertSame(2000, (int) $row->timedecided);
+        $this->assertSame(0, $DB->count_records(local\submission::ANSWER_TABLE, ['submissionid' => $mine]));
+
+        $control = $DB->get_record('enrol_apply_submission', ['id' => $other], '*', MUST_EXIST);
+        $this->assertSame((int) $staying->id, (int) $control->userid);
+        $this->assertSame('My reason', $control->comment);
+        $this->assertSame('Welcome', $control->outcomemessage);
+        $this->assertSame('Internal', $control->decisionnote);
+        $this->assertSame(1, $DB->count_records(local\submission::ANSWER_TABLE, ['submissionid' => $other]));
+    }
+
+    /**
+     * Deleting a decider clears their name only; the applicant's data stays.
+     *
+     * Changes that must make it fail: the decidedby branch skipped, or the applicant's data blanked
+     * by the same call.
+     *
+     * @return void
+     */
+    public function test_deleting_a_decider_clears_only_their_name(): void {
+        global $DB;
+
+        $generator = $this->getDataGenerator();
+        $course = $generator->create_course();
+        $applicant = $generator->create_user();
+        $decider = $generator->create_user();
+        $bystander = $generator->create_user();
+        $id = $this->make_record((int) $course->id, (int) $applicant->id, (int) $decider->id);
+        $kept = $this->make_record((int) $course->id, (int) $applicant->id, (int) $bystander->id);
+
+        delete_user($decider);
+
+        $row = $DB->get_record('enrol_apply_submission', ['id' => $id], '*', MUST_EXIST);
+        $this->assertSame(0, (int) $row->decidedby);
+        $this->assertSame((int) $applicant->id, (int) $row->userid);
+        $this->assertSame('My reason', $row->comment);
+        $this->assertSame('Welcome', $row->outcomemessage);
+        $this->assertSame('Internal', $row->decisionnote);
+        $this->assertSame(1, $DB->count_records(local\submission::ANSWER_TABLE, ['submissionid' => $id]));
+        $this->assertSame((int) $bystander->id, (int) $DB->get_field('enrol_apply_submission', 'decidedby', ['id' => $kept]));
+    }
+
+    /**
+     * A second run, and a user with no record, change nothing.
+     *
+     * @return void
+     */
+    public function test_pseudonymising_a_user_twice_or_without_records_is_harmless(): void {
+        global $DB;
+
+        $generator = $this->getDataGenerator();
+        $course = $generator->create_course();
+        $applicant = $generator->create_user();
+        $id = $this->make_record((int) $course->id, (int) $applicant->id, 0);
+
+        local\submission::pseudonymise_user((int) $applicant->id);
+        local\submission::pseudonymise_user((int) $applicant->id);
+        local\submission::pseudonymise_user((int) $generator->create_user()->id);
+
+        $this->assertSame(0, (int) $DB->get_field('enrol_apply_submission', 'userid', ['id' => $id]));
+        $this->assertSame(1, $DB->count_records('enrol_apply_submission'));
+    }
 }
