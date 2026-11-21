@@ -25,6 +25,7 @@
 
 namespace enrol_apply\event;
 
+use enrol_apply\local\approvalwrite;
 use enrol_apply\local\decisionlog;
 use enrol_apply\local\keyattempts;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -40,7 +41,8 @@ require_once($CFG->dirroot . '/enrol/locallib.php');
  * Tests for the three decision events and the marker that keeps an approval logged once.
  *
  * Every approval route is driven for real, because the property under test is a count across two
- * passes of complete_approval() that only the real routes produce. Most read an event sink; Edit
+ * passes of complete_approval() (the user_enrolment_updated observer's and activate()'s) that only
+ * the real routes produce. Most read an event sink; Edit
  * enrolment reads the standard log store instead, since a sink stops observers from running and
  * that route is fired by one.
  *
@@ -54,6 +56,8 @@ require_once($CFG->dirroot . '/enrol/locallib.php');
 #[CoversClass(application_deferred::class)]
 #[CoversClass(application_cancelled::class)]
 #[CoversClass(decisionlog::class)]
+#[CoversClass(approvalwrite::class)]
+#[CoversClass(\enrol_apply\observers::class)]
 #[CoversClass(\enrol_apply_plugin::class)]
 final class decision_events_test extends \advanced_testcase {
     /** @var string The group enrolment key of the keyed test. */
@@ -90,6 +94,8 @@ final class decision_events_test extends \advanced_testcase {
 
         parent::setUp();
         $this->resetAfterTest();
+        // Ids repeat between tests, and an expectation an event sink kept from its observer is static.
+        approvalwrite::reset();
 
         $enabled = enrol_get_plugins(true);
         $enabled['apply'] = true;
@@ -121,6 +127,7 @@ final class decision_events_test extends \advanced_testcase {
         $this->messages->close();
         keyattempts::release_all();
         decisionlog::reset();
+        approvalwrite::reset();
         parent::tearDown();
     }
 
@@ -252,13 +259,13 @@ final class decision_events_test extends \advanced_testcase {
     }
 
     /**
-     * In the site log, where observers run, a queue approval is still recorded once: the hook
-     * pass that core's write dispatches stays silent while activate() owes the approval, and
-     * nothing it might have parked survives to be fired by the observer after the write.
+     * In the site log, where observers run, a queue approval is still recorded once: the
+     * observer's pass that core's write triggers stays silent while activate() owes the approval,
+     * and the hook's expectation is consumed by it.
      *
      * Changes that must make it fail: activate() writing outside decisionlog::defer(), or
-     * complete_approval() ignoring the marker, either of which leaves a parked copy for the
-     * observer to log beside activate()'s own.
+     * complete_approval() ignoring the marker, either of which lets the observer's pass log
+     * beside activate()'s own.
      *
      * @return void
      */
@@ -270,7 +277,7 @@ final class decision_events_test extends \advanced_testcase {
         $this->assertSame(1, $this->plugin->confirm_enrolment([$ueid], '', []));
 
         $this->assertCount(1, $this->logged(application_approved::class));
-        $this->assertFalse(decisionlog::is_parked($ueid));
+        $this->assertFalse(approvalwrite::is_expected($ueid));
     }
 
     /**
@@ -332,12 +339,12 @@ final class decision_events_test extends \advanced_testcase {
     }
 
     /**
-     * Core's "Edit enrolment" route, which reaches complete_approval() only through the hook,
-     * logs one approval, AFTER core has written the row and triggered its own event, with the
-     * method's defaults.
+     * Core's "Edit enrolment" route, which reaches complete_approval() only through the
+     * user_enrolment_updated observer, logs one approval, AFTER core has written the row and
+     * triggered its own event, with the method's defaults.
      *
      * Changes that must make it fail: the approval event dropped from complete_approval(); the
-     * chosen flag claiming a choice nobody made; the event fired from the hook pass, before the
+     * chosen flag claiming a choice nobody made; the approval completed from the hook, before the
      * write.
      *
      * @return void
@@ -365,62 +372,57 @@ final class decision_events_test extends \advanced_testcase {
         $this->assertSame([(int) $this->listed->id], $other['groups']);
         $this->assertSame($this->role('student'), $other['roleid']);
         $this->assertFalse($other['chosen']);
-        $this->assertFalse(decisionlog::is_parked($ueid));
+        $this->assertFalse(approvalwrite::is_expected($ueid));
     }
 
     /**
-     * An entry parked for a write that never happens logs nothing, even when an unrelated update
-     * of the same enrolment reaches the observer afterwards.
+     * An approval expected for a write that never happens completes nothing, even when an
+     * unrelated update of the same enrolment reaches the observer afterwards.
      *
-     * The control is the first update that does activate the row: the same parked event logs then.
+     * The control is the second update, which does find the row active: the same expectation
+     * completes the approval then.
      *
-     * Changes that must make it fail: the observer firing without re-reading the row's status.
+     * Changes that must make it fail: the observer completing without re-reading the row's status.
      *
      * @return void
      */
-    public function test_a_parked_approval_whose_write_never_happened_logs_nothing(): void {
+    public function test_an_expected_approval_whose_write_never_happened_completes_nothing(): void {
         global $DB;
 
         [$applicant, $ueid] = $this->application();
         $this->setUser($this->teacher);
         $this->enable_the_log();
-
-        // The hook pass alone: the row is not written, as when core's write throws.
-        $hookpass = function () use ($applicant, $ueid): void {
-            $this->plugin->complete_approval($this->instance, (int) $applicant->id, $ueid);
+        $updated = function () use ($applicant, $ueid): void {
+            \core\event\user_enrolment_updated::create([
+                'objectid' => $ueid,
+                'courseid' => $this->course->id,
+                'context' => \context_course::instance($this->course->id),
+                'relateduserid' => $applicant->id,
+                'other' => ['enrol' => 'apply'],
+            ])->trigger();
         };
-        $hookpass();
-        $this->assertTrue(decisionlog::is_parked($ueid));
-        $this->assertCount(0, $this->logged(application_approved::class));
+
+        // What the hook leaves when core's write, or a listener after this plugin's, throws.
+        approvalwrite::expect($ueid);
         $this->assertNotSame((int) ENROL_USER_ACTIVE, (int) $DB->get_field('user_enrolments', 'status', ['id' => $ueid]));
 
         // An unrelated update of the still-pending row, as core's date editing would trigger.
-        \core\event\user_enrolment_updated::create([
-            'objectid' => $ueid,
-            'courseid' => $this->course->id,
-            'context' => \context_course::instance($this->course->id),
-            'relateduserid' => $applicant->id,
-            'other' => ['enrol' => 'apply'],
-        ])->trigger();
+        $updated();
 
         $this->assertCount(0, $this->logged(application_approved::class));
-        $this->assertFalse(decisionlog::is_parked($ueid), 'the entry was not consumed');
+        $this->assertFalse(groups_is_member((int) $this->listed->id, (int) $applicant->id));
+        $this->assertFalse(approvalwrite::is_expected($ueid), 'the entry was not consumed');
 
-        // The control: with the row active, a parked entry does log.
-        $hookpass();
+        // The control: with the row active, an expected approval completes and logs.
+        approvalwrite::expect($ueid);
         $DB->set_field('user_enrolments', 'status', ENROL_USER_ACTIVE, ['id' => $ueid]);
-        \core\event\user_enrolment_updated::create([
-            'objectid' => $ueid,
-            'courseid' => $this->course->id,
-            'context' => \context_course::instance($this->course->id),
-            'relateduserid' => $applicant->id,
-            'other' => ['enrol' => 'apply'],
-        ])->trigger();
+        $updated();
         $this->assertCount(1, $this->logged(application_approved::class));
+        $this->assertTrue(groups_is_member((int) $this->listed->id, (int) $applicant->id));
     }
 
     /**
-     * The observer ignores another method's user_enrolment_updated, and leaves the entry parked.
+     * The observer ignores another method's user_enrolment_updated, and leaves the entry expected.
      *
      * Changes that must make it fail: the enrol name filter dropped from the observer.
      *
@@ -432,7 +434,7 @@ final class decision_events_test extends \advanced_testcase {
         [$applicant, $ueid] = $this->application();
         $this->setUser($this->teacher);
         $this->enable_the_log();
-        $this->plugin->complete_approval($this->instance, (int) $applicant->id, $ueid);
+        approvalwrite::expect($ueid);
         $DB->set_field('user_enrolments', 'status', ENROL_USER_ACTIVE, ['id' => $ueid]);
 
         \core\event\user_enrolment_updated::create([
@@ -444,35 +446,59 @@ final class decision_events_test extends \advanced_testcase {
         ])->trigger();
 
         $this->assertCount(0, $this->logged(application_approved::class));
-        $this->assertTrue(decisionlog::is_parked($ueid));
+        $this->assertTrue(approvalwrite::is_expected($ueid));
     }
 
     /**
-     * A parked entry is dropped when activate() takes over the approval, so the write it makes
-     * logs once, from activate(), and not a second time from the stale entry.
+     * An expectation no observer consumed is dropped by the next update of the same enrolment, so
+     * a later date edit of the now active enrolment does not approve it a second time.
      *
-     * Changes that must make it fail: the clear dropped from activate().
+     * The precondition is the entry the queue approval left under the sink, which silences the
+     * observer that would have consumed it.
+     *
+     * Changes that must make it fail: the hook keeping an earlier write's expectation.
      *
      * @return void
      */
-    public function test_activate_drops_a_stale_parked_approval(): void {
+    public function test_an_expectation_no_observer_consumed_is_dropped_by_the_next_update(): void {
+        global $DB;
+
         [$applicant, $ueid] = $this->application();
         $this->setUser($this->teacher);
+        $sink = $this->redirectEvents();
+        $this->assertSame(1, $this->plugin->confirm_enrolment([$ueid]));
+        $sink->close();
+        $this->assertTrue(approvalwrite::is_expected($ueid));
+        $notify = ['classname' => '\\enrol_apply\\task\\notify_approval'];
+        $DB->delete_records('task_adhoc', $notify);
+
+        $this->plugin->update_user_enrol($this->instance, $applicant->id, null, null, time() + WEEKSECS);
+
+        $this->assertFalse(approvalwrite::is_expected($ueid));
+        $this->assertCount(0, $DB->get_records('task_adhoc', $notify));
+    }
+
+    /**
+     * An expectation left behind by a failed write does not make a later queue approval of the
+     * same enrolment log twice: the observer's pass it feeds is owed to activate().
+     *
+     * @return void
+     */
+    public function test_a_stale_expected_approval_does_not_log_twice(): void {
+        [, $ueid] = $this->application();
+        $this->setUser($this->teacher);
         $this->enable_the_log();
-        $this->plugin->complete_approval($this->instance, (int) $applicant->id, $ueid);
-        $this->assertTrue(decisionlog::is_parked($ueid));
+        approvalwrite::expect($ueid);
 
         $this->plugin->confirm_enrolment([$ueid]);
 
-        $this->assertFalse(decisionlog::is_parked($ueid));
+        $this->assertFalse(approvalwrite::is_expected($ueid));
         $this->assertCount(1, $this->logged(application_approved::class));
     }
 
     /**
      * A decider narrowed by separate groups who is refused on Edit enrolment (S7) leaves no
-     * approval in the log and nothing parked.
-     *
-     * Changes that must make it fail: the refusal moved after complete_approval() in the hook.
+     * approval in the log and nothing expected.
      *
      * @return void
      */
@@ -494,11 +520,11 @@ final class decision_events_test extends \advanced_testcase {
             $this->plugin->update_user_enrol($this->instance, $applicant->id, ENROL_USER_ACTIVE);
             $this->fail('the update went through');
         } catch (\moodle_exception $e) {
-            $this->assertSame('groupscopeapprovalrefused', $e->errorcode);
+            $this->assertSame('editenrolmentrefused', $e->errorcode);
         }
 
         $this->assertCount(0, $this->logged(application_approved::class));
-        $this->assertFalse(decisionlog::is_parked($ueid));
+        $this->assertFalse(approvalwrite::is_expected($ueid));
         $this->assertNotSame((int) ENROL_USER_ACTIVE, (int) $DB->get_field('user_enrolments', 'status', ['id' => $ueid]));
     }
 

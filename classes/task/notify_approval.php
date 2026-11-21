@@ -21,9 +21,9 @@ namespace enrol_apply\task;
  *
  * Queued by enrol_apply_plugin::complete_approval(), which runs for every route an
  * approval can take — the plugin's own queue and core's "Edit enrolment" screen alike.
- * A task rather than inline because the second route reaches it through the
- * before_user_enrolment_updated hook, before the row is written; the task re-reads the
- * enrolment and sends nothing unless it is active.
+ * A task rather than inline because an approval can still be undone after it: a key
+ * admission runs inside a transaction that may roll back. The task re-reads the enrolment and
+ * sends nothing unless it is active.
  *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine

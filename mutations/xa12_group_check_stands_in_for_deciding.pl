@@ -1,0 +1,2 @@
+# XA12: refuses_approval() lets a holder of enrol/apply:manage through whenever the group scope allows the row, without the deciding capability or the self-decision refusal.
+s#(\n)( *)return !enrol_get_plugin\('apply'\)->can_manage_application\(#$1$2if (local\\groupscope::allows((int) \$instance->courseid, (int) \$userenrolment->id, (int) \$GLOBALS['USER']->id)) {\n$2    return false;\n$2}\n$2return !enrol_get_plugin('apply')->can_manage_application(#;

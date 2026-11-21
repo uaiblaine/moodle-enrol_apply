@@ -317,7 +317,8 @@ class submission {
      *
      * Only the caller knows the enrolment genuinely moved: confirm_enrolment() processes only
      * rows get_pending_user_enrolment() returned, which are this plugin's applications still
-     * awaiting a decision, and the hook callback fires only on a status change to active. A bare
+     * awaiting a decision, and the observer runs it only for an application the hook saw become
+     * active. A bare
      * decide() call knows nothing, so the default stays conservative.
      *
      * Passing it is safe for the double pass complete_approval() makes on every queue approval:
@@ -750,11 +751,11 @@ class submission {
      * Record the message the decider wrote to the applicant.
      *
      * Kept apart from decide(), which takes no message. complete_approval() runs twice for an
-     * approval taken through the queue: enrol_plugin::update_user_enrol() dispatches
-     * \core_enrol\hook\before_user_enrolment_updated before it writes the row, so
-     * hook_callbacks reaches complete_approval() first, with no operator input because the
-     * hook carries none. The message is therefore stored before the status changes, and the
-     * notify_approval task reads it back through outcome_message().
+     * approval taken through the queue: enrol_plugin::update_user_enrol() triggers
+     * \core\event\user_enrolment_updated once it has written the row, so
+     * \enrol_apply\observers reaches complete_approval() first, inside that call and with no
+     * operator input because the event carries none. The message is therefore stored before the
+     * status changes, and the notify_approval task reads it back through outcome_message().
      *
      * Written before the decision for the same reason the decision is written before the
      * unenrolment: unenrol_user() deletes the user_enrolments row, and the id it carried is how

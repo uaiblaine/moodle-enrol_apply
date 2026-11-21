@@ -265,8 +265,8 @@ if ($formaction !== '' && $userenrolments) {
        and decides, so this is a warning beside the success message, not a refusal.
 
        Emitted here and never from complete_approval(), which runs twice for a queue approval
-       (the before_user_enrolment_updated hook reaches it first, and its first pass sees
-       pre-write state) while \core\notification::add() does not deduplicate.
+       (the user_enrolment_updated observer reaches it first, inside update_user_enrol())
+       while \core\notification::add() does not deduplicate.
 
        Only where an instance is in scope: the site-wide and mentee queues span instances, and
        there is no single places number to report for them. */

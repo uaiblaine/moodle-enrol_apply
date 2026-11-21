@@ -211,8 +211,8 @@ final class joined_groups_test extends \advanced_testcase {
     }
 
     /**
-     * Core's "Edit enrolment" route, which reaches complete_approval() only through the hook,
-     * records the method's group too.
+     * Core's "Edit enrolment" route, which reaches complete_approval() only through the
+     * user_enrolment_updated observer, records the method's group too.
      *
      * @return void
      */
@@ -248,9 +248,9 @@ final class joined_groups_test extends \advanced_testcase {
     }
 
     /**
-     * The two passes of complete_approval() write one answer: the hook pass, which runs before
-     * core writes the row, already records the memberships, and the second pass reads the same
-     * memberships and writes the same value.
+     * The two passes of complete_approval() write one answer: the observer's pass, inside core's
+     * write, already records the memberships, and activate()'s pass reads the same memberships and
+     * writes the same value.
      *
      * Changes that must make it fail: the value read from what one pass's groups_add_member()
      * calls returned rather than from the memberships.
@@ -262,13 +262,13 @@ final class joined_groups_test extends \advanced_testcase {
         $this->setUser($this->teacher);
         submission::record_decided_groups($ueid, [(int) $this->chosen->id, (int) $this->listed->id]);
 
-        // The hook pass alone, as before_user_enrolment_updated runs it.
+        // The observer's pass alone, as user_enrolment_updated runs it.
         $this->plugin->complete_approval($this->instance, (int) $applicant->id, $ueid);
         $expected = implode(',', [min($this->listed->id, $this->chosen->id), max($this->listed->id, $this->chosen->id)]);
         $this->assertSame($expected, $this->joined_of($ueid));
 
-        // The second pass, with the row written.
-        $this->plugin->complete_approval($this->instance, (int) $applicant->id, $ueid, true);
+        // Activate()'s pass.
+        $this->plugin->complete_approval($this->instance, (int) $applicant->id, $ueid);
         $this->assertSame($expected, $this->joined_of($ueid));
     }
 
@@ -292,7 +292,7 @@ final class joined_groups_test extends \advanced_testcase {
         // The enrolment gone from under the approval, the record kept: groups_add_member() refuses.
         $DB->delete_records('user_enrolments', ['id' => $ueid]);
 
-        $this->plugin->complete_approval($this->instance, (int) $applicant->id, $ueid, true);
+        $this->plugin->complete_approval($this->instance, (int) $applicant->id, $ueid);
 
         $this->assertFalse(groups_is_member((int) $this->listed->id, (int) $applicant->id));
         $this->assertSame('', $this->joined_of($ueid));

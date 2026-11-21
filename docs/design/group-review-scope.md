@@ -54,7 +54,7 @@ application a group, and a group is what a separate-groups moderator needs to be
   `role_assigned` and `group_member_added`.
 - Core's edit-enrolment form approves too: a status change to active goes through
   `before_user_enrolment_updated` (`classes/hook_callbacks.php:53`) into `complete_approval()`
-  with no plugin check beyond core's `enrol/apply:manage`.
+  with no plugin check beyond core's `enrol/apply:manage`. (Closed since: see S7 below.)
 
 ## Stage 1: the fourth mode, "key only, reviewed"
 
@@ -166,7 +166,7 @@ course, and with which groups", read by:
 | **S4** | A group-scoped decider in no group | **Core's "You are not a member of any group" notice** on the queue, no rows. |
 | **S5** | Granular capabilities | **Two new course capabilities**, `manageapplications` keeps "decide": **`enrol/apply:choosedecision`**: change the groups and role an approval gives (the choosers). Without it the approval gives the key route and the instance's role, and the review page shows them read-only. This is the "only approve or refuse" the owner asked for. **`enrol/apply:viewapplications`**: read the queue and the review page without deciding (a coordinator). Archetypes: both to editingteacher and manager, so nothing changes on existing sites. |
 | **S6** | Can a group-scoped decider with `choosedecision` move the applicant to another group | **Only among their own groups.** |
-| **S7** | Core's edit-enrolment backdoor (`enrol/apply:manage` + status change) | **Documented, not closed**: a moderator role must not hold `enrol/apply:manage`. The README's moderator recipe says so, and the hook gains the same group check if a hook can refuse (S0 spike); if it cannot, the recipe is the defence. |
+| **S7** | Core's edit-enrolment backdoor (`enrol/apply:manage` + status change) | **Closed** (audit 2026-11-20, A-02): the hook refuses any change to an application the queue lists (status or dates) to a holder of `enrol/apply:manage` who fails `can_manage_application()`, so a moderator role may hold `enrol/apply:manage` and is narrowed there as on the queue; the approval's effects run after core's write, from the `user_enrolment_updated` observer. |
 | **S8** | The report for a group-scoped `viewreports` holder | **Scoped like the queue** (key group or decided groups). `viewreports` stays manager-only by default. |
 | **S9** | Upgrade | **No data change.** The rule is computed per request; capabilities are added by `db/access.php` with a version bump. |
 

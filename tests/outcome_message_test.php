@@ -161,9 +161,9 @@ final class outcome_message_test extends \advanced_testcase {
     /**
      * Approving with a message stores it and delivers it to the applicant.
      *
-     * complete_approval() runs twice for a queue approval: update_user_enrol() dispatches its
-     * hook before writing the row, so hook_callbacks reaches it first, carrying no operator
-     * input. The message is therefore recorded before the status changes, and the adhoc task
+     * complete_approval() runs twice for a queue approval: update_user_enrol() triggers an
+     * event once it has written the row, and \enrol_apply\observers reaches it first, carrying no
+     * operator input. The message is therefore recorded before the status changes, and the adhoc task
      * that notifies the applicant reads it back off the record.
      *
      * @return void
@@ -423,9 +423,9 @@ final class outcome_message_test extends \advanced_testcase {
     /**
      * The groups the decider chooses replace the instance's list, and do not add to it.
      *
-     * An approval taken through the queue completes twice: update_user_enrol() dispatches its
-     * hook before writing the row, so hook_callbacks finishes the approval first and
-     * confirm_enrolment() finishes it again. Had the chosen list been passed as an argument, the
+     * An approval taken through the queue completes twice: the event update_user_enrol()
+     * triggers once it has written the row lets \enrol_apply\observers finish the approval first,
+     * and confirm_enrolment() finishes it again. Had the chosen list been passed as an argument, the
      * first pass would join the instance's groups and the second the chosen ones, so a group the
      * approver deselected would be joined anyway. The choice is stored and both passes read it.
      *

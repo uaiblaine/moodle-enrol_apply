@@ -335,7 +335,16 @@ carry no seats and nothing above applies. It is not declared as a dependency.
 
 `enrol/apply:manageapplications` is honoured at three levels: at system level it covers
 every course, at course level that course, and in a user's own user context it covers
-that user's applications, which is what allows mentor-style delegation.
+that user's applications, which is what allows mentor-style delegation. Nobody decides their
+own application at any level, except a site administrator: the queue shows a decider's own
+application without a selection box, marked *Yours*, and its review page without the decision.
+
+`enrol/apply:manage` is core's right to edit enrolments, and on an application core's **Edit
+enrolment** is a decision: activating it approves it, and a start or end date moves it. So a
+holder of `enrol/apply:manage` changes an application there only when they may also decide it,
+exactly as on the queue; the dates of an active enrolment stay theirs. An approved enrolment
+suspended from the participants page is back in the queue, and reactivating it is approving it
+again.
 
 `enrol/apply:choosedecision` decides whether a decider picks the groups and role of an
 approval. Without it they approve or refuse only: an approval gives what the method gives (the
@@ -385,9 +394,9 @@ of any other application is refused to them, and they cannot approve, defer or c
 their own groups are offered to choose from. They are told of a new application only when it is
 in one of their groups. They get the decision icon on the participants page only for those. A
 decider in no group gets core's "you need to be part of a group" notice instead of a queue. Core's
-**Edit enrolment** screen (`enrol/apply:manage`) is refused to them too when it would approve an
-application outside their groups, and so is core's **Unenrol** route for a pending application outside
-their groups. A moderator in separate groups should decide from the approval queue, not from the
+**Edit enrolment** screen (`enrol/apply:manage`) is refused to them too when it would approve, or
+change the dates of, an application outside their groups, and so is core's **Unenrol** route for a
+pending application outside their groups. A moderator in separate groups should decide from the approval queue, not from the
 participants page: core lists a separate-groups teacher only the members of their own groups, and
 an applicant joins a group only when approved, so an applicant is rarely listed there for them. When
 they do reach the bulk decision, its confirmation says how many of the selected applications are
@@ -438,8 +447,8 @@ A moderator decides the applications of their own groups and nobody else's:
    allow `enrol/apply:viewapplications` instead of `enrol/apply:manageapplications`.
 3. Do not allow `moodle/site:accessallgroups`: it is what lifts the narrowing.
 4. `enrol/apply:manage` and `enrol/apply:unenrol` are not needed. Core's **Edit enrolment** and
-   **Unenrol** routes refuse a moderator an application outside their groups anyway, but leaving
-   both out keeps the role to this plugin's own screens.
+   **Unenrol** routes refuse a moderator an application outside their groups, as the queue does, but
+   leaving both out keeps the role to this plugin's own screens.
 5. Assign the role in the course and add each moderator to their groups.
 
 ### Recruiting moderators
