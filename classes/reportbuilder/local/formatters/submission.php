@@ -71,6 +71,39 @@ class submission {
      */
     public const IDENTITY_COLUMNS = ['email', 'idnumber', 'phone1', 'phone2', 'institution', 'department', 'address'];
 
+    /** @var string The application was cancelled. */
+    protected const OUTCOME_CANCELLED = 'cancelled';
+
+    /** @var string Nothing is known of the enrolment: a restore could not map it. */
+    protected const OUTCOME_UNKNOWN = 'unknown';
+
+    /** @var string Undecided, and the enrolment is gone. */
+    protected const OUTCOME_NEVERDECIDED = 'neverdecided';
+
+    /** @var string Undecided, and the enrolment's period has run out, so the queue lists it no more. */
+    protected const OUTCOME_LAPSED = 'lapsed';
+
+    /** @var string Pending, in the queue. */
+    protected const OUTCOME_AWAITING = 'awaiting';
+
+    /** @var string Deferred to the waiting list, in the queue. */
+    protected const OUTCOME_WAITING = 'waiting';
+
+    /** @var string Approved, and the enrolment is gone. */
+    protected const OUTCOME_UNENROLLED = 'unenrolled';
+
+    /** @var string Approved and active. */
+    protected const OUTCOME_APPROVED = 'approved';
+
+    /** @var string Approved, and the enrolment's period has run out. */
+    protected const OUTCOME_EXPIRED = 'expired';
+
+    /** @var string Approved, then suspended with no end passed: back in the queue. */
+    protected const OUTCOME_SUSPENDED = 'suspended';
+
+    /** @var string A status outside the vocabulary. */
+    protected const OUTCOME_OTHER = 'other';
+
     /**
      * The status, as the plugin's own label.
      *
@@ -302,22 +335,50 @@ class submission {
      * @return string Localised sentence.
      */
     public static function outcome($value, stdClass $row): string {
+        return match (self::outcome_state($value, $row)) {
+            self::OUTCOME_CANCELLED => get_string('outcomecancelled', 'enrol_apply'),
+            self::OUTCOME_UNKNOWN => submissionhelper::status_label((int) $value),
+            self::OUTCOME_NEVERDECIDED => get_string('outcomeneverdecided', 'enrol_apply'),
+            self::OUTCOME_LAPSED => get_string('outcomelapsed', 'enrol_apply'),
+            self::OUTCOME_AWAITING => get_string('outcomeawaiting', 'enrol_apply'),
+            self::OUTCOME_WAITING => get_string('outcomewaiting', 'enrol_apply'),
+            self::OUTCOME_UNENROLLED => get_string('outcomeunenrolled', 'enrol_apply'),
+            self::OUTCOME_APPROVED => get_string('outcomeapproved', 'enrol_apply'),
+            self::OUTCOME_EXPIRED => get_string('outcomeexpired', 'enrol_apply'),
+            self::OUTCOME_SUSPENDED => get_string('outcomesuspended', 'enrol_apply'),
+            // Not a vocabulary member; the status formatter's own rule applies.
+            default => self::status($value, $row),
+        };
+    }
+
+    /**
+     * Which of the outcomes {@see outcome()} words a record and its live enrolment amount to.
+     *
+     * The one reading of the pair, shared by the sentence the review page's history shows and the
+     * report's status label ({@see outcome_label()}), so the two cannot split a row differently.
+     *
+     * @param mixed $value The stored status.
+     * @param stdClass $row Row being rendered, carrying outcomeenrolstatus, outcomeenroltimeend
+     *                      and outcomeueid.
+     * @return string One of the OUTCOME_ constants.
+     */
+    protected static function outcome_state($value, stdClass $row): string {
         $recordstatus = (int) $value;
         $unknown = (int) ($row->outcomeueid ?? 0) === 0;
         $enrolstatus = $row->outcomeenrolstatus ?? null;
         $gone = !$unknown && ($enrolstatus === null || $enrolstatus === '');
 
         if ($recordstatus === submissionhelper::STATUS_CANCELLED) {
-            return get_string('outcomecancelled', 'enrol_apply');
+            return self::OUTCOME_CANCELLED;
         }
 
         if ($unknown) {
-            return submissionhelper::status_label($recordstatus);
+            return self::OUTCOME_UNKNOWN;
         }
 
         if ($recordstatus === submissionhelper::STATUS_PENDING || $recordstatus === submissionhelper::STATUS_WAITING) {
             if ($gone) {
-                return get_string('outcomeneverdecided', 'enrol_apply');
+                return self::OUTCOME_NEVERDECIDED;
             }
 
             // An undecided application whose period has run out is not in the queue any more.
@@ -326,25 +387,22 @@ class submission {
                 'timeend' => (int) ($row->outcomeenroltimeend ?? 0),
             ];
             if (!queue::is_awaiting_decision($enrolment)) {
-                return get_string('outcomelapsed', 'enrol_apply');
+                return self::OUTCOME_LAPSED;
             }
 
-            return $recordstatus === submissionhelper::STATUS_PENDING
-                ? get_string('outcomeawaiting', 'enrol_apply')
-                : get_string('outcomewaiting', 'enrol_apply');
+            return $recordstatus === submissionhelper::STATUS_PENDING ? self::OUTCOME_AWAITING : self::OUTCOME_WAITING;
         }
 
         if ($recordstatus !== submissionhelper::STATUS_APPROVED) {
-            // Not a vocabulary member; the status formatter's own rule applies.
-            return self::status($value, $row);
+            return self::OUTCOME_OTHER;
         }
 
         if ($gone) {
-            return get_string('outcomeunenrolled', 'enrol_apply');
+            return self::OUTCOME_UNENROLLED;
         }
 
         if ((int) $enrolstatus === ENROL_USER_ACTIVE) {
-            return get_string('outcomeapproved', 'enrol_apply');
+            return self::OUTCOME_APPROVED;
         }
 
         $enrolment = (object) [
@@ -352,10 +410,316 @@ class submission {
             'timeend' => (int) ($row->outcomeenroltimeend ?? 0),
         ];
         if (!queue::is_awaiting_decision($enrolment)) {
-            return get_string('outcomeexpired', 'enrol_apply');
+            return self::OUTCOME_EXPIRED;
         }
 
-        return get_string('outcomesuspended', 'enrol_apply');
+        return self::OUTCOME_SUSPENDED;
+    }
+
+    /**
+     * The outcome as a Design System status label, with what the record says under it when the
+     * live enrolment has since moved away from it.
+     *
+     * The label states what is true now, in one tone; the line under it, only where the two
+     * differ, names the record's own decision ("Approved, now unenrolled"), so the record and the
+     * enrolment are read in one cell rather than in three columns. An admission by a group key
+     * that no person has decided over since reads as such ({@see submissionhelper::admitted_by_key()}).
+     *
+     * Both parts are this plugin's own strings and carry no "<", and they are separated by a
+     * literal newline outside any tag: the download decodes entities and then drops tag-shaped
+     * runs line by line, so it keeps "Unenrolled" and "Approved, now unenrolled" as two lines.
+     *
+     * @param mixed $value The stored status.
+     * @param stdClass $row Row being rendered, carrying what {@see outcome_state()} reads plus
+     *     outcomekeyoutcome, outcomeapplicant and outcomedecidedby.
+     * @return string The label's markup, and the record's line when there is one.
+     */
+    public static function outcome_label($value, stdClass $row): string {
+        if ($value === null || $value === '') {
+            return '';
+        }
+
+        $record = submissionhelper::status_label((int) $value);
+        $state = self::outcome_state($value, $row);
+        $keyadmission = $state === self::OUTCOME_APPROVED && self::is_key_admission(
+            (int) $value,
+            $row->outcomekeyoutcome ?? null,
+            $row->outcomeapplicant ?? null,
+            $row->outcomedecidedby ?? null
+        );
+
+        [$label, $tone, $sub] = match ($state) {
+            self::OUTCOME_CANCELLED => [get_string('outcomecancelled', 'enrol_apply'), 'danger', ''],
+            self::OUTCOME_UNKNOWN => [$record, 'neutral', ''],
+            self::OUTCOME_NEVERDECIDED, self::OUTCOME_UNENROLLED => [
+                get_string('outcomelabelunenrolled', 'enrol_apply'),
+                'neutral',
+                get_string('outcomenowunenrolled', 'enrol_apply', $record),
+            ],
+            self::OUTCOME_LAPSED => [
+                get_string('outcomelabellapsed', 'enrol_apply'),
+                'neutral',
+                get_string('outcomenowlapsed', 'enrol_apply', $record),
+            ],
+            self::OUTCOME_AWAITING => [get_string('outcomeawaiting', 'enrol_apply'), 'warning', ''],
+            self::OUTCOME_WAITING => [get_string('outcomewaiting', 'enrol_apply'), 'info', ''],
+            self::OUTCOME_APPROVED => $keyadmission
+                ? [get_string('outcomelabelkey', 'enrol_apply'), 'brand', '']
+                : [$record, 'success', ''],
+            self::OUTCOME_EXPIRED => [
+                get_string('outcomelabelexpired', 'enrol_apply'),
+                'neutral',
+                get_string('outcomenowexpired', 'enrol_apply', $record),
+            ],
+            // Back in the queue, so it is waiting on somebody, as a pending application is.
+            self::OUTCOME_SUSPENDED => [
+                get_string('enrolmentsuspended', 'enrol_apply'),
+                'warning',
+                get_string('outcomenowsuspended', 'enrol_apply', $record),
+            ],
+            default => [self::status($value, $row), 'neutral', ''],
+        };
+
+        // A literal per tone, so a scan for the class finds every one of them.
+        $class = match ($tone) {
+            'success' => 'enrol_apply-status enrol_apply-status--success',
+            'warning' => 'enrol_apply-status enrol_apply-status--warning',
+            'info' => 'enrol_apply-status enrol_apply-status--info',
+            'danger' => 'enrol_apply-status enrol_apply-status--danger',
+            'brand' => 'enrol_apply-status enrol_apply-status--brand',
+            default => 'enrol_apply-status enrol_apply-status--neutral',
+        };
+
+        $cell = '<span class="' . $class . '">' . self::escape($label) . '</span>';
+        if ($sub !== '') {
+            $cell .= "\n" . '<span class="enrol_apply-reportsub">' . self::escape($sub) . '</span>';
+        }
+
+        return $cell;
+    }
+
+    /**
+     * Whether a record is an admission by a group key that no person has decided over since.
+     *
+     * {@see submissionhelper::admitted_by_key()} on the record's own fields, and only while the
+     * record still says approved: a later decision restamps the decider, so the applicant being
+     * the recorded decider is what keeps the admission the key's (G11).
+     *
+     * @param int $status The record's status.
+     * @param mixed $keyoutcome The record's keyoutcome.
+     * @param mixed $userid The applicant.
+     * @param mixed $decidedby The recorded decider.
+     * @return bool True for an admission by a key.
+     */
+    protected static function is_key_admission(int $status, $keyoutcome, $userid, $decidedby): bool {
+        $outcome = (int) $keyoutcome;
+        if ($status !== submissionhelper::STATUS_APPROVED || $outcome === submissionhelper::KEY_NONE) {
+            return false;
+        }
+
+        return submissionhelper::admitted_by_key((object) [
+            'outcome' => $outcome,
+            'userid' => (int) $userid,
+            'decidedby' => (int) $decidedby,
+        ]);
+    }
+
+    /**
+     * A date in the short form, with the full one in a title.
+     *
+     * Both spellings are userdate()'s, escaped; the title sits inside the tag, which the download
+     * drops, so the exported cell is the short date alone.
+     *
+     * @param mixed $value Stored timestamp.
+     * @param stdClass $row Row being rendered.
+     * @return string The date's markup, or empty for no date.
+     */
+    public static function shortdate($value, stdClass $row): string {
+        $time = (int) $value;
+        if ($time <= 0) {
+            return '';
+        }
+
+        return '<span title="' . s(userdate($time)) . '">'
+            . s(userdate($time, get_string('strftimedatetimeshort', 'core_langconfig'))) . '</span>';
+    }
+
+    /**
+     * How long an application waited, in calendar days and hours (AR-D6).
+     *
+     * Measured to the last decision as the record holds it, and to now while it holds none, in
+     * which case the wait is still running and says so ("4 d, open"). An admission by a key had no
+     * person to wait for and reads as such rather than as a turnaround of a few seconds.
+     *
+     * An aggregated value (a custom report's average, minimum or maximum) arrives without the
+     * row's other fields, so it is worded as a duration and nothing more.
+     *
+     * @param mixed $value Seconds waited, as the column's SQL computes them.
+     * @param stdClass $row Row being rendered, carrying waitdecided, waitstatus, waitkeyoutcome,
+     *     waitapplicant and waitdecidedby.
+     * @param mixed $argument Unused; core passes the column's callback argument.
+     * @param string|null $aggregation The aggregation applied to the column, null for none.
+     * @return string The wait, or empty when there is none.
+     */
+    public static function wait($value, stdClass $row, $argument = null, ?string $aggregation = null): string {
+        if ($value === null || $value === '') {
+            return '';
+        }
+
+        $text = self::duration((int) round((float) $value));
+        if ($aggregation !== null) {
+            return $text;
+        }
+
+        $keyadmission = self::is_key_admission(
+            (int) ($row->waitstatus ?? -1),
+            $row->waitkeyoutcome ?? null,
+            $row->waitapplicant ?? null,
+            $row->waitdecidedby ?? null
+        );
+        if ($keyadmission) {
+            return get_string('waitbykey', 'enrol_apply');
+        }
+
+        if ((int) ($row->waitdecided ?? 0) <= 0) {
+            return get_string('waitopen', 'enrol_apply', $text);
+        }
+
+        return $text;
+    }
+
+    /**
+     * A number of seconds as calendar time: minutes under an hour, hours under a day, days and
+     * hours under ten days, days beyond.
+     *
+     * @param int $seconds Seconds; a negative value, which only a restore or a clock change can
+     *     produce, reads as no time at all.
+     * @return string The duration.
+     */
+    public static function duration(int $seconds): string {
+        $seconds = max(0, $seconds);
+        if ($seconds < HOURSECS) {
+            return get_string('waitminutes', 'enrol_apply', max(1, (int) round($seconds / MINSECS)));
+        }
+        if ($seconds < DAYSECS) {
+            return get_string('waithours', 'enrol_apply', (int) round($seconds / HOURSECS));
+        }
+
+        $days = intdiv($seconds, DAYSECS);
+        $hours = (int) round(($seconds - $days * DAYSECS) / HOURSECS);
+        if ($hours === 24) {
+            $days++;
+            $hours = 0;
+        }
+        if ($hours > 0 && $days < 10) {
+            return get_string('waitdayshours', 'enrol_apply', (object) ['days' => $days, 'hours' => $hours]);
+        }
+
+        return get_string('waitdays', 'enrol_apply', $days);
+    }
+
+    /**
+     * The decision in one cell: when, and by whom.
+     *
+     * The short date ({@see shortdate()}), then on its own line "by" the decider's full name, or
+     * "By key" and the key's group for an admission by a key ({@see is_key_admission()}). The
+     * group is named under {@see key_group()}'s rule, so a group the reader may not see leaves
+     * "By key" alone, which the admission route already says. A decider the record no longer
+     * names (pseudonymised, or never stamped) leaves the date alone. "Not yet" for a record no
+     * decision has touched.
+     *
+     * The second line carries no markup: the download drops tag-shaped runs line by line after
+     * decoding entities, so a name holding "<" must not share a line with a tag.
+     *
+     * @param mixed $value The record's timedecided.
+     * @param stdClass $row Row being rendered, carrying decidedstatus, decidedkeyoutcome,
+     *     decidedapplicant, decidedby, the decider's name fields prefixed "decider" and deciderid,
+     *     and the key group's decidedkeygroupname, decidedkeygroupid, decidedkeygroupcourseid and
+     *     decidedkeygroupvisibility.
+     * @return string The cell.
+     */
+    public static function decided($value, stdClass $row): string {
+        $time = (int) $value;
+        if ($time <= 0) {
+            return get_string('decidednotyet', 'enrol_apply');
+        }
+
+        $lines = [self::shortdate($time, $row)];
+        $keyadmission = self::is_key_admission(
+            (int) ($row->decidedstatus ?? -1),
+            $row->decidedkeyoutcome ?? null,
+            $row->decidedapplicant ?? null,
+            $row->decidedby ?? null
+        );
+        if ($keyadmission) {
+            $group = self::key_group($row->decidedkeygroupname ?? null, (object) [
+                'keygroupoutcome' => $row->decidedkeyoutcome ?? null,
+                'keygroupid' => $row->decidedkeygroupid ?? null,
+                'keygroupcourseid' => $row->decidedkeygroupcourseid ?? null,
+                'keygroupvisibility' => $row->decidedkeygroupvisibility ?? null,
+            ]);
+            $lines[] = $group === ''
+                ? get_string('decidedbykeyonly', 'enrol_apply')
+                : get_string('decidedbykey', 'enrol_apply', $group);
+        } else if (!empty($row->deciderid)) {
+            $decider = new stdClass();
+            foreach (\core_user\fields::get_name_fields() as $field) {
+                $decider->{$field} = (string) ($row->{'decider' . $field} ?? '');
+            }
+            $viewfullnames = has_capability('moodle/site:viewfullnames', \context_system::instance());
+            $lines[] = get_string('decidedbyname', 'enrol_apply', self::escape(fullname($decider, $viewfullnames)));
+        }
+
+        return implode("\n", $lines);
+    }
+
+    /**
+     * The application's group and the groups its approval joined, in one cell.
+     *
+     * "Key: <group>" for a group key presented, "Chose: <group>" for a group chosen (the record
+     * holds one or the other, never both), then "Joined" and the groups the last approval left the
+     * applicant in. Every name goes through the visibility formatter of its own column
+     * ({@see key_group()}, {@see chosen_group()}, {@see joined_groups()}), so a group the reader may
+     * not see is never named, and a line whose group is withheld is left out whole rather than
+     * kept with an empty name. Plain text, one line each, for the reason {@see decided()} gives.
+     *
+     * @param mixed $value The key group's name, null when the join found nothing.
+     * @param stdClass $row Row being rendered, carrying groupkeyoutcome, groupkeyid,
+     *     groupkeycourseid and groupkeyvisibility; groupchosenname, groupchosenid,
+     *     groupchosencourseid and groupchosenvisibility once the chosen group's column exists; and
+     *     groupjoined.
+     * @return string The cell, empty when there is no group to name.
+     */
+    public static function group($value, stdClass $row): string {
+        $lines = [];
+
+        if ((int) ($row->groupkeyoutcome ?? 0) !== submissionhelper::KEY_NONE) {
+            $name = self::key_group($value, (object) [
+                'keygroupoutcome' => $row->groupkeyoutcome,
+                'keygroupid' => $row->groupkeyid ?? null,
+                'keygroupcourseid' => $row->groupkeycourseid ?? null,
+                'keygroupvisibility' => $row->groupkeyvisibility ?? null,
+            ]);
+            if ($name !== '') {
+                $lines[] = get_string('reportgroupkey', 'enrol_apply', $name);
+            }
+        } else if (property_exists($row, 'groupchosenid')) {
+            $name = self::chosen_group($row->groupchosenname ?? null, (object) [
+                'chosengroupid' => $row->groupchosenid,
+                'chosengroupcourseid' => $row->groupchosencourseid ?? null,
+                'chosengroupvisibility' => $row->groupchosenvisibility ?? null,
+            ]);
+            if ($name !== '') {
+                $lines[] = get_string('reportgroupchose', 'enrol_apply', $name);
+            }
+        }
+
+        $joined = self::joined_groups($row->groupjoined ?? null, new stdClass());
+        if ($joined !== '') {
+            $lines[] = get_string('reportgroupjoined', 'enrol_apply', $joined);
+        }
+
+        return implode("\n", $lines);
     }
 
     /**

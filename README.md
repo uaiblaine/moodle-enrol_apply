@@ -120,9 +120,10 @@ signals without the seats or places, and no decision.
 
 ![The applications report, sorted by admission route: status, submission date, outcome, admission route, the group of the key, the groups the approval joined and the answers to each question](docs/screenshots/report.png)
 
-Every application the course has recorded, decided ones included, with the outcome of each and
-how it was admitted, the group of the key and the groups the approval joined. It filters (by
-group too), sorts and downloads as CSV or Excel.
+Every application the course has recorded, decided ones included: its outcome, how long it waited,
+who decided it and when, its group and the groups the approval joined, and a Review action on each
+one still awaiting a decision. It filters (by group and by wait too), sorts and downloads as CSV or
+Excel. The screenshot predates the report's columns of version 2026112100.
 
 ### Setting up the method
 
@@ -295,9 +296,11 @@ Who is told what:
 - **The queue and the review page** mark an application a valid key could not admit. The review
   page names the group to a decider or a viewer who may see it, and ticks the groups the key would
   have joined. The empty queue of a key-only method says nothing waits there.
-- **The reports** carry an **Admission route** column and filter (review, or what the key did) and
-  the **Group of the enrolment key**, empty for a reader who may not see that group; that column
-  cannot be sorted.
+- **The reports** carry an **Admission route** filter (review, or what the key did); the course
+  report names the key's group in its Group cell ("Key: Evening A") and an admission by a key in
+  its Decided cell, and a custom report offers the **Admission route** and **Group of the
+  enrolment key** columns. A group the reader may not see is never named, and those cells cannot
+  be sorted.
 - **The teacher configuring a key-only method** is warned, while that mode is selected, when no
   group of the course has a key, when every keyed group is full, and when applications are still
   waiting; on *Key only, reviewed* the same two warnings read "apply" and the third counts only
@@ -487,21 +490,40 @@ methods page).
 
 Course → Participants → Enrolment methods carries a report icon beside each Course enrol
 confirmation method, and the course settings navigation carries the same link. It lists
-every application the course has recorded — who applied, when, the comment, the profile
-details submitted, the outcome, whether a group enrolment key admitted it, the groups the
-approval joined, who decided it and when — with per-user filters, sorting,
-paging and a CSV or Excel download.
+every application the course has recorded, with per-user filters, sorting, paging and a CSV or
+Excel download. Its columns, in order:
 
-**Groups joined** names the groups the last approval left the applicant in through the method,
+- **Applicant**, with the identity fields the site shows this reader;
+- **Outcome**: what is true of the application now, as a status label, with the record's own
+  decision under it where the enrolment has moved since ("Unenrolled", then "Approved, now
+  unenrolled");
+- **Submitted on**, as a short date with the full one on hover;
+- **Wait**: how long the application waited for its last decision, in days and hours, or how long
+  it has been waiting ("4 d, open"); "By key" for an admission by a group key. A **Wait** filter
+  finds the applications that waited more (or less) than a number of minutes, hours or days;
+- **Decided**: the date, and under it the person who decided ("by Maria Souza"), or "By key" and
+  the key's group; "Not yet" for an undecided one;
+- **Group**: the group of the key ("Key: Evening A") or the group chosen ("Chose: Morning C"),
+  then the groups the approval joined;
+- **Enrolment method**, only where the course has more than one Course enrol confirmation method;
+- the **Comment**, the **Note for the record** and one column per question asked.
+
+An application still awaiting a decision carries a **Review** action that opens its review page,
+for a reader that page admits (a decider, or a holder of `enrol/apply:viewapplications`, narrowed
+by separate groups as the queue is); a reader holding `enrol/apply:viewreports` alone gets none.
+On a phone the table becomes one card per application.
+
+The groups joined are the groups the last approval left the applicant in through the method,
 whether the decider chose them or the method's defaults applied. A group the reader may not see is
-left out (a cell whose groups are all hidden is blank), and so is a group deleted since. Approvals
-recorded before version 2026110505 show the groups the upgrade could find from the applicant's
-memberships, and nothing where it found none. **Group chosen** names the group the applicant
-chose from the method's list, beside **Group of the enrolment key**; neither is sortable, and a
-group the reader may not see leaves the cell blank. Where the course has groups, a **Group
-(applied for or joined)** filter selects the applications of one group: its key group or chosen
-group, or a group the approval joined. It offers the groups the reader may see, in natural order, and a reader narrowed
-by separate groups only their own.
+never named in the Group or Decided cell, and a group deleted since is left out of the groups
+joined. Approvals recorded before version 2026110505 show the groups the upgrade could find from
+the applicant's memberships, and nothing where it found none. Where the course has groups, a
+**Group (applied for or joined)** filter selects the applications of one group: its key group or
+chosen group, or a group the approval joined. It offers the groups the reader may see, in natural
+order, and a reader narrowed by separate groups only their own. The stored status, the live
+enrolment, the admission route, the three group columns and the details submitted are not columns
+of this report, which shows each of those facts once; a custom report on the source below offers
+all of them.
 
 Where a course carries more than one Course enrol confirmation method, the report opens scoped to
 the one whose icon you clicked, clearing the method filter widens it to every application in the

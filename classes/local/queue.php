@@ -122,6 +122,95 @@ final class queue {
     }
 
     /**
+     * The applications of one course the current user may open the review page of, by user enrolment.
+     *
+     * The SQL form of {@see \enrol_apply_plugin::can_view_application()} over the course's
+     * applications still awaiting a decision ({@see awaiting_decision_where()}), built from the
+     * queue's own scope clauses rather than a second rule, so the course report can offer its
+     * Review action ({@see \enrol_apply\reportbuilder\local\systemreports\course_applications::can_review()})
+     * with a few queries per page instead of a check per row. Level for level:
+     *
+     * - deciding (can_manage_application()): everything at the system level, unless the reader
+     *   switched role in the course ({@see groupscope::system_exempt()}); the deciding capability in
+     *   the course, narrowed by separate groups as the instance queue is ({@see groupscope::where()});
+     *   and the mentees, as the mentee queue lists them ({@see applications::get_mentees()}), except
+     *   for a site administrator previewing a switched role. None of these reaches the reader's own
+     *   application ({@see is_own_application()});
+     * - viewing (S5): the viewing capability in the course, narrowed the same way by its own system
+     *   exemption, the reader's own application included, as can_view_application() does.
+     *
+     * One query per level that applies, three at most beside the mentee lookup.
+     * test_the_reviewable_set_agrees_with_can_view_application holds the agreement row by row.
+     *
+     * @param int $courseid The course.
+     * @return array User enrolment id => true.
+     */
+    public static function reviewable_in_course(int $courseid): array {
+        global $DB, $USER;
+
+        $context = context_course::instance($courseid, IGNORE_MISSING);
+        if (!$context) {
+            return [];
+        }
+
+        [$awaiting, $baseparams] = self::awaiting_decision_where();
+        $baseparams += ['reviewcourse' => $courseid, 'reviewenrol' => 'apply'];
+        $base = 'SELECT ue.id
+                   FROM {user_enrolments} ue
+                   JOIN {enrol} e ON e.id = ue.enrolid
+                  WHERE e.courseid = :reviewcourse AND e.enrol = :reviewenrol
+                    AND ' . implode(' AND ', $awaiting);
+
+        $ids = [];
+        $read = static function (array $wheres, array $params) use ($DB, $base, $baseparams, &$ids): void {
+            $sql = $base . ($wheres ? ' AND ' . implode(' AND ', $wheres) : '');
+            foreach ($DB->get_fieldset_sql($sql, $baseparams + $params) as $id) {
+                $ids[(int) $id] = true;
+            }
+        };
+
+        // Nobody decides their own application but a site administrator.
+        $notown = is_siteadmin() ? [[], []] : [['ue.userid <> :reviewself'], ['reviewself' => (int) $USER->id]];
+
+        $userid = (int) $USER->id;
+        if (groupscope::system_exempt($courseid, $userid, groupscope::DECIDE)) {
+            $read($notown[0], $notown[1]);
+        } else {
+            if (has_capability(groupscope::DECIDE, $context)) {
+                $groups = groupscope::narrowed_to($courseid, $userid, groupscope::DECIDE);
+                [$wheres, $params] = $notown;
+                if ($groups !== null) {
+                    [$groupwhere, $groupparams] = groupscope::where($groups);
+                    $wheres[] = $groupwhere;
+                    $params += $groupparams;
+                }
+                $read($wheres, $params);
+            }
+
+            // The mentor level, which can_manage_application() withholds from a switched administrator.
+            if (!(is_siteadmin() && groupscope::switched($courseid))) {
+                $mentees = applications::get_mentees();
+                if ($mentees) {
+                    [$insql, $inparams] = $DB->get_in_or_equal($mentees, SQL_PARAMS_NAMED, 'reviewmentee');
+                    $read(array_merge($notown[0], ["ue.userid {$insql}"]), $notown[1] + $inparams);
+                }
+            }
+        }
+
+        if (has_capability(groupscope::VIEW, $context)) {
+            $groups = groupscope::narrowed_to($courseid, $userid, groupscope::VIEW);
+            if ($groups === null) {
+                $read([], []);
+            } else {
+                [$groupwhere, $groupparams] = groupscope::where($groups);
+                $read([$groupwhere], $groupparams);
+            }
+        }
+
+        return $ids;
+    }
+
+    /**
      * One application, if it is still awaiting a decision.
      *
      * One lookup for three outcomes - never applied, already decided, enrolment gone - because

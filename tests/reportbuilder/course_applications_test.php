@@ -35,6 +35,11 @@ use enrol_apply\reportbuilder\local\formatters\submission as submissionformatter
 use enrol_apply\reportbuilder\local\systemreports\course_applications;
 use PHPUnit\Framework\Attributes\CoversClass;
 
+defined('MOODLE_INTERNAL') || die();
+
+global $CFG;
+require_once($CFG->dirroot . '/enrol/apply/tests/fixtures/course_applications_every_column.php');
+
 /**
  * Tests for the course applications report.
  *
@@ -186,27 +191,31 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
      * The report, built for the course under test.
      *
      * @param int $enrolid Enrol instance to identify the report by, 0 for the course-level one.
+     * @param bool $every Whether to add back the entity columns the report no longer shows
+     *     ({@see \enrol_apply\course_applications_every_column}), for the tests of those columns.
      * @return \core_reportbuilder\system_report The report.
      */
-    protected function report(int $enrolid = 0): \core_reportbuilder\system_report {
+    protected function report(int $enrolid = 0, bool $every = false): \core_reportbuilder\system_report {
         $context = context_course::instance($this->course->id);
+        $class = $every ? \enrol_apply\course_applications_every_column::class : course_applications::class;
 
         /* With an enrolid, through for_method() exactly as report.php builds it. Without one, the
            bare course-level report, which has no itemid and is therefore a different persistent. */
         return $enrolid
-            ? course_applications::for_method($context, $enrolid)
-            : system_report_factory::create(course_applications::class, $context);
+            ? $class::for_method($context, $enrolid)
+            : system_report_factory::create($class, $context);
     }
 
     /**
      * The unique identifiers of the report's active columns.
      *
+     * @param \core_reportbuilder\system_report|null $report Report to read, null for the plain one.
      * @return array List of identifiers.
      */
-    protected function column_ids(): array {
+    protected function column_ids(?\core_reportbuilder\system_report $report = null): array {
         return array_map(
             static fn($column) => $column->get_unique_identifier(),
-            array_values($this->report()->get_active_columns())
+            array_values(($report ?? $this->report())->get_active_columns())
         );
     }
 
@@ -330,15 +339,64 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
     }
 
     /**
-     * The outcome cell of the single row the report shows.
+     * The outcome cell of the single row the report shows, as the download writes it.
      *
-     * @return string The rendered outcome.
+     * Through core's export transform, so the label and the record's line under it are read as
+     * the two lines a CSV carries, and markup that would lose either fails here.
+     *
+     * @return string The label, and the record's line under it when there is one.
      */
     protected function outcome_cell(): string {
         $rows = $this->rows();
         $this->assertCount(1, $rows, 'the fixture should produce exactly one row');
 
-        return (string) $rows[0]->{'submission:outcome'};
+        return $this->exported((string) $rows[0]->{'submission:outcome'});
+    }
+
+    /**
+     * A cell as core's download writes it.
+     *
+     * @param string $cell The rendered cell.
+     * @return string The cell after base_export_format::format_text().
+     */
+    protected function exported(string $cell): string {
+        $table = new \core_table\flexible_table('enrol_apply_export_probe');
+
+        return (new \core_table\base_export_format($table))->format_text($cell);
+    }
+
+    /**
+     * The outcome a label and the record's line under it read as, once exported.
+     *
+     * @param string $label The label's text.
+     * @param string $now The identifier of the record's line ("{$a}, now ..."), empty for none.
+     * @param int $status The record's status, which that line names.
+     * @return string What {@see outcome_cell()} returns for them.
+     */
+    protected function outcome_text(string $label, string $now = '', int $status = submission::STATUS_APPROVED): string {
+        if ($now === '') {
+            return $label;
+        }
+
+        return $label . "\n" . get_string($now, 'enrol_apply', submission::status_label($status));
+    }
+
+    /**
+     * What an approval suspended back into the queue reads as.
+     *
+     * @return string The exported outcome.
+     */
+    protected function suspended_text(): string {
+        return $this->outcome_text(get_string('enrolmentsuspended', 'enrol_apply'), 'outcomenowsuspended');
+    }
+
+    /**
+     * What an approval whose period ran out reads as.
+     *
+     * @return string The exported outcome.
+     */
+    protected function expired_text(): string {
+        return $this->outcome_text(get_string('outcomelabelexpired', 'enrol_apply'), 'outcomenowexpired');
     }
 
     /**
@@ -353,7 +411,8 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
         $this->seed_live(ENROL_USER_ACTIVE, submission::STATUS_APPROVED);
         $this->setUser($this->reader());
 
-        $this->assertSame(get_string('outcomeapproved', 'enrol_apply'), $this->outcome_cell());
+        $this->assertSame(get_string('submissionstatusapproved', 'enrol_apply'), $this->outcome_cell());
+        $this->assertStringContainsString('enrol_apply-status--success', (string) $this->rows()[0]->{'submission:outcome'});
     }
 
     /**
@@ -370,7 +429,10 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
         $this->seed_live(-1, submission::STATUS_APPROVED);
         $this->setUser($this->reader());
 
-        $this->assertSame(get_string('outcomeunenrolled', 'enrol_apply'), $this->outcome_cell());
+        $this->assertSame(
+            $this->outcome_text(get_string('outcomelabelunenrolled', 'enrol_apply'), 'outcomenowunenrolled'),
+            $this->outcome_cell()
+        );
     }
 
     /**
@@ -385,7 +447,14 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
         $this->seed_live(-1, submission::STATUS_PENDING);
         $this->setUser($this->reader());
 
-        $this->assertSame(get_string('outcomeneverdecided', 'enrol_apply'), $this->outcome_cell());
+        $this->assertSame(
+            $this->outcome_text(
+                get_string('outcomelabelunenrolled', 'enrol_apply'),
+                'outcomenowunenrolled',
+                submission::STATUS_PENDING
+            ),
+            $this->outcome_cell()
+        );
     }
 
     /**
@@ -401,7 +470,7 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
         $this->seed_live(ENROL_USER_SUSPENDED, submission::STATUS_APPROVED);
         $this->setUser($this->reader());
 
-        $this->assertSame(get_string('outcomesuspended', 'enrol_apply'), $this->outcome_cell());
+        $this->assertSame($this->suspended_text(), $this->outcome_cell());
     }
 
     /**
@@ -420,7 +489,7 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
         $this->seed_live(ENROL_USER_SUSPENDED, submission::STATUS_APPROVED, time() - DAYSECS);
         $this->setUser($this->reader());
 
-        $this->assertSame(get_string('outcomeexpired', 'enrol_apply'), $this->outcome_cell());
+        $this->assertSame($this->expired_text(), $this->outcome_cell());
     }
 
     /**
@@ -449,12 +518,12 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
         $this->setUser($this->reader());
 
         $this->assertNull(\enrol_apply\local\queue::application($ueid));
-        $this->assertSame(get_string('outcomeexpired', 'enrol_apply'), $this->outcome_cell());
+        $this->assertSame($this->expired_text(), $this->outcome_cell());
 
         $DB->set_field('user_enrolments', 'timeend', 0, ['id' => $ueid]);
 
         $this->assertNotNull(\enrol_apply\local\queue::application($ueid));
-        $this->assertSame(get_string('outcomesuspended', 'enrol_apply'), $this->outcome_cell());
+        $this->assertSame($this->suspended_text(), $this->outcome_cell());
     }
 
     /**
@@ -554,7 +623,7 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
         $this->seed('Please let me in', submission::STATUS_APPROVED);
         $this->setUser($this->reader());
 
-        $rows = $this->rows();
+        $rows = $this->rows($this->report(0, true));
         $this->assertCount(1, $rows);
         $this->assertSame(
             get_string('enrolmentunknown', 'enrol_apply'),
@@ -563,7 +632,7 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
         // And the outcome falls back to the stored decision rather than describing an enrolment.
         $this->assertSame(
             submission::status_label(submission::STATUS_APPROVED),
-            (string) $rows[0]->{'submission:outcome'}
+            $this->exported((string) $rows[0]->{'submission:outcome'})
         );
     }
 
@@ -585,7 +654,7 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
         $this->assertNotContains('submission:outcome', $this->filter_ids());
 
         // The control: a column that IS sortable, so the assertion is not passing vacuously.
-        $this->assertTrue($report->get_column('submission:enrolment')->get_is_sortable());
+        $this->assertTrue($report->get_column('submission:timecreated')->get_is_sortable());
     }
 
     /**
@@ -675,14 +744,15 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
      * masks nothing offers them all, so the assertion is not vacuous.
      *
      * Changes that must make it fail: set_disabled_aggregation_all() dropped from keygroup,
-     * chosengroup, joinedgroups or snapshot.
+     * chosengroup, joinedgroups, snapshot, or from the decided and group cells, which name the
+     * key's group (and the chosen and joined ones) under the same rule.
      *
      * @return void
      */
     public function test_masked_columns_offer_no_aggregation(): void {
         $this->seed();
         $this->setUser($this->reader());
-        $report = $this->report();
+        $report = $this->report(0, true);
 
         $every = array_map(
             static fn(string $aggregation): string => $aggregation::get_class_name(),
@@ -690,7 +760,7 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
         );
         $this->assertNotEmpty($every);
 
-        foreach (['keygroup', 'chosengroup', 'joinedgroups', 'snapshot'] as $name) {
+        foreach (['keygroup', 'chosengroup', 'joinedgroups', 'snapshot', 'decided', 'group'] as $name) {
             $column = $report->get_column("submission:{$name}");
             $this->assertNotNull($column, $name);
             $this->assertEqualsCanonicalizing($every, $column->get_disabled_aggregation(), $name);
@@ -1151,20 +1221,14 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
             'user:fullnamewithlink',
             'user:email',
             'user:idnumber',
-            'submission:status',
+            'submission:outcome',
             'submission:timecreated',
-            'submission:timedecided',
+            'submission:waittime',
+            'submission:decided',
+            'submission:group',
             'submission:comment',
             'submission:decisionnote',
-            'submission:enrolment',
-            'submission:outcome',
-            'submission:admissionroute',
-            'submission:keygroup',
-            'submission:chosengroup',
-            'submission:joinedgroups',
-            'submission:snapshot',
             'submission:s_city',
-            'applydecider:fullname',
         ], $this->column_ids());
 
         // The filters follow the columns, identity block included, and for the same reason.
@@ -1175,6 +1239,7 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
             'submission:status',
             'submission:timecreated',
             'submission:timedecided',
+            'submission:waittime',
             'submission:comment',
             'submission:decisionnote',
             'submission:admissionroute',
@@ -1241,7 +1306,7 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
 
         $this->assertNotContains('submission:snapshot', $this->filter_ids());
 
-        $report = $this->report();
+        $report = $this->report(0, true);
         $column = $report->get_column('submission:snapshot');
         $this->assertNotNull($column);
         $this->assertFalse($column->get_is_sortable());
@@ -1288,13 +1353,13 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
 
         $cells = function () use ($applicants): array {
             $byuser = [];
-            foreach ($this->rows() as $row) {
+            foreach ($this->rows($this->report(0, true)) as $row) {
                 $byuser[(int) $row->userid] = (string) $row->{'submission:keygroup'};
             }
             return array_map(static fn(\stdClass $user): string => $byuser[(int) $user->id] ?? 'missing', $applicants);
         };
 
-        $this->assertFalse($this->report()->get_column('submission:keygroup')->get_is_sortable());
+        $this->assertFalse($this->report(0, true)->get_column('submission:keygroup')->get_is_sortable());
         $this->assertSame(['open' => 'Turma Open', 'covert' => '', 'members' => ''], $cells());
 
         // Core adds only an enrolled user to a group.
@@ -1330,12 +1395,12 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
 
         // The control: a reader who may see identity fields gets both fields.
         $this->setUser($this->reader(true));
-        $withidentity = (string) $this->rows()[0]->{'submission:snapshot'};
+        $withidentity = (string) $this->rows($this->report(0, true))[0]->{'submission:snapshot'};
         $this->assertStringContainsString('Terry', $withidentity);
         $this->assertStringContainsString('Campinas', $withidentity);
 
         $this->setUser($this->reader(false));
-        $without = (string) $this->rows()[0]->{'submission:snapshot'};
+        $without = (string) $this->rows($this->report(0, true))[0]->{'submission:snapshot'};
 
         // The name part survives, so an empty cell cannot pass this test.
         $this->assertStringContainsString('Terry', $without);
@@ -1397,7 +1462,7 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
         $this->seed('On the list', submission::STATUS_WAITING);
         $this->setUser($this->reader());
 
-        $rows = $this->rows();
+        $rows = $this->rows($this->report(0, true));
         $this->assertCount(1, $rows);
         $rendered = (string) $rows[0]->{'submission:status'};
 
@@ -1430,7 +1495,7 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
         set_config('showuseridentity', 'email,department');
 
         $this->setUser($this->reader());
-        $rendered = (string) $this->rows()[0]->{'submission:snapshot'};
+        $rendered = (string) $this->rows($this->report(0, true))[0]->{'submission:snapshot'};
 
         $table = new \core_table\flexible_table('enrol_apply_export_probe');
         $exported = (new \core_table\base_export_format($table))->format_text($rendered);
@@ -1460,7 +1525,7 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
         $this->seed('Angle bracket', submission::STATUS_PENDING, $snapshot);
 
         $this->setUser($this->reader());
-        $rows = $this->rows();
+        $rows = $this->rows($this->report(0, true));
         $this->assertCount(1, $rows);
         $rendered = (string) $rows[0]->{'submission:snapshot'};
 
@@ -1489,10 +1554,11 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
         $this->seed('', submission::STATUS_PENDING, '');
 
         $this->setUser($this->reader());
-        $rows = $this->rows();
+        $report = $this->report(0, true);
+        $rows = $this->rows($report);
         $this->assertCount(count(submission::STATUSES) + 1, $rows);
 
-        foreach ($this->column_ids() as $columnid) {
+        foreach ($this->column_ids($report) as $columnid) {
             foreach ($rows as $row) {
                 $this->assertIsString((string) ($row->{$columnid} ?? ''));
             }
@@ -1556,7 +1622,7 @@ final class course_applications_test extends \core_reportbuilder\tests\core_repo
         $this->seed('Every name part', submission::STATUS_PENDING, $snapshot);
 
         $this->setUser($this->reader(false));
-        $rendered = (string) $this->rows()[0]->{'submission:snapshot'};
+        $rendered = (string) $this->rows($this->report(0, true))[0]->{'submission:snapshot'};
 
         foreach ($parts as $key => $value) {
             $this->assertStringContainsString($value, $rendered, $key . ' was withheld');

@@ -19,6 +19,7 @@ namespace enrol_apply\reportbuilder\local\entities;
 use core\lang_string;
 use core_reportbuilder\local\entities\base;
 use core_reportbuilder\local\filters\date;
+use core_reportbuilder\local\filters\duration;
 use core_reportbuilder\local\filters\select;
 use core_reportbuilder\local\filters\text;
 use core_reportbuilder\local\helpers\database;
@@ -105,6 +106,59 @@ class submission extends base {
     }
 
     /**
+     * The alias of the user who took the record's last decision.
+     *
+     * The entity's own, not a user entity's: the course report and the datasource add user
+     * entities of their own, under generated aliases, and the "Decided" cell must not depend on
+     * which of them a report carries. Suffixed like the chosen group's alias, so it cannot meet a
+     * generated one.
+     *
+     * @return string The alias.
+     */
+    protected function decider_alias(): string {
+        return $this->get_table_alias('enrol_apply_submission') . 'decider';
+    }
+
+    /**
+     * The join onto the user who took the record's last decision.
+     *
+     * LEFT, because an undecided record carries decidedby = 0, and so does a decided one whose
+     * decider has been deleted since (submission::pseudonymise_user()).
+     *
+     * @return string The join.
+     */
+    protected function decider_join(): string {
+        $alias = $this->get_table_alias('enrol_apply_submission');
+        $dalias = $this->decider_alias();
+
+        return "LEFT JOIN {user} {$dalias} ON {$dalias}.id = {$alias}.decidedby";
+    }
+
+    /**
+     * SQL giving how many seconds a record waited: to its last decision, or to now while it has
+     * none.
+     *
+     * Plain integer arithmetic in a CASE, which every supported database runs alike. "Now" is
+     * core's clock, read once per call and bound as a parameter, so a test can freeze it and the
+     * value is the same across the rows of one page. Each call has its own parameter name: the
+     * column, its sort and the filter each carry one, and a report may hold the filter as a
+     * condition too.
+     *
+     * @return array The SQL and its parameters.
+     */
+    protected function wait_sql(): array {
+        $alias = $this->get_table_alias('enrol_apply_submission');
+        $now = database::generate_param_name();
+
+        return [
+            "CASE WHEN {$alias}.timedecided > 0
+                  THEN {$alias}.timedecided - {$alias}.timecreated
+                  ELSE :{$now} - {$alias}.timecreated END",
+            [$now => \core\di::get(\core\clock::class)->time()],
+        ];
+    }
+
+    /**
      * The entity's title, as shown when picking columns.
      *
      * @return lang_string The title.
@@ -168,7 +222,7 @@ class submission extends base {
             ->set_type(column::TYPE_TIMESTAMP)
             ->add_field("{$alias}.timecreated")
             ->set_is_sortable(true)
-            ->add_callback([\core_reportbuilder\local\helpers\format::class, 'userdate']);
+            ->add_callback([formatter::class, 'shortdate']);
 
         $columns[] = (new column(
             'timedecided',
@@ -235,7 +289,8 @@ class submission extends base {
             ->add_callback([formatter::class, 'enrolment']);
 
         /* "What happened to this application", derived from the stored decision and the live
-           enrolment with no new storage; see formatter::outcome() and
+           enrolment with no new storage, drawn as a status label with the record's own decision
+           under it where the enrolment has moved since; see formatter::outcome_label() and
            docs/design/audit-trail-analysis.md.
 
            Not sortable and no filter: the value is computed in a callback, so a sort would order
@@ -253,8 +308,72 @@ class submission extends base {
             ->add_field("{$uealias}.status", 'outcomeenrolstatus')
             ->add_field("{$uealias}.timeend", 'outcomeenroltimeend')
             ->add_field("{$alias}.userenrolmentid", 'outcomeueid')
+            ->add_field("{$alias}.keyoutcome", 'outcomekeyoutcome')
+            ->add_field("{$alias}.userid", 'outcomeapplicant')
+            ->add_field("{$alias}.decidedby", 'outcomedecidedby')
             ->set_is_sortable(false)
-            ->add_callback([formatter::class, 'outcome']);
+            // The record's line goes under the label on a newline, which this class draws.
+            ->add_attributes(['class' => 'enrol_apply-linebreaks'])
+            ->add_callback([formatter::class, 'outcome_label']);
+
+        /* How long the application waited: to the last decision as the record holds it, or to now
+           while it holds none (AR-D4 (a) until the first response has a column of its own). SQL,
+           so it sorts and filters, and a custom report can average it. */
+        [$waitsql, $waitparams] = $this->wait_sql();
+        $columns[] = (new column(
+            'waittime',
+            new lang_string('waittime', 'enrol_apply'),
+            $this->get_entity_name()
+        ))
+            ->add_joins($this->get_joins())
+            ->set_type(column::TYPE_INTEGER)
+            ->add_field($waitsql, 'waittime', $waitparams)
+            ->add_field("{$alias}.timedecided", 'waitdecided')
+            ->add_field("{$alias}.status", 'waitstatus')
+            ->add_field("{$alias}.keyoutcome", 'waitkeyoutcome')
+            ->add_field("{$alias}.userid", 'waitapplicant')
+            ->add_field("{$alias}.decidedby", 'waitdecidedby')
+            ->set_is_sortable(true, ['waittime'])
+            ->add_callback([formatter::class, 'wait']);
+
+        /* The decision in one cell: the date and, under it, who took it, or the key that admitted
+           the applicant (formatter::decided()). The decider's name comes from a join of this
+           entity's own, so the column needs no user entity beside it. Sorted by the date.
+           No aggregation: the cell names the key's group, which formatter::key_group() withholds
+           from a reader who may not see it, and a grouped report would count those rows anyway
+           (see the snapshot column below). */
+        $galias = $this->get_table_alias('groups');
+        $deciderselects = [];
+        foreach (\core_user\fields::get_name_fields() as $field) {
+            $deciderselects["{$this->decider_alias()}.{$field}"] = 'decider' . $field;
+        }
+        $decided = (new column(
+            'decided',
+            new lang_string('decided', 'enrol_apply'),
+            $this->get_entity_name()
+        ))
+            ->add_joins($this->get_joins())
+            ->add_join($this->decider_join())
+            ->add_join($this->key_group_join())
+            ->set_type(column::TYPE_TIMESTAMP)
+            ->add_field("{$alias}.timedecided", 'decidedtime')
+            ->add_field("{$alias}.status", 'decidedstatus')
+            ->add_field("{$alias}.keyoutcome", 'decidedkeyoutcome')
+            ->add_field("{$alias}.userid", 'decidedapplicant')
+            ->add_field("{$alias}.decidedby", 'decidedby')
+            ->add_field("{$this->decider_alias()}.id", 'deciderid')
+            ->add_field("{$galias}.name", 'decidedkeygroupname')
+            ->add_field("{$alias}.keygroupid", 'decidedkeygroupid')
+            ->add_field("{$galias}.courseid", 'decidedkeygroupcourseid')
+            ->add_field("{$galias}.visibility", 'decidedkeygroupvisibility');
+        foreach ($deciderselects as $field => $fieldalias) {
+            $decided->add_field($field, $fieldalias);
+        }
+        $columns[] = $decided
+            ->set_is_sortable(true, ["{$alias}.timedecided"])
+            ->set_disabled_aggregation_all()
+            ->add_attributes(['class' => 'enrol_apply-linebreaks'])
+            ->add_callback([formatter::class, 'decided']);
 
         /* How the application was admitted, from the record: through review, or by a group key,
            with what a valid key that could not admit ran into. Sortable and filterable, because
@@ -274,7 +393,6 @@ class submission extends base {
            (formatter::key_group()), so the column carries the group's visibility and course and
            is not sortable: sorting by the name would place a withheld cell among the names it
            sits between. */
-        $galias = $this->get_table_alias('groups');
         $columns[] = (new column(
             'keygroup',
             new lang_string('keygroup', 'enrol_apply'),
@@ -335,6 +453,40 @@ class submission extends base {
             ->set_is_sortable(false)
             ->set_disabled_aggregation_all()
             ->add_callback([formatter::class, 'joined_groups']);
+
+        /* The group, once: the key's or the chosen one, then the groups the approval joined
+           (formatter::group()), each named through its own column's visibility rule. Neither
+           sortable nor aggregatable, for the reasons the three group columns above give. The
+           chosen group's fields only once the upgrade adding them has run, as for the chosen
+           group's column. */
+        $group = (new column(
+            'group',
+            new lang_string('reportgroupcolumn', 'enrol_apply'),
+            $this->get_entity_name()
+        ))
+            ->add_joins($this->get_joins())
+            ->add_join($this->key_group_join())
+            ->set_type(column::TYPE_TEXT)
+            ->add_field("{$galias}.name", 'groupkeyname')
+            ->add_field("{$alias}.keyoutcome", 'groupkeyoutcome')
+            ->add_field("{$alias}.keygroupid", 'groupkeyid')
+            ->add_field("{$galias}.courseid", 'groupkeycourseid')
+            ->add_field("{$galias}.visibility", 'groupkeyvisibility');
+        $chosenready = \enrol_apply\local\instanceoptions::schema_ready();
+        if ($chosenready) {
+            $chosenalias = $this->get_table_alias('groups') . 'chosen';
+            $group->add_join($this->chosen_group_join())
+                ->add_field("{$chosenalias}.name", 'groupchosenname')
+                ->add_field("{$alias}.chosengroupid", 'groupchosenid')
+                ->add_field("{$chosenalias}.courseid", 'groupchosencourseid')
+                ->add_field("{$chosenalias}.visibility", 'groupchosenvisibility');
+        }
+        $columns[] = $group
+            ->add_field(submissionhelper::joined_groups_sql($alias), 'groupjoined')
+            ->set_is_sortable(false)
+            ->set_disabled_aggregation_all()
+            ->add_attributes(['class' => 'enrol_apply-linebreaks'])
+            ->add_callback([formatter::class, 'group']);
 
         /* The frozen snapshot, as one long-text column that is neither sortable nor filterable.
            Built from the record's rows in SQL (submission::aggregate_sql()), because a display
@@ -511,6 +663,19 @@ class submission extends base {
                 date::DATE_NOT_EMPTY,
                 date::DATE_RANGE,
             ]);
+
+        /* "Waited more than N days": core's duration filter over the column's own expression, so
+           the filter and the sort agree on every row, the open ones included. */
+        [$waitsql, $waitparams] = $this->wait_sql();
+        $filters[] = (new filter(
+            duration::class,
+            'waittime',
+            new lang_string('waittime', 'enrol_apply'),
+            $this->get_entity_name(),
+            $waitsql,
+            $waitparams
+        ))
+            ->add_joins($this->get_joins());
 
         $filters[] = (new filter(
             text::class,
