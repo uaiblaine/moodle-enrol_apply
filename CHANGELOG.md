@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased (2026112007)
+## Unreleased (2026112008)
 
 ### Security
 
@@ -52,6 +52,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   chosen and joined group columns and the snapshot. The datasource documents that an ungrouped masked
   column beside a Count still yields a blank row per hidden group, and that the audience is the
   control.
+- **An anonymised backup carries no personal data of this plugin.** The application comment, the
+  durable record and the typed answers were written to `course/enrolments.xml` whenever users were
+  included, whether or not *Anonymise user information* was on, while core had already blanked the
+  users file. With anonymisation on, none of the three is written.
+- **A privacy export hands over the group conversations of the memberships this plugin added.** The
+  export replaced core_group's for those memberships but left their conversations out, while erasure
+  deleted them; the provider now exports them and declares the `core_message` link.
+- **A user deleted while the plugin is disabled no longer leaves the application comment behind.**
+  Core skips disabled plugins when unenrolling a deleted user; a `user_deleted` observer now runs the
+  same orphan sweep as the course deletion one.
 
 
 ### Added

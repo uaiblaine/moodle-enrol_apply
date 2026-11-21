@@ -111,6 +111,8 @@ class provider implements
         );
 
         $items->add_subsystem_link('core_group', [], 'privacy:metadata:core_group');
+        // The group conversations of the memberships it added are exported and erased with them.
+        $items->add_subsystem_link('core_message', [], 'privacy:metadata:core_message');
 
         return $items;
     }
@@ -265,7 +267,7 @@ class provider implements
         $params['userid'] = $userid;
         $params['component'] = 'enrol_apply';
         $rows = $DB->get_records_sql(
-            "SELECT gm.id, g.courseid, g.name, gm.timeadded
+            "SELECT gm.id, gm.groupid, g.courseid, g.name, gm.timeadded
                FROM {groups_members} gm
                JOIN {groups} g ON g.id = gm.groupid
               WHERE gm.userid = :userid AND gm.component = :component AND g.courseid {$insql}
@@ -274,8 +276,10 @@ class provider implements
         );
 
         $bycourse = [];
+        $groupids = [];
         foreach ($rows as $row) {
             $context = context_course::instance((int) $row->courseid);
+            $groupids[(int) $row->courseid][] = (int) $row->groupid;
             $bycourse[(int) $row->courseid][] = (object) [
                 // Plain spelling, as for the decided groups: the export file is not HTML.
                 'name' => format_string($row->name, true, ['context' => $context, 'escape' => false]),
@@ -288,6 +292,21 @@ class provider implements
                 [get_string('privacy:applicationpath', 'enrol_apply'), get_string('groups', 'core_group')],
                 (object) ['groups' => $groups]
             );
+
+            /* The group's conversation goes with the membership: deletion erases it through
+               delete_groups_for_*(), and core_group's own export, which this one replaces for
+               these rows, hands it over. Messages sent while the user was a member are theirs
+               to receive. */
+            foreach ($groupids[$courseid] as $groupid) {
+                \core_message\privacy\provider::export_conversations(
+                    $userid,
+                    'core_group',
+                    'groups',
+                    context_course::instance($courseid),
+                    [],
+                    $groupid
+                );
+            }
         }
     }
 

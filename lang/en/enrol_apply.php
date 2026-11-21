@@ -427,6 +427,7 @@ $string['pluginname_keyonly'] = 'Enrolment with a group key';
 $string['pluginname_keyreview'] = 'Application with a group key';
 $string['privacy:applicationpath'] = 'Enrolment application';
 $string['privacy:metadata:core_group'] = 'An approval adds the applicant to the groups chosen for the enrolment method or by the decider; the plugin exports and deletes the memberships it added.';
+$string['privacy:metadata:core_message'] = 'An approval adds the applicant to groups, and the plugin exports and deletes the conversations of the groups whose memberships it added.';
 $string['privacy:metadata:enrol_apply_answer'] = 'What the user submitted with a course enrolment application, one value per profile field and per question asked, as it was at submission.';
 $string['privacy:metadata:enrol_apply_answer:fieldkey'] = 'Which profile field or application question the value answers.';
 $string['privacy:metadata:enrol_apply_answer:label'] = 'The question as it read when the application was submitted.';

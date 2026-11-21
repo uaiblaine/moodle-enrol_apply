@@ -425,6 +425,7 @@ $string['pluginname_keyonly'] = 'Inscrição com chave de grupo';
 $string['pluginname_keyreview'] = 'Inscrição com chave de grupo e análise';
 $string['privacy:applicationpath'] = 'Solicitação de inscrição';
 $string['privacy:metadata:core_group'] = 'Uma aprovação adiciona o solicitante aos grupos escolhidos para o método de inscrição ou por quem decidiu; o plugin exporta e exclui as participações em grupo que adicionou.';
+$string['privacy:metadata:core_message'] = 'Uma aprovação adiciona o solicitante a grupos, e o plugin exporta e exclui as conversas dos grupos cujas participações adicionou.';
 $string['privacy:metadata:enrol_apply_answer'] = 'O que o usuário enviou com uma solicitação de inscrição no curso, um valor por campo de perfil e por pergunta feita, como estava no envio.';
 $string['privacy:metadata:enrol_apply_answer:fieldkey'] = 'A qual campo de perfil ou pergunta da solicitação o valor responde.';
 $string['privacy:metadata:enrol_apply_answer:label'] = 'A pergunta como estava redigida quando a solicitação foi enviada.';

@@ -617,6 +617,10 @@ Two consequences worth knowing before you rely on a backup:
   backup defaults*. The recycle bin is not: it backs up in automated mode, so the switch that
   governs it is *Automated backup setup ▸ Include users*. Turn that one off and a course that
   goes through the recycle bin comes back without its application records.
+- An **anonymised** backup (*Anonymise user information*) carries no application at all: not the
+  comment, not the record, not the answers. Core anonymises the users file but cannot scrub free text
+  an applicant wrote about themselves, so the three tables are left out of it. The configuration of
+  the enrolment method still travels.
 - A record travels **only while its enrolment method still exists**. Backup data for an
   enrolment plugin is written per enrolment method, so a record kept after the method was
   deleted has nothing to attach itself to and stays behind. It is still on the site, still

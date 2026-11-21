@@ -131,6 +131,50 @@ final class observers_test extends \advanced_testcase {
     }
 
     /**
+     * A user deleted while the plugin is disabled takes the comment of their application along.
+     *
+     * enrol_user_delete() asks only enabled plugins to unenrol the user, so with the plugin off
+     * the comment survives the deletion of the enrolment it hangs off; the user_deleted observer
+     * sweeps it. The other applicant's comment is the control: a sweep that emptied the table
+     * would remove it too.
+     *
+     * Changes that must make it fail: the observer unregistered or left empty, or its sweep
+     * written without the NOT EXISTS so that it empties the table.
+     *
+     * @return void
+     */
+    public function test_a_user_deleted_while_the_plugin_is_disabled_leaves_no_comment(): void {
+        global $DB;
+
+        $plugin = enrol_get_plugin('apply');
+        $generator = $this->getDataGenerator();
+        $course = $generator->create_course();
+        $instanceid = (int) $plugin->add_instance($course, $plugin->get_instance_defaults());
+        $instance = $DB->get_record('enrol', ['id' => $instanceid], '*', MUST_EXIST);
+
+        $infoof = function (\stdClass $user, string $comment) use ($plugin, $instance, $DB): int {
+            $plugin->enrol_user($instance, $user->id, null, 0, 0, ENROL_USER_SUSPENDED);
+            $ueid = (int) $DB->get_field('user_enrolments', 'id', ['enrolid' => $instance->id, 'userid' => $user->id], MUST_EXIST);
+
+            return (int) $DB->insert_record('enrol_apply_applicationinfo', (object) [
+                'userenrolmentid' => $ueid,
+                'comment' => $comment,
+            ]);
+        };
+        $leaving = $generator->create_user();
+        $staying = $generator->create_user();
+        $leavinginfo = $infoof($leaving, 'Going away');
+        $stayinginfo = $infoof($staying, 'Still here');
+
+        // Disabled: unenrol_user() of the plugin is no longer reached by delete_user().
+        set_config('enrol_plugins_enabled', '');
+        delete_user($leaving);
+
+        $this->assertFalse($DB->record_exists('enrol_apply_applicationinfo', ['id' => $leavinginfo]));
+        $this->assertTrue($DB->record_exists('enrol_apply_applicationinfo', ['id' => $stayinginfo]));
+    }
+
+    /**
      * A course deletion sweeps the options and offers whose method is gone, the case a disabled
      * plugin leaves behind, and keeps the live ones.
      *

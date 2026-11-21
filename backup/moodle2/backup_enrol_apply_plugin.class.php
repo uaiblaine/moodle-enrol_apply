@@ -226,6 +226,14 @@ class backup_enrol_apply_plugin extends backup_enrol_plugin {
         $keptroles = $this->task->get_kept_roles();
         $users = $this->task->get_setting_value('users');
 
+        /* An anonymised backup is one the owner means to share: core blanks users.xml and drops
+           the custom profile data. The comment, the snapshot and the typed answers are free text
+           the applicant wrote about themselves, which no anonymiser here can scrub, so no source
+           is defined for any of the three tables and they do not travel at all. */
+        if ($this->task->get_setting_value('anonymize')) {
+            $users = false;
+        }
+
         if ($users && empty($keptroles)) {
             $application->set_source_sql(
                 "SELECT ai.id, ai.userenrolmentid, ai.comment
