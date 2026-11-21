@@ -68,6 +68,9 @@ class enrol_apply_plugin extends enrol_plugin {
     /** @var int Instance id the cached enroller in $lasternoller belongs to. */
     protected $lasternollerinstanceid = 0;
 
+    /** @var int[] User enrolment ids the last confirm_enrolment() call decided, see get_confirmed_enrolment_ids(). */
+    protected $confirmedids = [];
+
     /**
      * Add new instance of enrol plugin with default settings.
      *
@@ -1873,6 +1876,7 @@ class enrol_apply_plugin extends enrol_plugin {
         global $DB;
 
         $decided = 0;
+        $this->confirmedids = [];
 
         foreach ($enrols as $enrol) {
             $userenrolment = $this->get_pending_user_enrolment($enrol);
@@ -1887,6 +1891,7 @@ class enrol_apply_plugin extends enrol_plugin {
             }
 
             $decided++;
+            $this->confirmedids[] = (int) $userenrolment->id;
 
             /* A record to write to. Without it record_outcome_message() below writes nothing,
                silently, for an application older than that table, and the message is stored
@@ -1973,6 +1978,15 @@ class enrol_apply_plugin extends enrol_plugin {
         }
 
         return $decided;
+    }
+
+    /**
+     * The user enrolments the last confirm_enrolment() call decided, not the ones it was asked for.
+     *
+     * @return int[] User enrolment ids, empty before any call.
+     */
+    public function get_confirmed_enrolment_ids(): array {
+        return $this->confirmedids;
     }
 
     /**

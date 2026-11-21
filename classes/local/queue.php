@@ -648,7 +648,7 @@ final class queue {
      * @return array The other applications, keyed by user enrolment id; empty when there are none.
      */
     public static function other_applications(int $courseid, array $userids, array $excludeueids): array {
-        global $DB;
+        global $DB, $USER;
 
         /* get_in_or_equal() throws on an empty array and this query takes two id lists. The
            first is the whole question - no users, no applications - so it returns early; the
@@ -662,6 +662,17 @@ final class queue {
         $wheres[] = 'e.courseid = :courseid';
         $params['enrol'] = 'apply';
         $params['courseid'] = $courseid;
+
+        /* The listing's own narrowing for this operator, so the count never names an application
+           of a group they cannot see. Null for a reader who sees every group. */
+        $groups = groupscope::narrowed_to($courseid, (int) $USER->id, groupscope::reader_capability(
+            context_course::instance($courseid)
+        ));
+        if ($groups !== null) {
+            [$groupwhere, $groupparams] = groupscope::where($groups);
+            $wheres[] = $groupwhere;
+            $params += $groupparams;
+        }
 
         [$insql, $inparams] = $DB->get_in_or_equal($userids, SQL_PARAMS_NAMED, 'otheruser');
         $wheres[] = "ue.userid {$insql}";

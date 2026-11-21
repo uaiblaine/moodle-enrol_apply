@@ -837,7 +837,8 @@ backup/                      group mappings, comments and the durable trail, see
   `groupvisibility::visible_to()`**, which mirrors `groups_get_all_groups()`'s visibility clause for
   an explicit reader (a notice is judged per recipient, not for `$USER`): the review chip, the
   managers' notice, `groupkey::summary()` on the instance form, the seats warning after an approval
-  (`groupseats::overfilled_named_to()`) and the report's `keygroup` column,
+  (`groupseats::overfilled_named_to()`, fed only the ids `decision::confirmed_ids()` reports and judged by
+  `groupscope::allows_group()`) and the report's `keygroup` column,
   which selects the group's visibility for it and is not sortable. Stock archetypes holding the
   plugin's capabilities all hold `moodle/course:viewhiddengroups`, so its tests use a custom role.
   Gates `GV1`-`GV6`, `GK10`, `GK11`, `KS20`-`KS28`.
@@ -1175,7 +1176,8 @@ backup/                      group mappings, comments and the durable trail, see
   reports a clean success. Measured. And that case is the reachable one, because two applications
   in one course are supported on purpose: two apply instances are two intakes.
 
-  `queue::other_applications()` is what closes it, and it WARNS rather than deciding — twice, on
+  `queue::other_applications()` (narrowed to the operator's groups by `groupscope::where()`, so it never
+  counts an application of a group they cannot see) is what closes it, and it WARNS rather than deciding — twice, on
   the confirmation form before anything is written and in the report after. Deciding the others is
   the intuitive fix and is wrong on its own terms: the decision carries per-instance data (the role
   fallback, the groups, both caps), so approving one intake is a statement about that intake alone,

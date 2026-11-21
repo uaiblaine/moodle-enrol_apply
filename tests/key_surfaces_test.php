@@ -903,6 +903,38 @@ final class key_surfaces_test extends \advanced_testcase {
     }
 
     /**
+     * A reader narrowed by separate groups is told only of the overfilled groups their scope reaches.
+     *
+     * The decision joined the keyed group (a group the moderator is not in); the control is the
+     * same moderator once a member of it, and an unnarrowed reader who is told either way.
+     *
+     * Changes that must make it fail: overfilled_named_to() without groupscope::allows_group().
+     *
+     * @return void
+     */
+    public function test_a_narrowed_reader_is_not_told_of_a_group_outside_their_scope(): void {
+        global $DB;
+
+        $this->require_groupdist();
+        $this->seats($this->keyed, 1);
+        $first = $this->own_row($this->waiting(submission::KEY_NONE))->id;
+        $second = $this->own_row($this->waiting(submission::KEY_NONE))->id;
+        $this->plugin->confirm_enrolment([$first, $second], '', ['groups' => [$this->keyed->id]]);
+
+        $DB->set_field('course', 'groupmode', SEPARATEGROUPS, ['id' => $this->course->id]);
+        $clerk = $this->clerk();
+        $this->getDataGenerator()->create_group_member(['groupid' => $this->listed->id, 'userid' => $clerk->id]);
+        $ids = [$first, $second];
+        $named = fn(int $readerid): array => array_keys(groupseats::overfilled_named_to($ids, $readerid));
+
+        $this->assertSame([(int) $this->keyed->id], $named((int) $this->teacher->id), 'the control: sees every group');
+        $this->assertSame([], $named((int) $clerk->id), 'narrowed to a group of their own');
+
+        $this->getDataGenerator()->create_group_member(['groupid' => $this->keyed->id, 'userid' => $clerk->id]);
+        $this->assertSame([(int) $this->keyed->id], $named((int) $clerk->id), 'the group is now theirs');
+    }
+
+    /**
      * Without local_groupdist nothing is over, whatever the memberships.
      *
      * @return void

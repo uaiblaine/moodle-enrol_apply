@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased (2026112006)
+## Unreleased (2026112007)
 
 ### Security
 
@@ -35,6 +35,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   no selection box on the reader's own row and labels it, the review page says why it offers no
   decision, and the bulk form counts it among the applications it will leave alone. A group key
   still admits an applicant who holds `enrol/apply:manage` in the course.
+- **The course report checks the course, not only the capability** (audit A-03). Core's
+  `download.php` runs only the site-level login before `can_view()`, so a holder of
+  `enrol/apply:viewreports` whose enrolment was suspended, or who had no access to a hidden course,
+  could still download the report. `can_view()` now asks `can_access_course()` with the capability
+  and `$onlyactive`, as `require_login($course)` does.
+- **The "applied before" badge follows the rule of the review page's history** (audit M-04). It is
+  computed only on one method's queue, for a reader holding `enrol/apply:viewreports` in the course,
+  and a reader the report narrows by separate groups is badged only for an earlier application in
+  their groups. The mentee and site-wide queues and a reader without the capability get none.
+- **The seats warning and the "other applications" count respect the operator's groups** (audit
+  M-05). The warning is read back only from the rows the decision confirmed, and names a group only
+  to a reader whose scope reaches it; `queue::other_applications()` is narrowed by the same
+  predicate as the queue's listing.
+- **The report columns that mask a value per reader offer no aggregation** (audit B-04): the key,
+  chosen and joined group columns and the snapshot. The datasource documents that an ungrouped masked
+  column beside a Count still yields a blank row per hidden group, and that the audience is the
+  control.
 
 
 ### Added

@@ -1335,6 +1335,62 @@ final class queue_test extends \advanced_testcase {
     }
 
     /**
+     * A narrowed operator is not told of another method's application filed under a group outside theirs.
+     *
+     * The warning names a count of applications the decision left alone; counting one the
+     * operator may not see would disclose that it exists. The application's second method row is
+     * filed under a group by its record: the moderator's own, then another group. The editing
+     * teacher, who sees every group, is the control that the row is one to be reported at all.
+     *
+     * Changes that must make it fail: other_applications() without the operator's group narrowing.
+     *
+     * @return void
+     */
+    public function test_other_applications_are_narrowed_to_the_operators_groups(): void {
+        global $DB;
+
+        $DB->set_field('course', 'groupmode', SEPARATEGROUPS, ['id' => $this->course->id]);
+        $generator = $this->getDataGenerator();
+        $mine = $generator->create_group(['courseid' => $this->course->id]);
+        $theirs = $generator->create_group(['courseid' => $this->course->id]);
+
+        $teacher = $DB->get_field('role', 'id', ['shortname' => 'teacher'], MUST_EXIST);
+        assign_capability('enrol/apply:manageapplications', CAP_ALLOW, $teacher, \context_system::instance()->id, true);
+        $moderator = $generator->create_and_enrol($this->course, 'teacher');
+        $generator->create_group_member(['groupid' => $mine->id, 'userid' => $moderator->id]);
+
+        [$user, $decided] = $this->applicant();
+        $other = $this->second_instance();
+        $otherueid = $this->also_applies_on($user, $other);
+        $recordid = (int) $DB->insert_record('enrol_apply_submission', (object) [
+            'courseid' => $this->course->id,
+            'userid' => $user->id,
+            'enrolid' => $other->id,
+            'userenrolmentid' => $otherueid,
+            'comment' => '',
+            'status' => submission::STATUS_PENDING,
+            'outcomemessage' => '',
+            'timecreated' => time(),
+            'timedecided' => 0,
+            'decidedby' => 0,
+            'keygroupid' => $theirs->id,
+            'keyoutcome' => submission::KEY_FOR_REVIEW,
+        ]);
+        $ask = fn(): array => array_map('intval', array_keys(
+            queue::other_applications((int) $this->course->id, [(int) $user->id], [$decided])
+        ));
+
+        $this->setUser($this->teacher());
+        $this->assertSame([$otherueid], $ask(), 'the control: an operator who sees every group');
+
+        $this->setUser($moderator);
+        $this->assertSame([], $ask(), 'filed under a group outside theirs');
+
+        $DB->set_field('enrol_apply_submission', 'keygroupid', $mine->id, ['id' => $recordid]);
+        $this->assertSame([$otherueid], $ask(), 'the control: filed under their own group');
+    }
+
+    /**
      * An empty user list asks nothing rather than throwing.
      *
      * get_in_or_equal() throws on an empty array; the early return is what makes the method safe

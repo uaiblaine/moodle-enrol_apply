@@ -281,7 +281,10 @@ if ($formaction !== '' && $userenrolments) {
        which groups were joined. Only the groups this reader may be told about are named
        (groupseats::overfilled_named_to()). */
     if ($formaction === 'confirm' && $decided > 0) {
-        foreach (\enrol_apply\local\groupseats::overfilled_named_to($userenrolments, (int) $USER->id) as $over) {
+        /* Only the rows the decision confirmed: the posted list holds rows it skipped, among them
+           rows outside this operator's groups, whose groups must not be read back to them. */
+        $confirmedids = \enrol_apply\local\decision::confirmed_ids();
+        foreach (\enrol_apply\local\groupseats::overfilled_named_to($confirmedids, (int) $USER->id) as $over) {
             $groupcontext = context_course::instance($over->courseid);
             \core\notification::warning(get_string('groupseatsexceeded', 'enrol_apply', (object) [
                 'group' => format_string($over->name, true, ['context' => $groupcontext]),

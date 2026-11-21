@@ -74,7 +74,7 @@ A valid group key enrols the applicant at once, in that group, with no review.
 The queue for one method. The panel at the top counts what awaits a decision, what is deferred,
 the places taken and the applications held. Each row carries the group its key named, what the
 applicant submitted, the comment and a badge where there is something to know: on the waiting
-list, applied before, or a valid group key that found no place or seat. The queue filters by group
+list, applied before (shown to readers of the course report only), or a valid group key that found no place or seat. The queue filters by group
 too. Select rows and decide them together from the bar at
 the foot of the page, choosing the groups and the role an approval gives.
 

@@ -163,6 +163,8 @@ class groupseats {
      * A group is named only to a reader who may manage applications in its course, the group
      * chooser's own gate, and who may see it by core's group visibility rule
      * ({@see groupvisibility::visible_to()}); a mentor's decision joins the method's groups unseen.
+     * A reader narrowed by separate groups is told only of the groups their scope reaches
+     * ({@see groupscope::allows_group()}): the method's kept groups outside it are not theirs.
      *
      * @param array $userenrolmentids The user enrolments a decision was asked for.
      * @param int $readerid The user the warning is shown to.
@@ -175,6 +177,7 @@ class groupseats {
             if (
                 has_capability('enrol/apply:manageapplications', $context, $readerid)
                 && groupvisibility::visible_to($over, $readerid)
+                && groupscope::allows_group($over->courseid, $groupid, $readerid)
             ) {
                 $named[$groupid] = $over;
             }

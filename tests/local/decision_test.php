@@ -220,6 +220,34 @@ final class decision_test extends \advanced_testcase {
     }
 
     /**
+     * A confirmation reports the rows it decided, not the rows it was posted.
+     *
+     * The seats warning reads groups back from these ids, so a posted row the decision skipped
+     * (here a course the teacher does not teach) must not be among them. The control: the
+     * teacher's own row is, and a wait decision confirms none.
+     *
+     * Changes that must make it fail: confirmed_ids() returning the posted list, or not reset
+     * between decisions.
+     *
+     * @return void
+     */
+    public function test_confirmed_ids_are_the_rows_the_decision_reached(): void {
+        $teacher = $this->getDataGenerator()->create_user();
+        $this->getDataGenerator()->enrol_user($teacher->id, $this->students->courseid, 'editingteacher');
+        $this->setUser($teacher);
+
+        $sink = $this->redirectMessages();
+        $decided = decision::apply('confirm', [$this->studentue, $this->moderatorue], '', [], ['note' => '']);
+        $sink->close();
+
+        $this->assertSame(1, $decided);
+        $this->assertSame([$this->studentue], decision::confirmed_ids());
+
+        decision::apply('wait', [$this->moderatorue], '', [], ['note' => '']);
+        $this->assertSame([], decision::confirmed_ids());
+    }
+
+    /**
      * Without per-method messages the selection is one call carrying the plain message.
      *
      * @return void
