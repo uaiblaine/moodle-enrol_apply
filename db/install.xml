@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<XMLDB PATH="enrol/apply/db" VERSION="20261119" COMMENT="XMLDB file for Moodle enrol/apply"
+<XMLDB PATH="enrol/apply/db" VERSION="20261121" COMMENT="XMLDB file for Moodle enrol/apply"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:noNamespaceSchemaLocation="../../../lib/xmldb/xmldb.xsd"
 >
@@ -30,7 +30,8 @@
         <FIELD NAME="decidedrole" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="role the decider chose at approval; 0 means the instance default was used. An id and not a key: the record outlives the role on purpose, and the restore does not carry it"/>
         <FIELD NAME="decisionnote" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="what the decider recorded for their colleagues about this decision; never sent to the applicant, unlike outcomemessage"/>
         <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="when the application was submitted; the retention sweep reads this"/>
-        <FIELD NAME="timedecided" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="when it was decided, 0 while undecided"/>
+        <FIELD NAME="timedecided" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="when it was decided, 0 while undecided; moved by a later decision"/>
+        <FIELD NAME="timefirstdecided" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="when the first decision (an approval, a deferral or a cancellation) was taken, stamped once and never moved; 0 while undecided, and on a record decided before the column, whose first decision nobody recorded"/>
         <FIELD NAME="decidedby" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="who decided it; zeroed when the course is deleted"/>
         <FIELD NAME="keygroupid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="group whose enrolment key the applicant presented, 0 for none; an id and not a key, the record outlives the group on purpose"/>
         <FIELD NAME="keyoutcome" TYPE="int" LENGTH="4" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="what the key did: 0 no key, 1 admitted without review, 2 valid but no place left on the method, 3 valid but a group to join had no seat left, 4 valid but a place or seat could not be confirmed in time, 5 valid and sent for review"/>

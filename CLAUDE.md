@@ -1880,7 +1880,9 @@ backup/                      group mappings, comments and the durable trail, see
   `ENROL_APPLY_OPTIONS_SCHEMA` is pinned to the step that creates the tables by
   `instanceoptions_test::test_the_schema_version_is_the_step_that_creates_the_table`. Cron is safe
   on its own: it refuses to run while an upgrade is pending. A later schema change needs the same
-  gate, with its own constant. Gates `LB2`-`LB4`, `OB1`, `BK1`, `RS4`, `RS5`; `delete_instance()`'s
+  gate, with its own constant: `ENROL_APPLY_FIRST_RESPONSE_SCHEMA` and `first_response_schema_ready()`
+  guard `timefirstdecided` in `decide()`, the backup, the restore and the report entity (gates
+  `FD4`, `FD6`, `FD7`, `FD14`), pinned by `first_decision_test`. Gates `LB2`-`LB4`, `OB1`, `BK1`, `RS4`, `RS5`; `delete_instance()`'s
   own gate has none, because under PHPUnit the classes' gates cover it: what it stops, the fatal of a
   node whose class map predates the deploy, is reproduced on the mini cluster only.
 

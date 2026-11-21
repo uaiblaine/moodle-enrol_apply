@@ -94,6 +94,7 @@ class provider implements
                 'decisionnote' => 'privacy:metadata:enrol_apply_submission:decisionnote',
                 'timecreated' => 'privacy:metadata:enrol_apply_submission:timecreated',
                 'timedecided' => 'privacy:metadata:enrol_apply_submission:timedecided',
+                'timefirstdecided' => 'privacy:metadata:enrol_apply_submission:timefirstdecided',
                 'decidedby' => 'privacy:metadata:enrol_apply_submission:decidedby',
             ],
             'privacy:metadata:enrol_apply_submission'
@@ -352,6 +353,8 @@ class provider implements
                 'status' => submission::status_label((int) $row->status),
                 'timecreated' => transform::datetime($row->timecreated),
                 'timedecided' => $row->timedecided ? transform::datetime($row->timedecided) : null,
+                /* Absent before the upgrade that adds it: s.* reads what the table has. */
+                'timefirstdecided' => !empty($row->timefirstdecided) ? transform::datetime($row->timefirstdecided) : null,
             ];
 
             /* The decision (message to the applicant, groups, role) goes to both subjects: the

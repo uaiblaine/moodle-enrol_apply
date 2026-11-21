@@ -592,5 +592,19 @@ function xmldb_enrol_apply_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026112010, 'enrol', 'apply');
     }
 
+    if ($oldversion < 2026112101) {
+        /* The first decision's date, apart from the last one's. Not backfilled: a record decided
+           before the column holds only its last decision, which may be a re-decision, and the
+           report reads that one and says so (formatter::wait()) rather than calling it the first.
+           ENROL_APPLY_FIRST_RESPONSE_SCHEMA names this step. */
+        $table = new xmldb_table('enrol_apply_submission');
+        $field = new xmldb_field('timefirstdecided', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0', 'timedecided');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        upgrade_plugin_savepoint(true, 2026112101, 'enrol', 'apply');
+    }
+
     return true;
 }

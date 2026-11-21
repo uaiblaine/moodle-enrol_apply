@@ -181,7 +181,7 @@ final class course_report_cells_test extends \advanced_testcase {
     }
 
     /**
-     * The wait runs to the last decision, or to now while there is none, and says so.
+     * The wait runs to the first decision, or to now while there is none, and says so.
      *
      * Changes that must make it fail: the SQL's pending branch not measuring to now (gate RB5), or
      * the cell not marking an undecided wait as open.
@@ -193,6 +193,7 @@ final class course_report_cells_test extends \advanced_testcase {
             'status' => submission::STATUS_APPROVED,
             'timecreated' => self::NOW - 10 * DAYSECS,
             'timedecided' => self::NOW - 7 * DAYSECS - 4 * HOURSECS,
+            'timefirstdecided' => self::NOW - 7 * DAYSECS - 4 * HOURSECS,
         ]);
         $pending = $this->seed(['timecreated' => self::NOW - 4 * DAYSECS]);
         $minutes = $this->seed(['timecreated' => self::NOW - 20 * MINSECS]);
@@ -200,6 +201,7 @@ final class course_report_cells_test extends \advanced_testcase {
             'status' => submission::STATUS_CANCELLED,
             'timecreated' => self::NOW - 40 * DAYSECS,
             'timedecided' => self::NOW - 25 * DAYSECS + 5 * HOURSECS,
+            'timefirstdecided' => self::NOW - 25 * DAYSECS + 5 * HOURSECS,
         ]);
         $this->setAdminUser();
 

@@ -310,6 +310,10 @@ class submission {
      * an already-decided enrolment does not re-attribute the decision to whoever did the
      * touching. test_a_recorded_decision_is_not_restamped pins that.
      *
+     * The first decision's date (timefirstdecided) is written by the first decision that is not
+     * PENDING and never again, whatever $isfreshdecision says: a re-decision moves timedecided
+     * only, so the report can tell the first response from the resolution (AR-D4).
+     *
      * $isfreshdecision is the narrow exception for a genuine second decision at the same status.
      * Approve, suspend from the participants page, approve again: the record never leaves
      * STATUS_APPROVED, so without it the trail would go on naming the first decider and date
@@ -343,17 +347,30 @@ class submission {
             throw new \coding_exception('Unknown enrol_apply submission status: ' . $status);
         }
 
-        $rows = $DB->get_records('enrol_apply_submission', ['userenrolmentid' => $userenrolmentid], '', 'id, status');
+        /* Before the upgrade that adds the first decision's date, the column is not written
+           (ENROL_APPLY_FIRST_RESPONSE_SCHEMA). */
+        $firstready = enrol_get_plugin('apply')->first_response_schema_ready();
+        $rows = $DB->get_records('enrol_apply_submission', ['userenrolmentid' => $userenrolmentid], '', 'id, status, timedecided');
+        $now = time();
         foreach ($rows as $row) {
             if ((int) $row->status === $status && !$isfreshdecision) {
                 continue;
             }
-            $DB->update_record('enrol_apply_submission', (object) [
+            $update = (object) [
                 'id' => $row->id,
                 'status' => $status,
-                'timedecided' => time(),
+                'timedecided' => $now,
                 'decidedby' => $decidedby,
-            ]);
+            ];
+            /* The first decision is stamped by the decision that finds none recorded, with the same
+               time, so a record decided once holds two equal dates. A record that already holds a
+               decision never gets one: either its first was stamped then, or it was decided before
+               the column existed, and its first decision is unknown (its last may be a
+               re-decision). A deferral counts: it is a response. */
+            if ($firstready && $status !== self::STATUS_PENDING && (int) $row->timedecided === 0) {
+                $update->timefirstdecided = $now;
+            }
+            $DB->update_record('enrol_apply_submission', $update);
         }
     }
 
