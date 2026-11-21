@@ -148,12 +148,13 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         $names = array_map(static function ($item): string {
             return $item->get_name();
         }, $items);
-        $this->assertCount(5, $items);
+        $this->assertCount(6, $items);
         $this->assertEqualsCanonicalizing(
             [
                 'enrol_apply_applicationinfo',
                 'enrol_apply_submission',
                 'enrol_apply_answer',
+                'enrol_apply_report_columns',
                 'core_group',
                 'core_message',
             ],
@@ -181,6 +182,28 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         $answerfields = $byname['enrol_apply_answer']->get_privacy_fields();
         $this->assertArrayHasKey('submissionid', $answerfields);
         $this->assertArrayHasKey('value', $answerfields);
+    }
+
+    /**
+     * The reader's grid on the course report is exported as the user's preference, and a user
+     * who never chose one exports none.
+     *
+     * Changes that must make it fail: export_user_preferences() not writing the preference.
+     *
+     * @return void
+     */
+    public function test_the_report_preference_is_exported(): void {
+        $chooser = $this->getDataGenerator()->create_user();
+        $other = $this->getDataGenerator()->create_user();
+        \enrol_apply\local\reportpreference::write(['outcome'], ['wait' => 200], (int) $chooser->id);
+
+        provider::export_user_preferences((int) $other->id);
+        $this->assertSame([], (array) writer::with_context(\context_system::instance())->get_user_preferences('enrol_apply'));
+
+        provider::export_user_preferences((int) $chooser->id);
+        $exported = writer::with_context(\context_system::instance())->get_user_preferences('enrol_apply');
+        $name = \enrol_apply\local\reportpreference::NAME;
+        $this->assertSame('{"columns":["outcome"],"widths":{"wait":200}}', $exported->$name->value);
     }
 
     /**

@@ -1,0 +1,49 @@
+<?php
+// This file is part of Moodle - http://moodle.org/
+//
+// Moodle is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Moodle is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+
+/**
+ * The plugin's web services: the course report read headlessly (stage R3).
+ *
+ * @package    enrol_apply
+ * @copyright  2026 Anderson Blaine
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+
+defined('MOODLE_INTERNAL') || die();
+
+$functions = [
+    'enrol_apply_report_rows' => [
+        'classname' => \enrol_apply\external\report_rows::class,
+        'description' => 'A page of the course report of applications, with its columns and filters.',
+        'type' => 'read',
+        'ajax' => true,
+        'capabilities' => 'enrol/apply:viewreports',
+    ],
+    'enrol_apply_report_summary' => [
+        'classname' => \enrol_apply\external\report_summary::class,
+        'description' => 'The turnaround summary of the course report of applications.',
+        'type' => 'read',
+        'ajax' => true,
+        'capabilities' => 'enrol/apply:viewreports',
+    ],
+    'enrol_apply_set_report_preference' => [
+        'classname' => \enrol_apply\external\set_report_preference::class,
+        'description' => 'Store the columns and widths the reader chose for the course report.',
+        'type' => 'write',
+        'ajax' => true,
+        'capabilities' => 'enrol/apply:viewreports',
+    ],
+];

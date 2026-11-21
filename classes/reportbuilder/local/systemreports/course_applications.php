@@ -32,6 +32,7 @@ use enrol_apply\local\fields;
 use enrol_apply\local\groupscope;
 use enrol_apply\local\groupvisibility;
 use enrol_apply\local\queue;
+use enrol_apply\local\reportpreference;
 use enrol_apply\reportbuilder\local\entities\submission;
 use enrol_apply\reportbuilder\local\filters\group as groupfilter;
 use enrol_apply\reportbuilder\local\formatters\submission as formatter;
@@ -58,6 +59,15 @@ class course_applications extends system_report {
 
     /** @var array|null User enrolment id => true for the rows this reader may review; see can_review(). */
     protected $reviewable = null;
+
+    /** @var array|null Catalogue key => definition; see column_catalogue(). */
+    protected $catalogue = null;
+
+    /** @var array Catalogue key => unique identifier of the column added for it, in display order. */
+    protected $activekeys = [];
+
+    /** @var string[] What the wait column may measure; see measure(). */
+    public const MEASURES = ['first', 'resolution'];
 
     /**
      * Unique identifier of the filter that narrows the report to one enrolment method.
@@ -87,8 +97,21 @@ class course_applications extends system_report {
      * @return bool True when the user may view the report.
      */
     protected function can_view(): bool {
-        $context = $this->get_context();
+        return self::may_view($this->get_context());
+    }
 
+    /**
+     * Whether the current user may see the report of this context, without building the report.
+     *
+     * {@see can_view()}'s whole rule, for a caller that must not build the report: core keeps one
+     * instance of a report per user for the whole request, so building it to check access fixes its
+     * columns and parameters for any later read in the same request
+     * ({@see \enrol_apply\external\set_report_preference}).
+     *
+     * @param context $context The report's context.
+     * @return bool True when the user may view the report.
+     */
+    public static function may_view(context $context): bool {
         /* Reachable: system_report_factory::create() builds this report in any context it is
            handed, and outside a course the capability check below would test the wrong thing. */
         if (!$context instanceof context_course) {
@@ -159,7 +182,15 @@ class course_applications extends system_report {
             "LEFT JOIN {user} {$decideralias} ON {$decideralias}.id = {$alias}.decidedby"
         ));
 
-        $this->add_base_fields("{$alias}.id, {$alias}.userid, {$alias}.userenrolmentid, {$alias}.status");
+        /* The record's own facts, beside the formatted cells, for a reader that computes with them
+           (the headless rows, \enrol_apply\local\reportengine): the dates, the decider and the
+           key's outcome, which say how long a row waited and whether a person decided it. */
+        $basefields = "{$alias}.id, {$alias}.userid, {$alias}.userenrolmentid, {$alias}.status, {$alias}.enrolid,"
+            . " {$alias}.timecreated, {$alias}.timedecided, {$alias}.decidedby, {$alias}.keyoutcome";
+        if (enrol_get_plugin('apply')->first_response_schema_ready()) {
+            $basefields .= ", {$alias}.timefirstdecided";
+        }
+        $this->add_base_fields($basefields);
 
         $this->add_report_columns();
         $this->add_report_filters();
@@ -181,7 +212,13 @@ class course_applications extends system_report {
            plugin's selectors need an attribute of the report's own to win. */
         $this->add_attributes(['data-enrol-apply-report' => 'course']);
 
-        $this->set_initial_sort_column('submission:timecreated', SORT_DESC);
+        /* Newest first, while the reader shows the submission date; a reader who hid it reads the
+           report by name, as core cannot sort by a column the report does not carry. */
+        if (isset($this->activekeys['submitted'])) {
+            $this->set_initial_sort_column('submission:timecreated', SORT_DESC);
+        } else {
+            $this->set_initial_sort_column('user:fullnamewithlink', SORT_ASC);
+        }
         $this->set_default_per_page(30);
         $this->set_downloadable(true, get_string('report:course_applications', 'enrol_apply'));
     }
@@ -245,19 +282,174 @@ class course_applications extends system_report {
     }
 
     /**
+     * What the wait column measures for this report, from its parameters.
+     *
+     * A report parameter, so a sort, a page turn and a download carry it as the first render had
+     * it; a client sets it freely, which is harmless: it chooses between two columns the reader
+     * may both see, and anything else reads as the first response.
+     *
+     * @return string 'first' or 'resolution'.
+     */
+    public function measure(): string {
+        $measure = (string) $this->get_parameter('measure', 'first', PARAM_ALPHA);
+
+        return in_array($measure, self::MEASURES, true) ? $measure : 'first';
+    }
+
+    /**
+     * The columns a reader may choose for this report, in display order.
+     *
+     * The applicant and their identity fields are not in it: they are always shown, and the
+     * identity fields come from core's helper for this reader alone (see add_report_columns()).
+     * Every other column is here only where this reader may see it: the method only where the
+     * course offers a choice of methods, a question only where questions() keeps it. So a key the
+     * preference names that is not in the catalogue, forged or from another course, adds nothing.
+     *
+     * The default set is the one the report showed before the reader chose (R1): everything but
+     * the admission route, whose fact the outcome cell already states.
+     *
+     * @return array Key => ['source' => 'entity'|'method'|'answer', 'name' => entity column or
+     *     field key, 'title' => plain title, 'sortable' => bool, 'default' => bool].
+     */
+    public function column_catalogue(): array {
+        if ($this->catalogue !== null) {
+            return $this->catalogue;
+        }
+
+        $entity = $this->get_entity('submission');
+        $wait = $this->measure() === 'resolution' ? 'resolutiontime' : 'waittime';
+        $entries = [
+            'outcome' => 'outcome',
+            'submitted' => 'timecreated',
+            'wait' => $wait,
+            'decided' => 'decided',
+            'group' => 'group',
+        ];
+        $catalogue = [];
+        foreach ($entries as $key => $name) {
+            $catalogue[$key] = [
+                'source' => 'entity',
+                'name' => $name,
+                'title' => $entity->get_column($name)->get_title(),
+                'sortable' => $entity->get_column($name)->get_is_sortable(),
+                'default' => true,
+            ];
+        }
+        if (count($this->instances()) > 1) {
+            $catalogue['method'] = [
+                'source' => 'method',
+                'name' => 'method',
+                'title' => get_string('submissionmethod', 'enrol_apply'),
+                'sortable' => false,
+                'default' => true,
+            ];
+        }
+        foreach (['route' => 'admissionroute', 'comment' => 'comment', 'note' => 'decisionnote'] as $key => $name) {
+            $catalogue[$key] = [
+                'source' => 'entity',
+                'name' => $name,
+                'title' => $entity->get_column($name)->get_title(),
+                'sortable' => $entity->get_column($name)->get_is_sortable(),
+                'default' => $key !== 'route',
+            ];
+        }
+        foreach ($this->questions() as $fieldkey => $title) {
+            $catalogue['answer:' . $fieldkey] = [
+                'source' => 'answer',
+                'name' => $fieldkey,
+                'title' => $title,
+                'sortable' => true,
+                'default' => true,
+            ];
+        }
+
+        $this->catalogue = $catalogue;
+
+        return $this->catalogue;
+    }
+
+    /**
+     * The catalogue keys this reader's report shows.
+     *
+     * The reader's preference ({@see reportpreference::read()}) intersected with the catalogue,
+     * or the catalogue's default set when they have chosen nothing. "answers" in the preference
+     * stands for every question of the course (AR-D8), so a reader who wants the answers sees the
+     * questions of whichever course they open; a single "answer:<key>" shows that one question
+     * where the course asks it.
+     *
+     * @return array Key => true, in catalogue order.
+     */
+    public function chosen_keys(): array {
+        $catalogue = $this->column_catalogue();
+        $preference = reportpreference::read()['columns'];
+
+        $chosen = [];
+        if ($preference === null) {
+            foreach ($catalogue as $key => $entry) {
+                if ($entry['default']) {
+                    $chosen[$key] = true;
+                }
+            }
+
+            return $chosen;
+        }
+
+        $named = array_flip($preference);
+        $answers = isset($named['answers']);
+        foreach ($catalogue as $key => $entry) {
+            if (isset($named[$key]) || ($answers && $entry['source'] === 'answer')) {
+                $chosen[$key] = true;
+            }
+        }
+
+        return $chosen;
+    }
+
+    /**
+     * The alias of the application record's table in this instance's SQL.
+     *
+     * Each instance of the report generates its own aliases, so a caller appending SQL to a table
+     * built from an instance asks that instance.
+     *
+     * @return string The alias.
+     */
+    public function submission_alias(): string {
+        return $this->get_entity('submission')->get_table_alias('enrol_apply_submission');
+    }
+
+    /**
+     * The columns this report shows, by catalogue key.
+     *
+     * The applicant is "applicant", each identity column "identity:<name>", the rest their
+     * catalogue keys. The unique identifiers are the same on every instance of the report, so a
+     * caller holding another instance (core re-creates the report for its table) finds the columns
+     * by them.
+     *
+     * @return array Key => column unique identifier, in display order.
+     */
+    public function active_keys(): array {
+        return $this->activekeys;
+    }
+
+    /**
      * Add the report's columns, in display order.
      *
-     * The default set of the report's design (AR-D3): the applicant and their identity fields,
-     * then one state, the dates, the wait, the decision, the group and, where the course offers a
-     * choice, the method; then the comment, the decision note and one column per question. The
-     * entity offers the rest (the stored status, the live enrolment, the admission route, the
-     * three group columns, the snapshot), which a custom report over the datasource can still
-     * pick; this report shows each of those facts once, in the cells above.
+     * The applicant and the identity fields this reader may see, always; then the catalogue's
+     * columns the reader chose, or its default set (AR-D3, and R1's choice of keeping the comment,
+     * the note and the answers in it): one state, the dates, the wait, the decision, the group and,
+     * where the course offers a choice, the method; then the comment, the decision note and one
+     * column per question. Read in initialise(), so every request (a sort, a page turn, a download,
+     * the headless rows) adds the same columns: the choice is a server fact, and sorting and paging
+     * never meet a hidden column. The entity offers the rest (the stored status, the live
+     * enrolment, the three group columns, the snapshot), which a custom report over the datasource
+     * can still pick; this report shows each of those facts once, in the cells above.
      *
      * @return void
      */
     protected function add_report_columns(): void {
-        $this->add_column_from_entity('user:fullnamewithlink');
+        $this->activekeys = [];
+        $applicantcolumn = $this->add_column_from_entity('user:fullnamewithlink');
+        $this->activekeys['applicant'] = $applicantcolumn->get_unique_identifier();
 
         /* Identity fields from core's helper, which returns none outside
            moodle/site:viewuseridentity, so a reader without it gets no column rather than a
@@ -265,24 +457,19 @@ class course_applications extends system_report {
            absence keeps a hidden value from being recovered. */
         $applicant = $this->get_entity('user');
         foreach ($applicant->get_identity_columns($this->get_context()) as $column) {
-            $this->add_column($column);
+            $added = $this->add_column($column);
+            $this->activekeys['identity:' . $added->get_name()] = $added->get_unique_identifier();
         }
 
-        foreach (['outcome', 'timecreated', 'waittime', 'decided', 'group'] as $name) {
-            $this->add_column_from_entity("submission:{$name}");
-        }
-
-        /* The method, only where the course offers a choice of methods, as its filter is: with one
-           it would repeat the same name on every row. */
-        if (count($this->instances()) > 1) {
-            $this->add_column($this->method_column());
-        }
-
-        $this->add_column_from_entity('submission:comment');
-        $this->add_column_from_entity('submission:decisionnote');
-
-        foreach ($this->questions() as $key => $title) {
-            $this->add_column($this->get_entity('submission')->answer_column($key, $title));
+        $catalogue = $this->column_catalogue();
+        foreach (array_keys($this->chosen_keys()) as $key) {
+            $entry = $catalogue[$key];
+            $added = match ($entry['source']) {
+                'entity' => $this->add_column_from_entity('submission:' . $entry['name']),
+                'method' => $this->add_column($this->method_column()),
+                'answer' => $this->add_column($this->get_entity('submission')->answer_column($entry['name'], $entry['title'])),
+            };
+            $this->activekeys[$key] = $added->get_unique_identifier();
         }
 
         /* Each cell carries its column's heading, which the phone layout in styles.css shows above
@@ -455,12 +642,16 @@ class course_applications extends system_report {
      * context. A named constructor so that the PHPUnit suite can reach it
      * (test_two_methods_keep_independent_scopes); report.php is a page script no test runs.
      *
+     * The parameters carry presentation only ({@see measure()}); core stores them with the table
+     * and hands them back on every later request, and a client may set them freely.
+     *
      * @param context $context Course context the report belongs to.
      * @param int $enrolid Enrol instance the reader opened it from.
+     * @param array $parameters Report parameters: 'measure'.
      * @return \core_reportbuilder\system_report The report.
      */
-    public static function for_method(context $context, int $enrolid): \core_reportbuilder\system_report {
-        return system_report_factory::create(self::class, $context, 'enrol_apply', 'method', $enrolid);
+    public static function for_method(context $context, int $enrolid, array $parameters = []): \core_reportbuilder\system_report {
+        return system_report_factory::create(self::class, $context, 'enrol_apply', 'method', $enrolid, $parameters);
     }
 
     /**

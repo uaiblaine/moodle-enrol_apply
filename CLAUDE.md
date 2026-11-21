@@ -1238,6 +1238,17 @@ backup/                      group mappings, comments and the durable trail, see
   happens to be 2: one is the enrolment's status and the other the record's, equal by coincidence
   rather than contract.
 
+- **The course report is read headlessly through the report itself, never beside it (R3).**
+  `\enrol_apply\local\reportengine` builds `headless_table` (core's `system_report_table`, plus the
+  report instance it built and `narrow()`), so the base conditions, the stored filters and the masking
+  are the page's; it appends only the scope (`open_sql()`, which `is_open()` must mirror) and the name
+  search (the report's own `user:fullname` filter field SQL). The summary reads that table's FROM and
+  WHERE, so `decided + open + withoutperson` is the rows' total. The columns are a server fact: the
+  report reads `reportpreference` in `initialise()` and intersects it with `column_catalogue()`, and
+  `active_keys()` maps catalogue keys to column identifiers, which are the same on every instance
+  (each instance generates its own aliases, so never carry an alias across). No preference means the
+  R1 default set. Gates `HD1`-`HD23`.
+
 - **Both listings order by a unique key as a last resort, and the injection point is the only
   one that works.** Every column either table offers can tie — `applydate` is `ue.timecreated`,
   which `enrol_user()` writes as whole Unix seconds, so a cohort admitted by one script shares a

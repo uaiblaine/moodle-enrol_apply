@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased (2026112101)
+## Unreleased (2026112102)
 
 ### Security
 
@@ -122,6 +122,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **The course report, read headlessly** (`docs/design/audit-report-study.md`, stage R3, decisions
+  AR-D8, AR-D13, AR-D14, AR-D15 and AR-D17). The plugin's first web services, for the report's coming
+  view: `enrol_apply_report_rows` (a page of rows with the report's own formatted cells and the raw
+  facts a client computes with, the columns, the filters and their stored values),
+  `enrol_apply_report_summary` (the turnaround band: decided, open, late, the oldest open, the median
+  and, for a reader not narrowed by groups, the 90th percentile, a histogram and the median by method
+  and by group) and `enrol_apply_set_report_preference`. Both readers start from the table core
+  builds for the report, so the course, the separate-groups narrowing, the reader's filters and the
+  masking hold as on the page, and the summary counts exactly the rows listed; a search by the
+  applicant's name and a scope (awaiting, decided) narrow both. **The reader's columns and widths**
+  are one user preference (`enrol_apply_report_columns`) the report reads on every request, the
+  download included: a key the report does not offer this reader adds nothing. With no choice stored
+  the report shows the columns it showed before. A new optional column, **Admission route**, can be
+  chosen. Mutation gates `HD1`-`HD23`.
 - **The first response, apart from the resolution** (`docs/design/audit-report-study.md`, stage R2,
   decision AR-D4). Each record now keeps the date of its first decision (`timefirstdecided`, a new
   column of `enrol_apply_submission`), stamped once and never moved: a deferral is a response, and a
