@@ -22,6 +22,8 @@ use core\lang_string;
 use core_reportbuilder\local\entities\user;
 use core_reportbuilder\local\helpers\database;
 use core_reportbuilder\local\filters\select;
+use core_reportbuilder\local\report\action;
+use core_reportbuilder\local\report\column;
 use core_reportbuilder\local\report\filter;
 use core_reportbuilder\system_report;
 use core_reportbuilder\system_report_factory;
@@ -29,9 +31,13 @@ use enrol_apply\local\answers;
 use enrol_apply\local\fields;
 use enrol_apply\local\groupscope;
 use enrol_apply\local\groupvisibility;
+use enrol_apply\local\queue;
 use enrol_apply\reportbuilder\local\entities\submission;
 use enrol_apply\reportbuilder\local\filters\group as groupfilter;
 use enrol_apply\reportbuilder\local\formatters\submission as formatter;
+use moodle_url;
+use pix_icon;
+use stdClass;
 
 /**
  * The applications made to one course.
@@ -46,6 +52,12 @@ class course_applications extends system_report {
 
     /** @var array|null Field key => current name, the questions this reader gets a column for. */
     protected $questions = null;
+
+    /** @var array|null The course's apply instances keyed by id, read once; see instances(). */
+    protected $instances = null;
+
+    /** @var array|null User enrolment id => true for the rows this reader may review; see can_review(). */
+    protected $reviewable = null;
 
     /**
      * Unique identifier of the filter that narrows the report to one enrolment method.
@@ -137,7 +149,8 @@ class course_applications extends system_report {
 
         /* A second user entity for the decider, renamed so it does not collide with the first
            (report\base::annotate_entity() throws 'Duplicate entity name'). LEFT JOIN, because an
-           undecided record carries decidedby = 0. */
+           undecided record carries decidedby = 0. It carries the filter on the decider's name;
+           the name itself is shown in the "Decided" cell, from the submission entity's own join. */
         $decider = (new user())
             ->set_entity_name(self::DECIDER)
             ->set_entity_title(new lang_string('submissiondecidedby', 'enrol_apply'));
@@ -150,6 +163,23 @@ class course_applications extends system_report {
 
         $this->add_report_columns();
         $this->add_report_filters();
+
+        /* The way from a row to the decision (AR-D18): the applicant's name stays the profile link
+           it is on every other page, and an application still awaiting a decision gets a Review
+           action to the review page, drawn only for a reader that page admits. The callback reads
+           a set computed once per report, so a page of rows costs no query per row. */
+        $this->add_action((new action(
+            new moodle_url('/enrol/apply/manage.php', ['userenrol' => ':userenrolmentid']),
+            new pix_icon('t/preview', ''),
+            [],
+            false,
+            new lang_string('queuereview', 'enrol_apply')
+        ))->add_callback(fn(stdClass $row): bool => $this->can_review((int) $row->userenrolmentid)));
+
+        /* What styles.css keys this report's own layout on, phone cards included: core's card view
+           applies to custom reports only, and a plugin sheet loads before the theme's, so the
+           plugin's selectors need an attribute of the report's own to win. */
+        $this->add_attributes(['data-enrol-apply-report' => 'course']);
 
         $this->set_initial_sort_column('submission:timecreated', SORT_DESC);
         $this->set_default_per_page(30);
@@ -217,6 +247,13 @@ class course_applications extends system_report {
     /**
      * Add the report's columns, in display order.
      *
+     * The default set of the report's design (AR-D3): the applicant and their identity fields,
+     * then one state, the dates, the wait, the decision, the group and, where the course offers a
+     * choice, the method; then the comment, the decision note and one column per question. The
+     * entity offers the rest (the stored status, the live enrolment, the admission route, the
+     * three group columns, the snapshot), which a custom report over the datasource can still
+     * pick; this report shows each of those facts once, in the cells above.
+     *
      * @return void
      */
     protected function add_report_columns(): void {
@@ -231,21 +268,137 @@ class course_applications extends system_report {
             $this->add_column($column);
         }
 
-        $this->add_columns_from_entity('submission');
+        foreach (['outcome', 'timecreated', 'waittime', 'decided', 'group'] as $name) {
+            $this->add_column_from_entity("submission:{$name}");
+        }
 
-        /* The snapshot's masking is decided here, in the course context, and handed to the
-           formatter as its argument; the entity has no context to decide it in. Without this
-           line the formatter shows names only. */
-        $this->get_column('submission:snapshot')->set_callback(
-            [formatter::class, 'snapshot'],
-            formatter::visible_keys($this->get_context())
-        );
+        /* The method, only where the course offers a choice of methods, as its filter is: with one
+           it would repeat the same name on every row. */
+        if (count($this->instances()) > 1) {
+            $this->add_column($this->method_column());
+        }
+
+        $this->add_column_from_entity('submission:comment');
+        $this->add_column_from_entity('submission:decisionnote');
 
         foreach ($this->questions() as $key => $title) {
             $this->add_column($this->get_entity('submission')->answer_column($key, $title));
         }
 
-        $this->add_column_from_entity(self::DECIDER . ':fullname');
+        /* Each cell carries its column's heading, which the phone layout in styles.css shows above
+           the value once the table becomes cards. Core sets it for custom reports only. The
+           applicant's column is headed by core as the name parts' sort links, so its card label is
+           the plugin's own word. */
+        foreach ($this->get_active_columns() as $identifier => $column) {
+            $title = $identifier === 'user:fullnamewithlink'
+                ? get_string('reportapplicant', 'enrol_apply')
+                : $column->get_title();
+            $column->add_attributes(['data-cardtitle' => $title]);
+        }
+    }
+
+    /**
+     * The column naming the enrolment method each application was made to.
+     *
+     * The names are read once with the instances, never per row: the cell looks its method up in
+     * the map handed to the callback as its argument. A record of a method deleted since
+     * ({@see \enrol_apply_plugin::delete_instance()} keeps the records) says so. Not sortable: the
+     * stored value is an id, and ids are not in the order of the names they stand for.
+     *
+     * @return column The column.
+     */
+    protected function method_column(): column {
+        $alias = $this->get_entity('submission')->get_table_alias('enrol_apply_submission');
+
+        return (new column(
+            'method',
+            new lang_string('submissionmethod', 'enrol_apply'),
+            'submission'
+        ))
+            ->add_joins($this->get_entity('submission')->get_joins())
+            ->set_type(column::TYPE_INTEGER)
+            ->add_field("{$alias}.enrolid", 'methodenrolid')
+            ->set_is_sortable(false)
+            ->add_callback([self::class, 'method_name'], $this->method_names());
+    }
+
+    /**
+     * The name of the method a record was made to, for the method column.
+     *
+     * @param mixed $value The record's enrolid.
+     * @param stdClass $row Row being rendered.
+     * @param mixed $names Enrol instance id => name, as {@see method_names()} built them.
+     * @return string The name, in the escaped spelling get_instance_name() returns, or a note that
+     *     the method is gone.
+     */
+    public static function method_name($value, stdClass $row, $names = null): string {
+        if ($value === null || $value === '') {
+            return '';
+        }
+
+        return is_array($names) && array_key_exists((int) $value, $names)
+            ? (string) $names[(int) $value]
+            : get_string('submissionmethodgone', 'enrol_apply');
+    }
+
+    /**
+     * The course's apply instances, oldest first, read once per report.
+     *
+     * Every apply instance of the course, not the one the report was opened from: the rows are the
+     * whole course's, and the itemid naming that instance is client-settable.
+     *
+     * @return array Enrol instance records keyed by id.
+     */
+    protected function instances(): array {
+        global $DB;
+
+        if ($this->instances === null) {
+            $this->instances = $DB->get_records(
+                'enrol',
+                ['courseid' => $this->get_context()->instanceid, 'enrol' => 'apply'],
+                'id ASC'
+            );
+        }
+
+        return $this->instances;
+    }
+
+    /**
+     * The names of the course's apply instances, as the method filter and column show them.
+     *
+     * get_instance_name() wants the whole record, not a menu: the name is built from more than
+     * the name column. Its answer is format_string()'s escaped spelling, which both sinks want: a
+     * select option and a Report Builder cell render raw.
+     *
+     * @return array Enrol instance id => name.
+     */
+    protected function method_names(): array {
+        $plugin = enrol_get_plugin('apply');
+        $names = [];
+        foreach ($this->instances() as $id => $instance) {
+            $names[(int) $id] = $plugin->get_instance_name($instance);
+        }
+
+        return $names;
+    }
+
+    /**
+     * Whether the current user may open this application's review page from a row of the report.
+     *
+     * True only for an application still awaiting a decision that the review page would admit
+     * this reader to ({@see queue::reviewable_in_course()}, which answers as
+     * can_view_application() does). The set is read once per report, so a page of rows costs the
+     * same few queries as one row.
+     *
+     * @param int $userenrolmentid The row's user enrolment, 0 for a record with none.
+     * @return bool True when the row gets the Review action.
+     */
+    public function can_review(int $userenrolmentid): bool {
+        if ($this->reviewable === null) {
+            $this->reviewable = queue::reviewable_in_course((int) $this->get_context()->instanceid);
+        }
+
+        return $userenrolmentid > 0 && isset($this->reviewable[$userenrolmentid]);
     }
 
     /**
@@ -266,20 +419,13 @@ class course_applications extends system_report {
      * @return array Field key => the question's current name, plain spelling.
      */
     protected function questions(): array {
-        global $DB;
-
         if ($this->questions !== null) {
             return $this->questions;
         }
 
         $visible = formatter::visible_keys($this->get_context());
         $questions = [];
-        $instances = $DB->get_records(
-            'enrol',
-            ['courseid' => $this->get_context()->instanceid, 'enrol' => 'apply'],
-            'id ASC'
-        );
-        foreach ($instances as $instance) {
+        foreach ($this->instances() as $instance) {
             foreach (fields::resolve($instance)->keys() as $key) {
                 $questions[$key] ??= fields::label($key, false);
             }
@@ -352,8 +498,6 @@ class course_applications extends system_report {
      * @return void
      */
     protected function add_report_filters(): void {
-        global $DB;
-
         $this->add_filter_from_entity('user:fullname');
 
         /* The identity filters must stay in step with the identity columns: a filter on a field
@@ -392,26 +536,14 @@ class course_applications extends system_report {
         /* The method filter is added only where the course offers a choice of methods. With one
            it would read as a control that does nothing, and selecting it would hide the records
            of deleted methods, which delete_instance() keeps. */
-        $instances = $DB->get_records(
-            'enrol',
-            ['courseid' => $this->get_context()->instanceid, 'enrol' => 'apply'],
-            'id ASC'
-        );
-        if (count($instances) > 1) {
-            $plugin = enrol_get_plugin('apply');
-            $options = [];
-            foreach ($instances as $id => $instance) {
-                // The whole record is needed, not a menu: the instance name is built from more.
-                $options[$id] = $plugin->get_instance_name($instance);
-            }
-
+        if (count($this->instances()) > 1) {
             $this->add_filter((new filter(
                 select::class,
                 'method',
                 new lang_string('submissionmethod', 'enrol_apply'),
                 'submission',
                 "{$alias}.enrolid"
-            ))->set_options($options));
+            ))->set_options($this->method_names()));
         }
     }
 }

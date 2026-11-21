@@ -10,7 +10,8 @@
 .enrol_apply-manage,
 .enrol_apply-capacity,
 .enrol_apply-filters,
-.enrol_apply-sheet {
+.enrol_apply-sheet,
+[data-enrol-apply-report] {
     --enrol-apply-line: var(--bs-border-color, #dee2e6);
     --enrol-apply-muted: var(--bs-secondary-color, #6c757d);
     --enrol-apply-fill: var(--bs-primary, #0f6cbf);
@@ -34,7 +35,8 @@
 .enrol_apply-review,
 .enrol_apply-applicationnav,
 .enrol_apply-timeline,
-.enrol_apply-sheet {
+.enrol_apply-sheet,
+[data-enrol-apply-report] {
     --enrol-apply-surface-inset: var(--dimensions-surface-inset, var(--bs-secondary-bg, #e9ecef));
     --enrol-apply-ink-muted: var(--dimensions-ink-muted, var(--bs-secondary-color, rgba(33, 37, 41, .75)));
     --enrol-apply-brand-tint: var(--dimensions-brand-tint, var(--bs-primary-bg-subtle, #cfe2ff));
@@ -49,6 +51,9 @@
     --enrol-apply-info-tint: var(--dimensions-info-tint, var(--bs-info-bg-subtle, #cff4fc));
     --enrol-apply-info-edge: var(--dimensions-info-edge, var(--bs-info-border-subtle, #9eeaf9));
     --enrol-apply-info-ink: var(--dimensions-info-ink, var(--bs-info-text-emphasis, #055160));
+    --enrol-apply-danger-tint: var(--dimensions-danger-tint, var(--bs-danger-bg-subtle, #f8d7da));
+    --enrol-apply-danger-edge: var(--dimensions-danger-edge, var(--bs-danger-border-subtle, #f1aeb5));
+    --enrol-apply-danger-ink: var(--dimensions-danger-ink, var(--bs-danger-text-emphasis, #58151c));
     --enrol-apply-neutral-tint: var(--dimensions-neutral-tint, var(--bs-secondary-bg-subtle, #e2e3e5));
     --enrol-apply-neutral-edge: var(--dimensions-neutral-edge, var(--bs-secondary-border-subtle, #c4c8cb));
     --enrol-apply-neutral-ink: var(--dimensions-neutral-ink, var(--bs-secondary-text-emphasis, #2b2f32));
@@ -102,6 +107,18 @@
     background-color: var(--enrol-apply-neutral-tint);
     border-color: var(--enrol-apply-neutral-edge);
     color: var(--enrol-apply-neutral-ink);
+}
+
+.enrol_apply-status--danger {
+    background-color: var(--enrol-apply-danger-tint);
+    border-color: var(--enrol-apply-danger-edge);
+    color: var(--enrol-apply-danger-ink);
+}
+
+.enrol_apply-status--brand {
+    background-color: var(--enrol-apply-brand-tint);
+    border-color: var(--enrol-apply-brand-edge);
+    color: var(--enrol-apply-brand-ink);
 }
 
 /* The decision context above the table: a band of separate tiles, each a panel at 12 px. A plain
@@ -1819,5 +1836,80 @@ body.path-enrol-apply:not(.jsenabled) .enrol_apply-accordion .collapse {
 @media (prefers-reduced-motion: reduce) {
     .enrol_apply-chooser .enrol_apply-chooser-option {
         transition: none;
+    }
+}
+
+/* The course report (report.php). The line under the outcome's label: what the record itself
+   says, where the live enrolment has moved since. */
+[data-enrol-apply-report] .enrol_apply-reportsub {
+    color: var(--enrol-apply-ink-muted);
+    display: block;
+    font-size: 0.8125rem;
+    margin-top: 0.25rem;
+}
+
+/* The report as cards on a phone (concept A of docs/design/audit-report-study.md): core's
+   card view of a custom report, theme_boost's table-cards mixin, copied for this system report,
+   which core's own rule skips. A viewport query rather than core's container query, which the
+   fleet's stylelint does not accept. Each cell's label is its column's heading, which the report
+   writes into data-cardtitle; sentence case, as the Design System has it. Qualified by the
+   report's own attribute, because this sheet loads before the theme's and only specificity wins
+   over a core rule. */
+@media (max-width: 575.98px) {
+    [data-enrol-apply-report] table.reportbuilder-table {
+        --bs-table-striped-bg: var(--enrol-apply-surface);
+        --bs-table-hover-bg: var(--enrol-apply-surface);
+    }
+
+    [data-enrol-apply-report] table.reportbuilder-table thead {
+        display: none;
+    }
+
+    [data-enrol-apply-report] table.reportbuilder-table tr {
+        background-clip: border-box;
+        background-color: var(--enrol-apply-surface);
+        border: 1px solid var(--enrol-apply-line);
+        border-radius: var(--enrol-apply-radius-md);
+        color: var(--enrol-apply-ink);
+        display: flex;
+        flex-direction: column;
+        margin: 0.5rem 0;
+        padding: 0.25rem 0.5rem 0;
+        position: relative;
+        word-wrap: break-word;
+    }
+
+    [data-enrol-apply-report] table.reportbuilder-table tr.emptyrow {
+        display: none;
+    }
+
+    [data-enrol-apply-report] table.reportbuilder-table td {
+        border: 0;
+        display: block;
+        padding: 0.5rem 0.25rem;
+    }
+
+    [data-enrol-apply-report] table.reportbuilder-table td + td {
+        border-top: 1px solid var(--enrol-apply-line);
+    }
+
+    [data-enrol-apply-report] table.reportbuilder-table td[data-cardtitle]::before {
+        color: var(--enrol-apply-ink-muted);
+        content: attr(data-cardtitle);
+        display: block;
+        font-size: 0.75rem;
+        white-space: normal;
+    }
+
+    /* The actions menu, which carries no heading, sits in the card's top corner as core puts it. */
+    [data-enrol-apply-report] table.reportbuilder-table td:last-child:not([data-cardtitle]) {
+        border-top: 0;
+        position: absolute;
+        right: 0.25rem;
+        top: 0.25rem;
+    }
+
+    [data-enrol-apply-report] table.reportbuilder-table td:first-child {
+        padding-right: 2.5rem;
     }
 }

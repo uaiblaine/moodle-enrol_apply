@@ -759,20 +759,24 @@ final class key_surfaces_test extends \advanced_testcase {
     }
 
     /**
-     * Both new columns reach the course report, through the entity.
+     * Both columns stay in the entity, which custom reports pick from, and the course report
+     * keeps the admission route's filter and names the key's group in its own Group cell.
      *
      * @return void
      */
     public function test_the_report_offers_both_columns(): void {
         $this->setAdminUser();
+        $entity = (new \enrol_apply\reportbuilder\local\entities\submission())->initialise();
+        $this->assertNotNull($entity->get_column('admissionroute'));
+        $this->assertNotNull($entity->get_column('keygroup'));
+
         $report = \core_reportbuilder\system_report_factory::create(
             \enrol_apply\reportbuilder\local\systemreports\course_applications::class,
             \context_course::instance($this->course->id)
         );
-
-        $this->assertNotNull($report->get_column('submission:admissionroute'));
-        $this->assertNotNull($report->get_column('submission:keygroup'));
         $this->assertNotNull($report->get_filter('submission:admissionroute'));
+        $this->assertNotNull($report->get_column('submission:group'));
+        $this->assertNull($report->get_column('submission:keygroup'));
     }
 
     /**

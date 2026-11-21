@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased (2026112011)
+## Unreleased (2026112100)
 
 ### Security
 
@@ -121,6 +121,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   privacy export names only groups of the course.
 
 ### Added
+
+- **The course report shows each fact once** (`docs/design/audit-report-study.md`, stage R1,
+  decisions AR-D3, AR-D5, AR-D6, AR-D11 and AR-D18). Its columns are now the applicant and their
+  identity fields, **Outcome** (a status label, with the record's own decision under it where the
+  enrolment has moved since: "Unenrolled", then "Approved, now unenrolled"), **Submitted on** (a short
+  date, the full one on hover), **Wait** (calendar days and hours to the last decision, "4 d, open"
+  while it is still waiting, "By key" for an admission by a key), **Decided** (the date and "by" the
+  decider, "By key" and the key's group, or "Not yet"), **Group** ("Key: Evening A" or "Chose: Morning
+  C", then the groups joined), **Enrolment method** where the course has two or more, the comment,
+  the note for the record and the answers. The stored status, the live enrolment, the date decided,
+  the admission route, the key group, the chosen group, the groups joined, the details submitted and
+  the decider's own column left this report and stay in the entity, so a custom report on the
+  Enrolment applications source can still pick each of them, together with the new Wait, Decided and
+  Group columns. Every filter stays, and a **Wait** filter (core's duration filter: more or less than
+  a number of minutes, hours or days) joins them in both reports. A group the reader may not see is
+  never named in the new cells, and the Decided and Group columns cannot be aggregated.
+- **A Review action on every application still awaiting a decision** (AR-D18), opening its review
+  page, drawn only for a reader that page admits; a reader holding `enrol/apply:viewreports` alone
+  gets none. The set of rows is read once per page (`queue::reviewable_in_course()`), never per row.
+- **The course report becomes cards on a phone**, one per application, each value under its
+  column's heading, from the plugin's stylesheet.
 
 - **The decision side of the applicant's group choice** (`docs/design/applicant-group-choice.md`,
   stage G5). An application made with a chosen group is filed under that group exactly as one made

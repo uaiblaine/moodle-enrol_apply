@@ -43,6 +43,7 @@ global $CFG;
 // At file scope so the approval route and the group API are loaded for every test.
 require_once($CFG->dirroot . '/enrol/apply/lib.php');
 require_once($CFG->dirroot . '/group/lib.php');
+require_once($CFG->dirroot . '/enrol/apply/tests/fixtures/course_applications_every_column.php');
 
 /**
  * The course report's "Groups joined" column and group filter, and the narrowing reading what an
@@ -178,12 +179,19 @@ final class joined_groups_report_test extends \core_reportbuilder\tests\core_rep
     }
 
     /**
-     * The course report as report.php builds it.
+     * The course report as report.php builds it, with the entity's "Groups joined" column added back.
+     *
+     * The course report shows the groups joined in its Group cell since R1; this column is the
+     * entity's, which the datasource offers, read here under the course report's own gate and
+     * narrowing ({@see \enrol_apply\course_applications_every_column}).
      *
      * @return course_applications The report.
      */
     private function report(): course_applications {
-        $report = course_applications::for_method(context_course::instance($this->course->id), (int) $this->instance->id);
+        $report = \enrol_apply\course_applications_every_column::for_method(
+            context_course::instance($this->course->id),
+            (int) $this->instance->id
+        );
         $this->assertInstanceOf(course_applications::class, $report);
 
         return $report;

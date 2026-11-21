@@ -1226,8 +1226,11 @@ backup/                      group mappings, comments and the durable trail, see
 
   **`outcome` is not sortable and has no filter, and that is load bearing** — it is a display
   callback, and filtering and sorting are SQL that never reach one. The sortable primitives are
-  `status` and `enrolment`. The same precondition is what makes the snapshot column's masking
-  sound.
+  `status` and `enrolment`, which stay in the entity (and so in custom reports) although the
+  course report shows only the outcome since R1; their filters stay on the course report. The same
+  precondition is what makes the snapshot column's masking sound. The same holds for the new
+  `decided` and `group` cells (R1), which name groups and so are unsortable where they name one and
+  offer no aggregation.
 
   **`ENROL_APPLY_USER_WAIT` needs a `require_once` from an autoloaded class.** It is defined in
   the plugin's `lib.php`, which is not autoloaded, and the formatter is the first `classes/` file
