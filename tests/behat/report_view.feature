@@ -38,9 +38,33 @@ Feature: The applications report in its own view
     Then I should see "Student 2" in the "[data-region='enrol_apply-rows']" "css_element"
     And I should not see "Student 1" in the "[data-region='enrol_apply-rows']" "css_element"
     And I should see "1 application" in the "[data-region='enrol_apply-total']" "css_element"
+    # While the field is open it says what is searched; the chip waits for it to close.
+    And "Remove filter Name: Student 2" "button" should not exist
+    # Escape closes the field whatever it holds, and the text stays in force as a chip.
+    When I press the escape key
+    Then "Remove filter Name: Student 2" "button" should exist
     And I should see "Name: Student 2" in the "[data-region='enrol_apply-chips']" "css_element"
+    And "Search by name" "button" should exist
+    And I should not see "Student 1" in the "[data-region='enrol_apply-rows']" "css_element"
     When I press "Remove filter Name: Student 2"
     Then I should see "Student 1" in the "[data-region='enrol_apply-rows']" "css_element"
+    And I should see "2 applications" in the "[data-region='enrol_apply-total']" "css_element"
+
+  Scenario: The eraser clears the text and the search stays open
+    Given the site is running Moodle version 5.3 or higher
+    And "student1" has applied to "C1" with the key of ""
+    And "student2" has applied to "C1" with the key of ""
+    And I log in as "admin"
+    And I am on the "C1" "enrol_apply > applications report" page
+    And I should see "2 applications" in the "[data-region='enrol_apply-total']" "css_element"
+    When I press "Search by name"
+    And I set the field "Search by name" to "Student 2"
+    Then I should see "1 application" in the "[data-region='enrol_apply-total']" "css_element"
+    When I press "Clear text"
+    Then the field "Search by name" matches value ""
+    And "Search by name" "field" should exist
+    And "Clear text" "button" should not exist
+    And I should see "Student 1" in the "[data-region='enrol_apply-rows']" "css_element"
     And I should see "2 applications" in the "[data-region='enrol_apply-total']" "css_element"
 
   Scenario: The columns menu adds a column and removes it again

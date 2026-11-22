@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased (2026112105)
+## Unreleased (2026112106)
 
 ### Security
 
@@ -279,6 +279,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **The course report's filter bar follows the fleet Design System's** (Moodle 5.3 view;
+  `filter-bar.md`, `menu.md`, `filter-panel.md`, `tooltip.md`, filter-line contract sections 2, 3
+  and 8). The open search shows one clearing control, an eraser named "Clear text" with its tooltip,
+  instead of the browser's cross beside the plugin's own; it clears the text and keeps the field open.
+  Escape closes the field whatever it holds, keeping the text in force, and gives the focus back to
+  the search button; `/` opens the search from anywhere outside a field. The name chip shows only
+  once the field is closed, and "Clear all" counts the chips actually shown. Each menu (Columns,
+  View, Download) hangs under its own button and Download carries a chevron like the other two; the
+  filter panel hangs under the row of controls, never under the chips, and its foot stays in view
+  while its groups scroll. Menu items move their icon 2 px on hover and darken when pressed; the
+  tooltips wrap at 260 px, with an arrow and a shadow. Under a 576 px container the scope takes a
+  line of its own with its cells sharing the width, the menus hang from the controls' end, and the
+  open search takes the line. Filters' accessible name reads "Filters: 2 in force" ("Filtros em
+  vigor: 2"), correct for any number.
 - **The confirmation queue takes the fleet Design System's look** (`docs/design/manage-queue-study.md`,
   stage Q1). The heading reads "Confirm enrolments" and the description line under it is gone. A
   row's states are status labels: "Deferred" in the warning tone (no longer "Waiting list"), a group

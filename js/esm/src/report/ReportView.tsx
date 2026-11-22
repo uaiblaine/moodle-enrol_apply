@@ -513,6 +513,7 @@ const ReportView = (props: ViewProps): ReactElement => {
             />
             <Bar
                 labels={labels}
+                narrow={narrow}
                 scope={current.scope}
                 total={rows === null ? null : rows.total}
                 filters={filters}

@@ -35,6 +35,8 @@ const PATHS: Record<string, string> = {
     download: 'M8 2v8M4.5 7 8 10.5 11.5 7M3 13h10',
     search: 'M7 12A5 5 0 1 0 7 2a5 5 0 0 0 0 10zM10.5 10.5 14 14',
     close: 'M4 4l8 8M12 4l-8 8',
+    // Font Awesome's eraser drawn in strokes: a block at 45 degrees, its rubber end, the line it rests on.
+    eraser: 'M9.5 2 14 6.5 7.5 13 3 8.5zM5.6 5.9l4.5 4.5M7.5 13H14',
     tick: 'M3 8.5 6.5 12 13 4.5',
     chevron: 'M4 6l4 4 4-4',
     reset: 'M3 8a5 5 0 1 0 1.5-3.5M3 2.5V5h2.5',
