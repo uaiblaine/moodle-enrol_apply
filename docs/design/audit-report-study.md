@@ -560,6 +560,14 @@ view (scope and search as the report's own parameters) and the retention notice.
 counts add one statement per facet to a rows call that asks for them (a filter, the scope, the search or
 the measure; never a sort or a page turn), which R6's bench should measure next.
 
+**R5 status (2026-11-22): written.** The fleet Design System carries the data report
+(`moodle-dev/docs/design-system/components/data-report.md`, decisions D122-D128): the contract as built in
+R3, R4, R6 and 2026112108 (facet counts, the grouping select, two more facets, column sets, the debounced
+keyboard resize, a download that follows scope and search). One departure from section 5b: a region drops a
+stale answer by a sequence number rather than an `AbortController`, because core's `fetchOne` cannot abort
+(D123). The second client is local_evidencehub's hub, with block_feedback_tracker's pending report as the
+runner-up (D128), to be confirmed by the owner before any work on it.
+
 **R6 status (2026112105): profiled, one finding, fixed.** Profiled on a seeded course on m503 and on
 the mini cluster (PostgreSQL 18). The course had 10,000 applications:
 
