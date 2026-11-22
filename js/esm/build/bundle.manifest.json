@@ -3,7 +3,7 @@
     "outfile": "build/bundle.js",
     "sources": {
         "src/report/Band.tsx": "0d12f67805425ab945d947e9ea4cbaa2b8f35f10",
-        "src/report/Bar.tsx": "058fcbf32db0e01a8e5053c46b82e5dd6601c06c",
+        "src/report/Bar.tsx": "ddfeb75f69fab7c515ca3c8ebe9653932d16fd64",
         "src/report/Cards.tsx": "ef38e9c5eb174f8af24b771571203d4b90e37d4d",
         "src/report/Grid.tsx": "2364e37370629bdcac7fa195fcaeea340667d888",
         "src/report/Pager.tsx": "de7aea742e348887e2634852b905df6638e07819",

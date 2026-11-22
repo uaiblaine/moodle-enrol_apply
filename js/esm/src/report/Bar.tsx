@@ -351,6 +351,15 @@ export const Bar = (props: BarProps): ReactElement => {
     // The text in force is a chip once the field is closed; while it is open, the field says it.
     const searchchip = searched && !searchopen;
     const chipcount = applied.length + (searchchip ? 1 : 0);
+
+    // At the narrow step the visible count is the bare number; the full sentence stays for assistive technology.
+    const fullcount = props.total === null ? '…' : fillCount(labels, 'count', props.total, num(props.total));
+    const countText = props.total !== null && props.narrow ? (
+        <>
+            <span aria-hidden="true">{num(props.total)}</span>
+            <span className="visually-hidden">{fullcount}</span>
+        </>
+    ) : fullcount;
     const panelfilters = filters.filter(choosable);
     const others = filters.filter((filter) => !choosable(filter));
 
@@ -411,7 +420,7 @@ export const Bar = (props: BarProps): ReactElement => {
             <div className="enrol_apply-rview-bar-controls">
                 <div className="enrol_apply-rview-bar-cluster">
                     <span className="enrol_apply-rview-bar-count" data-region="enrol_apply-total" aria-live="polite">
-                        {props.total === null ? '…' : fillCount(labels, 'count', props.total, num(props.total))}
+                        {countText}
                     </span>
                     <div className="enrol_apply-rview-capsule">
                         {iconbutton('filters', 'filter', filtersname, badge)}

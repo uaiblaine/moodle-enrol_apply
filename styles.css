@@ -1922,7 +1922,7 @@ body.path-enrol-apply:not(.jsenabled) .enrol_apply-accordion .collapse {
 .enrol_apply-rview {
     --enrol-apply-surface-alt: var(--dimensions-surface-alt, var(--bs-tertiary-bg, #f8f9fa));
     --enrol-apply-hover: var(--dimensions-hover, var(--bs-primary-bg-subtle, #cfe2ff));
-    --enrol-apply-pressed: var(--dimensions-pressed, var(--bs-primary-border-subtle, #9ec5fe));
+    --enrol-apply-pressed: var(--dimensions-pressed, color-mix(in srgb, var(--enrol-apply-brand-tint) 85%, var(--enrol-apply-surface)));
     --enrol-apply-ink-strong: var(--dimensions-ink-strong, var(--bs-emphasis-color, #000));
     --enrol-apply-ink-faint: var(--dimensions-ink-faint, var(--bs-tertiary-color, rgba(33, 37, 41, .5)));
     --enrol-apply-accent: var(--dimensions-accent, var(--bs-link-color, #0f6cbf));
@@ -2687,6 +2687,11 @@ body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload + .enrol_apply-rvie
     color: var(--enrol-apply-brand-ink);
     transform: translateX(0.125rem);
     transition-duration: var(--enrol-apply-motion-fast);
+}
+
+/* RTLCSS does not mirror transform, so the shift towards the label needs its own direction. */
+.dir-rtl .enrol_apply-rview .enrol_apply-rview-menu-item:not([aria-disabled="true"]):hover > .enrol_apply-rview-icon:first-child {
+    transform: translateX(-0.125rem);
 }
 
 .enrol_apply-rview .enrol_apply-rview-menu-label {
