@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased (2026112106)
+## Unreleased (2026112107)
 
 ### Security
 
@@ -278,6 +278,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   changes for a site: the upgrade step only creates the tables and the column.
 
 ### Changed
+
+- **The course report's count is a bare number at the narrow step** (Design System D111). Under 576 px
+  the bar shows "6,000" instead of "6,000 applications", so the count and the capsule leave room for
+  the search button on the same line; the live region still announces the full sentence to screen
+  readers. The pressed colour's fallback now follows the Design System (the brand tint over the
+  surface) instead of Bootstrap's subtle border.
+  The menu items' hover icon shift is mirrored in right-to-left languages (RTLCSS does not mirror
+  `transform`).
 
 - **The course report's filter bar follows the fleet Design System's** (Moodle 5.3 view;
   `filter-bar.md`, `menu.md`, `filter-panel.md`, `tooltip.md`, filter-line contract sections 2, 3
