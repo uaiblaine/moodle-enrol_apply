@@ -63,7 +63,8 @@ const First = ({row, column}: {row: Row, column: string}): ReactElement | null =
 const Card = ({labels, columns, identity, row, single}: {labels: Record<string, string>, columns: Column[],
         identity: Column[], row: Row, single: boolean}): ReactElement => {
     const [more, setMore] = useState(false);
-    const extra = columns.filter((column) => !FIXED.includes(column.key));
+    // A field with nothing in it is left out of the card: the table keeps its empty cell, a card has no column to keep.
+    const extra = columns.filter((column) => !FIXED.includes(column.key) && cellHtml(row, column.key).trim() !== '');
     const shown = !single || more;
     /**
      * Whether the reader's report shows a column.

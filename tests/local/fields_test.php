@@ -402,6 +402,44 @@ final class fields_test extends \advanced_testcase {
     }
 
     /**
+     * A custom field's label is formatted in the system context, never in the page's.
+     *
+     * Core's report filter services (core_reportbuilder_set_filters and _filters_reset) build the
+     * course report from its id before they set a context, and the report names its profile
+     * questions while it is built: a label formatted without a context read $PAGE->context, which a
+     * web request had not set, and failed in developer mode. PHPUnit runs as CLI, where an unset
+     * page context quietly falls back to the system one, so the page here is given a COURSE context
+     * where a filter acts, and the label must be the system context's spelling. The second
+     * assertion is the control: the filter really does act in the course.
+     *
+     * Changes that must make it fail: label() formatting the name without a context.
+     *
+     * @return void
+     */
+    public function test_a_custom_field_label_is_formatted_in_the_system_context(): void {
+        global $CFG, $PAGE;
+        require_once($CFG->libdir . '/filterlib.php');
+
+        $course = $this->getDataGenerator()->create_course();
+        $coursecontext = \context_course::instance($course->id);
+        set_config('filterall', 1);
+        filter_set_global_state('multilang', TEXTFILTER_OFF);
+        filter_set_local_state('multilang', $coursecontext->id, TEXTFILTER_ON);
+        // Only the filters that apply to strings run in format_string().
+        filter_set_applies_to_strings('multilang', true);
+        \filter_manager::reset_caches();
+
+        $name = '<span lang="en" class="multilang">Badge</span><span lang="pt_br" class="multilang">Crachá</span>';
+        $field = $this->create_custom_field('badge', $name);
+        $PAGE->set_context($coursecontext);
+
+        $label = fields::label(fields::custom_key((int) $field->id), false);
+
+        $this->assertSame(format_string($name, true, ['context' => \context_system::instance(), 'escape' => false]), $label);
+        $this->assertNotSame(format_string($name, true, ['context' => $coursecontext, 'escape' => false]), $label);
+    }
+
+    /**
      * A standard field is labelled by its core string, not by its key.
      *
      * @return void

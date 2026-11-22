@@ -453,7 +453,11 @@ class fields {
             return $key;
         }
 
-        return format_string($name, true, ['escape' => $escape]);
+        /* The system context, as core's own profile pages name a field: a profile field belongs to the
+           site, and format_string() without one reads $PAGE->context, which a web service that builds
+           the course report before validate_context() has not set yet (core_reportbuilder_set_filters
+           and _filters_reset build it from the report id first). */
+        return format_string($name, true, ['context' => \context_system::instance(), 'escape' => $escape]);
     }
 
     /**

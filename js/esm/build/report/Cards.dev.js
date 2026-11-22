@@ -26,31 +26,31 @@ const First = /* @__PURE__ */ __name(({ row, column }) => {
 }, "First");
 const Card = /* @__PURE__ */ __name(({ labels, columns, identity, row, single }) => {
   const [more, setMore] = useState(false);
-  const extra = columns.filter((column) => !FIXED.includes(column.key));
+  const extra = columns.filter((column) => !FIXED.includes(column.key) && cellHtml(row, column.key).trim() !== "");
   const shown = !single || more;
   const has = /* @__PURE__ */ __name((key) => columns.some((column) => column.key === key), "has");
   const list = /* @__PURE__ */ jsxDEV("dl", { className: "enrol_apply-rview-card-list", children: extra.map((column) => /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-card-item", children: [
     /* @__PURE__ */ jsxDEV("dt", { children: column.title }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/report/Cards.tsx",
-      lineNumber: 80,
+      lineNumber: 81,
       columnNumber: 21
     }),
     /* @__PURE__ */ jsxDEV("dd", { children: /* @__PURE__ */ jsxDEV(CellLines, { column: column.key, html: cellHtml(row, column.key) }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/report/Cards.tsx",
-      lineNumber: 81,
+      lineNumber: 82,
       columnNumber: 25
     }) }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/report/Cards.tsx",
-      lineNumber: 81,
+      lineNumber: 82,
       columnNumber: 21
     })
   ] }, column.key, true, {
     fileName: "public/enrol/apply/js/esm/src/report/Cards.tsx",
-    lineNumber: 79,
+    lineNumber: 80,
     columnNumber: 17
   })) }, void 0, false, {
     fileName: "public/enrol/apply/js/esm/src/report/Cards.tsx",
-    lineNumber: 77,
+    lineNumber: 78,
     columnNumber: 9
   });
   return /* @__PURE__ */ jsxDEV("article", { className: "enrol_apply-rview-card", role: "listitem", "data-record": row.id, children: [
@@ -58,83 +58,83 @@ const Card = /* @__PURE__ */ __name(({ labels, columns, identity, row, single })
       /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-card-who", children: [
         /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-card-name", dangerouslySetInnerHTML: { __html: cellHtml(row, "applicant") } }, void 0, false, {
           fileName: "public/enrol/apply/js/esm/src/report/Cards.tsx",
-          lineNumber: 91,
+          lineNumber: 92,
           columnNumber: 21
         }),
         has("outcome") ? /* @__PURE__ */ jsxDEV(First, { row, column: "outcome" }, void 0, false, {
           fileName: "public/enrol/apply/js/esm/src/report/Cards.tsx",
-          lineNumber: 92,
+          lineNumber: 93,
           columnNumber: 39
         }) : null,
         /* @__PURE__ */ jsxDEV(IdentityLines, { row, identity }, void 0, false, {
           fileName: "public/enrol/apply/js/esm/src/report/Cards.tsx",
-          lineNumber: 93,
+          lineNumber: 94,
           columnNumber: 21
         })
       ] }, void 0, true, {
         fileName: "public/enrol/apply/js/esm/src/report/Cards.tsx",
-        lineNumber: 90,
+        lineNumber: 91,
         columnNumber: 17
       }),
       /* @__PURE__ */ jsxDEV(ReviewButton, { row, label: labels.review }, void 0, false, {
         fileName: "public/enrol/apply/js/esm/src/report/Cards.tsx",
-        lineNumber: 95,
+        lineNumber: 96,
         columnNumber: 17
       })
     ] }, void 0, true, {
       fileName: "public/enrol/apply/js/esm/src/report/Cards.tsx",
-      lineNumber: 89,
+      lineNumber: 90,
       columnNumber: 13
     }),
     /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-card-line" + (row.open ? " enrol_apply-rview-card-line--open" : ""), children: [
       has("wait") ? /* @__PURE__ */ jsxDEV(First, { row, column: "wait" }, void 0, false, {
         fileName: "public/enrol/apply/js/esm/src/report/Cards.tsx",
-        lineNumber: 98,
+        lineNumber: 99,
         columnNumber: 32
       }) : null,
       has("wait") && has("submitted") ? /* @__PURE__ */ jsxDEV("span", { "aria-hidden": "true", children: " \xB7 " }, void 0, false, {
         fileName: "public/enrol/apply/js/esm/src/report/Cards.tsx",
-        lineNumber: 99,
+        lineNumber: 100,
         columnNumber: 52
       }) : null,
       has("submitted") ? /* @__PURE__ */ jsxDEV(First, { row, column: "submitted" }, void 0, false, {
         fileName: "public/enrol/apply/js/esm/src/report/Cards.tsx",
-        lineNumber: 100,
+        lineNumber: 101,
         columnNumber: 37
       }) : null
     ] }, void 0, true, {
       fileName: "public/enrol/apply/js/esm/src/report/Cards.tsx",
-      lineNumber: 97,
+      lineNumber: 98,
       columnNumber: 13
     }),
     has("decided") ? /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-card-line", children: lines("decided", cellHtml(row, "decided")).map((part, index) => /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-inline", dangerouslySetInnerHTML: { __html: part } }, index, false, {
       fileName: "public/enrol/apply/js/esm/src/report/Cards.tsx",
-      lineNumber: 105,
+      lineNumber: 106,
       columnNumber: 25
     })) }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/report/Cards.tsx",
-      lineNumber: 103,
+      lineNumber: 104,
       columnNumber: 17
     }) : null,
     has("group") || has("method") ? /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-card-line enrol_apply-rview-card-line--muted", children: [
       has("group") ? /* @__PURE__ */ jsxDEV(First, { row, column: "group" }, void 0, false, {
         fileName: "public/enrol/apply/js/esm/src/report/Cards.tsx",
-        lineNumber: 111,
+        lineNumber: 112,
         columnNumber: 37
       }) : null,
       has("group") && has("method") && cellHtml(row, "group") !== "" ? /* @__PURE__ */ jsxDEV("span", { "aria-hidden": "true", children: " \xB7 " }, void 0, false, {
         fileName: "public/enrol/apply/js/esm/src/report/Cards.tsx",
-        lineNumber: 112,
+        lineNumber: 113,
         columnNumber: 87
       }) : null,
       has("method") ? /* @__PURE__ */ jsxDEV(First, { row, column: "method" }, void 0, false, {
         fileName: "public/enrol/apply/js/esm/src/report/Cards.tsx",
-        lineNumber: 113,
+        lineNumber: 114,
         columnNumber: 38
       }) : null
     ] }, void 0, true, {
       fileName: "public/enrol/apply/js/esm/src/report/Cards.tsx",
-      lineNumber: 110,
+      lineNumber: 111,
       columnNumber: 17
     }) : null,
     extra.length > 0 ? /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-card-more", children: [
@@ -151,59 +151,59 @@ const Card = /* @__PURE__ */ __name(({ labels, columns, identity, row, single })
         false,
         {
           fileName: "public/enrol/apply/js/esm/src/report/Cards.tsx",
-          lineNumber: 119,
+          lineNumber: 120,
           columnNumber: 25
         }
       ) : null,
       shown ? list : null
     ] }, void 0, true, {
       fileName: "public/enrol/apply/js/esm/src/report/Cards.tsx",
-      lineNumber: 117,
+      lineNumber: 118,
       columnNumber: 17
     }) : null
   ] }, void 0, true, {
     fileName: "public/enrol/apply/js/esm/src/report/Cards.tsx",
-    lineNumber: 88,
+    lineNumber: 89,
     columnNumber: 9
   });
 }, "Card");
 const Cards = /* @__PURE__ */ __name(({ labels, columns, identity, rows, single }) => /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-cards" + (single ? " enrol_apply-rview-cards--single" : ""), role: "list", children: rows.map((row) => /* @__PURE__ */ jsxDEV(Card, { labels, columns, identity, row, single }, row.id, false, {
   fileName: "public/enrol/apply/js/esm/src/report/Cards.tsx",
-  lineNumber: 144,
+  lineNumber: 145,
   columnNumber: 13
 })) }, void 0, false, {
   fileName: "public/enrol/apply/js/esm/src/report/Cards.tsx",
-  lineNumber: 142,
+  lineNumber: 143,
   columnNumber: 5
 }), "Cards");
 const CardsSkeleton = /* @__PURE__ */ __name(({ single }) => /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-cards" + (single ? " enrol_apply-rview-cards--single" : ""), "aria-hidden": "true", children: Array.from({ length: single ? 4 : 6 }, (_, i) => /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-card enrol_apply-rview-sk", children: [
   /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-skb enrol_apply-rview-skb--w60" }, void 0, false, {
     fileName: "public/enrol/apply/js/esm/src/report/Cards.tsx",
-    lineNumber: 159,
+    lineNumber: 160,
     columnNumber: 17
   }),
   /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-skb enrol_apply-rview-skb--w80" }, void 0, false, {
     fileName: "public/enrol/apply/js/esm/src/report/Cards.tsx",
-    lineNumber: 160,
+    lineNumber: 161,
     columnNumber: 17
   }),
   /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-skb enrol_apply-rview-skb--w60" }, void 0, false, {
     fileName: "public/enrol/apply/js/esm/src/report/Cards.tsx",
-    lineNumber: 161,
+    lineNumber: 162,
     columnNumber: 17
   }),
   /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-skb enrol_apply-rview-skb--w40" }, void 0, false, {
     fileName: "public/enrol/apply/js/esm/src/report/Cards.tsx",
-    lineNumber: 162,
+    lineNumber: 163,
     columnNumber: 17
   })
 ] }, i, true, {
   fileName: "public/enrol/apply/js/esm/src/report/Cards.tsx",
-  lineNumber: 158,
+  lineNumber: 159,
   columnNumber: 13
 })) }, void 0, false, {
   fileName: "public/enrol/apply/js/esm/src/report/Cards.tsx",
-  lineNumber: 156,
+  lineNumber: 157,
   columnNumber: 5
 }), "CardsSkeleton");
 export {

@@ -2694,8 +2694,11 @@ body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload + .enrol_apply-rvie
     font-size: 0.8125rem;
     font-weight: 500;
     gap: 0.375rem;
-    height: 1.75rem;
-    padding: 0 0.5rem;
+    line-height: 1.25;
+    /* A minimum, not a height: an admission route's label is a sentence, and wraps in the panel. */
+    min-height: 1.75rem;
+    padding: 0.1875rem 0.5rem;
+    text-align: left;
 }
 
 .enrol_apply-rview .enrol_apply-rview-fpanel-opt[aria-checked="true"] {

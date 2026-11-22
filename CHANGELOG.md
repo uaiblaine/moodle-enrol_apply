@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased (2026112103)
+## Unreleased (2026112104)
 
 ### Security
 
@@ -107,6 +107,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   state, is idempotent, and costs two indexed probes when the user has no record.
 
 ### Fixed
+
+- **The course report's filters work on a method that asks a custom profile field.** Core's
+  `core_reportbuilder_set_filters` and `_filters_reset` build the report from its id before they set
+  a context, and the report names its profile questions while it is built: the label was formatted
+  without a context, read `$PAGE->context` and failed, so every filter change of the React view (and
+  a reset in core's table view) failed on such a method. The label is formatted in the system
+  context, as core names a profile field. In the React view a long filter option wraps inside its
+  button, and a card leaves out the fields that hold nothing.
 
 - **A restore is stricter about what an archive may claim** (audit M-02): the user enrolment a record
   points to must be the applicant's in the restored method, a status outside the known ones skips the
