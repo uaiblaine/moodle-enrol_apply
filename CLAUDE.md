@@ -1249,6 +1249,11 @@ backup/                      group mappings, comments and the durable trail, see
   `active_keys()` maps catalogue keys to column identifiers, which are the same on every instance
   (each instance generates its own aliases, so never carry an alias across). No preference means the
   R1 default set. Gates `HD1`-`HD23`.
+  **A page is read in two statements** (`headless_table::query_db()`, R6): the page's ids and the
+  total over the table's SQL, which leaves the database only the sort keys to compute, then those rows
+  whole, put back in the ids' order. Core's single statement computes every column (the group and
+  answer subqueries) for every row before the page. The ids end in the record's id
+  (`page_order()`). Gates `PG1`-`PG5`.
 
 - **The course report's React view is Moodle 5.3 only, and it is a client of R3, never a second
   report (R4).** `report.php` renders `\enrol_apply\output\report_view` (template `report_view`)

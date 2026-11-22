@@ -552,6 +552,78 @@ the filter panel (the rows answer carries none), the grouping select of section 
 by" facets, which are core filters of other types and stay in core's table view ("More filters").
 Behat in `tests/behat/report_view.feature`; the profile is R6's.
 
+**R6 status (2026112105): profiled, one finding, fixed.** Profiled on a seeded course on m503 and on
+the mini cluster (PostgreSQL 18). The course had 10,000 applications:
+
+- 60 % went to a method with a cohort choice and two questions, and 40 % to a plain method.
+- 300 groups in 20 groupings; separate groups, forced.
+- About half were approved (some after a deferral), 15 % refused, 6 % still deferred and 25 % pending.
+- First-response waits are roughly log-normal around two days, over a year of dates.
+- 20 deciders: four managers see every group, and sixteen narrowed ones each see one grouping
+  (about 360 rows each).
+
+The seed and the bench are `moodle-dev/data/enrol-apply-demo/seed_r6.php` and `bench_r6.php`
+(not versioned). Each case is the web service's class called 50 times after two warm-up calls,
+with core's report cache reset between calls (one call stands for one request). Times are wall
+time inside PHP. A statement is one `perf_get_queries()` step.
+
+| Case (admin, 10,000 rows) | Before, p50 / p95 ms | After, p50 / p95 ms | Statements before / after |
+|---|---|---|---|
+| Rows, page 1 of 30 | 73 / 75 | 50 / 56 | 10-11 / 11 |
+| Rows, page 1 of 100 | 135 / 147 | 113 / 118 | 10-11 / 11 |
+| Rows, last page of 30 | **1,096 / 1,162** | 32 / 35 | 10-12 / 11 |
+| Rows, sorted by the wait | 74 / 77 | 51 / 53 | 10 / 11 |
+| Rows, awaiting a decision | 63 / 68 | 39 / 42 | 10 / 11 |
+| Rows, name search ("lar") | 80 / 101 | 79 / 83 | 10 / 11 |
+| Summary, first response | 45 / 52 | 39 / 42 | 10 / 10 |
+| Summary, resolution | 38 / 40 | 42 / 44 | 10 / 10 |
+
+On the mini cluster the last page went from 913 / 949 ms to 15 / 16 ms, and every other case stays
+under 50 ms. A narrowed decider (356 rows) reads every rows case under 105 ms at p95 and the
+compact band in 10 ms, in 14 and 11 statements. The answers are byte for byte the same size
+before and after.
+
+**The finding: a page cost more the later it came.** Core's read
+(`base_report_table::query_db()`) selects every column under `COUNT(1) OVER()` with LIMIT and
+OFFSET, so PostgreSQL computes the select list of every row before the page. That includes the
+"Group" column's subquery, which scans the course's 300 groups for each row: 0.046 ms × 10,000.
+It also includes one answer subquery per question. Two further facts from the plan:
+
+- The plan's estimated cost (1.17M) crosses the JIT thresholds, and JIT compilation alone was 563 of
+  the 1,088 ms.
+- With JIT off the page still took 566 ms.
+
+The fix is `headless_table::query_db()`, which reads the page in two statements:
+
+1. The ids and the total over the same SQL. The database then computes only the sort keys:
+   19 ms by hand at offset 9,990.
+2. Those rows whole, with the table's own conditions: 5 ms.
+
+The ids end in the record's id, so a tie on the sort cannot put a row on two pages. Core's own
+table (5.1, 5.2 and "Table view" on 5.3) keeps core's read. Its last page on 10,000 records still
+costs about a second; that is core's, and a reader of a course that large on those branches pages
+backwards with the sort.
+
+**The browser, on m503 (the 5.3 view, before the fix, which changes no first page).** Times are
+counted from navigation start:
+
+- First load, median of 8 in a frame: HTML at 186 ms, the skeleton at 231 ms and the first rows at
+  417 ms (budget 1 s).
+- Over HTTP the rows call took 140 to 240 ms (longer while the summary runs beside it) and the
+  summary about 90 ms.
+- A sort or a page change dims the rows within one frame (5 to 17 ms) and finishes in 150 to 175 ms.
+- A keystroke in the name search takes 40 to 48 ms (Event Timing), with 15 ms in the handler.
+- After the 300 ms debounce, the rows dim at 316 ms and the new ones paint at 747 ms.
+
+**Not measured, and why.**
+
+- **MariaDB.** No stack runs it; the CI legs prove only correctness there.
+- **4x CPU throttling.** The in-app browser cannot throttle.
+- **The React Profiler's render time and a resize drag.** No profiling build is shipped.
+
+These stay open for whoever next profiles the view. **No cache is called for**: the summary is
+under 50 ms at 10,000 decisions, a tenth of its budget, so section 5b's MUC cache stays unbuilt.
+
 ## Sources read
 
 `report.php`; `classes/reportbuilder/` (system report, entities, formatter, group filter, datasource);
