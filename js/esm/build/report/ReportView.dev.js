@@ -420,6 +420,7 @@ const ReportView = /* @__PURE__ */ __name((props) => {
       Bar,
       {
         labels,
+        narrow,
         scope: current.scope,
         total: rows === null ? null : rows.total,
         filters,
@@ -487,7 +488,7 @@ const ReportView = /* @__PURE__ */ __name((props) => {
         children: [
           rowsloading && rows !== null ? /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-progress" }, void 0, false, {
             fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-            lineNumber: 565,
+            lineNumber: 566,
             columnNumber: 49
           }) : null,
           /* @__PURE__ */ jsxDEV(
@@ -510,7 +511,7 @@ const ReportView = /* @__PURE__ */ __name((props) => {
             false,
             {
               fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-              lineNumber: 566,
+              lineNumber: 567,
               columnNumber: 17
             }
           )
@@ -520,7 +521,7 @@ const ReportView = /* @__PURE__ */ __name((props) => {
       true,
       {
         fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-        lineNumber: 559,
+        lineNumber: 560,
         columnNumber: 13
       }
     ),
@@ -541,7 +542,7 @@ const ReportView = /* @__PURE__ */ __name((props) => {
       false,
       {
         fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-        lineNumber: 582,
+        lineNumber: 583,
         columnNumber: 17
       }
     ) : null

@@ -1922,6 +1922,7 @@ body.path-enrol-apply:not(.jsenabled) .enrol_apply-accordion .collapse {
 .enrol_apply-rview {
     --enrol-apply-surface-alt: var(--dimensions-surface-alt, var(--bs-tertiary-bg, #f8f9fa));
     --enrol-apply-hover: var(--dimensions-hover, var(--bs-primary-bg-subtle, #cfe2ff));
+    --enrol-apply-pressed: var(--dimensions-pressed, var(--bs-primary-border-subtle, #9ec5fe));
     --enrol-apply-ink-strong: var(--dimensions-ink-strong, var(--bs-emphasis-color, #000));
     --enrol-apply-ink-faint: var(--dimensions-ink-faint, var(--bs-tertiary-color, rgba(33, 37, 41, .5)));
     --enrol-apply-accent: var(--dimensions-accent, var(--bs-link-color, #0f6cbf));
@@ -2310,6 +2311,24 @@ body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload + .enrol_apply-rvie
     flex: 1 1 0;
 }
 
+/* The row of controls (the cluster, then the search's capsule) is the panel's anchor, so the panel
+   hangs under the controls and never under the chips row below them. */
+.enrol_apply-rview .enrol_apply-rview-bar-controls {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: flex-end;
+    margin-inline-start: auto;
+    position: relative;
+}
+
+/* A button that opens a menu and its menu: the menu hangs under the button, at its end. */
+.enrol_apply-rview .enrol_apply-rview-anchor {
+    display: inline-flex;
+    position: relative;
+}
+
 .enrol_apply-rview .enrol_apply-rview-bar-cluster {
     color: var(--enrol-apply-ink-muted);
     align-items: center;
@@ -2374,34 +2393,60 @@ body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload + .enrol_apply-rvie
     width: 0.75rem;
 }
 
-/* The tooltip naming an icon button after 100 ms of rest (tooltip.md); its aria-label is the name. */
-.enrol_apply-rview .enrol_apply-rview-iconbtn[data-enrol-apply-tip]::after {
+/* The tooltip naming an icon button or the eraser after 100 ms of rest on hover or keyboard focus
+   (tooltip.md): the balloon above the host, wrapping at 260 px, with its arrow; the host's aria-label is
+   the name. Never while the host's own menu or panel is open. */
+.enrol_apply-rview [data-enrol-apply-tip]::after,
+.enrol_apply-rview [data-enrol-apply-tip]::before {
+    left: 50%;
+    opacity: 0;
+    pointer-events: none;
+    position: absolute;
+    transition: opacity var(--enrol-apply-motion-fast) ease;
+}
+
+.enrol_apply-rview [data-enrol-apply-tip]::after {
     background: var(--enrol-apply-ink);
     border-radius: var(--enrol-apply-radius-sm);
     bottom: calc(100% + 0.5rem);
+    box-shadow: 0 0.5rem 1rem var(--enrol-apply-shadow);
     color: var(--enrol-apply-surface);
     content: attr(data-enrol-apply-tip);
     font-size: 0.75rem;
-    left: 50%;
+    font-weight: 400;
     line-height: 1.35;
-    opacity: 0;
-    padding: 0.25rem 0.5rem;
-    pointer-events: none;
-    position: absolute;
+    max-width: 16.25rem;
+    padding: 0.35rem 0.55rem;
+    text-align: center;
     transform: translateX(-50%);
-    transition: opacity var(--enrol-apply-motion-fast) ease;
-    white-space: nowrap;
-    z-index: 25;
+    white-space: normal;
+    width: max-content;
+    z-index: 20;
 }
 
-.enrol_apply-rview .enrol_apply-rview-iconbtn[data-enrol-apply-tip]:hover::after,
-.enrol_apply-rview .enrol_apply-rview-iconbtn[data-enrol-apply-tip]:focus-visible::after {
+.enrol_apply-rview [data-enrol-apply-tip]::before {
+    border: 5px solid transparent;
+    border-top-color: var(--enrol-apply-ink);
+    bottom: calc(100% - 0.125rem);
+    content: "";
+    margin-left: -5px;
+    z-index: 21;
+}
+
+.enrol_apply-rview [data-enrol-apply-tip]:not([aria-expanded="true"]):hover::after,
+.enrol_apply-rview [data-enrol-apply-tip]:not([aria-expanded="true"]):hover::before,
+.enrol_apply-rview [data-enrol-apply-tip]:not([aria-expanded="true"]):focus-visible::after,
+.enrol_apply-rview [data-enrol-apply-tip]:not([aria-expanded="true"]):focus-visible::before {
     opacity: 1;
     transition-delay: 100ms;
 }
 
-.enrol_apply-rview .enrol_apply-rview-iconbtn[aria-expanded="true"]::after {
-    opacity: 0;
+/* The search's capsule ends the bar: the balloons of its button and of the eraser line up with their
+   host's end edge, so they stay over the bar, the arrow still over the host's middle. */
+.enrol_apply-rview .enrol_apply-rview-searchcap [data-enrol-apply-tip]::after {
+    left: auto;
+    right: 0;
+    transform: none;
 }
 
 .enrol_apply-rview .enrol_apply-rview-badge {
@@ -2438,6 +2483,7 @@ body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload + .enrol_apply-rvie
 }
 
 .enrol_apply-rview .enrol_apply-rview-search input {
+    appearance: none;
     background: transparent;
     border: 0;
     color: var(--enrol-apply-ink);
@@ -2447,6 +2493,11 @@ body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload + .enrol_apply-rvie
     width: 190px;
 }
 
+/* The browser's own clear button goes: the eraser is the one control that clears, and never a cross. */
+.enrol_apply-rview .enrol_apply-rview-search input::-webkit-search-cancel-button {
+    display: none;
+}
+
 .enrol_apply-rview .enrol_apply-rview-eraser {
     align-items: center;
     background: transparent;
@@ -2454,10 +2505,27 @@ body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload + .enrol_apply-rvie
     border-radius: var(--enrol-apply-radius-xs);
     color: var(--enrol-apply-ink-muted);
     display: inline-flex;
+    flex: none;
     height: 1.5rem;
     justify-content: center;
+    margin-inline-end: -0.25rem;
     padding: 0;
+    position: relative;
+    transition:
+        background-color var(--enrol-apply-motion-base) var(--enrol-apply-motion-ease),
+        color var(--enrol-apply-motion-base) var(--enrol-apply-motion-ease);
     width: 1.5rem;
+}
+
+.enrol_apply-rview .enrol_apply-rview-eraser:hover {
+    background: var(--enrol-apply-surface-alt);
+    color: var(--enrol-apply-ink);
+    transition-duration: var(--enrol-apply-motion-fast);
+}
+
+.enrol_apply-rview .enrol_apply-rview-eraser:focus-visible {
+    outline: var(--enrol-apply-focus-width) solid var(--enrol-apply-focus-ring);
+    outline-offset: 0.125rem;
 }
 
 .enrol_apply-rview .enrol_apply-rview-spin {
@@ -2530,7 +2598,8 @@ body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload + .enrol_apply-rvie
     text-decoration: underline;
 }
 
-/* Menus (menu.md) and the filter panel (filter-panel.md, panel-popover-sheet.md). */
+/* Menus (menu.md) and the filter panel (filter-panel.md, panel-popover-sheet.md). A menu hangs under
+   its own button (its anchor), the panel under the row of controls; both at that box's end. */
 .enrol_apply-rview .enrol_apply-rview-menu,
 .enrol_apply-rview .enrol_apply-rview-fpanel {
     color: var(--enrol-apply-ink);
@@ -2538,7 +2607,6 @@ body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload + .enrol_apply-rvie
     border: 1px solid var(--enrol-apply-line);
     box-shadow: var(--enrol-apply-elevation-md);
     max-height: 70vh;
-    overflow: auto;
     position: absolute;
     right: 0;
     top: calc(100% + 0.375rem);
@@ -2548,6 +2616,7 @@ body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload + .enrol_apply-rvie
 .enrol_apply-rview .enrol_apply-rview-menu {
     border-radius: var(--enrol-apply-radius-md);
     min-width: 13.75rem;
+    overflow: auto;
     padding: 0.25rem;
 }
 
@@ -2587,6 +2656,11 @@ body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload + .enrol_apply-rvie
     transition-duration: var(--enrol-apply-motion-fast);
 }
 
+.enrol_apply-rview .enrol_apply-rview-menu-item:active {
+    background: var(--enrol-apply-pressed);
+    color: var(--enrol-apply-brand-ink);
+}
+
 .enrol_apply-rview .enrol_apply-rview-menu-item:focus-visible {
     outline-offset: -2px;
 }
@@ -2603,6 +2677,16 @@ body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload + .enrol_apply-rvie
 
 .enrol_apply-rview .enrol_apply-rview-menu-item > .enrol_apply-rview-icon:first-child {
     color: var(--enrol-apply-ink-muted);
+    transition:
+        color var(--enrol-apply-motion-base) var(--enrol-apply-motion-ease),
+        transform var(--enrol-apply-motion-base) var(--enrol-apply-motion-ease);
+}
+
+/* On hover the leading icon takes the item's ink and moves 2 px towards the label (hover.md). */
+.enrol_apply-rview .enrol_apply-rview-menu-item:not([aria-disabled="true"]):hover > .enrol_apply-rview-icon:first-child {
+    color: var(--enrol-apply-brand-ink);
+    transform: translateX(0.125rem);
+    transition-duration: var(--enrol-apply-motion-fast);
 }
 
 .enrol_apply-rview .enrol_apply-rview-menu-label {
@@ -2657,12 +2741,18 @@ body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload + .enrol_apply-rvie
 
 .enrol_apply-rview .enrol_apply-rview-fpanel {
     border-radius: var(--enrol-apply-radius-lg);
+    display: flex;
+    flex-direction: column;
     max-width: 100%;
     min-width: 18.75rem;
     width: 24rem;
 }
 
+/* The groups scroll; the foot stays in view under them. */
 .enrol_apply-rview .enrol_apply-rview-fpanel-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
     padding: 0.75rem;
 }
 
@@ -2745,6 +2835,7 @@ body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload + .enrol_apply-rvie
 .enrol_apply-rview .enrol_apply-rview-fpanel-foot {
     border-top: 1px solid var(--enrol-apply-line);
     display: flex;
+    flex: none;
     gap: 0.5rem;
     justify-content: space-between;
     padding: 0.75rem;
@@ -2754,24 +2845,65 @@ body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload + .enrol_apply-rvie
     min-height: 2rem;
 }
 
-/* At the bar's narrow step the panel is a sheet from the bottom of the screen. */
-@media (max-width: 575.98px) {
-    .enrol_apply-rview .enrol_apply-rview-fpanel {
-        border-radius: var(--enrol-apply-radius-xl) var(--enrol-apply-radius-xl) 0 0;
-        bottom: 0;
-        left: 0;
-        max-height: 80vh;
-        position: fixed;
-        right: 0;
-        top: auto;
-        width: auto;
-        z-index: 1050;
-    }
+/* The bar's narrow step (filter-line contract, section 2), written by Bar.tsx while the view's own
+   container is under 576 px: the controls on a line of their own, the scope on the next one with its
+   cells sharing the width, the chips after it. The menus hang from the controls' end, not from their
+   button (220 px under a button near the start would leave the screen), and the panel is a sheet from
+   the bottom of the screen. While the search is open the cluster hides and the field takes the line. */
+.enrol_apply-rview .enrol_apply-rview-bar--narrow > .enrol_apply-rview-bar-spacer {
+    display: none;
+}
 
-    .enrol_apply-rview .enrol_apply-rview-menu {
-        left: 0;
-        right: auto;
-    }
+.enrol_apply-rview .enrol_apply-rview-bar--narrow > .enrol_apply-rview-bar-controls {
+    flex: 1 0 100%;
+}
+
+.enrol_apply-rview .enrol_apply-rview-bar--narrow > .enrol_apply-rview-seg {
+    display: flex;
+    flex: 1 0 100%;
+    order: 1;
+}
+
+.enrol_apply-rview .enrol_apply-rview-bar--narrow > .enrol_apply-rview-seg .enrol_apply-rview-seg-cell {
+    flex: 1 1 0;
+    justify-content: center;
+    min-width: 0;
+}
+
+.enrol_apply-rview .enrol_apply-rview-bar--narrow > .enrol_apply-rview-chips {
+    order: 2;
+}
+
+.enrol_apply-rview .enrol_apply-rview-bar--narrow .enrol_apply-rview-capsule,
+.enrol_apply-rview .enrol_apply-rview-bar--narrow .enrol_apply-rview-anchor {
+    position: static;
+}
+
+.enrol_apply-rview .enrol_apply-rview-bar--narrow.enrol_apply-rview-bar--searching .enrol_apply-rview-bar-cluster {
+    display: none;
+}
+
+.enrol_apply-rview .enrol_apply-rview-bar--narrow.enrol_apply-rview-bar--searching .enrol_apply-rview-searchcap,
+.enrol_apply-rview .enrol_apply-rview-bar--narrow.enrol_apply-rview-bar--searching .enrol_apply-rview-search {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.enrol_apply-rview .enrol_apply-rview-bar--narrow .enrol_apply-rview-search input {
+    flex: 1 1 auto;
+    width: auto;
+}
+
+.enrol_apply-rview .enrol_apply-rview-bar--narrow .enrol_apply-rview-fpanel {
+    border-radius: var(--enrol-apply-radius-xl) var(--enrol-apply-radius-xl) 0 0;
+    bottom: 0;
+    left: 0;
+    max-height: 80vh;
+    position: fixed;
+    right: 0;
+    top: auto;
+    width: auto;
+    z-index: 1050;
 }
 
 /* The bounded grid (section 5b): the frame scrolls both ways, the heading row and the Applicant
@@ -3140,8 +3272,11 @@ body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload + .enrol_apply-rvie
 @media (prefers-reduced-motion: reduce) {
     .enrol_apply-rview .enrol_apply-rview-seg-cell,
     .enrol_apply-rview .enrol_apply-rview-iconbtn,
+    .enrol_apply-rview .enrol_apply-rview-eraser,
     .enrol_apply-rview .enrol_apply-rview-menu-item,
-    .enrol_apply-rview .enrol_apply-rview-iconbtn[data-enrol-apply-tip]::after {
+    .enrol_apply-rview .enrol_apply-rview-menu-item > .enrol_apply-rview-icon:first-child,
+    .enrol_apply-rview [data-enrol-apply-tip]::after,
+    .enrol_apply-rview [data-enrol-apply-tip]::before {
         transition: none;
     }
 }

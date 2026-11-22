@@ -18,8 +18,15 @@
  *
  * The scope (all, awaiting, decided), the count, a capsule of icon buttons - Filters with its loud
  * counter, Columns, View, Download - and the search by name in a capsule of its own, folded to its
- * button until pressed; the chips of what is in force on a row of their own, then "Clear all". One
- * layer is open at a time; Escape or a press outside closes it and gives the focus back to its button.
+ * button until pressed or `/` is typed; the chips of what is in force on a row of their own, then
+ * "Clear all". One layer is open at a time; Escape or a press outside closes it and gives the focus
+ * back to its button. Each menu hangs under its own button, the panel under the row of controls (never
+ * under the chips); at the narrow step (the view's container under 576 px) the menus hang from the
+ * controls' end, the scope takes a line of its own after them, and the open search takes the line.
+ *
+ * The open search: Escape closes it whatever it holds, the text staying in force, and gives the focus
+ * back to its button; leaving it empty closes it too; the eraser clears the text and keeps it open. The
+ * text in force shows as a chip only while the field is closed, so it is never said twice.
  *
  * Filters draws the report's own filters that pick one option of a list (core's store, through
  * core_reportbuilder_set_filters); a group filter with more than eight groups is a search over a list
@@ -50,6 +57,7 @@ type Layer = 'filters' | 'columns' | 'view' | 'download' | null;
 
 type BarProps = {
     labels: Record<string, string>,
+    narrow: boolean,
     scope: Scope,
     total: number | null,
     filters: Filter[],
@@ -215,6 +223,8 @@ export const Bar = (props: BarProps): ReactElement => {
     const uid = useId();
     const root = useRef<HTMLDivElement | null>(null);
     const searchinput = useRef<HTMLInputElement | null>(null);
+    const searchbutton = useRef<HTMLButtonElement | null>(null);
+    const refocus = useRef(false);
     const [layer, setLayer] = useState<Layer>(null);
     const [searchopen, setSearchopen] = useState(props.search !== '');
     const triggers = useRef<Record<string, HTMLButtonElement | null>>({});
@@ -251,10 +261,48 @@ export const Bar = (props: BarProps): ReactElement => {
         item?.focus();
     }, [layer, uid]);
 
+    // The opened field takes the focus; the field closed by Escape gives it back to the search button.
     useEffect(() => {
         if (searchopen) {
             searchinput.current?.focus();
+        } else if (refocus.current) {
+            refocus.current = false;
+            searchbutton.current?.focus();
         }
+    }, [searchopen]);
+
+    // Typing `/` anywhere but in a field opens the search, or moves the focus into the open one, while the
+    // bar is on screen.
+    useEffect(() => {
+        /**
+         * Open or focus the search on `/`.
+         *
+         * @param {object} event The keyboard event, on the document.
+         * @returns {void}
+         */
+        const slash = (event: globalThis.KeyboardEvent): void => {
+            if (event.key !== '/' || event.ctrlKey || event.metaKey || event.altKey || event.defaultPrevented) {
+                return;
+            }
+            const focused = document.activeElement as HTMLElement | null;
+            if (focused && (focused.isContentEditable || focused.closest('input, textarea, select'))) {
+                return;
+            }
+            const rect = root.current?.getBoundingClientRect();
+            if (!rect || rect.width === 0 || rect.bottom <= 0 || rect.top >= window.innerHeight) {
+                return;
+            }
+            event.preventDefault();
+            if (searchopen) {
+                searchinput.current?.focus();
+            } else {
+                setLayer(null);
+                setSearchopen(true);
+            }
+        };
+        document.addEventListener('keydown', slash);
+
+        return () => document.removeEventListener('keydown', slash);
     }, [searchopen]);
 
     /**
@@ -266,23 +314,43 @@ export const Bar = (props: BarProps): ReactElement => {
     const toggle = (which: Layer): void => setLayer(layer === which ? null : which);
 
     /**
-     * Escape closes the open layer and gives the focus back to its button.
+     * Close the search field, leaving its text in force.
+     *
+     * @param {boolean} back Whether the focus goes back to the search button.
+     * @returns {void}
+     */
+    const closeSearch = (back: boolean): void => {
+        refocus.current = back;
+        setSearchopen(false);
+    };
+
+    /**
+     * Escape closes the open layer and gives the focus back to its button; with no layer open, it closes
+     * the open search from any control of the bar (the field handles its own Escape first).
      *
      * @param {object} event The keyboard event.
      * @returns {void}
      */
     const escape = (event: KeyboardEvent<HTMLDivElement>): void => {
-        if (event.key !== 'Escape' || layer === null) {
+        if (event.key !== 'Escape' || event.defaultPrevented) {
             return;
         }
-        event.preventDefault();
-        const trigger = triggers.current[layer];
-        setLayer(null);
-        trigger?.focus();
+        if (layer !== null) {
+            event.preventDefault();
+            const trigger = triggers.current[layer];
+            setLayer(null);
+            trigger?.focus();
+        } else if (searchopen) {
+            event.preventDefault();
+            closeSearch(true);
+        }
     };
 
     const applied = filters.filter((filter) => filter.applied);
     const searched = props.search.trim().length >= props.searchmin;
+    // The text in force is a chip once the field is closed; while it is open, the field says it.
+    const searchchip = searched && !searchopen;
+    const chipcount = applied.length + (searchchip ? 1 : 0);
     const panelfilters = filters.filter(choosable);
     const others = filters.filter((filter) => !choosable(filter));
 
@@ -322,9 +390,12 @@ export const Bar = (props: BarProps): ReactElement => {
         : null;
     const download = props.downloadurl !== '' && props.formats.length > 0;
     const parameters = encodeURIComponent(JSON.stringify({measure: props.measure}));
+    const barclass = 'enrol_apply-rview-bar'
+        + (props.narrow ? ' enrol_apply-rview-bar--narrow' : '')
+        + (searchopen ? ' enrol_apply-rview-bar--searching' : '');
 
     return (
-        <div className="enrol_apply-rview-bar" data-region="enrol_apply-bar" ref={root} onKeyDown={escape}>
+        <div className={barclass} data-region="enrol_apply-bar" ref={root} onKeyDown={escape}>
             <Segmented
                 label={labels.scope}
                 value={props.scope}
@@ -336,241 +407,257 @@ export const Bar = (props: BarProps): ReactElement => {
                 onChange={(value) => props.onScope(value as Scope)}
             />
             <span className="enrol_apply-rview-bar-spacer" />
-            <div className="enrol_apply-rview-bar-cluster">
-                <span className="enrol_apply-rview-bar-count" data-region="enrol_apply-total" aria-live="polite">
-                    {props.total === null ? '…' : fillCount(labels, 'count', props.total, num(props.total))}
-                </span>
-                <div className="enrol_apply-rview-capsule">
-                    {iconbutton('filters', 'filter', filtersname, badge)}
-                    {iconbutton('columns', 'columns', labels.columns, chevron)}
-                    {iconbutton('view', viewicon, labels.view, chevron)}
-                    {download ? iconbutton('download', 'download', labels.download, null) : null}
-                </div>
-            </div>
-            <div className="enrol_apply-rview-capsule">
-                {searchopen ? (
-                    <span className="enrol_apply-rview-search">
-                        {props.searching && searched
-                            ? <span className="enrol_apply-rview-spin" aria-hidden="true" />
-                            : <Icon name="search" />}
-                        <input
-                            ref={searchinput}
-                            type="search"
-                            aria-label={labels.search}
-                            placeholder={labels.search}
-                            autoComplete="off"
-                            value={props.search}
-                            onChange={(event) => props.onSearch(event.target.value)}
-                            onKeyDown={(event) => {
-                                if (event.key === 'Escape') {
-                                    event.preventDefault();
-                                    if (props.search === '') {
-                                        setSearchopen(false);
-                                    } else {
-                                        props.onSearch('');
-                                    }
-                                }
-                            }}
-                            onBlur={() => {
-                                if (props.search === '') {
-                                    setSearchopen(false);
-                                }
-                            }}
-                        />
-                        {props.search !== '' ? (
-                            <button
-                                type="button"
-                                className="enrol_apply-rview-eraser"
-                                aria-label={labels.cleartext}
-                                onMouseDown={(event) => event.preventDefault()}
-                                onClick={() => {
-                                    props.onSearch('');
-                                    searchinput.current?.focus();
-                                }}
-                            >
-                                <Icon name="close" />
-                            </button>
-                        ) : null}
+            {/* The row of controls: the panel and, at the narrow step, the menus hang under it. */}
+            <div className="enrol_apply-rview-bar-controls">
+                <div className="enrol_apply-rview-bar-cluster">
+                    <span className="enrol_apply-rview-bar-count" data-region="enrol_apply-total" aria-live="polite">
+                        {props.total === null ? '…' : fillCount(labels, 'count', props.total, num(props.total))}
                     </span>
-                ) : (
-                    <button
-                        type="button"
-                        className="enrol_apply-rview-iconbtn"
-                        aria-label={labels.search}
-                        data-enrol-apply-tip={labels.search}
-                        onClick={() => setSearchopen(true)}
-                    >
-                        <Icon name="search" />
-                    </button>
-                )}
-            </div>
-
-            <div
-                className="enrol_apply-rview-fpanel"
-                id={uid + 'filters'}
-                role="dialog"
-                aria-label={labels.filters}
-                hidden={layer !== 'filters'}
-            >
-                <div className="enrol_apply-rview-fpanel-body">
-                    {panelfilters.map((filter) => (
-                        <FilterGroup key={filter.name} labels={labels} filter={filter} onFilter={props.onFilter} />
-                    ))}
-                    {others.length > 0 ? (
-                        <p className="enrol_apply-rview-note">
-                            {labels.morefiltershelp}{' '}
-                            <a href={props.tableurl}>{labels.morefilters}</a>
-                        </p>
-                    ) : null}
-                </div>
-                <div className="enrol_apply-rview-fpanel-foot">
-                    <button type="button" className="btn btn-sm btn-outline-secondary" onClick={props.onClearFilters}>
-                        {labels.clearfilters}
-                    </button>
-                    <button
-                        type="button"
-                        className="btn btn-sm btn-primary"
-                        onClick={() => {
-                            setLayer(null);
-                            triggers.current.filters?.focus();
-                        }}
-                    >
-                        {labels.show}
-                    </button>
-                </div>
-            </div>
-
-            <div
-                className="enrol_apply-rview-menu"
-                id={uid + 'columns'}
-                role="menu"
-                aria-label={labels.columns}
-                hidden={layer !== 'columns'}
-                onKeyDown={menuKeys}
-            >
-                {columns.map((column) => (
-                    column.fixed ? (
-                        <div
-                            key={column.key}
-                            className="enrol_apply-rview-menu-item"
-                            role="menuitemcheckbox"
-                            aria-checked="true"
-                            aria-disabled="true"
-                            tabIndex={-1}
-                        >
-                            <span className="enrol_apply-rview-box" aria-hidden="true"><Icon name="tick" /></span>
-                            <span className="enrol_apply-rview-menu-label">{column.title}</span>
-                            <span className="enrol_apply-rview-menu-hint">{labels.always}</span>
+                    <div className="enrol_apply-rview-capsule">
+                        {iconbutton('filters', 'filter', filtersname, badge)}
+                        <div className="enrol_apply-rview-anchor">
+                            {iconbutton('columns', 'columns', labels.columns, chevron)}
+                            <div
+                                className="enrol_apply-rview-menu"
+                                id={uid + 'columns'}
+                                role="menu"
+                                aria-label={labels.columns}
+                                hidden={layer !== 'columns'}
+                                onKeyDown={menuKeys}
+                            >
+                                {columns.map((column) => (
+                                    column.fixed ? (
+                                        <div
+                                            key={column.key}
+                                            className="enrol_apply-rview-menu-item"
+                                            role="menuitemcheckbox"
+                                            aria-checked="true"
+                                            aria-disabled="true"
+                                            tabIndex={-1}
+                                        >
+                                            <span className="enrol_apply-rview-box" aria-hidden="true">
+                                                <Icon name="tick" />
+                                            </span>
+                                            <span className="enrol_apply-rview-menu-label">{column.title}</span>
+                                            <span className="enrol_apply-rview-menu-hint">{labels.always}</span>
+                                        </div>
+                                    ) : (
+                                        <button
+                                            key={column.key}
+                                            type="button"
+                                            className="enrol_apply-rview-menu-item"
+                                            role="menuitemcheckbox"
+                                            aria-checked={column.active}
+                                            tabIndex={-1}
+                                            onClick={() => props.onColumn(column.key, !column.active)}
+                                        >
+                                            <span className="enrol_apply-rview-box" aria-hidden="true">
+                                                <Icon name="tick" />
+                                            </span>
+                                            <span className="enrol_apply-rview-menu-label">{column.title}</span>
+                                        </button>
+                                    )
+                                ))}
+                                <div className="enrol_apply-rview-menu-sep" role="separator" />
+                                <button
+                                    type="button"
+                                    className="enrol_apply-rview-menu-item"
+                                    role="menuitem"
+                                    tabIndex={-1}
+                                    aria-disabled={props.usedefault}
+                                    onClick={() => {
+                                        if (!props.usedefault) {
+                                            props.onDefaultColumns();
+                                        }
+                                    }}
+                                >
+                                    <Icon name="columns" />
+                                    <span className="enrol_apply-rview-menu-label">{labels.defaultcolumns}</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    className="enrol_apply-rview-menu-item"
+                                    role="menuitem"
+                                    tabIndex={-1}
+                                    aria-disabled={!props.haswidths}
+                                    onClick={() => {
+                                        if (props.haswidths) {
+                                            props.onResetWidths();
+                                        }
+                                    }}
+                                >
+                                    <Icon name="reset" />
+                                    <span className="enrol_apply-rview-menu-label">{labels.resetwidths}</span>
+                                </button>
+                            </div>
                         </div>
+                        <div className="enrol_apply-rview-anchor">
+                            {iconbutton('view', viewicon, labels.view, chevron)}
+                            <div
+                                className="enrol_apply-rview-menu"
+                                id={uid + 'view'}
+                                role="menu"
+                                aria-label={labels.view}
+                                hidden={layer !== 'view'}
+                                onKeyDown={menuKeys}
+                            >
+                                {([['auto', labels.viewauto, labels.viewautohint], ['table', labels.table, ''],
+                                    ['cards', labels.cards, '']] as [ViewMode, string, string][]).map(([value, label, hint]) => (
+                                    <button
+                                        key={value}
+                                        type="button"
+                                        className="enrol_apply-rview-menu-item"
+                                        role="menuitemradio"
+                                        aria-checked={props.view === value}
+                                        tabIndex={-1}
+                                        onClick={() => {
+                                            props.onView(value);
+                                            setLayer(null);
+                                            triggers.current.view?.focus();
+                                        }}
+                                    >
+                                        <Icon name={value} />
+                                        <span className="enrol_apply-rview-menu-label">{label}</span>
+                                        {hint !== '' ? <span className="enrol_apply-rview-menu-hint">{hint}</span> : null}
+                                        <Icon name="tick" className="enrol_apply-rview-tick" />
+                                    </button>
+                                ))}
+                                <div className="enrol_apply-rview-menu-sep" role="separator" />
+                                <a className="enrol_apply-rview-menu-item" role="menuitem" tabIndex={-1} href={props.tableurl}>
+                                    <Icon name="table" />
+                                    <span className="enrol_apply-rview-menu-label">{labels.coretable}</span>
+                                </a>
+                            </div>
+                        </div>
+                        {download ? (
+                            <div className="enrol_apply-rview-anchor">
+                                {iconbutton('download', 'download', labels.download, chevron)}
+                                <div
+                                    className="enrol_apply-rview-menu"
+                                    id={uid + 'download'}
+                                    role="menu"
+                                    aria-label={labels.download}
+                                    hidden={layer !== 'download'}
+                                    onKeyDown={menuKeys}
+                                >
+                                    {props.formats.map((format) => (
+                                        <a
+                                            key={format.value}
+                                            className="enrol_apply-rview-menu-item"
+                                            role="menuitem"
+                                            tabIndex={-1}
+                                            href={`${props.downloadurl}&parameters=${parameters}`
+                                                + `&download=${encodeURIComponent(format.value)}`}
+                                        >
+                                            <Icon name="download" />
+                                            <span className="enrol_apply-rview-menu-label">{format.label}</span>
+                                        </a>
+                                    ))}
+                                </div>
+                            </div>
+                        ) : null}
+                    </div>
+                </div>
+                <div className="enrol_apply-rview-capsule enrol_apply-rview-searchcap">
+                    {searchopen ? (
+                        <span className="enrol_apply-rview-search">
+                            {props.searching && searched
+                                ? <span className="enrol_apply-rview-spin" aria-hidden="true" />
+                                : <Icon name="search" />}
+                            <input
+                                ref={searchinput}
+                                type="search"
+                                aria-label={labels.search}
+                                placeholder={labels.search}
+                                autoComplete="off"
+                                value={props.search}
+                                onChange={(event) => props.onSearch(event.target.value)}
+                                onKeyDown={(event) => {
+                                    if (event.key === 'Escape') {
+                                        // Before the browser empties a search field on the same key: Escape
+                                        // closes the field whatever it holds, the text staying in force.
+                                        event.preventDefault();
+                                        closeSearch(true);
+                                    }
+                                }}
+                                onBlur={() => {
+                                    if (props.search === '') {
+                                        closeSearch(false);
+                                    }
+                                }}
+                            />
+                            {props.search !== '' ? (
+                                // The eraser keeps the field's focus on a press: it clears the text and the
+                                // field stays open.
+                                <button
+                                    type="button"
+                                    className="enrol_apply-rview-eraser"
+                                    aria-label={labels.cleartext}
+                                    data-enrol-apply-tip={labels.cleartext}
+                                    onMouseDown={(event) => event.preventDefault()}
+                                    onClick={() => {
+                                        props.onSearch('');
+                                        searchinput.current?.focus();
+                                    }}
+                                >
+                                    <Icon name="eraser" />
+                                </button>
+                            ) : null}
+                        </span>
                     ) : (
                         <button
-                            key={column.key}
+                            ref={searchbutton}
                             type="button"
-                            className="enrol_apply-rview-menu-item"
-                            role="menuitemcheckbox"
-                            aria-checked={column.active}
-                            tabIndex={-1}
-                            onClick={() => props.onColumn(column.key, !column.active)}
+                            className="enrol_apply-rview-iconbtn"
+                            aria-label={labels.search}
+                            data-enrol-apply-tip={labels.search}
+                            onClick={() => {
+                                setLayer(null);
+                                setSearchopen(true);
+                            }}
                         >
-                            <span className="enrol_apply-rview-box" aria-hidden="true"><Icon name="tick" /></span>
-                            <span className="enrol_apply-rview-menu-label">{column.title}</span>
+                            <Icon name="search" />
                         </button>
-                    )
-                ))}
-                <div className="enrol_apply-rview-menu-sep" role="separator" />
-                <button
-                    type="button"
-                    className="enrol_apply-rview-menu-item"
-                    role="menuitem"
-                    tabIndex={-1}
-                    aria-disabled={props.usedefault}
-                    onClick={() => {
-                        if (!props.usedefault) {
-                            props.onDefaultColumns();
-                        }
-                    }}
-                >
-                    <Icon name="columns" />
-                    <span className="enrol_apply-rview-menu-label">{labels.defaultcolumns}</span>
-                </button>
-                <button
-                    type="button"
-                    className="enrol_apply-rview-menu-item"
-                    role="menuitem"
-                    tabIndex={-1}
-                    aria-disabled={!props.haswidths}
-                    onClick={() => {
-                        if (props.haswidths) {
-                            props.onResetWidths();
-                        }
-                    }}
-                >
-                    <Icon name="reset" />
-                    <span className="enrol_apply-rview-menu-label">{labels.resetwidths}</span>
-                </button>
-            </div>
-
-            <div
-                className="enrol_apply-rview-menu"
-                id={uid + 'view'}
-                role="menu"
-                aria-label={labels.view}
-                hidden={layer !== 'view'}
-                onKeyDown={menuKeys}
-            >
-                {([['auto', labels.viewauto, labels.viewautohint], ['table', labels.table, ''], ['cards', labels.cards, '']] as
-                        [ViewMode, string, string][]).map(([value, label, hint]) => (
-                    <button
-                        key={value}
-                        type="button"
-                        className="enrol_apply-rview-menu-item"
-                        role="menuitemradio"
-                        aria-checked={props.view === value}
-                        tabIndex={-1}
-                        onClick={() => {
-                            props.onView(value);
-                            setLayer(null);
-                            triggers.current.view?.focus();
-                        }}
-                    >
-                        <Icon name={value} />
-                        <span className="enrol_apply-rview-menu-label">{label}</span>
-                        {hint !== '' ? <span className="enrol_apply-rview-menu-hint">{hint}</span> : null}
-                        <Icon name="tick" className="enrol_apply-rview-tick" />
-                    </button>
-                ))}
-                <div className="enrol_apply-rview-menu-sep" role="separator" />
-                <a className="enrol_apply-rview-menu-item" role="menuitem" tabIndex={-1} href={props.tableurl}>
-                    <Icon name="table" />
-                    <span className="enrol_apply-rview-menu-label">{labels.coretable}</span>
-                </a>
-            </div>
-
-            {download ? (
-                <div
-                    className="enrol_apply-rview-menu"
-                    id={uid + 'download'}
-                    role="menu"
-                    aria-label={labels.download}
-                    hidden={layer !== 'download'}
-                    onKeyDown={menuKeys}
-                >
-                    {props.formats.map((format) => (
-                        <a
-                            key={format.value}
-                            className="enrol_apply-rview-menu-item"
-                            role="menuitem"
-                            tabIndex={-1}
-                            href={`${props.downloadurl}&parameters=${parameters}&download=${encodeURIComponent(format.value)}`}
-                        >
-                            <Icon name="download" />
-                            <span className="enrol_apply-rview-menu-label">{format.label}</span>
-                        </a>
-                    ))}
+                    )}
                 </div>
-            ) : null}
 
-            <div className="enrol_apply-rview-chips" data-region="enrol_apply-chips" hidden={applied.length === 0 && !searched}>
+                <div
+                    className="enrol_apply-rview-fpanel"
+                    id={uid + 'filters'}
+                    role="dialog"
+                    aria-label={labels.filters}
+                    hidden={layer !== 'filters'}
+                >
+                    <div className="enrol_apply-rview-fpanel-body">
+                        {panelfilters.map((filter) => (
+                            <FilterGroup key={filter.name} labels={labels} filter={filter} onFilter={props.onFilter} />
+                        ))}
+                        {others.length > 0 ? (
+                            <p className="enrol_apply-rview-note">
+                                {labels.morefiltershelp}{' '}
+                                <a href={props.tableurl}>{labels.morefilters}</a>
+                            </p>
+                        ) : null}
+                    </div>
+                    <div className="enrol_apply-rview-fpanel-foot">
+                        <button type="button" className="btn btn-sm btn-outline-secondary" onClick={props.onClearFilters}>
+                            {labels.clearfilters}
+                        </button>
+                        <button
+                            type="button"
+                            className="btn btn-sm btn-primary"
+                            onClick={() => {
+                                setLayer(null);
+                                triggers.current.filters?.focus();
+                            }}
+                        >
+                            {labels.show}
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div className="enrol_apply-rview-chips" data-region="enrol_apply-chips" hidden={chipcount === 0}>
                 {applied.map((filter) => {
                     const value = chosenLabel(filter);
                     const text = value === '' ? filter.title : fillObject(labels.filterchip, {title: filter.title, value});
@@ -587,21 +674,18 @@ export const Bar = (props: BarProps): ReactElement => {
                         </button>
                     );
                 })}
-                {searched ? (
+                {searchchip ? (
                     <button
                         type="button"
                         className="enrol_apply-rview-chip"
                         aria-label={fill(labels.removefilter, fill(labels.searchchip, props.search.trim()))}
-                        onClick={() => {
-                            props.onSearch('');
-                            setSearchopen(false);
-                        }}
+                        onClick={() => props.onSearch('')}
                     >
                         <span>{fill(labels.searchchip, props.search.trim())}</span>
                         <Icon name="close" />
                     </button>
                 ) : null}
-                {applied.length + (searched ? 1 : 0) > 1 ? (
+                {chipcount > 1 ? (
                     <button
                         type="button"
                         className="enrol_apply-rview-clearall"
