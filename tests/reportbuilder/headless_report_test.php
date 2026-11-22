@@ -534,6 +534,86 @@ final class headless_report_test extends \core_reportbuilder\tests\core_reportbu
     }
 
     /**
+     * The report's table in its default sort, set up as the engine sets it up.
+     *
+     * @return headless_table The table.
+     */
+    private function table(): headless_table {
+        $report = $this->report();
+        $table = headless_table::create((int) $report->get_report_persistent()->get('id'), $report->get_parameters());
+        $table->guess_base_url();
+        $table->setup();
+
+        return $table;
+    }
+
+    /**
+     * One page of two rows, read through the table.
+     *
+     * @param headless_table $table The table, set up.
+     * @param int $page 0-based page.
+     * @return array [applicant ids in the page's order, the total].
+     */
+    private function page_of_two(headless_table $table, int $page): array {
+        $table->set_page_number($page + 1);
+        $table->query_db(2, false);
+        $ids = array_map(fn(\stdClass $record): int => (int) $record->userid, $table->rawdata);
+
+        return [$ids, (int) $table->totalrows];
+    }
+
+    /**
+     * The pages of the default sort (newest application first) cover every row once, in order, each
+     * page counting all six: the page read by ids and then whole (R6) agrees with the order of one
+     * statement.
+     *
+     * Changes that must make it fail: the second statement's rows kept in its own order rather than
+     * the first's; the offset or the limit dropped from the first statement; the total not read from
+     * it.
+     *
+     * @return void
+     */
+    public function test_the_pages_hold_every_row_once_in_the_sort_order(): void {
+        $this->setAdminUser();
+
+        $pages = [];
+        foreach ([0, 1, 2] as $page) {
+            [$ids, $total] = $this->page_of_two($this->table(), $page);
+            $this->assertSame(6, $total, "page {$page}");
+            $this->assertCount(2, $ids, "page {$page}");
+            $pages[] = $ids;
+        }
+        // Newest first; the three of the same second by record id, the order they were written in.
+        $this->assertSame([
+            [$this->applicants['key'], $this->applicants['pending']],
+            [$this->applicants['deferred'], $this->applicants['resolved']],
+            [$this->applicants['legacy'], $this->applicants['cancelled']],
+        ], $pages);
+
+        // A page past the last one reads nothing, as core's counted read does.
+        [$ids] = $this->page_of_two($this->table(), 3);
+        $this->assertSame([], $ids);
+    }
+
+    /**
+     * The page's ids are ordered by the reader's sort and then by the record's id, so rows tied on
+     * the sort (three of the six arrived in the same second) fall on one page each.
+     *
+     * Changes that must make it fail: the unique last key dropped; the reader's sort dropped.
+     *
+     * @return void
+     */
+    public function test_the_page_order_ends_in_a_unique_key(): void {
+        $this->setAdminUser();
+
+        $table = $this->table();
+        $order = $table->page_order();
+        $this->assertStringEndsWith(', results.id', $order);
+        $this->assertStringStartsWith($table->get_sql_sort() . ',', $order);
+        $this->assertNotSame('', $table->get_sql_sort());
+    }
+
+    /**
      * With no choice stored the report shows its default set; a stored choice shows the catalogue
      * keys it names and nothing it names that the report does not offer, on the headless rows and
      * on the report's own table alike (the download reads that table).

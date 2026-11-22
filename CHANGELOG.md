@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased (2026112104)
+## Unreleased (2026112105)
 
 ### Security
 
@@ -107,6 +107,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   state, is idempotent, and costs two indexed probes when the user has no record.
 
 ### Fixed
+
+- **A late page of the course report costs what the first one does** (stage R6 of
+  `docs/design/audit-report-study.md`). The React view's rows were read in core's one statement, which
+  computes every column of every row before the page; with the group and answer columns that is a
+  subquery per skipped row, so on a course of 10,000 applications the last page took 1.1 s on
+  PostgreSQL (0.93 s on the mini cluster) where the first took 76 ms. The page is now read in two
+  statements: the page's ids and the total, then those rows whole. The page's order now ends in the
+  record's id, so rows tied on the sort fall on exactly one page. Core's own table view (5.1 and 5.2,
+  and "Table view" on 5.3) still reads in one statement.
 
 - **The course report's filters work on a method that asks a custom profile field.** Core's
   `core_reportbuilder_set_filters` and `_filters_reset` build the report from its id before they set
