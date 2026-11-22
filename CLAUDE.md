@@ -91,6 +91,7 @@ classes/table/applications.php  the queue's table, a core_table\dynamic one
 classes/local/queue.php      "awaiting a decision", the review lookup, the scopes and the previous/next walk
 classes/bulk/                the participants page's three bulk decisions
 report.php, classes/reportbuilder/  the course report and a custom-report datasource, both over the durable record
+classes/output/report_view.php, js/esm/src/report/  the course report's React view (5.3), its shell and its client
 renderer.php                 page rendering plus the notification e-mail body
 templates/                   manage, manage_actions, queue_capacity, queue_chip, queue_filters, review
                              (left column: review_summary, review_rules, review_history,
@@ -1248,6 +1249,23 @@ backup/                      group mappings, comments and the durable trail, see
   `active_keys()` maps catalogue keys to column identifiers, which are the same on every instance
   (each instance generates its own aliases, so never carry an alias across). No preference means the
   R1 default set. Gates `HD1`-`HD23`.
+
+- **The course report's React view is Moodle 5.3 only, and it is a client of R3, never a second
+  report (R4).** `report.php` renders `\enrol_apply\output\report_view` (template `report_view`)
+  where `report_view::wanted()` holds: `$CFG->branch >= 503` and no `view=table`; 5.1 and 5.2 keep
+  core's system report, because the owner limited the view to 5.3 and the committed `js/esm` tree is
+  the one 5.3's `grunt esm` builds (a `.dev.js` beside each output, `js/esm/src/swizzle.json`, every
+  entry `prohibited` because the page mounts the bundle, which inlines them). The props carry
+  configuration and strings only; every row comes through `enrol_apply_report_rows` and the band
+  through `enrol_apply_report_summary`, each call a request of its own (`fetchOne`, never a batch:
+  core keeps one report instance per request), a column change re-reads the rows only after the
+  preference write resolves, and filters are core's store (`core_reportbuilder_set_filters`, which
+  replaces the whole set, so `js/esm/src/report/filters.ts` rewrites every stored value). The
+  noscript holds core's rendering without its filter form (`set_filter_form_default(false)`: its
+  script would look for a form a scripting browser never builds from a noscript). Build:
+  `js/esm/bundle.json` names `src/report/ReportView.tsx`; core's task writes the per-file outputs,
+  then the fleet's bundle step writes `js/esm/build/bundle.js` and its manifest, which
+  `tests/bundle_test.php` checks against the sources. Behat waits on `pending.ts`'s holds.
 
 - **Both listings order by a unique key as a last resort, and the injection point is the only
   one that works.** Every column either table offers can tie — `applydate` is `ue.timecreated`,

@@ -1,0 +1,77 @@
+{{!
+    This file is part of Moodle - http://moodle.org/
+
+    Moodle is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Moodle is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+}}
+{{!
+    @template enrol_apply/report_view
+
+    The course report's React view (stage R4, Moodle 5.3 only): one mount point, core's own
+    rendering of the report for a browser without JavaScript, and the way to core's table.
+
+    The mount names the bundle (js/esm/bundle.json): one ES module built from
+    js/esm/src/report/ReportView.tsx, so the client arrives in one request. Its inner content is
+    what the first paint shows until React commits, which replaces it: a skeleton in the shape of
+    the band and the grid, and, hidden behind it, one sentence that is true only if the component
+    never mounts. styles.css swaps the two about 10 s after the first paint, so no pulse lasts for
+    ever. Both are shown only under body.jsenabled; only the mounted component draws rows, so a
+    step asserting an applicant's name in the view asserts that React ran.
+
+    The props arrive already JSON-encoded by enrol_apply\output\report_view, in one value, through
+    a triple stash: nothing between here and React is an HTML context. They carry configuration and
+    strings, never a row.
+
+    The noscript holds core's rendering of the report without its filter form; the link under it
+    is core's table with JavaScript, which keeps every filter core offers.
+
+    Context variables required for this template:
+    * props - the component's props, JSON.
+    * tableurl - report.php with view=table.
+    * noscript - core's rendering of the report, HTML.
+
+    Example context (json):
+    {
+        "props": "{\"enrolid\": 3, \"labels\": {\"loading\": \"Loading applications\"}, \"perpage\": 30}",
+        "tableurl": "https://example.com/enrol/apply/report.php?id=3&view=table",
+        "noscript": "<p>Core's report</p>"
+    }
+}}
+<div class="enrol_apply-rview" data-enrol-apply-report="view">
+    <p class="enrol_apply-rview-tablelink">
+        <a href="{{tableurl}}">{{#str}}reportviewtableview, enrol_apply{{/str}}</a>
+    </p>
+    {{#react}}
+    {
+        "component": "@moodle/lms/enrol_apply/bundle",
+        "props": {{{props}}},
+        "class": "enrol_apply-rview-mount"
+    }
+    <div class="enrol_apply-rview-preload" aria-hidden="true">
+        <div class="enrol_apply-rview-band">
+            <div class="enrol_apply-rview-tile enrol_apply-rview-sk"><span class="enrol_apply-rview-skb"></span><span class="enrol_apply-rview-skb enrol_apply-rview-skb--big"></span></div>
+            <div class="enrol_apply-rview-tile enrol_apply-rview-sk"><span class="enrol_apply-rview-skb"></span><span class="enrol_apply-rview-skb enrol_apply-rview-skb--big"></span></div>
+            <div class="enrol_apply-rview-tile enrol_apply-rview-sk"><span class="enrol_apply-rview-skb"></span><span class="enrol_apply-rview-skb enrol_apply-rview-skb--big"></span></div>
+        </div>
+        <div class="enrol_apply-rview-skgrid enrol_apply-rview-sk">
+            <span class="enrol_apply-rview-skb"></span>
+            <span class="enrol_apply-rview-skb"></span>
+            <span class="enrol_apply-rview-skb"></span>
+            <span class="enrol_apply-rview-skb"></span>
+            <span class="enrol_apply-rview-skb"></span>
+        </div>
+    </div>
+    <p class="enrol_apply-rview-failed">{{#str}}reportviewmountfailed, enrol_apply{{/str}}</p>
+    {{/react}}
+    <noscript>{{{noscript}}}</noscript>
+</div>

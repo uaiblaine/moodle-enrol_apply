@@ -1,0 +1,30 @@
+{
+  "report/Band": {
+    "eject": "prohibited",
+    "wrap": "prohibited"
+  },
+  "report/Bar": {
+    "eject": "prohibited",
+    "wrap": "prohibited"
+  },
+  "report/Cards": {
+    "eject": "prohibited",
+    "wrap": "prohibited"
+  },
+  "report/Grid": {
+    "eject": "prohibited",
+    "wrap": "prohibited"
+  },
+  "report/Pager": {
+    "eject": "prohibited",
+    "wrap": "prohibited"
+  },
+  "report/ReportView": {
+    "eject": "prohibited",
+    "wrap": "prohibited"
+  },
+  "report/Segmented": {
+    "eject": "prohibited",
+    "wrap": "prohibited"
+  }
+}

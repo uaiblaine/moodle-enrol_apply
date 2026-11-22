@@ -19,7 +19,9 @@
  *
  * This script authorises the first view. It does not authorise the ones that follow: sorting,
  * filtering and paging all go through core_table_get_dynamic_table_content, which never runs
- * this file. The gate that runs every time is course_applications::can_view().
+ * this file. The gate that runs every time is course_applications::can_view(). On Moodle 5.3 the
+ * page is the React view's shell by default (\enrol_apply\output\report_view), whose rows come from
+ * the plugin's web services under the same gate, and core's table with view=table.
  *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine
@@ -28,9 +30,14 @@
 
 require_once('../../config.php');
 
+use enrol_apply\output\report_view;
 use enrol_apply\reportbuilder\local\systemreports\course_applications;
 
 $id = required_param('id', PARAM_INT);
+/* 'table' asks for core's own rendering of the report where the React view is the default (5.3, R4);
+   anything else is the default view. Presentation only: both read the same report. */
+$view = optional_param('view', '', PARAM_ALPHA);
+$react = report_view::wanted($view);
 
 $instance = $DB->get_record('enrol', ['id' => $id, 'enrol' => 'apply'], '*', MUST_EXIST);
 $course = get_course($instance->courseid);
@@ -39,7 +46,7 @@ require_login($course);
 $context = context_course::instance($course->id, MUST_EXIST);
 require_capability('enrol/apply:viewreports', $context);
 
-$url = new moodle_url('/enrol/apply/report.php', ['id' => $instance->id]);
+$url = report_view::url((int) $instance->id, !$react && report_view::available());
 
 $PAGE->set_context($context);
 $PAGE->set_url($url);
@@ -76,5 +83,18 @@ echo $OUTPUT->heading(get_string('report:course_applications', 'enrol_apply'));
 if ($report->narrowed_groups() === []) {
     echo $OUTPUT->notification(get_string('notingroup'), \core\output\notification::NOTIFY_INFO);
 }
-echo $report->output();
+if ($react) {
+    /* The React view (R4): a shell whose props carry configuration and strings, every row arriving
+       through the plugin's web services, which read this same report. See report_view. */
+    echo $OUTPUT->render(new report_view($instance, $report));
+} else {
+    if (report_view::available()) {
+        // The way back to the default view, where this page is core's table on request.
+        echo $OUTPUT->container(
+            $OUTPUT->action_link(report_view::url((int) $instance->id), get_string('reportviewreactview', 'enrol_apply')),
+            'enrol_apply-rview-tablelink'
+        );
+    }
+    echo $report->output();
+}
 echo $OUTPUT->footer();

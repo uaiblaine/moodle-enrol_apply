@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased (2026112102)
+## Unreleased (2026112103)
 
 ### Security
 
@@ -122,6 +122,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **The course report's own view, on Moodle 5.3** (`docs/design/audit-report-study.md`, stage R4,
+  decisions AR-D4, AR-D9, AR-D13, AR-D14, AR-D15, AR-D17 and AR-D18). `report.php` now draws the
+  report in React from the three web services below: the turnaround band (median, 90th percentile,
+  still open with a link to the queue, decided without a person, the wait's distribution and the
+  median by method or group; compact for a reader narrowed by separate groups) with its measure
+  switch (first response or resolution); a filter bar with the scope (all, awaiting, decided), the
+  count, Filters (the report's own one-option filters, stored in core's filter store; a searched,
+  capped list where a course has many groups), Columns, View and Download, a search by name and the
+  chips of what is in force; a grid whose heading row and Applicant column stay in view while it
+  scrolls both ways, with sortable headings and columns resized by drag or by the arrow keys and
+  remembered in the reader's preference; cards under a narrow container; pages of 30, 50 or 100;
+  skeletons on the first load and dimmed rows under a progress line on later ones. An application
+  still awaiting a decision carries a **Review** button for a reader the review page admits. Core's
+  own table is one link away ("Table view", `report.php?view=table`), and is what a browser without
+  JavaScript gets. Moodle 5.1 and 5.2 keep core's table as before. The client is built from
+  `js/esm/src/report/` into one module (`js/esm/build/bundle.js`).
 - **The course report, read headlessly** (`docs/design/audit-report-study.md`, stage R3, decisions
   AR-D8, AR-D13, AR-D14, AR-D15 and AR-D17). The plugin's first web services, for the report's coming
   view: `enrol_apply_report_rows` (a page of rows with the report's own formatted cells and the raw

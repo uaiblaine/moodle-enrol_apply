@@ -545,6 +545,13 @@ R1 folds that column into the one Group cell of 3.0 and keeps G5's filter as is.
 R1 in either order; R4 needs R3. R6 runs after R4 is implemented, never before: the owner's rule
 (round 2).
 
+**R4 status (2026112103): implemented, on Moodle 5.3 only** (the owner narrowed it from 5.2+ on
+2026-11-21: 5.1 and 5.2 keep core's table). What it leaves out of the mockup: per-option counts in
+the filter panel (the rows answer carries none), the grouping select of section 5b's group filter
+(it carries no groupings), the Columns menu's preset sets, and the "Waited more than" and "Decided
+by" facets, which are core filters of other types and stay in core's table view ("More filters").
+Behat in `tests/behat/report_view.feature`; the profile is R6's.
+
 ## Sources read
 
 `report.php`; `classes/reportbuilder/` (system report, entities, formatter, group filter, datasource);
