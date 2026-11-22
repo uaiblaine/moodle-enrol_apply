@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Unreleased (2026112109)
+
+### Changed
+
+- **The course report's facet counts read the rows once (2026112109, no upgrade step).** Every
+  facet with no value of its own in force shares one WHERE, so its options are counted from one
+  read of the filtered records (DISTINCT by record, every facet's value beside the id) tallied in
+  PHP; only a facet whose own filter is applied is read apart, without that value. Each facet cost
+  about 47 ms under a name search (seven of them, each re-evaluating the search over the user
+  join), which put `enrol_apply_report_rows` at 318 ms p50 and 343 ms p95 on 10,000 applications
+  (PostgreSQL 18, 38 statements) against AR-D16's 300 ms budget; the counts, their narrowing and
+  their meaning are unchanged (`report_facets_test` chooses each option).
+
 ## Unreleased (2026112108)
 
 ### Added

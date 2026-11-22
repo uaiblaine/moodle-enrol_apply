@@ -507,6 +507,58 @@ final class report_facets_test extends \core_reportbuilder\tests\core_reportbuil
     }
 
     /**
+     * The statements one read of the rows spends, with or without the facets.
+     *
+     * @param bool $facets Whether the facets are counted.
+     * @return int The reads the database counted.
+     */
+    private function reads_of_rows(bool $facets): int {
+        global $DB;
+
+        $report = $this->report();
+        $before = $DB->perf_get_reads();
+        reportengine::rows($report, ['facets' => $facets]);
+
+        return $DB->perf_get_reads() - $before;
+    }
+
+    /**
+     * The facets with no value of their own in force are counted in one read, and a facet whose own
+     * filter is applied in one more, whatever the number of facets.
+     *
+     * One read is a statement, or three where the database opens a cursor for a recordset (PostgreSQL),
+     * which a recordset of a known query measures; the group facet's groupings are one more recordset,
+     * and one statement besides is the panel's own.
+     *
+     * Changes that must make it fail: a facet read of its own for each filter, or a facet whose own
+     * filter is applied counted from the shared read.
+     *
+     * @return void
+     */
+    public function test_the_facets_are_counted_in_one_read_per_distinct_where(): void {
+        global $DB;
+
+        $this->setAdminUser();
+        $before = $DB->perf_get_reads();
+        $DB->get_recordset_sql('SELECT id FROM {user} WHERE id = ?', [0])->close();
+        $read = $DB->perf_get_reads() - $before;
+
+        // A first call warms the caches the later calls would otherwise fill.
+        $this->reads_of_rows(true);
+        $none = $this->reads_of_rows(true) - $this->reads_of_rows(false);
+        $this->assertSame(2 * $read + 1, $none, 'One read of the facets, one of the groupings, one statement besides');
+
+        $this->store([
+            'submission:status_operator' => select::EQUAL_TO,
+            'submission:status_value' => submission::STATUS_APPROVED,
+        ]);
+        $one = $this->reads_of_rows(true) - $this->reads_of_rows(false);
+        // The applied facet's read, and at most the one statement a filter in force adds to the rows' own.
+        $this->assertGreaterThanOrEqual($none + $read, $one, 'The applied facet is read apart');
+        $this->assertLessThanOrEqual($none + $read + 1, $one);
+    }
+
+    /**
      * "Waited more than": each threshold counts what core's duration filter lists at that many days,
      * for the measure's filter, and the other measure's facet is counted too.
      *
