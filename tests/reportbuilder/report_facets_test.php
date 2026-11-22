@@ -415,6 +415,98 @@ final class report_facets_test extends \core_reportbuilder\tests\core_reportbuil
     }
 
     /**
+     * A reader holding the report and every group, through a role of their own, with or without the
+     * capability that shows hidden groups.
+     *
+     * A role of their own: every stock archetype holding the report's capability also holds
+     * moodle/course:viewhiddengroups, so a stock role would prove nothing about the visibility rule.
+     *
+     * @param bool $viewhidden Whether the role holds moodle/course:viewhiddengroups.
+     * @return \stdClass The reader, a member of no group and narrowed by none.
+     */
+    private function unnarrowed_reader(bool $viewhidden): \stdClass {
+        $role = $this->getDataGenerator()->create_role();
+        $system = \context_system::instance()->id;
+        assign_capability(groupscope::REPORT, CAP_ALLOW, $role, $system, true);
+        assign_capability('moodle/site:accessallgroups', CAP_ALLOW, $role, $system, true);
+        if ($viewhidden) {
+            assign_capability('moodle/course:viewhiddengroups', CAP_ALLOW, $role, $system, true);
+        }
+        $user = $this->getDataGenerator()->create_user();
+        role_assign($role, $user->id, context_course::instance($this->course->id)->id);
+        $this->getDataGenerator()->enrol_user($user->id, $this->course->id);
+
+        return $user;
+    }
+
+    /**
+     * A group core hides from a reader is neither counted nor listed under its grouping, for a reader
+     * no separate-groups rule narrows; the same reader holding the capability that shows hidden
+     * groups sees both.
+     *
+     * Two hidden groups, one visible to nobody and one to its members, each holding a record the
+     * reader's rows list. The groupings: North two holds Alpha and the hidden Gamma, East holds the two
+     * hidden groups alone.
+     *
+     * Changes that must make it fail: the group facet offering every group of the course rather than
+     * the ones core shows the reader (the options and so the counts), or the groupings reading every
+     * group of the course rather than the offered ones.
+     *
+     * @return void
+     */
+    public function test_a_group_hidden_from_the_reader_is_neither_counted_nor_listed_under_its_grouping(): void {
+        $generator = $this->getDataGenerator();
+        $none = $generator->create_group([
+            'courseid' => $this->course->id,
+            'name' => 'Gamma',
+            'visibility' => GROUPS_VISIBILITY_NONE,
+        ]);
+        $own = $generator->create_group([
+            'courseid' => $this->course->id,
+            'name' => 'Delta',
+            'visibility' => GROUPS_VISIBILITY_OWN,
+        ]);
+        $east = $generator->create_grouping(['courseid' => $this->course->id, 'name' => 'East']);
+        $north = $generator->create_grouping(['courseid' => $this->course->id, 'name' => 'North two']);
+        $generator->create_grouping_group(['groupingid' => $east->id, 'groupid' => $none->id]);
+        $generator->create_grouping_group(['groupingid' => $east->id, 'groupid' => $own->id]);
+        $generator->create_grouping_group(['groupingid' => $north->id, 'groupid' => $this->mine->id]);
+        $generator->create_grouping_group(['groupingid' => $north->id, 'groupid' => $none->id]);
+        $this->seed('hidden', 'Gabi', (int) $none->id, ['timecreated' => self::NOW - 3 * DAYSECS]);
+        $this->seed('own', 'Hugo', (int) $own->id, ['timecreated' => self::NOW - 3 * DAYSECS]);
+
+        // The control: with the capability the same reader is offered and counted both.
+        $this->setUser($this->unnarrowed_reader(true));
+        $seen = reportengine::rows($this->report(), []);
+        $this->assertSame(8, $seen['total']);
+        // The options are in natural order of name, so the counts are compared by value.
+        $this->assertEquals(
+            [
+                (string) $this->mine->id => 4,
+                (string) $this->theirs->id => 2,
+                (string) $none->id => 1,
+                (string) $own->id => 1,
+            ],
+            $this->counts($seen, 'submission:group')
+        );
+        $groupings = array_column($this->filter($seen, 'submission:group')['groupings'], 'groups', 'name');
+        $this->assertSame([(int) $none->id, (int) $own->id], $groupings['East']);
+        $this->assertSame([(int) $this->mine->id, (int) $none->id], $groupings['North two']);
+
+        // Without it the rows still list the records, and the facet names neither group.
+        $this->setUser($this->unnarrowed_reader(false));
+        $blind = reportengine::rows($this->report(), []);
+        $this->assertSame(8, $blind['total']);
+        $this->assertSame(
+            [(string) $this->mine->id => 4, (string) $this->theirs->id => 2],
+            $this->counts($blind, 'submission:group')
+        );
+        $groupings = array_column($this->filter($blind, 'submission:group')['groupings'], 'groups', 'name');
+        $this->assertSame(['North', 'North two', 'South'], array_keys($groupings));
+        $this->assertSame([(int) $this->mine->id], $groupings['North two']);
+    }
+
+    /**
      * The group facet's column predicate answers as the filter's listed one for every record and group.
      *
      * @return void
