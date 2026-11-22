@@ -52,6 +52,7 @@ class report_rows extends external_api {
             'perpage' => new external_value(PARAM_INT, 'Rows per page: 30, 50 or 100', VALUE_DEFAULT, 30),
             'sort' => new external_value(PARAM_RAW, 'The column key to sort by, empty for the report\'s sort', VALUE_DEFAULT, ''),
             'direction' => new external_value(PARAM_ALPHA, 'asc or desc', VALUE_DEFAULT, 'desc'),
+            'facets' => new external_value(PARAM_BOOL, 'Whether to count the filter panel\'s options', VALUE_DEFAULT, true),
         ]);
     }
 
@@ -66,6 +67,7 @@ class report_rows extends external_api {
      * @param int $perpage Rows per page.
      * @param string $sort The column key to sort by.
      * @param string $direction asc or desc.
+     * @param bool $facets Whether to count the filter panel's options.
      * @return array The rows; see execute_returns().
      * @throws \moodle_exception When the method does not exist, or for a guest.
      * @throws \required_capability_exception When the reader may not view the report.
@@ -78,7 +80,8 @@ class report_rows extends external_api {
         int $page = 0,
         int $perpage = 30,
         string $sort = '',
-        string $direction = 'desc'
+        string $direction = 'desc',
+        bool $facets = true
     ): array {
         $params = self::validate_parameters(self::execute_parameters(), [
             'enrolid' => $enrolid,
@@ -89,6 +92,7 @@ class report_rows extends external_api {
             'perpage' => $perpage,
             'sort' => $sort,
             'direction' => $direction,
+            'facets' => $facets,
         ]);
 
         [$instance, $context] = reportengine::locate($params['enrolid']);
@@ -129,6 +133,13 @@ class report_rows extends external_api {
                 'active' => new external_value(PARAM_BOOL, 'Whether the report shows it'),
                 'fixed' => new external_value(PARAM_BOOL, 'Whether it is always shown'),
             ])),
+            'presets' => new external_multiple_structure(new external_single_structure([
+                'name' => new external_value(PARAM_ALPHA, 'The set\'s name'),
+                'columns' => new external_multiple_structure(
+                    new external_value(PARAM_RAW, 'Column key, as the preference stores it')
+                ),
+                'active' => new external_value(PARAM_BOOL, 'Whether the report shows this set'),
+            ])),
             'rows' => new external_multiple_structure(new external_single_structure([
                 'id' => new external_value(PARAM_INT, 'Record id'),
                 'userid' => new external_value(PARAM_INT, 'Applicant'),
@@ -146,16 +157,24 @@ class report_rows extends external_api {
                     'html' => new external_value(PARAM_RAW, 'Formatted cell'),
                 ])),
             ])),
+            'counted' => new external_value(PARAM_BOOL, 'Whether the filters\' options carry their counts'),
             'filters' => new external_multiple_structure(new external_single_structure([
                 'name' => new external_value(PARAM_RAW, 'Filter unique identifier'),
                 'title' => new external_value(PARAM_RAW, 'Title, plain'),
                 'type' => new external_value(PARAM_ALPHANUMEXT, 'Filter class name'),
+                'facet' => new external_value(PARAM_ALPHA, 'The panel\'s facet: choice, waited, decider, or empty for none'),
                 'options' => new external_multiple_structure(new external_single_structure([
                     'value' => new external_value(PARAM_RAW, 'Value'),
                     'label' => new external_value(PARAM_RAW, 'Label, plain'),
+                    'count' => new external_value(PARAM_INT, 'Rows with this option under every other filter, -1 when not counted'),
                 ])),
                 'applied' => new external_value(PARAM_BOOL, 'Whether the reader\'s stored values narrow the rows'),
                 'values' => new external_value(PARAM_RAW, 'The reader\'s stored values for it, JSON'),
+                'groupings' => new external_multiple_structure(new external_single_structure([
+                    'id' => new external_value(PARAM_INT, 'Grouping id'),
+                    'name' => new external_value(PARAM_RAW, 'Name, plain'),
+                    'groups' => new external_multiple_structure(new external_value(PARAM_INT, 'An offered group it holds')),
+                ])),
             ])),
             'preference' => preference_structure::get(),
         ]);

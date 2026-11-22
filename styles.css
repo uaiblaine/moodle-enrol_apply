@@ -2003,6 +2003,7 @@ body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload + .enrol_apply-rvie
 
 .enrol_apply-rview .enrol_apply-rview-narrowed,
 .enrol_apply-rview .enrol_apply-rview-note,
+.enrol_apply-rview .enrol_apply-rview-retention,
 .enrol_apply-rview .enrol_apply-rview-hint {
     color: var(--enrol-apply-ink-muted);
     font-size: 0.8125rem;
@@ -2835,6 +2836,43 @@ body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload + .enrol_apply-rvie
 
 .enrol_apply-rview .enrol_apply-rview-optrow[aria-pressed="true"] {
     font-weight: 600;
+}
+
+/* An option's quiet count (counter.md): beside its label in an option, at the row's end in a searched list. */
+.enrol_apply-rview .enrol_apply-rview-optcount {
+    color: var(--enrol-apply-ink-muted);
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+}
+
+.enrol_apply-rview .enrol_apply-rview-optrow .enrol_apply-rview-optcount {
+    margin-inline-start: auto;
+}
+
+/* A searched list's field and, for the groups, the grouping select beside it (RP-D23). */
+.enrol_apply-rview .enrol_apply-rview-find {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+}
+
+.enrol_apply-rview .enrol_apply-rview-find .enrol_apply-rview-input {
+    flex: 1 1 10rem;
+}
+
+.enrol_apply-rview .enrol_apply-rview-grouping {
+    flex: 0 1 auto;
+    margin-top: 0.375rem;
+    width: auto;
+}
+
+/* A menu's heading (menu.md): the Columns menu's sets. */
+.enrol_apply-rview .enrol_apply-rview-menu-head {
+    color: var(--enrol-apply-ink-muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.375rem 0.5rem 0.125rem;
 }
 
 .enrol_apply-rview .enrol_apply-rview-fpanel-foot {

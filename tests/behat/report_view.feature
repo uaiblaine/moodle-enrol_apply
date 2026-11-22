@@ -86,21 +86,38 @@ Feature: The applications report in its own view
     And I should see "Student 1" in the "[data-region='enrol_apply-rows']" "css_element"
     And I should not see "Admission route" in the "[data-region='enrol_apply-rows']" "css_element"
 
-  Scenario: A filter narrows the rows, shows a chip, and the chip clears it
+  Scenario: A filter's options carry their counts, and the one chosen shows a chip that clears it
+    Given the site is running Moodle version 5.3 or higher
+    And "student1" has applied to "C1" with the key of ""
+    And "student2" has applied to "C1" with the key of ""
+    And I log in as "admin"
+    And I am on the "C1" "enrol_apply > applications report" page
+    And I should see "Student 1" in the "[data-region='enrol_apply-rows']" "css_element"
+    When I press "Filters"
+    # Each option says how many rows it would list; one no row would list is not offered.
+    Then I should see "Pending 2" in the "[data-region='enrol_apply-bar'] [role='dialog']" "css_element"
+    And I should not see "Approved" in the "[data-region='enrol_apply-bar'] [role='dialog']" "css_element"
+    When I press "Pending 2"
+    And I press "Show 2"
+    Then I should see "Status: Pending" in the "[data-region='enrol_apply-chips']" "css_element"
+    And I should see "Student 2" in the "[data-region='enrol_apply-rows']" "css_element"
+    When I press "Remove filter Status: Pending"
+    Then "Remove filter Status: Pending" "button" should not exist
+    And I should see "2 applications" in the "[data-region='enrol_apply-total']" "css_element"
+
+  Scenario: A column set from the columns menu replaces the reader's columns
     Given the site is running Moodle version 5.3 or higher
     And "student1" has applied to "C1" with the key of ""
     And I log in as "admin"
     And I am on the "C1" "enrol_apply > applications report" page
     And I should see "Student 1" in the "[data-region='enrol_apply-rows']" "css_element"
-    When I press "Filters"
-    And I press "Approved"
-    And I press "Show results"
-    Then I should see "Status: Approved" in the "[data-region='enrol_apply-chips']" "css_element"
-    And I should see "No application matches" in the "[data-region='enrol_apply-rows']" "css_element"
-    And I should not see "Student 1" in the "[data-region='enrol_apply-rows']" "css_element"
-    When I press "Remove filter Status: Approved"
-    Then I should see "Student 1" in the "[data-region='enrol_apply-rows']" "css_element"
-    And I should see "1 application" in the "[data-region='enrol_apply-total']" "css_element"
+    And I should not see "Admission route" in the "[data-region='enrol_apply-rows']" "css_element"
+    # The Groups set is the one with the admission route, which the default set leaves out.
+    When I press "Columns"
+    And I press "Groups"
+    Then I should see "Admission route" in the "[data-region='enrol_apply-rows']" "css_element"
+    And I reload the page
+    And I should see "Admission route" in the "[data-region='enrol_apply-rows']" "css_element"
 
   Scenario: An open application carries a Review button to its review page
     Given the site is running Moodle version 5.3 or higher

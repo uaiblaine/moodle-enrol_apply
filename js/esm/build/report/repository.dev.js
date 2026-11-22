@@ -15,7 +15,7 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 import { fetchOne } from "@moodle/lms/core/ajax";
-const getRows = /* @__PURE__ */ __name((enrolid, query) => fetchOne({ methodname: "enrol_apply_report_rows", args: { enrolid, ...query } }), "getRows");
+const getRows = /* @__PURE__ */ __name((enrolid, query, facets) => fetchOne({ methodname: "enrol_apply_report_rows", args: { enrolid, ...query, facets } }), "getRows");
 const getSummary = /* @__PURE__ */ __name((enrolid, measure, scope, search) => fetchOne({ methodname: "enrol_apply_report_summary", args: { enrolid, measure, scope, search } }), "getSummary");
 const setPreference = /* @__PURE__ */ __name((enrolid, preference) => fetchOne({
   methodname: "enrol_apply_set_report_preference",

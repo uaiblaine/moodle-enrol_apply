@@ -9,7 +9,8 @@ import { jsxDEV } from "react/jsx-dev-runtime";
  * with a shadow on its edge once the frame has scrolled sideways. Sortable headings are buttons, the
  * order in aria-sort. Each heading's right edge is a separator that resizes its column: a drag changes
  * the col element alone and is saved once, on release, in the reader's preference (AR-D13); the arrow
- * keys move it by 16 px; a double click restores the default.
+ * keys move it by 16 px, saved once too, after the last key or when the handle loses the focus; a
+ * double click restores the default.
  *
  * @module     enrol_apply/report/Grid
  * @copyright  2026 Anderson Blaine
@@ -32,15 +33,26 @@ const WaitBar = /* @__PURE__ */ __name(({ row, longest }) => {
   }
   return /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-waitbar" + (row.open ? " enrol_apply-rview-waitbar--open" : ""), "aria-hidden": "true", children: /* @__PURE__ */ jsxDEV("span", { style: { width: `${Math.min(100, Math.round(row.wait / longest * 100))}%` } }, void 0, false, {
     fileName: "public/enrol/apply/js/esm/src/report/Grid.tsx",
-    lineNumber: 83,
+    lineNumber: 85,
     columnNumber: 13
   }) }, void 0, false, {
     fileName: "public/enrol/apply/js/esm/src/report/Grid.tsx",
-    lineNumber: 82,
+    lineNumber: 84,
     columnNumber: 9
   });
 }, "WaitBar");
-const Grid = /* @__PURE__ */ __name(({ labels, columns, identity, rows, widths, sort, direction, onSort, onWidth }) => {
+const Grid = /* @__PURE__ */ __name(({
+  labels,
+  columns,
+  identity,
+  rows,
+  widths,
+  sort,
+  direction,
+  onSort,
+  onWidth,
+  onWidthCommit
+}) => {
   const frame = useRef(null);
   const table = useRef(null);
   const drag = useRef(null);
@@ -98,7 +110,7 @@ const Grid = /* @__PURE__ */ __name(({ labels, columns, identity, rows, widths, 
       step = rtl ? STEP : -STEP;
     } else if (event.key === "Home") {
       event.preventDefault();
-      onWidth(key, null);
+      onWidth(key, null, true);
       return;
     }
     if (step === 0) {
@@ -107,7 +119,7 @@ const Grid = /* @__PURE__ */ __name(({ labels, columns, identity, rows, widths, 
     event.preventDefault();
     const width = bound(key, widthOf(widths, key) + step);
     if (width !== widthOf(widths, key)) {
-      onWidth(key, width);
+      onWidth(key, width, true);
     }
   }, "keydown");
   return /* @__PURE__ */ jsxDEV(
@@ -122,23 +134,23 @@ const Grid = /* @__PURE__ */ __name(({ labels, columns, identity, rows, widths, 
       children: /* @__PURE__ */ jsxDEV("table", { className: "enrol_apply-rview-grid", ref: table, style: { width: `${total}px` }, children: [
         /* @__PURE__ */ jsxDEV("caption", { className: "visually-hidden", children: labels.caption }, void 0, false, {
           fileName: "public/enrol/apply/js/esm/src/report/Grid.tsx",
-          lineNumber: 232,
+          lineNumber: 236,
           columnNumber: 17
         }),
         /* @__PURE__ */ jsxDEV("colgroup", { children: columns.map((column) => /* @__PURE__ */ jsxDEV("col", { "data-col": column.key, style: { width: `${widthOf(widths, column.key)}px` } }, column.key, false, {
           fileName: "public/enrol/apply/js/esm/src/report/Grid.tsx",
-          lineNumber: 235,
+          lineNumber: 239,
           columnNumber: 25
         })) }, void 0, false, {
           fileName: "public/enrol/apply/js/esm/src/report/Grid.tsx",
-          lineNumber: 233,
+          lineNumber: 237,
           columnNumber: 17
         }),
         /* @__PURE__ */ jsxDEV("thead", { children: /* @__PURE__ */ jsxDEV("tr", { children: columns.map((column) => {
           const order = ariaSort(sort === column.key, direction);
           const title = /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-th-title", children: column.title }, void 0, false, {
             fileName: "public/enrol/apply/js/esm/src/report/Grid.tsx",
-            lineNumber: 242,
+            lineNumber: 246,
             columnNumber: 43
           });
           return /* @__PURE__ */ jsxDEV(
@@ -160,7 +172,7 @@ const Grid = /* @__PURE__ */ __name(({ labels, columns, identity, rows, widths, 
                       title,
                       /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-arrow", "aria-hidden": "true", children: ARROWS[order] }, void 0, false, {
                         fileName: "public/enrol/apply/js/esm/src/report/Grid.tsx",
-                        lineNumber: 259,
+                        lineNumber: 263,
                         columnNumber: 45
                       })
                     ]
@@ -169,12 +181,12 @@ const Grid = /* @__PURE__ */ __name(({ labels, columns, identity, rows, widths, 
                   true,
                   {
                     fileName: "public/enrol/apply/js/esm/src/report/Grid.tsx",
-                    lineNumber: 253,
+                    lineNumber: 257,
                     columnNumber: 41
                   }
                 ) : /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-plain", children: title }, void 0, false, {
                   fileName: "public/enrol/apply/js/esm/src/report/Grid.tsx",
-                  lineNumber: 263,
+                  lineNumber: 267,
                   columnNumber: 41
                 }),
                 /* @__PURE__ */ jsxDEV(
@@ -197,13 +209,14 @@ const Grid = /* @__PURE__ */ __name(({ labels, columns, identity, rows, widths, 
                         onWidth(column.key, null);
                       }
                     },
-                    onKeyDown: (event) => keydown(event, column.key)
+                    onKeyDown: (event) => keydown(event, column.key),
+                    onBlur: onWidthCommit
                   },
                   void 0,
                   false,
                   {
                     fileName: "public/enrol/apply/js/esm/src/report/Grid.tsx",
-                    lineNumber: 264,
+                    lineNumber: 268,
                     columnNumber: 37
                   }
                 )
@@ -213,76 +226,76 @@ const Grid = /* @__PURE__ */ __name(({ labels, columns, identity, rows, widths, 
             true,
             {
               fileName: "public/enrol/apply/js/esm/src/report/Grid.tsx",
-              lineNumber: 244,
+              lineNumber: 248,
               columnNumber: 33
             }
           );
         }) }, void 0, false, {
           fileName: "public/enrol/apply/js/esm/src/report/Grid.tsx",
-          lineNumber: 239,
+          lineNumber: 243,
           columnNumber: 21
         }) }, void 0, false, {
           fileName: "public/enrol/apply/js/esm/src/report/Grid.tsx",
-          lineNumber: 238,
+          lineNumber: 242,
           columnNumber: 17
         }),
         /* @__PURE__ */ jsxDEV("tbody", { children: rows.map((row) => /* @__PURE__ */ jsxDEV("tr", { "data-record": row.id, children: columns.map((column) => column.key === "applicant" ? /* @__PURE__ */ jsxDEV("td", { className: "enrol_apply-rview-fixed", children: /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-applicant", children: [
           /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-applicant-text", children: [
             /* @__PURE__ */ jsxDEV(CellLines, { column: column.key, html: cellHtml(row, column.key) }, void 0, false, {
               fileName: "public/enrol/apply/js/esm/src/report/Grid.tsx",
-              lineNumber: 297,
+              lineNumber: 302,
               columnNumber: 49
             }),
             /* @__PURE__ */ jsxDEV(IdentityLines, { row, identity }, void 0, false, {
               fileName: "public/enrol/apply/js/esm/src/report/Grid.tsx",
-              lineNumber: 298,
+              lineNumber: 303,
               columnNumber: 49
             })
           ] }, void 0, true, {
             fileName: "public/enrol/apply/js/esm/src/report/Grid.tsx",
-            lineNumber: 296,
+            lineNumber: 301,
             columnNumber: 45
           }),
           /* @__PURE__ */ jsxDEV(ReviewButton, { row, label: labels.review }, void 0, false, {
             fileName: "public/enrol/apply/js/esm/src/report/Grid.tsx",
-            lineNumber: 300,
+            lineNumber: 305,
             columnNumber: 45
           })
         ] }, void 0, true, {
           fileName: "public/enrol/apply/js/esm/src/report/Grid.tsx",
-          lineNumber: 295,
+          lineNumber: 300,
           columnNumber: 41
         }) }, column.key, false, {
           fileName: "public/enrol/apply/js/esm/src/report/Grid.tsx",
-          lineNumber: 294,
+          lineNumber: 299,
           columnNumber: 37
         }) : /* @__PURE__ */ jsxDEV("td", { children: [
           /* @__PURE__ */ jsxDEV(CellLines, { column: column.key, html: cellHtml(row, column.key) }, void 0, false, {
             fileName: "public/enrol/apply/js/esm/src/report/Grid.tsx",
-            lineNumber: 305,
+            lineNumber: 310,
             columnNumber: 41
           }),
           column.key === "wait" ? /* @__PURE__ */ jsxDEV(WaitBar, { row, longest }, void 0, false, {
             fileName: "public/enrol/apply/js/esm/src/report/Grid.tsx",
-            lineNumber: 306,
+            lineNumber: 311,
             columnNumber: 66
           }) : null
         ] }, column.key, true, {
           fileName: "public/enrol/apply/js/esm/src/report/Grid.tsx",
-          lineNumber: 304,
+          lineNumber: 309,
           columnNumber: 37
         })) }, row.id, false, {
           fileName: "public/enrol/apply/js/esm/src/report/Grid.tsx",
-          lineNumber: 291,
+          lineNumber: 296,
           columnNumber: 25
         })) }, void 0, false, {
           fileName: "public/enrol/apply/js/esm/src/report/Grid.tsx",
-          lineNumber: 289,
+          lineNumber: 294,
           columnNumber: 17
         })
       ] }, void 0, true, {
         fileName: "public/enrol/apply/js/esm/src/report/Grid.tsx",
-        lineNumber: 231,
+        lineNumber: 235,
         columnNumber: 13
       })
     },
@@ -290,7 +303,7 @@ const Grid = /* @__PURE__ */ __name(({ labels, columns, identity, rows, widths, 
     false,
     {
       fileName: "public/enrol/apply/js/esm/src/report/Grid.tsx",
-      lineNumber: 223,
+      lineNumber: 227,
       columnNumber: 9
     }
   );
@@ -301,58 +314,58 @@ const GridSkeleton = /* @__PURE__ */ __name(({ columns, widths }) => {
   return /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-gridframe", "aria-hidden": "true", children: /* @__PURE__ */ jsxDEV("table", { className: "enrol_apply-rview-grid", style: { width: `${total}px` }, children: [
     /* @__PURE__ */ jsxDEV("colgroup", { children: columns.map((column) => /* @__PURE__ */ jsxDEV("col", { style: { width: `${widthOf(widths, column.key)}px` } }, column.key, false, {
       fileName: "public/enrol/apply/js/esm/src/report/Grid.tsx",
-      lineNumber: 332,
+      lineNumber: 337,
       columnNumber: 46
     })) }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/report/Grid.tsx",
-      lineNumber: 331,
+      lineNumber: 336,
       columnNumber: 17
     }),
     /* @__PURE__ */ jsxDEV("thead", { children: /* @__PURE__ */ jsxDEV("tr", { children: columns.map((column) => /* @__PURE__ */ jsxDEV("th", { className: column.key === "applicant" ? "enrol_apply-rview-fixed" : void 0, children: /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-plain", children: /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-th-title", children: column.title }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/report/Grid.tsx",
-      lineNumber: 339,
+      lineNumber: 344,
       columnNumber: 37
     }) }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/report/Grid.tsx",
-      lineNumber: 338,
+      lineNumber: 343,
       columnNumber: 33
     }) }, column.key, false, {
       fileName: "public/enrol/apply/js/esm/src/report/Grid.tsx",
-      lineNumber: 337,
+      lineNumber: 342,
       columnNumber: 29
     })) }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/report/Grid.tsx",
-      lineNumber: 335,
+      lineNumber: 340,
       columnNumber: 21
     }) }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/report/Grid.tsx",
-      lineNumber: 334,
+      lineNumber: 339,
       columnNumber: 17
     }),
     /* @__PURE__ */ jsxDEV("tbody", { children: Array.from({ length: 8 }, (_, i) => /* @__PURE__ */ jsxDEV("tr", { className: "enrol_apply-rview-sk", children: columns.map((column, j) => /* @__PURE__ */ jsxDEV("td", { className: column.key === "applicant" ? "enrol_apply-rview-fixed" : void 0, children: /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-skb " + shapes[(i + j) % 3] }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/report/Grid.tsx",
-      lineNumber: 350,
+      lineNumber: 355,
       columnNumber: 37
     }) }, column.key, false, {
       fileName: "public/enrol/apply/js/esm/src/report/Grid.tsx",
-      lineNumber: 349,
+      lineNumber: 354,
       columnNumber: 33
     })) }, i, false, {
       fileName: "public/enrol/apply/js/esm/src/report/Grid.tsx",
-      lineNumber: 347,
+      lineNumber: 352,
       columnNumber: 25
     })) }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/report/Grid.tsx",
-      lineNumber: 345,
+      lineNumber: 350,
       columnNumber: 17
     })
   ] }, void 0, true, {
     fileName: "public/enrol/apply/js/esm/src/report/Grid.tsx",
-    lineNumber: 330,
+    lineNumber: 335,
     columnNumber: 13
   }) }, void 0, false, {
     fileName: "public/enrol/apply/js/esm/src/report/Grid.tsx",
-    lineNumber: 329,
+    lineNumber: 334,
     columnNumber: 9
   });
 }, "GridSkeleton");

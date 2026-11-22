@@ -539,11 +539,17 @@ decided), the count, Filters, Columns, View and Download, a search by name (from
 and a chip for each filter in force; a grid whose heading row and Applicant column stay in view as
 it scrolls, sortable by its headings, whose columns can be resized by dragging a heading's edge or
 with the arrow keys on it; and pages of 30, 50 or 100. Filters offers the report's filters that
-pick one value (the outcome, the admission route, the group, the method); the others are set in
-core's table view, which **Table view** (or View → Core's table view) opens and which a browser
-without JavaScript is shown. Columns chooses the columns, and the choice and the widths follow the
-reader to every course; View switches between the table, cards and Automatic (cards when the report
-is narrower than 576 pixels), remembered in the browser. Moodle 5.1 and 5.2 show core's table only.
+pick one value (the outcome, the admission route, the group, the method), "Waited more than" 1, 3,
+7 or 14 days and "Decided by", each option with the number of applications it would list under the
+other filters, the scope and the search in force; above eight groups the group filter is a search,
+with a grouping menu where the course has groupings. The others are set in core's table view, which
+**Table view** (or View → Core's table view) opens and which a browser without JavaScript is shown.
+Columns chooses the columns, or one of three sets (Decisions, Answers, Groups), and the choice and
+the widths follow the reader to every course; View switches between the table, cards and Automatic
+(cards when the report is narrower than 576 pixels), remembered in the browser. Download writes the
+applications in view: the filters, the scope and the search in force. Under the report, and above
+core's table, a note says how long application records are kept (`retentiondays`), with a link to
+the setting for a site administrator. Moodle 5.1 and 5.2 show core's table only.
 
 Where a course carries more than one Course enrol confirmation method, the report opens scoped to
 the one whose icon you clicked, clearing the method filter widens it to every application in the
@@ -561,7 +567,8 @@ no guest):
   columns, optionally narrowed to the applications still awaiting a response (or a resolution) or
   to the decided ones, and by part of the applicant's name. The cells are the report's own, and the
   reader's filters, their group narrowing and the masking of what they may not see apply as on the
-  page. The answer also lists the columns the reader may choose and the report's filters.
+  page. The answer also lists the columns the reader may choose, the three column sets, and the
+  report's filters with, unless the caller asks for none, how many rows each option would list.
 - `enrol_apply_report_summary`: for the same rows, how many were decided by a person, are still
   open (and how many for more than a week, and the oldest), or were decided without a person (a
   key admission); the median wait; and, for a reader not narrowed by separate groups, the 90th

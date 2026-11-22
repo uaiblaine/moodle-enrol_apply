@@ -32,6 +32,7 @@ use enrol_apply\local\fields;
 use enrol_apply\local\groupscope;
 use enrol_apply\local\groupvisibility;
 use enrol_apply\local\queue;
+use enrol_apply\local\reportengine;
 use enrol_apply\local\reportpreference;
 use enrol_apply\reportbuilder\local\entities\submission;
 use enrol_apply\reportbuilder\local\filters\group as groupfilter;
@@ -194,6 +195,18 @@ class course_applications extends system_report {
 
         $this->add_report_columns();
         $this->add_report_filters();
+
+        /* The scope and the name search, where the report's parameters carry them: the headless view's
+           download link passes the ones in force (reportengine adds them to its own table instead), so
+           core's download.php, which rebuilds the report from its parameters, writes the rows the
+           reader is looking at. Read through the engine's own vocabulary and cleaning, and built by
+           the same method the rows call uses; each is ANDed with the base conditions above, so a
+           parameter, which a client sets freely, can only narrow what this reader may already read. */
+        $scope = reportengine::scope((string) $this->get_parameter('scope', 'all', PARAM_ALPHA));
+        $search = reportengine::search((string) $this->get_parameter('search', '', PARAM_TEXT));
+        foreach (reportengine::conditions($this, $this->measure(), $scope, $search) as [$sql, $params]) {
+            $this->add_base_condition_sql("({$sql})", $params);
+        }
 
         /* The way from a row to the decision (AR-D18): the applicant's name stays the profile link
            it is on every other page, and an application still awaiting a decision gets a Review
@@ -380,12 +393,11 @@ class course_applications extends system_report {
      * @return array Key => true, in catalogue order.
      */
     public function chosen_keys(): array {
-        $catalogue = $this->column_catalogue();
         $preference = reportpreference::read()['columns'];
 
-        $chosen = [];
         if ($preference === null) {
-            foreach ($catalogue as $key => $entry) {
+            $chosen = [];
+            foreach ($this->column_catalogue() as $key => $entry) {
                 if ($entry['default']) {
                     $chosen[$key] = true;
                 }
@@ -394,7 +406,23 @@ class course_applications extends system_report {
             return $chosen;
         }
 
-        $named = array_flip($preference);
+        return $this->keys_for($preference);
+    }
+
+    /**
+     * The catalogue keys a stored choice of columns shows on this report.
+     *
+     * The choice intersected with the catalogue, "answers" standing for every question. What
+     * {@see chosen_keys()} reads a reader's preference as, and what a Columns menu set means here
+     * ({@see \enrol_apply\local\reportengine::PRESETS}).
+     *
+     * @param array $columns The keys chosen, as reportpreference stores them.
+     * @return array Key => true, in catalogue order.
+     */
+    public function keys_for(array $columns): array {
+        $catalogue = $this->column_catalogue();
+        $chosen = [];
+        $named = array_flip($columns);
         $answers = isset($named['answers']);
         foreach ($catalogue as $key => $entry) {
             if (isset($named[$key]) || ($answers && $entry['source'] === 'answer')) {

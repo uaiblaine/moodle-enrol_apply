@@ -1271,6 +1271,17 @@ backup/                      group mappings, comments and the durable trail, see
   `js/esm/bundle.json` names `src/report/ReportView.tsx`; core's task writes the per-file outputs,
   then the fleet's bundle step writes `js/esm/build/bundle.js` and its manifest, which
   `tests/bundle_test.php` checks against the sources. Behat waits on `pending.ts`'s holds.
+  **The panel's counts are faceted, and one definition carries the scope and the search.** Each
+  facet's options are counted over the table's FROM and `headless_table::where_without()` (core's
+  `init_sql()` rebuilt: base condition, every other filter, the appended conditions), so a count is
+  what choosing that option lists (`report_facets_test` chooses each one); the group facet reads
+  each record once (its application group and joined list) and tallies in PHP, a whole id counting
+  once per record, as `record_group_where()` selects (one join per offered group cost 430 ms on
+  MariaDB at 300 groups).
+  `reportengine::conditions()` is the scope and the search for both the headless table and the report's
+  own base conditions when its parameters carry them, which is how core's `download.php` writes the
+  rows in view; its parameter names are core-generated (`database::generate_param_name()`, the
+  fullname field's own are not), or `add_base_condition_sql()` throws. Gates `FC1`-`FC10`, `DL1`, `DL2`, `PR1`, `RT1`, `RT2`.
 
 - **Both listings order by a unique key as a last resort, and the injection point is the only
   one that works.** Every column either table offers can tie — `applydate` is `ue.timecreated`,
