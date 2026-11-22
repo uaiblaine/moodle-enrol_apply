@@ -535,6 +535,19 @@ final class bootstrap_compat_test extends \basic_testcase {
             '.enrol_apply-meter' => 'a track, drawn empty',
             '.enrol_apply-meterfill' => 'the bar inside the track',
             '.enrol_apply-meterfill-warn' => 'the same bar, recoloured',
+            '.enrol_apply-rview .enrol_apply-rview-skb' => 'a skeleton block',
+            '.enrol_apply-rview .enrol_apply-rview-progress::before' => 'the loading line',
+            '.enrol_apply-rview .enrol_apply-rview-track' => 'a bar\'s track, drawn empty',
+            '.enrol_apply-rview .enrol_apply-rview-fill' => 'the bar inside the track',
+            '.enrol_apply-rview .enrol_apply-rview-fill--late' => 'the same bar, recoloured',
+            '.enrol_apply-rview .enrol_apply-rview-menu-sep' => 'a menu\'s separator line',
+            '.enrol_apply-rview .enrol_apply-rview-resize::after' => 'a resize handle\'s line',
+            '.enrol_apply-rview .enrol_apply-rview-resize:hover::after, '
+                . '.enrol_apply-rview .enrol_apply-rview-resize:focus-visible::after, '
+                . '.enrol_apply-rview .enrol_apply-rview-resize.is-active::after' => 'the same line, active',
+            '.enrol_apply-rview .enrol_apply-rview-waitbar' => 'the wait\'s track',
+            '.enrol_apply-rview .enrol_apply-rview-waitbar > span' => 'the bar inside it',
+            '.enrol_apply-rview .enrol_apply-rview-waitbar--open > span' => 'the same bar, recoloured',
         ];
 
         $offenders = [];

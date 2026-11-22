@@ -21,3 +21,8 @@ docs                  export-ignore
 mutations             export-ignore
 /lang/pt_br           export-ignore
 /.mdlshield          export-ignore
+# The React client's development build: the .dev.js twins (served only under developer debugging,
+# with a fallback to the .js beside them) and the source maps. Tracked, because `mdl ci` compares
+# js/esm with a fresh build; not shipped.
+/js/esm/build/**/*.dev.js    export-ignore
+/js/esm/build/**/*.js.map    export-ignore

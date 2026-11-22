@@ -42,6 +42,8 @@ class behat_enrol_apply extends behat_base {
      * Recognised pages:
      *   "<shortname> > manage applications"   the per-course application queue
      *   "<shortname> > application fields"    the instance's own application questions
+     *   "<shortname> > applications report"   the course report of applications, its default view
+     *   "<shortname> > applications table"    the same report as core's table (view=table on 5.3)
      *
      * @param string $type Identifies which page to resolve.
      * @param string $identifier Course short name.
@@ -55,6 +57,12 @@ class behat_enrol_apply extends behat_base {
 
             case 'application fields':
                 return new moodle_url('/enrol/apply/fields.php', ['id' => $this->get_instance_id($identifier)]);
+
+            case 'applications report':
+                return new moodle_url('/enrol/apply/report.php', ['id' => $this->get_instance_id($identifier)]);
+
+            case 'applications table':
+                return new moodle_url('/enrol/apply/report.php', ['id' => $this->get_instance_id($identifier), 'view' => 'table']);
 
             default:
                 throw new Exception("Unrecognised enrol_apply page type '{$type}'.");

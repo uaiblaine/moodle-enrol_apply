@@ -529,6 +529,22 @@ enrolment, the admission route, the three group columns and the details submitte
 of this report, which shows each of those facts once; a custom report on the source below offers
 all of them.
 
+On Moodle 5.3 the report opens in its own view, drawn in the page from the web services below:
+a turnaround band over the rows listed (the median wait, the 90th percentile, how many are still
+open, with a link to the queue for a reader who may open it, and how many were decided without a
+person, then the wait's distribution and the median by method or by group; a reader narrowed by
+separate groups gets the median, the open count and the decisions without a person only), measured
+to the first response or to the resolution; a bar with the scope (all, awaiting a response,
+decided), the count, Filters, Columns, View and Download, a search by name (from two characters)
+and a chip for each filter in force; a grid whose heading row and Applicant column stay in view as
+it scrolls, sortable by its headings, whose columns can be resized by dragging a heading's edge or
+with the arrow keys on it; and pages of 30, 50 or 100. Filters offers the report's filters that
+pick one value (the outcome, the admission route, the group, the method); the others are set in
+core's table view, which **Table view** (or View → Core's table view) opens and which a browser
+without JavaScript is shown. Columns chooses the columns, and the choice and the widths follow the
+reader to every course; View switches between the table, cards and Automatic (cards when the report
+is narrower than 576 pixels), remembered in the browser. Moodle 5.1 and 5.2 show core's table only.
+
 Where a course carries more than one Course enrol confirmation method, the report opens scoped to
 the one whose icon you clicked, clearing the method filter widens it to every application in the
 course, and each method remembers your filters separately. A course with a single method offers no
@@ -537,7 +553,7 @@ such filter, and its report lists that course's applications as it always did.
 ### Web services
 
 The report can also be read without its page, through three AJAX web services that the report's
-coming view uses. Each takes the enrolment method's id, derives the course from it, and refuses a
+own view uses. Each takes the enrolment method's id, derives the course from it, and refuses a
 reader the report refuses (`enrol/apply:viewreports`, an active enrolment or access to the course,
 no guest):
 

@@ -1913,3 +1913,1232 @@ body.path-enrol-apply:not(.jsenabled) .enrol_apply-accordion .collapse {
         padding-right: 2.5rem;
     }
 }
+
+/* The course report's React view (R4, Moodle 5.3; js/esm/src/report). Its root is the shell's
+   wrapper, which carries data-enrol-apply-report and so the report's tokens above; these are the
+   further tokens of the Design System the view paints with (tokens.md), each the family name, then
+   Bootstrap's, then Bootstrap 5.3's light default. Every layer the view opens is drawn inside this
+   root, so no other root is needed. */
+.enrol_apply-rview {
+    --enrol-apply-surface-alt: var(--dimensions-surface-alt, var(--bs-tertiary-bg, #f8f9fa));
+    --enrol-apply-hover: var(--dimensions-hover, var(--bs-primary-bg-subtle, #cfe2ff));
+    --enrol-apply-ink-strong: var(--dimensions-ink-strong, var(--bs-emphasis-color, #000));
+    --enrol-apply-ink-faint: var(--dimensions-ink-faint, var(--bs-tertiary-color, rgba(33, 37, 41, .5)));
+    --enrol-apply-accent: var(--dimensions-accent, var(--bs-link-color, #0f6cbf));
+    --enrol-apply-focus-ring: var(--dimensions-focus-ring, var(--bs-emphasis-color, #000));
+    --enrol-apply-focus-width: var(--dimensions-focus-width, 2px);
+    --enrol-apply-radius-xl: var(--dimensions-radius-xl, 16px);
+    --enrol-apply-motion-fast: var(--dimensions-motion-fast, 150ms);
+    --enrol-apply-motion-base: var(--dimensions-motion-base, 250ms);
+    --enrol-apply-motion-ease: var(--dimensions-motion-ease, cubic-bezier(.4, 0, .2, 1));
+    --enrol-apply-bar-inner: 2rem;
+    color: var(--enrol-apply-ink);
+}
+
+@media (pointer: coarse) {
+    .enrol_apply-rview {
+        --enrol-apply-bar-inner: 2.25rem;
+    }
+}
+
+.enrol_apply-rview .enrol_apply-rview-tablelink {
+    font-size: 0.875rem;
+    margin: 0 0 0.75rem;
+}
+
+/* The shell's first paint: a skeleton until React commits, and after about 10 s the one sentence
+   that says the view did not load (block_compass's preload step, copied). Without JavaScript
+   neither shows: the noscript beside them carries core's report. */
+.enrol_apply-rview .enrol_apply-rview-preload,
+.enrol_apply-rview .enrol_apply-rview-failed {
+    display: none;
+}
+
+body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload {
+    animation: enrol_apply-rview-preload-out 100ms step-start 10s forwards;
+    display: block;
+}
+
+body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload + .enrol_apply-rview-failed {
+    animation: enrol_apply-rview-preload-in 100ms step-start 10s forwards;
+    display: block;
+    position: absolute;
+    visibility: hidden;
+}
+
+@keyframes enrol_apply-rview-preload-out {
+    from,
+    to {
+        position: absolute;
+        visibility: hidden;
+    }
+}
+
+@keyframes enrol_apply-rview-preload-in {
+    from,
+    to {
+        position: static;
+        visibility: visible;
+    }
+}
+
+.enrol_apply-rview .enrol_apply-rview-icon {
+    flex: none;
+    height: 1rem;
+    width: 1rem;
+}
+
+.enrol_apply-rview :focus-visible {
+    outline: var(--enrol-apply-focus-width) solid var(--enrol-apply-focus-ring);
+    outline-offset: 2px;
+}
+
+.enrol_apply-rview .enrol_apply-rview-num,
+.enrol_apply-rview .enrol_apply-rview-tile-value,
+.enrol_apply-rview .enrol_apply-rview-hrow-n,
+.enrol_apply-rview .enrol_apply-rview-pager button {
+    font-variant-numeric: tabular-nums;
+}
+
+.enrol_apply-rview .enrol_apply-rview-narrowed,
+.enrol_apply-rview .enrol_apply-rview-note,
+.enrol_apply-rview .enrol_apply-rview-hint {
+    color: var(--enrol-apply-ink-muted);
+    font-size: 0.8125rem;
+    margin: 0.25rem 0;
+}
+
+.enrol_apply-rview .enrol_apply-rview-error {
+    color: var(--enrol-apply-danger-ink);
+    font-size: 0.875rem;
+}
+
+.enrol_apply-rview .enrol_apply-rview-linkbtn {
+    padding: 0;
+}
+
+/* Skeleton (skeleton.md): blocks in the shape of what they stand for, one 1.3 s pulse. */
+.enrol_apply-rview .enrol_apply-rview-skb {
+    background: var(--enrol-apply-surface-inset);
+    border-radius: var(--enrol-apply-radius-xs);
+    display: block;
+    height: 0.75rem;
+    margin: 0.375rem 0;
+}
+
+.enrol_apply-rview .enrol_apply-rview-skb--big {
+    height: 1.5rem;
+    width: 60%;
+}
+
+.enrol_apply-rview .enrol_apply-rview-skb--w40 {
+    width: 40%;
+}
+
+.enrol_apply-rview .enrol_apply-rview-skb--w60 {
+    width: 60%;
+}
+
+.enrol_apply-rview .enrol_apply-rview-skb--w80 {
+    width: 80%;
+}
+
+.enrol_apply-rview .enrol_apply-rview-skgrid {
+    border: 1px solid var(--enrol-apply-line);
+    border-radius: var(--enrol-apply-radius-lg);
+    padding: 0.75rem;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .enrol_apply-rview .enrol_apply-rview-sk {
+        animation: enrol_apply-rview-pulse 1300ms ease-in-out infinite;
+    }
+}
+
+@keyframes enrol_apply-rview-pulse {
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: .45;
+    }
+}
+
+/* A region loading again: the old content stays, dimmed, under a 2 px line. */
+.enrol_apply-rview .enrol_apply-rview-region {
+    margin-bottom: 0.75rem;
+    position: relative;
+}
+
+.enrol_apply-rview .enrol_apply-rview-region[aria-busy="true"] .enrol_apply-rview-dim {
+    opacity: .55;
+    transition: opacity var(--enrol-apply-motion-fast) var(--enrol-apply-motion-ease);
+}
+
+.enrol_apply-rview .enrol_apply-rview-progress {
+    border-radius: 2px;
+    height: 2px;
+    left: 0;
+    overflow: hidden;
+    position: absolute;
+    right: 0;
+    top: 0;
+    z-index: 6;
+}
+
+.enrol_apply-rview .enrol_apply-rview-progress::before {
+    background: var(--enrol-apply-brand-fill);
+    bottom: 0;
+    content: "";
+    left: 0;
+    position: absolute;
+    top: 0;
+    width: 30%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .enrol_apply-rview .enrol_apply-rview-progress::before {
+        animation: enrol_apply-rview-indeterminate 1100ms var(--enrol-apply-motion-ease) infinite;
+    }
+}
+
+@keyframes enrol_apply-rview-indeterminate {
+    from {
+        transform: translateX(-100%);
+    }
+
+    to {
+        transform: translateX(340%);
+    }
+}
+
+/* The band: tiles, then the distribution and the breakdown side by side. */
+.enrol_apply-rview .enrol_apply-rview-bandhead {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+}
+
+.enrol_apply-rview .enrol_apply-rview-bandtitle {
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.enrol_apply-rview .enrol_apply-rview-band {
+    display: grid;
+    gap: 0.5rem;
+    grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+    margin-bottom: 0.5rem;
+}
+
+.enrol_apply-rview .enrol_apply-rview-tile,
+.enrol_apply-rview .enrol_apply-rview-panel {
+    color: var(--enrol-apply-ink);
+    background: var(--enrol-apply-surface);
+    border: 1px solid var(--enrol-apply-line);
+    border-radius: var(--enrol-apply-radius-lg);
+    min-width: 0;
+    padding: 0.75rem;
+}
+
+.enrol_apply-rview .enrol_apply-rview-tile-label {
+    color: var(--enrol-apply-ink-muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.enrol_apply-rview .enrol_apply-rview-tile-value {
+    color: var(--enrol-apply-ink-strong);
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.enrol_apply-rview .enrol_apply-rview-tile--warn .enrol_apply-rview-tile-value {
+    color: var(--enrol-apply-warning-ink);
+}
+
+.enrol_apply-rview .enrol_apply-rview-tile-sub {
+    color: var(--enrol-apply-ink-muted);
+    font-size: 0.75rem;
+}
+
+.enrol_apply-rview .enrol_apply-rview-tile-link {
+    display: inline-block;
+    font-size: 0.8125rem;
+    margin-top: 0.25rem;
+}
+
+.enrol_apply-rview .enrol_apply-rview-dist {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.enrol_apply-rview .enrol_apply-rview-dist > .enrol_apply-rview-panel {
+    flex: 1 1 45%;
+    min-width: 17.5rem;
+}
+
+.enrol_apply-rview .enrol_apply-rview-panel-title {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    gap: 0.5rem;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+}
+
+.enrol_apply-rview .enrol_apply-rview-hrow {
+    align-items: center;
+    display: grid;
+    font-size: 0.8125rem;
+    gap: 0.5rem;
+    grid-template-columns: minmax(0, 8rem) minmax(0, 1fr) 6rem;
+    margin: 0.25rem 0;
+}
+
+.enrol_apply-rview .enrol_apply-rview-hrow-label {
+    color: var(--enrol-apply-ink-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.enrol_apply-rview .enrol_apply-rview-hrow-n {
+    color: var(--enrol-apply-ink-muted);
+    text-align: right;
+    white-space: nowrap;
+}
+
+.enrol_apply-rview .enrol_apply-rview-track {
+    background: var(--enrol-apply-surface-inset);
+    border-radius: var(--enrol-apply-radius-xs);
+    display: block;
+    height: 0.5rem;
+    overflow: hidden;
+}
+
+.enrol_apply-rview .enrol_apply-rview-fill {
+    background: var(--enrol-apply-brand-fill);
+    border-radius: var(--enrol-apply-radius-xs);
+    display: block;
+    height: 100%;
+}
+
+.enrol_apply-rview .enrol_apply-rview-fill--late {
+    background: var(--enrol-apply-warning-edge);
+}
+
+.enrol_apply-rview .enrol_apply-rview-scrolllist {
+    border-top: 1px solid var(--enrol-apply-line);
+    margin-top: 0.5rem;
+    max-height: 16rem;
+    overflow-y: auto;
+    padding: 0.375rem 0.25rem 0 0;
+}
+
+.enrol_apply-rview .enrol_apply-rview-input {
+    margin-top: 0.375rem;
+}
+
+/* Segmented control (segmented-control.md). */
+.enrol_apply-rview .enrol_apply-rview-seg {
+    color: var(--enrol-apply-ink-muted);
+    background: var(--enrol-apply-surface-inset);
+    border: 1px solid transparent;
+    border-radius: var(--enrol-apply-radius-lg);
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.125rem;
+    padding: 0.1875rem;
+}
+
+.enrol_apply-rview .enrol_apply-rview-seg-cell {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    border-radius: var(--enrol-apply-radius-md);
+    color: var(--enrol-apply-ink-muted);
+    display: inline-flex;
+    font-size: 0.875rem;
+    font-weight: 500;
+    gap: 0.375rem;
+    height: var(--enrol-apply-bar-inner);
+    padding: 0 0.75rem;
+    transition:
+        background-color var(--enrol-apply-motion-base) var(--enrol-apply-motion-ease),
+        color var(--enrol-apply-motion-base) var(--enrol-apply-motion-ease);
+}
+
+.enrol_apply-rview .enrol_apply-rview-seg-cell:hover {
+    color: var(--enrol-apply-ink);
+    transition-duration: var(--enrol-apply-motion-fast);
+}
+
+.enrol_apply-rview .enrol_apply-rview-seg-cell[aria-checked="true"] {
+    background: var(--enrol-apply-surface);
+    box-shadow: var(--enrol-apply-elevation-sm);
+    color: var(--enrol-apply-ink);
+    font-weight: 600;
+}
+
+.enrol_apply-rview .enrol_apply-rview-seg--small .enrol_apply-rview-seg-cell {
+    font-size: 0.8125rem;
+    height: 1.75rem;
+    padding: 0 0.5rem;
+}
+
+/* Filter bar (filter-bar.md, icon-button.md, counter.md, tooltip.md). */
+.enrol_apply-rview .enrol_apply-rview-bar {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+    position: relative;
+}
+
+.enrol_apply-rview .enrol_apply-rview-bar-spacer {
+    flex: 1 1 0;
+}
+
+.enrol_apply-rview .enrol_apply-rview-bar-cluster {
+    color: var(--enrol-apply-ink-muted);
+    align-items: center;
+    background: var(--enrol-apply-surface-inset);
+    border-radius: var(--enrol-apply-radius-lg);
+    display: inline-flex;
+}
+
+.enrol_apply-rview .enrol_apply-rview-bar-count {
+    color: var(--enrol-apply-ink-muted);
+    font-size: 0.875rem;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    padding: 0 0.5rem 0 0.75rem;
+    white-space: nowrap;
+}
+
+.enrol_apply-rview .enrol_apply-rview-capsule {
+    color: var(--enrol-apply-ink-muted);
+    align-items: center;
+    background: var(--enrol-apply-surface);
+    border: 1px solid var(--enrol-apply-line);
+    border-radius: var(--enrol-apply-radius-lg);
+    box-shadow: var(--enrol-apply-elevation-sm);
+    display: inline-flex;
+    gap: 0.125rem;
+    padding: 0.1875rem;
+    position: relative;
+}
+
+.enrol_apply-rview .enrol_apply-rview-iconbtn {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    border-radius: var(--enrol-apply-radius-md);
+    color: var(--enrol-apply-ink-muted);
+    display: inline-flex;
+    gap: 0.125rem;
+    height: var(--enrol-apply-bar-inner);
+    justify-content: center;
+    min-width: var(--enrol-apply-bar-inner);
+    padding: 0 0.375rem;
+    position: relative;
+    transition:
+        background-color var(--enrol-apply-motion-base) var(--enrol-apply-motion-ease),
+        color var(--enrol-apply-motion-base) var(--enrol-apply-motion-ease);
+}
+
+.enrol_apply-rview .enrol_apply-rview-iconbtn:hover {
+    background: var(--enrol-apply-surface-alt);
+    color: var(--enrol-apply-ink);
+    transition-duration: var(--enrol-apply-motion-fast);
+}
+
+.enrol_apply-rview .enrol_apply-rview-iconbtn[aria-expanded="true"] {
+    background: var(--enrol-apply-brand-tint);
+    color: var(--enrol-apply-brand-ink);
+}
+
+.enrol_apply-rview .enrol_apply-rview-chevron {
+    height: 0.75rem;
+    width: 0.75rem;
+}
+
+/* The tooltip naming an icon button after 100 ms of rest (tooltip.md); its aria-label is the name. */
+.enrol_apply-rview .enrol_apply-rview-iconbtn[data-enrol-apply-tip]::after {
+    background: var(--enrol-apply-ink);
+    border-radius: var(--enrol-apply-radius-sm);
+    bottom: calc(100% + 0.5rem);
+    color: var(--enrol-apply-surface);
+    content: attr(data-enrol-apply-tip);
+    font-size: 0.75rem;
+    left: 50%;
+    line-height: 1.35;
+    opacity: 0;
+    padding: 0.25rem 0.5rem;
+    pointer-events: none;
+    position: absolute;
+    transform: translateX(-50%);
+    transition: opacity var(--enrol-apply-motion-fast) ease;
+    white-space: nowrap;
+    z-index: 25;
+}
+
+.enrol_apply-rview .enrol_apply-rview-iconbtn[data-enrol-apply-tip]:hover::after,
+.enrol_apply-rview .enrol_apply-rview-iconbtn[data-enrol-apply-tip]:focus-visible::after {
+    opacity: 1;
+    transition-delay: 100ms;
+}
+
+.enrol_apply-rview .enrol_apply-rview-iconbtn[aria-expanded="true"]::after {
+    opacity: 0;
+}
+
+.enrol_apply-rview .enrol_apply-rview-badge {
+    background: var(--enrol-apply-brand-fill);
+    border-radius: 50rem;
+    color: var(--enrol-apply-on-brand-fill);
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    height: 1rem;
+    line-height: 1rem;
+    min-width: 1rem;
+    padding: 0 0.25rem;
+    position: absolute;
+    right: -0.25rem;
+    text-align: center;
+    top: -0.25rem;
+}
+
+.enrol_apply-rview .enrol_apply-rview-search {
+    align-items: center;
+    background: var(--enrol-apply-surface-inset);
+    border-radius: var(--enrol-apply-radius-md);
+    color: var(--enrol-apply-ink-muted);
+    display: inline-flex;
+    gap: 0.375rem;
+    height: var(--enrol-apply-bar-inner);
+    padding: 0 0.5rem;
+}
+
+.enrol_apply-rview .enrol_apply-rview-search:focus-within {
+    outline: var(--enrol-apply-focus-width) solid var(--enrol-apply-focus-ring);
+    outline-offset: 2px;
+}
+
+.enrol_apply-rview .enrol_apply-rview-search input {
+    background: transparent;
+    border: 0;
+    color: var(--enrol-apply-ink);
+    font-size: 0.875rem;
+    min-width: 60px;
+    outline: none;
+    width: 190px;
+}
+
+.enrol_apply-rview .enrol_apply-rview-eraser {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    border-radius: var(--enrol-apply-radius-xs);
+    color: var(--enrol-apply-ink-muted);
+    display: inline-flex;
+    height: 1.5rem;
+    justify-content: center;
+    padding: 0;
+    width: 1.5rem;
+}
+
+.enrol_apply-rview .enrol_apply-rview-spin {
+    border: 2px solid var(--enrol-apply-line);
+    border-radius: 50%;
+    border-top-color: var(--enrol-apply-brand-fill);
+    flex: none;
+    height: 0.875rem;
+    width: 0.875rem;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .enrol_apply-rview .enrol_apply-rview-spin {
+        animation: enrol_apply-rview-spin 700ms linear infinite;
+    }
+}
+
+@keyframes enrol_apply-rview-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Chips (chip.md). */
+.enrol_apply-rview .enrol_apply-rview-chips {
+    align-items: center;
+    display: flex;
+    flex: 1 0 100%;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+}
+
+.enrol_apply-rview .enrol_apply-rview-chips[hidden] {
+    display: none;
+}
+
+.enrol_apply-rview .enrol_apply-rview-chip {
+    align-items: center;
+    background: var(--enrol-apply-brand-tint);
+    border: 1px solid var(--enrol-apply-brand-edge);
+    border-radius: var(--enrol-apply-radius-sm);
+    color: var(--enrol-apply-brand-ink);
+    display: inline-flex;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    gap: 0.375rem;
+    height: 1.75rem;
+    max-width: 100%;
+    padding: 0 0.375rem 0 0.5rem;
+}
+
+.enrol_apply-rview .enrol_apply-rview-chip span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.enrol_apply-rview .enrol_apply-rview-chip .enrol_apply-rview-icon {
+    height: 0.75rem;
+    width: 0.75rem;
+}
+
+.enrol_apply-rview .enrol_apply-rview-clearall {
+    background: none;
+    border: 0;
+    color: var(--enrol-apply-ink);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    padding: 0 0.25rem;
+    text-decoration: underline;
+}
+
+/* Menus (menu.md) and the filter panel (filter-panel.md, panel-popover-sheet.md). */
+.enrol_apply-rview .enrol_apply-rview-menu,
+.enrol_apply-rview .enrol_apply-rview-fpanel {
+    color: var(--enrol-apply-ink);
+    background: var(--enrol-apply-surface);
+    border: 1px solid var(--enrol-apply-line);
+    box-shadow: var(--enrol-apply-elevation-md);
+    max-height: 70vh;
+    overflow: auto;
+    position: absolute;
+    right: 0;
+    top: calc(100% + 0.375rem);
+    z-index: 20;
+}
+
+.enrol_apply-rview .enrol_apply-rview-menu {
+    border-radius: var(--enrol-apply-radius-md);
+    min-width: 13.75rem;
+    padding: 0.25rem;
+}
+
+.enrol_apply-rview .enrol_apply-rview-menu[hidden],
+.enrol_apply-rview .enrol_apply-rview-fpanel[hidden] {
+    display: none;
+}
+
+.enrol_apply-rview .enrol_apply-rview-menu-sep {
+    background: var(--enrol-apply-line);
+    height: 1px;
+    margin: 0.25rem 0;
+}
+
+.enrol_apply-rview .enrol_apply-rview-menu-item {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    border-radius: var(--enrol-apply-radius-xs);
+    color: var(--enrol-apply-ink);
+    display: flex;
+    font-size: 0.875rem;
+    gap: 0.5rem;
+    min-height: 2rem;
+    padding: 0.25rem 0.5rem;
+    text-align: start;
+    text-decoration: none;
+    transition:
+        background-color var(--enrol-apply-motion-base) var(--enrol-apply-motion-ease),
+        color var(--enrol-apply-motion-base) var(--enrol-apply-motion-ease);
+    width: 100%;
+}
+
+.enrol_apply-rview .enrol_apply-rview-menu-item:hover {
+    background: var(--enrol-apply-hover);
+    color: var(--enrol-apply-brand-ink);
+    transition-duration: var(--enrol-apply-motion-fast);
+}
+
+.enrol_apply-rview .enrol_apply-rview-menu-item:focus-visible {
+    outline-offset: -2px;
+}
+
+.enrol_apply-rview .enrol_apply-rview-menu-item[aria-disabled="true"] {
+    background: transparent;
+    color: var(--enrol-apply-ink-faint);
+    cursor: default;
+}
+
+.enrol_apply-rview .enrol_apply-rview-menu-item[aria-checked="true"] {
+    font-weight: 600;
+}
+
+.enrol_apply-rview .enrol_apply-rview-menu-item > .enrol_apply-rview-icon:first-child {
+    color: var(--enrol-apply-ink-muted);
+}
+
+.enrol_apply-rview .enrol_apply-rview-menu-label {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.enrol_apply-rview .enrol_apply-rview-menu-hint {
+    color: var(--enrol-apply-ink-muted);
+    font-size: 0.75rem;
+    font-weight: 400;
+}
+
+.enrol_apply-rview .enrol_apply-rview-tick {
+    color: var(--enrol-apply-brand-ink);
+    visibility: hidden;
+}
+
+.enrol_apply-rview .enrol_apply-rview-menu-item[aria-checked="true"] .enrol_apply-rview-tick {
+    visibility: visible;
+}
+
+.enrol_apply-rview .enrol_apply-rview-box {
+    align-items: center;
+    border: 1px solid var(--enrol-apply-control-line);
+    border-radius: var(--enrol-apply-radius-xs);
+    display: inline-flex;
+    flex: none;
+    height: 1rem;
+    justify-content: center;
+    width: 1rem;
+}
+
+.enrol_apply-rview .enrol_apply-rview-box .enrol_apply-rview-icon {
+    color: var(--enrol-apply-on-brand-fill);
+    height: 0.75rem;
+    visibility: hidden;
+    width: 0.75rem;
+}
+
+.enrol_apply-rview [aria-checked="true"] > .enrol_apply-rview-box,
+.enrol_apply-rview [aria-pressed="true"] > .enrol_apply-rview-box {
+    color: var(--enrol-apply-on-brand-fill);
+    background: var(--enrol-apply-brand-fill);
+    border-color: var(--enrol-apply-brand-fill);
+}
+
+.enrol_apply-rview [aria-checked="true"] > .enrol_apply-rview-box .enrol_apply-rview-icon,
+.enrol_apply-rview [aria-pressed="true"] > .enrol_apply-rview-box .enrol_apply-rview-icon {
+    visibility: visible;
+}
+
+.enrol_apply-rview .enrol_apply-rview-fpanel {
+    border-radius: var(--enrol-apply-radius-lg);
+    max-width: 100%;
+    min-width: 18.75rem;
+    width: 24rem;
+}
+
+.enrol_apply-rview .enrol_apply-rview-fpanel-body {
+    padding: 0.75rem;
+}
+
+.enrol_apply-rview .enrol_apply-rview-fgroup {
+    margin-bottom: 0.75rem;
+}
+
+.enrol_apply-rview .enrol_apply-rview-fpanel-head {
+    color: var(--enrol-apply-ink-muted);
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0 0 0.375rem;
+}
+
+.enrol_apply-rview .enrol_apply-rview-fpanel-opts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+}
+
+.enrol_apply-rview .enrol_apply-rview-fpanel-opt {
+    align-items: center;
+    background: var(--enrol-apply-surface);
+    border: 1px solid var(--enrol-apply-control-line);
+    border-radius: var(--enrol-apply-radius-sm);
+    color: var(--enrol-apply-ink);
+    display: inline-flex;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    gap: 0.375rem;
+    height: 1.75rem;
+    padding: 0 0.5rem;
+}
+
+.enrol_apply-rview .enrol_apply-rview-fpanel-opt[aria-checked="true"] {
+    background: var(--enrol-apply-brand-tint);
+    border-color: var(--enrol-apply-brand-edge);
+    color: var(--enrol-apply-brand-ink);
+}
+
+.enrol_apply-rview .enrol_apply-rview-optlist {
+    border: 1px solid var(--enrol-apply-line);
+    border-radius: var(--enrol-apply-radius-md);
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    margin-top: 0.375rem;
+    max-height: 15rem;
+    overflow-y: auto;
+    padding: 0.25rem;
+}
+
+.enrol_apply-rview .enrol_apply-rview-optrow {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    border-radius: var(--enrol-apply-radius-xs);
+    color: var(--enrol-apply-ink);
+    display: flex;
+    font-size: 0.8125rem;
+    gap: 0.5rem;
+    min-height: 2rem;
+    padding: 0 0.5rem;
+    text-align: start;
+}
+
+.enrol_apply-rview .enrol_apply-rview-optrow:hover {
+    color: var(--enrol-apply-brand-ink);
+    background: var(--enrol-apply-hover);
+}
+
+.enrol_apply-rview .enrol_apply-rview-optrow[aria-pressed="true"] {
+    font-weight: 600;
+}
+
+.enrol_apply-rview .enrol_apply-rview-fpanel-foot {
+    border-top: 1px solid var(--enrol-apply-line);
+    display: flex;
+    gap: 0.5rem;
+    justify-content: space-between;
+    padding: 0.75rem;
+}
+
+.enrol_apply-rview .enrol_apply-rview-fpanel-foot .btn {
+    min-height: 2rem;
+}
+
+/* At the bar's narrow step the panel is a sheet from the bottom of the screen. */
+@media (max-width: 575.98px) {
+    .enrol_apply-rview .enrol_apply-rview-fpanel {
+        border-radius: var(--enrol-apply-radius-xl) var(--enrol-apply-radius-xl) 0 0;
+        bottom: 0;
+        left: 0;
+        max-height: 80vh;
+        position: fixed;
+        right: 0;
+        top: auto;
+        width: auto;
+        z-index: 1050;
+    }
+
+    .enrol_apply-rview .enrol_apply-rview-menu {
+        left: 0;
+        right: auto;
+    }
+}
+
+/* The bounded grid (section 5b): the frame scrolls both ways, the heading row and the Applicant
+   column stay, every cell is one line ending in an ellipsis. */
+.enrol_apply-rview .enrol_apply-rview-gridframe {
+    border: 1px solid var(--enrol-apply-line);
+    border-radius: var(--enrol-apply-radius-lg);
+    max-height: 34rem;
+    overflow: auto;
+    overscroll-behavior-x: contain;
+    position: relative;
+}
+
+.enrol_apply-rview table.enrol_apply-rview-grid {
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 0.875rem;
+    margin: 0;
+    table-layout: fixed;
+}
+
+.enrol_apply-rview .enrol_apply-rview-grid th {
+    background: var(--enrol-apply-surface-alt);
+    border-bottom: 1px solid var(--enrol-apply-line);
+    color: var(--enrol-apply-ink-muted);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    padding: 0;
+    position: sticky;
+    text-align: start;
+    top: 0;
+    white-space: nowrap;
+    z-index: 2;
+}
+
+.enrol_apply-rview .enrol_apply-rview-grid th[aria-sort="ascending"],
+.enrol_apply-rview .enrol_apply-rview-grid th[aria-sort="descending"] {
+    color: var(--enrol-apply-ink);
+}
+
+.enrol_apply-rview .enrol_apply-rview-sortbtn,
+.enrol_apply-rview .enrol_apply-rview-plain {
+    align-items: center;
+    background: none;
+    border: 0;
+    color: inherit;
+    display: flex;
+    font: inherit;
+    gap: 0.25rem;
+    overflow: hidden;
+    padding: 0.5rem 0.75rem;
+    text-align: start;
+    width: 100%;
+}
+
+.enrol_apply-rview .enrol_apply-rview-sortbtn:hover {
+    color: var(--enrol-apply-ink);
+}
+
+.enrol_apply-rview .enrol_apply-rview-sortbtn:focus-visible {
+    outline-offset: -2px;
+}
+
+.enrol_apply-rview .enrol_apply-rview-th-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.enrol_apply-rview .enrol_apply-rview-arrow {
+    color: var(--enrol-apply-brand-ink);
+    flex: none;
+    font-size: 0.75rem;
+}
+
+.enrol_apply-rview .enrol_apply-rview-resize {
+    cursor: col-resize;
+    height: 100%;
+    position: absolute;
+    right: -4px;
+    top: 0;
+    touch-action: none;
+    width: 9px;
+    z-index: 3;
+}
+
+.enrol_apply-rview .enrol_apply-rview-resize::after {
+    background: var(--enrol-apply-line);
+    bottom: 25%;
+    content: "";
+    left: 4px;
+    position: absolute;
+    top: 25%;
+    width: 1px;
+}
+
+.enrol_apply-rview .enrol_apply-rview-resize:hover::after,
+.enrol_apply-rview .enrol_apply-rview-resize:focus-visible::after,
+.enrol_apply-rview .enrol_apply-rview-resize.is-active::after {
+    background: var(--enrol-apply-brand-fill);
+    bottom: 0;
+    left: 3px;
+    top: 0;
+    width: 3px;
+}
+
+.enrol_apply-rview .enrol_apply-rview-resize:focus-visible {
+    outline: none;
+}
+
+.enrol_apply-rview .enrol_apply-rview-grid td {
+    color: var(--enrol-apply-ink);
+    background: var(--enrol-apply-surface);
+    border-bottom: 1px solid var(--enrol-apply-line);
+    padding: 0.5rem 0.75rem;
+    vertical-align: top;
+}
+
+.enrol_apply-rview .enrol_apply-rview-grid tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+.enrol_apply-rview .enrol_apply-rview-grid tbody tr:hover td {
+    color: var(--enrol-apply-ink);
+    background: var(--enrol-apply-hover);
+}
+
+.enrol_apply-rview .enrol_apply-rview-grid .enrol_apply-rview-fixed {
+    left: 0;
+    position: sticky;
+    z-index: 1;
+}
+
+.enrol_apply-rview .enrol_apply-rview-grid th.enrol_apply-rview-fixed {
+    z-index: 4;
+}
+
+.enrol_apply-rview .enrol_apply-rview-gridframe.is-scrolled .enrol_apply-rview-fixed {
+    box-shadow: 6px 0 8px -6px var(--enrol-apply-shadow);
+}
+
+.enrol_apply-rview .enrol_apply-rview-c,
+.enrol_apply-rview .enrol_apply-rview-sub {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.enrol_apply-rview .enrol_apply-rview-sub {
+    color: var(--enrol-apply-ink-muted);
+    font-size: 0.8125rem;
+}
+
+/* The report's own sub-line class inside a view cell: one line, as the cell's others. */
+.enrol_apply-rview .enrol_apply-rview-c .enrol_apply-reportsub {
+    display: inline;
+    margin: 0;
+}
+
+.enrol_apply-rview .enrol_apply-rview-applicant {
+    align-items: flex-start;
+    display: flex;
+    gap: 0.5rem;
+    justify-content: space-between;
+}
+
+.enrol_apply-rview .enrol_apply-rview-applicant-text {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.enrol_apply-rview .enrol_apply-rview-applicant-text a,
+.enrol_apply-rview .enrol_apply-rview-card-name a {
+    font-weight: 600;
+}
+
+.enrol_apply-rview .enrol_apply-rview-review {
+    flex: none;
+}
+
+.enrol_apply-rview .enrol_apply-rview-waitbar {
+    background: var(--enrol-apply-surface-inset);
+    border-radius: var(--enrol-apply-radius-xs);
+    display: block;
+    height: 0.25rem;
+    margin-top: 0.25rem;
+    overflow: hidden;
+}
+
+.enrol_apply-rview .enrol_apply-rview-waitbar > span {
+    background: var(--enrol-apply-brand-fill);
+    display: block;
+    height: 100%;
+}
+
+.enrol_apply-rview .enrol_apply-rview-waitbar--open > span {
+    background: var(--enrol-apply-warning-edge);
+}
+
+/* Cards (AR-D9): a grid of 17.5rem cards on a wide screen, one column on a narrow one. */
+.enrol_apply-rview .enrol_apply-rview-cards {
+    display: grid;
+    gap: 0.5rem;
+    grid-template-columns: repeat(auto-fill, minmax(17.5rem, 1fr));
+}
+
+.enrol_apply-rview .enrol_apply-rview-cards--single {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.enrol_apply-rview .enrol_apply-rview-card {
+    color: var(--enrol-apply-ink);
+    background: var(--enrol-apply-surface);
+    border: 1px solid var(--enrol-apply-line);
+    border-radius: var(--enrol-apply-radius-lg);
+    min-width: 0;
+    padding: 0.75rem;
+}
+
+.enrol_apply-rview .enrol_apply-rview-card-l1 {
+    align-items: flex-start;
+    display: flex;
+    gap: 0.5rem;
+    justify-content: space-between;
+}
+
+.enrol_apply-rview .enrol_apply-rview-card-who {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.enrol_apply-rview .enrol_apply-rview-card-line {
+    font-size: 0.8125rem;
+    margin-top: 0.25rem;
+    overflow-wrap: anywhere;
+}
+
+.enrol_apply-rview .enrol_apply-rview-card-line--open {
+    color: var(--enrol-apply-warning-ink);
+    font-weight: 600;
+}
+
+.enrol_apply-rview .enrol_apply-rview-card-line--muted {
+    color: var(--enrol-apply-ink-muted);
+}
+
+.enrol_apply-rview .enrol_apply-rview-inline + .enrol_apply-rview-inline {
+    margin-left: 0.375rem;
+}
+
+.enrol_apply-rview .enrol_apply-rview-card-more {
+    margin-top: 0.375rem;
+}
+
+.enrol_apply-rview .enrol_apply-rview-card-list {
+    border-top: 1px solid var(--enrol-apply-line);
+    font-size: 0.8125rem;
+    margin: 0.5rem 0 0;
+    padding-top: 0.5rem;
+}
+
+.enrol_apply-rview .enrol_apply-rview-card-item {
+    display: grid;
+    gap: 0.25rem 0.5rem;
+    grid-template-columns: minmax(0, 7rem) minmax(0, 1fr);
+}
+
+.enrol_apply-rview .enrol_apply-rview-card-item dt {
+    color: var(--enrol-apply-ink-muted);
+    font-weight: 400;
+}
+
+.enrol_apply-rview .enrol_apply-rview-card-item dd {
+    margin: 0;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.enrol_apply-rview .enrol_apply-rview-card-item dd .enrol_apply-rview-c,
+.enrol_apply-rview .enrol_apply-rview-card-item dd .enrol_apply-rview-sub {
+    white-space: normal;
+}
+
+/* The empty state (empty-state.md, the full form without an icon). */
+.enrol_apply-rview .enrol_apply-rview-empty {
+    border: 1px dashed var(--enrol-apply-line);
+    border-radius: var(--enrol-apply-radius-lg);
+    padding: 2rem 1.25rem;
+    text-align: center;
+}
+
+.enrol_apply-rview .enrol_apply-rview-empty-title {
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.enrol_apply-rview .enrol_apply-rview-empty-text {
+    color: var(--enrol-apply-ink-muted);
+    font-size: 0.875rem;
+    margin: 0.25rem 0 0;
+}
+
+/* The foot: the range, the pages, the page size. */
+.enrol_apply-rview .enrol_apply-rview-foot {
+    align-items: center;
+    color: var(--enrol-apply-ink-muted);
+    display: flex;
+    flex-wrap: wrap;
+    font-size: 0.8125rem;
+    gap: 0.5rem;
+    justify-content: space-between;
+}
+
+.enrol_apply-rview .enrol_apply-rview-pager {
+    align-items: center;
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.125rem;
+}
+
+.enrol_apply-rview .enrol_apply-rview-pager button {
+    background: transparent;
+    border: 0;
+    border-radius: var(--enrol-apply-radius-md);
+    color: var(--enrol-apply-ink);
+    font-size: 0.8125rem;
+    min-height: 2rem;
+    min-width: 2rem;
+    padding: 0 0.5rem;
+}
+
+.enrol_apply-rview .enrol_apply-rview-pager button:hover {
+    color: var(--enrol-apply-brand-ink);
+    background: var(--enrol-apply-hover);
+}
+
+.enrol_apply-rview .enrol_apply-rview-pager button[aria-current="page"] {
+    background: var(--enrol-apply-brand-tint);
+    color: var(--enrol-apply-brand-ink);
+    font-weight: 700;
+}
+
+.enrol_apply-rview .enrol_apply-rview-pager button[disabled] {
+    background: transparent;
+    color: var(--enrol-apply-ink-faint);
+}
+
+.enrol_apply-rview .enrol_apply-rview-pager-gap {
+    padding: 0 0.25rem;
+}
+
+.enrol_apply-rview .enrol_apply-rview-perpage {
+    align-items: center;
+    display: inline-flex;
+    gap: 0.375rem;
+}
+
+.enrol_apply-rview .enrol_apply-rview-perpage .form-select {
+    width: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .enrol_apply-rview .enrol_apply-rview-seg-cell,
+    .enrol_apply-rview .enrol_apply-rview-iconbtn,
+    .enrol_apply-rview .enrol_apply-rview-menu-item,
+    .enrol_apply-rview .enrol_apply-rview-iconbtn[data-enrol-apply-tip]::after {
+        transition: none;
+    }
+}
