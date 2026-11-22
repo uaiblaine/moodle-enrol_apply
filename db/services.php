@@ -27,7 +27,7 @@ defined('MOODLE_INTERNAL') || die();
 $functions = [
     'enrol_apply_report_rows' => [
         'classname' => \enrol_apply\external\report_rows::class,
-        'description' => 'A page of the course report of applications, with its columns and filters.',
+        'description' => 'A page of the course report of applications, with its columns, its filters and their counts.',
         'type' => 'read',
         'ajax' => true,
         'capabilities' => 'enrol/apply:viewreports',

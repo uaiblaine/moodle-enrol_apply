@@ -4,7 +4,27 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased (2026112107)
+## Unreleased (2026112108)
+
+### Added
+
+- **The course report's view finishes what R4 left out (2026112108, no upgrade step).** The filter
+  panel's options carry their counts: each option says how many applications it would list under
+  every other filter in force, the scope and the search, never under its own value, counted on the
+  server over the report's own FROM and WHERE, one statement per filter, narrowed as the rows are
+  (`enrol_apply_report_rows` takes `facets`; a sort or a page turn asks for none). An option no row
+  would list is hidden unless chosen. Above eight groups the group filter adds a grouping menu
+  beside its search (the groupings of the groups the reader is offered). "Waited more than" (1, 3, 7
+  or 14 days, for the wait the band measures) and "Decided by" (the people who decided, never a key
+  admission's applicant) are drawn in the panel, writing core's own duration and text filter values.
+  The Columns menu starts with three sets, Decisions, Answers and Groups, stored as the reader's
+  choice. A width set with the arrow keys is saved once, after the last key or when the handle loses
+  the focus. The download lists the applications in view: the report applies the scope and the
+  search from its own parameters, with the rows call's SQL, so core's `download.php` writes the same
+  rows; a parameter can only narrow. The report says how long application records are kept
+  (`enrol_apply/retentiondays`), in the view and above core's table, with a link to the setting for a
+  site administrator, and nothing when records are kept forever (from the unmerged
+  `feat/report-retention-notice`).
 
 ### Security
 

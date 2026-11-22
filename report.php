@@ -95,6 +95,7 @@ if ($react) {
             'enrol_apply-rview-tablelink'
         );
     }
+    echo $PAGE->get_renderer('enrol_apply')->retention_notice();
     echo $report->output();
 }
 echo $OUTPUT->footer();

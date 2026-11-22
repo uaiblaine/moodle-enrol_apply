@@ -14,7 +14,10 @@ import { Fragment, jsxDEV } from "react/jsx-dev-runtime";
  * - the grid (enrol_apply_set_report_preference): a column change is written, and the rows are read
  *   again only once the write has landed, because the report reads the columns in initialise().
  *
- * A filter, the scope or the search reloads both. One request is in flight per region: core's ajax
+ * A filter, the scope or the search reloads both, and the rows then come with the filter panel's counts,
+ * which a sort or a page turn cannot move and so does not ask for: the panel keeps the last counted
+ * answer's options. A width set from the keyboard is saved once, 500 ms after the last key or when the
+ * handle loses the focus, as a drag is saved once, on release. One request is in flight per region: core's ajax
  * cannot abort, so each region numbers its requests and drops any answer but the newest. The first
  * load draws skeletons with aria-busy; later ones keep the old rows, dimmed, under a 2 px line.
  *
@@ -33,6 +36,7 @@ import { hold } from "./pending";
 import { getRows, getSummary, resetFilters, setFilters, setPreference } from "./repository";
 const NARROW = 576;
 const SEARCH_DELAY = 300;
+const WIDTH_DELAY = 500;
 const VIEW_KEY = "enrol_apply_report_view";
 const SKELETON_COLUMNS = ["applicant", "outcome", "submitted", "wait", "decided", "group"];
 const storedView = /* @__PURE__ */ __name(() => {
@@ -55,19 +59,20 @@ const RowsContent = /* @__PURE__ */ __name(({
   widths,
   onRetry,
   onSort,
-  onWidth
+  onWidth,
+  onWidthCommit
 }) => {
   const retry = /* @__PURE__ */ jsxDEV("p", { className: "enrol_apply-rview-error", children: [
     labels.loaderror,
     " ",
     /* @__PURE__ */ jsxDEV("button", { type: "button", className: "btn btn-sm btn-outline-secondary", onClick: onRetry, children: labels.retry }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-      lineNumber: 102,
+      lineNumber: 110,
       columnNumber: 13
     })
   ] }, void 0, true, {
     fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-    lineNumber: 100,
+    lineNumber: 108,
     columnNumber: 9
   });
   if (rows === null && error) {
@@ -85,21 +90,21 @@ const RowsContent = /* @__PURE__ */ __name(({
     return /* @__PURE__ */ jsxDEV(Fragment, { children: [
       cards ? /* @__PURE__ */ jsxDEV(CardsSkeleton, { single: narrow }, void 0, false, {
         fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-        lineNumber: 119,
+        lineNumber: 127,
         columnNumber: 26
       }) : /* @__PURE__ */ jsxDEV(GridSkeleton, { columns: skeleton, widths }, void 0, false, {
         fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-        lineNumber: 119,
+        lineNumber: 127,
         columnNumber: 62
       }),
       /* @__PURE__ */ jsxDEV("span", { className: "visually-hidden", role: "status", children: labels.loading }, void 0, false, {
         fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-        lineNumber: 120,
+        lineNumber: 128,
         columnNumber: 17
       })
     ] }, void 0, true, {
       fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-      lineNumber: 118,
+      lineNumber: 126,
       columnNumber: 13
     });
   }
@@ -107,17 +112,17 @@ const RowsContent = /* @__PURE__ */ __name(({
     return /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-empty", children: [
       /* @__PURE__ */ jsxDEV("p", { className: "enrol_apply-rview-empty-title", children: filtered ? labels.nomatch : labels.empty }, void 0, false, {
         fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-        lineNumber: 127,
+        lineNumber: 135,
         columnNumber: 17
       }),
       filtered ? /* @__PURE__ */ jsxDEV("p", { className: "enrol_apply-rview-empty-text", children: labels.nomatchhelp }, void 0, false, {
         fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-        lineNumber: 128,
+        lineNumber: 136,
         columnNumber: 29
       }) : null
     ] }, void 0, true, {
       fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-      lineNumber: 126,
+      lineNumber: 134,
       columnNumber: 13
     });
   }
@@ -125,7 +130,7 @@ const RowsContent = /* @__PURE__ */ __name(({
     error ? retry : null,
     cards ? /* @__PURE__ */ jsxDEV(Cards, { labels, columns, identity, rows: rows.rows, single: narrow }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-      lineNumber: 137,
+      lineNumber: 145,
       columnNumber: 17
     }) : /* @__PURE__ */ jsxDEV(Fragment, { children: [
       /* @__PURE__ */ jsxDEV(
@@ -139,29 +144,30 @@ const RowsContent = /* @__PURE__ */ __name(({
           sort: rows.sort,
           direction: rows.direction,
           onSort,
-          onWidth
+          onWidth,
+          onWidthCommit
         },
         void 0,
         false,
         {
           fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-          lineNumber: 140,
+          lineNumber: 148,
           columnNumber: 21
         }
       ),
       /* @__PURE__ */ jsxDEV("p", { className: "enrol_apply-rview-hint", children: labels.scrollhint }, void 0, false, {
         fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-        lineNumber: 151,
+        lineNumber: 160,
         columnNumber: 21
       })
     ] }, void 0, true, {
       fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-      lineNumber: 139,
+      lineNumber: 147,
       columnNumber: 17
     })
   ] }, void 0, true, {
     fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-    lineNumber: 134,
+    lineNumber: 142,
     columnNumber: 9
   });
 }, "RowsContent");
@@ -189,6 +195,7 @@ const ReportView = /* @__PURE__ */ __name((props) => {
   const [bandloading, setBandloading] = useState(true);
   const [banderror, setBanderror] = useState(false);
   const [widths, setWidths] = useState({});
+  const [counted, setCounted] = useState({});
   const rowsseq = useRef(0);
   const bandseq = useRef(0);
   const rowshold = useRef(null);
@@ -196,15 +203,22 @@ const ReportView = /* @__PURE__ */ __name((props) => {
   const searchtimer = useRef(null);
   const searchhold = useRef(null);
   const widthsread = useRef(false);
-  const loadRows = useCallback((asked) => {
+  const widthtimer = useRef(null);
+  const widthhold = useRef(null);
+  const pendingwidths = useRef(null);
+  const flushref = useRef(() => void 0);
+  const loadRows = useCallback((asked, facets) => {
     const seq = ++rowsseq.current;
     if (!rowshold.current) {
       rowshold.current = hold("enrol_apply/report:rows");
     }
     setRowsloading(true);
-    getRows(enrolid, asked).then((answer) => {
+    getRows(enrolid, asked, facets).then((answer) => {
       if (seq !== rowsseq.current) {
         return;
+      }
+      if (answer.counted) {
+        setCounted(Object.fromEntries(answer.filters.map((filter) => [filter.name, filter])));
       }
       if (!widthsread.current) {
         widthsread.current = true;
@@ -249,7 +263,7 @@ const ReportView = /* @__PURE__ */ __name((props) => {
     query.current = { ...query.current, ...change };
     setCurrent(query.current);
     if (readrows) {
-      loadRows(query.current);
+      loadRows(query.current, readband);
     }
     if (readband) {
       loadBand(query.current);
@@ -268,7 +282,7 @@ const ReportView = /* @__PURE__ */ __name((props) => {
     }
   }, [bandloading, summary, banderror]);
   useEffect(() => {
-    loadRows(query.current);
+    loadRows(query.current, true);
     loadBand(query.current);
   }, [loadRows, loadBand]);
   useEffect(() => {
@@ -288,6 +302,7 @@ const ReportView = /* @__PURE__ */ __name((props) => {
       window.clearTimeout(searchtimer.current);
     }
     searchhold.current?.();
+    flushref.current();
   }, []);
   const setView = /* @__PURE__ */ __name((chosen) => {
     setViewState(chosen);
@@ -334,12 +349,12 @@ const ReportView = /* @__PURE__ */ __name((props) => {
       setRowserror(true);
     }).finally(release);
   }, "writeFilters");
-  const filters = rows?.filters ?? [];
+  const filters = (rows?.filters ?? []).map((filter) => counted[filter.name] ? { ...filter, options: counted[filter.name].options, groupings: counted[filter.name].groupings } : filter);
   const writePreference = /* @__PURE__ */ __name((preference, reread) => {
     const release = hold("enrol_apply/report:preference");
     setPreference(enrolid, preference).then(() => {
       if (reread) {
-        loadRows(query.current);
+        loadRows(query.current, false);
       }
       return;
     }).catch(() => {
@@ -363,7 +378,21 @@ const ReportView = /* @__PURE__ */ __name((props) => {
     }
     writePreference({ usedefault: false, columns: next, widths: widthList(widths) }, true);
   }, "onColumn");
-  const onWidth = /* @__PURE__ */ __name((key, width) => {
+  const flushWidths = /* @__PURE__ */ __name(() => {
+    if (widthtimer.current !== null) {
+      window.clearTimeout(widthtimer.current);
+      widthtimer.current = null;
+    }
+    const next = pendingwidths.current;
+    pendingwidths.current = null;
+    if (next !== null) {
+      writePreference({ usedefault, columns: usedefault ? [] : chosenkeys, widths: widthList(next) }, false);
+    }
+    widthhold.current?.();
+    widthhold.current = null;
+  }, "flushWidths");
+  flushref.current = flushWidths;
+  const onWidth = /* @__PURE__ */ __name((key, width, defer = false) => {
     const next = { ...widths };
     if (width === null) {
       delete next[key];
@@ -371,8 +400,34 @@ const ReportView = /* @__PURE__ */ __name((props) => {
       next[key] = width;
     }
     setWidths(next);
-    writePreference({ usedefault, columns: usedefault ? [] : chosenkeys, widths: widthList(next) }, false);
+    pendingwidths.current = next;
+    if (!defer) {
+      flushWidths();
+      return;
+    }
+    if (widthtimer.current !== null) {
+      window.clearTimeout(widthtimer.current);
+    }
+    if (!widthhold.current) {
+      widthhold.current = hold("enrol_apply/report:width");
+    }
+    widthtimer.current = window.setTimeout(() => flushref.current(), WIDTH_DELAY);
   }, "onWidth");
+  const onPreset = /* @__PURE__ */ __name((preset) => {
+    const named = new Set(preset.columns);
+    if (rows) {
+      setRows({
+        ...rows,
+        columns: rows.columns.map((column) => column.fixed ? column : {
+          ...column,
+          active: named.has(column.key) || named.has("answers") && column.key.startsWith("answer:")
+        }),
+        presets: rows.presets.map((entry) => ({ ...entry, active: entry.name === preset.name })),
+        preference: { ...rows.preference, usedefault: false, columns: preset.columns }
+      });
+    }
+    writePreference({ usedefault: false, columns: preset.columns, widths: widthList(widths) }, true);
+  }, "onPreset");
   const onSort = /* @__PURE__ */ __name((key) => {
     const sorted = rows?.sort ?? "";
     const direction = sorted === key && rows?.direction === "asc" ? "desc" : "asc";
@@ -390,7 +445,7 @@ const ReportView = /* @__PURE__ */ __name((props) => {
   return /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-root", ref: root, "data-region": "enrol_apply-reportview", children: [
     rows?.narrowed ? /* @__PURE__ */ jsxDEV("p", { className: "enrol_apply-rview-narrowed", children: labels.narrowed }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-      lineNumber: 500,
+      lineNumber: 582,
       columnNumber: 31
     }) : null,
     /* @__PURE__ */ jsxDEV(
@@ -412,7 +467,7 @@ const ReportView = /* @__PURE__ */ __name((props) => {
       false,
       {
         fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-        lineNumber: 501,
+        lineNumber: 583,
         columnNumber: 13
       }
     ),
@@ -425,11 +480,13 @@ const ReportView = /* @__PURE__ */ __name((props) => {
         total: rows === null ? null : rows.total,
         filters,
         columns: allcolumns.filter((column) => !column.key.startsWith("identity:") || column.active),
+        presets: rows?.presets ?? [],
         usedefault,
         haswidths: Object.keys(widths).length > 0,
         view,
         measure: current.measure,
         search: searchtext,
+        appliedsearch: current.search,
         searchmin: props.searchmin,
         searching: rowsloading,
         tableurl: props.tableurl,
@@ -458,6 +515,7 @@ const ReportView = /* @__PURE__ */ __name((props) => {
           }
         },
         onColumn,
+        onPreset,
         onDefaultColumns: () => {
           if (rows) {
             setRows({ ...rows, preference: { ...rows.preference, usedefault: true, columns: [] } });
@@ -474,7 +532,7 @@ const ReportView = /* @__PURE__ */ __name((props) => {
       false,
       {
         fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-        lineNumber: 514,
+        lineNumber: 596,
         columnNumber: 13
       }
     ),
@@ -488,7 +546,7 @@ const ReportView = /* @__PURE__ */ __name((props) => {
         children: [
           rowsloading && rows !== null ? /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-progress" }, void 0, false, {
             fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-            lineNumber: 566,
+            lineNumber: 651,
             columnNumber: 49
           }) : null,
           /* @__PURE__ */ jsxDEV(
@@ -503,15 +561,16 @@ const ReportView = /* @__PURE__ */ __name((props) => {
               columns: shown,
               identity,
               widths,
-              onRetry: () => loadRows(query.current),
+              onRetry: () => loadRows(query.current, true),
               onSort,
-              onWidth
+              onWidth,
+              onWidthCommit: () => flushref.current()
             },
             void 0,
             false,
             {
               fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-              lineNumber: 567,
+              lineNumber: 652,
               columnNumber: 17
             }
           )
@@ -521,7 +580,7 @@ const ReportView = /* @__PURE__ */ __name((props) => {
       true,
       {
         fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-        lineNumber: 560,
+        lineNumber: 645,
         columnNumber: 13
       }
     ),
@@ -542,13 +601,32 @@ const ReportView = /* @__PURE__ */ __name((props) => {
       false,
       {
         fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-        lineNumber: 583,
+        lineNumber: 669,
         columnNumber: 17
       }
-    ) : null
+    ) : null,
+    props.retention !== "" ? /* @__PURE__ */ jsxDEV("p", { className: "enrol_apply-rview-retention", "data-region": "enrol_apply-retention", children: [
+      props.retention,
+      props.retentionurl !== "" ? /* @__PURE__ */ jsxDEV(Fragment, { children: [
+        " ",
+        /* @__PURE__ */ jsxDEV("a", { href: props.retentionurl, children: labels.retentionchange }, void 0, false, {
+          fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
+          lineNumber: 684,
+          columnNumber: 57
+        })
+      ] }, void 0, true, {
+        fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
+        lineNumber: 684,
+        columnNumber: 50
+      }) : null
+    ] }, void 0, true, {
+      fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
+      lineNumber: 682,
+      columnNumber: 17
+    }) : null
   ] }, void 0, true, {
     fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-    lineNumber: 499,
+    lineNumber: 581,
     columnNumber: 9
   });
 }, "ReportView");

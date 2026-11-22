@@ -2785,4 +2785,50 @@ final class renderer_test extends \advanced_testcase {
         $this->assertSame(1, $found, 'no category chip in the rendered queue');
         $this->assertSame(self::ESCAPED_ONCE, trim($chip[1]));
     }
+
+    /**
+     * The report's notice names the retention period, and links to the setting only for admins.
+     *
+     * Changes that must make it fail: the period left out; the link drawn for every reader.
+     *
+     * @return void
+     */
+    public function test_the_retention_notice_names_the_period_and_links_only_for_admins(): void {
+        global $PAGE;
+        $this->resetAfterTest();
+        set_config('retentiondays', 45 * DAYSECS, 'enrol_apply');
+        $teacher = $this->getDataGenerator()->create_user();
+        $settings = (new \moodle_url('/admin/settings.php', ['section' => 'enrolsettingsapply']))->out();
+
+        $this->setAdminUser();
+        $admin = $PAGE->get_renderer('enrol_apply')->retention_notice();
+        $this->assertStringContainsString(format_time(45 * DAYSECS), $admin);
+        $this->assertStringContainsString(get_string('reportretention_change', 'enrol_apply'), $admin);
+        $this->assertStringContainsString($settings, $admin);
+
+        $this->setUser($teacher);
+        $other = $PAGE->get_renderer('enrol_apply')->retention_notice();
+        $this->assertStringContainsString(format_time(45 * DAYSECS), $other);
+        $this->assertStringNotContainsString($settings, $other);
+        $this->assertStringNotContainsString(get_string('reportretention_change', 'enrol_apply'), $other);
+    }
+
+    /**
+     * With records kept forever there is nothing to warn about, so nothing is rendered.
+     *
+     * Changes that must make it fail: a notice for a retention of zero.
+     *
+     * @return void
+     */
+    public function test_no_retention_notice_when_records_are_kept_forever(): void {
+        global $PAGE;
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        set_config('retentiondays', DAYSECS, 'enrol_apply');
+        $this->assertNotSame('', $PAGE->get_renderer('enrol_apply')->retention_notice());
+
+        set_config('retentiondays', 0, 'enrol_apply');
+        $this->assertSame('', $PAGE->get_renderer('enrol_apply')->retention_notice());
+    }
 }

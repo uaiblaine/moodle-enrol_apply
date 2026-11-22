@@ -149,7 +149,7 @@ final class report_view_test extends \advanced_testcase {
         $props = (new report_view($this->instance, $report))->props();
         $this->assertSame([
             'enrolid', 'reportid', 'measure', 'perpage', 'perpages', 'searchmin', 'downloadurl', 'formats', 'queueurl',
-            'pendingstatus', 'tableurl', 'methods', 'labels',
+            'pendingstatus', 'tableurl', 'retention', 'retentionurl', 'methods', 'labels',
         ], array_keys($props));
         $this->assertSame((int) $this->instance->id, $props['enrolid']);
         $this->assertSame((int) $report->get_report_persistent()->get('id'), $props['reportid']);
@@ -222,6 +222,45 @@ final class report_view_test extends \advanced_testcase {
         $this->setUser($reader);
         $props = (new report_view($this->instance, $this->report()))->props();
         $this->assertSame('', $props['queueurl']);
+    }
+
+    /**
+     * The props say how long records are kept, to every reader, and carry the way to the setting only
+     * for a site administrator; nothing when records are kept forever. The noscript copy says it too.
+     *
+     * Changes that must make it fail: the notice dropped from the props or the noscript; the setting's
+     * link handed to every reader; a notice drawn for records kept forever.
+     *
+     * @return void
+     */
+    public function test_the_retention_notice_names_the_period_and_links_only_for_admins(): void {
+        global $DB, $PAGE;
+
+        set_config('retentiondays', 45 * DAYSECS, 'enrol_apply');
+        $settings = (new \moodle_url('/admin/settings.php', ['section' => 'enrolsettingsapply']))->out(false);
+        $period = format_time(45 * DAYSECS);
+
+        $this->setAdminUser();
+        $props = (new report_view($this->instance, $this->report()))->props();
+        $this->assertStringContainsString($period, $props['retention']);
+        $this->assertSame($settings, $props['retentionurl']);
+        $this->assertSame(get_string('reportretention_change', 'enrol_apply'), $props['labels']['retentionchange']);
+        $context = (new report_view($this->instance, $this->report()))->export_for_template($PAGE->get_renderer('core'));
+        $this->assertStringContainsString(s($period), $context['noscript']);
+
+        $teacher = $this->getDataGenerator()->create_user();
+        $this->getDataGenerator()->enrol_user($teacher->id, $this->course->id, 'editingteacher');
+        $role = (int) $DB->get_field('role', 'id', ['shortname' => 'editingteacher']);
+        assign_capability('enrol/apply:viewreports', CAP_ALLOW, $role, context_course::instance($this->course->id)->id, true);
+        $this->setUser($teacher);
+        $props = (new report_view($this->instance, $this->report()))->props();
+        $this->assertStringContainsString($period, $props['retention']);
+        $this->assertSame('', $props['retentionurl']);
+
+        set_config('retentiondays', 0, 'enrol_apply');
+        $props = (new report_view($this->instance, $this->report()))->props();
+        $this->assertSame('', $props['retention']);
+        $this->assertSame('', $props['retentionurl']);
     }
 
     /**

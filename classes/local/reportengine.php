@@ -68,6 +68,25 @@ final class reportengine {
     /** @var int The group bucket of the records whose group the reader may not see named. */
     public const GROUP_WITHHELD = -1;
 
+    /** @var int[] The "waited more than" facet's thresholds, in days (the mockup's). */
+    public const WAITED_DAYS = [1, 3, 7, 14];
+
+    /** @var string[] The wait filters the panel draws as "waited more than", one per measure. */
+    public const WAITED_FILTERS = ['submission:waittime', 'submission:resolutiontime'];
+
+    /** @var string The filter on the decider's name, drawn as the deciders the rows name. */
+    public const DECIDER_FILTER = 'applydecider:fullname';
+
+    /**
+     * @var array The Columns menu's sets (study, section 5b): name => the keys stored as the reader's
+     *     choice, "answers" for every question of the course.
+     */
+    public const PRESETS = [
+        'decisions' => ['outcome', 'submitted', 'wait', 'decided', 'group', 'method'],
+        'answers' => ['outcome', 'submitted', 'comment', 'answers'],
+        'groups' => ['outcome', 'group', 'method', 'route', 'decided'],
+    ];
+
     /**
      * The apply method an id names, and its course's context.
      *
@@ -222,9 +241,13 @@ final class reportengine {
      * Review link the report's own row action would draw). The sort names a catalogue key; one the
      * report does not show, or cannot sort by, leaves the report's own sort.
      *
+     * The filters come with their facets' counts unless 'facets' is false: a sort or a page turn
+     * changes no count, so a client asks for them only when what is counted can have moved
+     * ({@see facet_counts()}).
+     *
      * @param course_applications $report The report, as {@see report()} returned it.
      * @param array $options 'scope', 'search', 'page' (0-based), 'perpage', 'sort' (a
-     *     column key), 'direction' ('asc' or 'desc').
+     *     column key), 'direction' ('asc' or 'desc'), 'facets' (bool, default true).
      * @return array The rows, the total, the columns, the filters and the reader's grid; see
      *     \enrol_apply\external\report_rows::execute_returns().
      */
@@ -304,6 +327,7 @@ final class reportengine {
         }
 
         $narrowed = $tablereport->narrowed_groups();
+        $counted = (bool) ($options['facets'] ?? true);
 
         return [
             'measure' => $measure,
@@ -317,8 +341,10 @@ final class reportengine {
             'narrowed' => $narrowed !== null,
             'notingroup' => $narrowed === [],
             'columns' => self::columns($tablereport),
+            'presets' => self::presets($tablereport),
             'rows' => $rows,
-            'filters' => self::filters($tablereport),
+            'counted' => $counted,
+            'filters' => self::filters($table, $counted),
             'preference' => self::preference(),
         ];
     }
@@ -473,39 +499,67 @@ final class reportengine {
      * @return headless_table The table, not yet set up.
      */
     protected static function table(course_applications $report, string $measure, string $scope, string $search): headless_table {
-        global $DB;
-
         /** @var headless_table $table */
         $table = headless_table::create((int) $report->get_report_persistent()->get('id'), $report->get_parameters());
         /** @var course_applications $tablereport */
         $tablereport = $table->get_report();
-        $alias = $tablereport->submission_alias();
-
-        if ($scope !== 'all') {
-            $open = self::open_sql($alias, $measure);
-            $table->narrow($scope === 'awaiting' ? $open : "NOT ({$open})", []);
-        }
-
-        /* The applicant's name as core's text filter on it matches (reportbuilder's text filter,
-           CONTAINS): the report's own fullname filter's field SQL, case and accent insensitive. A
-           parameter of the request, never a stored filter, so a keystroke writes nothing. Its
-           parameters renamed with a prefix of this class's, so they cannot meet the same filter's
-           when the reader also applied it. */
-        if ($search !== '') {
-            $filter = $tablereport->get_filter('user:fullname');
-            [$fieldsql, $fieldparams] = database::sql_replace_parameters(
-                $filter->get_field_sql(),
-                $filter->get_field_params(),
-                static fn(string $name): string => "hs_{$name}"
-            );
-            $param = database::generate_param_name();
-            $table->narrow(
-                $DB->sql_like($fieldsql, ":{$param}", false, false),
-                $fieldparams + [$param => '%' . $DB->sql_like_escape($search) . '%']
-            );
+        foreach (self::conditions($tablereport, $measure, $scope, $search) as [$sql, $params]) {
+            $table->narrow($sql, $params);
         }
 
         return $table;
+    }
+
+    /**
+     * The scope and the name search as SQL conditions over one instance of the report.
+     *
+     * The one definition both readers of these two request facts apply: the headless rows and
+     * summary ({@see table()}) append them to the table's WHERE, and the report itself adds them as
+     * base conditions when its own parameters carry them ({@see course_applications::initialise()}),
+     * which is how core's download.php, rebuilding the report from its parameters, lists the rows
+     * the reader is looking at. Each condition is ANDed, so either can only narrow.
+     *
+     * The search is the applicant's name as core's text filter on it matches (reportbuilder's text
+     * filter, CONTAINS): the report's own fullname filter's field SQL, case and accent insensitive.
+     * Its parameters are renamed to names core generates, so they cannot meet the same filter's when
+     * the reader also applied it, and they carry core's prefix, which a base condition requires (the
+     * fullname's own names do not).
+     *
+     * @param course_applications $report The instance whose aliases the SQL uses.
+     * @param string $measure A cleaned measure, which the scope reads.
+     * @param string $scope A cleaned scope ({@see scope()}).
+     * @param string $search A cleaned search ({@see search()}), '' for none.
+     * @return array Each: [the condition, its named parameters].
+     */
+    public static function conditions(course_applications $report, string $measure, string $scope, string $search): array {
+        global $DB;
+
+        $alias = $report->submission_alias();
+        $conditions = [];
+        if ($scope !== 'all') {
+            $open = self::open_sql($alias, $measure);
+            $conditions[] = [$scope === 'awaiting' ? $open : "NOT ({$open})", []];
+        }
+
+        $filter = $report->get_filter('user:fullname');
+        if ($search !== '' && $filter !== null) {
+            // Core calls the callback twice per name (the SQL, then the parameters): one new name for each.
+            $names = [];
+            [$fieldsql, $fieldparams] = database::sql_replace_parameters(
+                $filter->get_field_sql(),
+                $filter->get_field_params(),
+                static function (string $name) use (&$names): string {
+                    return $names[$name] ??= database::generate_param_name('_hs');
+                }
+            );
+            $param = database::generate_param_name();
+            $conditions[] = [
+                $DB->sql_like($fieldsql, ":{$param}", false, false),
+                $fieldparams + [$param => '%' . $DB->sql_like_escape($search) . '%'],
+            ];
+        }
+
+        return $conditions;
     }
 
     /**
@@ -576,10 +630,19 @@ final class reportengine {
      * Option labels come back in the plain spelling: the report's own options are the escaped one
      * its form wants.
      *
-     * @param course_applications $report The table's report.
-     * @return array Each: name, title, type, options (value, label), applied, values (JSON).
+     * Each filter says which facet of the panel draws it ({@see facet()}). A facet's options carry
+     * their counts when $counted, -1 otherwise; the decider facet's options are the deciders the
+     * counts find, so it offers none uncounted. The group facet carries the groupings of the groups
+     * it offers, when counted.
+     *
+     * @param headless_table $table The rows' table, its scope and search appended.
+     * @param bool $counted Whether to count the facets' options.
+     * @return array Each: name, title, type, facet, options (value, label, count), applied, values
+     *     (JSON), groupings (id, name, groups).
      */
-    protected static function filters(course_applications $report): array {
+    protected static function filters(headless_table $table, bool $counted): array {
+        /** @var course_applications $report */
+        $report = $table->get_report();
         $values = $report->get_filter_values();
         $filters = [];
         foreach ($report->get_active_filters() as $identifier => $filter) {
@@ -590,28 +653,274 @@ final class reportengine {
                     $own[$name] = $value;
                 }
             }
-            $options = [];
-            $offered = $filter->get_options();
-            if (is_array($offered)) {
-                foreach ($offered as $value => $label) {
-                    $options[] = [
-                        'value' => (string) $value,
-                        'label' => html_entity_decode((string) $label, ENT_QUOTES | ENT_HTML401, 'UTF-8'),
-                    ];
+            $type = (new \ReflectionClass($class))->getShortName();
+            $facet = self::facet($identifier, $type, $filter);
+
+            $offered = [];
+            if ($facet === 'waited') {
+                foreach (self::WAITED_DAYS as $days) {
+                    $offered[(string) $days] = get_string('waitdays', 'enrol_apply', $days);
                 }
+            } else if (is_array($filter->get_options())) {
+                foreach ($filter->get_options() as $value => $label) {
+                    $offered[(string) $value] = html_entity_decode((string) $label, ENT_QUOTES | ENT_HTML401, 'UTF-8');
+                }
+            }
+
+            $counts = $counted && $facet !== '' ? self::facet_counts($table, $identifier, $facet, array_keys($offered)) : null;
+            if ($facet === 'decider' && $counts !== null) {
+                // The deciders are the values counted: their names are the filter's own field.
+                $offered = array_combine(array_keys($counts), array_map('strval', array_keys($counts)));
+            }
+
+            $options = [];
+            foreach ($offered as $value => $label) {
+                $options[] = [
+                    'value' => (string) $value,
+                    'label' => $label,
+                    'count' => $counts === null ? -1 : (int) ($counts[$value] ?? 0),
+                ];
             }
             [$sql] = $class::create($filter)->get_sql_filter($values);
             $filters[] = [
                 'name' => $identifier,
                 'title' => $filter->get_header(),
-                'type' => (new \ReflectionClass($class))->getShortName(),
+                'type' => $type,
+                'facet' => $facet,
                 'options' => $options,
                 'applied' => $sql !== '',
                 'values' => json_encode((object) $own),
+                'groupings' => $counted && $type === 'group' ? self::groupings($report, array_keys($offered)) : [],
             ];
         }
 
         return $filters;
+    }
+
+    /**
+     * Which facet of the panel draws a filter.
+     *
+     * 'choice': one option of a list the filter itself offers (core's select, this plugin's group
+     * filter). 'waited': a wait filter (core's duration filter over the wait or the resolution),
+     * drawn as "waited more than" a few days. 'decider': the decider's name (core's text filter),
+     * drawn as the deciders the rows name. '' for every other filter, set in core's table view.
+     *
+     * @param string $identifier The filter's unique identifier.
+     * @param string $type The filter class's short name.
+     * @param \core_reportbuilder\local\report\filter $filter The filter.
+     * @return string The facet, or ''.
+     */
+    protected static function facet(string $identifier, string $type, \core_reportbuilder\local\report\filter $filter): string {
+        if (in_array($type, ['select', 'group'], true)) {
+            return is_array($filter->get_options()) && $filter->get_options() !== [] ? 'choice' : '';
+        }
+        if ($type === 'duration' && in_array($identifier, self::WAITED_FILTERS, true)) {
+            return 'waited';
+        }
+
+        return $identifier === self::DECIDER_FILTER && $type === 'text' ? 'decider' : '';
+    }
+
+    /**
+     * How many rows each option of a facet would list, under every other filter in force.
+     *
+     * Faceted counts: the rows' own FROM and WHERE ({@see headless_table::where_without()}), so the
+     * base conditions (the course, the separate-groups narrowing, S8), the scope, the search and
+     * every stored filter but this facet's own are in force, and the facet's own value is not. Each
+     * count is what the rows' total would be with this option chosen in place of the facet's current
+     * value. One statement per facet, never one per option:
+     *
+     * - a choice of core's select: the rows grouped by the filter's field, which the filter compares
+     *   with "=" ({@see \core_reportbuilder\local\filters\select});
+     * - the group filter: the rows joined to the offered groups by the filter's own predicate
+     *   ({@see groupscope::record_group_column_where()}), a record counting once in each group it
+     *   belongs to;
+     * - waited: the rows whose wait, cast as core's duration filter casts it, is at least each
+     *   threshold;
+     * - decider: the decisions by a person (AR-D5: not a key admission, whose recorded decider is
+     *   the applicant) grouped by the decider's name, the field core's text filter compares with
+     *   "is equal to". That filter compares case- and accent-insensitively, so two deciders whose
+     *   names differ only so are one option's count apart from what choosing it lists; and it reaches
+     *   a key admission of the decider's own, which no option counts.
+     *
+     * Computed per request, never cached: a count is the database's answer now, on whichever node.
+     *
+     * @param headless_table $table The rows' table.
+     * @param string $identifier The facet's filter.
+     * @param string $facet Its kind ({@see facet()}).
+     * @param array $offered The values offered (group ids for the group filter), unused for a decider.
+     * @return array Option value => rows.
+     */
+    protected static function facet_counts(headless_table $table, string $identifier, string $facet, array $offered): array {
+        global $DB;
+
+        /** @var course_applications $report */
+        $report = $table->get_report();
+        $filter = $report->get_filter($identifier);
+        $alias = $report->submission_alias();
+        [$where, $params] = $table->where_without($identifier);
+        $params = array_merge($table->sql->params, $params);
+        $from = $table->from_with($filter);
+        [$fieldsql, $fieldparams] = database::sql_replace_parameters(
+            $filter->get_field_sql(),
+            $filter->get_field_params(),
+            static fn(string $name): string => "{$name}_fc"
+        );
+        $params = array_merge($params, $fieldparams);
+
+        $counts = [];
+        if ($facet === 'waited') {
+            $wait = $DB->sql_cast_char2real("({$fieldsql})");
+            $sums = [];
+            foreach (self::WAITED_DAYS as $index => $days) {
+                $sums[] = "SUM(CASE WHEN w.wait >= " . ($days * DAYSECS) . " THEN 1 ELSE 0 END) AS d{$index}";
+            }
+            $record = $DB->get_record_sql(
+                "SELECT " . implode(', ', $sums) . "
+                   FROM (SELECT DISTINCT {$alias}.id, {$wait} AS wait FROM {$from} WHERE {$where}) w",
+                $params
+            );
+            foreach (self::WAITED_DAYS as $index => $days) {
+                $counts[(string) $days] = (int) ($record->{"d{$index}"} ?? 0);
+            }
+
+            return $counts;
+        }
+
+        if ($facet === 'choice' && $filter->get_filter_class() === \enrol_apply\reportbuilder\local\filters\group::class) {
+            $ids = array_values(array_filter(array_map('intval', $offered)));
+            if ($ids === []) {
+                return [];
+            }
+            [$insql, $inparams] = $DB->get_in_or_equal($ids, SQL_PARAMS_NAMED, database::generate_param_name('_fg'));
+            $belongs = groupscope::record_group_column_where($alias, 'fg.id');
+            $sql = "SELECT fg.id AS facetvalue, COUNT(DISTINCT {$alias}.id) AS facetcount
+                      FROM {$from}
+                      JOIN {groups} fg ON fg.id {$insql} AND {$belongs}
+                     WHERE {$where}
+                  GROUP BY fg.id";
+            $params = array_merge($params, $inparams);
+        } else {
+            $person = $facet === 'decider' ? " AND {$alias}.decidedby > 0 AND {$alias}.decidedby <> {$alias}.userid" : '';
+            $sql = "SELECT v.facetvalue, COUNT(1) AS facetcount
+                      FROM (SELECT DISTINCT {$alias}.id, {$fieldsql} AS facetvalue
+                              FROM {$from}
+                             WHERE ({$where}){$person}) v
+                  GROUP BY v.facetvalue";
+        }
+
+        $recordset = $DB->get_recordset_sql($sql, $params);
+        foreach ($recordset as $record) {
+            if ($record->facetvalue === null || (string) $record->facetvalue === '') {
+                continue;
+            }
+            $counts[(string) $record->facetvalue] = (int) $record->facetcount;
+        }
+        $recordset->close();
+        if ($facet === 'decider') {
+            uksort($counts, static fn($a, $b): int => strnatcasecmp((string) $a, (string) $b));
+        }
+
+        return $counts;
+    }
+
+    /**
+     * The groupings of the offered groups, each with the offered groups it holds (RP-D23).
+     *
+     * Only groups the group filter offers this reader appear, so a grouping says nothing of a group
+     * the reader may not be told about ({@see course_applications::group_options()}, which follows
+     * groupvisibility), and a grouping holding none of them is left out.
+     *
+     * @param course_applications $report The report.
+     * @param array $offered The offered group ids.
+     * @return array Each: id, name (plain), groups (ids); in natural order of name.
+     */
+    protected static function groupings(course_applications $report, array $offered): array {
+        global $DB;
+
+        $ids = array_values(array_filter(array_map('intval', $offered)));
+        if ($ids === []) {
+            return [];
+        }
+        $context = $report->get_context();
+        [$insql, $params] = $DB->get_in_or_equal($ids, SQL_PARAMS_NAMED);
+        $params['courseid'] = $context->instanceid;
+        $recordset = $DB->get_recordset_sql(
+            "SELECT gg.id, gg.groupingid, gg.groupid, g.name
+               FROM {groupings_groups} gg
+               JOIN {groupings} g ON g.id = gg.groupingid
+              WHERE g.courseid = :courseid AND gg.groupid {$insql}
+           ORDER BY gg.groupingid, gg.groupid",
+            $params
+        );
+        $groupings = [];
+        foreach ($recordset as $record) {
+            $id = (int) $record->groupingid;
+            $groupings[$id] ??= [
+                'id' => $id,
+                'name' => format_string($record->name, true, ['context' => $context, 'escape' => false]),
+                'groups' => [],
+            ];
+            $groupings[$id]['groups'][] = (int) $record->groupid;
+        }
+        $recordset->close();
+        $groupings = array_values($groupings);
+        usort($groupings, static fn(array $a, array $b): int => strnatcasecmp($a['name'], $b['name']));
+
+        return $groupings;
+    }
+
+    /**
+     * The Columns menu's sets, and which one the reader's columns are.
+     *
+     * Each set is stored as the reader's choice ({@see reportpreference}), so it means what a hand
+     * choice of the same keys means: intersected with this course's catalogue, "answers" standing
+     * for every question.
+     *
+     * @param course_applications $report The table's report.
+     * @return array Each: name, columns (the keys stored), active (whether the report shows that set).
+     */
+    protected static function presets(course_applications $report): array {
+        $chosen = array_keys($report->chosen_keys());
+        $presets = [];
+        foreach (self::PRESETS as $name => $columns) {
+            $keys = array_keys($report->keys_for($columns));
+            $presets[] = [
+                'name' => $name,
+                'columns' => $columns,
+                'active' => $keys !== [] && $keys === $chosen,
+            ];
+        }
+
+        return $presets;
+    }
+
+    /**
+     * How long the application records are kept, as the report says it (the retention notice).
+     *
+     * The daily purge deletes a decided application's record once enrol_apply/retentiondays has
+     * passed since its submission, so an approval that aged out reads, on the report, like one never
+     * recorded; every reader of the report is told the period. A site administrator also gets the
+     * way to the setting. Nothing when records are kept forever.
+     *
+     * @return array|null 'text' (plain), 'url' (the setting, '' for a reader who may not change
+     *     it), 'link' (plain); null when nothing is ever purged.
+     */
+    public static function retention(): ?array {
+        $seconds = submission::retention_seconds();
+        if ($seconds <= 0) {
+            return null;
+        }
+        $url = '';
+        if (has_capability('moodle/site:config', \context_system::instance())) {
+            $url = (new moodle_url('/admin/settings.php', ['section' => 'enrolsettingsapply']))->out(false);
+        }
+
+        return [
+            'text' => get_string('reportretention', 'enrol_apply', format_time($seconds)),
+            'url' => $url,
+            'link' => get_string('reportretention_change', 'enrol_apply'),
+        ];
     }
 
     /**

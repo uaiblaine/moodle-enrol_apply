@@ -136,6 +136,8 @@ class report_view implements renderable, templatable {
         /* The band's "Still open" leads to the queue only for a reader the queue would admit (AR-D18):
            its own capability rule, for this reader, from the method; a viewer of the report alone
            gets the number and no link that would refuse them. */
+        $retention = reportengine::retention();
+
         $queueurl = '';
         if ($context instanceof context_course && queue::listing_scope($enrolid)->allowed) {
             $queueurl = (new moodle_url('/enrol/apply/manage.php', ['id' => $enrolid]))->out(false);
@@ -153,6 +155,8 @@ class report_view implements renderable, templatable {
             'queueurl' => $queueurl,
             'pendingstatus' => ENROL_USER_SUSPENDED,
             'tableurl' => self::url($enrolid, true)->out(false),
+            'retention' => $retention['text'] ?? '',
+            'retentionurl' => $retention['url'] ?? '',
             'methods' => $DB->count_records('enrol', ['courseid' => $context->instanceid, 'enrol' => 'apply']),
             'labels' => self::labels(),
         ];
@@ -170,6 +174,7 @@ class report_view implements renderable, templatable {
         return [
             'all' => get_string('reportviewall', 'enrol_apply'),
             'allgroups' => get_string('reportviewallgroups', 'enrol_apply'),
+            'allgroupings' => get_string('reportviewallgroupings', 'enrol_apply'),
             'always' => get_string('reportviewalways', 'enrol_apply'),
             'any' => get_string('reportviewany', 'enrol_apply'),
             'applicant' => get_string('reportapplicant', 'enrol_apply'),
@@ -190,6 +195,7 @@ class report_view implements renderable, templatable {
             'count' => get_string('reportviewcount', 'enrol_apply'),
             'count_one' => get_string('reportviewcount_one', 'enrol_apply'),
             'decided' => get_string('reportviewdecided', 'enrol_apply'),
+            'decidedby' => get_string('submissiondecidedby', 'enrol_apply'),
             'decisions' => get_string('reportviewdecisions', 'enrol_apply'),
             'defaultcolumns' => get_string('reportviewdefaultcolumns', 'enrol_apply'),
             'distfirst' => get_string('reportviewdistfirst', 'enrol_apply'),
@@ -200,6 +206,7 @@ class report_view implements renderable, templatable {
             'filters' => get_string('reportviewfilters', 'enrol_apply'),
             'filterson' => get_string('reportviewfilterson', 'enrol_apply'),
             'grid' => get_string('reportviewgrid', 'enrol_apply'),
+            'grouping' => get_string('reportviewgrouping', 'enrol_apply'),
             'hide' => get_string('reportviewhide', 'enrol_apply'),
             'late' => get_string('reportviewlate', 'enrol_apply'),
             'less' => get_string('reportviewless', 'enrol_apply'),
@@ -217,8 +224,10 @@ class report_view implements renderable, templatable {
             'morefilters' => get_string('reportviewmorefilters', 'enrol_apply'),
             'morefiltershelp' => get_string('reportviewmorefilters_help', 'enrol_apply'),
             'moregroups' => get_string('reportviewmoregroups', 'enrol_apply'),
+            'moregroupsgrouping' => get_string('reportviewmoregroupsgrouping', 'enrol_apply'),
             'narrowed' => get_string('reportviewnarrowed', 'enrol_apply'),
             'next' => get_string('reportviewnext', 'enrol_apply'),
+            'nodecidermatch' => get_string('reportviewnodecidermatch', 'enrol_apply'),
             'nogroupmatch' => get_string('reportviewnogroupmatch', 'enrol_apply'),
             'nomatch' => get_string('reportviewnomatch', 'enrol_apply'),
             'nomatchhelp' => get_string('reportviewnomatch_help', 'enrol_apply'),
@@ -234,8 +243,13 @@ class report_view implements renderable, templatable {
             'previous' => get_string('reportviewprevious', 'enrol_apply'),
             'range' => get_string('reportviewrange', 'enrol_apply'),
             'removefilter' => get_string('reportviewremovefilter', 'enrol_apply'),
+            'presetanswers' => get_string('reportviewpresetanswers', 'enrol_apply'),
+            'presetdecisions' => get_string('reportviewpresetdecisions', 'enrol_apply'),
+            'presetgroups' => get_string('reportviewpresetgroups', 'enrol_apply'),
+            'presets' => get_string('reportviewpresets', 'enrol_apply'),
             'resetwidths' => get_string('reportviewresetwidths', 'enrol_apply'),
             'resize' => get_string('reportviewresize', 'enrol_apply'),
+            'retentionchange' => get_string('reportretention_change', 'enrol_apply'),
             'retry' => get_string('reportviewretry', 'enrol_apply'),
             'review' => get_string('queuereview', 'enrol_apply'),
             'scope' => get_string('reportviewscope', 'enrol_apply'),
@@ -243,8 +257,10 @@ class report_view implements renderable, templatable {
             'search' => get_string('reportviewsearch', 'enrol_apply'),
             'searchchip' => get_string('reportviewsearchchip', 'enrol_apply'),
             'searchgroup' => get_string('reportviewsearchgroup', 'enrol_apply'),
+            'searchdeciders' => get_string('reportviewsearchdeciders', 'enrol_apply'),
             'searchgroups' => get_string('reportviewsearchgroups', 'enrol_apply'),
             'show' => get_string('reportviewshow', 'enrol_apply'),
+            'showcount' => get_string('reportviewshowcount', 'enrol_apply'),
             'table' => get_string('reportviewtable', 'enrol_apply'),
             'topgroups' => get_string('reportviewtopgroups', 'enrol_apply'),
             'turnaround' => get_string('reportviewturnaround', 'enrol_apply'),
@@ -252,6 +268,7 @@ class report_view implements renderable, templatable {
             'viewauto' => get_string('reportviewviewauto', 'enrol_apply'),
             'viewautohint' => get_string('reportviewviewautohint', 'enrol_apply'),
             'waitdays' => get_string('waitdays', 'enrol_apply'),
+            'waitedmore' => get_string('reportviewwaitedmore', 'enrol_apply'),
             'waitdayshours' => get_string('waitdayshours', 'enrol_apply'),
             'waithours' => get_string('waithours', 'enrol_apply'),
             'waitminutes' => get_string('waitminutes', 'enrol_apply'),
@@ -264,9 +281,11 @@ class report_view implements renderable, templatable {
      * Export the shell.
      *
      * @param renderer_base $output The renderer.
-     * @return array props (JSON), tableurl, noscript (core's rendering of the report).
+     * @return array props (JSON), tableurl, noscript (the retention notice and core's rendering of the report).
      */
     public function export_for_template(renderer_base $output): array {
+        global $PAGE;
+
         /* Without JavaScript core's filter form is a dynamic form that cannot submit, and its script,
            which the template registers on the page whatever the browser does with a noscript, would
            look up a form a scripting browser never builds. */
@@ -275,7 +294,7 @@ class report_view implements renderable, templatable {
         return [
             'props' => json_encode($this->props(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_UNESCAPED_UNICODE),
             'tableurl' => self::url((int) $this->instance->id, true)->out(false),
-            'noscript' => $this->report->output(),
+            'noscript' => $PAGE->get_renderer('enrol_apply')->retention_notice() . $this->report->output(),
         ];
     }
 }

@@ -35,6 +35,9 @@ use core_reportbuilder\table\system_report_table;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class headless_table extends system_report_table {
+    /** @var array Each condition {@see narrow()} appended: [the SQL, its parameters]. */
+    protected $narrowings = [];
+
     /**
      * The report this table was built from.
      *
@@ -54,6 +57,72 @@ class headless_table extends system_report_table {
     public function narrow(string $sql, array $params): void {
         $this->sql->where = "({$this->sql->where}) AND ({$sql})";
         $this->sql->params = array_merge($this->sql->params, $params);
+        $this->narrowings[] = [$sql, $params];
+    }
+
+    /**
+     * The table's WHERE clause without one filter's condition: what the rows would be under every
+     * other condition, for the panel's faceted counts.
+     *
+     * Rebuilt as core's base_report_table::init_sql() builds the table's own (the report's base
+     * condition, then each active filter's SQL for the reader's stored values, each with parameters
+     * of its own), then the conditions {@see narrow()} appended, in order; the filter named is left
+     * out, and with a name no filter has it is the table's own WHERE
+     * (test_the_where_without_no_filter_is_the_tables_own). The FROM is the table's: a filter left
+     * out keeps any join it brought, which joins to one row or none and so narrows nothing.
+     *
+     * @param string $exclude The unique identifier of the filter to leave out.
+     * @return array [the WHERE clause, its parameters].
+     */
+    public function where_without(string $exclude): array {
+        [$base, $params] = $this->report->get_base_condition();
+        $wheres = $base !== '' ? ["({$base})"] : [];
+        $values = $this->report->get_filter_values();
+        $index = 0;
+        foreach ($this->report->get_active_filters() as $identifier => $filter) {
+            $index++;
+            if ($identifier === $exclude) {
+                continue;
+            }
+            $class = $filter->get_filter_class();
+            [$sql, $filterparams] = $class::create($filter)->get_sql_filter($values);
+            if ($sql === '') {
+                continue;
+            }
+            [$sql, $filterparams] = database::sql_replace_parameters(
+                $sql,
+                $filterparams,
+                static fn(string $name): string => "{$name}_fw{$index}"
+            );
+            $wheres[] = "({$sql})";
+            $params = array_merge($params, $filterparams);
+        }
+        foreach ($this->narrowings as [$sql, $narrowparams]) {
+            $wheres[] = "({$sql})";
+            $params = array_merge($params, $narrowparams);
+        }
+
+        return [$wheres ? implode(' AND ', $wheres) : '1=1', $params];
+    }
+
+    /**
+     * The table's FROM with a filter's joins added, those it does not carry yet.
+     *
+     * Core joins a filter's tables only while the filter applies, and a facet counts by a filter's
+     * field whether it applies or not.
+     *
+     * @param \core_reportbuilder\local\report\filter $filter The filter.
+     * @return string The FROM clause.
+     */
+    public function from_with(\core_reportbuilder\local\report\filter $filter): string {
+        $from = $this->sql->from;
+        foreach (array_unique($filter->get_joins()) as $join) {
+            if (!str_contains($from, $join)) {
+                $from .= ' ' . $join;
+            }
+        }
+
+        return $from;
     }
 
     /**

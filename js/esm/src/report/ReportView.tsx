@@ -26,7 +26,10 @@
  * - the grid (enrol_apply_set_report_preference): a column change is written, and the rows are read
  *   again only once the write has landed, because the report reads the columns in initialise().
  *
- * A filter, the scope or the search reloads both. One request is in flight per region: core's ajax
+ * A filter, the scope or the search reloads both, and the rows then come with the filter panel's counts,
+ * which a sort or a page turn cannot move and so does not ask for: the panel keeps the last counted
+ * answer's options. A width set from the keyboard is saved once, 500 ms after the last key or when the
+ * handle loses the focus, as a drag is saved once, on release. One request is in flight per region: core's ajax
  * cannot abort, so each region numbers its requests and drops any answer but the newest. The first
  * load draws skeletons with aria-busy; later ones keep the old rows, dimmed, under a 2 px line.
  *
@@ -45,13 +48,17 @@ import {Grid, GridSkeleton} from './Grid';
 import {Pager} from './Pager';
 import {hold} from './pending';
 import {getRows, getSummary, resetFilters, setFilters, setPreference} from './repository';
-import type {Column, Filter, Measure, Preference, RowsAnswer, RowsQuery, Scope, SummaryAnswer, ViewMode, ViewProps} from './types';
+import type {Column, Filter, Measure, Preference, Preset, RowsAnswer, RowsQuery, Scope, SummaryAnswer, ViewMode,
+    ViewProps} from './types';
 
 /** Below this container width, in pixels, Automatic draws cards (AR-D9; stylelint refuses a container query). */
 const NARROW = 576;
 
 /** The wait before the search is sent, after the last key (section 5b). */
 const SEARCH_DELAY = 300;
+
+/** The wait before a width set from the keyboard is saved, after the last key. */
+const WIDTH_DELAY = 500;
 
 /** The browser key the reader's view choice is remembered under: a convenience of this browser alone. */
 const VIEW_KEY = 'enrol_apply_report_view';
@@ -85,7 +92,8 @@ type RowsContentProps = {
     widths: Record<string, number>,
     onRetry: () => void,
     onSort: (key: string) => void,
-    onWidth: (key: string, width: number | null) => void,
+    onWidth: (key: string, width: number | null, defer?: boolean) => void,
+    onWidthCommit: () => void,
 };
 
 /**
@@ -95,7 +103,7 @@ type RowsContentProps = {
  * @returns {object} The region's content.
  */
 const RowsContent = ({labels, rows, error, cards, narrow, filtered, columns, identity, widths, onRetry, onSort,
-        onWidth}: RowsContentProps): ReactElement => {
+        onWidth, onWidthCommit}: RowsContentProps): ReactElement => {
     const retry = (
         <p className="enrol_apply-rview-error">
             {labels.loaderror}{' '}
@@ -147,6 +155,7 @@ const RowsContent = ({labels, rows, error, cards, narrow, filtered, columns, ide
                         direction={rows.direction}
                         onSort={onSort}
                         onWidth={onWidth}
+                        onWidthCommit={onWidthCommit}
                     />
                     <p className="enrol_apply-rview-hint">{labels.scrollhint}</p>
                 </>
@@ -187,6 +196,7 @@ const ReportView = (props: ViewProps): ReactElement => {
     const [bandloading, setBandloading] = useState(true);
     const [banderror, setBanderror] = useState(false);
     const [widths, setWidths] = useState<Record<string, number>>({});
+    const [counted, setCounted] = useState<Record<string, Filter>>({});
 
     const rowsseq = useRef(0);
     const bandseq = useRef(0);
@@ -195,22 +205,30 @@ const ReportView = (props: ViewProps): ReactElement => {
     const searchtimer = useRef<number | null>(null);
     const searchhold = useRef<(() => void) | null>(null);
     const widthsread = useRef(false);
+    const widthtimer = useRef<number | null>(null);
+    const widthhold = useRef<(() => void) | null>(null);
+    const pendingwidths = useRef<Record<string, number> | null>(null);
+    const flushref = useRef<() => void>(() => undefined);
 
     /**
      * Read a page of rows; an answer to an older request than the newest is dropped.
      *
      * @param {object} asked What to read.
+     * @param {boolean} facets Whether the panel's counts can have moved, and so are asked for.
      * @returns {void}
      */
-    const loadRows = useCallback((asked: RowsQuery): void => {
+    const loadRows = useCallback((asked: RowsQuery, facets: boolean): void => {
         const seq = ++rowsseq.current;
         if (!rowshold.current) {
             rowshold.current = hold('enrol_apply/report:rows');
         }
         setRowsloading(true);
-        getRows(enrolid, asked).then((answer) => {
+        getRows(enrolid, asked, facets).then((answer) => {
             if (seq !== rowsseq.current) {
                 return;
+            }
+            if (answer.counted) {
+                setCounted(Object.fromEntries(answer.filters.map((filter) => [filter.name, filter])));
             }
             if (!widthsread.current) {
                 widthsread.current = true;
@@ -272,7 +290,8 @@ const ReportView = (props: ViewProps): ReactElement => {
         query.current = {...query.current, ...change};
         setCurrent(query.current);
         if (readrows) {
-            loadRows(query.current);
+            // The band moves exactly when what the panel counts moves: a filter, the scope, the search, the measure.
+            loadRows(query.current, readband);
         }
         if (readband) {
             loadBand(query.current);
@@ -295,7 +314,7 @@ const ReportView = (props: ViewProps): ReactElement => {
 
     // The first load: both regions, in parallel, each in a request of its own.
     useEffect(() => {
-        loadRows(query.current);
+        loadRows(query.current, true);
         loadBand(query.current);
     }, [loadRows, loadBand]);
 
@@ -314,12 +333,13 @@ const ReportView = (props: ViewProps): ReactElement => {
         return () => observer.disconnect();
     }, []);
 
-    // A pending search is dropped with the component, and its hold released.
+    // A pending search is dropped with the component, and its hold released; a pending width is saved.
     useEffect(() => () => {
         if (searchtimer.current !== null) {
             window.clearTimeout(searchtimer.current);
         }
         searchhold.current?.();
+        flushref.current();
     }, []);
 
     /**
@@ -389,7 +409,10 @@ const ReportView = (props: ViewProps): ReactElement => {
         }).finally(release);
     };
 
-    const filters: Filter[] = rows?.filters ?? [];
+    // The panel draws each filter as the rows last counted it, its applied values as they are now.
+    const filters: Filter[] = (rows?.filters ?? []).map((filter) => (counted[filter.name]
+        ? {...filter, options: counted[filter.name].options, groupings: counted[filter.name].groupings}
+        : filter));
 
     /**
      * Store the reader's grid; read the rows again afterwards when the columns changed.
@@ -402,7 +425,7 @@ const ReportView = (props: ViewProps): ReactElement => {
         const release = hold('enrol_apply/report:preference');
         setPreference(enrolid, preference).then(() => {
             if (reread) {
-                loadRows(query.current);
+                loadRows(query.current, false);
             }
             return;
         }).catch(() => {
@@ -446,13 +469,36 @@ const ReportView = (props: ViewProps): ReactElement => {
     };
 
     /**
-     * One column's width: written once, on release; null restores its default.
+     * Save the widths waiting to be saved, if any: once, whatever number of steps led to them.
+     *
+     * @returns {void}
+     */
+    const flushWidths = (): void => {
+        if (widthtimer.current !== null) {
+            window.clearTimeout(widthtimer.current);
+            widthtimer.current = null;
+        }
+        const next = pendingwidths.current;
+        pendingwidths.current = null;
+        if (next !== null) {
+            writePreference({usedefault, columns: usedefault ? [] : chosenkeys, widths: widthList(next)}, false);
+        }
+        widthhold.current?.();
+        widthhold.current = null;
+    };
+    // The timer and the unmount call the newest flush, which writes the columns as they are then.
+    flushref.current = flushWidths;
+
+    /**
+     * One column's width, drawn at once; null restores its default. A drag's release and a double click
+     * write it now; a key step (defer) waits for the last key, or for the handle to lose the focus.
      *
      * @param {string} key The column key.
      * @param {number|null} width Pixels, or null.
+     * @param {boolean} defer Whether to wait for more steps before writing.
      * @returns {void}
      */
-    const onWidth = (key: string, width: number | null): void => {
+    const onWidth = (key: string, width: number | null, defer = false): void => {
         const next = {...widths};
         if (width === null) {
             delete next[key];
@@ -460,7 +506,43 @@ const ReportView = (props: ViewProps): ReactElement => {
             next[key] = width;
         }
         setWidths(next);
-        writePreference({usedefault, columns: usedefault ? [] : chosenkeys, widths: widthList(next)}, false);
+        pendingwidths.current = next;
+        if (!defer) {
+            flushWidths();
+            return;
+        }
+        if (widthtimer.current !== null) {
+            window.clearTimeout(widthtimer.current);
+        }
+        if (!widthhold.current) {
+            widthhold.current = hold('enrol_apply/report:width');
+        }
+        widthtimer.current = window.setTimeout(() => flushref.current(), WIDTH_DELAY);
+    };
+
+    /**
+     * Apply one of the Columns menu's sets: written as the reader's choice, then the rows are read with it.
+     *
+     * The menu answers at once with the set's columns as the catalogue offers them ("answers" being every
+     * question); the server's answer then says which set is in force.
+     *
+     * @param {object} preset The set.
+     * @returns {void}
+     */
+    const onPreset = (preset: Preset): void => {
+        const named = new Set(preset.columns);
+        if (rows) {
+            setRows({
+                ...rows,
+                columns: rows.columns.map((column) => (column.fixed ? column : {
+                    ...column,
+                    active: named.has(column.key) || (named.has('answers') && column.key.startsWith('answer:')),
+                })),
+                presets: rows.presets.map((entry) => ({...entry, active: entry.name === preset.name})),
+                preference: {...rows.preference, usedefault: false, columns: preset.columns},
+            });
+        }
+        writePreference({usedefault: false, columns: preset.columns, widths: widthList(widths)}, true);
     };
 
     /**
@@ -518,11 +600,13 @@ const ReportView = (props: ViewProps): ReactElement => {
                 total={rows === null ? null : rows.total}
                 filters={filters}
                 columns={allcolumns.filter((column) => !column.key.startsWith('identity:') || column.active)}
+                presets={rows?.presets ?? []}
                 usedefault={usedefault}
                 haswidths={Object.keys(widths).length > 0}
                 view={view}
                 measure={current.measure}
                 search={searchtext}
+                appliedsearch={current.search}
                 searchmin={props.searchmin}
                 searching={rowsloading}
                 tableurl={props.tableurl}
@@ -545,6 +629,7 @@ const ReportView = (props: ViewProps): ReactElement => {
                     }
                 }}
                 onColumn={onColumn}
+                onPreset={onPreset}
                 onDefaultColumns={() => {
                     if (rows) {
                         setRows({...rows, preference: {...rows.preference, usedefault: true, columns: []}});
@@ -574,9 +659,10 @@ const ReportView = (props: ViewProps): ReactElement => {
                     columns={shown}
                     identity={identity}
                     widths={widths}
-                    onRetry={() => loadRows(query.current)}
+                    onRetry={() => loadRows(query.current, true)}
                     onSort={onSort}
                     onWidth={onWidth}
+                    onWidthCommit={() => flushref.current()}
                 />
             </section>
             {rows !== null && rows.total > 0 ? (
@@ -591,6 +677,12 @@ const ReportView = (props: ViewProps): ReactElement => {
                     onPage={(page) => run({page}, true, false)}
                     onPerpage={(perpage) => run({perpage, page: 0}, true, false)}
                 />
+            ) : null}
+            {props.retention !== '' ? (
+                <p className="enrol_apply-rview-retention" data-region="enrol_apply-retention">
+                    {props.retention}
+                    {props.retentionurl !== '' ? <>{' '}<a href={props.retentionurl}>{labels.retentionchange}</a></> : null}
+                </p>
             ) : null}
         </div>
     );

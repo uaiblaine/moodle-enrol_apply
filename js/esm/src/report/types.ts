@@ -44,6 +44,8 @@ export type ViewProps = {
     queueurl: string,
     pendingstatus: number,
     tableurl: string,
+    retention: string,
+    retentionurl: string,
     methods: number,
     labels: Record<string, string>,
 };
@@ -77,18 +79,29 @@ export type Row = {
     cells: Cell[],
 };
 
-/** One option of a filter. */
-export type FilterOption = {value: string, label: string};
+/** One option of a filter, with the rows it would list under every other filter; -1 when not counted. */
+export type FilterOption = {value: string, label: string, count: number};
+
+/** A grouping of the groups a group filter offers. */
+export type Grouping = {id: number, name: string, groups: number[]};
+
+/** The panel's facet that draws a filter; '' for one set in core's table view. */
+export type Facet = '' | 'choice' | 'waited' | 'decider';
 
 /** One of the report's filters, as the rows answer describes it. */
 export type Filter = {
     name: string,
     title: string,
     type: string,
+    facet: Facet,
     options: FilterOption[],
     applied: boolean,
     values: string,
+    groupings: Grouping[],
 };
+
+/** One of the Columns menu's sets. */
+export type Preset = {name: string, columns: string[], active: boolean};
 
 /** The reader's grid. */
 export type Preference = {
@@ -110,7 +123,9 @@ export type RowsAnswer = {
     narrowed: boolean,
     notingroup: boolean,
     columns: Column[],
+    presets: Preset[],
     rows: Row[],
+    counted: boolean,
     filters: Filter[],
     preference: Preference,
 };

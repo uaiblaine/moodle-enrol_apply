@@ -28,11 +28,16 @@
  * back to its button; leaving it empty closes it too; the eraser clears the text and keeps it open. The
  * text in force shows as a chip only while the field is closed, so it is never said twice.
  *
- * Filters draws the report's own filters that pick one option of a list (core's store, through
- * core_reportbuilder_set_filters); a group filter with more than eight groups is a search over a list
- * capped at fifty, the chosen one pinned on top (section 5b). Columns lists the report's catalogue for
- * this reader, the applicant and the identity fields always shown, and ends with "Reset column widths".
- * View is Automatic, Table or Cards, and core's own table view.
+ * Filters draws the report's facets (core's store, through core_reportbuilder_set_filters): the filters
+ * that pick one option of a list, "Waited more than" for the wait the band measures and "Decided by",
+ * each option with the rows it would list under every other filter in force, the scope and the search
+ * (the rows answer counts them; an option no row would list is hidden unless chosen). A facet with more
+ * than eight options is a search over a list capped at fifty, the chosen one pinned on top, the group
+ * facet's with a grouping select (section 5b). Columns starts with three sets (Decisions, Answers,
+ * Groups), each written as the reader's choice like a column change, then lists the report's catalogue
+ * for this reader, the applicant and the identity fields always shown, and ends with "Reset column
+ * widths". View is Automatic, Table or Cards, and core's own table view. Download links core's download
+ * of the report with the measure, the scope and the search in force, which the report applies itself.
  *
  * @module     enrol_apply/report/Bar
  * @copyright  2026 Anderson Blaine
@@ -45,9 +50,9 @@ import {choosable, chosen, chosenLabel} from './filters';
 import {Icon} from './icons';
 import {Segmented} from './Segmented';
 import {fill, fillCount, fillObject, num} from './str';
-import type {Column, Filter, Format, Measure, Scope, ViewMode} from './types';
+import type {Column, Filter, FilterOption, Format, Measure, Preset, Scope, ViewMode} from './types';
 
-/** A group filter with more options than this is searched (RP-D18, section 5b). */
+/** A facet with more options than this is searched (RP-D18, section 5b). */
 const FEW = 8;
 
 /** The most options a searched list draws at once (section 5b). */
@@ -62,11 +67,13 @@ type BarProps = {
     total: number | null,
     filters: Filter[],
     columns: Column[],
+    presets: Preset[],
     usedefault: boolean,
     haswidths: boolean,
     view: ViewMode,
     measure: Measure,
     search: string,
+    appliedsearch: string,
     searchmin: number,
     searching: boolean,
     tableurl: string,
@@ -79,9 +86,117 @@ type BarProps = {
     onClearFilters: () => void,
     onClearAll: () => void,
     onColumn: (key: string, on: boolean) => void,
+    onPreset: (preset: Preset) => void,
     onDefaultColumns: () => void,
     onResetWidths: () => void,
     onView: (view: ViewMode) => void,
+};
+
+/**
+ * The heading a facet is drawn under: the panel's own words for the wait and the decider, whose filters
+ * are named for core's form.
+ *
+ * @param {object} labels The strings.
+ * @param {object} filter The filter.
+ * @returns {string} The heading.
+ */
+const facetTitle = (labels: Record<string, string>, filter: Filter): string => {
+    if (filter.facet === 'waited') {
+        return labels.waitedmore;
+    }
+
+    return filter.facet === 'decider' ? labels.decidedby : filter.title;
+};
+
+/**
+ * A Columns set's name, by the literal key of each (a label is never looked up by a computed name).
+ *
+ * @param {object} labels The strings.
+ * @param {string} name The set's name.
+ * @returns {string} Its label.
+ */
+const presetLabel = (labels: Record<string, string>, name: string): string => {
+    switch (name) {
+        case 'decisions':
+            return labels.presetdecisions;
+        case 'answers':
+            return labels.presetanswers;
+        case 'groups':
+            return labels.presetgroups;
+        default:
+            return name;
+    }
+};
+
+/**
+ * The report parameters of the download link: the rows in view, as the report applies the scope and the
+ * search from its own parameters (course_applications::initialise()).
+ *
+ * @param {string} measure What the wait measures.
+ * @param {string} scope Which rows.
+ * @param {string} search The name search in force, or ''.
+ * @returns {string} The parameters, JSON, encoded for a url.
+ */
+const downloadParameters = (measure: Measure, scope: Scope, search: string): string => {
+    const parameters: Record<string, string> = {measure};
+    if (scope !== 'all') {
+        parameters.scope = scope;
+    }
+    if (search !== '') {
+        parameters.search = search;
+    }
+
+    return encodeURIComponent(JSON.stringify(parameters));
+};
+
+/**
+ * The panel's "Show" button: with the rows' count once it is known (filter-panel.md).
+ *
+ * @param {object} labels The strings.
+ * @param {number|null} total The rows' total, or null before the first answer.
+ * @returns {string} The label.
+ */
+const showLabel = (labels: Record<string, string>, total: number | null): string =>
+    (total === null ? labels.show : fill(labels.showcount, num(total)));
+
+/**
+ * The Columns menu's sets, under their heading and before a separator: menuitemcheckbox items, the set
+ * in force checked (menu.md); a press on another writes it as the reader's choice.
+ *
+ * @param {object} props The strings, the sets and the callback.
+ * @returns {object|null} The items, or nothing without sets.
+ */
+const PresetItems = ({labels, presets, onPreset}: {labels: Record<string, string>, presets: Preset[],
+        onPreset: (preset: Preset) => void}): ReactElement | null => {
+    if (presets.length === 0) {
+        return null;
+    }
+
+    return (
+        <>
+            <div className="enrol_apply-rview-menu-head" role="presentation">{labels.presets}</div>
+            {presets.map((preset) => (
+                <button
+                    key={preset.name}
+                    type="button"
+                    className="enrol_apply-rview-menu-item"
+                    role="menuitemcheckbox"
+                    aria-checked={preset.active}
+                    tabIndex={-1}
+                    data-preset={preset.name}
+                    onClick={() => {
+                        if (!preset.active) {
+                            onPreset(preset);
+                        }
+                    }}
+                >
+                    <span className="enrol_apply-rview-box" aria-hidden="true"><Icon name="tick" /></span>
+                    <span className="enrol_apply-rview-menu-label">{presetLabel(labels, preset.name)}</span>
+                </button>
+            ))}
+            <div className="enrol_apply-rview-menu-sep" role="separator" />
+        </>
+    );
 };
 
 /**
@@ -112,54 +227,113 @@ const menuKeys = (event: KeyboardEvent<HTMLDivElement>): void => {
 };
 
 /**
- * One filter's group in the panel: a radio group of its options, or a searched list for many groups.
+ * An option's quiet count (counter.md), or nothing where the panel has not counted.
  *
- * @param {object} props The strings, the filter and the callback.
- * @returns {object} The group.
+ * @param {object} props The option.
+ * @returns {object|null} The count.
  */
-const FilterGroup = ({labels, filter, onFilter}: {labels: Record<string, string>, filter: Filter,
-        onFilter: (filter: Filter, value: string) => void}): ReactElement => {
-    const headid = useId();
-    const [query, setQuery] = useState('');
-    const value = chosen(filter);
-    const options = [{value: '', label: labels.any}, ...filter.options];
+const OptionCount = ({option}: {option: FilterOption}): ReactElement | null => (
+    option.count >= 0 ? <small className="enrol_apply-rview-optcount">{num(option.count)}</small> : null
+);
 
-    if (filter.options.length > FEW) {
-        const folded = query.trim().toLocaleLowerCase();
-        const pinned = filter.options.filter((option) => option.value === value);
-        const rest = filter.options.filter((option) => option.value !== value
-            && (folded === '' || option.label.toLocaleLowerCase().includes(folded)));
-        return (
-            <div className="enrol_apply-rview-fgroup">
-                <span className="enrol_apply-rview-fpanel-head" id={headid}>{filter.title}</span>
+/**
+ * The options a facet shows: every counted option but those no row would list, unless chosen (counter.md).
+ *
+ * @param {object} filter The filter.
+ * @param {string} value The chosen option's value.
+ * @returns {Array} The options.
+ */
+const shownOptions = (filter: Filter, value: string): FilterOption[] =>
+    filter.options.filter((option) => option.count !== 0 || option.value === value);
+
+/**
+ * A facet of many options as a searched list (filter-panel.md): the search, for the groups a grouping
+ * select (RP-D23), the chosen option pinned on top, then at most fifty matches and a note of the rest.
+ *
+ * @param {object} props The strings, the filter, its options shown, the chosen value, the heading's id
+ *     and the callback.
+ * @returns {object} The field and the list.
+ */
+const SearchedList = ({labels, filter, shown, value, headid, onFilter}: {labels: Record<string, string>, filter: Filter,
+        shown: FilterOption[], value: string, headid: string, onFilter: (filter: Filter, value: string) => void}): ReactElement => {
+    const [query, setQuery] = useState('');
+    const [grouping, setGrouping] = useState('');
+    const folded = query.trim().toLocaleLowerCase();
+    const groups = filter.groupings.length > 1 ? filter.groupings : [];
+    const inside = groups.find((entry) => String(entry.id) === grouping)?.groups.map(String) ?? null;
+    const pinned = shown.filter((option) => option.value === value);
+    const rest = shown.filter((option) => option.value !== value
+        && (folded === '' || option.label.toLocaleLowerCase().includes(folded))
+        && (inside === null || inside.includes(option.value)));
+    const decider = filter.facet === 'decider';
+    const searchlabel = fill(decider ? labels.searchdeciders : labels.searchgroups, num(filter.options.length));
+    const more = groups.length > 0 ? labels.moregroupsgrouping : labels.moregroups;
+
+    return (
+        <>
+            <div className="enrol_apply-rview-find">
                 <input
                     type="search"
                     className="form-control form-control-sm enrol_apply-rview-input"
-                    placeholder={fill(labels.searchgroups, num(filter.options.length))}
-                    aria-label={fill(labels.searchgroups, num(filter.options.length))}
+                    placeholder={searchlabel}
+                    aria-label={searchlabel}
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
                 />
-                <div className="enrol_apply-rview-optlist" role="group" aria-labelledby={headid}>
-                    {[...pinned, ...rest.slice(0, CAP)].map((option) => (
-                        <button
-                            key={option.value}
-                            type="button"
-                            className="enrol_apply-rview-optrow"
-                            aria-pressed={option.value === value}
-                            onClick={() => onFilter(filter, option.value === value ? '' : option.value)}
-                        >
-                            <span className="enrol_apply-rview-box" aria-hidden="true"><Icon name="tick" /></span>
-                            <span className="enrol_apply-rview-optrow-label">{option.label}</span>
-                        </button>
-                    ))}
-                    {rest.length > CAP
-                        ? <p className="enrol_apply-rview-note">{fill(labels.moregroups, num(rest.length - CAP))}</p>
-                        : null}
-                    {pinned.length === 0 && rest.length === 0
-                        ? <p className="enrol_apply-rview-note">{labels.nogroupmatch}</p>
-                        : null}
-                </div>
+                {groups.length > 0 ? (
+                    <select
+                        className="form-select form-select-sm enrol_apply-rview-grouping"
+                        aria-label={labels.grouping}
+                        value={grouping}
+                        onChange={(event) => setGrouping(event.target.value)}
+                    >
+                        <option value="">{labels.allgroupings}</option>
+                        {groups.map((entry) => <option key={entry.id} value={String(entry.id)}>{entry.name}</option>)}
+                    </select>
+                ) : null}
+            </div>
+            <div className="enrol_apply-rview-optlist" role="group" aria-labelledby={headid}>
+                {[...pinned, ...rest.slice(0, CAP)].map((option) => (
+                    <button
+                        key={option.value}
+                        type="button"
+                        className="enrol_apply-rview-optrow"
+                        aria-pressed={option.value === value}
+                        onClick={() => onFilter(filter, option.value === value ? '' : option.value)}
+                    >
+                        <span className="enrol_apply-rview-box" aria-hidden="true"><Icon name="tick" /></span>
+                        <span className="enrol_apply-rview-optrow-label">{option.label}</span>{' '}
+                        <OptionCount option={option} />
+                    </button>
+                ))}
+                {rest.length > CAP ? <p className="enrol_apply-rview-note">{fill(more, num(rest.length - CAP))}</p> : null}
+                {pinned.length === 0 && rest.length === 0
+                    ? <p className="enrol_apply-rview-note">{decider ? labels.nodecidermatch : labels.nogroupmatch}</p>
+                    : null}
+            </div>
+        </>
+    );
+};
+
+/**
+ * One facet's group in the panel: a radio group of its options with their counts, or a searched list
+ * above eight options.
+ *
+ * @param {object} props The strings, the filter, its heading and the callback.
+ * @returns {object} The group.
+ */
+const FilterGroup = ({labels, filter, title, onFilter}: {labels: Record<string, string>, filter: Filter, title: string,
+        onFilter: (filter: Filter, value: string) => void}): ReactElement => {
+    const headid = useId();
+    const value = chosen(filter);
+    const shown = shownOptions(filter, value);
+    const options: FilterOption[] = [{value: '', label: labels.any, count: -1}, ...shown];
+
+    if (filter.options.length > FEW) {
+        return (
+            <div className="enrol_apply-rview-fgroup">
+                <span className="enrol_apply-rview-fpanel-head" id={headid}>{title}</span>
+                <SearchedList labels={labels} filter={filter} shown={shown} value={value} headid={headid} onFilter={onFilter} />
             </div>
         );
     }
@@ -192,7 +366,7 @@ const FilterGroup = ({labels, filter, onFilter}: {labels: Record<string, string>
 
     return (
         <div className="enrol_apply-rview-fgroup">
-            <span className="enrol_apply-rview-fpanel-head" id={headid}>{filter.title}</span>
+            <span className="enrol_apply-rview-fpanel-head" id={headid}>{title}</span>
             <div className="enrol_apply-rview-fpanel-opts" role="radiogroup" aria-labelledby={headid} onKeyDown={keydown}>
                 {options.map((option) => (
                     <button
@@ -204,7 +378,8 @@ const FilterGroup = ({labels, filter, onFilter}: {labels: Record<string, string>
                         tabIndex={option.value === value ? 0 : -1}
                         onClick={() => onFilter(filter, option.value)}
                     >
-                        {option.label}
+                        {option.label}{' '}
+                        <OptionCount option={option} />
                     </button>
                 ))}
             </div>
@@ -360,8 +535,17 @@ export const Bar = (props: BarProps): ReactElement => {
             <span className="visually-hidden">{fullcount}</span>
         </>
     ) : fullcount;
-    const panelfilters = filters.filter(choosable);
-    const others = filters.filter((filter) => !choosable(filter));
+    // The wait the panel draws is the one the band measures; the other stays in core's table view.
+    const waited = props.measure === 'resolution' ? 'submission:resolutiontime' : 'submission:waittime';
+    /**
+     * Whether the panel draws a filter.
+     *
+     * @param {object} filter The filter.
+     * @returns {boolean} True for a facet with options, a wait only for the measure's.
+     */
+    const inpanel = (filter: Filter): boolean => choosable(filter) && (filter.facet !== 'waited' || filter.name === waited);
+    const panelfilters = filters.filter(inpanel);
+    const others = filters.filter((filter) => !inpanel(filter));
 
     /**
      * One icon button of the capsule.
@@ -398,7 +582,7 @@ export const Bar = (props: BarProps): ReactElement => {
         ? <span className="enrol_apply-rview-badge" aria-hidden="true">{num(applied.length)}</span>
         : null;
     const download = props.downloadurl !== '' && props.formats.length > 0;
-    const parameters = encodeURIComponent(JSON.stringify({measure: props.measure}));
+    const parameters = downloadParameters(props.measure, props.scope, props.appliedsearch);
     const barclass = 'enrol_apply-rview-bar'
         + (props.narrow ? ' enrol_apply-rview-bar--narrow' : '')
         + (searchopen ? ' enrol_apply-rview-bar--searching' : '');
@@ -434,6 +618,7 @@ export const Bar = (props: BarProps): ReactElement => {
                                 hidden={layer !== 'columns'}
                                 onKeyDown={menuKeys}
                             >
+                                <PresetItems labels={labels} presets={props.presets} onPreset={props.onPreset} />
                                 {columns.map((column) => (
                                     column.fixed ? (
                                         <div
@@ -639,7 +824,13 @@ export const Bar = (props: BarProps): ReactElement => {
                 >
                     <div className="enrol_apply-rview-fpanel-body">
                         {panelfilters.map((filter) => (
-                            <FilterGroup key={filter.name} labels={labels} filter={filter} onFilter={props.onFilter} />
+                            <FilterGroup
+                                key={filter.name}
+                                labels={labels}
+                                filter={filter}
+                                title={facetTitle(labels, filter)}
+                                onFilter={props.onFilter}
+                            />
                         ))}
                         {others.length > 0 ? (
                             <p className="enrol_apply-rview-note">
@@ -660,7 +851,7 @@ export const Bar = (props: BarProps): ReactElement => {
                                 triggers.current.filters?.focus();
                             }}
                         >
-                            {labels.show}
+                            {showLabel(labels, props.total)}
                         </button>
                     </div>
                 </div>
@@ -669,7 +860,8 @@ export const Bar = (props: BarProps): ReactElement => {
             <div className="enrol_apply-rview-chips" data-region="enrol_apply-chips" hidden={chipcount === 0}>
                 {applied.map((filter) => {
                     const value = chosenLabel(filter);
-                    const text = value === '' ? filter.title : fillObject(labels.filterchip, {title: filter.title, value});
+                    const title = value !== '' ? facetTitle(labels, filter) : filter.title;
+                    const text = value === '' ? title : fillObject(labels.filterchip, {title, value});
                     return (
                         <button
                             key={filter.name}

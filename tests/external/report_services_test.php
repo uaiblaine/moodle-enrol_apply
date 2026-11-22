@@ -139,6 +139,18 @@ final class report_services_test extends \advanced_testcase {
         $comments = array_column(array_merge(...array_column($response['data']['rows'], 'cells')), 'html', 'key');
         $this->assertStringContainsString('&lt; bare', $comments['comment']);
 
+        // The filters carry their counts by default; a page turn asks for none, and the answer says so.
+        $this->assertTrue($response['data']['counted']);
+        $status = array_column($response['data']['filters'], null, 'name')['submission:status'];
+        $this->assertSame('choice', $status['facet']);
+        $this->assertSame(2, array_sum(array_column($status['options'], 'count')));
+        $this->assertSame(['decisions', 'answers', 'groups'], array_column($response['data']['presets'], 'name'));
+        $response = $this->call('enrol_apply_report_rows', ['enrolid' => $this->instance->id, 'page' => 0, 'facets' => false]);
+        $this->assertFalse($response['error'], json_encode($response['exception'] ?? null));
+        $this->assertFalse($response['data']['counted']);
+        $status = array_column($response['data']['filters'], null, 'name')['submission:status'];
+        $this->assertSame([-1], array_values(array_unique(array_column($status['options'], 'count'))));
+
         $response = $this->call('enrol_apply_report_summary', ['enrolid' => $this->instance->id, 'measure' => 'resolution']);
         $this->assertFalse($response['error'], json_encode($response['exception'] ?? null));
         $this->assertSame(2, $response['data']['total']);

@@ -21,7 +21,8 @@
  * with a shadow on its edge once the frame has scrolled sideways. Sortable headings are buttons, the
  * order in aria-sort. Each heading's right edge is a separator that resizes its column: a drag changes
  * the col element alone and is saved once, on release, in the reader's preference (AR-D13); the arrow
- * keys move it by 16 px; a double click restores the default.
+ * keys move it by 16 px, saved once too, after the last key or when the handle loses the focus; a
+ * double click restores the default.
  *
  * @module     enrol_apply/report/Grid
  * @copyright  2026 Anderson Blaine
@@ -64,7 +65,8 @@ type GridProps = {
     sort: string,
     direction: string,
     onSort: (key: string) => void,
-    onWidth: (key: string, width: number | null) => void,
+    onWidth: (key: string, width: number | null, defer?: boolean) => void,
+    onWidthCommit: () => void,
 };
 
 /**
@@ -91,7 +93,8 @@ const WaitBar = ({row, longest}: {row: Row, longest: number}): ReactElement | nu
  * @param {object} props See GridProps.
  * @returns {object} The frame and its table.
  */
-export const Grid = ({labels, columns, identity, rows, widths, sort, direction, onSort, onWidth}: GridProps): ReactElement => {
+export const Grid = ({labels, columns, identity, rows, widths, sort, direction, onSort, onWidth,
+        onWidthCommit}: GridProps): ReactElement => {
     const frame = useRef<HTMLDivElement | null>(null);
     const table = useRef<HTMLTableElement | null>(null);
     const drag = useRef<{key: string, x: number, width: number, now: number} | null>(null);
@@ -191,7 +194,8 @@ export const Grid = ({labels, columns, identity, rows, widths, sort, direction, 
     };
 
     /**
-     * The arrow keys on a handle: 16 px narrower or wider; Home restores the default.
+     * The arrow keys on a handle: 16 px narrower or wider; Home restores the default. Each step is drawn
+     * at once and saved later, once, as a drag is (onWidth's defer).
      *
      * @param {object} event The keyboard event.
      * @param {string} key The column key.
@@ -206,7 +210,7 @@ export const Grid = ({labels, columns, identity, rows, widths, sort, direction, 
             step = rtl ? STEP : -STEP;
         } else if (event.key === 'Home') {
             event.preventDefault();
-            onWidth(key, null);
+            onWidth(key, null, true);
             return;
         }
         if (step === 0) {
@@ -215,7 +219,7 @@ export const Grid = ({labels, columns, identity, rows, widths, sort, direction, 
         event.preventDefault();
         const width = bound(key, widthOf(widths, key) + step);
         if (width !== widthOf(widths, key)) {
-            onWidth(key, width);
+            onWidth(key, width, true);
         }
     };
 
@@ -280,6 +284,7 @@ export const Grid = ({labels, columns, identity, rows, widths, sort, direction, 
                                             }
                                         }}
                                         onKeyDown={(event) => keydown(event, column.key)}
+                                        onBlur={onWidthCommit}
                                     />
                                 </th>
                             );

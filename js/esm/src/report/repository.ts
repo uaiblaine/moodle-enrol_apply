@@ -36,10 +36,11 @@ import type {Measure, Preference, RowsAnswer, RowsQuery, Scope, SummaryAnswer} f
  *
  * @param {number} enrolid The apply method.
  * @param {object} query What to read; see RowsQuery.
+ * @param {boolean} facets Whether to count the filter panel's options: only when a count can have moved.
  * @returns {Promise} The answer.
  */
-export const getRows = (enrolid: number, query: RowsQuery): Promise<RowsAnswer> =>
-    fetchOne<RowsAnswer>({methodname: 'enrol_apply_report_rows', args: {enrolid, ...query}});
+export const getRows = (enrolid: number, query: RowsQuery, facets: boolean): Promise<RowsAnswer> =>
+    fetchOne<RowsAnswer>({methodname: 'enrol_apply_report_rows', args: {enrolid, ...query, facets}});
 
 /**
  * The turnaround summary of the same rows.
