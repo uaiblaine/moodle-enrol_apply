@@ -733,7 +733,7 @@ final class reportengine {
      * - a choice of core's select: the rows grouped by the filter's field, which the filter compares
      *   with "=" ({@see \core_reportbuilder\local\filters\select});
      * - the group filter: the rows joined to the offered groups by the filter's own predicate
-     *   ({@see groupscope::record_group_column_where()}), a record counting once in each group it
+     *   ({@see groupscope::record_group_where()}, tallied in PHP), a record counting once in each group it
      *   belongs to;
      * - waited: the rows whose wait, cast as core's duration filter casts it, is at least each
      *   threshold;
@@ -792,14 +792,29 @@ final class reportengine {
             if ($ids === []) {
                 return [];
             }
-            [$insql, $inparams] = $DB->get_in_or_equal($ids, SQL_PARAMS_NAMED, database::generate_param_name('_fg'));
-            $belongs = groupscope::record_group_column_where($alias, 'fg.id');
-            $sql = "SELECT fg.id AS facetvalue, COUNT(DISTINCT {$alias}.id) AS facetcount
-                      FROM {$from}
-                      JOIN {groups} fg ON fg.id {$insql} AND {$belongs}
-                     WHERE {$where}
-                  GROUP BY fg.id";
-            $params = array_merge($params, $inparams);
+            // One read, tallied here: a join of every offered group to every record grows with both.
+            $offeredset = array_flip($ids);
+            $group = groupscope::application_group_sql($alias);
+            $recordset = $DB->get_recordset_sql(
+                "SELECT DISTINCT {$alias}.id AS recordid, {$group} AS appgroup,
+                        COALESCE({$alias}.joinedgroups, {$alias}.decidedgroups, '') AS joined
+                   FROM {$from}
+                  WHERE {$where}",
+                $params
+            );
+            foreach ($recordset as $record) {
+                // The application's group, or any group of the joined list: a whole id, so 11 is never 1.
+                $groups = array_map('intval', explode(',', (string) $record->joined));
+                $groups[] = (int) $record->appgroup;
+                foreach (array_unique($groups) as $groupid) {
+                    if (isset($offeredset[$groupid])) {
+                        $counts[(string) $groupid] = ($counts[(string) $groupid] ?? 0) + 1;
+                    }
+                }
+            }
+            $recordset->close();
+
+            return $counts;
         } else {
             $person = $facet === 'decider' ? " AND {$alias}.decidedby > 0 AND {$alias}.decidedby <> {$alias}.userid" : '';
             $sql = "SELECT v.facetvalue, COUNT(1) AS facetcount

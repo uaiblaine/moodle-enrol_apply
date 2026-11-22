@@ -507,27 +507,6 @@ final class report_facets_test extends \core_reportbuilder\tests\core_reportbuil
     }
 
     /**
-     * The group facet's column predicate answers as the filter's listed one for every record and group.
-     *
-     * @return void
-     */
-    public function test_the_column_predicate_agrees_with_the_listed_one(): void {
-        global $DB;
-
-        foreach ([$this->mine->id, $this->theirs->id] as $groupid) {
-            [$listed, $params] = groupscope::record_group_where('r', [(int) $groupid], 'tcp');
-            $byid = $DB->get_fieldset_sql("SELECT r.id FROM {enrol_apply_submission} r WHERE {$listed} ORDER BY r.id", $params);
-            $column = groupscope::record_group_column_where('r', 'g.id');
-            $bycolumn = $DB->get_fieldset_sql(
-                "SELECT r.id FROM {enrol_apply_submission} r JOIN {groups} g ON g.id = :g AND {$column} ORDER BY r.id",
-                ['g' => $groupid]
-            );
-            $this->assertNotEmpty($byid);
-            $this->assertSame($byid, $bycolumn);
-        }
-    }
-
-    /**
      * "Waited more than": each threshold counts what core's duration filter lists at that many days,
      * for the measure's filter, and the other measure's facet is counted too.
      *

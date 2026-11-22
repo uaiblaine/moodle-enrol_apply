@@ -580,30 +580,6 @@ final class groupscope {
     }
 
     /**
-     * {@see record_group_where()} for the group a column names, rather than for listed ids.
-     *
-     * The same predicate, read against a group id column of the caller's query (the report's group
-     * facet joins the offered groups and counts each record once per group it belongs to,
-     * {@see \enrol_apply\local\reportengine::facet_counts()}): the application's group equal to the
-     * column, or ",<column>," found in ",<joined or decided groups>,". The two must answer alike for
-     * every record and group (test_the_column_predicate_agrees_with_the_listed_one), so that a
-     * group's count is what choosing that group in the filter lists.
-     *
-     * @param string $alias Alias of {enrol_apply_submission} in the caller's query.
-     * @param string $column A group id column of the caller's query.
-     * @return string The where fragment; it takes no parameters.
-     */
-    public static function record_group_column_where(string $alias, string $column): string {
-        global $DB;
-
-        $list = $DB->sql_concat("','", "COALESCE({$alias}.joinedgroups, {$alias}.decidedgroups, '')", "','");
-        // A substring test rather than LIKE: sql_like() wants a bound pattern, and ",<id>," has no wildcard to match.
-        $needle = $DB->sql_concat("','", $DB->sql_cast_to_char($column), "','");
-
-        return '(' . self::application_group_sql($alias) . " = {$column} OR " . $DB->sql_position($needle, $list) . ' > 0)';
-    }
-
-    /**
      * The groups of this course the current user may choose for an approval (S6).
      *
      * Every group of the course groups_get_all_groups() lists to $USER, narrowed to their own
