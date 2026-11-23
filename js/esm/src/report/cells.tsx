@@ -29,7 +29,9 @@
  */
 
 import type {ReactElement} from 'react';
-import {plain} from './str';
+import {Lines, splitLines} from '../datareport/cells';
+import {makeSizing} from '../datareport/sizing';
+import {plain} from '../datareport/str';
 import type {Column, Row} from './types';
 
 /** The columns whose formatter writes one fact per line (formatters\submission). */
@@ -59,33 +61,10 @@ const MINIMUMS: Record<string, number> = {applicant: 160, submitted: 104, decide
 const MINIMUM = 80;
 
 /** The widest a column may be dragged; the server keeps up to 1600. */
-export const MAXIMUM = 800;
+const MAXIMUM = 800;
 
-/**
- * A column's default width.
- *
- * @param {string} key The column key.
- * @returns {number} Pixels.
- */
-export const defaultWidth = (key: string): number => WIDTHS[key] ?? DEFAULT_WIDTH;
-
-/**
- * A column's minimum width.
- *
- * @param {string} key The column key.
- * @returns {number} Pixels.
- */
-export const minimumWidth = (key: string): number => MINIMUMS[key] ?? MINIMUM;
-
-/**
- * The width a column is drawn at: the reader's, held to the bounds, or the default.
- *
- * @param {object} widths The reader's widths by key.
- * @param {string} key The column key.
- * @returns {number} Pixels.
- */
-export const widthOf = (widths: Record<string, number>, key: string): number =>
-    Math.min(MAXIMUM, Math.max(minimumWidth(key), widths[key] ?? defaultWidth(key)));
+/** The report's width policy. */
+export const SIZING = makeSizing(WIDTHS, DEFAULT_WIDTH, MINIMUMS, MINIMUM, MAXIMUM);
 
 /**
  * A row's cell for a column, as HTML; '' where the report gave none.
@@ -103,13 +82,7 @@ export const cellHtml = (row: Row, key: string): string => row.cells.find((cell)
  * @param {string} html The cell's HTML.
  * @returns {Array} The lines, as HTML.
  */
-export const lines = (key: string, html: string): string[] => {
-    if (!MULTILINE.includes(key)) {
-        return [html];
-    }
-
-    return html.split('\n').map((line) => line.trim()).filter((line) => line !== '');
-};
+export const lines = (key: string, html: string): string[] => splitLines(html, MULTILINE.includes(key));
 
 /**
  * One cell's content: its first line, then its sub-lines.
@@ -117,22 +90,7 @@ export const lines = (key: string, html: string): string[] => {
  * @param {object} props The column key and the cell's HTML.
  * @returns {object} The lines.
  */
-export const CellLines = ({column, html}: {column: string, html: string}): ReactElement => {
-    const parts = lines(column, html);
-
-    return (
-        <>
-            {parts.map((part, index) => (
-                <span
-                    key={index}
-                    className={index === 0 ? 'enrol_apply-rview-c' : 'enrol_apply-rview-sub'}
-                    title={plain(part)}
-                    dangerouslySetInnerHTML={{__html: part}}
-                />
-            ))}
-        </>
-    );
-};
+export const CellLines = ({column, html}: {column: string, html: string}): ReactElement => <Lines parts={lines(column, html)} />;
 
 /**
  * The Review action, on a row the server gave a review url (AR-D18): an application still awaiting a

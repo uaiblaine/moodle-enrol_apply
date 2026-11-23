@@ -24,9 +24,13 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+import type {Column, FilterOption, Grouping, ViewMode} from '../datareport/types';
+
+// The shared parts' shapes the report's answers already have, field for field.
+export type {Column, FilterOption, Grouping, ViewMode};
+
 export type Measure = 'first' | 'resolution';
 export type Scope = 'all' | 'awaiting' | 'decided';
-export type ViewMode = 'auto' | 'table' | 'cards';
 
 /** One download format core offers (a dataformat plugin). */
 export type Format = {value: string, label: string};
@@ -50,16 +54,6 @@ export type ViewProps = {
     labels: Record<string, string>,
 };
 
-/** A column the report shows or offers. */
-export type Column = {
-    key: string,
-    title: string,
-    sortable: boolean,
-    default: boolean,
-    active: boolean,
-    fixed: boolean,
-};
-
 /** One cell of a row: the report's own formatted HTML. */
 export type Cell = {key: string, html: string};
 
@@ -78,12 +72,6 @@ export type Row = {
     reviewurl: string,
     cells: Cell[],
 };
-
-/** One option of a filter, with the rows it would list under every other filter; -1 when not counted. */
-export type FilterOption = {value: string, label: string, count: number};
-
-/** A grouping of the groups a group filter offers. */
-export type Grouping = {id: number, name: string, groups: number[]};
 
 /** The panel's facet that draws a filter; '' for one set in core's table view. */
 export type Facet = '' | 'choice' | 'waited' | 'decider';

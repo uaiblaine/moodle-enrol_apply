@@ -46,8 +46,8 @@ final class bundle_test extends basic_testcase {
     /** @var string The plugin's root. */
     private const ROOT = __DIR__ . '/..';
 
-    /** @var string The entry the marker names. */
-    private const ENTRY = 'src/report/ReportView.tsx';
+    /** @var string The entry the marker names: every view of the plugin, chosen per mount by its props. */
+    private const ENTRY = 'src/views.tsx';
 
     /** @var string What to do when the build is stale. */
     private const REBUILD = 'rebuild js/esm/build on Moodle 5.3 (core\'s esm task, then the bundle that js/esm/bundle.json '

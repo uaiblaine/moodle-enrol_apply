@@ -1,4 +1,4 @@
 {
-    "entry": "src/report/ReportView.tsx",
+    "entry": "src/views.tsx",
     "outfile": "build/bundle.js"
 }

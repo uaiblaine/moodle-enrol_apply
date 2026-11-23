@@ -14,20 +14,20 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * The card view (AR-D9): the same rows, page and order as the grid, one article each.
+ * The course report's cards: the shared card view (datareport/Cards) with the report's four lines.
  *
  * Four fixed lines answer who, what happened, how long and who decided: the applicant with the outcome
  * and the Review action; the wait and the submission date; the decision; the group and the method. The
- * other chosen fields follow in a list, at once on a wide screen (a grid of 17.5rem cards) and behind
- * "More" on a narrow one (one column).
+ * other chosen fields follow in the card's list, a field with nothing in it left out.
  *
  * @module     enrol_apply/report/Cards
  * @copyright  2026 Anderson Blaine
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-import {useState} from 'react';
 import type {ReactElement} from 'react';
+import {Cards as DataCards} from '../datareport/Cards';
+import type {CardContent} from '../datareport/Cards';
 import {CellLines, IdentityLines, ReviewButton, cellHtml, lines} from './cells';
 import type {Column, Row} from './types';
 
@@ -55,17 +55,15 @@ const First = ({row, column}: {row: Row, column: string}): ReactElement | null =
 };
 
 /**
- * One card.
+ * What one card holds.
  *
- * @param {object} props The strings, the active columns, the identity columns, the row, and whether the list folds.
- * @returns {object} The article.
+ * @param {object} labels The strings.
+ * @param {Array} columns The active columns.
+ * @param {Array} identity The identity columns.
+ * @param {object} row The row.
+ * @returns {object} The card's first line, its fixed lines and its list.
  */
-const Card = ({labels, columns, identity, row, single}: {labels: Record<string, string>, columns: Column[],
-        identity: Column[], row: Row, single: boolean}): ReactElement => {
-    const [more, setMore] = useState(false);
-    // A field with nothing in it is left out of the card: the table keeps its empty cell, a card has no column to keep.
-    const extra = columns.filter((column) => !FIXED.includes(column.key) && cellHtml(row, column.key).trim() !== '');
-    const shown = !single || more;
+const content = (labels: Record<string, string>, columns: Column[], identity: Column[], row: Row): CardContent => {
     /**
      * Whether the reader's report shows a column.
      *
@@ -73,64 +71,51 @@ const Card = ({labels, columns, identity, row, single}: {labels: Record<string, 
      * @returns {boolean} True when it is active.
      */
     const has = (key: string): boolean => columns.some((column) => column.key === key);
+    // A field with nothing in it is left out of the card: the table keeps its empty cell, a card has no column to keep.
+    const extra = columns.filter((column) => !FIXED.includes(column.key) && cellHtml(row, column.key).trim() !== '');
 
-    const list = (
-        <dl className="enrol_apply-rview-card-list">
-            {extra.map((column) => (
-                <div key={column.key} className="enrol_apply-rview-card-item">
-                    <dt>{column.title}</dt>
-                    <dd><CellLines column={column.key} html={cellHtml(row, column.key)} /></dd>
-                </div>
-            ))}
-        </dl>
-    );
-
-    return (
-        <article className="enrol_apply-rview-card" role="listitem" data-record={row.id}>
-            <div className="enrol_apply-rview-card-l1">
+    return {
+        head: (
+            <>
                 <div className="enrol_apply-rview-card-who">
                     <span className="enrol_apply-rview-card-name" dangerouslySetInnerHTML={{__html: cellHtml(row, 'applicant')}} />
                     {has('outcome') ? <First row={row} column="outcome" /> : null}
                     <IdentityLines row={row} identity={identity} />
                 </div>
                 <ReviewButton row={row} label={labels.review} />
-            </div>
-            <div className={'enrol_apply-rview-card-line' + (row.open ? ' enrol_apply-rview-card-line--open' : '')}>
-                {has('wait') ? <First row={row} column="wait" /> : null}
-                {has('wait') && has('submitted') ? <span aria-hidden="true"> · </span> : null}
-                {has('submitted') ? <First row={row} column="submitted" /> : null}
-            </div>
-            {has('decided') ? (
-                <div className="enrol_apply-rview-card-line">
-                    {lines('decided', cellHtml(row, 'decided')).map((part, index) => (
-                        <span key={index} className="enrol_apply-rview-inline" dangerouslySetInnerHTML={{__html: part}} />
-                    ))}
+            </>
+        ),
+        lines: (
+            <>
+                <div className={'enrol_apply-rview-card-line' + (row.open ? ' enrol_apply-rview-card-line--open' : '')}>
+                    {has('wait') ? <First row={row} column="wait" /> : null}
+                    {has('wait') && has('submitted') ? <span aria-hidden="true"> · </span> : null}
+                    {has('submitted') ? <First row={row} column="submitted" /> : null}
                 </div>
-            ) : null}
-            {has('group') || has('method') ? (
-                <div className="enrol_apply-rview-card-line enrol_apply-rview-card-line--muted">
-                    {has('group') ? <First row={row} column="group" /> : null}
-                    {has('group') && has('method') && cellHtml(row, 'group') !== '' ? <span aria-hidden="true"> · </span> : null}
-                    {has('method') ? <First row={row} column="method" /> : null}
-                </div>
-            ) : null}
-            {extra.length > 0 ? (
-                <div className="enrol_apply-rview-card-more">
-                    {single ? (
-                        <button
-                            type="button"
-                            className="btn btn-link btn-sm enrol_apply-rview-linkbtn"
-                            aria-expanded={more}
-                            onClick={() => setMore(!more)}
-                        >
-                            {more ? labels.less : labels.more}
-                        </button>
-                    ) : null}
-                    {shown ? list : null}
-                </div>
-            ) : null}
-        </article>
-    );
+                {has('decided') ? (
+                    <div className="enrol_apply-rview-card-line">
+                        {lines('decided', cellHtml(row, 'decided')).map((part, index) => (
+                            <span key={index} className="enrol_apply-rview-inline" dangerouslySetInnerHTML={{__html: part}} />
+                        ))}
+                    </div>
+                ) : null}
+                {has('group') || has('method') ? (
+                    <div className="enrol_apply-rview-card-line enrol_apply-rview-card-line--muted">
+                        {has('group') ? <First row={row} column="group" /> : null}
+                        {has('group') && has('method') && cellHtml(row, 'group') !== ''
+                            ? <span aria-hidden="true"> · </span>
+                            : null}
+                        {has('method') ? <First row={row} column="method" /> : null}
+                    </div>
+                ) : null}
+            </>
+        ),
+        fields: extra.map((column) => ({
+            key: column.key,
+            title: column.title,
+            content: <CellLines column={column.key} html={cellHtml(row, column.key)} />,
+        })),
+    };
 };
 
 /**
@@ -140,28 +125,10 @@ const Card = ({labels, columns, identity, row, single}: {labels: Record<string, 
  * @returns {object} The list of cards.
  */
 export const Cards = ({labels, columns, identity, rows, single}: CardsProps): ReactElement => (
-    <div className={'enrol_apply-rview-cards' + (single ? ' enrol_apply-rview-cards--single' : '')} role="list">
-        {rows.map((row) => (
-            <Card key={row.id} labels={labels} columns={columns} identity={identity} row={row} single={single} />
-        ))}
-    </div>
-);
-
-/**
- * The cards' skeleton.
- *
- * @param {object} props Whether the cards are one column.
- * @returns {object} The skeleton.
- */
-export const CardsSkeleton = ({single}: {single: boolean}): ReactElement => (
-    <div className={'enrol_apply-rview-cards' + (single ? ' enrol_apply-rview-cards--single' : '')} aria-hidden="true">
-        {Array.from({length: single ? 4 : 6}, (_, i) => (
-            <div key={i} className="enrol_apply-rview-card enrol_apply-rview-sk">
-                <span className="enrol_apply-rview-skb enrol_apply-rview-skb--w60" />
-                <span className="enrol_apply-rview-skb enrol_apply-rview-skb--w80" />
-                <span className="enrol_apply-rview-skb enrol_apply-rview-skb--w60" />
-                <span className="enrol_apply-rview-skb enrol_apply-rview-skb--w40" />
-            </div>
-        ))}
-    </div>
+    <DataCards<Row>
+        labels={labels}
+        rows={rows}
+        single={single}
+        renderCard={(row) => content(labels, columns, identity, row)}
+    />
 );

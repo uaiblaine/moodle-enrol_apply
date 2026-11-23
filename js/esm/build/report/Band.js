@@ -1,4 +1,4 @@
-import{useState as M}from"react";import{Segmented as A}from"./Segmented";import{duration as f,fill as v,fillObject as T,num as r}from"./str";import{Fragment as S,jsx as a,jsxs as o}from"react/jsx-runtime";/**
+import{useState as M}from"react";import{Segmented as A}from"../datareport/Segmented";import{duration as f,fill as v,fillObject as T,num as r}from"../datareport/str";import{Fragment as S,jsx as a,jsxs as o}from"react/jsx-runtime";/**
  * The summary band: how long applications waited, over the rows the reader's table lists.
  *
  * Tiles (median, 90th percentile, still open, decided without a person), the wait's distribution and

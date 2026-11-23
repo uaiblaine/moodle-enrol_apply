@@ -20,13 +20,14 @@
     The course report's React view (stage R4): one mount point, core's own
     rendering of the report for a browser without JavaScript, and the way to core's table.
 
-    The mount names the bundle (js/esm/bundle.json): one ES module built from
-    js/esm/src/report/ReportView.tsx, so the client arrives in one request. Its inner content is
-    what the first paint shows until React commits, which replaces it: a skeleton in the shape of
-    the band and the grid, and, hidden behind it, one sentence that is true only if the component
-    never mounts. styles.css swaps the two about 10 s after the first paint, so no pulse lasts for
-    ever. Both are shown only under body.jsenabled; only the mounted component draws rows, so a
-    step asserting an applicant's name in the view asserts that React ran.
+    The mount names the bundle (js/esm/bundle.json): one ES module built from js/esm/src/views.tsx,
+    so the client arrives in one request; props that name no view in "mount" are the course report's
+    (ReportView). Its inner content is what the first paint shows until React commits, which
+    replaces it: a skeleton in the shape of the band and the grid, and, hidden behind it, one
+    sentence that is true only if the component never mounts. styles.css swaps the two about 10 s
+    after the first paint, so no pulse lasts for ever. Both are shown only under body.jsenabled;
+    only the mounted component draws rows, so a step asserting an applicant's name in the view
+    asserts that React ran.
 
     The props arrive already JSON-encoded by enrol_apply\output\report_view, in one value, through
     a triple stash: nothing between here and React is an HTML context. They carry configuration and
