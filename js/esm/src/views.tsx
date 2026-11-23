@@ -20,8 +20,9 @@
  * step builds one entry into one file (js/esm/bundle.json), so every view of the plugin is reached
  * through this one component: each template names @moodle/lms/enrol_apply/bundle, and its props name
  * the view in `mount`. A mount that names none is the course report's, whose props (report_view)
- * predate the key. Another view is one more branch here and a template whose props name it; the
- * views share the data report's parts, so the bundle carries them once.
+ * predate the key; `queue` is the approval queue of one method (queue_view, mounted by manage.php with
+ * view=grid). Another view is one more branch here and a template whose props name it; the views share
+ * the data report's parts, so the bundle carries them once.
  *
  * @module     enrol_apply/views
  * @copyright  2026 Anderson Blaine
@@ -29,14 +30,16 @@
  */
 
 import type {ReactElement} from 'react';
+import QueueView from './queue/QueueView';
+import type {ViewProps as QueueProps} from './queue/types';
 import ReportView from './report/ReportView';
 import type {ViewProps as ReportProps} from './report/types';
 
 /**
  * What a mount's props carry: one view's own props, and that view's name in `mount`, optional for the
- * report alone. A second view joins as a member of this union whose `mount` is required.
+ * report alone. Every other view is a member of this union whose `mount` is required.
  */
-type MountProps = ReportProps & {mount?: 'report'};
+type MountProps = (ReportProps & {mount?: 'report'}) | QueueProps;
 
 /**
  * The view a mount names.
@@ -47,6 +50,9 @@ type MountProps = ReportProps & {mount?: 'report'};
 const Views = (props: MountProps): ReactElement | null => {
     if (props.mount === undefined || props.mount === 'report') {
         return <ReportView {...props} />;
+    }
+    if (props.mount === 'queue') {
+        return <QueueView {...props} />;
     }
 
     return null;

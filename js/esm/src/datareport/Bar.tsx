@@ -33,7 +33,8 @@
  * force, the column catalogue and its sets, the View choices and the link to the view's server table,
  * and the Download links (none: no Download button). Columns starts with the sets, each handed to the
  * view as the reader's choice, then lists the catalogue, a fixed column always shown, and ends with
- * the default columns and "Reset column widths".
+ * the default columns and "Reset column widths". A view may put a link of its own at the end of the
+ * chips' row (`aside`: the queue's "Open the report"), which then shows with no chip in force too.
  *
  * Strings read from the view's labels: scope, count (and count_one), filters, filterson, columns,
  * presets, always, defaultcolumns, resetwidths, view, viewauto, viewautohint, table, cards, coretable,
@@ -65,6 +66,7 @@ type BarProps = {
     values: Record<string, string>,
     panelnote?: ReactNode,
     chips: Chip[],
+    aside?: ReactNode,
     columns: Column[],
     sets: ColumnSet[],
     usedefault: boolean,
@@ -526,7 +528,7 @@ export const Bar = (props: BarProps): ReactElement => {
                 />
             </div>
 
-            <div className="enrol_apply-rview-chips" data-region="enrol_apply-chips" hidden={chipcount === 0}>
+            <div className="enrol_apply-rview-chips" data-region="enrol_apply-chips" hidden={chipcount === 0 && !props.aside}>
                 {chips.map((chip) => (
                     <button
                         key={chip.key}
@@ -562,6 +564,7 @@ export const Bar = (props: BarProps): ReactElement => {
                         {labels.clearall}
                     </button>
                 ) : null}
+                {props.aside ?? null}
             </div>
         </div>
     );

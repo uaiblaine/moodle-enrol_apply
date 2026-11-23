@@ -95,6 +95,7 @@ classes/local/queueengine.php  one method's queue read headlessly, for classes/e
 classes/bulk/                the participants page's three bulk decisions
 report.php, classes/reportbuilder/  the course report and a custom-report datasource, both over the durable record
 classes/output/report_view.php, js/esm/src/report/  the course report's React view (5.3), its shell and its client
+classes/output/queue_view.php, js/esm/src/queue/  the method queue's grid view (view=grid), its shell and its client
 renderer.php                 page rendering plus the notification e-mail body
 templates/                   manage, manage_actions, queue_capacity, queue_chip, queue_filters, review
                              (left column: review_summary, review_rules, review_history,
@@ -1330,6 +1331,27 @@ backup/                      group mappings, comments and the durable trail, see
   the table's, in set and order, for a decider, a narrowed moderator and a viewer over every scope and
   filter; `test_each_facet_count_is_what_choosing_it_lists`), `tests/external/queue_services_test.php`
   (the doors), `tests/table/applications_test.php` (the two-record row). Gates `QE1`-`QE23`, `QE4` and `QE5` retired.
+
+- **The method queue's grid view is a client of the headless queue, opt-in, and read only.**
+  `manage.php` renders `\enrol_apply\output\queue_view` (template `queue_view`) only where
+  `queue_view::wanted()` holds: the queue of one method (`id` > 0; the site-wide and mentee queues keep
+  the table, CQ-D3) and `view=grid` in the address. Today's table stays the default until the grid
+  can decide: stage 4 inverts the second condition to `view=table` there, in that one predicate. The
+  shell's props carry configuration and strings only (mount `queue` in `js/esm/src/views.tsx`); rows
+  and tiles come from `enrol_apply_queue_rows` and `enrol_apply_queue_summary`, and its noscript is
+  `manage_form()`, the table with its decision form. `$PAGE->url` names the grid; `$manageurl`, which
+  the form posts to and a decision redirects to, stays the table's. **Filters live in the address,
+  never in a preference** (CQ-D6): `status` (the scope), `search`, `group`, the identity tokens,
+  `appliedfrom`, `appliedto` are the names `manage.php` reads for the table, and `queue_view::initial()`
+  reads them from manage.php's own cleaning (`request_filters()`, so the group default applies); the
+  facets (`named`, `waited`, `appliedbefore`), `sort`, `dir`, `page` and `perpage` are the view's own.
+  `js/esm/src/queue/address.ts` writes them back with `replaceState` (the search, the first paint) or
+  `pushState` (everything else) and keeps the shell's "Table view" link in step; a released group
+  filter writes `group=all` where the group filter has a default, as the table's chip does. Only the
+  columns and widths are the reader's (`enrol_apply_queue_grid`), and a column change re-reads the rows
+  only after the write resolves. Cells documented as HTML are inserted as HTML; the name, the identity
+  values and the tags are text. The tags' tones mirror `applications::TAG_TONES` by hand. Gates
+  `QV1`-`QV3`; `tests/behat/queue_view.feature` drives the client.
 
 - **Both listings order by a unique key as a last resort, and the injection point is the only
   one that works.** Every column either table offers can tie — `applydate` is `ue.timecreated`,

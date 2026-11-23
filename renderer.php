@@ -63,7 +63,27 @@ class enrol_apply_renderer extends plugin_renderer_base {
     public function manage_page($table, $manageurl, $instance) {
         echo $this->header();
         echo $this->heading(get_string('confirmusers', 'enrol_apply'));
+        /* The way to the grid view, on the queue of one method only (CQ-D3), with the filters in force.
+           Outside manage_form(), which is also the grid view's noscript, where it would lead back. */
+        if ($instance !== null) {
+            echo $this->render_from_template('enrol_apply/queue_viewswitch', [
+                'url' => \enrol_apply\output\queue_view::url($manageurl, true)->out(false),
+            ]);
+        }
         echo $this->manage_form($table, $manageurl, $instance);
+        echo $this->footer();
+    }
+
+    /**
+     * Render the method queue's grid view, read only (stage 3): the React shell, today's queue in its noscript.
+     *
+     * @param \enrol_apply\output\queue_view $view The shell.
+     * @return void
+     */
+    public function queue_page(\enrol_apply\output\queue_view $view): void {
+        echo $this->header();
+        echo $this->heading(get_string('confirmusers', 'enrol_apply'));
+        echo $this->render($view);
         echo $this->footer();
     }
 

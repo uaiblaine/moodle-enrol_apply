@@ -23,6 +23,18 @@
     "eject": "prohibited",
     "wrap": "prohibited"
   },
+  "queue/Bar": {
+    "eject": "prohibited",
+    "wrap": "prohibited"
+  },
+  "queue/QueueView": {
+    "eject": "prohibited",
+    "wrap": "prohibited"
+  },
+  "queue/Tiles": {
+    "eject": "prohibited",
+    "wrap": "prohibited"
+  },
   "report/Band": {
     "eject": "prohibited",
     "wrap": "prohibited"

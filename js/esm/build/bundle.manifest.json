@@ -2,7 +2,7 @@
     "entry": "src/views.tsx",
     "outfile": "build/bundle.js",
     "sources": {
-        "src/datareport/Bar.tsx": "bac330a67a9c129158fe3e64f14f87968ba8eede",
+        "src/datareport/Bar.tsx": "2a2e90920ab98d28b6271b1fca074b1b6ef2e11e",
         "src/datareport/Cards.tsx": "1329cdfdb2dc646d79be8984fcc28c64305e6ebd",
         "src/datareport/FilterPanel.tsx": "6c9a7c94a32eacac55fc23d514e01c81119e682c",
         "src/datareport/Grid.tsx": "edec08fbe58e4cef62c03b5b54469e7369ea97f9",
@@ -17,6 +17,13 @@
         "src/datareport/sizing.ts": "348419518ba12d6fad33179da593e37db8e30260",
         "src/datareport/str.ts": "feff9e9e488b097405ea2b94afb1b9f4625dc5bf",
         "src/datareport/types.ts": "a21e277f3da16f358d120dc2bdfbaeb2d04411d7",
+        "src/queue/Bar.tsx": "ff6d471d3604801af0493d5a77714237ff1ed48e",
+        "src/queue/QueueView.tsx": "c04514312f3f77415a403404ac5382e1656a608d",
+        "src/queue/Tiles.tsx": "3eab1dbc36f8f2edc414be80404e595b2dc0ce6f",
+        "src/queue/address.ts": "5690effdb0fda18406c8762b74e9b3dea1f19583",
+        "src/queue/cells.tsx": "18e90657f8e2232097babe3b4a03f73251d50e5d",
+        "src/queue/repository.ts": "d0103f66d21c582a58c070983693868e5f31ff55",
+        "src/queue/types.ts": "9a70d36393877737c72c6a44be58e0dcbe0c274b",
         "src/report/Band.tsx": "21c21cffd5f581e337b8a68470d0eda3422b6aa5",
         "src/report/Bar.tsx": "2ef7b2af78c6515d4ffd099b8ec09296e1320578",
         "src/report/Cards.tsx": "ab4aa85c8b807433f29a089693c31262c767f93a",
@@ -26,6 +33,6 @@
         "src/report/filters.ts": "a2354d47acd0b279d8bdcd64aad424c68331030f",
         "src/report/repository.ts": "e6ec92164ab40264a7014499c15993dd82210b10",
         "src/report/types.ts": "de8d15a6b5bc7beede8649c76d1dac6e5100b9b2",
-        "src/views.tsx": "6fe47507ab9a4d08a1be336c9f82524003f6eb57"
+        "src/views.tsx": "c4d66ca6f03a7b6e65dfbf4f305ceb46e269cc4c"
     }
 }

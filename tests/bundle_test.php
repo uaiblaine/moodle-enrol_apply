@@ -76,6 +76,27 @@ final class bundle_test extends basic_testcase {
     }
 
     /**
+     * Each view's shell mounts the bundle, and the entry draws the view its props name.
+     *
+     * The queue's props name their view in `mount` (queue_view::MOUNT); an entry that no longer
+     * handles that name mounts nothing, silently, and only Behat would see it.
+     *
+     * @return void
+     */
+    public function test_every_view_the_shells_name_is_one_the_entry_draws(): void {
+        $template = (string) file_get_contents(self::ROOT . '/templates/queue_view.mustache');
+        $this->assertStringContainsString('"component": "@moodle/lms/enrol_apply/bundle"', $template);
+
+        $shell = (string) file_get_contents(self::ROOT . '/classes/output/queue_view.php');
+        $this->assertMatchesRegularExpression("/public const MOUNT = 'queue';/", $shell);
+
+        $entry = (string) file_get_contents(self::ROOT . '/js/esm/' . self::ENTRY);
+        $this->assertStringContainsString("props.mount === 'queue'", $entry);
+        $this->assertStringContainsString("import QueueView from './queue/QueueView';", $entry);
+        $this->assertStringContainsString("mount: 'queue'", (string) file_get_contents(self::ROOT . '/js/esm/src/queue/types.ts'));
+    }
+
+    /**
      * Every source is in the manifest with the hash of the file on disk, and nothing else is.
      *
      * A source edited without a rebundle differs; one added is missing; one deleted is listed for

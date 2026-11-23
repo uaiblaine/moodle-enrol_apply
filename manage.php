@@ -160,8 +160,13 @@ if (!$userenrol) {
 
 $manageurl = new moodle_url('/enrol/apply/manage.php', $manageurlparams);
 
+/* The method queue's grid view (stage 3), read only, on request: queue_view::wanted() is the one rule.
+   $manageurl stays the table's, without the view parameter: the decision form inside the view's
+   noscript posts there, and a decision lands back on the table, which decides. */
+$gridview = !$userenrol && \enrol_apply\output\queue_view::wanted((int) $id, optional_param('view', '', PARAM_ALPHA));
+
 $PAGE->set_context($context);
-$PAGE->set_url($manageurl);
+$PAGE->set_url($gridview ? \enrol_apply\output\queue_view::url($manageurl, true) : $manageurl);
 $PAGE->set_pagelayout('admin');
 $PAGE->set_heading($pageheading);
 
@@ -343,4 +348,14 @@ if ($userenrol) {
    identity fields, the wording of the comment heading - is resolved inside from the instance id,
    so this page and the web service that refreshes its rows cannot decide them differently. */
 $table = \enrol_apply\table\applications::for_scope((int) $id, $search, $status, $queuefilters);
+if ($gridview) {
+    // The table above is the view's noscript; the rows the view draws come from its web services.
+    $renderer->queue_page(new \enrol_apply\output\queue_view(
+        $instance,
+        $table,
+        $manageurl,
+        \enrol_apply\output\queue_view::initial($search, $status, $queuefilters)
+    ));
+    exit;
+}
 $renderer->manage_page($table, $manageurl, $instance);

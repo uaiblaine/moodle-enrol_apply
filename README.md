@@ -83,6 +83,15 @@ list, applied before (shown to readers of the course report only), or a valid gr
 too. Select rows and decide them together from the bar at
 the foot of the page, choosing the groups and the role an approval gives.
 
+**Grid view** (the link above the queue of one method, or `manage.php?id=<method>&view=grid`) shows
+the same applications as the course report shows its rows, read only for now: the method's places,
+applications held, what awaits a decision with the oldest wait, and whether it accepts applications;
+All, Pending or Deferred; filters with counts; a choice of columns (every answer, a decision at a
+glance, or the answers alone) remembered for you; a table or cards; each applicant's picture and
+labels, and a Review link to decide. What you filter, search, sort and page by stays in the page's
+address, so the link can be bookmarked or shared; **Table view** leads back to the queue above,
+where decisions are taken. A holder of `enrol/apply:viewreports` also gets a link to the report.
+
 ![Reviewing one application whose group key found no seat: the status and key strip, the rules to observe with the full key group flagged over the limit on confirming, the comment and the submitted details, the On confirming card with its sentence and the group cards with their occupancy, the applicant's card, and the three decisions in the bar at the foot](docs/screenshots/review.png)
 
 **Review** opens one application, with links to the previous and next, and reads top to bottom
