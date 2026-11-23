@@ -37,7 +37,8 @@ fork's; it does not list which features are which, so this file does not either.
   `enrol_apply_queue_rows`, `enrol_apply_queue_summary` (read) and `enrol_apply_set_queue_preference`
   (write), standing capabilities `enrol/apply:manageapplications` or `enrol/apply:viewapplications`, the
   real check being `queueengine::require_listing()` (the queue page's own question, narrowed by groups),
-  which the engine's public readers also ask themselves. None decides an application: decisions are the
+  asked by the engine's public readers themselves (`rows()`, `summary()`, `catalogue()`) and by
+  `enrol_apply_set_queue_preference`, which has no engine reader behind it. None decides an application: decisions are the
   POST to `manage.php`. The modal application form is a `core_form\dynamic_form` served by core's dynamic
   form web service, and the queue page's table is a `core_table\dynamic` table served by core's dynamic
   table web service; each re-derives its scope and checks the capability itself.

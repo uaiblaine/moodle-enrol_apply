@@ -184,6 +184,9 @@ final class queueengine {
     /**
      * A page of the queue, with what a client needs to draw it.
      *
+     * The reader is refused by the engine's own check, which runs first: the table below is built from
+     * the reader's scope, and the catalogue it then builds asks {@see require_listing()} again.
+     *
      * @param int $enrolid The enrol instance; refused to a reader {@see require_listing()} refuses.
      * @param array $options 'scope' (one of SCOPES), 'search', 'filters' (name => value), 'page'
      *     (0-based), 'perpage' (one of PERPAGES), 'sort' (a sortable catalogue key, '' for the

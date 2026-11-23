@@ -27,7 +27,8 @@ use enrol_apply\local\queueengine;
  *
  * Places taken against the places, applications held against the limit, the reader's applications
  * awaiting a decision with the oldest wait and how many waited long, and whether the method is
- * open ({@see queueengine::summary()}). Behind the same door as the rows.
+ * open ({@see queueengine::summary()}). Behind the same door as the rows: the method, the context and
+ * the guest are checked here, a reader the queue refuses is refused by the engine's summary.
  *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine
@@ -61,7 +62,6 @@ class queue_summary extends external_api {
         if (isguestuser()) {
             throw new \moodle_exception('noguest');
         }
-        queueengine::require_listing($params['enrolid']);
 
         return queueengine::summary($instance);
     }

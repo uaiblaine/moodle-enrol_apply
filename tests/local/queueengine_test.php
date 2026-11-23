@@ -322,8 +322,7 @@ final class queueengine_test extends \advanced_testcase {
      * a search and every operator filter.
      *
      * Changes that must make it fail: any clause of the scope or of a filter read differently by the
-     * two; the record joined without its "newest" restriction (Dora is then two rows); an order that
-     * does not end in ue.id (Zed and Gus tie).
+     * two; an order that does not end in ue.id (Zed and Gus tie).
      *
      * @return void
      */
@@ -385,10 +384,15 @@ final class queueengine_test extends \advanced_testcase {
     }
 
     /**
-     * A user enrolment with two records is one row, reading the newest record's comment, answers
-     * and group.
+     * A user enrolment with two records is one row, counted once, reading the newest record's
+     * comment, answers and group.
      *
-     * Changes that must make it fail: the record joined without its "newest" restriction.
+     * The page is keyed on the enrolment id, so a doubled join still lists one row, whichever
+     * record it keeps first; what a doubled row shows is the total and the counts, which are tallied
+     * over the joined rows, so those are asserted as well as the row.
+     *
+     * Changes that must make it fail: the record joined without its "newest" restriction (the
+     * total and the counts say eight).
      *
      * @return void
      */
@@ -397,7 +401,11 @@ final class queueengine_test extends \advanced_testcase {
         $this->setUser($this->editing);
         queuepreference::write(['group', queueengine::ANSWERS, 'comment', 'history'], []);
 
-        $rows = array_column($this->rows()['rows'], null, 'userenrolmentid');
+        $response = $this->rows();
+        $this->assertCount(7, $response['rows']);
+        $this->assertSame(7, $response['total']);
+        $this->assertSame(7, $response['counts']['all']);
+        $rows = array_column($response['rows'], null, 'userenrolmentid');
         $this->assertCount(7, $rows);
         $cells = array_column($rows[$this->ue['dora']]['cells'], 'html', 'key');
         $this->assertSame('Please', $cells['comment']);
@@ -822,6 +830,10 @@ final class queueengine_test extends \advanced_testcase {
      * nothing in the course and by a student. The table is built by the editing teacher, so the
      * catalogue's own check is the only one that can refuse.
      *
+     * rows() builds the table for the reader's scope before the catalogue, which would refuse as
+     * well, so its refusal is told apart by where it was thrown: from rows() itself, with no
+     * catalogue() frame under require_listing().
+     *
      * Changes that must make it fail: rows(), summary() or catalogue() not asking require_listing().
      *
      * @return void
@@ -850,6 +862,10 @@ final class queueengine_test extends \advanced_testcase {
                 $this->assertInstanceOf(\required_capability_exception::class, $caught, $who . ' ' . $name);
                 $this->assertSame($expected->getMessage(), $caught->getMessage(), $who . ' ' . $name);
             }
+            // The reader of the queue is refused before its table is built, not by the catalogue after it.
+            $frames = array_column($this->thrown($calls['rows'])->getTrace(), 'function');
+            $this->assertContains('rows', $frames, $who);
+            $this->assertNotContains('catalogue', $frames, $who);
         }
 
         // The control: a decider gets all three.

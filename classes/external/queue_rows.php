@@ -29,7 +29,8 @@ use enrol_apply\local\queueengine;
  * The rows are the queue table's own ({@see queueengine::rows()}): the scope
  * queue::listing_scope() gives the reader, the operator filters as the page's address carries them,
  * the masking of the answers by the course report's rule. The course comes from the method; nothing
- * the request carries chooses the scope.
+ * the request carries chooses the scope. A reader the queue refuses is refused by the engine
+ * ({@see queueengine::rows()}), after the method, the context and the guest are checked here.
  *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine
@@ -64,6 +65,9 @@ class queue_rows extends external_api {
 
     /**
      * Read a page of the queue.
+     *
+     * The refusal of a reader who may not open the queue comes from the engine's own check, which
+     * runs before anything is read.
      *
      * @param int $enrolid The apply method.
      * @param string $scope Which applications.
@@ -103,7 +107,6 @@ class queue_rows extends external_api {
         if (isguestuser()) {
             throw new \moodle_exception('noguest');
         }
-        queueengine::require_listing($params['enrolid']);
 
         $named = [];
         foreach ($params['filters'] as $filter) {

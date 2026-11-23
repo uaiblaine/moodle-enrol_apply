@@ -40,7 +40,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   earlier applications are shown to), which the page's own controls do not send. Fixed with it: the
   server-rendered queue joined every record of a user enrolment, so an enrolment carrying two
   records was listed twice; it now joins the newest one, the record the scope and the group column
-  already judged the row by. Mutation gates `QE1`-`QE22`.
+  already judged the row by. Mutation gates `QE1`-`QE23` (`QE4`, `QE5` retired: the services' own check duplicated the engine's).
 
 ### Changed
 
