@@ -91,6 +91,7 @@ edit.php / edit_form.php     per-course instance configuration
 manage.php                      the approval queue, its bulk actions and the one-application review page
 classes/table/applications.php  the queue's table, a core_table\dynamic one
 classes/local/queue.php      "awaiting a decision", the review lookup, the scopes and the previous/next walk
+classes/local/queueengine.php  one method's queue read headlessly, for classes/external/queue_*.php
 classes/bulk/                the participants page's three bulk decisions
 report.php, classes/reportbuilder/  the course report and a custom-report datasource, both over the durable record
 classes/output/report_view.php, js/esm/src/report/  the course report's React view (5.3), its shell and its client
@@ -1287,6 +1288,45 @@ backup/                      group mappings, comments and the durable trail, see
   own base conditions when its parameters carry them, which is how core's `download.php` writes the
   rows in view; its parameter names are core-generated (`database::generate_param_name()`, the
   fullname field's own are not), or `add_base_condition_sql()` throws. Gates `FC1`-`FC10`, `DL1`, `DL2`, `PR1`, `RT1`, `RT2`.
+
+- **The approval queue of one method is read headlessly through its own table, never beside it.**
+  `\enrol_apply\local\queueengine` builds `applications::for_scope()` for the scope
+  `queue::listing_scope()` gives (the method, awaiting a decision, the separate-groups narrowing,
+  derived from the course and `$USER`), never from the request: the id names the method and nothing
+  else. It reads that table's SELECT, FROM and WHERE (`where_without()` for a facet's count, which
+  leaves out only that facet's own filter) and fills cells through the table's `prepare_rows()` and
+  helpers; it writes no query of its own over what the queue lists. So a scope clause, filter or join
+  goes into the table and reaches the engine by construction; one added to the engine alone is a
+  second queue. The record join is the newest record of the user enrolment (the NOT EXISTS shape of
+  `groupscope::where()`); `named_where()` and the engine's `tally()` read the same newest record and
+  the waited threshold with the same strict comparison, so keep the three in step. Computed per
+  request and never cached: what a reader may see depends on capabilities, groups and live
+  enrolments.
+
+  **Masking is the catalogue.** A column exists only in `queueengine::catalogue()`, whose answer
+  columns come from `questions()` masked by the table's `visible_keys()` (the course report's rule,
+  `formatter::shows()`), and the engine reads no cell, sort or filter for a key outside it. Request
+  filters go through the table's filterset and are cleaned per reader by `set_filterset()`; names the
+  filterset does not declare and `NOT_FILTERS` are dropped first, because core's filterset throws on
+  them. The earlier-applications column, the `appliedbefore` filter and its facet exist only where
+  `counts_history()` holds (`enrol/apply:viewreports` in the course). `enrol_apply_queue_grid`
+  (`queuepreference`) stores catalogue keys only, cleaned for shape by `reportpreference::clean()`,
+  and is intersected with the reader's catalogue on every request, so a forged or stale key adds
+  nothing. `applications::selectable()` is the one predicate behind the table's checkbox and the
+  engine's flag (never for a viewer, never the reader's own application).
+
+  **What the services refuse.** `queue_rows`, `queue_summary` and `set_queue_preference` all run
+  `queueengine::locate()` (an id that names no apply method, 0 included, is refused, so the
+  site-wide and mentee queues have no door here), `validate_context()`, the guest check and
+  `queueengine::require_listing()` (`listing_scope()` asked as `manage.php?id=` asks it), in that
+  order. None decides: decisions stay the POST to `manage.php`. The summary's places and applications
+  held are the method's; its queue figures are the reader's scope before any filter
+  (`scope_figures()` over `scope_where()`); open or closed is `capacity::state()`, which the page's
+  panel reads too. Tests: `tests/local/queueengine_test.php`
+  (`test_the_rows_are_the_tables_rows_for_every_reader_and_request` compares the engine's rows with
+  the table's, in set and order, for a decider, a narrowed moderator and a viewer over every scope and
+  filter; `test_each_facet_count_is_what_choosing_it_lists`), `tests/external/queue_services_test.php`
+  (the doors), `tests/table/applications_test.php` (the two-record row). Gates `QE1`-`QE19`.
 
 - **Both listings order by a unique key as a last resort, and the injection point is the only
   one that works.** Every column either table offers can tie — `applydate` is `ue.timecreated`,

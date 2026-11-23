@@ -4,7 +4,42 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased (2026112301)
+## Unreleased (2026112302)
+
+### Added
+
+- **The approval queue of one method can be read without its page** (2026112302, no upgrade step;
+  the queue page looks and behaves as before). `\enrol_apply\local\queueengine` builds the queue's
+  own table for the scope `queue::listing_scope()` gives the reader and reads that table's SQL, so
+  the rows, the filters and the masking are the page's. Three AJAX web services expose it. Each
+  takes the method's id and derives the course from it, and refuses a guest, an id that names no
+  Course enrol confirmation method (0, the site-wide queue, included) and a reader `manage.php?id=`
+  refuses (neither `enrol/apply:manageapplications` nor `enrol/apply:viewapplications` in the
+  course, or no access to it). None decides an application: decisions stay the queue's form.
+  `enrol_apply_queue_rows` returns a page of 30, 50 or 100 rows (50 by default) of the applications
+  awaiting a decision, the pending or the deferred ones, searched and filtered as the page's address
+  does, sorted by the applied date, the applicant's name or an answer, ties broken by the user
+  enrolment. Each row carries the applicant's name, picture, identity fields, profile link (where
+  the profile would open for the reader), labels (deferred, the key's outcome, applied before,
+  yours), whether it may be selected (never the reader's own application, never for a reader who
+  may only view) and the cells of the columns in view. With the page come the counts of the three
+  scopes, the columns the reader may choose (applicant, wait, group where the course has groups, one
+  per profile field and question of the method the reader may see, comment, and the number of
+  earlier applications for a holder of `enrol/apply:viewreports`), three column sets, and the
+  facets (group, how the group was named, waited more than 1, 3, 7 or 14 days, applied before),
+  each option counted under every other criterion in force. `enrol_apply_queue_summary` returns the
+  method's places and applications held against their limits, whether it accepts applications now
+  and when it closes, and the reader's applications awaiting a decision, deferred, waiting more than
+  seven days and the oldest wait; the queue page's panel and the summary read open or closed from
+  one place, `capacity::state()`. `enrol_apply_set_queue_preference` stores the columns and widths
+  the reader chose in a new user preference, `enrol_apply_queue_grid`, one for the whole site and
+  apart from the report's; a stored column the reader may not see adds nothing. The preference is
+  declared in the privacy metadata and exported with the user's data. The queue's table gains three
+  filters for those facets (`named`, `waited`, `appliedbefore`; the last only for a reader the
+  earlier applications are shown to), which the page's own controls do not send. Fixed with it: the
+  server-rendered queue joined every record of a user enrolment, so an enrolment carrying two
+  records was listed twice; it now joins the newest one, the record the scope and the group column
+  already judged the row by. Mutation gates `QE1`-`QE19`.
 
 ### Changed
 

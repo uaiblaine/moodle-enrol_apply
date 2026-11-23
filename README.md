@@ -633,6 +633,36 @@ no guest):
   that reader: a stored column the reader may not see adds nothing. Until a reader chooses, the
   report shows the columns listed above. **Admission route** is a column a reader can add.
 
+The approval queue of one method can be read the same way, through three more AJAX web services.
+Each takes the method's id, derives the course from it, and refuses a reader the queue page
+(`manage.php?id=`) refuses: no guest, access to the course, and `enrol/apply:manageapplications` or
+`enrol/apply:viewapplications` there. An id of no Course enrol confirmation method is refused, so
+the site-wide queue is not read this way. None of them decides an application; decisions are taken
+on the queue page as before.
+
+- `enrol_apply_queue_rows`: a page of the queue (30, 50 or 100 rows, 50 by default), of every
+  application awaiting a decision or only the pending or the deferred ones, searched and filtered as
+  the page is, sorted by the applied date, the applicant's name or an answer. Each row gives the
+  applicant's name, picture and identity fields, a link to the profile where it would open for the
+  reader, the labels the queue shows (on the waiting list, the key's outcome, applied before, your
+  own application), whether a decider may select it, and the cells of the columns in view. The
+  answer also lists the columns the reader may choose (the applicant, the wait, the group where the
+  course has groups, one column per profile field and question of the method the reader may see, the
+  comment, and the number of earlier applications for a holder of `enrol/apply:viewreports`), three
+  column sets, the counts of every application, the pending and the deferred ones, and the filters
+  group, how the group was named, waited more than 1, 3, 7 or 14 days and applied before, each
+  option with the number of applications it would list under the other filters in force.
+- `enrol_apply_queue_summary`: the method's places taken and applications held against their
+  limits, whether it accepts applications now and when it closes, and the applications awaiting a
+  decision in the reader's queue, before any filter: how many, how many deferred, how many waiting
+  more than seven days, and how long the oldest has waited. A reader narrowed by separate groups
+  gets the method's numbers and their own applications.
+- `enrol_apply_set_queue_preference`: stores the columns the reader chose for the queue and the
+  widths they gave them, in the user preference `enrol_apply_queue_grid`, the same on every method of
+  the site and apart from the report's. The queue shows only the columns it offers that reader: a
+  stored column the reader may not see adds nothing. Until a reader chooses, every column but the
+  earlier applications is shown.
+
 ## Site-wide custom reports
 
 Site administration → Reports → Report builder offers **Enrolment applications** as a report
@@ -808,9 +838,10 @@ joins, per method), `enrol_apply_offer` (the groups an applicant may choose from
 method without a row uses the defaults) and `enrol_apply_fieldcond` (when a question is shown). All
 four are deleted with the method.
 
-One user preference, `enrol_apply_report_columns`, holds the columns a reader chose for the
-applications report and their widths (column names and pixels, never data about anybody else). It
-is exported with the user's data and deleted with the user.
+Two user preferences hold a reader's grid (column names and pixels, never data about anybody
+else): `enrol_apply_report_columns` the columns they chose for the applications report and their
+widths, `enrol_apply_queue_grid` the same for the approval queue. Each is exported with the user's
+data and deleted with the user.
 
 An approval also writes core rows: a role assignment and group memberships stamped with
 `enrol_apply`, and the enrolment itself. The plugin never writes the applicant's profile unless
@@ -824,7 +855,8 @@ The plugin implements the full privacy API — metadata, data export, and deleti
 user, for a list of users, and for a whole context — over its three personal-data tables and
 the group memberships its approvals add.
 
-- **A data export** includes the user's choice of columns for the applications report, and gives
+- **A data export** includes the user's choice of columns for the applications report and for the
+  approval queue, and gives
   the applicant their pending comment, every application record they
   submitted with the details and answers it carried and the decision taken on it, and the groups
   an approval added them to. Somebody who decided applications gets each decision they took,
