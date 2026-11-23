@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased (2026112304)
+## Unreleased (2026112305)
 
 ### Added
 
@@ -82,6 +82,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **The shared bar's View menu takes a caller's own views** (2026112305, no upgrade step). A view
+  may hand the bar extra choices that follow the built-in ones behind a separator; nothing a reader
+  sees changes, as no view passes any yet.
 - **The course report's client is built from shared parts** (2026112301, no upgrade step; the
   report looks and behaves as before). The bar, the filter panel, the menus, the grid, the cards, the
   pager and the segmented control moved to `js/esm/src/datareport/` and take as props what differs

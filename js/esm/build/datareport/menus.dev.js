@@ -90,8 +90,153 @@ const SetItems = /* @__PURE__ */ __name(({ heading, sets, onSet }) => {
     columnNumber: 9
   });
 }, "SetItems");
+const viewIcon = /* @__PURE__ */ __name((view, extraViews = []) => extraViews.find((extra) => extra.value === view)?.icon ?? { auto: "auto", table: "table", cards: "cards" }[view], "viewIcon");
+const ViewMenu = /* @__PURE__ */ __name((props) => {
+  const { labels } = props;
+  const extraViews = props.extraViews ?? [];
+  const choices = [
+    ["auto", labels.viewauto, labels.viewautohint],
+    ["table", labels.table, ""],
+    ["cards", labels.cards, ""]
+  ].filter(([value]) => props.views.includes(value));
+  return /* @__PURE__ */ jsxDEV(
+    "div",
+    {
+      className: "enrol_apply-rview-menu",
+      id: props.id,
+      role: "menu",
+      "aria-label": labels.view,
+      hidden: props.hidden,
+      onKeyDown: menuKeys,
+      children: [
+        choices.map(([value, label, hint]) => /* @__PURE__ */ jsxDEV(
+          "button",
+          {
+            type: "button",
+            className: "enrol_apply-rview-menu-item",
+            role: "menuitemradio",
+            "aria-checked": props.view === value,
+            tabIndex: -1,
+            onClick: () => props.onChoose(value),
+            children: [
+              /* @__PURE__ */ jsxDEV(Icon, { name: value }, void 0, false, {
+                fileName: "public/enrol/apply/js/esm/src/datareport/menus.tsx",
+                lineNumber: 149,
+                columnNumber: 21
+              }),
+              /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-menu-label", children: label }, void 0, false, {
+                fileName: "public/enrol/apply/js/esm/src/datareport/menus.tsx",
+                lineNumber: 150,
+                columnNumber: 21
+              }),
+              hint !== "" ? /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-menu-hint", children: hint }, void 0, false, {
+                fileName: "public/enrol/apply/js/esm/src/datareport/menus.tsx",
+                lineNumber: 151,
+                columnNumber: 36
+              }) : null,
+              /* @__PURE__ */ jsxDEV(Icon, { name: "tick", className: "enrol_apply-rview-tick" }, void 0, false, {
+                fileName: "public/enrol/apply/js/esm/src/datareport/menus.tsx",
+                lineNumber: 152,
+                columnNumber: 21
+              })
+            ]
+          },
+          value,
+          true,
+          {
+            fileName: "public/enrol/apply/js/esm/src/datareport/menus.tsx",
+            lineNumber: 140,
+            columnNumber: 17
+          }
+        )),
+        extraViews.length > 0 ? /* @__PURE__ */ jsxDEV(Fragment, { children: [
+          /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-menu-sep", role: "separator" }, void 0, false, {
+            fileName: "public/enrol/apply/js/esm/src/datareport/menus.tsx",
+            lineNumber: 157,
+            columnNumber: 21
+          }),
+          extraViews.map((extra) => /* @__PURE__ */ jsxDEV(
+            "button",
+            {
+              type: "button",
+              className: "enrol_apply-rview-menu-item",
+              role: "menuitemradio",
+              "aria-checked": props.view === extra.value,
+              tabIndex: -1,
+              onClick: () => props.onChoose(extra.value),
+              children: [
+                /* @__PURE__ */ jsxDEV(Icon, { name: extra.icon }, void 0, false, {
+                  fileName: "public/enrol/apply/js/esm/src/datareport/menus.tsx",
+                  lineNumber: 168,
+                  columnNumber: 29
+                }),
+                /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-menu-label", children: extra.label }, void 0, false, {
+                  fileName: "public/enrol/apply/js/esm/src/datareport/menus.tsx",
+                  lineNumber: 169,
+                  columnNumber: 29
+                }),
+                /* @__PURE__ */ jsxDEV(Icon, { name: "tick", className: "enrol_apply-rview-tick" }, void 0, false, {
+                  fileName: "public/enrol/apply/js/esm/src/datareport/menus.tsx",
+                  lineNumber: 170,
+                  columnNumber: 29
+                })
+              ]
+            },
+            extra.value,
+            true,
+            {
+              fileName: "public/enrol/apply/js/esm/src/datareport/menus.tsx",
+              lineNumber: 159,
+              columnNumber: 25
+            }
+          ))
+        ] }, void 0, true, {
+          fileName: "public/enrol/apply/js/esm/src/datareport/menus.tsx",
+          lineNumber: 156,
+          columnNumber: 17
+        }) : null,
+        props.tableurl !== "" ? /* @__PURE__ */ jsxDEV(Fragment, { children: [
+          /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-menu-sep", role: "separator" }, void 0, false, {
+            fileName: "public/enrol/apply/js/esm/src/datareport/menus.tsx",
+            lineNumber: 177,
+            columnNumber: 21
+          }),
+          /* @__PURE__ */ jsxDEV("a", { className: "enrol_apply-rview-menu-item", role: "menuitem", tabIndex: -1, href: props.tableurl, children: [
+            /* @__PURE__ */ jsxDEV(Icon, { name: "table" }, void 0, false, {
+              fileName: "public/enrol/apply/js/esm/src/datareport/menus.tsx",
+              lineNumber: 179,
+              columnNumber: 25
+            }),
+            /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-menu-label", children: labels.coretable }, void 0, false, {
+              fileName: "public/enrol/apply/js/esm/src/datareport/menus.tsx",
+              lineNumber: 180,
+              columnNumber: 25
+            })
+          ] }, void 0, true, {
+            fileName: "public/enrol/apply/js/esm/src/datareport/menus.tsx",
+            lineNumber: 178,
+            columnNumber: 21
+          })
+        ] }, void 0, true, {
+          fileName: "public/enrol/apply/js/esm/src/datareport/menus.tsx",
+          lineNumber: 176,
+          columnNumber: 17
+        }) : null
+      ]
+    },
+    void 0,
+    true,
+    {
+      fileName: "public/enrol/apply/js/esm/src/datareport/menus.tsx",
+      lineNumber: 131,
+      columnNumber: 9
+    }
+  );
+}, "ViewMenu");
 export {
   SetItems,
-  menuKeys
+  ViewMenu,
+  menuKeys,
+  viewIcon
 };
 //# sourceMappingURL=menus.dev.js.map

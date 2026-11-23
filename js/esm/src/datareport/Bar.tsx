@@ -49,10 +49,10 @@ import {useEffect, useId, useRef, useState} from 'react';
 import type {KeyboardEvent, ReactElement, ReactNode} from 'react';
 import {FilterPanel} from './FilterPanel';
 import {Icon} from './icons';
-import {SetItems, menuKeys} from './menus';
+import {SetItems, ViewMenu, menuKeys, viewIcon} from './menus';
 import {Segmented} from './Segmented';
 import {fill, fillCount, num} from './str';
-import type {Chip, Choice, Column, ColumnSet, DownloadLink, FacetDefinition, ViewMode} from './types';
+import type {Chip, Choice, Column, ColumnSet, DownloadLink, ExtraView, FacetDefinition, ViewMode} from './types';
 
 type Layer = 'filters' | 'columns' | 'view' | 'download' | null;
 
@@ -71,8 +71,9 @@ type BarProps = {
     sets: ColumnSet[],
     usedefault: boolean,
     haswidths: boolean,
-    view: ViewMode,
+    view: ViewMode | string,
     views: ViewMode[],
+    extraViews?: ExtraView[],
     tableurl: string,
     downloads: DownloadLink[],
     search: string,
@@ -88,8 +89,19 @@ type BarProps = {
     onSet: (name: string) => void,
     onDefaultColumns: () => void,
     onResetWidths: () => void,
-    onView: (view: ViewMode) => void,
+    onView(view: ViewMode | string): void,
 };
+
+/**
+ * The bar's class: the narrow step and the open search each add a modifier.
+ *
+ * @param {boolean} narrow Whether the view's container is at the narrow step.
+ * @param {boolean} searching Whether the search field is open.
+ * @returns {string} The class list.
+ */
+const barClass = (narrow: boolean, searching: boolean): string => 'enrol_apply-rview-bar'
+    + (narrow ? ' enrol_apply-rview-bar--narrow' : '')
+    + (searching ? ' enrol_apply-rview-bar--searching' : '');
 
 /**
  * The bar.
@@ -267,21 +279,15 @@ export const Bar = (props: BarProps): ReactElement => {
         </button>
     );
 
-    const viewicon = {auto: 'auto', table: 'table', cards: 'cards'}[props.view];
+    const viewicon = viewIcon(props.view, props.extraViews);
     const chevron = <Icon name="chevron" className="enrol_apply-rview-chevron" />;
     // Every chip but the search's is a filter in force: their number is the Filters button's counter.
     const filtersname = chips.length > 0 ? fill(labels.filterson, num(chips.length)) : labels.filters;
     const badge = chips.length > 0
         ? <span className="enrol_apply-rview-badge" aria-hidden="true">{num(chips.length)}</span>
         : null;
-    const viewchoices = ([['auto', labels.viewauto, labels.viewautohint], ['table', labels.table, ''],
-        ['cards', labels.cards, '']] as [ViewMode, string, string][]).filter(([value]) => props.views.includes(value));
-    const barclass = 'enrol_apply-rview-bar'
-        + (props.narrow ? ' enrol_apply-rview-bar--narrow' : '')
-        + (searchopen ? ' enrol_apply-rview-bar--searching' : '');
-
     return (
-        <div className={barclass} data-region="enrol_apply-bar" ref={root} onKeyDown={escape}>
+        <div className={barClass(props.narrow, searchopen)} data-region="enrol_apply-bar" ref={root} onKeyDown={escape}>
             <Segmented
                 label={labels.scope}
                 value={props.scope}
@@ -376,49 +382,20 @@ export const Bar = (props: BarProps): ReactElement => {
                         </div>
                         <div className="enrol_apply-rview-anchor">
                             {iconbutton('view', viewicon, labels.view, chevron)}
-                            <div
-                                className="enrol_apply-rview-menu"
+                            <ViewMenu
                                 id={uid + 'view'}
-                                role="menu"
-                                aria-label={labels.view}
+                                labels={labels}
                                 hidden={layer !== 'view'}
-                                onKeyDown={menuKeys}
-                            >
-                                {viewchoices.map(([value, label, hint]) => (
-                                    <button
-                                        key={value}
-                                        type="button"
-                                        className="enrol_apply-rview-menu-item"
-                                        role="menuitemradio"
-                                        aria-checked={props.view === value}
-                                        tabIndex={-1}
-                                        onClick={() => {
-                                            props.onView(value);
-                                            setLayer(null);
-                                            triggers.current.view?.focus();
-                                        }}
-                                    >
-                                        <Icon name={value} />
-                                        <span className="enrol_apply-rview-menu-label">{label}</span>
-                                        {hint !== '' ? <span className="enrol_apply-rview-menu-hint">{hint}</span> : null}
-                                        <Icon name="tick" className="enrol_apply-rview-tick" />
-                                    </button>
-                                ))}
-                                {props.tableurl !== '' ? (
-                                    <>
-                                        <div className="enrol_apply-rview-menu-sep" role="separator" />
-                                        <a
-                                            className="enrol_apply-rview-menu-item"
-                                            role="menuitem"
-                                            tabIndex={-1}
-                                            href={props.tableurl}
-                                        >
-                                            <Icon name="table" />
-                                            <span className="enrol_apply-rview-menu-label">{labels.coretable}</span>
-                                        </a>
-                                    </>
-                                ) : null}
-                            </div>
+                                view={props.view}
+                                views={props.views}
+                                extraViews={props.extraViews}
+                                tableurl={props.tableurl}
+                                onChoose={(value) => {
+                                    props.onView(value);
+                                    setLayer(null);
+                                    triggers.current.view?.focus();
+                                }}
+                            />
                         </div>
                         {props.downloads.length > 0 ? (
                             <div className="enrol_apply-rview-anchor">

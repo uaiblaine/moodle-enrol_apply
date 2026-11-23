@@ -26,6 +26,12 @@
 
 export type ViewMode = 'auto' | 'table' | 'cards';
 
+/**
+ * A view a caller adds to the bar's View menu after the built-in choices; its value is the caller's
+ * own (never a ViewMode), icon is a key of the icons' PATHS, and the caller draws its body itself.
+ */
+export type ExtraView = {value: string, label: string, icon: string};
+
 /** A column a view shows or offers; fixed is always shown and cannot be chosen away. */
 export type Column = {
     key: string,
