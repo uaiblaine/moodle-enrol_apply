@@ -55,15 +55,30 @@ class enrol_apply_edit_form extends moodleform {
 
         [$instance, $plugin, $context] = $this->_customdata;
 
-        // The summary strip reads the saved instance, so a new one has none.
+        $roleid = $instance->id ? $instance->roleid : $plugin->get_config('roleid');
+        // Kept in a variable: add_decider_notices() hides a warning by these exact option values.
+        $roles = get_default_enrol_roles($context, $roleid);
+
+        /* A scenario only for a method being added: an existing one has its own values to keep. Its
+           values become the form's initial data in prepare_instance_data(), on both requests, so the
+           frozen "Who decides" exports what the screen showed. */
+        $preset = empty($instance->id) ? \enrol_apply\local\preset::key((string) ($this->_customdata[3] ?? '')) : '';
+        $presetvalues = \enrol_apply\local\preset::values($preset, (int) $instance->courseid, array_keys($roles));
+
+        // The summary strip reads the saved instance, so a new one has none; a new one has the scenarios.
         if (!empty($instance->id)) {
             $mform->addElement('html', $this->summary_strip($instance));
+        } else {
+            $mform->addElement('html', $this->preset_cards($preset, (int) $instance->courseid, $context, array_keys($roles)));
         }
 
         /* Which collapsed sections open on load. General, When and how many, Application form and
            Groups are always open; the other three open only when they hold a value other than the
-           default, so nothing configured hides behind a closed section. */
+           default, so nothing configured hides behind a closed section, and Who decides also in a
+           separate-groups course, the one mode where its answer narrows anybody. */
         $opened = $this->opened_sections($instance, $plugin);
+        // A scenario's values open their section as stored ones would.
+        $opened['sectiondeciders'] = $opened['sectiondeciders'] || $this->preset_opens_deciders($presetvalues, $plugin);
 
         $yesno = [1 => get_string('yes'), 0 => get_string('no')];
 
@@ -86,13 +101,7 @@ class enrol_apply_edit_form extends moodleform {
         $mform->setDefault('customint6', $plugin->get_config('newenrols'));
         $mform->addHelpButton('customint6', 'newenrols', 'enrol_apply');
 
-        $roleid = $instance->id ? $instance->roleid : $plugin->get_config('roleid');
-        $mform->addElement(
-            'select',
-            'roleid',
-            get_string('roleonapproval', 'enrol_apply'),
-            get_default_enrol_roles($context, $roleid)
-        );
+        $mform->addElement('select', 'roleid', get_string('roleonapproval', 'enrol_apply'), $roles);
         $mform->setDefault('roleid', $plugin->get_config('roleid'));
         $mform->addHelpButton('roleid', 'roleonapproval', 'enrol_apply');
 
@@ -261,6 +270,16 @@ class enrol_apply_edit_form extends moodleform {
         $question = \enrol_apply\local\groupquestion::class;
         $courseid = (int) $instance->courseid;
         $separate = $this->separate_groups($courseid);
+        $roleids = array_map('intval', array_keys($roles));
+        $deciderwarnings = $this->decider_warnings($instance, $roleids);
+
+        // The course's group mode first: it decides what the rest of this section and the next one do.
+        $mform->addElement(
+            'static',
+            'coursegroupmode',
+            get_string('coursegroupmode', 'enrol_apply'),
+            $this->group_mode_text($courseid, $context)
+        );
 
         /* One question for what used to be two independent selects (C-D6): who decides an
            applicant's group. edit.php maps the answer onto the two stored settings, customchar1
@@ -308,6 +327,13 @@ class enrol_apply_edit_form extends moodleform {
         $mform->setDefault('groupoffergrouping', 0);
         $mform->addHelpButton('groupoffergrouping', 'groupoffergrouping', 'enrol_apply');
         $mform->hideIf('groupoffergrouping', 'groupdecided', 'neq', $question::CHOICE);
+
+        // Beside the offer it is about (C-D27); decider_warnings() leaves it empty outside separate groups.
+        if ($deciderwarnings['offerleak'] !== '') {
+            $mform->addElement('static', 'offerleak', '', $this->group_notice($deciderwarnings['offerleak'], true));
+            $mform->hideIf('offerleak', 'groupdecided', 'neq', $question::CHOICE);
+            $mform->hideIf('offerleak', 'deciders', 'eq', \enrol_apply\local\instanceoptions::DECIDERS_ALLGROUPS);
+        }
 
         $mform->addElement('select', 'groupchoicerequired', get_string('groupchoicerequired', 'enrol_apply'), [
             \enrol_apply\local\instanceoptions::CHOICE_REQUIRED => get_string('groupchoicerequired_yes', 'enrol_apply'),
@@ -398,7 +424,23 @@ class enrol_apply_edit_form extends moodleform {
             $mform->hideIf('groupkeyselfkeyschoice', 'choicekey', 'eq', \enrol_apply\local\groupkey::MODE_OFF);
         }
 
-        // Always: who decides (C-D20), and the groups an approval joins.
+        // Always: the groups an approval joins, and the group the answer adds to them.
+        $groupselect = $mform->addElement('autocomplete', 'groupselect', get_string('group', 'enrol_apply'), $groups);
+        $groupselect->setMultiple(true);
+        $mform->addHelpButton('groupselect', 'group', 'enrol_apply');
+        $mform->addElement('static', 'groupselectchoice', '', $this->group_notice(
+            get_string('groupselectchoice', 'enrol_apply')
+        ));
+        $mform->hideIf('groupselectchoice', 'groupdecided', 'neq', $question::CHOICE);
+        $mform->addElement('static', 'groupselectkey', '', $this->group_notice(get_string('groupselectkey', 'enrol_apply')));
+        $mform->hideIf('groupselectkey', 'groupdecided', 'neq', $question::KEY);
+
+        // Section 6: Who decides and who is notified.
+        $mform->addElement('header', 'sectiondeciders', get_string('sectiondeciders', 'enrol_apply'));
+        $mform->addHelpButton('sectiondeciders', 'sectiondeciders', 'enrol_apply');
+        $mform->setExpanded('sectiondeciders', $opened['sectiondeciders']);
+
+        // Who decides (C-D20).
         $mform->addElement('select', 'deciders', get_string('deciders', 'enrol_apply'), [
             \enrol_apply\local\instanceoptions::DECIDERS_GROUP => get_string('deciders_group', 'enrol_apply'),
             \enrol_apply\local\instanceoptions::DECIDERS_ALLGROUPS => get_string('deciders_allgroups', 'enrol_apply'),
@@ -407,13 +449,33 @@ class enrol_apply_edit_form extends moodleform {
         $mform->setDefault('deciders', \enrol_apply\local\instanceoptions::DECIDERS_GROUP);
         $mform->addHelpButton('deciders', 'deciders', 'enrol_apply');
 
-        $groupselect = $mform->addElement('autocomplete', 'groupselect', get_string('group', 'enrol_apply'), $groups);
-        $groupselect->setMultiple(true);
-        $mform->addHelpButton('groupselect', 'group', 'enrol_apply');
+        /* Outside separate groups the answer narrows nobody, so it is shown but cannot be changed.
+           A hard freeze rather than a disabled input: a disabled input posts nothing, and a hard
+           frozen element exports the value set_data() loaded whatever is posted
+           (MoodleQuickForm::exportValues()), so saving keeps the stored answer for the day the
+           course switches to separate groups. */
+        if (!$separate) {
+            $mform->hardFreeze('deciders');
+            $mform->addElement('static', 'decidersinert', '', $this->group_notice(get_string('decidersinert', 'enrol_apply')));
+        }
 
-        $this->add_group_notices($instance, $separate);
+        $this->add_decider_notices($separate, $deciderwarnings, $courseid, $roleids);
 
-        // Section 6: After approval.
+        $recipients = \enrol_apply\local\notifyrecipients::class;
+        $choices = [
+            $recipients::NONE => get_string('nobody'),
+            $recipients::ALL => get_string('everyonewhocan', 'admin', get_capability_string('enrol/apply:manageapplications')),
+            $recipients::GROUP => get_string('notifygroupdeciders', 'enrol_apply'),
+        ];
+        foreach (get_enrolled_users($context, 'enrol/apply:manageapplications') as $userid => $user) {
+            // Escaped: element-select.mustache renders an option's text raw.
+            $choices[$userid] = s(fullname($user));
+        }
+        $notify = $mform->addElement('select', 'notify', get_string('notify', 'enrol_apply'), $choices);
+        $notify->setMultiple(true);
+        $mform->addHelpButton('notify', 'notify', 'enrol_apply');
+
+        // Section 7: After approval.
         $mform->addElement('header', 'sectionafter', get_string('sectionafter', 'enrol_apply'));
         $mform->addHelpButton('sectionafter', 'sectionafter', 'enrol_apply');
         $mform->setExpanded('sectionafter', $opened['sectionafter']);
@@ -427,18 +489,18 @@ class enrol_apply_edit_form extends moodleform {
         $mform->addHelpButton('enrolperiod', 'defaultperiod', 'enrol_apply');
 
         // Expiry notification, stored across the expirynotify and notifyall instance fields.
-        $mform->addElement('select', 'expirynotify', get_string('expirynotify', 'core_enrol'), [
+        $mform->addElement('select', 'expirynotify', get_string('expirynotify', 'enrol_apply'), [
             0 => get_string('no'),
             1 => get_string('expirynotifyenroller', 'enrol_apply'),
             2 => get_string('expirynotifyall', 'enrol_apply'),
         ]);
-        $mform->addHelpButton('expirynotify', 'expirynotify', 'core_enrol');
+        $mform->addHelpButton('expirynotify', 'expirynotify', 'enrol_apply');
 
-        $mform->addElement('duration', 'expirythreshold', get_string('expirythreshold', 'core_enrol'), [
+        $mform->addElement('duration', 'expirythreshold', get_string('expirythreshold', 'enrol_apply'), [
             'optional' => false,
             'defaultunit' => DAYSECS,
         ]);
-        $mform->addHelpButton('expirythreshold', 'expirythreshold', 'core_enrol');
+        $mform->addHelpButton('expirythreshold', 'expirythreshold', 'enrol_apply');
         $mform->disabledIf('expirythreshold', 'expirynotify', 'eq', 0);
         $mform->setDefault('expirythreshold', DAYSECS);
 
@@ -456,27 +518,14 @@ class enrol_apply_edit_form extends moodleform {
             $mform->setConstant('customint8', 0);
         }
 
-        // Section 7: Notifications.
-        $mform->addElement('header', 'sectionnotify', get_string('sectionnotify', 'enrol_apply'));
-        $mform->addHelpButton('sectionnotify', 'sectionnotify', 'enrol_apply');
-        $mform->setExpanded('sectionnotify', $opened['sectionnotify']);
-
-        $choices = [
-            '$@NONE@$' => get_string('nobody'),
-            '$@ALL@$' => get_string('everyonewhocan', 'admin', get_capability_string('enrol/apply:manageapplications')),
-        ];
-        foreach (get_enrolled_users($context, 'enrol/apply:manageapplications') as $userid => $user) {
-            // Escaped: element-select.mustache renders an option's text raw.
-            $choices[$userid] = s(fullname($user));
-        }
-        $notify = $mform->addElement('select', 'notify', get_string('notify', 'enrol_apply'), $choices);
-        $notify->setMultiple(true);
-        $mform->addHelpButton('notify', 'notify', 'enrol_apply');
-
         $mform->addElement('hidden', 'id');
         $mform->setType('id', PARAM_INT);
         $mform->addElement('hidden', 'courseid');
         $mform->setType('courseid', PARAM_INT);
+        // The scenario rides along, so a redisplay after a validation error loads and marks it again.
+        $mform->addElement('hidden', 'preset');
+        $mform->setType('preset', PARAM_ALPHA);
+        $mform->setConstant('preset', $preset);
 
         /* A second save button that lands on the instance's own questions: they hang off the
            instance id, so they can only be edited once the instance exists. */
@@ -489,31 +538,78 @@ class enrol_apply_edit_form extends moodleform {
         $mform->addGroup($buttons, 'buttonar', '', [' '], false);
         $mform->closeHeaderBefore('buttonar');
 
-        $this->set_data($this->prepare_instance_data($instance, $DB));
+        $this->set_data($this->prepare_instance_data($instance, $DB, $presetvalues));
+    }
+
+    /**
+     * The scenario cards above a new method's first section, rendered.
+     *
+     * @param string $preset The scenario in force, '' for none.
+     * @param int $courseid Course id.
+     * @param context $context Course context.
+     * @param array $roleids The ids "Role on approval" offers, in its order.
+     * @return string HTML for the form's html element, which renders it raw.
+     */
+    protected function preset_cards(string $preset, int $courseid, $context, array $roleids): string {
+        global $OUTPUT;
+
+        $mode = $this->group_mode($courseid);
+
+        return $OUTPUT->render_from_template('enrol_apply/instance_presets', \enrol_apply\local\preset::cards(
+            $preset,
+            $courseid,
+            $roleids,
+            $this->group_mode_name($mode),
+            $mode === SEPARATEGROUPS,
+            has_capability('moodle/course:update', $context)
+        ));
+    }
+
+    /**
+     * Whether a scenario's values put something other than the default in Who decides and who is notified.
+     *
+     * @param array $values The scenario's form values, from {@see \enrol_apply\local\preset::values()}.
+     * @param enrol_apply_plugin $plugin The plugin, for the notification default.
+     * @return bool True when the section must open to show them.
+     */
+    protected function preset_opens_deciders(array $values, $plugin): bool {
+        $options = \enrol_apply\local\instanceoptions::class;
+        if ((int) ($values['deciders'] ?? $options::DECIDERS_GROUP) !== $options::DECIDERS_GROUP) {
+            return true;
+        }
+        if (!isset($values['notify'])) {
+            return false;
+        }
+        $defaults = $plugin->get_instance_defaults();
+
+        return \enrol_apply\local\notifyrecipients::from_form($values['notify']) !== (string) $defaults['customtext3'];
     }
 
     /**
      * Which of the sections closed by default open on load.
      *
-     * Who may apply, After approval and Notifications are closed by default; each opens when the
-     * instance holds a value in it other than the default, so a configured value is never hidden
-     * behind a closed section. For a new instance the "instance" is the defaults, so a site
-     * default such as an enrolment duration opens its section too.
+     * Who may apply, Who decides and who is notified, and After approval are closed by default;
+     * each opens when the instance holds a value in it other than the default, so a configured
+     * value is never hidden behind a closed section. Who decides also opens whenever the course is
+     * in separate groups mode, where "Who decides" and its notices change who sees an application.
+     * For a new instance the "instance" is the defaults, so a site default such as an enrolment
+     * duration opens its section too.
      *
      * @param stdClass $instance Instance record, or the defaults for a new instance.
      * @param enrol_apply_plugin $plugin The plugin, for the notification default.
-     * @return array Whether to open each section, keyed by header name: sectionwho, sectionafter
-     *         and sectionnotify.
+     * @return array Whether to open each section, keyed by header name: sectionwho,
+     *         sectiondeciders and sectionafter.
      */
     protected function opened_sections($instance, $plugin): array {
         $defaults = $plugin->get_instance_defaults();
 
         return [
             'sectionwho' => (int) ($instance->customint5 ?? 0) !== 0,
+            'sectiondeciders' => $this->separate_groups((int) $instance->courseid)
+                || (string) ($instance->customtext3 ?? '') !== (string) $defaults['customtext3'],
             'sectionafter' => !empty($instance->enrolperiod)
                 || !empty($instance->expirynotify)
                 || !empty($instance->customint8),
-            'sectionnotify' => (string) ($instance->customtext3 ?? '') !== (string) $defaults['customtext3'],
         ];
     }
 
@@ -523,10 +619,10 @@ class enrol_apply_edit_form extends moodleform {
      * Whether it accepts applications (in allow_apply()'s order: disabled, not accepting new
      * ones, not open yet, closed, the applicant limit reached, then open, until the closing date
      * when there is one), how many places are taken of the limit, what a group enrolment key
-     * does, and where they apply, how many groups an applicant chooses among and that only those
-     * who see every group decide (C-D16, C-D20). Each fact comes from the instance row or an
-     * existing reader; the cohort restriction is left out, because whether it lets somebody in
-     * depends on who asks.
+     * does, the course's group mode, and where they apply, how many groups an applicant chooses
+     * among and that only those who see every group decide (C-D16, C-D20). Each fact comes from
+     * the instance row, its course or an existing reader; the cohort restriction is left out,
+     * because whether it lets somebody in depends on who asks.
      *
      * @param stdClass $instance The saved {enrol} record.
      * @return string[] The facts, plain text.
@@ -569,6 +665,13 @@ class enrol_apply_edit_form extends moodleform {
         } else {
             $facts[] = get_string('summarykeysany', 'enrol_apply');
         }
+
+        // The mode the course has now, not the one it had when the method was saved.
+        $facts[] = get_string(
+            'summarygroupmode',
+            'enrol_apply',
+            $this->group_mode_name($this->group_mode((int) $instance->courseid))
+        );
 
         /* The applicant's choice as the application form reads it (groupchoice::mode(), off in the
            key-only modes), counting the offered groups that still exist in the course. */
@@ -922,25 +1025,33 @@ class enrol_apply_edit_form extends moodleform {
     }
 
     /**
-     * The notices at the foot of the Groups section: who an application reaches, and the warnings of C-D27.
+     * The notices under "Who decides": who an application reaches, and the warning of C-D27 about deciders.
      *
      * In a separate-groups course, an application without a group reaches only those who can
      * access all groups (S3): said for the answers that make one (a decider chooses, a key in
      * "a valid key enrols at once", a choice with "No preference", C-D11), and replaced by one
-     * sentence when "Who decides" leaves every application to them (C-D20). Then the warnings
-     * {@see decider_warnings()} computes from the saved method, each shown while the answers being
-     * edited still recreate its problem.
+     * sentence when "Who decides" leaves every application to them (C-D20). Then the warning that
+     * a moderator could approve another, which {@see decider_warnings()} gives when a role offered
+     * under "Role on approval" decides: it follows the role being edited, hidden while the select
+     * holds one of the offered roles that do not decide, so it appears before the method is saved.
      *
-     * @param stdClass $instance The instance being edited, or the defaults for a new one.
      * @param bool $separate Whether the course is in separate groups mode.
+     * @param array $warnings What {@see decider_warnings()} returned for the method.
+     * @param int $courseid Course id.
+     * @param array $roleids The ids "Role on approval" offers, as integers.
      * @return void
      */
-    protected function add_group_notices(stdClass $instance, bool $separate): void {
+    protected function add_decider_notices(bool $separate, array $warnings, int $courseid, array $roleids): void {
         $mform = $this->_form;
         $question = \enrol_apply\local\groupquestion::class;
         $allgroups = \enrol_apply\local\instanceoptions::DECIDERS_ALLGROUPS;
 
         if ($separate) {
+            $mform->addElement('static', 'decidersallgroups', '', $this->group_notice(
+                get_string('decidersallgroupsinfo', 'enrol_apply')
+            ));
+            $mform->hideIf('decidersallgroups', 'deciders', 'neq', $allgroups);
+
             $keyless = $this->group_notice(get_string('groupscopekeyless', 'enrol_apply'));
 
             $mform->addElement('static', 'groupscopekeyless', '', $keyless);
@@ -969,22 +1080,17 @@ class enrol_apply_edit_form extends moodleform {
                 \enrol_apply\local\instanceoptions::CHOICE_REQUIRED
             );
             $mform->hideIf('groupscopenopreference', 'deciders', 'eq', $allgroups);
-
-            $mform->addElement('static', 'decidersallgroups', '', $this->group_notice(
-                get_string('decidersallgroupsinfo', 'enrol_apply')
-            ));
-            $mform->hideIf('decidersallgroups', 'deciders', 'neq', $allgroups);
         }
 
-        $warnings = $this->decider_warnings($instance);
         if ($warnings['decidingbygroups'] !== '') {
             $mform->addElement('static', 'decidingbygroups', '', $this->group_notice($warnings['decidingbygroups'], true));
             $mform->hideIf('decidingbygroups', 'deciders', 'eq', $allgroups);
-        }
-        if ($warnings['offerleak'] !== '') {
-            $mform->addElement('static', 'offerleak', '', $this->group_notice($warnings['offerleak'], true));
-            $mform->hideIf('offerleak', 'groupdecided', 'neq', $question::CHOICE);
-            $mform->hideIf('offerleak', 'deciders', 'eq', $allgroups);
+            // The ids exactly as the select's option values, so the browser compares like with like.
+            $learner = array_values(array_diff($roleids, \enrol_apply\local\decidingrole::roles($courseid)));
+            sort($learner);
+            if ($learner) {
+                $mform->hideIf('decidingbygroups', 'roleid', 'in', implode('|', $learner));
+            }
         }
     }
 
@@ -1004,7 +1110,7 @@ class enrol_apply_edit_form extends moodleform {
     }
 
     /**
-     * The configurations that let a moderator decide on another moderator (C-D27), as the method is saved.
+     * The configurations that let a moderator decide on another moderator (C-D27), for the method being edited.
      *
      * Only in a separate-groups course, the one mode in which a group's members decide its
      * applications; everywhere else every decider sees every application and "Who decides" changes
@@ -1012,20 +1118,22 @@ class enrol_apply_edit_form extends moodleform {
      * {@see key_only_warnings()} reads them, so the teacher is warned before switching to the
      * answer that would make them true:
      *
-     * - decidingbygroups: the method grants a role that decides ({@see \enrol_apply\local\decidingrole}),
-     *   so whoever it approves is a decider, and each group's deciders decide it: a moderator of a
-     *   group could approve another moderator. Read from the saved role, or the default role of a
-     *   new method.
+     * - decidingbygroups: a role "Role on approval" offers decides
+     *   ({@see \enrol_apply\local\decidingrole}), so a method granting it approves deciders, and each
+     *   group's deciders decide it: a moderator of a group could approve another moderator. Read
+     *   from the offered roles rather than the saved one, so the warning can follow the select
+     *   before a save ({@see add_decider_notices()} hides it for the roles that do not decide).
      * - offerleak: a group this method offers is one another apply method of the course joins on
      *   approval with a deciding role, so the people that method approves would decide every
      *   application to it. Groups are named only where the reader may see them
      *   ({@see \enrol_apply\local\groupvisibility::visible_to()}).
      *
      * @param stdClass $instance The instance being edited, or the defaults for a new one.
+     * @param array $roleids The ids "Role on approval" offers, as integers.
      * @return array The two sentences in their plain spelling, '' for a fact that does not hold,
      *     under 'decidingbygroups' and 'offerleak'.
      */
-    protected function decider_warnings(stdClass $instance): array {
+    protected function decider_warnings(stdClass $instance, array $roleids): array {
         global $DB, $USER;
 
         $warnings = ['decidingbygroups' => '', 'offerleak' => ''];
@@ -1034,7 +1142,7 @@ class enrol_apply_edit_form extends moodleform {
             return $warnings;
         }
 
-        if (\enrol_apply\local\decidingrole::method_decides($instance)) {
+        if (array_intersect($roleids, \enrol_apply\local\decidingrole::roles($courseid))) {
             $warnings['decidingbygroups'] = get_string('warndecidingbygroups', 'enrol_apply');
         }
 
@@ -1091,11 +1199,63 @@ class enrol_apply_edit_form extends moodleform {
      * @return bool True for SEPARATEGROUPS.
      */
     protected function separate_groups(int $courseid): bool {
+        return $this->group_mode($courseid) === SEPARATEGROUPS;
+    }
+
+    /**
+     * The course's group mode, as core reads it.
+     *
+     * @param int $courseid Course id.
+     * @return int NOGROUPS, SEPARATEGROUPS or VISIBLEGROUPS; NOGROUPS for a course that no longer exists.
+     */
+    protected function group_mode(int $courseid): int {
         global $DB;
 
         $course = $DB->get_record('course', ['id' => $courseid], 'id, groupmode', IGNORE_MISSING);
 
-        return $course && (int) groups_get_course_groupmode($course) === SEPARATEGROUPS;
+        return $course ? (int) groups_get_course_groupmode($course) : NOGROUPS;
+    }
+
+    /**
+     * The name core gives a group mode.
+     *
+     * @param int $mode A group mode constant.
+     * @return string The name, plain.
+     */
+    protected function group_mode_name(int $mode): string {
+        return match ($mode) {
+            SEPARATEGROUPS => get_string('groupsseparate', 'group'),
+            VISIBLEGROUPS => get_string('groupsvisible', 'group'),
+            default => get_string('groupsnone', 'group'),
+        };
+    }
+
+    /**
+     * The first row of the Groups section: the course's group mode and what it does to deciders.
+     *
+     * Separate groups narrow who sees an application to its group's deciders and those who see
+     * every group; the other two modes narrow nobody. The course settings, where the mode is
+     * changed, are linked only for a reader who may change them (core's course/edit.php gate).
+     *
+     * @param int $courseid Course id.
+     * @param context $context Course context.
+     * @return string HTML for the static element, which renders it raw.
+     */
+    protected function group_mode_text(int $courseid, $context): string {
+        global $OUTPUT;
+
+        $mode = $this->group_mode($courseid);
+        $canupdate = has_capability('moodle/course:update', $context);
+
+        return $OUTPUT->render_from_template('enrol_apply/course_group_mode', [
+            'mode' => $this->group_mode_name($mode),
+            'consequence' => $mode === SEPARATEGROUPS
+                ? get_string('coursegroupmodeseparate', 'enrol_apply')
+                : get_string('coursegroupmodeshared', 'enrol_apply'),
+            'hasurl' => $canupdate,
+            'url' => $canupdate ? (new moodle_url('/course/edit.php', ['id' => $courseid]))->out(false) : '',
+            'linktext' => get_string('coursegroupmodelink', 'enrol_apply'),
+        ]);
     }
 
     /**
@@ -1162,15 +1322,20 @@ class enrol_apply_edit_form extends moodleform {
      * configured groups live in their own table, so both have to be unpacked before
      * set_data() can populate the multi-select elements.
      *
+     * A scenario's values ({@see \enrol_apply\local\preset::values()}) go on top, element by element,
+     * so the freeze and every hideIf read them as they read a stored value.
+     *
      * @param stdClass $instance Instance record, or the defaults for a new instance.
      * @param moodle_database $db Database connection.
+     * @param array $preset A scenario's form values, keyed by element name; empty for none.
      * @return stdClass Instance data ready for set_data().
      */
-    protected function prepare_instance_data($instance, $db) {
+    protected function prepare_instance_data($instance, $db, array $preset = []) {
         $data = clone $instance;
 
-        $stored = isset($data->customtext3) ? (string) $data->customtext3 : '';
-        $data->notify = $stored === '' ? ['$@NONE@$'] : explode(',', $stored);
+        $data->notify = \enrol_apply\local\notifyrecipients::to_form(
+            isset($data->customtext3) ? (string) $data->customtext3 : ''
+        );
 
         /* Unpack the stored envelope onto the picker's checkbox pairs. resolve() rather than
            the raw envelope, so a key the site no longer allows shows as unticked instead of
@@ -1214,6 +1379,10 @@ class enrol_apply_edit_form extends moodleform {
             $data->expirynotify = 2;
         }
         unset($data->notifyall);
+
+        foreach ($preset as $name => $value) {
+            $data->{$name} = $value;
+        }
 
         return $data;
     }

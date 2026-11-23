@@ -2533,8 +2533,9 @@ class enrol_apply_plugin extends enrol_plugin {
             ];
         }
 
-        // Notify users holding the capability in the course context.
-        $recipients = $this->get_notifycoursebased_users($instance);
+        /* Notify users holding the capability in the course context: under "the deciders of the
+           application's group" the setting needs the group to choose them. */
+        $recipients = $this->get_notifycoursebased_users($instance, $keygroupid);
         $notified = [];
         if ($recipients) {
             $manageurl = $admission->url ?? new moodle_url('/enrol/apply/manage.php', ['id' => $instance->id]);
@@ -2774,14 +2775,23 @@ class enrol_apply_plugin extends enrol_plugin {
      * require_login() refuses a user whose own enrolment is suspended or outside its dates, even
      * though their role, and with it the capability, survives.
      *
+     * The setting is read by {@see \enrol_apply\local\notifyrecipients::parse()}: nobody, every one
+     * of them, the people picked by name, or the deciders of the application's group
+     * ({@see \enrol_apply\local\notifyrecipients::for_group()}) together with the people picked by
+     * name. Only that last reading uses $groupid, so a caller that does not know the group gets
+     * what it always got for every other value. The caller still narrows each recipient by
+     * groupscope::allows_group(), the people picked by name included.
+     *
      * Note: mostly copied from the get_users_from_config() function in moodlelib.php.
      *
      * @param stdClass $instance Enrol apply instance record.
+     * @param int $groupid The application's group ({@see \enrol_apply\local\groupscope::application_group()}),
+     *     0 for none.
      * @return array Array of user records keyed by user id.
      */
-    public function get_notifycoursebased_users($instance) {
-        $value = $instance->customtext3;
-        if (empty($value) || $value === '$@NONE@$') {
+    public function get_notifycoursebased_users($instance, int $groupid = 0) {
+        $setting = \enrol_apply\local\notifyrecipients::parse((string) ($instance->customtext3 ?? ''));
+        if (!$setting->everyone && !$setting->group && !$setting->ids) {
             return [];
         }
 
@@ -2792,13 +2802,20 @@ class enrol_apply_plugin extends enrol_plugin {
            to validate them one by one. */
         $users = get_enrolled_users($context, 'enrol/apply:manageapplications', 0, 'u.*', null, 0, 0, true);
 
-        if ($value === '$@ALL@$') {
+        if ($setting->everyone) {
             return $users;
         }
 
         $result = [];
-        $allowed = explode(',', $value);
-        foreach ($allowed as $uid) {
+        if ($setting->group) {
+            $result = \enrol_apply\local\notifyrecipients::for_group(
+                $users,
+                (int) $instance->courseid,
+                (int) $instance->id,
+                $groupid
+            );
+        }
+        foreach ($setting->ids as $uid) {
             if (isset($users[$uid])) {
                 $result[$uid] = $users[$uid];
             }
@@ -2892,12 +2909,12 @@ class enrol_apply_plugin extends enrol_plugin {
      * @return void
      */
     public function restore_instance(restore_enrolments_structure_step $step, stdClass $data, $course, $oldid) {
-        /* customtext3 holds either a marker or a list of user ids to notify. Ids from
-           another site point at different people here, so anything but the "everyone"
-           marker degrades to "nobody" on a cross-site restore. */
-        if (!empty($data->customtext3) && $data->customtext3 !== '$@ALL@$' && !$step->get_task()->is_samesite()) {
-            $data->customtext3 = '';
-        }
+        /* customtext3 holds markers and a list of user ids to notify. Ids from another site point
+           at different people here, so a cross-site restore keeps the markers and drops the ids. */
+        $data->customtext3 = \enrol_apply\local\notifyrecipients::for_restore(
+            (string) ($data->customtext3 ?? ''),
+            $step->get_task()->is_samesite()
+        );
 
         /* A cohort id from another site names a different group of people here, so the
            restriction degrades to the -1 sentinel rather than to 0: allow_apply() reads it

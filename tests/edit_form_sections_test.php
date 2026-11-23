@@ -51,12 +51,12 @@ final class edit_form_sections_test extends \advanced_testcase {
         'sectionwho',
         'sectionform',
         'sectiongroups',
+        'sectiondeciders',
         'sectionafter',
-        'sectionnotify',
     ];
 
     /** @var string[] The sections closed unless they hold a value other than the default. */
-    private const CLOSED_BY_DEFAULT = ['sectionwho', 'sectionafter', 'sectionnotify'];
+    private const CLOSED_BY_DEFAULT = ['sectionwho', 'sectiondeciders', 'sectionafter'];
 
     /** @var \stdClass Course the apply instance belongs to. */
     private $course;
@@ -126,7 +126,8 @@ final class edit_form_sections_test extends \advanced_testcase {
                 $current = $element->getName();
             }
             $name = (string) $element->getName();
-            if ($name !== '') {
+            // Formslib adds a hidden expand-state element, with a random suffix, after each collapsible header.
+            if ($name !== '' && strpos($name, 'mform_isexpanded_') !== 0) {
                 $sections[$name] = $current;
             }
         }
@@ -186,6 +187,7 @@ final class edit_form_sections_test extends \advanced_testcase {
             'sectionwho' => ['customint5', 'hidecard'],
             'sectionform' => ['customtext1', 'customint7', 'customtext2', 'questions'],
             'sectiongroups' => [
+                'coursegroupmode',
                 'groupdecidedgroup',
                 'groupoffer',
                 'groupoffergrouping',
@@ -195,11 +197,12 @@ final class edit_form_sections_test extends \advanced_testcase {
                 'customchar1',
                 'customchar2',
                 'groupkeysummary',
-                'deciders',
                 'groupselect',
+                'groupselectchoice',
+                'groupselectkey',
             ],
+            'sectiondeciders' => ['deciders', 'decidersinert', 'notify'],
             'sectionafter' => ['enrolperiod', 'expirynotify', 'expirythreshold', 'customint8'],
-            'sectionnotify' => ['notify'],
         ];
         $sections = $this->section_of($mform);
         foreach ($expected as $section => $names) {
@@ -208,6 +211,15 @@ final class edit_form_sections_test extends \advanced_testcase {
                 $this->assertSame($section, $sections[$name], "{$name} should be in {$section}");
             }
         }
+        // The group mode opens Groups, the joined groups close it, and notify closes Who decides.
+        $groups = array_keys($sections, 'sectiongroups', true);
+        $this->assertSame(['sectiongroups', 'coursegroupmode'], array_slice($groups, 0, 2));
+        $this->assertSame(['groupselect', 'groupselectchoice', 'groupselectkey'], array_slice($groups, -3));
+        $this->assertSame(
+            ['sectiondeciders', 'deciders', 'decidersinert', 'notify'],
+            array_keys($sections, 'sectiondeciders', true),
+            'outside separate groups the section holds no notice but the inert one'
+        );
         $this->assertSame('select', $mform->getElementType('customint5'));
         $this->assertSame('select', $mform->getElementType('hidecard'));
         $this->assertSame('advcheckbox', $mform->getElementType('customint8'));
@@ -296,7 +308,7 @@ final class edit_form_sections_test extends \advanced_testcase {
             'an enrolment duration' => ['enrolperiod', DAYSECS, 'sectionafter'],
             'an expiry notice' => ['expirynotify', 1, 'sectionafter'],
             'the profile write' => ['customint8', 1, 'sectionafter'],
-            'a notification recipient list' => ['customtext3', '$@ALL@$', 'sectionnotify'],
+            'a notification recipient list' => ['customtext3', '$@ALL@$', 'sectiondeciders'],
         ];
     }
 
@@ -326,6 +338,25 @@ final class edit_form_sections_test extends \advanced_testcase {
     }
 
     /**
+     * Who decides and who is notified opens in a separate-groups course whatever it holds, the one
+     * mode where its answer narrows who sees an application; in the other two it stays closed.
+     *
+     * Changes that must make it fail: the group mode left out of the rule.
+     *
+     * @return void
+     */
+    public function test_separate_groups_open_the_deciders_section(): void {
+        global $DB;
+
+        foreach ([NOGROUPS => true, VISIBLEGROUPS => true, SEPARATEGROUPS => false] as $mode => $closed) {
+            $DB->set_field('course', 'groupmode', $mode, ['id' => $this->course->id]);
+            $mform = $this->mform();
+            $this->assertSame($closed, $mform->_collapsibleElements['sectiondeciders'], "group mode {$mode}");
+            $this->assertTrue($mform->_collapsibleElements['sectionafter'], 'the mode opens no other section');
+        }
+    }
+
+    /**
      * A new instance has no summary strip; a saved one has it, as an information alert carrying
      * its facts.
      *
@@ -338,9 +369,14 @@ final class edit_form_sections_test extends \advanced_testcase {
         $new = (object) $this->plugin->get_instance_defaults();
         $new->id = null;
         $new->courseid = $this->course->id;
-        foreach ($this->mform($new)->_elements as $element) {
-            $this->assertNotSame('html', $element->getType(), 'a new instance has nothing to summarise');
-        }
+        $html = array_values(array_filter(
+            $this->mform($new)->_elements,
+            static fn($element): bool => $element->getType() === 'html'
+        ));
+        // A new instance has nothing to summarise: its one html element is the scenarios.
+        $this->assertCount(1, $html);
+        $this->assertStringContainsString('enrol_apply-presets', $html[0]->toHtml());
+        $this->assertStringNotContainsString('enrol_apply-summary', $html[0]->toHtml());
 
         $html = $this->mform()->_elements[0]->toHtml();
         $this->assertStringContainsString('alert-info', $html);

@@ -11,6 +11,7 @@
 .enrol_apply-capacity,
 .enrol_apply-filters,
 .enrol_apply-sheet,
+.enrol_apply-presets,
 [data-enrol-apply-report] {
     --enrol-apply-line: var(--bs-border-color, #dee2e6);
     --enrol-apply-muted: var(--bs-secondary-color, #6c757d);
@@ -36,6 +37,7 @@
 .enrol_apply-applicationnav,
 .enrol_apply-timeline,
 .enrol_apply-sheet,
+.enrol_apply-presets,
 [data-enrol-apply-report] {
     --enrol-apply-surface-inset: var(--dimensions-surface-inset, var(--bs-secondary-bg, #e9ecef));
     --enrol-apply-ink-muted: var(--dimensions-ink-muted, var(--bs-secondary-color, rgba(33, 37, 41, .75)));
@@ -3322,4 +3324,76 @@ body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload + .enrol_apply-rvie
     .enrol_apply-rview [data-enrol-apply-tip]::before {
         transition: none;
     }
+}
+
+/* The scenarios above a new method's settings form (template instance_presets): one card a row on a
+   phone, two from 576 px, four from 1200 px. A panel: 12 px, a 1 px edge, no elevation. The chosen
+   card's edge is thicker as well as tinted, and its link reads "Chosen", so the state is not told by
+   colour alone. */
+.enrol_apply-presets .enrol_apply-presets-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    list-style: none;
+    margin: 0 0 0.75rem;
+    padding: 0;
+}
+
+.enrol_apply-presets .enrol_apply-presets-item {
+    display: flex;
+    flex: 1 1 100%;
+}
+
+@media (min-width: 576px) {
+    .enrol_apply-presets .enrol_apply-presets-item {
+        flex: 1 1 45%;
+        min-width: 15rem;
+    }
+}
+
+@media (min-width: 1200px) {
+    .enrol_apply-presets .enrol_apply-presets-item {
+        flex: 1 1 20%;
+        min-width: 12rem;
+    }
+}
+
+.enrol_apply-presets .enrol_apply-preset {
+    border: 1px solid var(--enrol-apply-line);
+    border-radius: var(--enrol-apply-radius-lg);
+    width: 100%;
+}
+
+.enrol_apply-presets .enrol_apply-preset.enrol_apply-preset-chosen {
+    border: 3px solid var(--enrol-apply-brand-fill);
+}
+
+.enrol_apply-presets .enrol_apply-preset-body {
+    display: flex;
+    flex-direction: column;
+}
+
+.enrol_apply-presets .enrol_apply-preset-sets {
+    font-size: 0.875rem;
+    margin: 0 0 0.75rem;
+    padding-left: 1.25rem;
+}
+
+.enrol_apply-presets .enrol_apply-preset-label {
+    font-weight: 600;
+}
+
+.enrol_apply-presets .enrol_apply-preset-prerequisite,
+.enrol_apply-presets .enrol_apply-preset-note {
+    color: var(--enrol-apply-ink-muted);
+    font-size: 0.875rem;
+}
+
+.enrol_apply-presets .enrol_apply-preset-needs {
+    color: var(--enrol-apply-warning-ink);
+    display: block;
+}
+
+.enrol_apply-presets .enrol_apply-preset-action {
+    margin-top: auto;
 }

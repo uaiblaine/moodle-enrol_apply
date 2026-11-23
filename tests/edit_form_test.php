@@ -43,6 +43,8 @@ require_once($CFG->dirroot . '/enrol/apply/edit_form.php');
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 #[CoversClass(\enrol_apply_edit_form::class)]
+#[CoversClass(\enrol_apply\local\notifyrecipients::class)]
+#[CoversClass(\enrol_apply\local\preset::class)]
 final class edit_form_test extends \advanced_testcase {
     /** @var \stdClass Course the apply instance belongs to. */
     private $course;
@@ -165,9 +167,13 @@ final class edit_form_test extends \advanced_testcase {
      * Drive a real submission of the edit form and return what it exports.
      *
      * @param array $values Element values to submit on top of a valid submission.
+     * @param string[] $omit Element names to leave out of the submission, as a browser leaves out what it does not post.
+     * @param \stdClass|null $instance The instance the form edits, the saved one by default.
+     * @param string $preset The scenario edit.php hands the form, as requested.
      * @return \stdClass|null The exported data, or null when the form refused the submission.
      */
-    private function submit(array $values): ?\stdClass {
+    private function submit(array $values, array $omit = [], ?\stdClass $instance = null, string $preset = ''): ?\stdClass {
+        $instance = $instance ?? $this->instance;
         /* The form's constructor checks the sesskey through confirm_sesskey(), which reads the
            request, and the PHPUnit harness does not reset $_POST between tests, so it is put
            back afterwards. */
@@ -183,20 +189,22 @@ final class edit_form_test extends \advanced_testcase {
             'customint5' => 0,
             'customint6' => 1,
             'roleid' => $this->instance->roleid,
+            'preset' => $preset,
             'notify' => ['$@NONE@$'],
             'customint3' => '0',
             'customint4' => '0',
-            'id' => $this->instance->id,
+            'id' => (int) $instance->id,
             'courseid' => $this->course->id,
             'groupdecided' => \enrol_apply\local\groupquestion::DECIDER,
             'deciders' => '0',
         ], $values);
+        $submitted = array_diff_key($submitted, array_flip($omit));
 
         try {
             $context = \context_course::instance($this->course->id);
             $form = new \enrol_apply_edit_form(
                 null,
-                [$this->instance, $this->plugin, $context],
+                [$instance, $this->plugin, $context, $preset],
                 'post',
                 '',
                 null,
@@ -639,5 +647,523 @@ final class edit_form_test extends \advanced_testcase {
 
         $this->assertSame(s(fullname($teacher)), $texts[(string) $teacher->id] ?? null);
         $this->assertStringContainsString('R&amp;D &lt;Lab&gt;', $texts[(string) $teacher->id]);
+    }
+
+    /**
+     * The QuickForm the edit form builds for the instance.
+     *
+     * @return \MoodleQuickForm The form.
+     */
+    private function quickform(): \MoodleQuickForm {
+        return (new \ReflectionProperty(\moodleform::class, '_form'))->getValue($this->form());
+    }
+
+    /**
+     * Outside separate groups "Who decides" is shown frozen, and a save keeps the stored answer
+     * whether the post carries another one or none; in separate groups the posted answer is saved.
+     *
+     * The stored answer is the one that matters if the course later switches to separate groups,
+     * so a save of an unrelated setting must not reset it.
+     *
+     * Changes that must make it fail: the freeze dropped, a freeze that posts its value (a forged
+     * post then wins), or the freeze applied in separate groups too.
+     *
+     * @return void
+     */
+    public function test_a_frozen_deciders_keeps_its_stored_value_on_save(): void {
+        global $DB;
+
+        $options = \enrol_apply\local\instanceoptions::class;
+        $enrolid = (int) $this->instance->id;
+        $options::set($enrolid, ['deciders' => $options::DECIDERS_ALLGROUPS]);
+
+        $this->assertTrue($this->quickform()->getElement('deciders')->isFrozen());
+
+        $data = $this->submit(['deciders' => (string) $options::DECIDERS_GROUP]);
+        $this->assertNotNull($data);
+        $this->assertEquals($options::DECIDERS_ALLGROUPS, $data->deciders, 'a posted answer does not replace the stored one');
+        \enrol_apply\local\groupquestion::save($enrolid, $data);
+        $this->assertSame($options::DECIDERS_ALLGROUPS, $options::get($enrolid)->deciders);
+
+        $data = $this->submit([], ['deciders']);
+        $this->assertNotNull($data);
+        $this->assertEquals($options::DECIDERS_ALLGROUPS, $data->deciders, 'nothing posted keeps the stored answer');
+
+        // The control: in separate groups the answer is the teacher's to change.
+        $DB->set_field('course', 'groupmode', SEPARATEGROUPS, ['id' => $this->course->id]);
+        $this->assertFalse($this->quickform()->getElement('deciders')->isFrozen());
+        $data = $this->submit(['deciders' => (string) $options::DECIDERS_GROUP]);
+        $this->assertNotNull($data);
+        $this->assertEquals($options::DECIDERS_GROUP, $data->deciders);
+        \enrol_apply\local\groupquestion::save($enrolid, $data);
+        $this->assertSame($options::DECIDERS_GROUP, $options::get($enrolid)->deciders);
+    }
+
+    /**
+     * The note that "Who decides" changes nothing is under it in the two modes where that is
+     * true, and absent in separate groups.
+     *
+     * Changes that must make it fail: the note dropped, or shown in separate groups.
+     *
+     * @return void
+     */
+    public function test_the_inert_note_follows_the_group_mode(): void {
+        global $DB;
+
+        $note = s(get_string('decidersinert', 'enrol_apply'));
+        foreach ([NOGROUPS => true, VISIBLEGROUPS => true, SEPARATEGROUPS => false] as $mode => $shown) {
+            $DB->set_field('course', 'groupmode', $mode, ['id' => $this->course->id]);
+            $mform = $this->quickform();
+
+            $this->assertSame($shown, $mform->elementExists('decidersinert'), "group mode {$mode}");
+            $this->assertSame($shown, $mform->getElement('deciders')->isFrozen(), "group mode {$mode}");
+            if ($shown) {
+                $this->assertStringContainsString($note, $mform->getElement('decidersinert')->_text);
+            }
+        }
+    }
+
+    /**
+     * The notification list offers "the deciders of the application's group" right after "everyone".
+     *
+     * Changes that must make it fail: the option dropped from the list.
+     *
+     * @return void
+     */
+    public function test_the_group_marker_is_offered_after_everyone(): void {
+        $recipients = \enrol_apply\local\notifyrecipients::class;
+        $options = $this->quickform()->getElement('notify')->_options;
+
+        $this->assertSame(
+            [$recipients::NONE, $recipients::ALL, $recipients::GROUP],
+            array_map(static fn(array $option): string => (string) $option['attr']['value'], array_slice($options, 0, 3))
+        );
+        $this->assertSame(get_string('notifygroupdeciders', 'enrol_apply'), $options[2]['text']);
+    }
+
+    /**
+     * The group marker picked with a person by name is saved as the marker followed by the id, and
+     * the form opens with both selected again.
+     *
+     * Changes that must make it fail: the option dropped (the select exports only values it offers),
+     * or the marker written after the ids.
+     *
+     * @return void
+     */
+    public function test_the_group_marker_and_a_named_person_round_trip(): void {
+        global $DB;
+
+        $recipients = \enrol_apply\local\notifyrecipients::class;
+        $teacher = $this->getDataGenerator()->create_and_enrol($this->course, 'editingteacher');
+
+        $data = $this->submit(['notify' => [(string) $teacher->id, $recipients::GROUP]]);
+        $this->assertNotNull($data);
+        $this->assertEqualsCanonicalizing([(string) $teacher->id, $recipients::GROUP], array_map('strval', $data->notify));
+        $stored = $recipients::from_form($data->notify);
+        $this->assertSame($recipients::GROUP . ',' . $teacher->id, $stored);
+
+        $DB->set_field('enrol', 'customtext3', $stored, ['id' => $this->instance->id]);
+        $this->instance = $DB->get_record('enrol', ['id' => $this->instance->id], '*', MUST_EXIST);
+        $this->assertSame(
+            [$recipients::GROUP, (string) $teacher->id],
+            array_map('strval', $this->quickform()->getElement('notify')->getValue())
+        );
+    }
+
+    /**
+     * What the multi-select posts is stored by one rule: "everyone" swallows the rest, "nobody" is
+     * dropped, and the group marker leads the people picked by name.
+     *
+     * Changes that must make it fail: "everyone" no longer winning, or the marker not written first.
+     *
+     * @return void
+     */
+    public function test_the_posted_recipients_are_stored_by_one_rule(): void {
+        $recipients = \enrol_apply\local\notifyrecipients::class;
+
+        $this->assertSame($recipients::ALL, $recipients::from_form([$recipients::GROUP, $recipients::ALL, '5']));
+        $this->assertSame('', $recipients::from_form([$recipients::NONE]));
+        $this->assertSame('', $recipients::from_form([]));
+        $this->assertSame('5', $recipients::from_form([$recipients::NONE, '5']));
+        $this->assertSame($recipients::GROUP . ',5,7', $recipients::from_form(['5', $recipients::GROUP, '7']));
+        $this->assertSame($recipients::GROUP, $recipients::from_form([$recipients::GROUP, $recipients::NONE]));
+
+        // And back: an empty value selects "nobody", anything else its items in stored order.
+        $this->assertSame([$recipients::NONE], $recipients::to_form(''));
+        $this->assertSame([$recipients::GROUP, '5'], $recipients::to_form($recipients::GROUP . ',5'));
+    }
+
+    /**
+     * A new method's defaults, as edit.php hands them to the form.
+     *
+     * @return \stdClass The instance the form is built for.
+     */
+    private function new_instance(): \stdClass {
+        $instance = (object) $this->plugin->get_instance_defaults();
+        $instance->id = null;
+        $instance->courseid = $this->course->id;
+
+        return $instance;
+    }
+
+    /**
+     * The QuickForm built for a method with a scenario requested, as edit.php builds it.
+     *
+     * @param string $preset The scenario as requested.
+     * @param \stdClass|null $instance The instance, a new one by default.
+     * @return \MoodleQuickForm The form.
+     */
+    private function preset_quickform(string $preset, ?\stdClass $instance = null): \MoodleQuickForm {
+        $context = \context_course::instance($this->course->id);
+        $form = new \enrol_apply_edit_form(null, [$instance ?? $this->new_instance(), $this->plugin, $context, $preset]);
+
+        return (new \ReflectionProperty(\moodleform::class, '_form'))->getValue($form);
+    }
+
+    /**
+     * The scenario cards of a form, rendered: its first element.
+     *
+     * @param \MoodleQuickForm $mform The form.
+     * @return string The cards' HTML.
+     */
+    private function cards_html(\MoodleQuickForm $mform): string {
+        $html = $mform->_elements[0]->toHtml();
+        $this->assertStringContainsString('enrol_apply-presets', $html);
+
+        return $html;
+    }
+
+    /**
+     * One card's markup.
+     *
+     * @param string $html The cards' HTML.
+     * @param string $key The scenario.
+     * @return string From its data-preset attribute to the next card's.
+     */
+    private function card_html(string $html, string $key): string {
+        $parts = explode('data-preset="', $html);
+        foreach ($parts as $part) {
+            if (str_starts_with($part, $key . '"')) {
+                return $part;
+            }
+        }
+        $this->fail("no card for {$key}");
+    }
+
+    /**
+     * Save a new method the way edit.php does, from what the form exported.
+     *
+     * @param \stdClass $data The exported data.
+     * @return int The new method's id.
+     */
+    private function save_new(\stdClass $data): int {
+        $data->customtext3 = \enrol_apply\local\notifyrecipients::from_form((array) ($data->notify ?? []));
+        $data->customchar1 = \enrol_apply\local\groupquestion::storage($data)->customchar1;
+        $enrolid = (int) $this->plugin->add_instance($this->course, (array) $data);
+        \enrol_apply\local\groupquestion::save($enrolid, $data);
+
+        return $enrolid;
+    }
+
+    /**
+     * Each scenario with the values it must put in the form, and the role it grants by id.
+     *
+     * @return array Scenario, values by element name and the role's short name ('' for the default),
+     *     keyed by the scenario.
+     */
+    public static function scenario_provider(): array {
+        $question = \enrol_apply\local\groupquestion::class;
+        $options = \enrol_apply\local\instanceoptions::class;
+        $recipients = \enrol_apply\local\notifyrecipients::class;
+
+        return [
+            'review' => ['review', [
+                'groupdecided' => $question::DECIDER,
+                'deciders' => $options::DECIDERS_GROUP,
+                'notify' => [$recipients::ALL],
+            ], ''],
+            'classes' => ['classes', [
+                'groupdecided' => $question::CHOICE,
+                'groupchoicerequired' => $options::CHOICE_REQUIRED,
+                'groupseats' => 1,
+                'choicekey' => '',
+                'deciders' => $options::DECIDERS_GROUP,
+                'notify' => [$recipients::GROUP],
+                'groupoffer' => [],
+            ], ''],
+            'key' => ['key', [
+                'groupdecided' => $question::KEY,
+                'customchar1' => 'any',
+                'deciders' => $options::DECIDERS_GROUP,
+                'notify' => [$recipients::GROUP],
+            ], ''],
+            'moderators' => ['moderators', [
+                'groupdecided' => $question::CHOICE,
+                'groupchoicerequired' => $options::CHOICE_REQUIRED,
+                'groupseats' => 0,
+                'choicekey' => '',
+                'deciders' => $options::DECIDERS_ALLGROUPS,
+                'notify' => [$recipients::ALL],
+            ], 'editingteacher'],
+        ];
+    }
+
+    /**
+     * A scenario's values are the new method's form's initial data, the role of "Moderator
+     * recruitment" included, and the Who decides section opens to show them where they differ from
+     * the defaults.
+     *
+     * Read in a separate-groups course, where nothing is frozen. On a stock site the editing teacher is
+     * the first offered role that decides.
+     *
+     * @param string $preset The scenario.
+     * @param array $expected Its values by element name.
+     * @param string $role The role's short name, '' for the site default.
+     * @return void
+     */
+    #[DataProvider('scenario_provider')]
+    public function test_each_scenario_fills_in_the_form(string $preset, array $expected, string $role): void {
+        global $DB;
+
+        $DB->set_field('course', 'groupmode', SEPARATEGROUPS, ['id' => $this->course->id]);
+        $defaults = $this->preset_quickform($preset)->_defaultValues;
+        foreach ($expected as $name => $value) {
+            $this->assertArrayHasKey($name, $defaults, $name);
+            $this->assertEquals($value, $defaults[$name], $name);
+        }
+        $roleid = $role === ''
+            ? (int) $this->plugin->get_config('roleid')
+            : (int) $DB->get_field('role', 'id', ['shortname' => $role], MUST_EXIST);
+        $this->assertEquals($roleid, $defaults['roleid']);
+
+        // The control: the same form with no scenario holds the site defaults.
+        $plain = $this->preset_quickform('')->_defaultValues;
+        $this->assertSame(\enrol_apply\local\groupquestion::DECIDER, $plain['groupdecided']);
+        $this->assertNotEquals($expected, array_intersect_key($plain, $expected));
+    }
+
+    /**
+     * A scenario whose recipients or deciders differ from the defaults opens Who decides and who is
+     * notified, closed by default outside separate groups; one that matches the defaults leaves it so.
+     *
+     * Changes that must make it fail: a scenario's values ignored by the section rule.
+     *
+     * @return void
+     */
+    public function test_a_scenarios_values_open_their_section(): void {
+        $this->plugin->set_config('notifycoursebased', 1);
+
+        $this->assertTrue($this->preset_quickform('')->_collapsibleElements['sectiondeciders'], 'closed by default');
+        $this->assertTrue(
+            $this->preset_quickform('review')->_collapsibleElements['sectiondeciders'],
+            'everyone is the site default here'
+        );
+        $this->assertFalse($this->preset_quickform('classes')->_collapsibleElements['sectiondeciders'], 'the group marker');
+        $this->assertFalse($this->preset_quickform('moderators')->_collapsibleElements['sectiondeciders'], 'all groups decide');
+    }
+
+    /**
+     * Anything but a scenario's exact key builds the form a request with no scenario builds.
+     *
+     * Changes that must make it fail: a key matched without regard to case.
+     *
+     * @return void
+     */
+    public function test_an_unknown_scenario_is_no_scenario(): void {
+        $plain = $this->preset_quickform('');
+        foreach (['Classes', 'MODERATORS', 'keys', 'defaults'] as $requested) {
+            $mform = $this->preset_quickform($requested);
+            $this->assertEquals($plain->_defaultValues, $mform->_defaultValues, $requested);
+            $this->assertSame('', $mform->getElement('preset')->getValue(), $requested);
+            $this->assertStringNotContainsString('aria-current', $this->cards_html($mform), $requested);
+        }
+
+        // The control: the exact key is a scenario.
+        $this->assertSame('classes', $this->preset_quickform('classes')->getElement('preset')->getValue());
+    }
+
+    /**
+     * The cards are drawn above the first section of a new method only, and a scenario requested
+     * for a saved method changes none of its values.
+     *
+     * Changes that must make it fail: the cards drawn for a saved method, or its values replaced.
+     *
+     * @return void
+     */
+    public function test_scenarios_are_offered_for_a_new_method_only(): void {
+        $new = $this->preset_quickform('classes');
+        $this->assertSame('header', $new->_elements[1]->getType(), 'the cards come before the first section');
+        foreach (\enrol_apply\local\preset::KEYS as $key) {
+            $this->assertStringContainsString('preset=' . $key, $this->cards_html($new));
+        }
+        $this->assertSame(\enrol_apply\local\groupquestion::CHOICE, $new->_defaultValues['groupdecided']);
+
+        $saved = $this->preset_quickform('classes', $this->instance);
+        foreach ($saved->_elements as $element) {
+            if ($element->getType() === 'html') {
+                $this->assertStringNotContainsString('enrol_apply-presets', $element->toHtml());
+            }
+        }
+        $this->assertSame(\enrol_apply\local\groupquestion::DECIDER, $saved->_defaultValues['groupdecided']);
+        $this->assertSame('', $saved->getElement('preset')->getValue());
+    }
+
+    /**
+     * Choosing a scenario writes nothing; saving the form does.
+     *
+     * @return void
+     */
+    public function test_choosing_a_scenario_writes_nothing(): void {
+        global $DB;
+
+        $count = fn(): array => [
+            $DB->count_records('enrol', ['courseid' => $this->course->id]),
+            $DB->count_records('enrol_apply_options'),
+        ];
+        $before = $count();
+        foreach (\enrol_apply\local\preset::KEYS as $key) {
+            $this->cards_html($this->preset_quickform($key));
+        }
+        $this->assertSame($before, $count());
+
+        // The control: the counts move when a method is saved.
+        $data = $this->submit([], [], $this->new_instance(), 'review');
+        $this->assertNotNull($data);
+        $this->save_new($data);
+        $this->assertSame([$before[0] + 1, $before[1] + 1], $count());
+    }
+
+    /**
+     * A scenario's values, posted as the form shows them, are saved, and a frozen "Who decides" saves
+     * the scenario's answer the screen showed rather than whatever is posted.
+     *
+     * @return void
+     */
+    public function test_saving_a_scenarios_values_stores_them(): void {
+        global $DB;
+
+        $options = \enrol_apply\local\instanceoptions::class;
+        $recipients = \enrol_apply\local\notifyrecipients::class;
+        $group = $this->getDataGenerator()->create_group(['courseid' => $this->course->id]);
+        $DB->set_field('course', 'groupmode', SEPARATEGROUPS, ['id' => $this->course->id]);
+
+        $values = \enrol_apply\local\preset::values('classes', (int) $this->course->id, []);
+        $data = $this->submit($values + ['groupoffer' => [$group->id]], [], $this->new_instance(), 'classes');
+        $this->assertNotNull($data);
+        $enrolid = $this->save_new($data);
+
+        $instance = $DB->get_record('enrol', ['id' => $enrolid], '*', MUST_EXIST);
+        $this->assertSame($recipients::GROUP, $instance->customtext3);
+        $this->assertSame('', (string) $instance->customchar1);
+        $stored = $options::get($enrolid);
+        $this->assertSame($options::CHOICE_REQUIRED, $stored->groupchoice);
+        $this->assertSame(1, $stored->groupseats);
+        $this->assertSame($options::DECIDERS_GROUP, $stored->deciders);
+        $this->assertSame([(int) $group->id], \enrol_apply\local\groupoffer::group_ids($enrolid));
+
+        // Outside separate groups "Who decides" is frozen: the scenario's answer is what it saves.
+        $DB->set_field('course', 'groupmode', NOGROUPS, ['id' => $this->course->id]);
+        $editing = (int) $DB->get_field('role', 'id', ['shortname' => 'editingteacher'], MUST_EXIST);
+        $values = \enrol_apply\local\preset::values('moderators', (int) $this->course->id, [$editing]);
+        $values['deciders'] = (string) $options::DECIDERS_GROUP;
+        $data = $this->submit($values + ['groupoffer' => [$group->id]], [], $this->new_instance(), 'moderators');
+        $this->assertNotNull($data);
+        $enrolid = $this->save_new($data);
+
+        $this->assertSame($options::DECIDERS_ALLGROUPS, $options::get($enrolid)->deciders);
+        $this->assertSame(0, $options::get($enrolid)->groupseats);
+        $this->assertEquals($editing, $DB->get_field('enrol', 'roleid', ['id' => $enrolid]));
+        $this->assertSame($recipients::ALL, $DB->get_field('enrol', 'customtext3', ['id' => $enrolid]));
+    }
+
+    /**
+     * The scenario rides in a hidden element, which edit.php reads back on the post that saves the
+     * form or redisplays it after a validation error; a scenario leaves the offered groups to pick,
+     * so its first post without one is refused.
+     *
+     * Changes that must make it fail: the element carrying nothing.
+     *
+     * @return void
+     */
+    public function test_the_scenario_rides_in_a_hidden_element(): void {
+        $mform = $this->preset_quickform('moderators');
+        $this->assertSame('hidden', $mform->getElementType('preset'));
+        $this->assertSame('moderators', $mform->getElement('preset')->getValue());
+        $this->assertMatchesRegularExpression('/name="preset"[^>]*value="moderators"/', $mform->getElement('preset')->toHtml());
+
+        $values = \enrol_apply\local\preset::values('moderators', (int) $this->course->id, []);
+        $this->assertNull($this->submit($values, [], $this->new_instance(), 'moderators'), 'no group offered yet');
+    }
+
+    /**
+     * The cards built on groups state the course's group mode, say they need separate groups where
+     * the course is not in them, and link the course settings only for who may change them.
+     *
+     * Changes that must make it fail: the link offered without moodle/course:update, or the need said
+     * in a separate-groups course.
+     *
+     * @return void
+     */
+    public function test_the_prerequisite_line_follows_the_mode_and_the_capability(): void {
+        global $DB;
+
+        $link = '/course/edit.php?id=' . $this->course->id;
+        $needs = s(get_string('presetneedsseparate', 'enrol_apply'));
+
+        $html = $this->cards_html($this->preset_quickform(''));
+        foreach (['classes', 'moderators'] as $key) {
+            $card = $this->card_html($html, $key);
+            $this->assertStringContainsString(s(get_string('groupsnone', 'group')), $card, $key);
+            $this->assertStringContainsString($needs, $card, $key);
+            $this->assertStringContainsString($link, $card, 'the control: an administrator may change them');
+        }
+        $this->assertStringNotContainsString($needs, $this->card_html($html, 'review'));
+
+        $this->setUser($this->getDataGenerator()->create_and_enrol($this->course, 'teacher'));
+        $this->assertFalse(has_capability('moodle/course:update', \context_course::instance($this->course->id)));
+        $card = $this->card_html($this->cards_html($this->preset_quickform('')), 'classes');
+        $this->assertStringContainsString($needs, $card);
+        $this->assertStringNotContainsString($link, $card);
+
+        $this->setAdminUser();
+        $DB->set_field('course', 'groupmode', SEPARATEGROUPS, ['id' => $this->course->id]);
+        $card = $this->card_html($this->cards_html($this->preset_quickform('')), 'classes');
+        $this->assertStringContainsString(s(get_string('groupsseparate', 'group')), $card);
+        $this->assertStringNotContainsString($needs, $card);
+        $this->assertStringNotContainsString($link, $card);
+    }
+
+    /**
+     * The chosen card alone is marked for assistive technology and on screen, its link reads
+     * "Chosen", and the way back to the site defaults appears with it; a role name is escaped once.
+     *
+     * @return void
+     */
+    public function test_the_chosen_card_is_marked(): void {
+        global $DB;
+
+        $DB->set_field('role', 'name', 'R&D moderators', ['shortname' => 'editingteacher']);
+        $html = $this->cards_html($this->preset_quickform('moderators'));
+
+        $this->assertSame(1, substr_count($html, 'aria-current="true"'));
+        $chosen = $this->card_html($html, 'moderators');
+        $this->assertStringContainsString('aria-current="true"', $chosen);
+        // The class sits on the card's own tag, just before its data-preset attribute: outside the slice.
+        $marked = static fn(string $key): string => 'enrol_apply-preset-chosen" data-preset="' . $key . '"';
+        $this->assertStringContainsString($marked('moderators'), $html);
+        $this->assertStringContainsString(s(get_string('presetchosen', 'enrol_apply')), $chosen);
+        $this->assertStringContainsString('R&amp;D moderators', $chosen);
+        $this->assertStringNotContainsString('R&amp;amp;D', $chosen);
+        foreach (['review', 'classes', 'key'] as $key) {
+            $card = $this->card_html($html, $key);
+            $this->assertStringNotContainsString($marked($key), $html, $key);
+            $this->assertStringContainsString(s(get_string('presetuse', 'enrol_apply')), $card, $key);
+        }
+        $this->assertStringContainsString(s(get_string('presetclear', 'enrol_apply')), $html);
+
+        // The control: with none chosen nothing is marked and there is no way back to offer.
+        $html = $this->cards_html($this->preset_quickform(''));
+        $this->assertStringNotContainsString('aria-current', $html);
+        $this->assertStringNotContainsString(s(get_string('presetclear', 'enrol_apply')), $html);
     }
 }

@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased (2026112109)
 
+### Added
+
+- **A new method can start from a scenario** (settings hierarchy, stage S3; no upgrade step, no
+  version bump). Adding the method shows four cards above its first section: "Simple review" (a
+  decider places the applicant on approval, the group's deciders decide, everyone who may decide is
+  told), "Classes with moderators" (the applicant must choose from a list, group seats apply, no key,
+  the group's deciders decide and are told), "Group enrolment key" (a valid key enrols at once, the
+  group's deciders decide and are told) and "Moderator recruitment" (the applicant chooses from a
+  list, seats do not apply, only those who see every group decide, everyone is told, and the role on
+  approval is an offered role that decides applications, a non-editing teacher's first). Each card
+  says when to use it and what it sets in the form's own words; the two built on groups state the
+  course's group mode and, outside separate groups, that they need it, with the course settings
+  linked for whoever may change them. A card is a link (`edit.php?courseid=&preset=`) that rebuilds
+  the form with the scenario's values as its initial data on top of the site defaults: nothing is
+  written until the method is saved, no scenario is stored, and the key rides in a hidden element so
+  a redisplay after a validation error keeps it. An unknown key is no scenario. Editing a saved
+  method shows no cards. One class, `\enrol_apply\local\preset`, holds the four.
+
 ### Changed
 
 - **The course report's facet counts read the rows once (2026112109, no upgrade step).** Every
@@ -16,6 +34,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   join), which put `enrol_apply_report_rows` at 318 ms p50 and 343 ms p95 on 10,000 applications
   (PostgreSQL 18, 38 statements) against AR-D16's 300 ms budget; the counts, their narrowing and
   their meaning are unchanged (`report_facets_test` chooses each option).
+- **The method's settings say what the course's group mode does, and who decides has a section of
+  its own** (settings hierarchy, stage S1; no upgrade step, no version bump). Groups opens with the
+  course's group mode, one sentence on who sees an application in it and, for whoever may change
+  it, a link to the course settings; the summary strip names the mode too. Groups keeps only the
+  group questions: the warning about an offered group another deciding method joins sits beside
+  the offer, and "Groups joined on approval" says that the chosen group, or the key's group, is
+  joined as well. A new section, "Who decides and who is notified", placed before "After
+  approval", holds "Who decides applications to this method?", every notice about deciders and
+  "Notify of new applications"; it replaces "Notifications" (`sectionnotify` and
+  `sectionnotify_help` are listed in `lang/en/deprecated.txt` and stay defined in both packs) and
+  also opens in a separate-groups course. Outside separate groups "Who decides" is shown hard
+  frozen with a note that it changes nothing, and a save keeps the stored answer whatever is
+  posted. The warning that a moderator could approve another follows "Role on approval" as it is
+  edited, hidden in the browser while the select holds a role that does not decide, instead of
+  appearing only after a save of a deciding role.
+- **"Notify of new applications" can tell only the deciders of the application's group**
+  (settings hierarchy, stage S2; no upgrade step, no version bump). A third choice,
+  `$@GROUP@$` in `customtext3` ("The deciders of the application's group", `notifygroupdeciders`),
+  tells of each new application, and each admission by key, only the course deciders narrowed by
+  separate groups to the application's group (its key's, or the chosen one), so a manager or an
+  editing teacher who sees every group is no longer told of every class's applications. Without
+  such a decider (no group, nobody narrowed decides it, a method decided only by those who see
+  every group, a course not in separate groups) it tells whom "everyone" would, so it narrows and
+  never silences. People picked by name can be combined with it (`$@GROUP@$,12,15`), each still
+  told only of what they may decide; "everyone" still swallows every other pick. A restore from
+  another site keeps the marker and drops the ids. The setting has one reader and writer,
+  `\enrol_apply\local\notifyrecipients`, and `get_notifycoursebased_users()` takes the
+  application's group as an optional second argument (0 by default, which changes nothing for any
+  other setting).
+- **Every help text of the method's settings is rewritten to one shape**: what the setting is, its
+  options as a list, when to use each one and an example. "Notify before enrolment expires" and
+  "Notification threshold" carry the plugin's own label and help (`expirynotify`,
+  `expirythreshold`) instead of core's, which describe neither of this method's two options.
 
 ## Unreleased (2026112108)
 
