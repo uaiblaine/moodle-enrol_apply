@@ -1353,6 +1353,27 @@ backup/                      group mappings, comments and the durable trail, see
   values and the tags are text. The tags' tones mirror `applications::TAG_TONES` by hand. Gates
   `QV1`-`QV3`; `tests/behat/queue_view.feature` drives the client.
 
+- **The method queue's grid view is a client of the headless queue, opt-in, and read only.**
+  `manage.php` renders `\enrol_apply\output\queue_view` (template `queue_view`) only where
+  `queue_view::wanted()` holds: the queue of one method (`id` > 0; the site-wide and mentee queues keep
+  the table, CQ-D3) and `view=grid` in the address. Today's table stays the default until the grid
+  can decide: stage 4 inverts the second condition to `view=table` there, in that one predicate. The
+  shell's props carry configuration and strings only (mount `queue` in `js/esm/src/views.tsx`); rows
+  and tiles come from `enrol_apply_queue_rows` and `enrol_apply_queue_summary`, and its noscript is
+  `manage_form()`, the table with its decision form. `$PAGE->url` names the grid; `$manageurl`, which
+  the form posts to and a decision redirects to, stays the table's. **Filters live in the address,
+  never in a preference** (CQ-D6): `status` (the scope), `search`, `group`, the identity tokens,
+  `appliedfrom`, `appliedto` are the names `manage.php` reads for the table, and `queue_view::initial()`
+  reads them from manage.php's own cleaning (`request_filters()`, so the group default applies); the
+  facets (`named`, `waited`, `appliedbefore`), `sort`, `dir`, `page` and `perpage` are the view's own.
+  `js/esm/src/queue/address.ts` writes them back with `replaceState` (the search, the first paint) or
+  `pushState` (everything else) and keeps the shell's "Table view" link in step; a released group
+  filter writes `group=all` where the group filter has a default, as the table's chip does. Only the
+  columns and widths are the reader's (`enrol_apply_queue_grid`), and a column change re-reads the rows
+  only after the write resolves. Cells documented as HTML are inserted as HTML; the name, the identity
+  values and the tags are text. The tags' tones mirror `applications::TAG_TONES` by hand. Gates
+  `QV1`-`QV3`; `tests/behat/queue_view.feature` drives the client.
+
 - **Both listings order by a unique key as a last resort, and the injection point is the only
   one that works.** Every column either table offers can tie — `applydate` is `ue.timecreated`,
   which `enrol_user()` writes as whole Unix seconds, so a cohort admitted by one script shares a
