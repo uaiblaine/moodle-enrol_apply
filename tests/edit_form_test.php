@@ -724,6 +724,24 @@ final class edit_form_test extends \advanced_testcase {
     }
 
     /**
+     * Outside separate groups the "changes nothing" note is an information alert.
+     *
+     * Changes that must make it fail: the note rendered as a warning.
+     *
+     * @return void
+     */
+    public function test_the_inert_note_is_information(): void {
+        global $DB;
+
+        $DB->set_field('course', 'groupmode', NOGROUPS, ['id' => $this->course->id]);
+        $html = $this->quickform()->getElement('decidersinert')->_text;
+
+        $this->assertStringContainsString('alert-info', $html);
+        $this->assertStringNotContainsString('alert-warning', $html);
+        $this->assertStringNotContainsString('alert-danger', $html);
+    }
+
+    /**
      * The notification list offers "the deciders of the application's group" right after "everyone".
      *
      * Changes that must make it fail: the option dropped from the list.

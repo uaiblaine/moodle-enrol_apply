@@ -26,6 +26,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **Three notes on the method's form are information, not warnings** (no upgrade step, no version
+  bump). "The group the applicant chose is joined as well", "The key's group is joined as well" and
+  the note that "Who decides" changes nothing outside separate groups state a fact and ask for
+  nothing, so they show as the blue information alert instead of the amber one. Every other notice
+  keeps its style. The template takes an optional `info` flag per item.
 - **The course report's facet counts read the rows once (2026112109, no upgrade step).** Every
   facet with no value of its own in force shares one WHERE, so its options are counted from one
   read of the filtered records (DISTINCT by record, every facet's value beside the id) tallied in
