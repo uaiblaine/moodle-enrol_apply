@@ -207,6 +207,38 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
     }
 
     /**
+     * The reader's grid on the approval queue is declared and exported as the user's preference,
+     * beside the report's and apart from it.
+     *
+     * Changes that must make it fail: the queue's preference not declared in get_metadata(), or not
+     * written by export_user_preferences().
+     *
+     * @return void
+     */
+    public function test_the_queue_preference_is_declared_and_exported(): void {
+        $names = [];
+        foreach (provider::get_metadata(new \core_privacy\local\metadata\collection('enrol_apply'))->get_collection() as $item) {
+            if ($item instanceof \core_privacy\local\metadata\types\user_preference) {
+                $names[] = $item->get_name();
+            }
+        }
+        $this->assertSame([\enrol_apply\local\reportpreference::NAME, \enrol_apply\local\queuepreference::NAME], $names);
+
+        $chooser = $this->getDataGenerator()->create_user();
+        $other = $this->getDataGenerator()->create_user();
+        \enrol_apply\local\queuepreference::write(['wait', 'comment'], ['comment' => 300], (int) $chooser->id);
+
+        provider::export_user_preferences((int) $other->id);
+        $this->assertSame([], (array) writer::with_context(\context_system::instance())->get_user_preferences('enrol_apply'));
+
+        provider::export_user_preferences((int) $chooser->id);
+        $exported = writer::with_context(\context_system::instance())->get_user_preferences('enrol_apply');
+        $name = \enrol_apply\local\queuepreference::NAME;
+        $this->assertSame('{"columns":["wait","comment"],"widths":{"comment":300}}', $exported->$name->value);
+        $this->assertObjectNotHasProperty(\enrol_apply\local\reportpreference::NAME, $exported);
+    }
+
+    /**
      * An applicant's course context is reported, and nothing else is.
      *
      * @return void

@@ -62,7 +62,7 @@ class queuefilter {
     public const RESERVED = [
         'id', 'search', 'status', 'page', 'perpage', 'tsort', 'tdir', 'treset',
         'tifirst', 'tilast', 'thide', 'tshow', 'download', 'userenrol', 'formaction',
-        'userenrolments', 'sesskey', 'confirmed', 'appliedfrom', 'appliedto',
+        'userenrolments', 'sesskey', 'confirmed', 'appliedfrom', 'appliedto', 'named', 'waited', 'appliedbefore',
     ];
 
     /** @var string Prefix distinguishing a custom profile field's token from a standard column. */

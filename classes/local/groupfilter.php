@@ -205,7 +205,7 @@ final class groupfilter {
      * @param stdClass $listing The scope, from {@see queue::listing_scope()}.
      * @return array Group ids, ascending.
      */
-    private static function own_groups(stdClass $listing): array {
+    public static function own_groups(stdClass $listing): array {
         global $USER;
 
         return groupscope::member_groups((int) $listing->instance->courseid, (int) $USER->id);

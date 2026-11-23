@@ -3,4 +3,5 @@
 # approved participant later suspended from the participants page carries APPROVED on the record
 # and SUSPENDED on the enrolment. That row answers to neither filter option and vanishes from a
 # filtered queue while sitting plainly in the unfiltered one.
-s{            \$wheres\[\] = 'ue\.status = :statusfilter';}{            \$wheres[] = 's.status = :statusfilter';}s;
+# Re-pointed when the stage-1 headless queue split the listing's narrowing into one entry per filter.
+s{\['ue\.status = :statusfilter', }{['s.status = :statusfilter', }s;

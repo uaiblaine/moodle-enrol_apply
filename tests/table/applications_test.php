@@ -1843,4 +1843,51 @@ final class applications_test extends \advanced_testcase {
         $this->assertStringContainsString('<span class="enrol_apply-applicantname">' . $escaped . '</span>', $cell);
         $this->assertStringNotContainsString('<Lab>', $cell);
     }
+
+    /**
+     * A user enrolment carrying two records is one row of the queue, and the row reads the newest.
+     *
+     * Two records for one enrolment are rare (a restore, a hand edit, an older application the
+     * same enrolment carried), and every other reader of the record (the scope, the group column,
+     * application_group()) already took the newest. A join without that restriction lists the
+     * application twice: the count says two, and the page keyed on ue.id keeps one of them, with
+     * core's debugging() about a first column that is not unique.
+     *
+     * Changes that must make it fail: the record joined without its "newest" restriction.
+     *
+     * @return void
+     */
+    public function test_an_enrolment_with_two_records_is_one_row_of_the_newest(): void {
+        global $DB;
+
+        $this->setAdminUser();
+        $applicant = $this->applicant(null, $this->snapshot('Oldtown'));
+        $ueid = (int) $DB->get_field('user_enrolments', 'id', ['userid' => $applicant->id], MUST_EXIST);
+        $newest = (int) $DB->insert_record('enrol_apply_submission', (object) [
+            'courseid' => $this->course->id,
+            'userid' => $applicant->id,
+            'enrolid' => (int) $this->instance->id,
+            'userenrolmentid' => $ueid,
+            'comment' => 'The newer words',
+            'status' => submission::STATUS_PENDING,
+            'outcomemessage' => '',
+            'timecreated' => time() + 10,
+            'timedecided' => 0,
+            'decidedby' => 0,
+        ]);
+        submission::write_answers($newest, submission::parse_envelope($this->snapshot('Newtown')));
+
+        $table = applications::for_scope((int) $this->instance->id);
+        ob_start();
+        $table->out(50, false);
+        $rendered = ob_get_clean();
+
+        $this->assertSame(1, (int) $table->totalrows);
+        $this->assertSame([$ueid], array_map(static fn($row): int => (int) $row->userenrolmentid, array_values($table->rawdata)));
+        $row = reset($table->rawdata);
+        $this->assertSame($newest, (int) $row->submissionid);
+        $this->assertSame('The newer words', $row->applycomment);
+        $this->assertStringContainsString('Newtown', $rendered);
+        $this->assertStringNotContainsString('Oldtown', $rendered);
+    }
 }

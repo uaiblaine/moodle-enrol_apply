@@ -219,4 +219,51 @@ final class capacity {
 
         return self::places_taken($instance) >= $places;
     }
+
+    /**
+     * What the queue's capacity tiles show: the two numbers held against their limits, and whether
+     * the method accepts applications now.
+     *
+     * The one definition of "open" the tiles read, the queue page's
+     * (renderer::queue_capacity_context()) and the headless summary's
+     * (\enrol_apply\local\queueengine::summary()). It is not allow_apply(), whose cohort clause asks
+     * whether the CURRENT user may apply, so a manager outside a restricted cohort would be told the
+     * method is closed: it is allow_apply()'s instance-level clauses (status, customint6, the
+     * enrolment dates) plus applications_closed(), which every caller of allow_apply() checks
+     * beside it. A new instance-level clause in allow_apply() belongs here as well.
+     *
+     * Each count is taken only where its limit is set, as the tiles show it only then.
+     * applications_closed() is inlined to reuse the count of applicants rather than run the same
+     * COUNT again; applicant_limit() clamps a negative to 0, so `$limit > 0` is that method's
+     * `$limit !== 0`. Keep the two in step.
+     *
+     * @param stdClass $instance Course enrol instance.
+     * @param int|null $now The time to judge the enrolment window at, now when null.
+     * @return stdClass places, taken (0 without places), limit, held (0 without a limit), open,
+     *     startdate and enddate (0 for none).
+     */
+    public static function state(stdClass $instance, ?int $now = null): stdClass {
+        $now = $now ?? time();
+        $places = self::places($instance);
+        $limit = self::applicant_limit($instance);
+        $held = $limit > 0 ? self::applicants($instance) : 0;
+        $startdate = (int) ($instance->enrolstartdate ?? 0);
+        $enddate = (int) ($instance->enrolenddate ?? 0);
+
+        $open = $instance->status == ENROL_INSTANCE_ENABLED
+            && !empty($instance->customint6)
+            && !($startdate > 0 && $startdate > $now)
+            && !($enddate > 0 && $enddate < $now)
+            && !($limit > 0 && $held >= $limit);
+
+        return (object) [
+            'places' => $places,
+            'taken' => $places > 0 ? self::places_taken($instance) : 0,
+            'limit' => $limit,
+            'held' => $held,
+            'open' => $open,
+            'startdate' => $startdate,
+            'enddate' => $enddate,
+        ];
+    }
 }
