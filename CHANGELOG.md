@@ -4,9 +4,27 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased (2026112306)
+## Unreleased (2026112307)
 
 ### Added
+
+- **The site-wide queue is a grid, and decides across enrolment methods** (2026112307, no upgrade
+  step). `manage.php` with no id opens the grid view for a holder of
+  `enrol/apply:manageapplications` or `enrol/apply:viewapplications` at the site, as the queue of one
+  method does; `view=table` keeps today's table, which links "Grid view", and a mentor's queue keeps
+  the table. Its tiles are what awaits (the oldest wait, how many waited over a week), what is
+  deferred and its share, the courses and methods holding an application, and the methods at their
+  limit. A "Course · method" column follows the applicant: the course's name linking to the course,
+  the method's name under it linking to its queue, with the table's "Grants a deciding role" and a
+  "Full" label; it sorts by course. Filters are the course and the category (searched, with how many
+  the list left out), the enrolment method once a course with two is chosen, waited more than, and
+  with or without a group, all kept in the address. A selection that spans methods says so on the
+  dock, and its sheet has a section per method (the course, the method, who, a message for them and
+  a link to that method's queue, where groups and a role are chosen) and one note for all; the
+  decision is the table's form posted to `manage.php`, with one `outcomemessages[<method>]` per
+  method and no group or role chooser, so every per-row check applies unchanged. A site-wide viewer
+  gets no selection and no dock. Mutation gates `QS1`-`QS8`; `QV1` and `QV2` retired into `QS2`,
+  `QS3`.
 
 - **The queues that span courses can be read without their page** (2026112306, no upgrade step;
   nothing a browser shows changes). The queue's three web services take `enrolid` 0 for the queue

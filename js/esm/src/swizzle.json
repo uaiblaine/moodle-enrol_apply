@@ -43,6 +43,10 @@
     "eject": "prohibited",
     "wrap": "prohibited"
   },
+  "queue/SheetMethods": {
+    "eject": "prohibited",
+    "wrap": "prohibited"
+  },
   "queue/Tiles": {
     "eject": "prohibited",
     "wrap": "prohibited"

@@ -5,9 +5,9 @@ import r from"./queue/QueueView";import o from"./report/ReportView";import{jsx a
  * step builds one entry into one file (js/esm/bundle.json), so every view of the plugin is reached
  * through this one component: each template names @moodle/lms/enrol_apply/bundle, and its props name
  * the view in `mount`. A mount that names none is the course report's, whose props (report_view)
- * predate the key; `queue` is the approval queue of one method (queue_view, mounted by manage.php with
- * view=grid). Another view is one more branch here and a template whose props name it; the views share
- * the data report's parts, so the bundle carries them once.
+ * predate the key; `queue` is the approval queue, of one method or site-wide (queue_view, mounted by
+ * manage.php unless view=table asks for the table). Another view is one more branch here and a template
+ * whose props name it; the views share the data report's parts, so the bundle carries them once.
  *
  * @module     enrol_apply/views
  * @copyright  2026 Anderson Blaine

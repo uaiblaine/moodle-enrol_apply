@@ -5,7 +5,9 @@ import { jsxDEV } from "react/jsx-dev-runtime";
  * The queue's filter bar: the shared bar (datareport/Bar) with the queue's vocabulary.
  *
  * The scope is All, Pending or Deferred. Filters draws the facets the rows answer counts (group, how
- * the group was named, waited more than, applied before) and the identity fields the reader may filter
+ * the group was named, waited more than, applied before; on the site-wide queue the course and the
+ * category, each searched and capped with a note of what was left out, the method once a course with two
+ * is chosen, and with or without a group) and the identity fields the reader may filter
  * by from a list, which the service does not count; the text fields and the dates are set in the
  * table view, which the panel's note links, and show here as chips that remove them. Columns starts
  * with the three sets (CQ-D7). View is Automatic, Table or Cards, and the table view. No Download
@@ -16,7 +18,7 @@ import { jsxDEV } from "react/jsx-dev-runtime";
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 import { Bar as DataBar } from "../datareport/Bar";
-import { fillObject } from "../datareport/str";
+import { fill, fillObject, num } from "../datareport/str";
 const ANY_GROUP = "all";
 const GROUP = "group";
 const VIEWS = ["auto", "table", "cards"];
@@ -32,15 +34,32 @@ const presetLabel = /* @__PURE__ */ __name((labels, name) => {
       return name;
   }
 }, "presetLabel");
+const finder = /* @__PURE__ */ __name((labels, name) => {
+  switch (name) {
+    case "course":
+      return { label: labels.searchcourses, nomatch: labels.nocoursematch };
+    case "category":
+      return { label: labels.searchcategories, nomatch: labels.nocategorymatch };
+    default:
+      return { label: labels.searchgroups, nomatch: labels.nogroupmatch };
+  }
+}, "finder");
+const omittedNote = /* @__PURE__ */ __name((labels, facet) => {
+  if (facet.omitted <= 0) {
+    return "";
+  }
+  return fill(facet.name === "category" ? labels.omittedcategories : labels.omittedcourses, num(facet.omitted));
+}, "omittedNote");
 const facets = /* @__PURE__ */ __name((labels, rows) => {
-  const find = { label: labels.searchgroups, nomatch: labels.nogroupmatch };
   const counted = rows.facets.map((facet) => ({
     name: facet.name,
     title: facet.title,
     options: facet.options,
     groupings: [],
-    find
+    find: finder(labels, facet.name),
+    note: omittedNote(labels, facet)
   }));
+  const find = finder(labels, "");
   const listed = rows.fieldfilters.filter((field) => field.control === "select").map((field) => ({
     name: field.name,
     title: field.title,
@@ -97,18 +116,18 @@ const Bar = /* @__PURE__ */ __name((props) => {
         " ",
         /* @__PURE__ */ jsxDEV("a", { href: props.tableurl, children: labels.morefilters }, void 0, false, {
           fileName: "public/enrol/apply/js/esm/src/queue/Bar.tsx",
-          lineNumber: 185,
+          lineNumber: 222,
           columnNumber: 21
         })
       ] }, void 0, true, {
         fileName: "public/enrol/apply/js/esm/src/queue/Bar.tsx",
-        lineNumber: 183,
+        lineNumber: 220,
         columnNumber: 17
       }),
       chips,
       aside: props.reporturl !== "" ? /* @__PURE__ */ jsxDEV("a", { className: "enrol_apply-qview-tolink", href: props.reporturl, children: labels.openreport }, void 0, false, {
         fileName: "public/enrol/apply/js/esm/src/queue/Bar.tsx",
-        lineNumber: 190,
+        lineNumber: 227,
         columnNumber: 17
       }) : null,
       columns: props.columns,
@@ -143,7 +162,7 @@ const Bar = /* @__PURE__ */ __name((props) => {
     false,
     {
       fileName: "public/enrol/apply/js/esm/src/queue/Bar.tsx",
-      lineNumber: 170,
+      lineNumber: 207,
       columnNumber: 9
     }
   );

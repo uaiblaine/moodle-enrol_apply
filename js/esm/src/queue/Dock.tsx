@@ -20,8 +20,9 @@
  * in the same order and the same styles, Cancel applications, Defer, Confirm. Each opens the decision
  * sheet; nothing posts from here. The count is worded "on this page", because that is what a selection
  * is: it is cleared
- * whenever the page, the scope, a filter, the search or the sort changes. Drawn only while something is
- * selected; the view keeps it out otherwise.
+ * whenever the page, the scope, a filter, the search or the sort changes. On the queues that span
+ * methods it adds how many methods the selection spans, when more than one, because the sheet then asks a
+ * message per method. Drawn only while something is selected; the view keeps it out otherwise.
  *
  * @module     enrol_apply/queue/Dock
  * @copyright  2026 Anderson Blaine
@@ -35,6 +36,8 @@ import type {Action, Decision} from './types';
 type DockProps = {
     labels: Record<string, string>,
     count: number,
+    /** How many enrolment methods the selection spans; 1 on a method's queue. */
+    methods: number,
     actions: Action[],
     /** Open the sheet for a decision; the button pressed gets the focus back when the sheet closes. */
     onDecide: (decision: Decision, button: HTMLButtonElement) => void,
@@ -46,9 +49,14 @@ type DockProps = {
  * @param {object} props See DockProps.
  * @returns {object} The dock.
  */
-export const Dock = ({labels, count, actions, onDecide}: DockProps): ReactElement => (
+export const Dock = ({labels, count, methods, actions, onDecide}: DockProps): ReactElement => (
     <div className="enrol_apply-qview-dock" role="region" aria-label={labels.dock} data-region="enrol_apply-dock">
-        <span className="enrol_apply-qview-dockcount" aria-live="polite">{fill(labels.selected, num(count))}</span>
+        <span className="enrol_apply-qview-dockcount" aria-live="polite">
+            {fill(labels.selected, num(count))}
+            {methods > 1 ? (
+                <small className="enrol_apply-qview-dockmethods">{' ' + fill(labels.dockmethods, num(methods))}</small>
+            ) : null}
+        </span>
         <div className="enrol_apply-qview-dockactions">
             {actions.map((action) => (
                 <button

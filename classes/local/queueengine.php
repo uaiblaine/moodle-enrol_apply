@@ -493,7 +493,8 @@ class queueengine {
     protected static function wide_catalogue(applications $table): array {
         $catalogue = [
             'applicant' => self::entry(get_string('reportapplicant', 'enrol_apply'), true, true, true),
-            'course' => self::entry(get_string('course'), true, true),
+            // One column for both, under one heading (SQ-D2): the client draws it from the row's course and method.
+            'course' => self::entry(get_string('queuecoursemethod', 'enrol_apply'), true, true),
             'wait' => self::entry(get_string('waittime', 'enrol_apply'), true, true),
         ];
         if ($table->has_group_column()) {

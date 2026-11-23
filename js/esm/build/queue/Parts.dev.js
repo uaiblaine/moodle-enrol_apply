@@ -12,10 +12,10 @@ import { Fragment, jsxDEV } from "react/jsx-dev-runtime";
  */
 import { Cards as DataCards } from "../datareport/Cards";
 import { Grid as DataGrid } from "../datareport/Grid";
-import { ApplicantCell, CellLine, SIZING, cellHtml } from "./cells";
+import { ApplicantCell, CellLine, CourseMethod, SIZING, cellHtml } from "./cells";
 import { Dock } from "./Dock";
 import { Sheet } from "./Sheet";
-const CARD_FIXED = ["applicant", "wait", "group"];
+const CARD_FIXED = ["applicant", "course", "wait", "group"];
 const cardFields = /* @__PURE__ */ __name((shown, row) => shown.filter((column) => !CARD_FIXED.includes(column.key) && cellHtml(row, column.key).trim() !== "").map((column) => ({ key: column.key, title: column.title, content: /* @__PURE__ */ jsxDEV(CellLine, { html: cellHtml(row, column.key) }, void 0, false, {
   fileName: "public/enrol/apply/js/esm/src/queue/Parts.tsx",
   lineNumber: 50,
@@ -37,9 +37,63 @@ const Notices = /* @__PURE__ */ __name(({ labels, narrowed, viewonly }) => /* @_
   lineNumber: 65,
   columnNumber: 5
 }), "Notices");
+const GridCell = /* @__PURE__ */ __name(({ labels, row, column }) => column === "course" ? /* @__PURE__ */ jsxDEV(CourseMethod, { labels, row }, void 0, false, {
+  fileName: "public/enrol/apply/js/esm/src/queue/Parts.tsx",
+  lineNumber: 94,
+  columnNumber: 27
+}) : /* @__PURE__ */ jsxDEV(CellLine, { html: cellHtml(row, column) }, void 0, false, {
+  fileName: "public/enrol/apply/js/esm/src/queue/Parts.tsx",
+  lineNumber: 94,
+  columnNumber: 72
+}), "GridCell");
+const CardLines = /* @__PURE__ */ __name(({ labels, row, shown }) => {
+  const has = /* @__PURE__ */ __name((key) => shown.some((column) => column.key === key), "has");
+  return /* @__PURE__ */ jsxDEV(Fragment, { children: [
+    has("course") ? /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-card-line", children: /* @__PURE__ */ jsxDEV(CourseMethod, { labels, row }, void 0, false, {
+      fileName: "public/enrol/apply/js/esm/src/queue/Parts.tsx",
+      lineNumber: 116,
+      columnNumber: 62
+    }) }, void 0, false, {
+      fileName: "public/enrol/apply/js/esm/src/queue/Parts.tsx",
+      lineNumber: 116,
+      columnNumber: 17
+    }) : null,
+    has("wait") ? /* @__PURE__ */ jsxDEV(
+      "div",
+      {
+        className: "enrol_apply-rview-card-line enrol_apply-rview-card-line--open",
+        dangerouslySetInnerHTML: { __html: cellHtml(row, "wait") }
+      },
+      void 0,
+      false,
+      {
+        fileName: "public/enrol/apply/js/esm/src/queue/Parts.tsx",
+        lineNumber: 119,
+        columnNumber: 17
+      }
+    ) : null,
+    has("group") && cellHtml(row, "group") !== "" ? /* @__PURE__ */ jsxDEV(
+      "div",
+      {
+        className: "enrol_apply-rview-card-line enrol_apply-rview-card-line--muted",
+        dangerouslySetInnerHTML: { __html: cellHtml(row, "group") }
+      },
+      void 0,
+      false,
+      {
+        fileName: "public/enrol/apply/js/esm/src/queue/Parts.tsx",
+        lineNumber: 125,
+        columnNumber: 17
+      }
+    ) : null
+  ] }, void 0, true, {
+    fileName: "public/enrol/apply/js/esm/src/queue/Parts.tsx",
+    lineNumber: 114,
+    columnNumber: 9
+  });
+}, "CardLines");
 const RowsBody = /* @__PURE__ */ __name((props) => {
   const { labels, list, shown, cards, narrow, selection } = props;
-  const has = /* @__PURE__ */ __name((key) => shown.some((column) => column.key === key), "has");
   if (cards) {
     return /* @__PURE__ */ jsxDEV(
       DataCards,
@@ -51,42 +105,13 @@ const RowsBody = /* @__PURE__ */ __name((props) => {
         renderCard: (row) => ({
           head: /* @__PURE__ */ jsxDEV(ApplicantCell, { labels, row }, void 0, false, {
             fileName: "public/enrol/apply/js/esm/src/queue/Parts.tsx",
-            lineNumber: 110,
+            lineNumber: 151,
             columnNumber: 27
           }),
-          lines: /* @__PURE__ */ jsxDEV(Fragment, { children: [
-            has("wait") ? /* @__PURE__ */ jsxDEV(
-              "div",
-              {
-                className: "enrol_apply-rview-card-line enrol_apply-rview-card-line--open",
-                dangerouslySetInnerHTML: { __html: cellHtml(row, "wait") }
-              },
-              void 0,
-              false,
-              {
-                fileName: "public/enrol/apply/js/esm/src/queue/Parts.tsx",
-                lineNumber: 114,
-                columnNumber: 33
-              }
-            ) : null,
-            has("group") && cellHtml(row, "group") !== "" ? /* @__PURE__ */ jsxDEV(
-              "div",
-              {
-                className: "enrol_apply-rview-card-line enrol_apply-rview-card-line--muted",
-                dangerouslySetInnerHTML: { __html: cellHtml(row, "group") }
-              },
-              void 0,
-              false,
-              {
-                fileName: "public/enrol/apply/js/esm/src/queue/Parts.tsx",
-                lineNumber: 120,
-                columnNumber: 33
-              }
-            ) : null
-          ] }, void 0, true, {
+          lines: /* @__PURE__ */ jsxDEV(CardLines, { labels, row, shown }, void 0, false, {
             fileName: "public/enrol/apply/js/esm/src/queue/Parts.tsx",
-            lineNumber: 112,
-            columnNumber: 25
+            lineNumber: 152,
+            columnNumber: 28
           }),
           fields: cardFields(shown, row)
         })
@@ -95,7 +120,7 @@ const RowsBody = /* @__PURE__ */ __name((props) => {
       false,
       {
         fileName: "public/enrol/apply/js/esm/src/queue/Parts.tsx",
-        lineNumber: 104,
+        lineNumber: 145,
         columnNumber: 13
       }
     );
@@ -114,12 +139,12 @@ const RowsBody = /* @__PURE__ */ __name((props) => {
       selection,
       renderLead: (row) => /* @__PURE__ */ jsxDEV(ApplicantCell, { labels, row }, void 0, false, {
         fileName: "public/enrol/apply/js/esm/src/queue/Parts.tsx",
-        lineNumber: 144,
+        lineNumber: 170,
         columnNumber: 34
       }),
-      renderCell: (row, column) => /* @__PURE__ */ jsxDEV(CellLine, { html: cellHtml(row, column.key) }, void 0, false, {
+      renderCell: (row, column) => /* @__PURE__ */ jsxDEV(GridCell, { labels, row, column: column.key }, void 0, false, {
         fileName: "public/enrol/apply/js/esm/src/queue/Parts.tsx",
-        lineNumber: 145,
+        lineNumber: 171,
         columnNumber: 42
       }),
       onSort: props.onSort,
@@ -130,19 +155,31 @@ const RowsBody = /* @__PURE__ */ __name((props) => {
     false,
     {
       fileName: "public/enrol/apply/js/esm/src/queue/Parts.tsx",
-      lineNumber: 134,
+      lineNumber: 160,
       columnNumber: 9
     }
   );
 }, "RowsBody");
-const dockFor = /* @__PURE__ */ __name((labels, offer, decides, count, onDecide) => offer !== null && decides && count > 0 ? /* @__PURE__ */ jsxDEV(Dock, { labels, count, actions: offer.actions, onDecide }, void 0, false, {
-  fileName: "public/enrol/apply/js/esm/src/queue/Parts.tsx",
-  lineNumber: 170,
-  columnNumber: 7
-}) : null, "dockFor");
+const dockFor = /* @__PURE__ */ __name((labels, offer, decides, chosen, onDecide) => offer !== null && decides && chosen.length > 0 ? /* @__PURE__ */ jsxDEV(
+  Dock,
+  {
+    labels,
+    count: chosen.length,
+    methods: new Set(chosen.map((row) => row.method.id)).size,
+    actions: offer.actions,
+    onDecide
+  },
+  void 0,
+  false,
+  {
+    fileName: "public/enrol/apply/js/esm/src/queue/Parts.tsx",
+    lineNumber: 197,
+    columnNumber: 9
+  }
+) : null, "dockFor");
 const sheetFor = /* @__PURE__ */ __name((labels, offer, decision, chosen, onClose, onCommit) => offer !== null && decision !== null && chosen.length > 0 ? /* @__PURE__ */ jsxDEV(Sheet, { labels, decision, rows: chosen, offer, onClose, onCommit }, void 0, false, {
   fileName: "public/enrol/apply/js/esm/src/queue/Parts.tsx",
-  lineNumber: 192,
+  lineNumber: 226,
   columnNumber: 7
 }) : null, "sheetFor");
 export {

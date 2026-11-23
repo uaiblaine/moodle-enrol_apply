@@ -14,11 +14,19 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * The approval queue of one method as a data report: the method queue's page (stages 3 and 4 of
- * docs/design/confirm-queue-as-report-plan.md, CQ-D5).
+ * The approval queue as a data report: the method queue's page (stages 3 and 4 of
+ * docs/design/confirm-queue-as-report-plan.md, CQ-D5) and the site-wide queue's (stage W3 of
+ * docs/design/site-queue-as-report-plan.md, SQ-D12).
  *
- * manage.php?id=<method> renders the shell (enrol_apply\output\queue_view) with configuration and
- * strings, unless view=table asks for today's table; the rows and the tiles come from the plugin's web
+ * One view for both, branching on the listing's kind (the props for the first paint, the rows answer
+ * after): the site-wide queue draws its own tiles (SQ-D7), a "Course · method" column (SQ-D2), the course,
+ * category, method and grouped facets the service returns (choosing another course releases the method),
+ * and a decision sheet that splits a selection spanning methods by method (SQ-D10). Nothing of the
+ * "By course" view yet (stage W4).
+ *
+ * manage.php?id=<method>, and manage.php for a site-wide reader, render the shell
+ * (enrol_apply\output\queue_view) with configuration and strings, unless view=table asks for today's
+ * table; the rows and the tiles come from the plugin's web
  * services, which read the queue's own table (classes/local/queueengine.php), so access, the
  * separate-groups narrowing, the masking of the answers and the filters are the table page's. Two
  * regions load on their own:
@@ -65,7 +73,7 @@ import {getRows, getSummary, setPreference} from './repository';
 import type {SheetValues} from './Sheet';
 import {Tiles} from './Tiles';
 import type {
-    Column, Decision, Preference, Preset, Query, RowsAnswer, Scope, SummaryAnswer, ViewMode, ViewProps,
+    Column, Decision, Kind, Preference, Preset, Query, RowsAnswer, Scope, SummaryAnswer, ViewMode, ViewProps,
 } from './types';
 
 /** The wait before the search is sent, after the last key. */
@@ -77,8 +85,18 @@ const WIDTH_DELAY = 500;
 /** The browser key the reader's view choice is remembered under: a convenience of this browser alone. */
 const VIEW_KEY = 'enrol_apply_queue_view';
 
-/** The columns the first skeleton draws, before the server has said which it shows. */
-const SKELETON_COLUMNS = ['applicant', 'wait', 'group', 'comment'];
+/** The columns the first skeleton draws, by the listing's kind, before the server has said which it shows. */
+const SKELETON_COLUMNS: Record<Kind, string[]> = {
+    method: ['applicant', 'wait', 'group', 'comment'],
+    site: ['applicant', 'course', 'wait', 'details'],
+    mentees: ['applicant', 'course', 'wait', 'comment'],
+};
+
+/** The method filter's name: it narrows within the course filter's course, so another course releases it. */
+const METHOD = 'method';
+
+/** The course filter's name. */
+const COURSE = 'course';
 
 /**
  * Whether a query narrows the queue at all: a scope, a filter (every group excepted) or a search.
@@ -329,7 +347,8 @@ const QueueView = (props: ViewProps): ReactElement => {
     /**
      * Set one filter, or release it with ''. A released group filter where the group filter has a
      * default reads "every group" explicitly, as the table page's chip writes it, so the default does not
-     * come back on the next visit.
+     * come back on the next visit. Another course, or none, releases the method filter, which only ever
+     * offers the chosen course's methods.
      *
      * @param {string} name The filter's name, as the address names it.
      * @param {string} value Its value, or ''.
@@ -343,6 +362,9 @@ const QueueView = (props: ViewProps): ReactElement => {
             filters[GROUP] = ANY_GROUP;
         } else {
             delete filters[name];
+        }
+        if (name === COURSE) {
+            delete filters[METHOD];
         }
         run({filters, page: 0}, true);
     };
@@ -553,7 +575,7 @@ const QueueView = (props: ViewProps): ReactElement => {
             onWidthCommit={() => flushref.current()}
         />
     );
-    const skeleton: Column[] = SKELETON_COLUMNS.map((key) => ({
+    const skeleton: Column[] = SKELETON_COLUMNS[config.kind].map((key) => ({
         key,
         title: key === 'applicant' ? labels.applicant : '',
         sortable: false,
@@ -564,7 +586,7 @@ const QueueView = (props: ViewProps): ReactElement => {
 
     return (
         <div className="enrol_apply-rview-root" ref={root} data-region="enrol_apply-queueview">
-            <Tiles labels={labels} summary={summary} error={summaryerror} onRetry={loadSummary} />
+            <Tiles labels={labels} kind={config.kind} summary={summary} error={summaryerror} onRetry={loadSummary} />
             {derived.notingroup ? <p className="enrol_apply-rview-narrowed">{labels.notingroup}</p> : (
                 <>
                     <Notices labels={labels} narrowed={derived.narrowed} viewonly={derived.viewonly} />
@@ -615,7 +637,7 @@ const QueueView = (props: ViewProps): ReactElement => {
                         cards={cards}
                         narrow={narrow}
                         skeleton={{columns: skeleton, lead: 'applicant', widths, sizing: SIZING}}
-                        dock={dockFor(labels, offer, decides, chosen.length, onDecide)}
+                        dock={dockFor(labels, offer, decides, chosen, onDecide)}
                         onRetry={() => loadRows(query.current)}
                     >
                         {body}

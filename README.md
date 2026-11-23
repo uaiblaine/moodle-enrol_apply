@@ -94,10 +94,27 @@ the method gives). Its button takes the decision, and the page comes back with w
 The selection belongs to the page on screen: another page, scope, filter, search or sort clears it.
 A reader who may only view applications sees no boxes and no bar.
 
-**Table view** (`manage.php?id=<method>&view=table`, the link above the grid) shows the same queue
-as a table whose decisions sit in a bar at the foot of the page; a browser without JavaScript gets
-that table on the queue page itself, and the site-wide queue and the queue of a mentor's mentees are
-always tables. Decisions taken there are the same decisions, with the same checks.
+The **site-wide queue** (`manage.php` with no id, for a holder of `enrol/apply:manageapplications`
+or `enrol/apply:viewapplications` at the site) is the same grid over every course. Its tiles give
+what awaits a decision (the oldest wait, how many have waited over a week), what is deferred and its
+share of what awaits, the courses and enrolment methods holding an application, and the methods at
+their limit (every place taken, or no more applications accepted). A **Course · method** column
+follows the applicant: the course, linking to it, and the method under it, linking to that method's
+queue, with *Grants a deciding role* and *Full* where they apply; it sorts by course. The answers are
+one *Details submitted* column, masked in each row's own course. Filters are the course and the
+category (searched; a long list says how many it left out, and the search above the grid finds a
+course by its name), the enrolment method once a course with two is chosen, how long the application
+has waited, and with or without a group (to a reader who may see hidden groups). A selection may span
+several methods: the bar under the rows says so, and the sheet asks one message per method, with the
+method's applicants, a *Full* warning where it applies and a link to the method's own queue, plus one
+note for all. Each approval uses its own method's role and groups: choosing them happens on the
+method's queue.
+
+**Table view** (`manage.php?id=<method>&view=table`, or `manage.php?view=table` for the site-wide
+queue, the link above the grid) shows the same queue as a table whose decisions sit in a bar at the
+foot of the page, with a **Grid view** link back; a browser without JavaScript gets that table on the
+queue page itself, and the queue of a mentor's mentees is always a table for now. Decisions taken
+there are the same decisions, with the same checks.
 
 ![Reviewing one application whose group key found no seat: the status and key strip, the rules to observe with the full key group flagged over the limit on confirming, the comment and the submitted details, the On confirming card with its sentence and the group cards with their occupancy, the applicant's card, and the three decisions in the bar at the foot](docs/screenshots/review.png)
 

@@ -63,6 +63,8 @@ require_login();
 $manageurlparams = [];
 $instance = null;
 $afterdecisionurl = null;
+// The listing scope, on the listing path only: the review page derives its own from the application.
+$listing = null;
 
 if ($userenrol) {
     /* Scope: one application, reviewed on its own. Everything is derived from the user
@@ -160,15 +162,19 @@ if (!$userenrol) {
 
 $manageurl = new moodle_url('/enrol/apply/manage.php', $manageurlparams);
 
-/* The method queue's page is its grid view (CQ-D5); view=table asks for today's table, and the
-   site-wide and mentee queues keep the table (CQ-D3). queue_view::wanted() is the one rule.
+/* The grid view is the page of the method queue (CQ-D5) and of the site-wide queue (W3, SQ-D12); view=table
+   asks for today's table, and the mentee queue keeps the table until stage W5. queue_view::wanted() is the
+   one rule, asked of the listing scope resolved above, never of the request.
 
-   $listingurl is where this listing lives. For the grid it is $manageurl, which the decision form in
-   the view's noscript posts to; a decision from the grid lands on queue_view::return_url() instead,
-   the address it was posted from, cleaned. For the method queue's table it carries view=table, so
-   the table's form posts there and its decisions land back on the table. */
-$gridview = !$userenrol && \enrol_apply\output\queue_view::wanted((int) $id, optional_param('view', '', PARAM_ALPHA));
-$listingurl = $userenrol || $gridview || !$id ? $manageurl : \enrol_apply\output\queue_view::url($manageurl, false);
+   $listingurl is where this listing lives. For the grid it is $manageurl, which the decision form in the
+   view's noscript posts to; a decision from the grid lands on queue_view::return_url() instead, the address
+   it was posted from, cleaned. For the table of a listing that has a grid it carries view=table, so the
+   table's form and its filter form post there and its decisions land back on the table; the mentee queue's
+   table, which has no grid, keeps the plain address. */
+$viewparam = optional_param('view', '', PARAM_ALPHA);
+$gridview = !$userenrol && \enrol_apply\output\queue_view::wanted($listing, $viewparam);
+$tableofgrid = !$userenrol && !$gridview && \enrol_apply\output\queue_view::wanted($listing, '');
+$listingurl = $tableofgrid ? \enrol_apply\output\queue_view::url($manageurl, false) : $manageurl;
 
 $PAGE->set_context($context);
 $PAGE->set_url($listingurl);
@@ -355,7 +361,7 @@ if ($gridview) {
         $instance,
         $table,
         $manageurl,
-        \enrol_apply\output\queue_view::initial($search, $status, $queuefilters)
+        \enrol_apply\output\queue_view::initial($search, $status, $queuefilters, !$id)
     ));
     exit;
 }

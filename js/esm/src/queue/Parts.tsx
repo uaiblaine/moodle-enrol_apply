@@ -28,14 +28,14 @@ import {Cards as DataCards} from '../datareport/Cards';
 import type {CardField} from '../datareport/Cards';
 import {Grid as DataGrid} from '../datareport/Grid';
 import type {Selection} from '../datareport/types';
-import {ApplicantCell, CellLine, SIZING, cellHtml} from './cells';
+import {ApplicantCell, CellLine, CourseMethod, SIZING, cellHtml} from './cells';
 import {Dock} from './Dock';
 import {Sheet} from './Sheet';
 import type {SheetValues} from './Sheet';
 import type {Column, Decision, DecisionProps, Row} from './types';
 
 /** The columns a card draws on its fixed lines; every other active column goes in its list. */
-const CARD_FIXED = ['applicant', 'wait', 'group'];
+const CARD_FIXED = ['applicant', 'course', 'wait', 'group'];
 
 /**
  * A card's list: the chosen columns its fixed lines do not draw, a field with nothing in it left out (a
@@ -84,13 +84,24 @@ type BodyProps = {
 };
 
 /**
- * The rows as the reader views them: cards, or the grid.
+ * One cell of the grid: the course and its method drawn from the row's own facts (the service sends no
+ * cell for that column), every other column the server's HTML.
  *
- * @param {object} props See BodyProps.
- * @returns {object} The rows.
+ * @param {object} props The strings, the row and the column's key.
+ * @returns {object} The cell's content.
  */
-export const RowsBody = (props: BodyProps): ReactElement => {
-    const {labels, list, shown, cards, narrow, selection} = props;
+const GridCell = ({labels, row, column}: {labels: Record<string, string>, row: Row, column: string}): ReactElement => (
+    column === 'course' ? <CourseMethod labels={labels} row={row} /> : <CellLine html={cellHtml(row, column)} />
+);
+
+/**
+ * A card's fixed lines, in the mockup's order: the course and its method right under the applicant, then
+ * the wait, then the group; each only where the reader's grid shows its column.
+ *
+ * @param {object} props The strings, the row and the columns in view.
+ * @returns {object} The lines.
+ */
+const CardLines = ({labels, row, shown}: {labels: Record<string, string>, row: Row, shown: Column[]}): ReactElement => {
     /**
      * Whether the reader's grid shows a column.
      *
@@ -98,6 +109,36 @@ export const RowsBody = (props: BodyProps): ReactElement => {
      * @returns {boolean} True when it is active.
      */
     const has = (key: string): boolean => shown.some((column) => column.key === key);
+
+    return (
+        <>
+            {has('course') ? (
+                <div className="enrol_apply-rview-card-line"><CourseMethod labels={labels} row={row} /></div>
+            ) : null}
+            {has('wait') ? (
+                <div
+                    className="enrol_apply-rview-card-line enrol_apply-rview-card-line--open"
+                    dangerouslySetInnerHTML={{__html: cellHtml(row, 'wait')}}
+                />
+            ) : null}
+            {has('group') && cellHtml(row, 'group') !== '' ? (
+                <div
+                    className="enrol_apply-rview-card-line enrol_apply-rview-card-line--muted"
+                    dangerouslySetInnerHTML={{__html: cellHtml(row, 'group')}}
+                />
+            ) : null}
+        </>
+    );
+};
+
+/**
+ * The rows as the reader views them: cards, or the grid.
+ *
+ * @param {object} props See BodyProps.
+ * @returns {object} The rows.
+ */
+export const RowsBody = (props: BodyProps): ReactElement => {
+    const {labels, list, shown, cards, narrow, selection} = props;
 
     if (cards) {
         return (
@@ -108,22 +149,7 @@ export const RowsBody = (props: BodyProps): ReactElement => {
                 selection={selection}
                 renderCard={(row) => ({
                     head: <ApplicantCell labels={labels} row={row} />,
-                    lines: (
-                        <>
-                            {has('wait') ? (
-                                <div
-                                    className="enrol_apply-rview-card-line enrol_apply-rview-card-line--open"
-                                    dangerouslySetInnerHTML={{__html: cellHtml(row, 'wait')}}
-                                />
-                            ) : null}
-                            {has('group') && cellHtml(row, 'group') !== '' ? (
-                                <div
-                                    className="enrol_apply-rview-card-line enrol_apply-rview-card-line--muted"
-                                    dangerouslySetInnerHTML={{__html: cellHtml(row, 'group')}}
-                                />
-                            ) : null}
-                        </>
-                    ),
+                    lines: <CardLines labels={labels} row={row} shown={shown} />,
                     fields: cardFields(shown, row),
                 })}
             />
@@ -142,7 +168,7 @@ export const RowsBody = (props: BodyProps): ReactElement => {
             direction={props.direction}
             selection={selection}
             renderLead={(row) => <ApplicantCell labels={labels} row={row} />}
-            renderCell={(row, column) => <CellLine html={cellHtml(row, column.key)} />}
+            renderCell={(row, column) => <GridCell labels={labels} row={row} column={column.key} />}
             onSort={props.onSort}
             onWidth={props.onWidth}
             onWidthCommit={props.onWidthCommit}
@@ -156,7 +182,7 @@ export const RowsBody = (props: BodyProps): ReactElement => {
  * @param {object} labels The strings.
  * @param {object} offer What the sheet may offer, null for a reader who may not decide.
  * @param {boolean} decides Whether this reader decides.
- * @param {number} count How many rows are selected.
+ * @param {Array} chosen The selected rows.
  * @param {Function} onDecide Open the sheet for a decision.
  * @returns {object} The dock, or null.
  */
@@ -164,10 +190,18 @@ export const dockFor = (
     labels: Record<string, string>,
     offer: DecisionProps | null,
     decides: boolean,
-    count: number,
+    chosen: Row[],
     onDecide: (decision: Decision, button: HTMLButtonElement) => void,
-): ReactElement | null => (offer !== null && decides && count > 0
-    ? <Dock labels={labels} count={count} actions={offer.actions} onDecide={onDecide} />
+): ReactElement | null => (offer !== null && decides && chosen.length > 0
+    ? (
+        <Dock
+            labels={labels}
+            count={chosen.length}
+            methods={new Set(chosen.map((row) => row.method.id)).size}
+            actions={offer.actions}
+            onDecide={onDecide}
+        />
+    )
     : null);
 
 /**

@@ -2,11 +2,19 @@ var __defProp = Object.defineProperty;
 var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
 import { Fragment, jsxDEV } from "react/jsx-dev-runtime";
 /**
- * The approval queue of one method as a data report: the method queue's page (stages 3 and 4 of
- * docs/design/confirm-queue-as-report-plan.md, CQ-D5).
+ * The approval queue as a data report: the method queue's page (stages 3 and 4 of
+ * docs/design/confirm-queue-as-report-plan.md, CQ-D5) and the site-wide queue's (stage W3 of
+ * docs/design/site-queue-as-report-plan.md, SQ-D12).
  *
- * manage.php?id=<method> renders the shell (enrol_apply\output\queue_view) with configuration and
- * strings, unless view=table asks for today's table; the rows and the tiles come from the plugin's web
+ * One view for both, branching on the listing's kind (the props for the first paint, the rows answer
+ * after): the site-wide queue draws its own tiles (SQ-D7), a "Course · method" column (SQ-D2), the course,
+ * category, method and grouped facets the service returns (choosing another course releases the method),
+ * and a decision sheet that splits a selection spanning methods by method (SQ-D10). Nothing of the
+ * "By course" view yet (stage W4).
+ *
+ * manage.php?id=<method>, and manage.php for a site-wide reader, render the shell
+ * (enrol_apply\output\queue_view) with configuration and strings, unless view=table asks for today's
+ * table; the rows and the tiles come from the plugin's web
  * services, which read the queue's own table (classes/local/queueengine.php), so access, the
  * separate-groups narrowing, the masking of the answers and the filters are the table page's. Two
  * regions load on their own:
@@ -52,7 +60,13 @@ import { Tiles } from "./Tiles";
 const SEARCH_DELAY = 300;
 const WIDTH_DELAY = 500;
 const VIEW_KEY = "enrol_apply_queue_view";
-const SKELETON_COLUMNS = ["applicant", "wait", "group", "comment"];
+const SKELETON_COLUMNS = {
+  method: ["applicant", "wait", "group", "comment"],
+  site: ["applicant", "course", "wait", "details"],
+  mentees: ["applicant", "course", "wait", "comment"]
+};
+const METHOD = "method";
+const COURSE = "course";
 const narrows = /* @__PURE__ */ __name((query) => query.scope !== "all" || query.search !== "" || Object.entries(query.filters).some(([name, value]) => value !== "" && !(name === GROUP && value === ANY_GROUP)), "narrows");
 const QueueView = /* @__PURE__ */ __name((props) => {
   const config = useRef(props).current;
@@ -230,6 +244,9 @@ const QueueView = /* @__PURE__ */ __name((props) => {
     } else {
       delete filters[name];
     }
+    if (name === COURSE) {
+      delete filters[METHOD];
+    }
     run({ filters, page: 0 }, true);
   }, "onFilter");
   const noFilters = /* @__PURE__ */ __name(() => groupdefault !== "" ? { [GROUP]: ANY_GROUP } : {}, "noFilters");
@@ -359,11 +376,11 @@ const QueueView = /* @__PURE__ */ __name((props) => {
     false,
     {
       fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-      lineNumber: 541,
+      lineNumber: 563,
       columnNumber: 9
     }
   );
-  const skeleton = SKELETON_COLUMNS.map((key) => ({
+  const skeleton = SKELETON_COLUMNS[config.kind].map((key) => ({
     key,
     title: key === "applicant" ? labels.applicant : "",
     sortable: false,
@@ -372,19 +389,19 @@ const QueueView = /* @__PURE__ */ __name((props) => {
     fixed: key === "applicant"
   }));
   return /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-root", ref: root, "data-region": "enrol_apply-queueview", children: [
-    /* @__PURE__ */ jsxDEV(Tiles, { labels, summary, error: summaryerror, onRetry: loadSummary }, void 0, false, {
+    /* @__PURE__ */ jsxDEV(Tiles, { labels, kind: config.kind, summary, error: summaryerror, onRetry: loadSummary }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-      lineNumber: 567,
+      lineNumber: 589,
       columnNumber: 13
     }),
     derived.notingroup ? /* @__PURE__ */ jsxDEV("p", { className: "enrol_apply-rview-narrowed", children: labels.notingroup }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-      lineNumber: 568,
+      lineNumber: 590,
       columnNumber: 35
     }) : /* @__PURE__ */ jsxDEV(Fragment, { children: [
       /* @__PURE__ */ jsxDEV(Notices, { labels, narrowed: derived.narrowed, viewonly: derived.viewonly }, void 0, false, {
         fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-        lineNumber: 570,
+        lineNumber: 592,
         columnNumber: 21
       }),
       /* @__PURE__ */ jsxDEV(
@@ -430,7 +447,7 @@ const QueueView = /* @__PURE__ */ __name((props) => {
         false,
         {
           fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-          lineNumber: 571,
+          lineNumber: 593,
           columnNumber: 21
         }
       ),
@@ -446,7 +463,7 @@ const QueueView = /* @__PURE__ */ __name((props) => {
           cards,
           narrow,
           skeleton: { columns: skeleton, lead: "applicant", widths, sizing: SIZING },
-          dock: dockFor(labels, offer, decides, chosen.length, onDecide),
+          dock: dockFor(labels, offer, decides, chosen, onDecide),
           onRetry: () => loadRows(query.current),
           children: body
         },
@@ -454,7 +471,7 @@ const QueueView = /* @__PURE__ */ __name((props) => {
         false,
         {
           fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-          lineNumber: 608,
+          lineNumber: 630,
           columnNumber: 21
         }
       ),
@@ -475,19 +492,19 @@ const QueueView = /* @__PURE__ */ __name((props) => {
         false,
         {
           fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-          lineNumber: 624,
+          lineNumber: 646,
           columnNumber: 25
         }
       ) : null
     ] }, void 0, true, {
       fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-      lineNumber: 569,
+      lineNumber: 591,
       columnNumber: 17
     }),
     sheetFor(labels, offer, sheet, chosen, () => setSheet(null), onCommit)
   ] }, void 0, true, {
     fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-    lineNumber: 566,
+    lineNumber: 588,
     columnNumber: 9
   });
 }, "QueueView");

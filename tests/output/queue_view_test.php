@@ -119,24 +119,27 @@ final class queue_view_test extends \advanced_testcase {
     /**
      * The view is the method queue's page, and view=table asks for today's table (CQ-D5).
      *
-     * Changes that must make it fail: the id condition dropped (the site-wide and mentee queues, id 0,
-     * would mount it); the view condition dropped (the table could no longer be asked for) or turned
-     * back into the opt-in view=grid.
+     * The site-wide and mentee scopes of the id-less page are site_queue_view_test's.
+     *
+     * Changes that must make it fail: the view condition dropped (the table could no longer be asked
+     * for) or turned back into the opt-in view=grid.
      *
      * @return void
      */
     public function test_the_view_is_the_method_queues_page_and_view_table_asks_for_the_table(): void {
-        $this->assertTrue(queue_view::wanted(5, ''));
+        $this->setAdminUser();
+        $method = \enrol_apply\local\queue::listing_scope((int) $this->instance->id);
+        // Precondition: the listing is the method's.
+        $this->assertNotNull($method->instance);
+
+        $this->assertTrue(queue_view::wanted($method, ''));
         // An address written before the flip, or any other value, still lands on the grid.
-        $this->assertTrue(queue_view::wanted(5, 'grid'));
-        $this->assertTrue(queue_view::wanted(5, 'cards'));
+        $this->assertTrue(queue_view::wanted($method, 'grid'));
+        $this->assertTrue(queue_view::wanted($method, 'cards'));
 
         // The table, to anyone who asks.
-        $this->assertFalse(queue_view::wanted(5, queue_view::TABLE));
-        $this->assertFalse(queue_view::wanted(5, 'table'));
-        // The site-wide and mentee queues keep the table (CQ-D3), with or without the parameter.
-        $this->assertFalse(queue_view::wanted(0, ''));
-        $this->assertFalse(queue_view::wanted(0, 'grid'));
+        $this->assertFalse(queue_view::wanted($method, queue_view::TABLE));
+        $this->assertFalse(queue_view::wanted($method, 'table'));
 
         // The two addresses differ only by the view parameter, and both keep the filters.
         $url = new moodle_url('/enrol/apply/manage.php', ['id' => 5, 'status' => 2, 'search' => 'Ann', 'view' => 'grid']);
@@ -168,12 +171,13 @@ final class queue_view_test extends \advanced_testcase {
         $props = $shell->props();
 
         $this->assertSame([
-            'mount', 'enrolid', 'initial', 'perpage', 'perpages', 'searchmin', 'pageurl', 'statuses', 'reporturl', 'decision',
-            'labels',
+            'mount', 'enrolid', 'kind', 'initial', 'perpage', 'perpages', 'searchmin', 'pageurl', 'statuses', 'reporturl',
+            'decision', 'labels',
         ], array_keys($props));
         $this->assertSame(queue_view::MOUNT, $props['mount']);
         $this->assertSame('queue', $props['mount']);
         $this->assertSame((int) $this->instance->id, $props['enrolid']);
+        $this->assertSame('method', $props['kind']);
         $this->assertSame(50, $props['perpage']);
         $this->assertSame([30, 50, 100], $props['perpages']);
         $this->assertSame(['pending' => ENROL_USER_SUSPENDED, 'deferred' => ENROL_APPLY_USER_WAIT], $props['statuses']);

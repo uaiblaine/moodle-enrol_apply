@@ -11,7 +11,13 @@
  * again (queue_view::return_url()) and redirects there with its notifications, so the browser lands
  * on the grid it decided from.
  *
+ * A selection on the site-wide queue that spans methods posts what the site-wide table's sheet posts
+ * (amd/src/manage.js, commit()): the page's own `outcomemessage` empty, and one
+ * `outcomemessages[<enrolid>]` per method, keyed by the method id the rows service gave the rows, which
+ * decision::groups() uses only to look up a message for the rows the database says belong to that method;
+ * and never a chooser, which that sheet does not offer (SQ-D10).
+ *
  * @module     enrol_apply/queue/decide
  * @copyright  2026 Anderson Blaine
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */const i=(n,e,o)=>{const r=document.createElement("input");r.type="hidden",r.name=e,r.value=o,n.appendChild(r)},t=n=>{const e=document.createElement("form");e.method="post",e.action=n.action,e.hidden=!0,i(e,"sesskey",n.sesskey),i(e,"formaction",n.decision),n.userenrolments.forEach(o=>i(e,"userenrolments[]",String(o))),i(e,"outcomemessage",n.message),i(e,"decisionnote",n.note),n.decision==="confirm"&&(n.groups?.forEach(o=>i(e,"groups[]",String(o))),n.roleid!==null&&i(e,"roleid",String(n.roleid))),document.body.appendChild(e),e.submit()};export{t as decide};
+ */const s=(e,n,i)=>{const r=document.createElement("input");r.type="hidden",r.name=n,r.value=i,e.appendChild(r)},o=e=>{const n=document.createElement("form");n.method="post",n.action=e.action,n.hidden=!0,s(n,"sesskey",e.sesskey),s(n,"formaction",e.decision),e.userenrolments.forEach(i=>s(n,"userenrolments[]",String(i))),s(n,"outcomemessage",e.messages===null?e.message:""),Object.entries(e.messages??{}).forEach(([i,r])=>s(n,`outcomemessages[${i}]`,r)),s(n,"decisionnote",e.note),e.decision==="confirm"&&e.messages===null&&(e.groups?.forEach(i=>s(n,"groups[]",String(i))),e.roleid!==null&&s(n,"roleid",String(e.roleid))),document.body.appendChild(n),n.submit()};export{o as decide};

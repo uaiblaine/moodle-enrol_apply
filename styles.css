@@ -3599,3 +3599,49 @@ body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload + .enrol_apply-rvie
 .enrol_apply-qview .enrol_apply-qview-sheetsummary {
     margin-bottom: 1rem;
 }
+
+/* The site-wide queue (W3): the "Course · method" cell, the dock's methods count and the sheet's
+   sections per method. */
+.enrol_apply-qview .enrol_apply-qview-course {
+    min-width: 0;
+}
+
+.enrol_apply-qview .enrol_apply-qview-coursename {
+    font-weight: 600;
+}
+
+.enrol_apply-qview .enrol_apply-qview-methodline {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 0.375rem;
+    min-width: 0;
+}
+
+.enrol_apply-qview .enrol_apply-qview-methodline .enrol_apply-qview-tags {
+    margin-top: 0;
+}
+
+.enrol_apply-qview .enrol_apply-qview-dockmethods {
+    color: var(--enrol-apply-ink-muted);
+    font-weight: 400;
+}
+
+.enrol_apply-qview .enrol_apply-qview-sheetmethod {
+    border: 1px solid var(--enrol-apply-line);
+    border-radius: var(--enrol-apply-radius-md);
+    margin-bottom: 1rem;
+    padding: 0.75rem;
+}
+
+.enrol_apply-qview .enrol_apply-qview-sheetmethodhead {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+}
+
+.enrol_apply-qview .enrol_apply-qview-sheetopen {
+    font-size: 0.875rem;
+    margin: 0.5rem 0 0;
+}
