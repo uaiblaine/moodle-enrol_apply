@@ -767,4 +767,271 @@ final class queueengine_test extends \advanced_testcase {
         // The method's own numbers, whoever reads them.
         $this->assertSame(7, $summary['applicants']);
     }
+
+    /**
+     * A reader of the queue holding the given capabilities and the two the queue's rows need to be
+     * listed whole, through a role of its own (a stock archetype would carry others).
+     *
+     * @param array $allow Further capabilities allowed, at the site.
+     * @param array $prohibit Capabilities prohibited, at the site.
+     * @return \stdClass The user, enrolled as a student in the course.
+     */
+    private function queue_reader(array $allow = [], array $prohibit = []): \stdClass {
+        $generator = $this->getDataGenerator();
+        $system = \context_system::instance()->id;
+        $user = $generator->create_and_enrol($this->course, 'student');
+        $role = $generator->create_role();
+        $allow = array_merge(['enrol/apply:manageapplications', 'moodle/site:accessallgroups'], $allow);
+        foreach ($allow as $capability) {
+            assign_capability($capability, CAP_ALLOW, $role, $system, true);
+        }
+        foreach ($prohibit as $capability) {
+            assign_capability($capability, CAP_PROHIBIT, $role, $system, true);
+        }
+        role_assign($role, $user->id, \context_course::instance($this->course->id)->id);
+
+        return $user;
+    }
+
+    /**
+     * What a callable throws.
+     *
+     * @param callable $call The call.
+     * @return \Throwable|null The exception, null when nothing was thrown.
+     */
+    private function thrown(callable $call): ?\Throwable {
+        try {
+            $call();
+        } catch (\Throwable $e) {
+            return $e;
+        }
+
+        return null;
+    }
+
+    /**
+     * Every public reader of the engine refuses who the queue refuses, called directly, with the
+     * exception require_listing() throws.
+     *
+     * The services run require_listing() first, so a refusal through them proves nothing about the
+     * engine: it is called here with no service in front, by a user who is logged in and holds
+     * nothing in the course and by a student. The table is built by the editing teacher, so the
+     * catalogue's own check is the only one that can refuse.
+     *
+     * Changes that must make it fail: rows(), summary() or catalogue() not asking require_listing().
+     *
+     * @return void
+     */
+    public function test_each_reader_of_the_engine_refuses_who_the_queue_refuses(): void {
+        $this->seed();
+        $enrolid = (int) $this->instance->id;
+        $instance = $this->instance;
+
+        $this->setUser($this->editing);
+        $table = queueengine::table($enrolid, 'all', '', []);
+        $calls = [
+            'rows' => static fn() => queueengine::rows($enrolid, []),
+            'summary' => static fn() => queueengine::summary($instance),
+            'catalogue' => static fn() => queueengine::catalogue($table),
+        ];
+
+        $outsider = $this->getDataGenerator()->create_user();
+        $student = $this->getDataGenerator()->create_and_enrol($this->course, 'student');
+        foreach (['outsider' => $outsider, 'student' => $student] as $who => $user) {
+            $this->setUser($user);
+            $expected = $this->thrown(static fn() => queueengine::require_listing($enrolid));
+            $this->assertInstanceOf(\required_capability_exception::class, $expected, $who);
+            foreach ($calls as $name => $call) {
+                $caught = $this->thrown($call);
+                $this->assertInstanceOf(\required_capability_exception::class, $caught, $who . ' ' . $name);
+                $this->assertSame($expected->getMessage(), $caught->getMessage(), $who . ' ' . $name);
+            }
+        }
+
+        // The control: a decider gets all three.
+        $this->setUser($this->editing);
+        $this->assertNotEmpty(queueengine::rows($enrolid, [])['rows']);
+        $this->assertArrayHasKey('places', queueengine::summary($instance));
+        $this->assertArrayHasKey('applicant', queueengine::catalogue($table));
+    }
+
+    /**
+     * A reader who may see identity is still not shown what core would not show them: an identity
+     * field the site does not list, a field it hides, a custom field nobody is shown.
+     *
+     * Three requested fields are withheld each for its own reason from a reader holding
+     * moodle/site:viewuseridentity alone; a reader who also holds moodle/course:viewhiddenuserfields,
+     * on a site that lists the identity field, gets the first two (the controls), and the field
+     * visible to everyone is shown to both.
+     *
+     * Changes that must make it fail: the catalogue's questions not masked by the identity list, by
+     * hiddenuserfields or by the custom field's visibility; a cell read for a key that is no column.
+     *
+     * @return void
+     */
+    public function test_a_reader_with_identity_is_not_shown_what_core_would_not_show_them(): void {
+        global $CFG, $DB;
+
+        require_once($CFG->dirroot . '/user/profile/lib.php');
+        $this->seed();
+        $generator = $this->getDataGenerator();
+        $open = $generator->create_custom_profile_field([
+            'datatype' => 'text', 'shortname' => 'openfield', 'name' => 'Open field', 'visible' => PROFILE_VISIBLE_ALL,
+        ]);
+        $none = $generator->create_custom_profile_field([
+            'datatype' => 'text', 'shortname' => 'nonefield', 'name' => 'Nobody field', 'visible' => PROFILE_VISIBLE_NONE,
+        ]);
+        $openkey = fields::custom_key((int) $open->id);
+        $nonekey = fields::custom_key((int) $none->id);
+        $DB->set_field(
+            'enrol',
+            'customtext4',
+            fieldset::from_keys(['s_city', 's_department', 's_country', $openkey, $nonekey])->to_json(),
+            ['id' => $this->instance->id]
+        );
+        set_config('hiddenuserfields', 'country');
+
+        $submissionid = (int) $DB->get_field('enrol_apply_submission', 'id', ['userenrolmentid' => $this->ue['zed']], MUST_EXIST);
+        submission::write_answers($submissionid, [
+            ['key' => 's_department', 'label' => 'Department', 'value' => 'DEPT-SECRET'],
+            ['key' => 's_country', 'label' => 'Country', 'value' => 'COUNTRY-SECRET'],
+            ['key' => $openkey, 'label' => 'Open field', 'value' => 'OPEN-VALUE'],
+            ['key' => $nonekey, 'label' => 'Nobody field', 'value' => 'NONE-SECRET'],
+        ]);
+        $prefix = queueengine::ANSWER_PREFIX;
+        $zed = $this->ue['zed'];
+        $cellsof = static fn(array $response): array => array_column(
+            array_column($response['rows'], null, 'userenrolmentid')[$zed]['cells'],
+            'html',
+            'key'
+        );
+
+        // The controls: the site lists the department and this reader may see hidden fields.
+        set_config('showuseridentity', 'email,city,department');
+        $this->setUser($this->queue_reader(['moodle/site:viewuseridentity', 'moodle/course:viewhiddenuserfields']));
+        $response = $this->rows();
+        $columns = array_column($response['columns'], 'key');
+        foreach (['s_city', 's_department', 's_country', $openkey] as $key) {
+            $this->assertContains($prefix . $key, $columns, $key);
+        }
+        $this->assertNotContains($prefix . $nonekey, $columns);
+        $cells = $cellsof($response);
+        $this->assertSame('DEPT-SECRET', $cells[$prefix . 's_department']);
+        $this->assertSame('COUNTRY-SECRET', $cells[$prefix . 's_country']);
+        $this->assertSame('OPEN-VALUE', $cells[$prefix . $openkey]);
+
+        // The reader who may see identity and nothing more: the site lists no department.
+        set_config('showuseridentity', 'email,city');
+        $this->setUser($this->queue_reader(['moodle/site:viewuseridentity'], ['moodle/course:viewhiddenuserfields']));
+        $response = $this->rows();
+        $columns = array_column($response['columns'], 'key');
+        $this->assertContains($prefix . 's_city', $columns);
+        $this->assertContains($prefix . $openkey, $columns);
+        foreach (['s_department', 's_country', $nonekey] as $withheld) {
+            $this->assertNotContains($prefix . $withheld, $columns, $withheld);
+            foreach ($response['rows'] as $row) {
+                $this->assertNotContains($prefix . $withheld, array_column($row['cells'], 'key'), $withheld);
+            }
+        }
+        $cells = $cellsof($response);
+        $this->assertSame('Lille', $cells[$prefix . 's_city']);
+        $this->assertSame('OPEN-VALUE', $cells[$prefix . $openkey]);
+        $json = json_encode($response);
+        foreach (['DEPT-SECRET', 'COUNTRY-SECRET', 'NONE-SECRET', 'Nobody field'] as $secret) {
+            $this->assertStringNotContainsString($secret, $json, $secret);
+        }
+    }
+
+    /**
+     * A group with hidden visibility is not an option of the group facet and its name is in no row,
+     * for a reader without moodle/course:viewhiddengroups; the engine says what the page says.
+     *
+     * The server table is rendered for the same reader: its group choices are the facet's options
+     * and its page does not carry the name either. A reader who holds the capability gets the name in
+     * both (the control).
+     *
+     * Changes that must make it fail: the group facet listing groups the reader may not see; the
+     * group cell not judged by groupvisibility.
+     *
+     * @return void
+     */
+    public function test_a_hidden_group_is_no_facet_option_and_no_cell_for_a_reader_who_may_not_see_it(): void {
+        $this->seed();
+        $secret = $this->getDataGenerator()->create_group([
+            'courseid' => $this->course->id,
+            'name' => 'Secret cell',
+            'visibility' => GROUPS_VISIBILITY_NONE,
+        ]);
+        $ueid = $this->applicant('Hidd', 'Metz', DAYSECS, $secret, 'key');
+        $facetoptions = static fn(array $response): array => array_column(
+            array_column($response['facets'], null, 'name')[groupfilter::NAME]['options'],
+            'label',
+            'value'
+        );
+        $groupcell = static fn(array $response): ?string => array_column(
+            array_column($response['rows'], null, 'userenrolmentid')[$ueid]['cells'],
+            'html',
+            'key'
+        )['group'] ?? null;
+        $rendered = function (): array {
+            $table = applications::for_scope((int) $this->instance->id, '', null, []);
+            ob_start();
+            $table->out(50, false);
+
+            return [$table->get_group_choices(), ob_get_clean()];
+        };
+
+        // The control: a reader who may see hidden groups is told the name, by the engine and by the page.
+        $this->setUser($this->queue_reader(['moodle/course:viewhiddengroups']));
+        $response = $this->rows();
+        $options = $facetoptions($response);
+        $this->assertSame('Secret cell', $options[(string) $secret->id] ?? null);
+        $this->assertSame('Secret cell', $groupcell($response));
+        [$choices, $html] = $rendered();
+        $this->assertSame($options, $choices);
+        $this->assertStringContainsString('Secret cell', $html);
+
+        $this->setUser($this->queue_reader([], ['moodle/course:viewhiddengroups']));
+        $response = $this->rows();
+        $options = $facetoptions($response);
+        $this->assertArrayNotHasKey((string) $secret->id, $options);
+        $this->assertNotContains('Secret cell', $options);
+        $this->assertContains('Own group', $options);
+        $this->assertContains($ueid, array_column($response['rows'], 'userenrolmentid'));
+        $this->assertSame('', $groupcell($response));
+        $this->assertStringNotContainsString('Secret cell', json_encode($response));
+        [$choices, $html] = $rendered();
+        $this->assertSame($options, $choices);
+        $this->assertStringNotContainsString('Secret cell', $html);
+    }
+
+    /**
+     * An answer and a comment arrive escaped in the cell HTML, and the applicant's name arrives plain.
+     *
+     * The text is a tag, an ampersand and a quote: the cell is raw HTML in the client, the name is
+     * text it draws as text.
+     *
+     * Changes that must make it fail: a cell passed through unescaped; the name escaped here, which
+     * the client would escape again.
+     *
+     * @return void
+     */
+    public function test_an_answer_and_a_comment_arrive_escaped_and_the_name_plain(): void {
+        global $DB;
+
+        $raw = '<b>&"';
+        $ueid = $this->applicant('X' . $raw, 'Lille', DAYSECS, null, '', $raw);
+        $DB->set_field('enrol_apply_submission', 'comment', $raw, ['userenrolmentid' => $ueid]);
+
+        $this->setUser($this->editing);
+        $row = array_column($this->rows()['rows'], null, 'userenrolmentid')[$ueid];
+        $cells = array_column($row['cells'], 'html', 'key');
+        $question = queueengine::ANSWER_PREFIX . answers::key($this->questionid);
+
+        $escaped = '&lt;b&gt;&amp;&quot;';
+        $this->assertSame($escaped, $cells[$question]);
+        $this->assertSame($escaped, $cells['comment']);
+        $this->assertStringNotContainsString('<b>', json_encode(array_values($cells)));
+        $this->assertSame('X' . $raw . ' X' . $raw . 'son', $row['applicant']['fullname']);
+    }
 }

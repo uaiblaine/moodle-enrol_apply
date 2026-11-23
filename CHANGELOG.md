@@ -15,7 +15,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   takes the method's id and derives the course from it, and refuses a guest, an id that names no
   Course enrol confirmation method (0, the site-wide queue, included) and a reader `manage.php?id=`
   refuses (neither `enrol/apply:manageapplications` nor `enrol/apply:viewapplications` in the
-  course, or no access to it). None decides an application: decisions stay the queue's form.
+  course, or no access to it). None decides an application: decisions stay the queue's form. The
+  engine also refuses such a reader on its own, whoever calls it.
   `enrol_apply_queue_rows` returns a page of 30, 50 or 100 rows (50 by default) of the applications
   awaiting a decision, the pending or the deferred ones, searched and filtered as the page's address
   does, sorted by the applied date, the applicant's name or an answer, ties broken by the user
@@ -39,7 +40,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   earlier applications are shown to), which the page's own controls do not send. Fixed with it: the
   server-rendered queue joined every record of a user enrolment, so an enrolment carrying two
   records was listed twice; it now joins the newest one, the record the scope and the group column
-  already judged the row by. Mutation gates `QE1`-`QE19`.
+  already judged the row by. Mutation gates `QE1`-`QE22`.
 
 ### Changed
 

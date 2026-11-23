@@ -1319,14 +1319,16 @@ backup/                      group mappings, comments and the durable trail, see
   `queueengine::locate()` (an id that names no apply method, 0 included, is refused, so the
   site-wide and mentee queues have no door here), `validate_context()`, the guest check and
   `queueengine::require_listing()` (`listing_scope()` asked as `manage.php?id=` asks it), in that
-  order. None decides: decisions stay the POST to `manage.php`. The summary's places and applications
+  order. The engine does not rely on that check: every public reader of it (`rows()`, `summary()`,
+  `catalogue()`) calls `require_listing()` itself as its first step (QE20-QE22), so a caller that
+  forgot it is refused too. None decides: decisions stay the POST to `manage.php`. The summary's places and applications
   held are the method's; its queue figures are the reader's scope before any filter
   (`scope_figures()` over `scope_where()`); open or closed is `capacity::state()`, which the page's
   panel reads too. Tests: `tests/local/queueengine_test.php`
   (`test_the_rows_are_the_tables_rows_for_every_reader_and_request` compares the engine's rows with
   the table's, in set and order, for a decider, a narrowed moderator and a viewer over every scope and
   filter; `test_each_facet_count_is_what_choosing_it_lists`), `tests/external/queue_services_test.php`
-  (the doors), `tests/table/applications_test.php` (the two-record row). Gates `QE1`-`QE19`.
+  (the doors), `tests/table/applications_test.php` (the two-record row). Gates `QE1`-`QE22`.
 
 - **Both listings order by a unique key as a last resort, and the injection point is the only
   one that works.** Every column either table offers can tie — `applydate` is `ue.timecreated`,

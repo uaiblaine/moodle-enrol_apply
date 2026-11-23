@@ -184,13 +184,16 @@ final class queueengine {
     /**
      * A page of the queue, with what a client needs to draw it.
      *
-     * @param int $enrolid The enrol instance; the caller has run {@see require_listing()}.
+     * @param int $enrolid The enrol instance; refused to a reader {@see require_listing()} refuses.
      * @param array $options 'scope' (one of SCOPES), 'search', 'filters' (name => value), 'page'
      *     (0-based), 'perpage' (one of PERPAGES), 'sort' (a sortable catalogue key, '' for the
      *     applied date), 'direction' ('asc' or 'desc', of the applied date for 'wait').
      * @return array See \enrol_apply\external\queue_rows::execute_returns().
+     * @throws \required_capability_exception When the reader may not open the queue.
      */
     public static function rows(int $enrolid, array $options): array {
+        self::require_listing($enrolid);
+
         $scope = in_array($options['scope'] ?? '', self::SCOPES, true) ? $options['scope'] : 'all';
         $perpage = in_array((int) ($options['perpage'] ?? 0), self::PERPAGES, true) ? (int) $options['perpage'] : self::PERPAGE;
         $page = max(0, (int) ($options['page'] ?? 0));
@@ -256,10 +259,13 @@ final class queueengine {
      * before any filter ({@see applications::scope_figures()}), so a moderator is told about their
      * own applications. Open or closed is {@see capacity::state()}, the page's own answer.
      *
-     * @param stdClass $instance The apply method; the caller has run {@see require_listing()}.
+     * @param stdClass $instance The apply method; refused to a reader {@see require_listing()} refuses.
      * @return array See \enrol_apply\external\queue_summary::execute_returns().
+     * @throws \required_capability_exception When the reader may not open the queue.
      */
     public static function summary(stdClass $instance): array {
+        self::require_listing((int) $instance->id);
+
         $table = applications::for_scope((int) $instance->id);
         $now = $table->now();
         $state = capacity::state($instance, $now);
@@ -296,9 +302,11 @@ final class queueengine {
      *
      * @param applications $table The queue's table.
      * @return array Catalogue key => ['title', 'sortable', 'default', 'fixed'].
+     * @throws \required_capability_exception When the reader may not open the queue.
      */
     public static function catalogue(applications $table): array {
         $instance = $table->get_instance();
+        self::require_listing((int) $instance->id);
 
         $catalogue = [
             'applicant' => self::entry(get_string('reportapplicant', 'enrol_apply'), true, true, true),
