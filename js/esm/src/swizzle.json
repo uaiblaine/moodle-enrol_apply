@@ -31,6 +31,10 @@
     "eject": "prohibited",
     "wrap": "prohibited"
   },
+  "queue/Parts": {
+    "eject": "prohibited",
+    "wrap": "prohibited"
+  },
   "queue/QueueView": {
     "eject": "prohibited",
     "wrap": "prohibited"

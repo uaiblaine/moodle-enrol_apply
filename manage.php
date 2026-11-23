@@ -236,6 +236,18 @@ if ($formaction !== '' && $userenrolments) {
         exit;
     }
 
+    /* The grid's way back is worked out BEFORE the decision: nothing in it depends on the outcome (the
+       filters and the sort come from the request and the reader's catalogue), and it reaches
+       queueengine::catalogue(), which can throw. A decision that was applied must never end in an
+       exception raised by an address; one that cannot be worked out falls back to the listing. */
+    if ($afterdecisionurl === null && $gridview) {
+        try {
+            $afterdecisionurl = \enrol_apply\output\queue_view::return_url((int) $id, $search, $status, $queuefilters);
+        } catch (\moodle_exception $e) {
+            $afterdecisionurl = null;
+        }
+    }
+
     $decided = \enrol_apply\local\decision::apply(
         $formaction,
         $userenrolments,
@@ -289,10 +301,8 @@ if ($formaction !== '' && $userenrolments) {
     }
 
     /* Back where the decision was taken: the review page's queue, the grid with the address it posted
-       from (cleaned again there, never echoed), or the listing the table form posted from. */
-    if ($afterdecisionurl === null && $gridview) {
-        $afterdecisionurl = \enrol_apply\output\queue_view::return_url((int) $id, $search, $status, $queuefilters);
-    }
+       from (worked out before the decision, cleaned there, never echoed), or the listing the table form
+       posted from. */
     redirect(
         $afterdecisionurl ?? $listingurl,
         $decided > 0

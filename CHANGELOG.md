@@ -20,7 +20,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `userenrolments[]`, `outcomemessage`, `decisionnote`, `groups[]`, `roleid`, `sesskey`), so every
   check a decision has applies unchanged; no web service decides. It lands back on the grid with the
   scope, the filters, the search, the sort and the page it was posted from, cleaned again by the
-  server. `manage.php?id=<method>` now shows the grid; `view=table` shows today's table to anyone,
+  server (worked out before the decision runs, so an address that cannot be worked out falls back to
+  the listing instead of failing a decision already applied). `manage.php?id=<method>` now shows the grid; `view=table` shows today's table to anyone,
   and a browser without JavaScript gets the table inside the grid page. A viewer reads the grid with
   no box, no dock and no sheet. The site-wide and mentee queues are unchanged. Mutation gates
   `QV1`, `QV2` (inverted) and `QV4`-`QV9`.

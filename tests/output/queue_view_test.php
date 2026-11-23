@@ -203,7 +203,7 @@ final class queue_view_test extends \advanced_testcase {
             $this->assertNotSame('', trim($text), $name);
             $this->assertStringStartsNotWith('[[', $text, "{$name} names a string that does not exist");
         }
-        foreach ([
+        $expected = [
             'all', 'pending', 'deferred', 'scope', 'count', 'count_one', 'filters', 'filterson', 'columns', 'presets', 'always',
             'defaultcolumns', 'resetwidths', 'view', 'viewauto', 'viewautohint', 'table', 'cards', 'coretable', 'search',
             'cleartext', 'removefilter', 'searchchip', 'clearall', 'any', 'clearfilters', 'show', 'showcount', 'grid',
@@ -214,7 +214,8 @@ final class queue_view_test extends \advanced_testcase {
             'selectapplicant', 'selectpage', 'selected', 'dock', 'back', 'close', 'andmore', 'viewonly',
             'sheetconfirm', 'sheetconfirmone', 'sheetconfirmcommit', 'sheetwait', 'sheetwaitone', 'sheetwaitcommit',
             'sheetwaitline', 'sheetcancel', 'sheetcancelone', 'sheetcancelcommit', 'sheetcanceldanger',
-        ] as $name) {
+        ];
+        foreach ($expected as $name) {
             $this->assertArrayHasKey($name, $labels);
         }
         // No Download in the queue (CQ-D11).

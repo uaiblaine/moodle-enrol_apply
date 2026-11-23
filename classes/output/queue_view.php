@@ -139,8 +139,9 @@ class queue_view implements renderable, templatable {
      * the search and the table's filters as manage.php read them; the facets through the queue's own
      * table, whose url_params() keeps only what it applied for this reader; the sort only when this
      * reader's catalogue offers it as sortable; the page size from its vocabulary ({@see initial()}).
-     * A value at its default is left out, as the client leaves it out. Called after the decision, so
-     * the rows it decided are gone; a page past the end is the rows service's to bring back.
+     * A value at its default is left out, as the client leaves it out. Called before the decision (nothing in it
+     * depends on the outcome), so an address can never fail a decision already applied; a page past the end is
+     * the rows service's to bring back.
      *
      * @param int $enrolid The method, already authorised by manage.php.
      * @param string $search The search manage.php read.

@@ -37,32 +37,23 @@ import { Fragment, jsxDEV } from "react/jsx-dev-runtime";
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Cards as DataCards } from "../datareport/Cards";
-import { Grid as DataGrid } from "../datareport/Grid";
 import { rememberView, storedView, useNarrow } from "../datareport/layout";
 import { Pager } from "../datareport/Pager";
 import { hold } from "../datareport/pending";
 import { RowsRegion } from "../datareport/Rows";
-import { fill } from "../datareport/str";
 import { initialQuery, queryOf, queueUrl, writeAddress } from "./address";
 import { ANY_GROUP, Bar, GROUP } from "./Bar";
-import { ApplicantCell, CellLine, SIZING, cellHtml } from "./cells";
+import { SIZING } from "./cells";
 import { decide } from "./decide";
-import { Dock } from "./Dock";
+import { chooseRows, derive } from "./derive";
+import { Notices, RowsBody, dockFor, sheetFor } from "./Parts";
 import { getRows, getSummary, setPreference } from "./repository";
-import { Sheet } from "./Sheet";
 import { Tiles } from "./Tiles";
 const SEARCH_DELAY = 300;
 const WIDTH_DELAY = 500;
 const VIEW_KEY = "enrol_apply_queue_view";
 const SKELETON_COLUMNS = ["applicant", "wait", "group", "comment"];
-const CARD_FIXED = ["applicant", "wait", "group"];
 const narrows = /* @__PURE__ */ __name((query) => query.scope !== "all" || query.search !== "" || Object.entries(query.filters).some(([name, value]) => value !== "" && !(name === GROUP && value === ANY_GROUP)), "narrows");
-const cardFields = /* @__PURE__ */ __name((shown, row) => shown.filter((column) => !CARD_FIXED.includes(column.key) && cellHtml(row, column.key).trim() !== "").map((column) => ({ key: column.key, title: column.title, content: /* @__PURE__ */ jsxDEV(CellLine, { html: cellHtml(row, column.key) }, void 0, false, {
-  fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-  lineNumber: 110,
-  columnNumber: 71
-}) })), "cardFields");
 const QueueView = /* @__PURE__ */ __name((props) => {
   const config = useRef(props).current;
   const { labels, enrolid } = config;
@@ -228,7 +219,8 @@ const QueueView = /* @__PURE__ */ __name((props) => {
       searchhold.current = null;
     }, SEARCH_DELAY);
   }, "onSearch");
-  const groupdefault = rows?.groupdefault ?? "";
+  const derived = derive(rows, config);
+  const { groupdefault, allcolumns, usedefault, list, decides } = derived;
   const onFilter = /* @__PURE__ */ __name((name, value) => {
     const filters = { ...query.current.filters };
     if (value !== "") {
@@ -254,9 +246,7 @@ const QueueView = /* @__PURE__ */ __name((props) => {
       }
     }).finally(release);
   }, "writePreference");
-  const allcolumns = rows?.columns ?? [];
   const chosenkeys = allcolumns.filter((column) => !column.fixed && column.active).map((column) => column.key);
-  const usedefault = rows?.preference.usedefault ?? true;
   const widthList = /* @__PURE__ */ __name((map) => Object.entries(map).map(([key, width]) => ({ key, width })), "widthList");
   const onColumn = /* @__PURE__ */ __name((key, on) => {
     const next = on ? [...chosenkeys, key] : chosenkeys.filter((chosen2) => chosen2 !== key);
@@ -324,9 +314,7 @@ const QueueView = /* @__PURE__ */ __name((props) => {
     run({ sort: key, direction, page: 0 }, true);
   }, "onSort");
   const shown = allcolumns.filter((column) => column.active);
-  const has = /* @__PURE__ */ __name((key) => shown.some((column) => column.key === key), "has");
   const cards = view === "cards" || view === "auto" && narrow;
-  const list = (rows?.rows ?? []).map((row) => ({ ...row, id: row.userenrolmentid }));
   useEffect(() => {
     if (sheet === null && opener.current) {
       opener.current.focus();
@@ -334,23 +322,7 @@ const QueueView = /* @__PURE__ */ __name((props) => {
     }
   }, [sheet]);
   const offer = config.decision;
-  const decides = offer !== null && rows !== null && rows.candecide;
-  const locked = new Set(list.filter((row) => !row.selectable).map((row) => row.id));
-  const chosen = list.filter((row) => selected.has(row.id));
-  const boxLabel = /* @__PURE__ */ __name((row) => fill(labels.selectapplicant, row.applicant.fullname), "boxLabel");
-  const onSelect = /* @__PURE__ */ __name((id, on) => setSelected((before) => {
-    const next = new Set(before);
-    if (on && !locked.has(id)) {
-      next.add(id);
-    } else {
-      next.delete(id);
-    }
-    return next;
-  }), "onSelect");
-  const onSelectPage = /* @__PURE__ */ __name((on) => setSelected(
-    on ? new Set(list.filter((row) => !locked.has(row.id)).map((row) => row.id)) : /* @__PURE__ */ new Set()
-  ), "onSelectPage");
-  const selection = decides ? { selected, locked, label: boxLabel, pagelabel: labels.selectpage, onSelect, onSelectPage } : void 0;
+  const { chosen, selection } = chooseRows(selected, setSelected, derived, labels);
   const onDecide = /* @__PURE__ */ __name((decision, button) => {
     opener.current = button;
     setSheet(decision);
@@ -367,100 +339,30 @@ const QueueView = /* @__PURE__ */ __name((props) => {
       ...values
     });
   }, "onCommit");
-  let body = null;
-  if (rows !== null) {
-    body = cards ? /* @__PURE__ */ jsxDEV(
-      DataCards,
-      {
-        labels,
-        rows: list,
-        single: narrow,
-        selection,
-        renderCard: (row) => ({
-          head: /* @__PURE__ */ jsxDEV(ApplicantCell, { labels, row }, void 0, false, {
-            fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-            lineNumber: 620,
-            columnNumber: 27
-          }),
-          lines: /* @__PURE__ */ jsxDEV(Fragment, { children: [
-            has("wait") ? /* @__PURE__ */ jsxDEV(
-              "div",
-              {
-                className: "enrol_apply-rview-card-line enrol_apply-rview-card-line--open",
-                dangerouslySetInnerHTML: { __html: cellHtml(row, "wait") }
-              },
-              void 0,
-              false,
-              {
-                fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-                lineNumber: 624,
-                columnNumber: 33
-              }
-            ) : null,
-            has("group") && cellHtml(row, "group") !== "" ? /* @__PURE__ */ jsxDEV(
-              "div",
-              {
-                className: "enrol_apply-rview-card-line enrol_apply-rview-card-line--muted",
-                dangerouslySetInnerHTML: { __html: cellHtml(row, "group") }
-              },
-              void 0,
-              false,
-              {
-                fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-                lineNumber: 630,
-                columnNumber: 33
-              }
-            ) : null
-          ] }, void 0, true, {
-            fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-            lineNumber: 622,
-            columnNumber: 25
-          }),
-          fields: cardFields(shown, row)
-        })
-      },
-      void 0,
-      false,
-      {
-        fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-        lineNumber: 614,
-        columnNumber: 13
-      }
-    ) : /* @__PURE__ */ jsxDEV(
-      DataGrid,
-      {
-        labels,
-        columns: shown,
-        lead: "applicant",
-        rows: list,
-        widths,
-        sizing: SIZING,
-        sort: rows.sort,
-        direction: rows.direction,
-        selection,
-        renderLead: (row) => /* @__PURE__ */ jsxDEV(ApplicantCell, { labels, row }, void 0, false, {
-          fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-          lineNumber: 651,
-          columnNumber: 38
-        }),
-        renderCell: (row, column) => /* @__PURE__ */ jsxDEV(CellLine, { html: cellHtml(row, column.key) }, void 0, false, {
-          fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-          lineNumber: 652,
-          columnNumber: 46
-        }),
-        onSort,
-        onWidth,
-        onWidthCommit: () => flushref.current()
-      },
-      void 0,
-      false,
-      {
-        fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-        lineNumber: 641,
-        columnNumber: 13
-      }
-    );
-  }
+  const body = rows === null ? null : /* @__PURE__ */ jsxDEV(
+    RowsBody,
+    {
+      labels,
+      list,
+      shown,
+      cards,
+      narrow,
+      widths,
+      sort: rows.sort,
+      direction: rows.direction,
+      selection,
+      onSort,
+      onWidth,
+      onWidthCommit: () => flushref.current()
+    },
+    void 0,
+    false,
+    {
+      fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
+      lineNumber: 541,
+      columnNumber: 9
+    }
+  );
   const skeleton = SKELETON_COLUMNS.map((key) => ({
     key,
     title: key === "applicant" ? labels.applicant : "",
@@ -472,24 +374,19 @@ const QueueView = /* @__PURE__ */ __name((props) => {
   return /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-root", ref: root, "data-region": "enrol_apply-queueview", children: [
     /* @__PURE__ */ jsxDEV(Tiles, { labels, summary, error: summaryerror, onRetry: loadSummary }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-      lineNumber: 670,
+      lineNumber: 567,
       columnNumber: 13
     }),
-    rows?.notingroup ? /* @__PURE__ */ jsxDEV("p", { className: "enrol_apply-rview-narrowed", children: labels.notingroup }, void 0, false, {
+    derived.notingroup ? /* @__PURE__ */ jsxDEV("p", { className: "enrol_apply-rview-narrowed", children: labels.notingroup }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-      lineNumber: 671,
-      columnNumber: 33
+      lineNumber: 568,
+      columnNumber: 35
     }) : /* @__PURE__ */ jsxDEV(Fragment, { children: [
-      rows?.narrowed ? /* @__PURE__ */ jsxDEV("p", { className: "enrol_apply-rview-narrowed", children: labels.narrowed }, void 0, false, {
+      /* @__PURE__ */ jsxDEV(Notices, { labels, narrowed: derived.narrowed, viewonly: derived.viewonly }, void 0, false, {
         fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-        lineNumber: 673,
-        columnNumber: 39
-      }) : null,
-      rows !== null && !decides ? /* @__PURE__ */ jsxDEV("div", { className: "alert alert-info", role: "status", children: labels.viewonly }, void 0, false, {
-        fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-        lineNumber: 675,
-        columnNumber: 25
-      }) : null,
+        lineNumber: 570,
+        columnNumber: 21
+      }),
       /* @__PURE__ */ jsxDEV(
         Bar,
         {
@@ -498,7 +395,7 @@ const QueueView = /* @__PURE__ */ __name((props) => {
           query: current,
           rows,
           columns: allcolumns,
-          presets: rows?.presets ?? [],
+          presets: derived.presets,
           usedefault,
           haswidths: Object.keys(widths).length > 0,
           view,
@@ -533,7 +430,7 @@ const QueueView = /* @__PURE__ */ __name((props) => {
         false,
         {
           fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-          lineNumber: 677,
+          lineNumber: 571,
           columnNumber: 21
         }
       ),
@@ -544,16 +441,12 @@ const QueueView = /* @__PURE__ */ __name((props) => {
           loading: rowsloading,
           loaded: rows !== null,
           error: rowserror,
-          total: rows?.total ?? 0,
+          total: derived.total,
           filtered: narrows(current),
           cards,
           narrow,
           skeleton: { columns: skeleton, lead: "applicant", widths, sizing: SIZING },
-          dock: offer !== null && decides && chosen.length > 0 ? /* @__PURE__ */ jsxDEV(Dock, { labels, count: chosen.length, actions: offer.actions, onDecide }, void 0, false, {
-            fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-            lineNumber: 725,
-            columnNumber: 29
-          }) : null,
+          dock: dockFor(labels, offer, decides, chosen.length, onDecide),
           onRetry: () => loadRows(query.current),
           children: body
         },
@@ -561,7 +454,7 @@ const QueueView = /* @__PURE__ */ __name((props) => {
         false,
         {
           fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-          lineNumber: 714,
+          lineNumber: 608,
           columnNumber: 21
         }
       ),
@@ -582,36 +475,19 @@ const QueueView = /* @__PURE__ */ __name((props) => {
         false,
         {
           fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-          lineNumber: 732,
+          lineNumber: 624,
           columnNumber: 25
         }
       ) : null
     ] }, void 0, true, {
       fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-      lineNumber: 672,
+      lineNumber: 569,
       columnNumber: 17
     }),
-    offer !== null && sheet !== null && chosen.length > 0 ? /* @__PURE__ */ jsxDEV(
-      Sheet,
-      {
-        labels,
-        decision: sheet,
-        rows: chosen,
-        offer,
-        onClose: () => setSheet(null),
-        onCommit
-      },
-      void 0,
-      false,
-      {
-        fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-        lineNumber: 747,
-        columnNumber: 17
-      }
-    ) : null
+    sheetFor(labels, offer, sheet, chosen, () => setSheet(null), onCommit)
   ] }, void 0, true, {
     fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-    lineNumber: 669,
+    lineNumber: 566,
     columnNumber: 9
   });
 }, "QueueView");

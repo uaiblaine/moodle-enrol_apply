@@ -51,26 +51,21 @@
 
 import {useCallback, useEffect, useRef, useState} from 'react';
 import type {ReactElement} from 'react';
-import {Cards as DataCards} from '../datareport/Cards';
-import type {CardField} from '../datareport/Cards';
-import {Grid as DataGrid} from '../datareport/Grid';
 import {rememberView, storedView, useNarrow} from '../datareport/layout';
 import {Pager} from '../datareport/Pager';
 import {hold} from '../datareport/pending';
 import {RowsRegion} from '../datareport/Rows';
-import {fill} from '../datareport/str';
-import type {Selection} from '../datareport/types';
 import {initialQuery, queryOf, queueUrl, writeAddress} from './address';
 import {ANY_GROUP, Bar, GROUP} from './Bar';
-import {ApplicantCell, CellLine, SIZING, cellHtml} from './cells';
+import {SIZING} from './cells';
 import {decide} from './decide';
-import {Dock} from './Dock';
+import {chooseRows, derive} from './derive';
+import {Notices, RowsBody, dockFor, sheetFor} from './Parts';
 import {getRows, getSummary, setPreference} from './repository';
-import {Sheet} from './Sheet';
 import type {SheetValues} from './Sheet';
 import {Tiles} from './Tiles';
 import type {
-    Column, Decision, Preference, Preset, Query, Row, RowsAnswer, Scope, SummaryAnswer, ViewMode, ViewProps,
+    Column, Decision, Preference, Preset, Query, RowsAnswer, Scope, SummaryAnswer, ViewMode, ViewProps,
 } from './types';
 
 /** The wait before the search is sent, after the last key. */
@@ -85,9 +80,6 @@ const VIEW_KEY = 'enrol_apply_queue_view';
 /** The columns the first skeleton draws, before the server has said which it shows. */
 const SKELETON_COLUMNS = ['applicant', 'wait', 'group', 'comment'];
 
-/** The columns a card draws on its fixed lines; every other active column goes in its list. */
-const CARD_FIXED = ['applicant', 'wait', 'group'];
-
 /**
  * Whether a query narrows the queue at all: a scope, a filter (every group excepted) or a search.
  *
@@ -96,18 +88,6 @@ const CARD_FIXED = ['applicant', 'wait', 'group'];
  */
 const narrows = (query: Query): boolean => query.scope !== 'all' || query.search !== ''
     || Object.entries(query.filters).some(([name, value]) => value !== '' && !(name === GROUP && value === ANY_GROUP));
-
-/**
- * A card's list: the chosen columns its fixed lines do not draw, a field with nothing in it left out (a
- * card has no column to keep).
- *
- * @param {Array} shown The columns in view.
- * @param {object} row The row.
- * @returns {Array} The fields.
- */
-const cardFields = (shown: Column[], row: Row): CardField[] => shown
-    .filter((column) => !CARD_FIXED.includes(column.key) && cellHtml(row, column.key).trim() !== '')
-    .map((column) => ({key: column.key, title: column.title, content: <CellLine html={cellHtml(row, column.key)} />}));
 
 /**
  * The queue's view.
@@ -343,7 +323,8 @@ const QueueView = (props: ViewProps): ReactElement => {
         }, SEARCH_DELAY);
     };
 
-    const groupdefault = rows?.groupdefault ?? '';
+    const derived = derive(rows, config);
+    const {groupdefault, allcolumns, usedefault, list, decides} = derived;
 
     /**
      * Set one filter, or release it with ''. A released group filter where the group filter has a
@@ -394,9 +375,7 @@ const QueueView = (props: ViewProps): ReactElement => {
         }).finally(release);
     };
 
-    const allcolumns: Column[] = rows?.columns ?? [];
     const chosenkeys = allcolumns.filter((column) => !column.fixed && column.active).map((column) => column.key);
-    const usedefault = rows?.preference.usedefault ?? true;
 
     /**
      * The widths as the preference stores them.
@@ -513,15 +492,7 @@ const QueueView = (props: ViewProps): ReactElement => {
     };
 
     const shown = allcolumns.filter((column) => column.active);
-    /**
-     * Whether the reader's grid shows a column.
-     *
-     * @param {string} key The column key.
-     * @returns {boolean} True when it is active.
-     */
-    const has = (key: string): boolean => shown.some((column) => column.key === key);
     const cards = view === 'cards' || (view === 'auto' && narrow);
-    const list: Row[] = (rows?.rows ?? []).map((row) => ({...row, id: row.userenrolmentid}));
 
     // The focus goes back to the dock button that opened the sheet, once the sheet has closed.
     useEffect(() => {
@@ -531,50 +502,8 @@ const QueueView = (props: ViewProps): ReactElement => {
         }
     }, [sheet]);
 
-    /* A reader decides here when the props offer the table form's controls (a viewer's carry none) and
-       the rows service agrees; either one false, and there is no box, no dock and no sheet. */
     const offer = config.decision;
-    const decides = offer !== null && rows !== null && rows.candecide;
-    const locked = new Set(list.filter((row) => !row.selectable).map((row) => row.id));
-    const chosen = list.filter((row) => selected.has(row.id));
-    /**
-     * A row box's name: "Select" and the applicant.
-     *
-     * @param {object} row The row.
-     * @returns {string} The name.
-     */
-    const boxLabel = (row: Row): string => fill(labels.selectapplicant, row.applicant.fullname);
-
-    /**
-     * Select or release one row; a row that may not be selected is never added.
-     *
-     * @param {number} id The row's user enrolment id.
-     * @param {boolean} on Whether to select it.
-     * @returns {void}
-     */
-    const onSelect = (id: number, on: boolean): void => setSelected((before) => {
-        const next = new Set(before);
-        if (on && !locked.has(id)) {
-            next.add(id);
-        } else {
-            next.delete(id);
-        }
-        return next;
-    });
-
-    /**
-     * Select every selectable row of this page, and no other, or release them all.
-     *
-     * @param {boolean} on Whether to select them.
-     * @returns {void}
-     */
-    const onSelectPage = (on: boolean): void => setSelected(
-        on ? new Set(list.filter((row) => !locked.has(row.id)).map((row) => row.id)) : new Set()
-    );
-
-    const selection: Selection<Row> | undefined = decides
-        ? {selected, locked, label: boxLabel, pagelabel: labels.selectpage, onSelect, onSelectPage}
-        : undefined;
+    const {chosen, selection} = chooseRows(selected, setSelected, derived, labels);
 
     /**
      * Open the sheet for one of the dock's decisions.
@@ -608,54 +537,22 @@ const QueueView = (props: ViewProps): ReactElement => {
     };
 
     // The rows as the reader views them; the region draws them only once an answer has some.
-    let body: ReactElement | null = null;
-    if (rows !== null) {
-        body = cards ? (
-            <DataCards<Row>
-                labels={labels}
-                rows={list}
-                single={narrow}
-                selection={selection}
-                renderCard={(row) => ({
-                    head: <ApplicantCell labels={labels} row={row} />,
-                    lines: (
-                        <>
-                            {has('wait') ? (
-                                <div
-                                    className="enrol_apply-rview-card-line enrol_apply-rview-card-line--open"
-                                    dangerouslySetInnerHTML={{__html: cellHtml(row, 'wait')}}
-                                />
-                            ) : null}
-                            {has('group') && cellHtml(row, 'group') !== '' ? (
-                                <div
-                                    className="enrol_apply-rview-card-line enrol_apply-rview-card-line--muted"
-                                    dangerouslySetInnerHTML={{__html: cellHtml(row, 'group')}}
-                                />
-                            ) : null}
-                        </>
-                    ),
-                    fields: cardFields(shown, row),
-                })}
-            />
-        ) : (
-            <DataGrid<Row>
-                labels={labels}
-                columns={shown}
-                lead="applicant"
-                rows={list}
-                widths={widths}
-                sizing={SIZING}
-                sort={rows.sort}
-                direction={rows.direction}
-                selection={selection}
-                renderLead={(row) => <ApplicantCell labels={labels} row={row} />}
-                renderCell={(row, column) => <CellLine html={cellHtml(row, column.key)} />}
-                onSort={onSort}
-                onWidth={onWidth}
-                onWidthCommit={() => flushref.current()}
-            />
-        );
-    }
+    const body = rows === null ? null : (
+        <RowsBody
+            labels={labels}
+            list={list}
+            shown={shown}
+            cards={cards}
+            narrow={narrow}
+            widths={widths}
+            sort={rows.sort}
+            direction={rows.direction}
+            selection={selection}
+            onSort={onSort}
+            onWidth={onWidth}
+            onWidthCommit={() => flushref.current()}
+        />
+    );
     const skeleton: Column[] = SKELETON_COLUMNS.map((key) => ({
         key,
         title: key === 'applicant' ? labels.applicant : '',
@@ -668,19 +565,16 @@ const QueueView = (props: ViewProps): ReactElement => {
     return (
         <div className="enrol_apply-rview-root" ref={root} data-region="enrol_apply-queueview">
             <Tiles labels={labels} summary={summary} error={summaryerror} onRetry={loadSummary} />
-            {rows?.notingroup ? <p className="enrol_apply-rview-narrowed">{labels.notingroup}</p> : (
+            {derived.notingroup ? <p className="enrol_apply-rview-narrowed">{labels.notingroup}</p> : (
                 <>
-                    {rows?.narrowed ? <p className="enrol_apply-rview-narrowed">{labels.narrowed}</p> : null}
-                    {rows !== null && !decides ? (
-                        <div className="alert alert-info" role="status">{labels.viewonly}</div>
-                    ) : null}
+                    <Notices labels={labels} narrowed={derived.narrowed} viewonly={derived.viewonly} />
                     <Bar
                         labels={labels}
                         narrow={narrow}
                         query={current}
                         rows={rows}
                         columns={allcolumns}
-                        presets={rows?.presets ?? []}
+                        presets={derived.presets}
                         usedefault={usedefault}
                         haswidths={Object.keys(widths).length > 0}
                         view={view}
@@ -716,14 +610,12 @@ const QueueView = (props: ViewProps): ReactElement => {
                         loading={rowsloading}
                         loaded={rows !== null}
                         error={rowserror}
-                        total={rows?.total ?? 0}
+                        total={derived.total}
                         filtered={narrows(current)}
                         cards={cards}
                         narrow={narrow}
                         skeleton={{columns: skeleton, lead: 'applicant', widths, sizing: SIZING}}
-                        dock={offer !== null && decides && chosen.length > 0 ? (
-                            <Dock labels={labels} count={chosen.length} actions={offer.actions} onDecide={onDecide} />
-                        ) : null}
+                        dock={dockFor(labels, offer, decides, chosen.length, onDecide)}
                         onRetry={() => loadRows(query.current)}
                     >
                         {body}
@@ -743,16 +635,7 @@ const QueueView = (props: ViewProps): ReactElement => {
                     ) : null}
                 </>
             )}
-            {offer !== null && sheet !== null && chosen.length > 0 ? (
-                <Sheet
-                    labels={labels}
-                    decision={sheet}
-                    rows={chosen}
-                    offer={offer}
-                    onClose={() => setSheet(null)}
-                    onCommit={onCommit}
-                />
-            ) : null}
+            {sheetFor(labels, offer, sheet, chosen, () => setSheet(null), onCommit)}
         </div>
     );
 };
