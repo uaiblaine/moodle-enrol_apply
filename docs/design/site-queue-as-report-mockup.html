@@ -1,0 +1,480 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fila do site: mockup</title>
+<style>
+  :root {
+    --ink: #1d2125; --muted: #5b6672; --line: #dfe3e8; --surface: #fff; --ground: #f5f6f8;
+    --brand: #0f6cbf; --brand-tint: #d9e9f7; --warn-bg: #fdf0d5; --warn-ink: #7a4d00; --warn-line: #f0d9a8;
+    --danger: #b3261e; --ok: #1a7f4b; --note: #6b3fa0; --note-bg: #f1eafa;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 20px 16px 48px; background: #e9ecf0; color: var(--ink);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  h1 { font-size: 19px; margin: 0 0 4px; }
+  .lead { color: var(--muted); max-width: 86ch; margin: 0 0 18px; }
+  .frame { max-width: 1180px; margin: 0 0 26px; }
+  .cap { display: flex; gap: 10px; align-items: baseline; margin: 0 0 8px; }
+  .cap b { font-size: 15px; }
+  .cap span { color: var(--muted); font-size: 13px; }
+  .page { background: var(--ground); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px 20px; }
+  .page h2 { font-size: 24px; font-weight: 500; margin: 0 0 2px; }
+  .crumb { color: var(--muted); font-size: 12.5px; margin-bottom: 8px; }
+  a, .lnk { color: var(--brand); text-decoration: none; }
+  .sub { font-size: 13px; margin-bottom: 12px; display: flex; gap: 14px; }
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 10px; }
+  .tile { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+  .tile small { display: block; font-size: 11.5px; font-weight: 600; color: var(--muted); }
+  .tile strong { font-size: 22px; line-height: 1.2; display: block; }
+  .tile em { font-style: normal; font-size: 12px; color: var(--muted); }
+  .tile.w strong { color: #6b4a12; }
+  .bar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+  .seg { display: inline-flex; background: #e6e9ee; border-radius: 10px; padding: 3px; }
+  .seg span { padding: 5px 12px; border-radius: 8px; font-size: 13.5px; color: #3b4550; }
+  .seg .on { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+  .sp { margin-left: auto; }
+  .cnt { background: #e6e9ee; border-radius: 10px; padding: 3px 3px 3px 12px; display: inline-flex; align-items: center;
+    gap: 10px; font-weight: 600; font-size: 13.5px; }
+  .tools { background: var(--surface); border-radius: 8px; padding: 5px 10px; display: inline-flex; gap: 12px;
+    box-shadow: 0 1px 2px rgba(0,0,0,.12); font-weight: 400; color: #3b4550; }
+  .ib { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; }
+  .chips { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; align-items: center; font-size: 12.5px; }
+  .chip { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 3px 8px; }
+  .chip i { font-style: normal; color: var(--muted); margin-left: 6px; }
+  table { width: 100%; border-collapse: separate; border-spacing: 0; background: var(--surface); font-size: 13.5px; }
+  .gridframe { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line);
+    vertical-align: top; }
+  thead th { font-size: 12.5px; background: #fafbfc; font-weight: 600; white-space: nowrap; }
+  tr:last-child td, tr:last-child th { border-bottom: 0; }
+  td:last-child, th:last-child { border-right: 0; }
+  tbody th { font-weight: 400; }
+  tr.sel > * { background: var(--brand-tint); }
+  .who { display: flex; gap: 8px; align-items: flex-start; }
+  .box { width: 15px; height: 15px; border: 1.5px solid #7d8794; border-radius: 3px; flex: none; margin-top: 3px;
+    background: #fff; }
+  .sel .box, .box.on { background: var(--brand); border-color: var(--brand); }
+  .box.mix { background: var(--brand); border-color: var(--brand); position: relative; }
+  .av { width: 28px; height: 28px; border-radius: 50%; background: #e3e7ec; display: grid; place-items: center;
+    font-size: 11px; color: #4a5562; flex: none; }
+  .nm { font-weight: 600; color: var(--brand); }
+  .id { font-size: 12px; color: var(--muted); }
+  .tag { display: inline-block; font-size: 11.5px; font-weight: 600; padding: 1px 7px; border-radius: 5px; margin-top: 3px;
+    background: var(--warn-bg); color: var(--warn-ink); border: 1px solid var(--warn-line); }
+  .tag.n { background: #eef1f5; color: #44505d; border-color: #dde2e8; }
+  .rv { margin-left: auto; border: 1px solid #8a94a1; border-radius: 7px; padding: 2px 8px; font-size: 12.5px;
+    color: #44505d; background: #fff; flex: none; }
+  .crs b { display: block; font-weight: 600; }
+  .crs small { color: var(--muted); font-size: 12px; display: block; }
+  .wait small { display: block; color: var(--muted); font-size: 12px; }
+  .ans { color: #2b333c; }
+  .ans span { color: var(--muted); }
+  .more { color: var(--brand); font-size: 12.5px; }
+  .hint { font-size: 12px; color: var(--muted); margin: 6px 0 8px; }
+  .dock { display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--line);
+    border-radius: 12px; padding: 8px 12px; box-shadow: 0 6px 18px rgba(20,30,45,.14); margin: 8px 0; }
+  .dock b { margin-right: auto; }
+  .dock small { color: var(--muted); font-weight: 400; margin-left: 8px; }
+  .btn { border: 1px solid #8a94a1; border-radius: 7px; padding: 5px 12px; font-size: 13.5px; background: #fff;
+    color: #44505d; }
+  .btn.p { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .btn.d { color: var(--danger); border-color: var(--danger); }
+  .pager { display: flex; justify-content: space-between; color: var(--muted); font-size: 12.5px; padding-top: 4px; }
+  .note { border-left: 3px solid var(--note); background: var(--note-bg); color: #3c2560; padding: 6px 10px;
+    border-radius: 0 8px 8px 0; font-size: 12.5px; margin: 8px 0 0; max-width: 100ch; }
+  .note b { color: var(--note); }
+  .two { display: grid; grid-template-columns: 1.25fr 1fr; gap: 18px; align-items: start; }
+  .dlg { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 10px 30px rgba(20,30,45,.2);
+    padding: 14px 16px; }
+  .dlg h3 { font-size: 16px; margin: 0 0 8px; font-weight: 600; display: flex; }
+  .dlg h3 span { margin-left: auto; color: var(--muted); font-weight: 400; }
+  .info { background: #e2f0f5; border: 1px solid #c3dde6; border-radius: 8px; padding: 7px 10px; font-size: 13px;
+    margin-bottom: 10px; }
+  .meth { border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px; margin-bottom: 8px; }
+  .meth b { display: block; }
+  .meth small { color: var(--muted); }
+  .ta { border: 1px solid #8a94a1; border-radius: 7px; height: 44px; margin-top: 6px; background: #fff; }
+  .lbl { font-size: 12.5px; font-weight: 600; margin-top: 8px; display: block; }
+  .foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+  .phone { width: 330px; background: var(--ground); border: 1px solid var(--line); border-radius: 18px; padding: 12px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px; margin-top: 8px; }
+  .card.sel { background: var(--brand-tint); border-color: #9cc3e6; }
+  .ovr td:nth-child(n+2), .ovr th:nth-child(n+2) { white-space: nowrap; }
+  .meter { height: 4px; background: #e6e9ee; border-radius: 2px; margin-top: 4px; width: 90px; }
+  .meter i { display: block; height: 100%; background: var(--brand); border-radius: 2px; }
+
+  .ic { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round;
+    stroke-linejoin: round; vertical-align: -3px; }
+  .ic.s { width: 12px; height: 12px; vertical-align: -1px; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  .tools button { background: none; border: 0; padding: 2px 4px; border-radius: 6px; display: inline-flex; gap: 4px;
+    align-items: center; }
+  .tools button[aria-expanded=true], .tools button.has { color: var(--brand); background: #eaf2fb; }
+  .tools button b { font-size: 11px; background: var(--brand); color: #fff; border-radius: 8px; padding: 0 5px; }
+  .seg button { background: none; border: 0; padding: 5px 12px; border-radius: 8px; font-size: 13.5px; color: #3b4550; }
+  .seg button.on { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+  .ib { display: inline-flex; align-items: center; gap: 6px; }
+  .ib { cursor: pointer; }
+  .ib input { border: 0; outline: 0; font: inherit; width: 0; padding: 0; background: none; }
+  .ib.open input { width: 170px; }
+  .dock[hidden] { display: none; }
+  .anchor { position: relative; }
+  .fpanel { position: absolute; right: 0; top: 44px; z-index: 5; width: 420px; background: var(--surface);
+    border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 10px 30px rgba(20,30,45,.2); }
+  .fpanel[hidden], .menu[hidden] { display: none; }
+  .fbody { padding: 12px 14px 4px; max-height: 430px; overflow: auto; }
+  .fgroup { margin-bottom: 12px; }
+  .fhead { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 5px; }
+  .fopts { display: flex; flex-wrap: wrap; gap: 5px; }
+  .fopt { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 3px 9px; font-size: 13px; }
+  .fopt small, .optrow small { color: var(--muted); margin-left: 5px; font-size: 11.5px; }
+  .fopt[aria-checked=true] { background: #eaf2fb; border-color: #9cc3e6; color: #0b4f8c; font-weight: 600; }
+  .find { width: 100%; border: 1px solid #8a94a1; border-radius: 7px; padding: 4px 8px; font: inherit; font-size: 13px;
+    margin-bottom: 5px; }
+  .optlist { display: grid; gap: 1px; }
+  .optrow { display: flex; align-items: center; gap: 8px; border: 0; background: none; text-align: left; padding: 4px 6px;
+    border-radius: 6px; font-size: 13px; }
+  .optrow:hover { background: #f1f4f7; }
+  .optrow .tb { width: 15px; height: 15px; border: 1.5px solid #7d8794; border-radius: 3px; flex: none; display: grid;
+    place-items: center; color: transparent; }
+  .optrow[aria-pressed=true] .tb { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .optrow[aria-pressed=true] { font-weight: 600; }
+  .optrow span.l { flex: 1; }
+  .ffoot { display: flex; justify-content: space-between; padding: 9px 14px; border-top: 1px solid var(--line); }
+  .fnote { font-size: 12px; color: var(--muted); margin: 3px 0 0; }
+  .menu { position: absolute; right: 0; top: 44px; z-index: 5; background: var(--surface); border: 1px solid var(--line);
+    border-radius: 10px; box-shadow: 0 10px 30px rgba(20,30,45,.2); padding: 5px; min-width: 190px; }
+  .menu button { display: flex; gap: 8px; align-items: center; width: 100%; border: 0; background: none; padding: 6px 9px;
+    border-radius: 6px; text-align: left; font-size: 13.5px; }
+  .menu button:hover { background: #f1f4f7; }
+  .menu button[aria-checked=true] { font-weight: 600; color: var(--brand); }
+  .chip button { border: 0; background: none; padding: 0 0 0 6px; color: var(--muted); }
+  .empty { padding: 26px; text-align: center; color: var(--muted); background: var(--surface); }
+  .box { cursor: pointer; }
+  tbody td.c, .crs .lnk { cursor: pointer; }
+  @media (max-width: 900px) { .tiles { grid-template-columns: 1fr 1fr; } .two { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<h1>Fila do site inteiro: a grade no contexto de sistema</h1>
+<p class="lead">Mesma página (<code>enrol/apply/manage.php</code> sem <code>id</code>), para quem decide no site todo. As notas
+roxas marcam o que muda em relação à fila de um método. Os rótulos da interface estão em inglês, como no plugin.</p>
+
+<div class="frame">
+  <div class="cap"><b>1 · Lista e visão por curso</b><span>interativo: escopo, filtros (curso com busca), busca, visão e seleção funcionam</span></div>
+  <div class="page">
+    <div class="crumb">Site administration / Plugins / Enrolments / Course enrol confirmation</div>
+    <h2>Confirm enrolments</h2>
+    <div class="sub"><span class="lnk">Table view</span></div>
+    <div class="tiles">
+      <div class="tile w"><small>Awaiting decision</small><strong id="t-await"></strong><em id="t-old"></em></div>
+      <div class="tile"><small>Deferred</small><strong id="t-def"></strong><em id="t-defp"></em></div>
+      <div class="tile"><small>Courses with applications</small><strong id="t-courses"></strong><em id="t-methods"></em></div>
+      <div class="tile"><small>Methods at their limit</small><strong id="t-full"></strong><em>approvals there will be refused</em></div>
+    </div>
+    <div class="bar anchor">
+      <span class="seg" id="scope"></span>
+      <span class="sp cnt"><span id="count"></span> <span class="tools">
+        <button type="button" id="b-filters" aria-expanded="false" aria-label="Filters"></button>
+        <button type="button" id="b-cols" aria-expanded="false" aria-label="Columns"></button>
+        <button type="button" id="b-view" aria-expanded="false" aria-label="View"></button></span></span>
+      <span class="ib" id="searchbox"></span>
+      <div class="fpanel" id="fpanel" role="dialog" aria-label="Filters" hidden>
+        <div class="fbody" id="fbody"></div>
+        <div class="ffoot"><button type="button" class="btn" id="f-clear"></button><button type="button" class="btn p" id="f-show"></button></div>
+      </div>
+      <div class="menu" id="m-view" role="menu" hidden></div>
+      <div class="menu" id="m-cols" role="menu" hidden></div>
+    </div>
+    <div class="chips" id="chips"></div>
+    <div class="gridframe" id="grid"></div>
+    <div class="dock" id="dock" hidden></div>
+    <div class="pager"><span id="range"></span><span>Previous · 1 · Next</span><span>Per page 50</span></div>
+  </div>
+  <p class="note"><b>Filtro de curso:</b> lista com busca e contagem, como o filtro de grupo do relatório; uma opção por vez. Ao escolher um curso com mais de um método aparece o filtro <b>Enrolment method</b>. As contagens de cada opção seguem os outros filtros ativos.</p>
+  <p class="note"><b>Coluna "Course · method":</b> logo depois do candidato; o curso filtra a lista por ele (clique no nome para testar) e o método leva à fila daquele método. Um selo "Full" avisa que o método está no limite.</p>
+  <p class="note"><b>Blocos do topo:</b> no lugar das vagas de um método, o que aguarda, o adiado, quantos cursos e métodos têm fila, e quantos métodos estão no limite. Não mudam com os filtros.</p>
+  <p class="note"><b>Respostas:</b> cada método pergunta coisas diferentes, então não há uma coluna por pergunta: "Details submitted" resume as duas primeiras e "+n" abre as demais; não é ordenável.</p>
+  <p class="note"><b>Visão "By course"</b> (menu View): uma linha por método, com o que aguarda, o adiado, a espera mais antiga e as vagas; sem seleção. "Open the queue" leva à fila daquele método, onde há uma coluna por resposta.</p>
+</div>
+
+<div class="frame">
+  <div class="cap"><b>2 · Decisão em mais de um método · celular</b><span>o diálogo de hoje, na grade; e o cartão em tela estreita</span></div>
+  <div class="two">
+    <div>
+      <div class="dlg">
+        <h3>Confirm 2 applications <span>✕</span></h3>
+        <div class="info">This selection spans 2 enrolment methods. Each method's own groups and role apply; write a message for each.</div>
+        <div class="meth"><b>R6 load course · Apply with a cohort</b><small>1 application: Yuri Oliveira</small>
+          <span class="lbl">Message to these applicants</span><div class="ta"></div></div>
+        <div class="meth"><b>Python for analysts · Moderator recruitment <span class="tag n">Full</span></b><small>1 application: Pavel Novotny · no place left: this approval will be refused</small>
+          <span class="lbl">Message to these applicants</span><div class="ta"></div></div>
+        <span class="lbl">Note for the record</span><div class="ta"></div>
+        <div class="foot"><span class="btn">Back</span><span class="btn p">Confirm 2</span></div>
+      </div>
+      <p class="note"><b>Igual a hoje:</b> uma mensagem por método e uma nota para todos. Os seletores de grupos e de papel só aparecem quando a seleção inteira é de um método; com mais de um, vale o que cada método configura. O envio continua sendo o POST do formulário ao <code>manage.php</code>.</p>
+    </div>
+    <div>
+      <div class="phone">
+        <div class="bar" style="margin-bottom:6px"><span class="cnt" style="padding:3px 10px">1,912</span><span class="tools"><span><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3h12l-4.5 5.5V13l-3 1.5V8.5L2 3z"/></svg></span><span><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3h12v10H2zM6.5 3v10M10 3v10"/></svg></span><span><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3h7v10H2zM11 3h3v4h-3zM11 9h3v4h-3z"/></svg></span></span><span class="ib sp"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M7 12A5 5 0 1 0 7 2a5 5 0 0 0 0 10zM10.5 10.5 14 14"/></svg></span></div>
+        <span class="seg" style="display:flex"><span class="on" style="flex:1;text-align:center">All</span><span style="flex:1;text-align:center">Pending</span><span style="flex:1;text-align:center">Deferred</span></span>
+        <div class="card sel"><span class="who"><span class="box"></span><span class="av">YO</span><span><span class="nm">Yuri Oliveira</span><br><span class="id">yuri@example.invalid</span></span><span class="rv">Review</span></span>
+          <div class="crs" style="margin-top:6px"><b>R6 load course</b><small>Apply with a cohort</small></div>
+          <div class="wait" style="margin-top:4px"><b>1 year 2 days</b><small>21/11/25, 16:35 · Cohort 167</small></div><span class="more">More</span></div>
+        <div class="card"><span class="who"><span class="box"></span><span class="av">PN</span><span><span class="nm">Pavel Novotny</span><br><span class="id">pavel@example.invalid</span></span><span class="rv">Review</span></span>
+          <div class="crs" style="margin-top:6px"><b>Python for analysts</b><small>Moderator recruitment <span class="tag n">Full</span></small></div>
+          <div class="wait" style="margin-top:4px"><b>14 days 23 hours</b><small>8/11/26, 22:47 · Online cohort</small></div><span class="more">More</span></div>
+        <div class="dock" style="flex-wrap:wrap"><b style="flex:1 0 100%">1 selected on this page</b><span class="btn p">Confirm</span><span class="btn">Defer</span><span class="btn d">Cancel</span></div>
+      </div>
+      <p class="note"><b>Cartão:</b> o curso e o método sobem para logo abaixo do nome, antes da espera.</p>
+    </div>
+  </div>
+</div>
+
+<div class="frame">
+  <div class="cap"><b>3 · Fila de mentorados</b><span>mesma grade, com menos dados</span></div>
+  <p class="note" style="margin-top:0"><b>O que muda:</b> título "Your mentees' applications"; sem campos de identidade e sem "Details submitted" (regra de hoje: essa fila cruza cursos e nenhum contexto único julga esses dados); sem a visão "Por curso" e sem os blocos de métodos; ficam o candidato, o curso e o método, a espera, o grupo e o comentário. Seleção e decisão como na lista.</p>
+</div>
+<script>
+(() => {
+  const P = {filter: 'M2 3h12l-4.5 5.5V13l-3 1.5V8.5L2 3z', columns: 'M2 3h12v10H2zM6.5 3v10M10 3v10',
+    table: 'M2 3h12v10H2zM2 6.5h12M2 10h12M6 6.5V13', cards: 'M2 3h5v4H2zM9 3h5v4H9zM2 9h5v4H2zM9 9h5v4H9z',
+    auto: 'M2 3h7v10H2zM11 3h3v4h-3zM11 9h3v4h-3z', search: 'M7 12A5 5 0 1 0 7 2a5 5 0 0 0 0 10zM10.5 10.5 14 14',
+    close: 'M4 4l8 8M12 4l-8 8', tick: 'M3 8.5 6.5 12 13 4.5', chevron: 'M4 6l4 4 4-4', queue: 'M3 4h10M3 8h10M3 12h6'};
+  const ic = (n, c = '') => `<svg class="ic ${c}" viewBox="0 0 16 16" aria-hidden="true"><path d="${P[n]}"/></svg>`;
+  const $ = (id) => document.getElementById(id);
+  const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+
+  const METHODS = [
+    {id: 1, course: 'R6 load course', name: 'Apply with a cohort', taken: 8155, limit: 0, status: 'Open'},
+    {id: 2, course: 'Python for analysts', name: 'Apply for a place', taken: 16, limit: 30, status: 'Open'},
+    {id: 3, course: 'Python for analysts', name: 'Moderator recruitment', taken: 4, limit: 4, status: 'Open'},
+    {id: 4, course: 'Data ethics', name: 'Apply for a place', taken: 41, limit: 60, status: 'Closes 30/11/26'},
+    {id: 5, course: 'Statistics refresher', name: 'Apply for a place', taken: 12, limit: 40, status: 'Open'},
+  ];
+  const R = (m, name, mail, city, days, group, deferred, answers, own) =>
+    ({m, name, mail, city, days, group, deferred, answers, own: !!own, id: name});
+  const ROWS = [
+    R(1, 'Yuri Oliveira', 'yuri@example.invalid', 'Lille', 367, 'Cohort 167', 0, [['Experience', 'A little'], ['Use', 'Sales forecasts'], ['Why', 'For our stores'], ['Hours', '4 a week']]),
+    R(1, 'Elisa Almeida', 'elisa@example.invalid', 'Malmö', 366, 'Cohort 187', 1, [['Experience', 'None yet'], ['Use', 'Demand planning'], ['Why', 'Keep me on the list'], ['Hours', '2 a week']]),
+    R(1, 'Marcos Barbosa', 'marcos@example.invalid', 'Porto', 366, 'Cohort 017', 1, [['Experience', 'A lot'], ['Use', 'Quality control']]),
+    R(1, 'Rafael Teixeira', 'rafael@example.invalid', 'Recife', 365, '', 0, [['Experience', 'A little'], ['Use', 'Teaching material']]),
+    R(1, 'Paula Barbosa', 'paula@example.invalid', 'Braga', 30, 'Cohort 225', 0, [['Experience', 'Some'], ['Use', 'Claims trends']]),
+    R(2, 'Amélie Dubois', 'amelie@example.invalid', 'Lille', 20, 'Evening cohort', 0, [['Python', 'A little'], ['Use', 'Sales forecasts'], ['Why', 'Forecasting for our stores']]),
+    R(2, 'Sara Lindgren', 'sara@example.invalid', 'Malmö', 16, '', 1, [['Python', 'A little'], ['Use', 'Demand planning']]),
+    R(2, 'Chloé Martin', 'chloe@example.invalid', 'Québec', 12, '', 1, [['Python', 'A little'], ['Use', 'Teaching material']]),
+    R(2, 'Kofi Mensah', 'kofi@example.invalid', 'Accra', 6, 'Online cohort', 0, [['Python', 'None yet'], ['Use', 'Claims trends']]),
+    R(3, 'Pavel Novotny', 'pavel@example.invalid', 'Brno', 14, 'Online cohort', 0, [['Why moderate', 'I taught the 2025 run'], ['Availability', 'Evenings']]),
+    R(3, 'Mateo Silva', 'mateo@example.invalid', 'Montevideo', 10, 'Online cohort', 0, [['Why moderate', 'Former participant']]),
+    R(4, 'Admin User', 'admin@example.invalid', '', 9, '', 0, [['Institution', 'Northwind']], true),
+    R(4, 'Leila Haddad', 'leila@example.invalid', 'Beirut', 8, '', 0, [['Institution', 'Cedar Labs'], ['Role', 'Analyst']]),
+    R(4, 'Ines Castro', 'ines@example.invalid', 'Faro', 3, '', 1, [['Institution', 'Atlântico'], ['Role', 'Manager']]),
+    R(5, 'Tomás Reis', 'tomas@example.invalid', 'Évora', 2, 'Morning group', 0, [['Background', 'Economics']]),
+    R(5, 'Hana Sato', 'hana@example.invalid', 'Osaka', 1, 'Morning group', 0, [['Background', 'Biology'], ['Goal', 'Thesis']]),
+  ];
+  const method = (id) => METHODS.find((m) => m.id === id);
+  const full = (m) => m.limit > 0 && m.taken >= m.limit;
+  const wait = (d) => d >= 365 ? `1 year ${d - 365} day${d - 365 === 1 ? '' : 's'}` : `${d} day${d === 1 ? '' : 's'}`;
+
+  const st = {scope: 'all', course: '', method: 0, waited: 0, named: '', search: '', view: 'list', find: '', sel: new Set(), details: true};
+  const WAITED = [0, 1, 3, 7, 14];
+  const NAMED = [['', 'Any'], ['yes', 'With a group'], ['no', 'Without a group']];
+
+  // Which rows pass every filter except the one named, so a facet's count is what choosing it would list.
+  const pass = (r, skip = '') => {
+    const m = method(r.m);
+    if (skip !== 'scope' && st.scope === 'pending' && r.deferred) { return false; }
+    if (skip !== 'scope' && st.scope === 'deferred' && !r.deferred) { return false; }
+    if (skip !== 'course' && st.course && m.course !== st.course) { return false; }
+    if (skip !== 'course' && skip !== 'method' && st.method && r.m !== st.method) { return false; }
+    if (skip !== 'waited' && st.waited && r.days <= st.waited) { return false; }
+    if (skip !== 'named' && st.named === 'yes' && !r.group) { return false; }
+    if (skip !== 'named' && st.named === 'no' && r.group) { return false; }
+    const q = st.search.trim().toLowerCase();
+    if (q && !(r.name + ' ' + r.mail + ' ' + r.city).toLowerCase().includes(q)) { return false; }
+    return true;
+  };
+  const rows = (skip) => ROWS.filter((r) => pass(r, skip)).sort((a, b) => b.days - a.days);
+  const active = () => [st.course, st.method, st.waited, st.named].filter(Boolean).length;
+
+  const tiles = () => {
+    $('t-await').textContent = ROWS.length;
+    $('t-old').textContent = `Oldest ${Math.max(...ROWS.map((r) => r.days))} d · ${ROWS.filter((r) => r.days > 7).length} over 7 d`;
+    const d = ROWS.filter((r) => r.deferred).length;
+    $('t-def').textContent = d;
+    $('t-defp').textContent = `${Math.round(100 * d / ROWS.length)}% of what awaits`;
+    $('t-courses').textContent = new Set(METHODS.map((m) => m.course)).size;
+    $('t-methods').textContent = `${METHODS.length} enrolment methods`;
+    $('t-full').textContent = METHODS.filter(full).length;
+  };
+
+  const bar = () => {
+    $('scope').innerHTML = [['all', 'All'], ['pending', 'Pending'], ['deferred', 'Deferred']]
+      .map(([v, l]) => `<button type="button" data-scope="${v}" class="${st.scope === v ? 'on' : ''}">${l}</button>`).join('');
+    const n = active();
+    $('b-filters').innerHTML = ic('filter') + (n ? `<b>${n}</b>` : '');
+    $('b-filters').className = n ? 'has' : '';
+    $('b-cols').innerHTML = ic('columns') + ic('chevron', 's');
+    $('b-view').innerHTML = ic(st.view === 'bycourse' ? 'queue' : (st.view === 'cards' ? 'cards' : 'auto')) + ic('chevron', 's');
+    if (!$('searchbox').firstChild) {
+      $('searchbox').innerHTML = ic('search') + '<input type="search" id="q" placeholder="Search applicants" aria-label="Search applicants">';
+      $('q').addEventListener('input', (e) => { st.search = e.target.value; st.sel.clear(); draw(false); });
+      $('searchbox').addEventListener('click', () => { $('searchbox').classList.add('open'); $('q').focus(); });
+      $('q').addEventListener('blur', () => { if (!st.search.trim()) { $('searchbox').classList.remove('open'); } });
+    }
+  };
+
+  const chips = () => {
+    const c = [];
+    if (st.course) { c.push(['course', 'Course: ' + st.course]); }
+    if (st.method) { c.push(['method', 'Method: ' + method(st.method).name]); }
+    if (st.waited) { c.push(['waited', `Waited more than: ${st.waited} day${st.waited === 1 ? '' : 's'}`]); }
+    if (st.named) { c.push(['named', st.named === 'yes' ? 'With a group' : 'Without a group']); }
+    if (st.search.trim()) { c.push(['search', 'Name: ' + st.search.trim()]); }
+    $('chips').innerHTML = c.map(([k, l]) => `<span class="chip">${esc(l)}<button type="button" data-chip="${k}" aria-label="Remove">${ic('close', 's')}</button></span>`).join('')
+      + (c.length ? '<button type="button" class="lnk" data-chip="all" style="border:0;background:none">Clear</button>' : '');
+  };
+
+  const panel = () => {
+    const courses = [...new Set(METHODS.map((m) => m.course))]
+      .map((c) => ({c, n: rows('course').filter((r) => method(r.m).course === c).length}))
+      .filter((o) => o.c.toLowerCase().includes(st.find.toLowerCase()))
+      .sort((a, b) => b.n - a.n);
+    const methods = st.course ? METHODS.filter((m) => m.course === st.course) : [];
+    const opt = (g, v, l, n, on) => `<button type="button" class="fopt" role="radio" data-f="${g}" data-v="${v}" aria-checked="${on}">${l}<small>${n}</small></button>`;
+    let h = `<div class="fgroup"><span class="fhead">Waited more than</span><div class="fopts" role="radiogroup">`
+      + WAITED.map((d) => opt('waited', d, d ? `${d} day${d === 1 ? '' : 's'}` : 'Any', rows('waited').filter((r) => !d || r.days > d).length, st.waited === d)).join('') + '</div></div>';
+    h += `<div class="fgroup"><span class="fhead">Group</span><div class="fopts" role="radiogroup">`
+      + NAMED.map(([v, l]) => opt('named', v, l, rows('named').filter((r) => !v || (v === 'yes') === !!r.group).length, st.named === v)).join('') + '</div></div>';
+    h += `<div class="fgroup"><span class="fhead">Course</span><input class="find" id="find" type="search" placeholder="Search courses" aria-label="Search courses" value="${esc(st.find)}"><div class="optlist" role="group">`
+      + courses.map((o) => `<button type="button" class="optrow" data-f="course" data-v="${esc(o.c)}" aria-pressed="${st.course === o.c}"><span class="tb">${ic('tick', 's')}</span><span class="l">${esc(o.c)}</span><small>${o.n}</small></button>`).join('')
+      + (courses.length ? '' : '<p class="fnote">No course matches.</p>') + '</div><p class="fnote">Courses with an application awaiting, most first.</p></div>';
+    if (methods.length > 1) {
+      h += `<div class="fgroup"><span class="fhead">Enrolment method</span><div class="optlist" role="group">`
+        + methods.map((m) => `<button type="button" class="optrow" data-f="method" data-v="${m.id}" aria-pressed="${st.method === m.id}"><span class="tb">${ic('tick', 's')}</span><span class="l">${esc(m.name)}${full(m) ? ' <span class="tag n">Full</span>' : ''}</span><small>${rows('method').filter((r) => r.m === m.id).length}</small></button>`).join('') + '</div></div>';
+    }
+    $('fbody').innerHTML = h;
+    $('f-clear').textContent = 'Clear filters';
+    const n = rows().length;
+    $('f-show').textContent = `Show ${n} application${n === 1 ? '' : 's'}`;
+    const f = $('find');
+    f.addEventListener('input', (e) => { st.find = e.target.value; const at = f.selectionStart; panel(); $('find').focus(); $('find').setSelectionRange(at, at); });
+  };
+
+  const list = () => {
+    const rs = rows();
+    if (!rs.length) { return '<div class="empty">No application matches these filters.</div>'; }
+    const selectable = rs.filter((r) => !r.own);
+    const all = selectable.length && selectable.every((r) => st.sel.has(r.id));
+    const some = selectable.some((r) => st.sel.has(r.id));
+    const head = `<thead><tr><th style="width:${st.details ? 27 : 34}%"><span class="who"><span class="box ${all ? 'on' : (some ? 'mix' : '')}" data-all="1" role="checkbox" aria-label="Select all on this page"></span>Applicant</span></th>`
+      + `<th style="width:${st.details ? 21 : 28}%">Course · method</th><th style="width:13%">Wait ▼</th><th style="width:13%">Group</th>${st.details ? '<th>Details submitted</th>' : ''}</tr></thead>`;
+    const body = rs.map((r) => {
+      const m = method(r.m);
+      const on = st.sel.has(r.id);
+      const tags = (r.deferred ? '<br><span class="tag">Deferred</span>' : '') + (r.own ? '<br><span class="tag n">Yours</span>' : '');
+      const a = r.answers.slice(0, 2).map(([k, v]) => `<span>${esc(k)}:</span> ${esc(v)}`).join(' · ') + (r.answers.length > 2 ? ` <span class="more">+${r.answers.length - 2}</span>` : '');
+      const box = r.own ? '<span style="width:15px;flex:none"></span>' : `<span class="box ${on ? 'on' : ''}" data-row="${esc(r.id)}" role="checkbox" aria-label="Select ${esc(r.name)}"></span>`;
+      return `<tr class="${on ? 'sel' : ''}"><th><span class="who">${box}<span class="av">${r.name.split(' ').map((w) => w[0]).join('')}</span><span><span class="nm">${esc(r.name)}</span><br><span class="id">${esc(r.mail)}${r.city ? ' · ' + esc(r.city) : ''}</span>${tags}</span><span class="rv">Review</span></span></th>`
+        + `<td class="crs"><b class="lnk" data-course="${esc(m.course)}">${esc(m.course)}</b><small>${esc(m.name)}${full(m) ? ' <span class="tag n">Full</span>' : ''}</small></td>`
+        + `<td class="wait">${wait(r.days)}</td><td>${r.group ? esc(r.group) : 'Without a group'}</td>${st.details ? `<td class="ans">${a}</td>` : ''}</tr>`;
+    }).join('');
+    return `<table>${head}<tbody>${body}</tbody></table>`;
+  };
+
+  const bycourse = () => {
+    const ms = METHODS.map((m) => ({m, rs: rows().filter((r) => r.m === m.id)})).filter((o) => o.rs.length).sort((a, b) => b.rs.length - a.rs.length);
+    if (!ms.length) { return '<div class="empty">No enrolment method matches these filters.</div>'; }
+    return '<table class="ovr"><thead><tr><th>Course · method</th><th>Awaiting ▼</th><th>Deferred</th><th>Oldest wait</th><th>Places taken</th><th>Status</th><th></th></tr></thead><tbody>'
+      + ms.map(({m, rs}) => `<tr><th class="crs"><b>${esc(m.course)}</b><small>${esc(m.name)}</small></th><td><b>${rs.length}</b></td><td>${rs.filter((r) => r.deferred).length}</td><td>${wait(Math.max(...rs.map((r) => r.days)))}</td>`
+        + `<td>${m.limit ? `${m.taken} of ${m.limit}<div class="meter"><i style="width:${Math.min(100, 100 * m.taken / m.limit)}%${full(m) ? ';background:#b26a00' : ''}"></i></div>` : `${m.taken.toLocaleString('en')}, no limit`}</td>`
+        + `<td>${full(m) ? '<span class="tag n">Full</span>' : esc(m.status)}</td><td><span class="lnk">Open the queue</span></td></tr>`).join('') + '</tbody></table>';
+  };
+
+  const dock = () => {
+    const picked = ROWS.filter((r) => st.sel.has(r.id));
+    const d = $('dock');
+    d.hidden = st.view === 'bycourse' || !picked.length;
+    const ms = new Set(picked.map((r) => r.m)).size;
+    d.innerHTML = `<b>${picked.length} selected on this page${ms > 1 ? ` <small>in ${ms} enrolment methods</small>` : ''}</b><span class="btn p">Confirm</span><span class="btn">Defer</span><span class="btn d">Cancel applications</span>`;
+  };
+
+  const draw = (withPanel = true) => {
+    bar(); chips();
+    const n = rows().length;
+    if (st.view === 'bycourse') {
+      const k = METHODS.filter((m) => rows().some((r) => r.m === m.id)).length;
+      $('count').textContent = `${k} enrolment method${k === 1 ? '' : 's'}`;
+      $('range').textContent = k ? `1 to ${k} of ${k}` : '';
+    } else {
+      $('count').textContent = `${n} application${n === 1 ? '' : 's'}`;
+      $('range').textContent = n ? `1 to ${n} of ${n}` : '';
+    }
+    $('grid').innerHTML = st.view === 'bycourse' ? bycourse() : list();
+    dock();
+    if (withPanel && !$('fpanel').hidden) { panel(); }
+  };
+
+  const close = (keep) => {
+    [['fpanel', 'b-filters'], ['m-view', 'b-view'], ['m-cols', 'b-cols']].forEach(([p, b]) => {
+      if (p !== keep) { $(p).hidden = true; $(b).setAttribute('aria-expanded', 'false'); }
+    });
+  };
+  const toggle = (p, b, fill) => {
+    const open = $(p).hidden;
+    close(p);
+    $(p).hidden = !open;
+    $(b).setAttribute('aria-expanded', String(open));
+    if (open) { fill(); }
+  };
+  const viewmenu = () => {
+    $('m-view').innerHTML = [['list', 'auto', 'Automatic'], ['cards', 'cards', 'Cards'], ['bycourse', 'queue', 'By course']]
+      .map(([v, i, l]) => `<button type="button" role="menuitemradio" data-view="${v}" aria-checked="${st.view === v}">${ic(i)}${l}</button>`).join('');
+  };
+  const colsmenu = () => {
+    $('m-cols').innerHTML = `<button type="button" role="menuitemcheckbox" aria-checked="true" disabled>${ic('tick')}Applicant <small style="color:var(--muted)">Always shown</small></button>`
+      + `<button type="button" role="menuitemcheckbox" data-col="details" aria-checked="${st.details}">${st.details ? ic('tick') : '<span style="width:16px"></span>'}Details submitted</button>`;
+  };
+
+  $('b-filters').addEventListener('click', () => toggle('fpanel', 'b-filters', panel));
+  $('b-view').addEventListener('click', () => toggle('m-view', 'b-view', viewmenu));
+  $('b-cols').addEventListener('click', () => toggle('m-cols', 'b-cols', colsmenu));
+  $('f-clear').addEventListener('click', () => { Object.assign(st, {course: '', method: 0, waited: 0, named: '', find: ''}); st.sel.clear(); draw(); });
+  $('f-show').addEventListener('click', () => close(''));
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { close(''); } });
+  document.addEventListener('click', (e) => {
+    const t = e.target.closest('[data-scope],[data-f],[data-chip],[data-view],[data-col],[data-row],[data-all],[data-course]');
+    if (!t) { return; }
+    const d = t.dataset;
+    if (d.scope) { st.scope = d.scope; st.sel.clear(); }
+    if (d.f === 'waited') { st.waited = Number(d.v); st.sel.clear(); }
+    if (d.f === 'named') { st.named = d.v; st.sel.clear(); }
+    if (d.f === 'course') { st.course = st.course === d.v ? '' : d.v; st.method = 0; st.sel.clear(); }
+    if (d.f === 'method') { st.method = st.method === Number(d.v) ? 0 : Number(d.v); st.sel.clear(); }
+    if (d.course) { st.course = d.course; st.method = 0; st.sel.clear(); }
+    if (d.chip) {
+      if (d.chip === 'all' || d.chip === 'course') { st.course = ''; st.method = 0; }
+      if (d.chip === 'all' || d.chip === 'method') { st.method = 0; }
+      if (d.chip === 'all' || d.chip === 'waited') { st.waited = 0; }
+      if (d.chip === 'all' || d.chip === 'named') { st.named = ''; }
+      if (d.chip === 'all' || d.chip === 'search') { st.search = ''; $('q').value = ''; $('searchbox').classList.remove('open'); }
+      st.sel.clear();
+    }
+    if (d.view) { st.view = d.view; st.sel.clear(); close(''); }
+    if (d.col) { st.details = !st.details; colsmenu(); }
+    if (d.row) { st.sel.has(d.row) ? st.sel.delete(d.row) : st.sel.add(d.row); }
+    if (d.all) {
+      const s = rows().filter((r) => !r.own);
+      const every = s.every((r) => st.sel.has(r.id));
+      s.forEach((r) => every ? st.sel.delete(r.id) : st.sel.add(r.id));
+    }
+    draw();
+  });
+  tiles();
+  draw();
+})();
+</script>
+</body>
+</html>
