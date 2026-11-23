@@ -451,9 +451,9 @@ final class queue_view_test extends \advanced_testcase {
         $offer = $this->shell()->props()['decision'];
         $this->assertNotNull($offer);
         $this->assertSame(sesskey(), $offer['sesskey']);
-        // The table's three decisions, in its order and under its labels.
-        $this->assertSame(['cancel', 'wait', 'confirm'], array_column($offer['actions'], 'value'));
-        $this->assertSame(['Cancel applications', 'Defer', 'Confirm'], array_column($offer['actions'], 'label'));
+        // The table's three decisions, in its order and under its labels: the destructive one last.
+        $this->assertSame(['confirm', 'wait', 'cancel'], array_column($offer['actions'], 'value'));
+        $this->assertSame(['Confirm', 'Defer', 'Cancel applications'], array_column($offer['actions'], 'label'));
         $this->assertSame(get_string('outcomemessage', 'enrol_apply'), $offer['message']['label']);
         $this->assertSame(get_string('decisionnote_help', 'enrol_apply'), $offer['note']['help']);
         // The choosers, with names in the plain spelling the client draws as text.
