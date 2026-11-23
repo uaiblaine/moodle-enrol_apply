@@ -21,7 +21,7 @@ use context_system;
 /**
  * Writes an applicant's own answers back to their profile, when they ask for it.
  *
- * The whole class exists because core will not stop you. user_update_user() consults no
+ * The whole class exists because core will not stop you. \core\user::update_user() consults no
  * capability and no field_lock_* setting, and neither profile_save_data() nor a field type's
  * edit_save_data() performs an authorisation check of any kind - they write whatever is on
  * the object they are handed. Core's only defence against a forged post is setConstant() winning in
@@ -82,7 +82,6 @@ class profilewriter {
     public static function write(\stdClass $instance, \stdClass $user, array $submitted): array {
         global $CFG, $DB;
 
-        require_once($CFG->dirroot . '/user/lib.php');
         require_once($CFG->dirroot . '/user/profile/lib.php');
 
         if (!self::is_enabled($instance)) {
@@ -134,7 +133,7 @@ class profilewriter {
         $usernew->timemodified = time();
 
         /* The order of core's user/edit.php, and each step matters. The auth plugin is told
-           first, or an external directory goes stale; user_update_user() is called with
+           first, or an external directory goes stale; \core\user::update_user() is called with
            $triggerevent = false so the event is not born in the middle of the write; each
            custom field is written by its own type's edit_save_data(), one field at a time
            rather than through profile_save_data(), so each type finds its own elements in the
@@ -143,12 +142,7 @@ class profilewriter {
             throw new \moodle_exception('cannotupdateprofile');
         }
         if ($wrotestandard) {
-            // Moodle 5.3 moved the function to \core\user and deprecated the old name; 5.1 and 5.2 have only the old one.
-            if (method_exists(\core\user::class, 'update_user')) {
-                \core\user::update_user($usernew, false, false);
-            } else {
-                user_update_user($usernew, false, false);
-            }
+            \core\user::update_user($usernew, false, false);
         }
         foreach ($custom as [$field, $change]) {
             customfield::save($field, (int) $user->id, $change['values']);

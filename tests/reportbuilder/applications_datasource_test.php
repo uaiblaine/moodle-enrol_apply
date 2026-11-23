@@ -200,8 +200,8 @@ final class applications_datasource_test extends \core_reportbuilder\tests\core_
     /**
      * The default columns, filters and conditions a new report starts with.
      *
-     * Only the defaults are pinned, not the full available set: core's user entity offers
-     * user:moodlenetprofile on 5.1 and not on 5.2.
+     * Only the defaults are pinned, not the full available set, which follows core's own entities
+     * from one release to the next.
      *
      * @return void
      */

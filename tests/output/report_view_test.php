@@ -31,10 +31,11 @@ use enrol_apply\reportbuilder\local\systemreports\course_applications;
 use PHPUnit\Framework\Attributes\CoversClass;
 
 /**
- * What the server adds for the React view: the branch gate, a shell whose props carry no row, core's
- * report in the noscript without its filter form, and the queue link only for a reader the queue admits.
+ * What the server adds for the React view: the view=table choice, a shell whose props carry no row,
+ * core's report in the noscript without its filter form, and the queue link only for a reader the
+ * queue admits.
  *
- * The client itself has no test runner here; tests/behat/report_view.feature drives it on 5.3.
+ * The client itself has no test runner here; tests/behat/report_view.feature drives it.
  *
  * @package    enrol_apply
  * @category   test
@@ -109,22 +110,15 @@ final class report_view_test extends \advanced_testcase {
     }
 
     /**
-     * The view mounts on Moodle 5.3 and later only, and never where core's table was asked for.
+     * The view mounts by default, and never where core's table was asked for.
      *
-     * Changes that must make it fail: the branch gate lowered to 5.2 or dropped; view=table ignored.
+     * Changes that must make it fail: view=table ignored; the default view no longer the React one.
      *
      * @return void
      */
-    public function test_the_view_mounts_on_53_only_and_not_for_the_table(): void {
-        global $CFG;
-
-        $CFG->branch = '502';
-        $this->assertFalse(report_view::available());
-        $this->assertFalse(report_view::wanted(''));
-
-        $CFG->branch = '503';
-        $this->assertTrue(report_view::available());
+    public function test_the_view_mounts_unless_the_table_is_asked_for(): void {
         $this->assertTrue(report_view::wanted(''));
+        $this->assertTrue(report_view::wanted('cards'));
         $this->assertFalse(report_view::wanted(report_view::TABLE));
 
         // The table's url names the view; the default one names nothing but the method.
@@ -175,9 +169,6 @@ final class report_view_test extends \advanced_testcase {
     public function test_the_shell_mounts_the_bundle_and_keeps_cores_report_for_no_javascript(): void {
         global $PAGE;
 
-        if (!report_view::available()) {
-            $this->markTestSkipped('The React view mounts on Moodle 5.3 and later only.');
-        }
         $this->setAdminUser();
 
         // Control: core's own rendering of this report carries its filter form.

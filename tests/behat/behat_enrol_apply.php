@@ -43,7 +43,7 @@ class behat_enrol_apply extends behat_base {
      *   "<shortname> > manage applications"   the per-course application queue
      *   "<shortname> > application fields"    the instance's own application questions
      *   "<shortname> > applications report"   the course report of applications, its default view
-     *   "<shortname> > applications table"    the same report as core's table (view=table on 5.3)
+     *   "<shortname> > applications table"    the same report as core's table (view=table)
      *
      * @param string $type Identifies which page to resolve.
      * @param string $identifier Course short name.

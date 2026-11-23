@@ -4,7 +4,7 @@
 front of a course enrolment. A user applies, optionally with a comment and a snapshot of
 profile fields; the enrolment is created suspended, so it grants no access; a teacher or
 manager then confirms it, defers it to a waiting list, or cancels it, and the applicant is
-notified. It supports Moodle 5.1 and 5.2 on one branch. It has three tables of its own:
+notified. It supports Moodle 5.3.1 and later only. It has three tables of its own:
 `enrol_apply_applicationinfo` (the pending comment), `enrol_apply_submission` (a durable
 record of each application, with applicant and decider) and `enrol_apply_groups`.
 
@@ -76,8 +76,8 @@ fork's; it does not list which features are which, so this file does not either.
 - Decider text is stored as `PARAM_TEXT` and escaped again at the sink (`s()` and `nl2br()`
   in the e-mail, `format_text(..., FORMAT_PLAIN)` on pages); the notification templates are the
   administrator's trusted HTML. The instance description is rendered with `format_text()`.
-- `$plugin->supported = [501, 502]`: code that branches on the core version or calls a helper
-  only when it exists is deliberate.
+- `$plugin->supported = [503, 503]` (requires 5.3.1): a helper called only when it exists is
+  probing an optional plugin (`local_groupdist`, a custom profile or custom field type), not core.
 
 ## De-emphasise
 

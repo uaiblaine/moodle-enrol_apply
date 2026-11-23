@@ -31,11 +31,9 @@ use enrol_apply\reportbuilder\local\formatters\submission as formatter;
 /**
  * The durable application record, as a Report Builder entity.
  *
- * initialise() is overridden to register every column and filter itself, which is the one
- * shape both supported branches accept: on Moodle 5.1 base::initialise() is abstract, while 5.2
- * makes it concrete and drives it from get_available_columns(), get_available_filters() and
- * get_available_conditions(), which do not exist on 5.1. An entity written in the 5.2 shape is
- * a fatal error on 5.1.
+ * initialise() is overridden to register every column and filter itself, rather than through
+ * get_available_columns(), get_available_filters() and get_available_conditions(), which core's
+ * base::initialise() drives. Core accepts either shape.
  *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine

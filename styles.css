@@ -3,7 +3,7 @@
    would be no background at all. The sticky footer needs no root of its own, because core
    positions it with CSS and it stays inside the form.
 
-   The chains read the theme's own tokens rather than inventing a palette: 5.1 and 5.2 ship
+   The chains read the theme's own tokens rather than inventing a palette: Moodle ships
    Bootstrap's dark colour mode, where a literal grey renders as a light slab inside a dark page,
    and a site with its own institutional colour must see it here too. */
 .enrol_apply-queue,

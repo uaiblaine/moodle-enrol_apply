@@ -19,10 +19,9 @@ namespace enrol_apply;
 /**
  * An auth plugin that sends its users elsewhere to edit their profile, for the tests that need one.
  *
- * No core auth plugin returns an edit_profile_url(), and before Moodle 5.3 get_auth_plugin()
- * requires the plugin's own file from the code tree, so there is nothing a test could stand in its
- * place. From 5.3 it asks core's dependency container for \core\authentication, which a test may
- * replace and advanced_testcase resets after every test. A test using this skips before 5.3.
+ * No core auth plugin returns an edit_profile_url(). get_auth_plugin() asks core's dependency
+ * container for \core\authentication, which a test may replace and advanced_testcase resets after
+ * every test, so the stand-in goes there.
  *
  * @package    enrol_apply
  * @category   test
@@ -40,9 +39,6 @@ trait profile_elsewhere {
     protected function send_manual_users_elsewhere(): void {
         global $CFG;
 
-        if (!class_exists(\core\authentication::class)) {
-            $this->markTestSkipped('Before Moodle 5.3 get_auth_plugin() offers no way to stand in an auth plugin.');
-        }
         require_once($CFG->dirroot . '/auth/manual/auth.php');
 
         $elsewhere = new class extends \auth_plugin_manual {

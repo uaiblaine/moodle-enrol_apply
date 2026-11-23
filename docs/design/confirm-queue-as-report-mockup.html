@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Confirm enrolments as a data report: mockup</title>
+<style>
+/* Tokens and measures are the course report's (styles.css, .enrol_apply-rview-*), written out as literals for a static page. */
+:root {
+    --surface: #fff; --ground: #f8f9fa; --inset: #eef0f3; --alt: #f3f4f6; --line: #dee2e6; --control-line: #b9c0c9; --ink: #1d2125; --strong: #0b0d0f;
+    --muted: #5b6470; --faint: #8a93a0; --brand: #0f6cbf; --brand-ink: #0b5394; --brand-tint: #e7f1fb; --brand-edge: #b7d4ee;
+    --warn-tint: #fdefd8; --warn-ink: #6b4a12; --warn-edge: #e0a43a; --info-tint: #dff1f6; --info-ink: #0b4f63; --danger: #b3261e;
+    --r-xs: 4px; --r-sm: 6px; --r-md: 8px; --r-lg: 12px; --r-xl: 16px; --bar-inner: 2rem;
+    --e-sm: 0 1px 2px rgba(10, 12, 50, .1); --e-md: 0 4px 12px rgba(10, 12, 50, .12); --e-lg: 0 12px 32px rgba(10, 12, 50, .18);
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--ground); color: var(--ink); font: 0.9375rem/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 1320px; margin: 0 auto; padding: 16px 16px 120px; }
+h1 { font-size: 1.6rem; font-weight: 500; margin: 0 0 12px; }
+button { font: inherit; color: inherit; cursor: pointer; }
+[hidden] { display: none !important; }
+.note { background: #fff8e1; border: 1px dashed #c9a227; border-radius: var(--r-md); padding: 8px 12px; margin: 0 0 14px; color: #5a4500; font-size: .8125rem; }
+.ic { flex: none; width: 1rem; height: 1rem; }
+.chev { width: .75rem; height: .75rem; }
+.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+
+.band { display: grid; gap: .5rem; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); margin-bottom: .75rem; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: .75rem; min-width: 0; }
+.tile .lbl { display: block; color: var(--muted); font-size: .75rem; font-weight: 600; }
+.tile strong { display: block; color: var(--strong); font-size: 1.5rem; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.tile.warn strong { color: var(--warn-ink); }
+.tile .sub { display: block; color: var(--muted); font-size: .75rem; }
+.meter { height: .25rem; border-radius: var(--r-xs); background: var(--inset); margin-top: .375rem; overflow: hidden; }
+.meter i { display: block; height: 100%; background: var(--brand); }
+.meter.open i { background: var(--warn-edge); }
+
+.bar { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; margin-bottom: .75rem; position: relative; }
+.seg { display: inline-flex; flex-wrap: wrap; gap: .125rem; padding: .1875rem; background: var(--inset); border-radius: var(--r-lg); }
+.seg button { display: inline-flex; align-items: center; gap: .375rem; height: var(--bar-inner); padding: 0 .75rem; border: 0; border-radius: var(--r-md); background: transparent; color: var(--muted); font-size: .875rem; font-weight: 500; }
+.seg button[aria-checked="true"] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: var(--e-sm); }
+.spacer { flex: 1 1 0; }
+.controls { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; justify-content: flex-end; margin-inline-start: auto; position: relative; }
+.cluster { display: inline-flex; align-items: center; background: var(--inset); border-radius: var(--r-lg); color: var(--muted); }
+.count { color: var(--muted); font-size: .875rem; font-weight: 600; font-variant-numeric: tabular-nums; padding: 0 .5rem 0 .75rem; white-space: nowrap; }
+.capsule { display: inline-flex; align-items: center; gap: .125rem; padding: .1875rem; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--e-sm); color: var(--muted); position: relative; }
+.anchor { display: inline-flex; position: relative; }
+.iconbtn { display: inline-flex; align-items: center; justify-content: center; gap: .125rem; height: var(--bar-inner); min-width: var(--bar-inner); padding: 0 .375rem; border: 0; border-radius: var(--r-md); background: transparent; color: var(--muted); position: relative; }
+.iconbtn:hover { background: var(--alt); color: var(--ink); }
+.iconbtn[aria-expanded="true"] { background: var(--brand-tint); color: var(--brand-ink); }
+.badge { position: absolute; top: -.25rem; right: -.25rem; min-width: 1rem; height: 1rem; line-height: 1rem; padding: 0 .25rem; border-radius: 50rem; background: var(--brand); color: #fff; font-size: .75rem; font-weight: 700; text-align: center; }
+.search { display: inline-flex; align-items: center; gap: .375rem; height: var(--bar-inner); padding: 0 .5rem; background: var(--inset); border-radius: var(--r-md); color: var(--muted); }
+.search input { border: 0; background: transparent; outline: none; font: inherit; font-size: .875rem; color: var(--ink); width: 190px; min-width: 60px; }
+.chips { display: flex; align-items: center; flex: 1 0 100%; flex-wrap: wrap; gap: .375rem; }
+.chip { display: inline-flex; align-items: center; gap: .375rem; height: 1.75rem; padding: 0 .375rem 0 .5rem; background: var(--brand-tint); border: 1px solid var(--brand-edge); border-radius: var(--r-sm); color: var(--brand-ink); font-size: .8125rem; font-weight: 500; }
+.chip button { display: inline-flex; border: 0; background: none; padding: 0; }
+.chip .ic { width: .75rem; height: .75rem; }
+.clearall { background: none; border: 0; padding: 0 .25rem; font-size: .8125rem; font-weight: 600; text-decoration: underline; }
+.tolink { margin-inline-start: auto; font-size: .8125rem; color: var(--brand); }
+
+.menu, .fpanel { position: absolute; right: 0; top: calc(100% + .375rem); z-index: 20; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--e-md); max-height: 70vh; color: var(--ink); }
+.menu { border-radius: var(--r-md); min-width: 15rem; overflow: auto; padding: .25rem; }
+.menu .head { color: var(--muted); font-size: .75rem; font-weight: 600; padding: .375rem .5rem .125rem; }
+.menu .sep { height: 1px; background: var(--line); margin: .25rem 0; }
+.item { display: flex; align-items: center; gap: .5rem; width: 100%; min-height: 2rem; padding: .25rem .5rem; border: 0; border-radius: var(--r-xs); background: transparent; font-size: .875rem; text-align: start; }
+.item:hover { background: var(--brand-tint); color: var(--brand-ink); }
+.item[aria-checked="true"] { font-weight: 600; }
+.item[aria-disabled="true"] { color: var(--faint); background: transparent; cursor: default; }
+.item .hint { margin-inline-start: auto; color: var(--muted); font-size: .75rem; font-weight: 400; }
+.box { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 1rem; height: 1rem; border: 1px solid var(--control-line); border-radius: var(--r-xs); }
+.box .ic { width: .75rem; height: .75rem; color: #fff; visibility: hidden; }
+[aria-checked="true"] > .box { background: var(--brand); border-color: var(--brand); }
+[aria-checked="true"] > .box .ic { visibility: visible; }
+.fpanel { display: flex; flex-direction: column; border-radius: var(--r-lg); width: 24rem; min-width: 18.75rem; max-width: 100%; }
+.fbody { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: .75rem; }
+.fhead { display: block; color: var(--muted); font-size: .75rem; font-weight: 600; padding: .625rem 0 .375rem; }
+.fhead:first-child { padding-top: 0; }
+.fopts { display: flex; flex-wrap: wrap; gap: .375rem; }
+.fopt { display: inline-flex; align-items: center; gap: .375rem; min-height: 1.75rem; padding: .1875rem .5rem; background: var(--surface); border: 1px solid var(--control-line); border-radius: var(--r-sm); font-size: .8125rem; font-weight: 500; }
+.fopt[aria-checked="true"] { background: var(--brand-tint); border-color: var(--brand-edge); color: var(--brand-ink); }
+.fopt small { color: var(--muted); font-variant-numeric: tabular-nums; }
+.ffoot { display: flex; justify-content: space-between; gap: .5rem; flex: none; padding: .75rem; border-top: 1px solid var(--line); }
+
+.btn { min-height: 2rem; padding: 0 .75rem; border: 1px solid var(--control-line); border-radius: var(--r-sm); background: var(--surface); font-size: .875rem; }
+.btn.sm { min-height: 1.75rem; padding: 0 .5rem; font-size: .8125rem; color: var(--muted); }
+.btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+.btn.danger { color: var(--danger); }
+.label { display: inline-block; border-radius: var(--r-sm); padding: .0625rem .4375rem; font-size: .75rem; font-weight: 600; }
+.label.defer, .label.open { background: var(--warn-tint); color: var(--warn-ink); }
+.label.key { background: var(--info-tint); color: var(--info-ink); }
+.label.keywarn { background: #fde4e1; color: #7a1f18; }
+.label.quiet { background: var(--inset); color: var(--muted); }
+.avatar { flex: none; width: 2.25rem; height: 2.25rem; border-radius: 50%; display: grid; place-items: center; color: #fff; font-size: .8125rem; font-weight: 600; }
+.sub { display: block; color: var(--muted); font-size: .8125rem; }
+.tags { display: flex; flex-wrap: wrap; gap: .25rem; margin-top: .25rem; }
+
+.frame { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); overflow: auto; max-height: 34rem; }
+table { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; font-size: .875rem; }
+th, td { text-align: left; vertical-align: top; padding: .625rem .75rem; border-bottom: 1px solid var(--line); border-inline-end: 1px solid var(--line); max-width: 16rem; }
+th { position: sticky; top: 0; z-index: 2; background: var(--ground); font-weight: 600; white-space: nowrap; }
+th:first-child, td:first-child { position: sticky; left: 0; z-index: 1; background: var(--surface); min-width: 21rem; }
+th:first-child { z-index: 3; background: var(--ground); }
+tr:last-child td { border-bottom: 0; }
+tr.sel td { background: var(--brand-tint); }
+.who { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; gap: .625rem; align-items: start; }
+.who a { color: var(--brand); font-weight: 600; text-decoration: none; }
+.th-who { display: flex; gap: .625rem; align-items: center; }
+td.txt { white-space: normal; min-width: 12rem; }
+.req { color: var(--muted); font-size: .75rem; font-weight: 400; }
+
+.cards { display: grid; gap: .5rem; grid-template-columns: repeat(auto-fill, minmax(17.5rem, 1fr)); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: .75rem; min-width: 0; }
+.card.sel { background: var(--brand-tint); border-color: var(--brand-edge); }
+.card .l1 { display: flex; gap: .5rem; align-items: flex-start; }
+.card .l1 .name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.card .l1 a { color: var(--brand); font-weight: 600; text-decoration: none; }
+.cline { font-size: .8125rem; margin-top: .25rem; overflow-wrap: anywhere; }
+.cline.open { color: var(--warn-ink); font-weight: 600; }
+.cline.muted { color: var(--muted); }
+.more { margin-top: .375rem; background: none; border: 0; padding: 0; color: var(--brand); font-size: .8125rem; }
+.card dl { border-top: 1px solid var(--line); font-size: .8125rem; margin: .5rem 0 0; padding-top: .5rem; display: grid; gap: .25rem .5rem; grid-template-columns: minmax(0, 7rem) minmax(0, 1fr); }
+.card dt { color: var(--muted); }
+.card dd { margin: 0; overflow-wrap: anywhere; }
+
+.foot { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: .5rem; margin-top: .625rem; color: var(--muted); font-size: .8125rem; }
+.pager { display: inline-flex; align-items: center; gap: .125rem; }
+.pager button { min-width: 2rem; min-height: 2rem; padding: 0 .5rem; border: 0; border-radius: var(--r-md); background: transparent; font-size: .8125rem; }
+.pager button[aria-current="page"] { background: var(--brand-tint); color: var(--brand-ink); font-weight: 700; }
+.pager button[disabled] { color: var(--faint); }
+.foot select { font: inherit; border: 1px solid var(--control-line); border-radius: var(--r-sm); padding: .125rem .375rem; background: var(--surface); }
+
+.dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; background: var(--surface); border-top: 1px solid var(--line); box-shadow: var(--e-lg); padding: .625rem 1rem; }
+.dock .in { max-width: 1320px; margin: 0 auto; display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+.dock input, .dock select { font: inherit; font-size: .875rem; min-height: 2rem; border: 1px solid var(--control-line); border-radius: var(--r-sm); padding: 0 .5rem; background: var(--surface); }
+.dock input { flex: 1 1 14rem; min-width: 0; }
+.legend { margin-top: 24px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 12px 16px; font-size: .875rem; }
+.legend h2 { font-size: 1rem; margin: 0 0 6px; }
+.legend li { margin: 4px 0; }
+
+/* The narrow bar, as the report's --narrow modifier (set by the width of the bar, not the screen). */
+.narrow > .spacer { display: none; }
+.narrow > .controls { flex: 1 0 100%; }
+.narrow > .seg { display: flex; flex: 1 0 100%; order: 1; }
+.narrow > .seg button { flex: 1 1 0; justify-content: center; min-width: 0; }
+.narrow > .chips { order: 2; }
+.narrow .capsule, .narrow .anchor { position: static; }
+.narrow .count .word { display: none; }
+.narrow.searching .cluster { display: none; }
+.narrow.searching .searchcap, .narrow.searching .search { flex: 1 1 0; min-width: 0; }
+.narrow .search input { flex: 1 1 auto; width: auto; }
+.narrow .fpanel { position: fixed; inset: auto 0 0 0; width: auto; max-height: 80vh; z-index: 1050; border-radius: var(--r-xl) var(--r-xl) 0 0; box-shadow: var(--e-lg); }
+.narrow ~ .foot .range { display: none; }
+</style>
+</head>
+<body>
+<main>
+<p class="note"><b>Mockup.</b> "Confirm enrolments" (<code>manage.php</code>) drawn with the course report's own parts: the same bar (closed search, the count that
+drops its word on a narrow bar, the capsule of icon buttons, the menus with boxes, the filter panel that becomes a sheet), the same grid, cards and pager.
+What only the queue has is added to it: the selection, the decision bar, the profile picture and the tags. Narrow the window to see the phone form.</p>
+
+<h1>Confirm enrolments</h1>
+
+<div class="band">
+    <div class="tile"><span class="lbl">Places taken (approved)</span><strong>16 of 30</strong><div class="meter"><i style="width:53%"></i></div></div>
+    <div class="tile"><span class="lbl">Applications held</span><strong>34 of 80</strong><div class="meter"><i style="width:42%"></i></div></div>
+    <div class="tile warn"><span class="lbl">Awaiting a decision</span><strong>8</strong><span class="sub">Oldest 19 d · 3 over 7 d</span></div>
+    <div class="tile"><span class="lbl">Status</span><strong>Open</strong><span class="sub">Applications close on 30/11/26</span></div>
+</div>
+
+<div class="bar" id="bar">
+    <div class="seg" role="radiogroup" aria-label="Show">
+        <button role="radio" aria-checked="true" data-scope="all">All</button>
+        <button role="radio" aria-checked="false" data-scope="pending">Pending</button>
+        <button role="radio" aria-checked="false" data-scope="deferred">Deferred</button>
+    </div>
+    <span class="spacer"></span>
+    <div class="controls">
+        <div class="cluster">
+            <span class="count"><span id="n">8</span><span class="word"> applications</span></span>
+            <div class="capsule">
+                <button class="iconbtn" id="b-filters" aria-label="Filters" title="Filters" aria-expanded="false"><svg class="ic" data-i="filter"></svg><span class="badge">1</span></button>
+                <div class="anchor"><button class="iconbtn" id="b-columns" aria-label="Columns" title="Columns" aria-expanded="false"><svg class="ic" data-i="columns"></svg><svg class="ic chev" data-i="chevron"></svg></button>
+                    <div class="menu" id="p-columns" role="menu" aria-label="Columns" hidden>
+                        <div class="head">Sets</div>
+                        <button class="item" role="menuitemcheckbox" aria-checked="true" data-set="wait,grp,a1,a2,a3,a4,cmt"><span class="box"><svg class="ic" data-i="tick"></svg></span>Everything asked</button>
+                        <button class="item" role="menuitemcheckbox" aria-checked="false" data-set="wait,grp,cmt"><span class="box"><svg class="ic" data-i="tick"></svg></span>Decision at a glance</button>
+                        <button class="item" role="menuitemcheckbox" aria-checked="false" data-set="a1,a2,a3,a4"><span class="box"><svg class="ic" data-i="tick"></svg></span>Answers</button>
+                        <div class="sep"></div>
+                        <button class="item" role="menuitemcheckbox" aria-checked="true" aria-disabled="true"><span class="box"><svg class="ic" data-i="tick"></svg></span>Applicant<span class="hint">Always shown</span></button>
+                        <button class="item" role="menuitemcheckbox" data-col="wait"><span class="box"><svg class="ic" data-i="tick"></svg></span>Waiting</button>
+                        <button class="item" role="menuitemcheckbox" data-col="grp"><span class="box"><svg class="ic" data-i="tick"></svg></span>Group</button>
+                        <button class="item" role="menuitemcheckbox" data-col="a1"><span class="box"><svg class="ic" data-i="tick"></svg></span>City/town</button>
+                        <button class="item" role="menuitemcheckbox" data-col="a2"><span class="box"><svg class="ic" data-i="tick"></svg></span>Institution</button>
+                        <button class="item" role="menuitemcheckbox" data-col="a3"><span class="box"><svg class="ic" data-i="tick"></svg></span>How much Python have you written?</button>
+                        <button class="item" role="menuitemcheckbox" data-col="a4"><span class="box"><svg class="ic" data-i="tick"></svg></span>What would you like to use it for?</button>
+                        <button class="item" role="menuitemcheckbox" data-col="cmt"><span class="box"><svg class="ic" data-i="tick"></svg></span>Comment</button>
+                        <button class="item" role="menuitemcheckbox" data-col="hist"><span class="box"><svg class="ic" data-i="tick"></svg></span>Earlier applications</button>
+                    </div></div>
+                <div class="anchor"><button class="iconbtn" id="b-view" aria-label="View" title="View" aria-expanded="false"><svg class="ic" id="viewicon" data-i="auto"></svg><svg class="ic chev" data-i="chevron"></svg></button>
+                    <div class="menu" id="p-view" role="menu" aria-label="View" hidden>
+                        <button class="item" role="menuitemradio" aria-checked="true" data-view="auto"><svg class="ic" data-i="auto"></svg>Automatic<span class="hint">By the width</span></button>
+                        <button class="item" role="menuitemradio" aria-checked="false" data-view="table"><svg class="ic" data-i="table"></svg>Table</button>
+                        <button class="item" role="menuitemradio" aria-checked="false" data-view="cards"><svg class="ic" data-i="cards"></svg>Cards</button>
+                    </div></div>
+            </div>
+        </div>
+        <div class="capsule searchcap">
+            <button class="iconbtn" id="b-search" aria-label="Search by name" title="Search by name"><svg class="ic" data-i="search"></svg></button>
+            <span class="search" id="searchbox" hidden><svg class="ic" data-i="search"></svg><input type="search" id="q" placeholder="Search by name" aria-label="Search by name">
+                <button class="iconbtn" id="b-searchclose" aria-label="Close the search" style="height:1.5rem;min-width:1.5rem"><svg class="ic" data-i="close"></svg></button></span>
+        </div>
+        <div class="fpanel" id="p-filters" role="dialog" aria-label="Filters" hidden>
+            <div class="fbody">
+                <span class="fhead">Group</span>
+                <div class="fopts"><button class="fopt" role="checkbox" aria-checked="true"><span class="box"><svg class="ic" data-i="tick"></svg></span>Evening cohort <small>3</small></button>
+                    <button class="fopt" role="checkbox" aria-checked="false"><span class="box"><svg class="ic" data-i="tick"></svg></span>Online cohort <small>2</small></button>
+                    <button class="fopt" role="checkbox" aria-checked="false"><span class="box"><svg class="ic" data-i="tick"></svg></span>Weekend cohort <small>2</small></button>
+                    <button class="fopt" role="checkbox" aria-checked="false"><span class="box"><svg class="ic" data-i="tick"></svg></span>Without a group <small>1</small></button></div>
+                <span class="fhead">How the group was named</span>
+                <div class="fopts"><button class="fopt" role="checkbox" aria-checked="false"><span class="box"><svg class="ic" data-i="tick"></svg></span>Chosen from the list <small>5</small></button>
+                    <button class="fopt" role="checkbox" aria-checked="false"><span class="box"><svg class="ic" data-i="tick"></svg></span>Group key <small>2</small></button></div>
+                <span class="fhead">Waited more than</span>
+                <div class="fopts"><button class="fopt" role="checkbox" aria-checked="false">1 day <small>7</small></button><button class="fopt" role="checkbox" aria-checked="false">3 days <small>4</small></button>
+                    <button class="fopt" role="checkbox" aria-checked="false">7 days <small>3</small></button><button class="fopt" role="checkbox" aria-checked="false">14 days <small>2</small></button></div>
+                <span class="fhead">Applied before</span>
+                <div class="fopts"><button class="fopt" role="checkbox" aria-checked="false"><span class="box"><svg class="ic" data-i="tick"></svg></span>Yes <small>1</small></button></div>
+            </div>
+            <div class="ffoot"><button class="btn" id="b-fclear">Clear filters</button><button class="btn primary" id="b-fshow">Show 3</button></div>
+        </div>
+    </div>
+    <div class="chips"><span class="chip"><span>Group: Evening cohort</span><button aria-label="Remove the filter Group: Evening cohort"><svg class="ic" data-i="close"></svg></button></span>
+        <button class="clearall">Clear all</button><a class="tolink" href="#">Open the report</a></div>
+</div>
+
+<div class="frame" id="grid">
+    <table>
+        <thead><tr>
+            <th><span class="th-who"><input type="checkbox" id="all" aria-label="Select all"> Applicant</span></th>
+            <th data-col="wait">Waiting</th><th data-col="grp">Group</th><th data-col="a1">City/town <span class="req">required</span></th>
+            <th data-col="a2">Institution</th><th data-col="a3">How much Python have you written?</th>
+            <th data-col="a4">What would you like to use it for?</th><th data-col="cmt">Why would you like to join this course?</th>
+            <th data-col="hist">Earlier applications</th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+    </table>
+</div>
+<div class="cards" id="cards" hidden></div>
+
+<div class="foot"><span class="range">1 to 8 of 8</span>
+    <span class="pager"><button disabled>Previous</button><button aria-current="page">1</button><button disabled>Next</button></span>
+    <label>Per page <select><option>30</option><option>50</option><option>100</option></select></label></div>
+
+<section class="legend">
+    <h2>What comes from the report, and what stays the queue's</h2>
+    <ul>
+        <li><b>From the report, unchanged:</b> the bar (scope, count, Filters with its counter, Columns with its sets, View, the search that opens from its icon),
+            the chips, the bounded grid with a sticky heading and applicant column, one column per profile field and per question, the cards with "More",
+            the pager, and the narrow form: the scope under the controls, the count without its word, the filter panel as a bottom sheet, cards in one column.</li>
+        <li><b>Left out:</b> Download (the queue is not a record to export; "Open the report" leads to it) and the turnaround band (the capacity tiles stand in its place).</li>
+        <li><b>The queue's own:</b> the selection and the decision bar (approve, defer, cancel, with the message and the groups), the Deferred scope.</li>
+        <li><b>New here:</b> the profile picture; the tags under the name (Deferred, Applied before, the key's outcome with its group, "Your own application", which
+            has no selection box); "Earlier applications" as an optional column for a holder of the reports capability.</li>
+        <li><b>Unchanged rules:</b> every row is one the reader may decide (group narrowing, own application, mentors); identity fields follow core's
+            <code>showuseridentity</code>; an answer the reader may not see is not a column for them.</li>
+    </ul>
+</section>
+</main>
+
+<div class="dock" id="dock" hidden><div class="in">
+    <strong id="nsel">1 selected</strong>
+    <input type="text" placeholder="Message to the applicant (optional)" aria-label="Message to the applicant">
+    <select aria-label="Groups to join"><option>Groups of the method</option><option>Evening cohort</option><option>Online cohort</option></select>
+    <button class="btn primary">Approve</button><button class="btn">Defer</button><button class="btn danger">Cancel</button>
+</div></div>
+
+<script>
+const P = {filter: 'M2 3h12l-4.5 5.5V13l-3 1.5V8.5L2 3z', columns: 'M2 3h12v10H2zM6.5 3v10M10 3v10', table: 'M2 3h12v10H2zM2 6.5h12M2 10h12M6 6.5V13',
+    cards: 'M2 3h5v4H2zM9 3h5v4H9zM2 9h5v4H2zM9 9h5v4H9z', auto: 'M2 3h7v10H2zM11 3h3v4h-3zM11 9h3v4h-3z', search: 'M7 12A5 5 0 1 0 7 2a5 5 0 0 0 0 10zM10.5 10.5 14 14',
+    close: 'M4 4l8 8M12 4l-8 8', tick: 'M3 8.5 6.5 12 13 4.5', chevron: 'M4 6l4 4 4-4'};
+const paint = root => root.querySelectorAll('svg[data-i]').forEach(s => {
+    s.setAttribute('viewBox', '0 0 16 16'); s.setAttribute('fill', 'none'); s.setAttribute('stroke', 'currentColor'); s.setAttribute('stroke-width', '1.5');
+    s.setAttribute('stroke-linecap', 'round'); s.setAttribute('stroke-linejoin', 'round'); s.setAttribute('aria-hidden', 'true'); s.innerHTML = `<path d="${P[s.dataset.i]}"/>`;
+});
+const R = [
+ ['AD', '#5a6acf', 'Amélie Dubois', 'amelie@example.invalid', 'pending', [], '19 d 5 h', '3/11/26, 20:57', 100, 'Evening cohort', 'Chose', 'Lille', 'Carrefour Data', 'A little', 'Sales forecasts', 'Sales forecasting for our stores.', ''],
+ ['SL', '#2f8f83', 'Sara Lindgren', 'sara@example.invalid', 'deferred', [['defer', 'Deferred']], '15 d 4 h', '7/11/26, 21:45', 80, '', '', 'Malmö', '', 'A little', 'Demand planning', 'Please keep me on the list for the next cohort.', ''],
+ ['PN', '#b0643c', 'Pavel Novotny', 'pavel@example.invalid', 'pending', [], '14 d 3 h', '8/11/26, 22:47', 74, 'Online cohort', 'Chose', 'Brno', 'Škoda Quality Lab', 'A little', 'Quality control', 'I applied early and am still hoping for a place.', ''],
+ ['MS', '#8a5aa8', 'Mateo Silva', 'mateo@example.invalid', 'deferred', [['defer', 'Deferred']], '9 d 5 h', '13/11/26, 20:26', 48, 'Online cohort', 'Chose', 'Montevideo', 'UdelaR', 'A little', 'Thesis data cleaning', 'I can only attend online, in the evenings.', ''],
+ ['PR', '#3d7fc4', 'Priya Raman', 'priya@example.invalid', 'pending', [['quiet', 'Applied before']], '3 d 2 h', '20/11/26, 00:19', 16, 'Evening cohort', 'Chose', 'Chennai', 'Apollo Clinics', 'A little', 'Clinic waiting-time data', 'Applying again: last term the dates clashed with my exams.', '1: cancelled on 12/08/26'],
+ ['RD', '#c0564b', 'Rafael Duarte', 'rafael@example.invalid', 'pending', [['keywarn', 'Key: no seat left']], '3 d 1 h', '20/11/26, 00:27', 16, 'Weekend cohort', 'Key', 'Porto', '', 'A little', 'Churn analysis', 'The weekend cohort fits my shifts.', ''],
+ ['SR', '#4f8a3c', 'Sofia Rinaldi', 'sofia@example.invalid', 'pending', [['key', 'Key: for review']], '2 d 4 h', '20/11/26, 22:05', 11, 'Weekend cohort', 'Key', 'Turin', 'Iren Energia', 'Quite a lot', 'Energy consumption', 'My manager gave me the weekend cohort key.', ''],
+ ['HM', '#6b7280', 'Helena Martins', 'helena@example.invalid', 'pending', [['quiet', 'Your own application']], '6 h 53 min', '22/11/26, 19:27', 2, 'Evening cohort', 'Chose', 'Lisbon', 'Northwind Academy', 'Quite a lot', 'Teaching material', 'I would like to follow the course I teach on.', '']
+];
+const cols = ['wait', 'grp', 'a1', 'a2', 'a3', 'a4', 'cmt', 'hist'], own = r => r[5].some(t => t[1].startsWith('Your own'));
+const tags = r => r[5].length ? `<span class="tags">${r[5].map(t => `<span class="label ${t[0]}">${t[1]}</span>`).join('')}</span>` : '';
+const pick = (r, i) => own(r) ? '<span style="width:13px"></span>' : `<input type="checkbox" class="pick" data-i="${i}" aria-label="Select ${r[2]}">`;
+const grp = r => r[9] ? `${r[10]}: ${r[9]}` : 'Without a group';
+const cell = {
+ wait: r => `${r[6]}, open<span class="sub">${r[7]}</span><span class="meter open"><i style="width:${r[8]}%"></i></span>`, grp,
+ a1: r => r[11], a2: r => r[12] || '<span class="sub">Not answered</span>', a3: r => r[13], a4: r => r[14], cmt: r => r[15], hist: r => r[16] || '<span class="sub">None</span>'
+};
+const label = {a1: 'City/town', a2: 'Institution', a3: 'Python written', a4: 'Use it for', cmt: 'Comment', hist: 'Earlier applications'};
+let scope = 'all', shown = new Set(['wait', 'grp', 'a1', 'a2', 'a3', 'a4', 'cmt']), picked = new Set(), view = 'auto', opened = new Set(), q = '';
+const $ = s => document.querySelector(s), bar = $('#bar');
+function draw() {
+    const rows = R.map((r, i) => [r, i]).filter(([r]) => (scope === 'all' || r[4] === scope) && r[2].toLowerCase().includes(q));
+    $('#rows').innerHTML = rows.map(([r, i]) => `<tr class="${picked.has(i) ? 'sel' : ''}"><td><div class="who">${pick(r, i)}
+        <span class="avatar" style="background:${r[1]}" title="Profile picture">${r[0]}</span><span><a href="#">${r[2]}</a><span class="sub">${r[3]}</span>${tags(r)}</span>
+        <button class="btn sm">Review</button></div></td>${cols.map(c => `<td data-col="${c}" class="${c === 'cmt' || c === 'a4' ? 'txt' : ''}"${shown.has(c) ? '' : ' hidden'}>${cell[c](r)}</td>`).join('')}</tr>`).join('');
+    $('#cards').innerHTML = rows.map(([r, i]) => { const rest = cols.filter(c => shown.has(c) && label[c]); return `<article class="card ${picked.has(i) ? 'sel' : ''}">
+        <div class="l1">${pick(r, i)}<span class="avatar" style="background:${r[1]}" title="Profile picture">${r[0]}</span>
+            <span class="name"><a href="#">${r[2]}</a><span class="sub">${r[3]}</span>${tags(r)}</span><button class="btn sm">Review</button></div>
+        ${shown.has('wait') ? `<div class="cline open">${r[6]}, open · ${r[7]}</div>` : ''}${shown.has('grp') ? `<div class="cline">${grp(r)}</div>` : ''}
+        ${rest.length ? (opened.has(i) ? `<dl>${rest.map(c => `<dt>${label[c]}</dt><dd>${cell[c](r)}</dd>`).join('')}</dl><button class="more" data-less="${i}">Less</button>`
+            : `<button class="more" data-more="${i}">More</button>`) : ''}</article>`; }).join('');
+    document.querySelectorAll('th[data-col]').forEach(th => { th.hidden = !shown.has(th.dataset.col); });
+    document.querySelectorAll('#p-columns [data-col]').forEach(b => b.setAttribute('aria-checked', shown.has(b.dataset.col)));
+    document.querySelectorAll('#p-columns [data-set]').forEach(b => b.setAttribute('aria-checked', b.dataset.set.split(',').sort().join() === [...shown].sort().join()));
+    document.querySelectorAll('.pick').forEach(b => { b.checked = picked.has(+b.dataset.i); });
+    const narrow = bar.classList.contains('narrow'), cards = view === 'cards' || (view === 'auto' && narrow);
+    $('#grid').hidden = cards; $('#cards').hidden = !cards; $('#cards').style.gridTemplateColumns = narrow ? 'minmax(0, 1fr)' : '';
+    $('#viewicon').dataset.i = view; paint($('#b-view'));
+    $('#n').textContent = rows.length; $('#dock').hidden = picked.size === 0; $('#nsel').textContent = picked.size + ' selected';
+}
+const layers = {'b-filters': '#p-filters', 'b-columns': '#p-columns', 'b-view': '#p-view'};
+const closeLayers = keep => Object.entries(layers).forEach(([id, sel]) => { const open = sel === keep && $(sel).hidden; $(sel).hidden = !open; $('#' + id).setAttribute('aria-expanded', open); });
+document.addEventListener('change', e => {
+    if (e.target.classList.contains('pick')) { const i = +e.target.dataset.i; e.target.checked ? picked.add(i) : picked.delete(i); draw(); }
+    if (e.target.id === 'all') { picked = e.target.checked ? new Set(R.map((r, i) => i).filter(i => !own(R[i]))) : new Set(); draw(); }
+});
+$('#q').addEventListener('input', e => { q = e.target.value.toLowerCase(); draw(); });
+document.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) { return; }
+    if (b.dataset.scope) { scope = b.dataset.scope; document.querySelectorAll('.seg button').forEach(x => x.setAttribute('aria-checked', x === b)); draw(); }
+    else if (b.dataset.set) { shown = new Set(b.dataset.set.split(',')); draw(); }
+    else if (b.dataset.col) { shown.has(b.dataset.col) ? shown.delete(b.dataset.col) : shown.add(b.dataset.col); draw(); }
+    else if (b.dataset.view) { view = b.dataset.view; document.querySelectorAll('#p-view .item').forEach(x => x.setAttribute('aria-checked', x === b)); closeLayers(null); draw(); }
+    else if (b.dataset.more) { opened.add(+b.dataset.more); draw(); }
+    else if (b.dataset.less) { opened.delete(+b.dataset.less); draw(); }
+    else if (b.classList.contains('fopt')) { b.setAttribute('aria-checked', b.getAttribute('aria-checked') !== 'true'); }
+    else if (b.id === 'b-search') { closeLayers(null); b.hidden = true; $('#searchbox').hidden = false; bar.classList.add('searching'); $('#q').focus(); }
+    else if (b.id === 'b-searchclose') { $('#searchbox').hidden = true; $('#b-search').hidden = false; bar.classList.remove('searching'); $('#q').value = ''; q = ''; draw(); }
+    else if (b.id === 'b-fshow' || b.id === 'b-fclear') { closeLayers(null); }
+    else if (layers[b.id]) { closeLayers(layers[b.id]); }
+});
+new ResizeObserver(([e]) => { const n = e.contentRect.width < 640; if (n !== bar.classList.contains('narrow')) { bar.classList.toggle('narrow', n); draw(); } }).observe(bar);
+paint(document); draw();
+</script>
+</body>
+</html>

@@ -684,8 +684,7 @@ final class profilewriter_test extends \advanced_testcase {
      *
      * Core's user/edit.php redirects such a user to the plugin's page before it edits anything.
      * The stand-in auth plugin is core's manual one with an edit_profile_url(), put in place
-     * through core's dependency container ({@see \enrol_apply\profile_elsewhere}), so the test
-     * runs on Moodle 5.3 and later only.
+     * through core's dependency container ({@see \enrol_apply\profile_elsewhere}).
      *
      * @return void
      */

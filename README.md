@@ -9,14 +9,16 @@ list, or cancels it. Applicants are notified of the decision by message and e-ma
 
 | Moodle | Supported | PHP |
 |--------|-----------|-----|
-| 5.3    | yes       | 8.3 – 8.4 |
-| 5.2    | yes       | 8.2 – 8.4 |
-| 5.1    | yes       | 8.2 – 8.4 |
-| 4.5 and older | no  | — |
+| 5.3.1 and later 5.3 releases | yes | 8.3 – 8.4 |
+| 5.3.0  | no        | — |
+| 5.2 and older | no  | — |
 
-Declared in `version.php` as `$plugin->supported = [501, 503]`. CI runs one
-moodle-an-hochschulen job per supported branch; the compatibility table and the job list
-in `.github/workflows/ci.yml` are updated together with `supported`.
+Declared in `version.php` as `$plugin->requires = 2026100501` (5.3.1) and
+`$plugin->supported = [503, 503]`. Moodle 5.1 and 5.2 are no longer supported: version
+`2026112109`, kept on the branch `frozen/moodle-501-502`, is the last for them, and nothing is
+back-ported to it. Development happens on `MOODLE_503_STABLE`, the default branch. CI runs one
+moodle-an-hochschulen job, Moodle 5.3 over every PHP version and database; the compatibility
+table and the job list in `.github/workflows/ci.yml` are updated together with `supported`.
 
 ## Features
 
@@ -47,8 +49,7 @@ in `.github/workflows/ci.yml` are updated together with `supported`.
 *Moodle 5.3 with the Boost theme and a demo course: one enrolment method asking for two profile
 fields and two questions of its own, where applicants may choose one of three groups (two with an
 enrolment key, one of them full), and forty fictional applications in every state, decided over the
-last weeks by two people. `local_groupdist` is installed, so the groups have seats. Moodle 5.1 and
-5.2 look the same except the course report, which is core's table there.*
+last weeks by two people. `local_groupdist` is installed, so the groups have seats.*
 
 ### Applying
 
@@ -126,15 +127,15 @@ signals without the seats or places, and no decision.
 
 Every application the course has recorded, decided ones included: its outcome, how long it waited,
 who decided it and when, its group and the groups the approval joined, and a Review action on each
-one still awaiting a decision. On Moodle 5.3 the report is a view of its own. A band above the grid
+one still awaiting a decision. The report is a view of its own. A band above the grid
 says how long decisions took (the first response or the resolution), what is still open and how
 many were not decided by a person, with the distribution of waits and the median by group. The
 bar narrows the grid to all, awaiting or decided applications, searches by name, and opens the
 filters, the **Columns** menu (with the **Decisions**, **Answers** and **Groups** sets; widths are
 kept per reader), the view (table or cards, automatic on a narrow screen) and **Download**, which
 writes the applications in view as CSV or Excel. A note under the grid says how long application
-records are kept. On Moodle 5.1 and 5.2, and behind **Table view** on 5.3, the same report is
-core's table, with the same columns, filters and downloads.
+records are kept. Behind **Table view** the same report is core's table, with the same columns,
+filters and downloads.
 
 ![The report's filter panel open: status, waited more than, admission route, decided by and group, each option with the number of applications it would list, and the Clear filters and Show 40 buttons](docs/screenshots/report-filters.png)
 
@@ -229,7 +230,7 @@ Site administration → Plugins → Install plugins, then upload the release ZIP
 ### With git
 
 ```sh
-cd /path/to/moodle/public/enrol      # Moodle 5.1 and later keep plugins under public/
+cd /path/to/moodle/public/enrol      # Moodle 5.3 keeps plugins under public/
 git clone https://github.com/uaiblaine/moodle-enrol_apply.git apply
 ```
 
@@ -581,7 +582,7 @@ enrolment, the admission route, the three group columns and the details submitte
 of this report, which shows each of those facts once; a custom report on the source below offers
 all of them.
 
-On Moodle 5.3 the report opens in its own view, drawn in the page from the web services below:
+The report opens in its own view, drawn in the page from the web services below:
 a turnaround band over the rows listed (the median wait, the 90th percentile, how many are still
 open, with a link to the queue for a reader who may open it, and how many were decided without a
 person, then the wait's distribution and the median by method or by group; a reader narrowed by
@@ -601,7 +602,7 @@ the widths follow the reader to every course; View switches between the table, c
 (cards when the report is narrower than 576 pixels), remembered in the browser. Download writes the
 applications in view: the filters, the scope and the search in force. Under the report, and above
 core's table, a note says how long application records are kept (`retentiondays`), with a link to
-the setting for a site administrator. Moodle 5.1 and 5.2 show core's table only.
+the setting for a site administrator.
 
 Where a course carries more than one Course enrol confirmation method, the report opens scoped to
 the one whose icon you clicked, clearing the method filter widens it to every application in the
@@ -852,8 +853,8 @@ See `CLAUDE.md` for the architecture notes and the local development commands.
 
 ```sh
 mdl ci moodle-enrol_apply --matrix # every CI leg, locally
-mdl phpunit m502 enrol_apply
-mdl behat m502 @enrol_apply
+mdl phpunit m503 enrol_apply
+mdl behat m503 @enrol_apply
 ```
 
 ## Credits

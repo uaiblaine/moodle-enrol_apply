@@ -4,6 +4,33 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Unreleased (2026112300)
+
+### Changed
+
+- **Moodle 5.3.1 or later only** (2026112300, no upgrade step). `requires` is 5.3.1 (`2026100501`)
+  and `supported` is `[503, 503]`; Moodle 5.1 and 5.2 are no longer supported. Version `2026112109`
+  is the last for them, kept on the branch `frozen/moodle-501-502`, to which nothing is back-ported.
+  `MOODLE_503_STABLE` is the default branch and the one every change merges into; `master` is gone.
+  CI keeps the Moodle 5.3 job alone (every PHP version and database), and its push trigger and
+  concurrency rule name `MOODLE_503_STABLE`.
+- **Three notes on the method's form are information, not warnings** (2026112300, no upgrade
+  step). "The group the applicant chose is joined as well", "The key's group is joined as well" and
+  the note that "Who decides" changes nothing outside separate groups state a fact and ask for
+  nothing, so they show as the blue information alert instead of the amber one. Every other notice
+  keeps its style. The template takes an optional `info` flag per item.
+
+### Removed
+
+- **What existed only for Moodle 5.1 and 5.2.** The course report's React view no longer checks the
+  core branch (`report_view::available()` and `MIN_BRANCH` are gone): it is the report's page unless
+  `view=table` asks for core's table, which stays, as does the noscript copy of core's table. The
+  profile link calls `\core\user::can_view_profile()` and the profile write
+  `\core\user::update_user()` directly, without the fallback to the functions 5.3 deprecated. The
+  tests drop their 5.3-only skips (the stand-in auth plugin, the report shell) and the Behat
+  scenarios of the report view their version step. Mutation gate `RX1`, which lowered the branch
+  check, is retired with it.
+
 ## Unreleased (2026112109)
 
 ### Added
@@ -26,11 +53,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- **Three notes on the method's form are information, not warnings** (no upgrade step, no version
-  bump). "The group the applicant chose is joined as well", "The key's group is joined as well" and
-  the note that "Who decides" changes nothing outside separate groups state a fact and ask for
-  nothing, so they show as the blue information alert instead of the amber one. Every other notice
-  keeps its style. The template takes an optional `info` flag per item.
 - **The course report's facet counts read the rows once (2026112109, no upgrade step).** Every
   facet with no value of its own in force shares one WHERE, so its options are counted from one
   read of the filtered records (DISTINCT by record, every facet's value beside the id) tallied in
