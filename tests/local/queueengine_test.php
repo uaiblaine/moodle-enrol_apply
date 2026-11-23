@@ -464,8 +464,10 @@ final class queueengine_test extends \advanced_testcase {
         $rows = array_column($this->rows()['rows'], null, 'userenrolmentid');
         $zed = $rows[$this->ue['zed']]['applicant'];
         $this->assertSame('Zed Zedson', $zed['fullname']);
-        $this->assertStringContainsString('<img', $zed['picture']);
-        $this->assertStringContainsString('width="35"', $zed['picture']);
+        // A generated user has no picture, so core draws the initials; the cell is core's output, with no link.
+        $this->assertStringContainsString('userinitials', $zed['picture']);
+        $this->assertStringContainsString('size-35', $zed['picture']);
+        $this->assertStringNotContainsString('<a ', $zed['picture']);
         $this->assertNotSame('', $zed['profileurl']);
         $this->assertSame(['email', 'city'], array_column($zed['identity'], 'name'));
         $this->assertSame('Lille', array_column($zed['identity'], 'value', 'name')['city']);
@@ -883,6 +885,8 @@ final class queueengine_test extends \advanced_testcase {
         ]);
         $openkey = fields::custom_key((int) $open->id);
         $nonekey = fields::custom_key((int) $none->id);
+        // A custom field reaches the method's fields only through the site's pool of allowed fields.
+        set_config('allowedfields', implode(',', array_merge(fields::DEFAULT_SET, [$openkey, $nonekey])), 'enrol_apply');
         $DB->set_field(
             'enrol',
             'customtext4',
@@ -1009,7 +1013,8 @@ final class queueengine_test extends \advanced_testcase {
      * An answer and a comment arrive escaped in the cell HTML, and the applicant's name arrives plain.
      *
      * The text is a tag, an ampersand and a quote: the cell is raw HTML in the client, the name is
-     * text it draws as text.
+     * text it draws as text. The name carries an ampersand and a quote only, because the user
+     * generator strips tags from a name.
      *
      * Changes that must make it fail: a cell passed through unescaped; the name escaped here, which
      * the client would escape again.
@@ -1020,7 +1025,8 @@ final class queueengine_test extends \advanced_testcase {
         global $DB;
 
         $raw = '<b>&"';
-        $ueid = $this->applicant('X' . $raw, 'Lille', DAYSECS, null, '', $raw);
+        $name = 'X&"';
+        $ueid = $this->applicant($name, 'Lille', DAYSECS, null, '', $raw);
         $DB->set_field('enrol_apply_submission', 'comment', $raw, ['userenrolmentid' => $ueid]);
 
         $this->setUser($this->editing);
@@ -1032,6 +1038,11 @@ final class queueengine_test extends \advanced_testcase {
         $this->assertSame($escaped, $cells[$question]);
         $this->assertSame($escaped, $cells['comment']);
         $this->assertStringNotContainsString('<b>', json_encode(array_values($cells)));
-        $this->assertSame('X' . $raw . ' X' . $raw . 'son', $row['applicant']['fullname']);
+        // Plain text: the ampersand and the quote arrive as typed, not as entities.
+        $fullname = $row['applicant']['fullname'];
+        $this->assertSame($name . ' ' . $name . 'son', $fullname);
+        $this->assertStringContainsString('&"', $fullname);
+        $this->assertStringNotContainsString('&amp;', $fullname);
+        $this->assertStringNotContainsString('&quot;', $fullname);
     }
 }
