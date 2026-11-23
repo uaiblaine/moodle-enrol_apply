@@ -125,6 +125,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   nothing, so they show as the blue information alert instead of the amber one. Every other notice
   keeps its style. The template takes an optional `info` flag per item.
 
+### Fixed
+
+- **The review page reads the newest record of an enrolment that carries two** (no upgrade step).
+  `queue::application()` joined every record of the user enrolment, so an enrolment with two records
+  (a restore, a hand edit) came back as two rows with the same id, raised core's duplicate-id notice
+  and showed the decision, the note and the comment of whichever row came last. It joins the newest
+  record, as the queue's table and `groupscope::where()` do. Mutation gate `QW25`.
+- **The applicant sort reads core's name template** (no upgrade step). With the site's name format
+  on "language", `queueengine::name_fields()` asked the `langconfig` component for a string that is
+  the `moodle` component's, so it raised an invalid-identifier notice and never found the name
+  columns in the result; a language that writes the family name first was not followed. Mutation gate
+  `QW26`.
+
 ### Removed
 
 - **What existed only for Moodle 5.1 and 5.2.** The course report's React view no longer checks the

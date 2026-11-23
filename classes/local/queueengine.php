@@ -710,8 +710,9 @@ class queueengine {
         global $CFG;
 
         $template = (string) ($CFG->fullnamedisplay ?? 'language');
+        // Core's own resolution ({@see \core_user::get_fullname()}): the string is the moodle component's.
         if ($template === 'language') {
-            $template = get_string('fullnamedisplay', 'langconfig');
+            $template = get_string('fullnamedisplay', 'moodle');
         }
         $first = strpos($template, 'firstname');
         $last = strpos($template, 'lastname');

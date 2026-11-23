@@ -1302,8 +1302,9 @@ backup/                      group mappings, comments and the durable trail, see
   helpers; it writes no query of its own over what the queue lists. So a scope clause, filter or join
   goes into the table and reaches the engine by construction; one added to the engine alone is a
   second queue. The record join is the newest record of the user enrolment (the NOT EXISTS shape of
-  `groupscope::where()`); `named_where()` and the engine's `tally()` read the same newest record and
-  the waited threshold with the same strict comparison, so keep the three in step. Computed per
+  `groupscope::where()`); `named_where()`, the engine's `tally()` and the review page's `queue::application()` read the same
+  newest record (the last with the same NOT EXISTS join), and the first two the waited threshold with
+  the same strict comparison, so keep them in step. Computed per
   request and never cached: what a reader may see depends on capabilities, groups and live
   enrolments.
 

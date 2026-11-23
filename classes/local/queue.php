@@ -240,7 +240,11 @@ final class queue {
 
         /* The decision columns come from a table this query already left joins, so they cost
            nothing. They let the review page say who deferred an application, when, and what
-           they wrote to the applicant; s.id is what links the page to the durable record. */
+           they wrote to the applicant; s.id is what links the page to the durable record.
+           The record is the NEWEST of the user enrolment, by the NOT EXISTS shape of
+           the queue table's own join (applications) and groupscope::where(), so an enrolment carrying
+           two records (a restore, a hand edit) is one row and the page reads the decision of the
+           record the queue judges it by. */
         $sql = "SELECT ue.id, ue.userid, ue.enrolid, ue.status, ue.timecreated AS applydate,
                        COALESCE(s.comment, ai.comment) AS applycomment,
                        s.id AS submissionid, s.status AS recordstatus, s.timedecided,
@@ -249,6 +253,13 @@ final class queue {
                   FROM {user_enrolments} ue
              LEFT JOIN {enrol_apply_applicationinfo} ai ON ai.userenrolmentid = ue.id
              LEFT JOIN {enrol_apply_submission} s ON s.userenrolmentid = ue.id
+                       AND NOT EXISTS (
+                           SELECT 1
+                             FROM {enrol_apply_submission} snewer
+                            WHERE snewer.userenrolmentid = s.userenrolmentid
+                              AND (snewer.timecreated > s.timecreated
+                                   OR (snewer.timecreated = s.timecreated AND snewer.id > s.id))
+                       )
                   JOIN {enrol} e ON e.id = ue.enrolid
                   JOIN {course} c ON c.id = e.courseid
                  WHERE ue.id = :ueid AND e.enrol = :enrol AND " . implode(' AND ', $wheres);
