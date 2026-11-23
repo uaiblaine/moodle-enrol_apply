@@ -588,8 +588,12 @@ final class queueengine {
             'applicant' => [
                 'fullname' => fullname($user),
                 'profileurl' => $profile === null ? '' : $profile->out(false),
-                // Decorative beside the name, which is the row's label: no link, no alternative text.
-                'picture' => $OUTPUT->user_picture($user, ['size' => self::PICTURE_SIZE, 'link' => false, 'alttext' => false]),
+                /* Decorative beside the name, which is the row's label: no link, and hidden from assistive
+                   technology as a whole, because core names the user on the initials it draws for a user
+                   with no picture whatever 'alttext' says. */
+                'picture' => '<span aria-hidden="true">' .
+                    $OUTPUT->user_picture($user, ['size' => self::PICTURE_SIZE, 'link' => false, 'alttext' => false]) .
+                    '</span>',
                 'identity' => $identity,
                 'tags' => $table->tags($record),
             ],

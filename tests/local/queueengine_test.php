@@ -468,6 +468,8 @@ final class queueengine_test extends \advanced_testcase {
         $this->assertStringContainsString('userinitials', $zed['picture']);
         $this->assertStringContainsString('size-35', $zed['picture']);
         $this->assertStringNotContainsString('<a ', $zed['picture']);
+        // Core names the user on the initials, and the name is beside them: the picture is hidden as a whole.
+        $this->assertStringStartsWith('<span aria-hidden="true">', $zed['picture']);
         $this->assertNotSame('', $zed['profileurl']);
         $this->assertSame(['email', 'city'], array_column($zed['identity'], 'name'));
         $this->assertSame('Lille', array_column($zed['identity'], 'value', 'name')['city']);
