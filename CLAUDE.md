@@ -1273,7 +1273,8 @@ backup/                      group mappings, comments and the durable trail, see
   script would look for a form a scripting browser never builds from a noscript). Build:
   `js/esm/bundle.json` names `src/views.tsx`, the one entry, which mounts the view its `mount` prop
   names (the report when it names none); the parts a second view shares are
-  `js/esm/src/datareport/`; core's task writes the per-file outputs,
+  `js/esm/src/datareport/` (the bar's View menu takes a caller's `extraViews`: the caller draws that
+  view, and the shared rows never receive its value); core's task writes the per-file outputs,
   then the fleet's bundle step writes `js/esm/build/bundle.js` and its manifest, which
   `tests/bundle_test.php` checks against the sources. Behat waits on `pending.ts`'s holds.
   **The panel's counts are faceted, and one definition carries the scope and the search.** Each

@@ -52,7 +52,7 @@ import {Icon} from './icons';
 import {SetItems, menuKeys} from './menus';
 import {Segmented} from './Segmented';
 import {fill, fillCount, num} from './str';
-import type {Chip, Choice, Column, ColumnSet, DownloadLink, FacetDefinition, ViewMode} from './types';
+import type {Chip, Choice, Column, ColumnSet, DownloadLink, ExtraView, FacetDefinition, ViewMode} from './types';
 
 type Layer = 'filters' | 'columns' | 'view' | 'download' | null;
 
@@ -71,8 +71,9 @@ type BarProps = {
     sets: ColumnSet[],
     usedefault: boolean,
     haswidths: boolean,
-    view: ViewMode,
+    view: ViewMode | string,
     views: ViewMode[],
+    extraViews?: ExtraView[],
     tableurl: string,
     downloads: DownloadLink[],
     search: string,
@@ -88,7 +89,7 @@ type BarProps = {
     onSet: (name: string) => void,
     onDefaultColumns: () => void,
     onResetWidths: () => void,
-    onView: (view: ViewMode) => void,
+    onView(view: ViewMode | string): void,
 };
 
 /**
@@ -267,7 +268,9 @@ export const Bar = (props: BarProps): ReactElement => {
         </button>
     );
 
-    const viewicon = {auto: 'auto', table: 'table', cards: 'cards'}[props.view];
+    const extraviews = props.extraViews ?? [];
+    const viewicon = extraviews.find((extra) => extra.value === props.view)?.icon
+        ?? {auto: 'auto', table: 'table', cards: 'cards'}[props.view as ViewMode];
     const chevron = <Icon name="chevron" className="enrol_apply-rview-chevron" />;
     // Every chip but the search's is a filter in force: their number is the Filters button's counter.
     const filtersname = chips.length > 0 ? fill(labels.filterson, num(chips.length)) : labels.filters;
@@ -404,6 +407,30 @@ export const Bar = (props: BarProps): ReactElement => {
                                         <Icon name="tick" className="enrol_apply-rview-tick" />
                                     </button>
                                 ))}
+                                {extraviews.length > 0 ? (
+                                    <>
+                                        <div className="enrol_apply-rview-menu-sep" role="separator" />
+                                        {extraviews.map((extra) => (
+                                            <button
+                                                key={extra.value}
+                                                type="button"
+                                                className="enrol_apply-rview-menu-item"
+                                                role="menuitemradio"
+                                                aria-checked={props.view === extra.value}
+                                                tabIndex={-1}
+                                                onClick={() => {
+                                                    props.onView(extra.value);
+                                                    setLayer(null);
+                                                    triggers.current.view?.focus();
+                                                }}
+                                            >
+                                                <Icon name={extra.icon} />
+                                                <span className="enrol_apply-rview-menu-label">{extra.label}</span>
+                                                <Icon name="tick" className="enrol_apply-rview-tick" />
+                                            </button>
+                                        ))}
+                                    </>
+                                ) : null}
                                 {props.tableurl !== '' ? (
                                     <>
                                         <div className="enrol_apply-rview-menu-sep" role="separator" />

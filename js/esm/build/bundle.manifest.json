@@ -2,7 +2,7 @@
     "entry": "src/views.tsx",
     "outfile": "build/bundle.js",
     "sources": {
-        "src/datareport/Bar.tsx": "2a2e90920ab98d28b6271b1fca074b1b6ef2e11e",
+        "src/datareport/Bar.tsx": "06f53c1c97a3be96e8f4e5aa804f7101cb4a6a12",
         "src/datareport/Cards.tsx": "1329cdfdb2dc646d79be8984fcc28c64305e6ebd",
         "src/datareport/FilterPanel.tsx": "6c9a7c94a32eacac55fc23d514e01c81119e682c",
         "src/datareport/Grid.tsx": "471d52c81525a0dbafa06911615a5bb411c2bcd0",
@@ -16,7 +16,7 @@
         "src/datareport/pending.ts": "c0d62a3ee5e007bd91469e8bf8b036d2aecb9b39",
         "src/datareport/sizing.ts": "348419518ba12d6fad33179da593e37db8e30260",
         "src/datareport/str.ts": "feff9e9e488b097405ea2b94afb1b9f4625dc5bf",
-        "src/datareport/types.ts": "a21e277f3da16f358d120dc2bdfbaeb2d04411d7",
+        "src/datareport/types.ts": "6bdf07b932a59cf3854831c23ff20292bf9c172a",
         "src/queue/Bar.tsx": "ff6d471d3604801af0493d5a77714237ff1ed48e",
         "src/queue/Dock.tsx": "28695dc145833be7aaf8dab5fa214ba018d5df05",
         "src/queue/Parts.tsx": "d88ba4b411422cad22bef5beba798d1c12c0eaaa",
