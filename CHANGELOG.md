@@ -4,9 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased (2026112300)
+## Unreleased (2026112301)
 
 ### Changed
+
+- **The course report's client is built from shared parts** (2026112301, no upgrade step; the
+  report looks and behaves as before). The bar, the filter panel, the menus, the grid, the cards, the
+  pager and the segmented control moved to `js/esm/src/datareport/` and take as props what differs
+  between views: the scope's vocabulary, whether there is a download, the row's action, a leading
+  selection column, a dock under the rows. `js/esm/src/report/` keeps what is the report's own (the
+  band, its filters, its repository). The bundle's one entry is now `src/views.tsx`, which mounts
+  the view the page's `mount` prop names, so a second page can ride the same bundle.
 
 - **Moodle 5.3.1 or later only** (2026112300, no upgrade step). `requires` is 5.3.1 (`2026100501`)
   and `supported` is `[503, 503]`; Moodle 5.1 and 5.2 are no longer supported. Version `2026112109`

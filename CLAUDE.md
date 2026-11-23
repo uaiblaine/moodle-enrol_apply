@@ -1269,7 +1269,9 @@ backup/                      group mappings, comments and the durable trail, see
   replaces the whole set, so `js/esm/src/report/filters.ts` rewrites every stored value). The
   noscript holds core's rendering without its filter form (`set_filter_form_default(false)`: its
   script would look for a form a scripting browser never builds from a noscript). Build:
-  `js/esm/bundle.json` names `src/report/ReportView.tsx`; core's task writes the per-file outputs,
+  `js/esm/bundle.json` names `src/views.tsx`, the one entry, which mounts the view its `mount` prop
+  names (the report when it names none); the parts a second view shares are
+  `js/esm/src/datareport/`; core's task writes the per-file outputs,
   then the fleet's bundle step writes `js/esm/build/bundle.js` and its manifest, which
   `tests/bundle_test.php` checks against the sources. Behat waits on `pending.ts`'s holds.
   **The panel's counts are faceted, and one definition carries the scope and the search.** Each

@@ -149,7 +149,7 @@ class report_view implements renderable, templatable {
      * The strings the component draws, by the name it reads them under, in the plain spelling.
      *
      * A literal per string, so tools that check string ids find every one of them. Strings that take a
-     * value arrive with their placeholder, which the client fills (js/esm/src/report/str.ts).
+     * value arrive with their placeholder, which the client fills (js/esm/src/datareport/str.ts).
      *
      * @return array Name => string.
      */
