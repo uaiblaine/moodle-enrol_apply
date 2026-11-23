@@ -1,33 +1,34 @@
 name: ci
 
-# The push trigger is master-only, so one change is validated once. With a bare `push:`
-# every commit on a feature branch ran the full pipeline AND opening its pull request ran
-# it a second time over the identical tree - 22 jobs to validate one commit, measured on
-# pull request #58. Every branch here reaches master through a pull request, so the
-# pull_request trigger is the one that gates the work; the push trigger now covers the
-# merge commit itself, which nothing else would.
+# The push trigger names MOODLE_503_STABLE alone, the one branch every pull request merges into,
+# so one change is validated once. With a bare `push:` every commit on a feature branch ran the
+# full pipeline AND opening its pull request ran it a second time over the identical tree - 22
+# jobs to validate one commit, measured on pull request #58. The pull_request trigger is the one
+# that gates the work; the push trigger covers the merge commit itself, which nothing else would.
+# frozen/moodle-501-502, the last state for Moodle 5.1 and 5.2, takes no further changes and is
+# not named.
 #
 # workflow_dispatch is the manual escape hatch: without it, a push whose commits
 # carry a skip-ci marker leaves code unvalidated with no way to launch a run short
 # of pushing another commit. It also covers the case this change creates - wanting a run
 # on a branch before it is ready for review.
 #
-# CI is not the only gate: the plugin is mounted on the local m501, m502 and m503 stacks
+# CI is not the only gate: the plugin is mounted on the local m503 stacks
 # (moodle-dev/plugins.conf), so run `mdl ci moodle-enrol_apply` before pushing.
 on:
   push:
     branches:
-      - master
+      - MOODLE_503_STABLE
   pull_request:
   workflow_dispatch:
 
 # Supersede a run when new commits arrive on the same pull request: pushing
 # three fixes in a row otherwise leaves three full pipelines running to the end.
-# Never on master - each merge there is the only run its commit will ever get, and
-# a second merge landing quickly must not cancel the first one's verdict.
+# Never on MOODLE_503_STABLE - each merge there is the only run its commit will ever get,
+# and a second merge landing quickly must not cancel the first one's verdict.
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/MOODLE_503_STABLE' }}
 
 # Read-only token for every job. uaiblaine/moodle-workflows declares the same
 # block itself; artifact uploads use the runner's own token, not this one.
@@ -36,42 +37,20 @@ permissions:
 
 jobs:
   # One reusable-workflow call per supported Moodle branch (version.php
-  # $plugin->supported) — update these when the supported range changes, in the
-  # same commit as the version.php change. The highest branch runs the full
-  # PHP x DB matrix; older branches run one DB only. PHPUnit and Behat run on
-  # every runtime leg.
+  # $plugin->supported = [503, 503], requires 5.3.1) — update these when the
+  # supported range changes, in the same commit as the version.php change. The
+  # highest branch runs the full PHP x DB matrix; an older one would run one DB
+  # only. PHPUnit and Behat run on every runtime leg.
   ci-503:
     name: Moodle 5.03
     uses: uaiblaine/moodle-workflows/.github/workflows/moodle-plugin-ci.yml@main
     with:
       runner: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.CI_RUNNER || '' }}
       moodle-core-branch: MOODLE_503_STABLE
-      # Test-only, both optional: the per-group seats a group enrolment key respects (each job
-      # installs the local_groupdist branch of its own Moodle version), and
+      # Test-only, both optional: the per-group seats a group enrolment key respects (the
+      # local_groupdist branch of the same Moodle version), and
       # profilefield_brasilufmunicipio, the profile field type with a shape of its own that
-      # tests/fixtures/municipality_field.php draws, reads and writes. One branch serves all three.
+      # tests/fixtures/municipality_field.php draws, reads and writes.
       plugin-dependencies: |
         uaiblaine/moodle-local_groupdist,MOODLE_503_STABLE
-        uaiblaine/moodle-profilefield_brasilufmunicipio,main
-
-  ci-502:
-    name: Moodle 5.02
-    uses: uaiblaine/moodle-workflows/.github/workflows/moodle-plugin-ci.yml@main
-    with:
-      runner: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.CI_RUNNER || '' }}
-      moodle-core-branch: MOODLE_502_STABLE
-      one-db-only: true
-      plugin-dependencies: |
-        uaiblaine/moodle-local_groupdist,MOODLE_502_STABLE
-        uaiblaine/moodle-profilefield_brasilufmunicipio,main
-
-  ci-501:
-    name: Moodle 5.01
-    uses: uaiblaine/moodle-workflows/.github/workflows/moodle-plugin-ci.yml@main
-    with:
-      runner: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.CI_RUNNER || '' }}
-      moodle-core-branch: MOODLE_501_STABLE
-      one-db-only: true
-      plugin-dependencies: |
-        uaiblaine/moodle-local_groupdist,MOODLE_501_STABLE
         uaiblaine/moodle-profilefield_brasilufmunicipio,main

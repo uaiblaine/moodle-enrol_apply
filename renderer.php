@@ -2858,7 +2858,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
     /**
      * Render the notice that says how long the course report's records are kept.
      *
-     * Above core's table of the report (5.1, 5.2, "Table view" on 5.3) and in the React view's
+     * Above core's table of the report ("Table view") and in the React view's
      * noscript copy; the React view draws the same words as a note of its own, from the same
      * source ({@see \enrol_apply\local\reportengine::retention()}). Nothing when records are kept
      * forever; the link to the setting only for a reader who may change it.

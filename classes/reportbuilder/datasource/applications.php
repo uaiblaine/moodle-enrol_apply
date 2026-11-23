@@ -118,9 +118,6 @@ class applications extends datasource {
             "LEFT JOIN {course} {$coursealias} ON {$coursealias}.id = {$alias}.courseid"
         ));
 
-        /* One call per entity, passing its name, never the object: on Moodle 5.1
-           add_all_from_entity() accepts only a name, and add_all_from_entities() matches its
-           array against entity names, so an entity object there is silently skipped. */
         $this->add_all_from_entity($entity->get_entity_name());
         $this->add_all_from_entity($applicant->get_entity_name());
         $this->add_all_from_entity($decider->get_entity_name());

@@ -34,8 +34,7 @@ use enrol_apply\reportbuilder\local\formatters\submission as formatter;
  * Nothing here decides who may see these values; the datasource does, for the whole entity at once
  * (see \enrol_apply\reportbuilder\datasource\applications::restrict_submitted_data()).
  *
- * initialise() registers everything itself, as the submission entity does, because that is the one
- * shape Moodle 5.1 and 5.2 both accept.
+ * initialise() registers everything itself, as the submission entity does.
  *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine

@@ -34,8 +34,7 @@ use PHPUnit\Framework\Attributes\CoversNothing;
  * Core's grunt regenerates the per-file outputs and CI fails on a diff, so those cannot go stale
  * unnoticed; the bundle is written by a build step outside core's grunt, which core's check cannot
  * see. The manifest that step writes beside the bundle - the SHA-1 of every source - is what this
- * test recomputes, so a source edited without a rebundle fails here. It reads files only, so it runs
- * on every branch, 5.1 and 5.2 included, where the view never mounts.
+ * test recomputes, so a source edited without a rebundle fails here. It reads files only.
  *
  * @package    enrol_apply
  * @category   test

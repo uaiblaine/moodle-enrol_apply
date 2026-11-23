@@ -15,11 +15,13 @@ outlives its enrolment) and `enrol_apply_answer` (what that application submitte
 per value, owned by the record); `enrol_apply_groups` (groups an approved applicant joins) and
 `enrol_apply_fieldcond` (when a question is shown), `enrol_apply_offer` (groups an applicant may
 choose) and `enrol_apply_options` (per-method options with no `{enrol}` column left) are configuration. It leans on core's enrolment expiry machinery for everything time based. Supports
-Moodle **5.1 through 5.3** (`$plugin->requires = 2025100600`,
-`$plugin->supported = [501, 503]`). CI is the moodle-an-hochschulen reusable workflow,
-one job per supported branch in `.github/workflows/ci.yml` — **update those jobs when
-`supported` changes**. Development happens on the m501, m502 and m503 stacks; this repo mounts at
-`enrol/apply` (see `~/dev/moodle-dev/plugins.conf`).
+Moodle **5.3.1 and later only** (`$plugin->requires = 2026100501`,
+`$plugin->supported = [503, 503]`; owner, 2026-11-23). Development happens on
+`MOODLE_503_STABLE`, the default branch; `frozen/moodle-501-502` keeps version 2026112109, the last
+for 5.1 and 5.2, and nothing is back-ported to it. CI is the moodle-an-hochschulen reusable
+workflow, one job per supported branch in `.github/workflows/ci.yml` (the 5.3 job alone, full PHP
+x DB matrix) — **update those jobs when `supported` changes**. This repo mounts at `enrol/apply` on
+the m503 and m503b stacks and the mini cluster (see `~/dev/moodle-dev/plugins.conf`).
 
 ## Agent orchestration budget (fleet rule, repeated here on purpose)
 
@@ -61,10 +63,10 @@ history before assuming it was deliberate.
 ```sh
 mdl ci moodle-enrol_apply                # one CI leg, while iterating
 mdl ci moodle-enrol_apply --matrix       # every leg GitHub runs, before any push
-mdl phpunit m502 enrol_apply             # targeted tests
-mdl behat m502 @enrol_apply              # Behat smoke tests
-mdl grunt m502 enrol/apply               # rebuild amd/build (commit with src)
-mdl purge m502                           # after template or renderer changes
+mdl phpunit m503 enrol_apply             # targeted tests
+mdl behat m503 @enrol_apply              # Behat smoke tests
+mdl grunt m503 enrol/apply               # rebuild amd/build and js/esm/build (commit with src)
+mdl purge m503                           # after template or renderer changes
 
 mdl mutate moodle-enrol_apply mutations/gates.conf --dry-run   # patterns only, seconds
 mdl mutate moodle-enrol_apply mutations/gates.conf             # the mutation sweep
@@ -1255,11 +1257,10 @@ backup/                      group mappings, comments and the durable trail, see
   answer subqueries) for every row before the page. The ids end in the record's id
   (`page_order()`). Gates `PG1`-`PG5`.
 
-- **The course report's React view is Moodle 5.3 only, and it is a client of R3, never a second
-  report (R4).** `report.php` renders `\enrol_apply\output\report_view` (template `report_view`)
-  where `report_view::wanted()` holds: `$CFG->branch >= 503` and no `view=table`; 5.1 and 5.2 keep
-  core's system report, because the owner limited the view to 5.3 and the committed `js/esm` tree is
-  the one 5.3's `grunt esm` builds (a `.dev.js` beside each output, `js/esm/src/swizzle.json`, every
+- **The course report's React view is a client of R3, never a second report (R4).** `report.php`
+  renders `\enrol_apply\output\report_view` (template `report_view`) unless `view=table` asks for
+  core's system report (`report_view::wanted()`, gate `RX2`). The committed `js/esm` tree is the one
+  5.3's `grunt esm` builds (a `.dev.js` beside each output, `js/esm/src/swizzle.json`, every
   entry `prohibited` because the page mounts the bundle, which inlines them). The props carry
   configuration and strings only; every row comes through `enrol_apply_report_rows` and the band
   through `enrol_apply_report_summary`, each call a request of its own (`fetchOne`, never a batch:
@@ -1395,13 +1396,12 @@ backup/                      group mappings, comments and the durable trail, see
   `view.php`'s branches in its order (own profile, the "parent" branch a mentor holding
   `moodle/user:viewdetails` in the applicant's context takes, the four-argument
   `can_access_course()` for `require_login($course)` (the three-argument form admits a suspended
-  or expired reader, as the review-page bullet above measured), then core's rule: `\core\user::can_view_profile()` on 5.3,
-  `user_can_view_profile()` before it). The queue judges a page per course in
+  or expired reader, as the review-page bullet above measured), then core's rule,
+  `\core\user::can_view_profile()`). The queue judges a page per course in
   `viewable_ids()`, which asks core's `is_enrolled()` for the page at once and must stay step for
   step with the single answer
   (`test_the_batch_agrees_with_the_single_answer`): per row, core's rule is three statements, and
-  `test_the_answers_of_a_whole_page_are_read_in_one_query` counts them. Gates `PL1`-`PL21`; `PL5`
-  holds the 5.3 branch only.
+  `test_the_answers_of_a_whole_page_are_read_in_one_query` counts them. Gates `PL1`-`PL21`.
 
 - **Cancelling asks, and button order could never have been the fix.** Confirm was the form's
   first submit and therefore its default, so Enter on either chooser approved the enrolment -
@@ -1653,7 +1653,7 @@ backup/                      group mappings, comments and the durable trail, see
   user whose auth plugin names an `edit_profile_url()` has every field locked in
   `fields::classify()`, custom ones included, because core's profile page redirects them before
   editing anything; the write needs no check of its own, since it writes only what `classify()`
-  calls editable (`XA42`/`XA43`, held on 5.3+ only: the stand-in auth plugin needs core's DI).
+  calls editable (`XA42`/`XA43`; the stand-in auth plugin goes through core's DI).
 
 - **An enrolment form may add to a profile but never empty it.** Core's own boundary would
   erase: `profile_field_base::edit_save_data()` ignores a value only when the property is
@@ -1738,7 +1738,7 @@ backup/                      group mappings, comments and the durable trail, see
   `tests/` directory only. Invoke it deliberately:
 
   ```sh
-  docker exec m502-webserver-1 php /var/www/html/vendor/bin/phpunit --no-coverage \
+  docker exec m503-webserver-1 php /var/www/html/vendor/bin/phpunit --no-coverage \
     --filter test_table_coverage --testsuite core_privacy_testsuite
   ```
 
@@ -2015,7 +2015,7 @@ Expect no matches. `phpcbf` fixes it too, but the grep is faster than a CI round
   apply here.** `~/dev/CLAUDE.md` keeps `@covers` docblocks alive for plugins that still support
   Moodle 4.5, because moodle-cs on the 4.05 leg cannot see attributes and reports
   `moodle.PHPUnit.TestCaseCovers.Missing` for every method in the file. This plugin declares
-  `$plugin->supported = [501, 503]` and `ci.yml` has no 4.05 job, so `#[CoversClass(...)]` is
+  `$plugin->supported = [503, 503]` and `ci.yml` has no 4.05 job, so `#[CoversClass(...)]` is
   the correct form. PHPUnit 11.5.55 raises one test-runner deprecation per file carrying
   `@covers` in a docblock; the suite is at zero and a restored docblock puts them back.
 - `tests/lib_test.php` drives the state machine directly against the plugin object. Note
@@ -2073,13 +2073,13 @@ reviews).
   in the fleet CLAUDE.md (section 4, "MDL Shield review budget").
 
 - `.mdlshield/config.yml` and `.mdlshield/context.md` are read **from the default branch
-  only** (`master`), so a pull request cannot change the rules that judge it, and the pull
+  only** (`MOODLE_503_STABLE`), so a pull request cannot change the rules that judge it, and the pull
   request that first adds them is judged by the website settings instead. Both are
   `export-ignore`d and never reach the release zip. The file overrides the website for each
   key it names; an invalid file stops reviews for the repository until it is fixed, and an
   unknown key only raises a warning on the summary comment.
 - **One Moodle version per repository.** There is no per-branch mapping, so the file pins
-  `moodle.versions: ["5.2"]`. The plugin also runs on older cores, so read a finding about a core API with that in mind.
+  `moodle.versions: ["5.3"]`, the one core the plugin supports.
 - `fail_on.severity` is `high`: the check fails on an open finding at or above it. Code
   quality findings never block, only security findings do.
 - The context file is project knowledge that **influences** the reviewer and is not a

@@ -604,6 +604,34 @@ final class edit_form_groups_test extends \advanced_testcase {
     }
 
     /**
+     * The two "joined as well" lines only inform: they are information alerts, while a caution stays
+     * amber and a configuration that defeats itself stays red.
+     *
+     * Changes that must make it fail: an information note rendered as a warning, or the controls
+     * (a caution, a danger) changed in the same move.
+     *
+     * @return void
+     */
+    public function test_the_informing_notes_are_alerts_of_their_own_kind(): void {
+        $mform = $this->quickform($this->form());
+
+        foreach (['groupselectchoice', 'groupselectkey'] as $name) {
+            $html = $mform->getElement($name)->_text;
+            $this->assertStringContainsString('alert-info', $html, $name);
+            $this->assertStringNotContainsString('alert-warning', $html, $name);
+            $this->assertStringNotContainsString('alert-danger', $html, $name);
+        }
+
+        // The controls: a caution and a danger keep their own style.
+        $caution = $mform->getElement('decidersallgroups')->_text;
+        $this->assertStringContainsString('alert-warning', $caution);
+        $this->assertStringNotContainsString('alert-info', $caution);
+        $danger = $mform->getElement('decidingbygroups')->_text;
+        $this->assertStringContainsString('alert-danger', $danger);
+        $this->assertStringNotContainsString('alert-info', $danger);
+    }
+
+    /**
      * The group modes, with the strings the line names each one with.
      *
      * @return array The mode, the core string id of its name and this plugin's consequence string id.

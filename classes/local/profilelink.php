@@ -42,8 +42,7 @@ final class profilelink {
      * or viewing; a reader with a role in the user's own context and moodle/user:viewdetails there
      * (core's "parent" branch, which is how this plugin's mentor level is granted) is let in
      * without the course; everybody else needs access to the course ({@see enters()}), then
-     * core's profile rule: \core\user::can_view_profile() from 5.3, user_can_view_profile()
-     * before it.
+     * core's profile rule, \core\user::can_view_profile().
      *
      * @param stdClass $user The applicant: id and deleted are read.
      * @param stdClass $course The course the profile is shown in: a course record.
@@ -240,24 +239,18 @@ final class profilelink {
     }
 
     /**
-     * Core's profile rule for one user in one course, whichever core this is.
+     * Core's profile rule for one user in one course.
      *
      * @param stdClass $user The user: id and deleted are read.
      * @param stdClass $course The course: a course record.
      * @return bool What core answers.
      */
     private static function core_rule(stdClass $user, stdClass $course): bool {
-        global $CFG;
-
         $usercontext = context_user::instance((int) $user->id, IGNORE_MISSING);
         if (!$usercontext) {
             return false;
         }
-        if (method_exists(\core\user::class, 'can_view_profile')) {
-            return \core\user::can_view_profile($user, $course, $usercontext);
-        }
-        require_once($CFG->dirroot . '/user/lib.php');
-        return user_can_view_profile($user, $course, $usercontext);
+        return \core\user::can_view_profile($user, $course, $usercontext);
     }
 
     /**

@@ -428,11 +428,11 @@ class enrol_apply_edit_form extends moodleform {
         $groupselect = $mform->addElement('autocomplete', 'groupselect', get_string('group', 'enrol_apply'), $groups);
         $groupselect->setMultiple(true);
         $mform->addHelpButton('groupselect', 'group', 'enrol_apply');
-        $mform->addElement('static', 'groupselectchoice', '', $this->group_notice(
+        $mform->addElement('static', 'groupselectchoice', '', $this->group_info(
             get_string('groupselectchoice', 'enrol_apply')
         ));
         $mform->hideIf('groupselectchoice', 'groupdecided', 'neq', $question::CHOICE);
-        $mform->addElement('static', 'groupselectkey', '', $this->group_notice(get_string('groupselectkey', 'enrol_apply')));
+        $mform->addElement('static', 'groupselectkey', '', $this->group_info(get_string('groupselectkey', 'enrol_apply')));
         $mform->hideIf('groupselectkey', 'groupdecided', 'neq', $question::KEY);
 
         // Section 6: Who decides and who is notified.
@@ -456,7 +456,7 @@ class enrol_apply_edit_form extends moodleform {
            course switches to separate groups. */
         if (!$separate) {
             $mform->hardFreeze('deciders');
-            $mform->addElement('static', 'decidersinert', '', $this->group_notice(get_string('decidersinert', 'enrol_apply')));
+            $mform->addElement('static', 'decidersinert', '', $this->group_info(get_string('decidersinert', 'enrol_apply')));
         }
 
         $this->add_decider_notices($separate, $deciderwarnings, $courseid, $roleids);
@@ -1106,6 +1106,23 @@ class enrol_apply_edit_form extends moodleform {
 
         return $OUTPUT->render_from_template('enrol_apply/groupkey_warnings', [
             'warnings' => [['danger' => $danger, 'message' => $message]],
+        ]);
+    }
+
+    /**
+     * One note of the Groups section that only informs, rendered as an information alert.
+     *
+     * For a fact the form states and asks nothing about; a caution or a configuration that defeats
+     * itself goes through {@see group_notice()}.
+     *
+     * @param string $message The sentence, in its plain spelling: the template escapes it.
+     * @return string HTML for a static element, which renders it raw.
+     */
+    protected function group_info(string $message): string {
+        global $OUTPUT;
+
+        return $OUTPUT->render_from_template('enrol_apply/groupkey_warnings', [
+            'warnings' => [['info' => true, 'message' => $message]],
         ]);
     }
 

@@ -24,6 +24,8 @@
 
     Context variables required for this template:
     * warnings array - one object per warning, in the order they are read:
+      * info boolean - optional; true for a note that reports a fact and asks for nothing, shown as
+        information and winning over danger (a missing key means it is not one)
       * danger boolean - whether the configuration defeats itself (otherwise a caution)
       * message string - the sentence
 
@@ -31,12 +33,13 @@
     {
         "warnings": [
             {"danger": true, "message": "No group in this course has an enrolment key, so nobody can enrol through this method."},
+            {"info": true, "message": "The key's group is joined as well."},
             {"danger": false, "message": "3 applications are still waiting for a decision. Switching to key only does not decide them; they stay in the queue."}
         ]
     }
 }}
 <div class="enrol_apply-groupkeywarnings">
     {{#warnings}}
-        <div class="alert {{#danger}}alert-danger{{/danger}}{{^danger}}alert-warning{{/danger}} mb-1">{{message}}</div>
+        <div class="alert {{#info}}alert-info{{/info}}{{^info}}{{#danger}}alert-danger{{/danger}}{{^danger}}alert-warning{{/danger}}{{/info}} mb-1">{{message}}</div>
     {{/warnings}}
 </div>

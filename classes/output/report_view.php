@@ -27,7 +27,7 @@ use stdClass;
 use templatable;
 
 /**
- * The course report's React view (stage R4): the shell report.php renders on Moodle 5.3.
+ * The course report's React view (stage R4): the shell report.php renders by default.
  *
  * The page carries configuration and strings only; every row and every number arrives through the
  * plugin's web services (enrol_apply_report_rows, enrol_apply_report_summary), which read the same
@@ -44,13 +44,7 @@ use templatable;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class report_view implements renderable, templatable {
-    /**
-     * @var int The first Moodle branch the view mounts on. The owner's decision (R4): 5.1 and 5.2 keep
-     *     core's system report, and the committed js/esm tree is the one 5.3 builds.
-     */
-    public const MIN_BRANCH = 503;
-
-    /** @var string The view parameter that asks for core's table on a branch that has the React view. */
+    /** @var string The view parameter that asks for core's table instead of the React view. */
     public const TABLE = 'table';
 
     /** @var stdClass The apply method the report was opened from. */
@@ -71,24 +65,13 @@ class report_view implements renderable, templatable {
     }
 
     /**
-     * Whether this site has the React view at all.
-     *
-     * @return bool True on Moodle 5.3 and later.
-     */
-    public static function available(): bool {
-        global $CFG;
-
-        return (int) $CFG->branch >= self::MIN_BRANCH;
-    }
-
-    /**
      * Whether report.php renders the React shell for a request, rather than core's table.
      *
      * @param string $view The request's view parameter: 'table' for core's table, anything else for the default.
-     * @return bool True where the view is available and core's table was not asked for.
+     * @return bool True unless core's table was asked for.
      */
     public static function wanted(string $view): bool {
-        return self::available() && $view !== self::TABLE;
+        return $view !== self::TABLE;
     }
 
     /**
