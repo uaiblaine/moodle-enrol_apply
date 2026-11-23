@@ -74,7 +74,7 @@ chosen group.
 
 ### Deciding
 
-![The approval queue: applications awaiting a decision, deferred, places taken and applications held; the search and the filters; one row per application with its group, how long it has waited, the details submitted, the comment and badges for the waiting list and a group key that could not admit](docs/screenshots/queue.png)
+![The approval queue of one method as a grid: tiles for places taken, applications held, what awaits a decision with the oldest wait, and whether the method is open; the All, Pending and Deferred scopes, the count, the filters, the columns and view menus and the search; one row per application with the applicant's picture, name, e-mail and Deferred tag, the wait, the group and one column per answer; two rows selected and, under the rows, the dock with the count and Confirm, Defer and Cancel applications](docs/screenshots/queue.png)
 
 The queue of one method (`manage.php?id=<method>`) is a grid, as the course report shows its rows:
 the method's places, applications held, what awaits a decision with the oldest wait, and whether it
