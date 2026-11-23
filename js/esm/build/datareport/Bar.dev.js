@@ -21,7 +21,8 @@ import { Fragment, jsxDEV } from "react/jsx-dev-runtime";
  * force, the column catalogue and its sets, the View choices and the link to the view's server table,
  * and the Download links (none: no Download button). Columns starts with the sets, each handed to the
  * view as the reader's choice, then lists the catalogue, a fixed column always shown, and ends with
- * the default columns and "Reset column widths".
+ * the default columns and "Reset column widths". A view may put a link of its own at the end of the
+ * chips' row (`aside`: the queue's "Open the report"), which then shows with no chip in force too.
  *
  * Strings read from the view's labels: scope, count (and count_one), filters, filterson, columns,
  * presets, always, defaultcolumns, resetwidths, view, viewauto, viewautohint, table, cards, coretable,
@@ -125,17 +126,17 @@ const Bar = /* @__PURE__ */ __name((props) => {
   const countText = props.total !== null && props.narrow ? /* @__PURE__ */ jsxDEV(Fragment, { children: [
     /* @__PURE__ */ jsxDEV("span", { "aria-hidden": "true", children: num(props.total) }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-      lineNumber: 235,
+      lineNumber: 237,
       columnNumber: 13
     }),
     /* @__PURE__ */ jsxDEV("span", { className: "visually-hidden", children: fullcount }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-      lineNumber: 236,
+      lineNumber: 238,
       columnNumber: 13
     })
   ] }, void 0, true, {
     fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-    lineNumber: 234,
+    lineNumber: 236,
     columnNumber: 9
   }) : fullcount;
   const iconbutton = /* @__PURE__ */ __name((which, icon, name, extra) => /* @__PURE__ */ jsxDEV(
@@ -155,7 +156,7 @@ const Bar = /* @__PURE__ */ __name((props) => {
       children: [
         /* @__PURE__ */ jsxDEV(Icon, { name: icon }, void 0, false, {
           fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-          lineNumber: 263,
+          lineNumber: 265,
           columnNumber: 13
         }),
         extra
@@ -165,20 +166,20 @@ const Bar = /* @__PURE__ */ __name((props) => {
     true,
     {
       fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-      lineNumber: 250,
+      lineNumber: 252,
       columnNumber: 9
     }
   ), "iconbutton");
   const viewicon = { auto: "auto", table: "table", cards: "cards" }[props.view];
   const chevron = /* @__PURE__ */ jsxDEV(Icon, { name: "chevron", className: "enrol_apply-rview-chevron" }, void 0, false, {
     fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-    lineNumber: 269,
+    lineNumber: 271,
     columnNumber: 21
   });
   const filtersname = chips.length > 0 ? fill(labels.filterson, num(chips.length)) : labels.filters;
   const badge = chips.length > 0 ? /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-badge", "aria-hidden": "true", children: num(chips.length) }, void 0, false, {
     fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-    lineNumber: 273,
+    lineNumber: 275,
     columnNumber: 11
   }) : null;
   const viewchoices = [
@@ -200,20 +201,20 @@ const Bar = /* @__PURE__ */ __name((props) => {
       false,
       {
         fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-        lineNumber: 283,
+        lineNumber: 285,
         columnNumber: 13
       }
     ),
     /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-bar-spacer" }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-      lineNumber: 289,
+      lineNumber: 291,
       columnNumber: 13
     }),
     /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-bar-controls", children: [
       /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-bar-cluster", children: [
         /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-bar-count", "data-region": "enrol_apply-total", "aria-live": "polite", children: countText }, void 0, false, {
           fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-          lineNumber: 293,
+          lineNumber: 295,
           columnNumber: 21
         }),
         /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-capsule", children: [
@@ -232,7 +233,7 @@ const Bar = /* @__PURE__ */ __name((props) => {
                 children: [
                   /* @__PURE__ */ jsxDEV(SetItems, { heading: labels.presets, sets: props.sets, onSet: props.onSet }, void 0, false, {
                     fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-                    lineNumber: 308,
+                    lineNumber: 310,
                     columnNumber: 33
                   }),
                   columns.map((column) => column.fixed ? /* @__PURE__ */ jsxDEV(
@@ -246,21 +247,21 @@ const Bar = /* @__PURE__ */ __name((props) => {
                       children: [
                         /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-box", "aria-hidden": "true", children: /* @__PURE__ */ jsxDEV(Icon, { name: "tick" }, void 0, false, {
                           fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-                          lineNumber: 320,
+                          lineNumber: 322,
                           columnNumber: 49
                         }) }, void 0, false, {
                           fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-                          lineNumber: 319,
+                          lineNumber: 321,
                           columnNumber: 45
                         }),
                         /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-menu-label", children: column.title }, void 0, false, {
                           fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-                          lineNumber: 322,
+                          lineNumber: 324,
                           columnNumber: 45
                         }),
                         /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-menu-hint", children: labels.always }, void 0, false, {
                           fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-                          lineNumber: 323,
+                          lineNumber: 325,
                           columnNumber: 45
                         })
                       ]
@@ -269,7 +270,7 @@ const Bar = /* @__PURE__ */ __name((props) => {
                     true,
                     {
                       fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-                      lineNumber: 311,
+                      lineNumber: 313,
                       columnNumber: 41
                     }
                   ) : /* @__PURE__ */ jsxDEV(
@@ -284,16 +285,16 @@ const Bar = /* @__PURE__ */ __name((props) => {
                       children: [
                         /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-box", "aria-hidden": "true", children: /* @__PURE__ */ jsxDEV(Icon, { name: "tick" }, void 0, false, {
                           fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-                          lineNumber: 336,
+                          lineNumber: 338,
                           columnNumber: 49
                         }) }, void 0, false, {
                           fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-                          lineNumber: 335,
+                          lineNumber: 337,
                           columnNumber: 45
                         }),
                         /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-menu-label", children: column.title }, void 0, false, {
                           fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-                          lineNumber: 338,
+                          lineNumber: 340,
                           columnNumber: 45
                         })
                       ]
@@ -302,13 +303,13 @@ const Bar = /* @__PURE__ */ __name((props) => {
                     true,
                     {
                       fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-                      lineNumber: 326,
+                      lineNumber: 328,
                       columnNumber: 41
                     }
                   )),
                   /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-menu-sep", role: "separator" }, void 0, false, {
                     fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-                    lineNumber: 342,
+                    lineNumber: 344,
                     columnNumber: 33
                   }),
                   /* @__PURE__ */ jsxDEV(
@@ -327,12 +328,12 @@ const Bar = /* @__PURE__ */ __name((props) => {
                       children: [
                         /* @__PURE__ */ jsxDEV(Icon, { name: "columns" }, void 0, false, {
                           fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-                          lineNumber: 355,
+                          lineNumber: 357,
                           columnNumber: 37
                         }),
                         /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-menu-label", children: labels.defaultcolumns }, void 0, false, {
                           fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-                          lineNumber: 356,
+                          lineNumber: 358,
                           columnNumber: 37
                         })
                       ]
@@ -341,7 +342,7 @@ const Bar = /* @__PURE__ */ __name((props) => {
                     true,
                     {
                       fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-                      lineNumber: 343,
+                      lineNumber: 345,
                       columnNumber: 33
                     }
                   ),
@@ -361,12 +362,12 @@ const Bar = /* @__PURE__ */ __name((props) => {
                       children: [
                         /* @__PURE__ */ jsxDEV(Icon, { name: "reset" }, void 0, false, {
                           fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-                          lineNumber: 370,
+                          lineNumber: 372,
                           columnNumber: 37
                         }),
                         /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-menu-label", children: labels.resetwidths }, void 0, false, {
                           fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-                          lineNumber: 371,
+                          lineNumber: 373,
                           columnNumber: 37
                         })
                       ]
@@ -375,7 +376,7 @@ const Bar = /* @__PURE__ */ __name((props) => {
                     true,
                     {
                       fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-                      lineNumber: 358,
+                      lineNumber: 360,
                       columnNumber: 33
                     }
                   )
@@ -385,13 +386,13 @@ const Bar = /* @__PURE__ */ __name((props) => {
               true,
               {
                 fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-                lineNumber: 300,
+                lineNumber: 302,
                 columnNumber: 29
               }
             )
           ] }, void 0, true, {
             fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-            lineNumber: 298,
+            lineNumber: 300,
             columnNumber: 25
           }),
           /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-anchor", children: [
@@ -422,22 +423,22 @@ const Bar = /* @__PURE__ */ __name((props) => {
                       children: [
                         /* @__PURE__ */ jsxDEV(Icon, { name: value }, void 0, false, {
                           fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-                          lineNumber: 399,
+                          lineNumber: 401,
                           columnNumber: 41
                         }),
                         /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-menu-label", children: label }, void 0, false, {
                           fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-                          lineNumber: 400,
+                          lineNumber: 402,
                           columnNumber: 41
                         }),
                         hint !== "" ? /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-menu-hint", children: hint }, void 0, false, {
                           fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-                          lineNumber: 401,
+                          lineNumber: 403,
                           columnNumber: 56
                         }) : null,
                         /* @__PURE__ */ jsxDEV(Icon, { name: "tick", className: "enrol_apply-rview-tick" }, void 0, false, {
                           fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-                          lineNumber: 402,
+                          lineNumber: 404,
                           columnNumber: 41
                         })
                       ]
@@ -446,14 +447,14 @@ const Bar = /* @__PURE__ */ __name((props) => {
                     true,
                     {
                       fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-                      lineNumber: 386,
+                      lineNumber: 388,
                       columnNumber: 37
                     }
                   )),
                   props.tableurl !== "" ? /* @__PURE__ */ jsxDEV(Fragment, { children: [
                     /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-menu-sep", role: "separator" }, void 0, false, {
                       fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-                      lineNumber: 407,
+                      lineNumber: 409,
                       columnNumber: 41
                     }),
                     /* @__PURE__ */ jsxDEV(
@@ -466,12 +467,12 @@ const Bar = /* @__PURE__ */ __name((props) => {
                         children: [
                           /* @__PURE__ */ jsxDEV(Icon, { name: "table" }, void 0, false, {
                             fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-                            lineNumber: 414,
+                            lineNumber: 416,
                             columnNumber: 45
                           }),
                           /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-menu-label", children: labels.coretable }, void 0, false, {
                             fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-                            lineNumber: 415,
+                            lineNumber: 417,
                             columnNumber: 45
                           })
                         ]
@@ -480,13 +481,13 @@ const Bar = /* @__PURE__ */ __name((props) => {
                       true,
                       {
                         fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-                        lineNumber: 408,
+                        lineNumber: 410,
                         columnNumber: 41
                       }
                     )
                   ] }, void 0, true, {
                     fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-                    lineNumber: 406,
+                    lineNumber: 408,
                     columnNumber: 37
                   }) : null
                 ]
@@ -495,13 +496,13 @@ const Bar = /* @__PURE__ */ __name((props) => {
               true,
               {
                 fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-                lineNumber: 377,
+                lineNumber: 379,
                 columnNumber: 29
               }
             )
           ] }, void 0, true, {
             fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-            lineNumber: 375,
+            lineNumber: 377,
             columnNumber: 25
           }),
           props.downloads.length > 0 ? /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-anchor", children: [
@@ -525,12 +526,12 @@ const Bar = /* @__PURE__ */ __name((props) => {
                     children: [
                       /* @__PURE__ */ jsxDEV(Icon, { name: "download" }, void 0, false, {
                         fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-                        lineNumber: 440,
+                        lineNumber: 442,
                         columnNumber: 45
                       }),
                       /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-menu-label", children: link.label }, void 0, false, {
                         fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-                        lineNumber: 441,
+                        lineNumber: 443,
                         columnNumber: 45
                       })
                     ]
@@ -539,7 +540,7 @@ const Bar = /* @__PURE__ */ __name((props) => {
                   true,
                   {
                     fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-                    lineNumber: 433,
+                    lineNumber: 435,
                     columnNumber: 41
                   }
                 ))
@@ -548,33 +549,33 @@ const Bar = /* @__PURE__ */ __name((props) => {
               false,
               {
                 fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-                lineNumber: 424,
+                lineNumber: 426,
                 columnNumber: 33
               }
             )
           ] }, void 0, true, {
             fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-            lineNumber: 422,
+            lineNumber: 424,
             columnNumber: 29
           }) : null
         ] }, void 0, true, {
           fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-          lineNumber: 296,
+          lineNumber: 298,
           columnNumber: 21
         })
       ] }, void 0, true, {
         fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-        lineNumber: 292,
+        lineNumber: 294,
         columnNumber: 17
       }),
       /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-capsule enrol_apply-rview-searchcap", children: searchopen ? /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-search", children: [
         props.searching && searched ? /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-spin", "aria-hidden": "true" }, void 0, false, {
           fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-          lineNumber: 453,
+          lineNumber: 455,
           columnNumber: 35
         }) : /* @__PURE__ */ jsxDEV(Icon, { name: "search" }, void 0, false, {
           fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-          lineNumber: 454,
+          lineNumber: 456,
           columnNumber: 35
         }),
         /* @__PURE__ */ jsxDEV(
@@ -603,7 +604,7 @@ const Bar = /* @__PURE__ */ __name((props) => {
           false,
           {
             fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-            lineNumber: 455,
+            lineNumber: 457,
             columnNumber: 29
           }
         ),
@@ -624,7 +625,7 @@ const Bar = /* @__PURE__ */ __name((props) => {
               },
               children: /* @__PURE__ */ jsxDEV(Icon, { name: "eraser" }, void 0, false, {
                 fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-                lineNumber: 491,
+                lineNumber: 493,
                 columnNumber: 37
               })
             },
@@ -632,14 +633,14 @@ const Bar = /* @__PURE__ */ __name((props) => {
             false,
             {
               fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-              lineNumber: 480,
+              lineNumber: 482,
               columnNumber: 33
             }
           )
         ) : null
       ] }, void 0, true, {
         fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-        lineNumber: 451,
+        lineNumber: 453,
         columnNumber: 25
       }) : /* @__PURE__ */ jsxDEV(
         "button",
@@ -655,7 +656,7 @@ const Bar = /* @__PURE__ */ __name((props) => {
           },
           children: /* @__PURE__ */ jsxDEV(Icon, { name: "search" }, void 0, false, {
             fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-            lineNumber: 507,
+            lineNumber: 509,
             columnNumber: 29
           })
         },
@@ -663,12 +664,12 @@ const Bar = /* @__PURE__ */ __name((props) => {
         false,
         {
           fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-          lineNumber: 496,
+          lineNumber: 498,
           columnNumber: 25
         }
       ) }, void 0, false, {
         fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-        lineNumber: 449,
+        lineNumber: 451,
         columnNumber: 17
       }),
       /* @__PURE__ */ jsxDEV(
@@ -692,16 +693,16 @@ const Bar = /* @__PURE__ */ __name((props) => {
         false,
         {
           fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-          lineNumber: 512,
+          lineNumber: 514,
           columnNumber: 17
         }
       )
     ] }, void 0, true, {
       fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-      lineNumber: 291,
+      lineNumber: 293,
       columnNumber: 13
     }),
-    /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-chips", "data-region": "enrol_apply-chips", hidden: chipcount === 0, children: [
+    /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-chips", "data-region": "enrol_apply-chips", hidden: chipcount === 0 && !props.aside, children: [
       chips.map((chip) => /* @__PURE__ */ jsxDEV(
         "button",
         {
@@ -712,12 +713,12 @@ const Bar = /* @__PURE__ */ __name((props) => {
           children: [
             /* @__PURE__ */ jsxDEV("span", { children: chip.text }, void 0, false, {
               fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-              lineNumber: 538,
+              lineNumber: 540,
               columnNumber: 25
             }),
             /* @__PURE__ */ jsxDEV(Icon, { name: "close" }, void 0, false, {
               fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-              lineNumber: 539,
+              lineNumber: 541,
               columnNumber: 25
             })
           ]
@@ -726,7 +727,7 @@ const Bar = /* @__PURE__ */ __name((props) => {
         true,
         {
           fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-          lineNumber: 531,
+          lineNumber: 533,
           columnNumber: 21
         }
       )),
@@ -740,12 +741,12 @@ const Bar = /* @__PURE__ */ __name((props) => {
           children: [
             /* @__PURE__ */ jsxDEV("span", { children: fill(labels.searchchip, props.search.trim()) }, void 0, false, {
               fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-              lineNumber: 549,
+              lineNumber: 551,
               columnNumber: 25
             }),
             /* @__PURE__ */ jsxDEV(Icon, { name: "close" }, void 0, false, {
               fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-              lineNumber: 550,
+              lineNumber: 552,
               columnNumber: 25
             })
           ]
@@ -754,7 +755,7 @@ const Bar = /* @__PURE__ */ __name((props) => {
         true,
         {
           fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-          lineNumber: 543,
+          lineNumber: 545,
           columnNumber: 21
         }
       ) : null,
@@ -773,18 +774,19 @@ const Bar = /* @__PURE__ */ __name((props) => {
         false,
         {
           fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-          lineNumber: 554,
+          lineNumber: 556,
           columnNumber: 21
         }
-      ) : null
+      ) : null,
+      props.aside ?? null
     ] }, void 0, true, {
       fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-      lineNumber: 529,
+      lineNumber: 531,
       columnNumber: 13
     })
   ] }, void 0, true, {
     fileName: "public/enrol/apply/js/esm/src/datareport/Bar.tsx",
-    lineNumber: 282,
+    lineNumber: 284,
     columnNumber: 9
   });
 }, "Bar");

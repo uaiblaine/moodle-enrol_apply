@@ -40,7 +40,9 @@ class behat_enrol_apply extends behat_base {
      * Resolve page instance URLs for this plugin.
      *
      * Recognised pages:
-     *   "<shortname> > manage applications"   the per-course application queue
+     *   "<shortname> > manage applications"   the per-course application queue, its page (the grid view)
+     *   "<shortname> > applications queue grid"  the same queue, named for the view it lands on
+     *   "<shortname> > applications queue table" the same queue as today's table (view=table)
      *   "<shortname> > application fields"    the instance's own application questions
      *   "<shortname> > applications report"   the course report of applications, its default view
      *   "<shortname> > applications table"    the same report as core's table (view=table)
@@ -54,6 +56,12 @@ class behat_enrol_apply extends behat_base {
         switch (strtolower($type)) {
             case 'manage applications':
                 return new moodle_url('/enrol/apply/manage.php', ['id' => $this->get_instance_id($identifier)]);
+
+            case 'applications queue grid':
+                return new moodle_url('/enrol/apply/manage.php', ['id' => $this->get_instance_id($identifier)]);
+
+            case 'applications queue table':
+                return new moodle_url('/enrol/apply/manage.php', ['id' => $this->get_instance_id($identifier), 'view' => 'table']);
 
             case 'application fields':
                 return new moodle_url('/enrol/apply/fields.php', ['id' => $this->get_instance_id($identifier)]);

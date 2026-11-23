@@ -56,14 +56,36 @@ class enrol_apply_renderer extends plugin_renderer_base {
      * Render the page listing the applications awaiting a decision.
      *
      * @param \enrol_apply\table\applications $table Table listing the applications.
-     * @param moodle_url $manageurl Url the decision form posts back to.
+     * @param moodle_url $manageurl Url the decision form posts back to: on the queue of one method,
+     *     the table's own address (view=table), so a decision lands back on the table.
      * @param stdClass|null $instance Enrol instance when the page is scoped to one, null otherwise.
      * @return void
      */
     public function manage_page($table, $manageurl, $instance) {
         echo $this->header();
         echo $this->heading(get_string('confirmusers', 'enrol_apply'));
+        /* The way to the grid view, the method queue's page, on the queue of one method only (CQ-D3),
+           with the filters in force. Outside manage_form(), which is also the grid view's noscript,
+           where it would lead back. */
+        if ($instance !== null) {
+            echo $this->render_from_template('enrol_apply/queue_viewswitch', [
+                'url' => \enrol_apply\output\queue_view::url($manageurl, true)->out(false),
+            ]);
+        }
         echo $this->manage_form($table, $manageurl, $instance);
+        echo $this->footer();
+    }
+
+    /**
+     * Render the method queue's grid view, its page (CQ-D5): the React shell, today's queue in its noscript.
+     *
+     * @param \enrol_apply\output\queue_view $view The shell.
+     * @return void
+     */
+    public function queue_page(\enrol_apply\output\queue_view $view): void {
+        echo $this->header();
+        echo $this->heading(get_string('confirmusers', 'enrol_apply'));
+        echo $this->render($view);
         echo $this->footer();
     }
 
@@ -90,31 +112,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
            decision controls. The decision methods would skip their rows anyway; this only keeps
            the page from offering what it cannot do. */
         $candecide = $table->can_decide();
-
-        /* The three decisions as three submit buttons named formaction, in the review page's
-           order and styles (MQ-D4), so the POST contract is the review page's and a decision is
-           one press without JavaScript. Each carries a short label too, the one shown below
-           576 px, where core's 80 px footer has to keep one line. */
-        $actions = [
-            [
-                'value' => 'cancel',
-                'label' => get_string('btncancel', 'enrol_apply'),
-                'short' => get_string('btncancelshort', 'enrol_apply'),
-                'classes' => 'btn-outline-danger',
-            ],
-            [
-                'value' => 'wait',
-                'label' => get_string('btnwait', 'enrol_apply'),
-                'short' => get_string('btnwaitshort', 'enrol_apply'),
-                'classes' => 'btn-outline-secondary',
-            ],
-            [
-                'value' => 'confirm',
-                'label' => get_string('btnconfirm', 'enrol_apply'),
-                'short' => get_string('btnconfirmshort', 'enrol_apply'),
-                'classes' => 'btn-primary',
-            ],
-        ];
+        $actions = $this->queue_actions();
 
         /* The action bar goes into a core sticky footer that the template interpolates inside
            the form: its position is CSS and it is never moved in the DOM, so its controls post
@@ -194,7 +192,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
             'total' => (int) $table->totalrows,
         ]);
 
-        $context = ($candecide ? $this->decision_controls_context($instance) : []) + [
+        $context = $this->queue_decision_controls($table, $instance) + [
             'candecide' => $candecide,
             'viewonlynotice' => get_string('queueviewonly', 'enrol_apply'),
             'formurl' => $manageurl->out(false),
@@ -244,6 +242,55 @@ class enrol_apply_renderer extends plugin_renderer_base {
         );
 
         return $this->render_from_template('enrol_apply/manage', $context);
+    }
+
+    /**
+     * The queue's three decisions, in the review page's order and styles (MQ-D4).
+     *
+     * One list for the table's sticky footer and the grid view's dock, so the two offer the same
+     * decisions under the same labels in the same order: approve, defer, and the destructive one
+     * last. Each value is a formaction manage.php accepts, so the POST contract is the review
+     * page's and a decision is one press without JavaScript. Each carries a short label too, the
+     * one the footer shows below 576 px, where core's 80 px footer has to keep one line.
+     *
+     * @return array Each: value (the formaction), label, short, classes (the button's style).
+     */
+    public function queue_actions(): array {
+        return [
+            [
+                'value' => 'confirm',
+                'label' => get_string('btnconfirm', 'enrol_apply'),
+                'short' => get_string('btnconfirmshort', 'enrol_apply'),
+                'classes' => 'btn-primary',
+            ],
+            [
+                'value' => 'wait',
+                'label' => get_string('btnwait', 'enrol_apply'),
+                'short' => get_string('btnwaitshort', 'enrol_apply'),
+                'classes' => 'btn-outline-secondary',
+            ],
+            [
+                'value' => 'cancel',
+                'label' => get_string('btncancel', 'enrol_apply'),
+                'short' => get_string('btncancelshort', 'enrol_apply'),
+                'classes' => 'btn-outline-danger',
+            ],
+        ];
+    }
+
+    /**
+     * What the queue's decision form offers this reader: the decision controls, or nothing.
+     *
+     * The table form's own call, and the grid view's (\enrol_apply\output\queue_view::props()), so the
+     * two cannot offer different groups, roles or summaries. Nothing for a reader who may not decide
+     * from this listing (a viewer, S5), whose page has no decision form at all.
+     *
+     * @param \enrol_apply\table\applications $table The queue as built for this request.
+     * @param stdClass|null $instance Enrol instance the queue is scoped to, null site wide.
+     * @return array The context of enrol_apply/decision_controls, or an empty array.
+     */
+    public function queue_decision_controls(\enrol_apply\table\applications $table, ?stdClass $instance): array {
+        return $table->can_decide() ? $this->decision_controls_context($instance) : [];
     }
 
     /**
@@ -553,6 +600,10 @@ class enrol_apply_renderer extends plugin_renderer_base {
             'formaction' => (new moodle_url('/enrol/apply/manage.php'))->out(false),
             'hasscope' => $scoped,
             'scopeid' => $params['id'] ?? 0,
+            /* A GET submit replaces the query string, so the table view (view=table, CQ-D5) rides
+               along as a field of its own, as the scope does: Enter in the search box keeps the
+               reader on the table rather than sending them to the grid. */
+            'hasviewtable' => $manageurl->get_param('view') === \enrol_apply\output\queue_view::TABLE,
             'searchlabel' => get_string('queuesearch', 'enrol_apply'),
             'searchvalue' => $search,
             'searchhelp' => $this->output->help_icon('queuesearch', 'enrol_apply'),

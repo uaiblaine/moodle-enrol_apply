@@ -4,9 +4,47 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased (2026112302)
+## Unreleased (2026112304)
 
 ### Added
+
+- **The grid view decides, and is the queue page of a method** (2026112304, no upgrade step). A
+  reader who may decide selects rows with a box per row and one for the page (never their own
+  application, which has none); the selection is cleared when the page, the scope, a filter, the
+  search or the sort changes, and the dock under the rows says how many are selected "on this page"
+  beside the table's three decisions, Confirm, Defer and Cancel applications (the destructive one
+  last; the grid's first cell on each row is a row header). Each opens a sheet that
+  names the applicants and asks what the table's sheet asks: the message to the applicant, the note
+  for the record and, for an approval, the groups and the role to a holder of
+  `enrol/apply:choosedecision` (what an approval gives to a decider without it), with the table's
+  warnings. The decision is the table's own form posted to `manage.php` (`formaction`,
+  `userenrolments[]`, `outcomemessage`, `decisionnote`, `groups[]`, `roleid`, `sesskey`), so every
+  check a decision has applies unchanged; no web service decides. It lands back on the grid with the
+  scope, the filters, the search, the sort and the page it was posted from, cleaned again by the
+  server (worked out before the decision runs, so an address that cannot be worked out falls back to
+  the listing instead of failing a decision already applied). `manage.php?id=<method>` now shows the grid; `view=table` shows today's table to anyone,
+  and a browser without JavaScript gets the table inside the grid page. A viewer reads the grid with
+  no box, no dock and no sheet. The site-wide and mentee queues are unchanged. Mutation gates
+  `QV1`, `QV2` (inverted) and `QV4`-`QV9`.
+- **The queue of one method has a grid view, read only, on request** (2026112303, no upgrade step;
+  the queue page is unchanged and stays the default). `manage.php?id=<method>&view=grid` draws the
+  queue as the course report draws its rows, from the queue's own web services: tiles with the
+  method's places and applications held, the applications awaiting a decision with the oldest wait,
+  and whether the method accepts applications; a bar with All, Pending and Deferred, the count,
+  Filters (group, how the group was named, waited more than, applied before, and the identity fields
+  offered as a list, each counted where the server counts it), Columns with three sets (everything
+  asked, decision at a glance, answers) kept in the reader's `enrol_apply_queue_grid` preference,
+  View (automatic, table, cards), the search and the chips of what is in force; a grid or cards with
+  each applicant's picture, name (linked where the profile would open), identity fields and labels,
+  and a Review link; a pager of 30, 50 or 100 rows. No Download; "Open the report" for a holder of
+  `enrol/apply:viewreports`. The scope, the filters, the search, the sort and the page live in the
+  page's address, under the names the table page already reads (`status`, `search`, `group`, the
+  identity fields, the dates) and `named`, `waited`, `appliedbefore`, `sort`, `dir`, `page` and
+  `perpage`, so a filtered link lands filtered; they are not stored per user. Nothing is decided
+  there yet: each row leads to its review page. The table page of a method links to the grid view
+  ("Grid view") and the grid view back ("Table view"), with the filters in force; without
+  JavaScript the grid view shows today's queue. The site-wide and mentee queues keep the table.
+  Mutation gates `QV1`-`QV3`.
 
 - **The approval queue of one method can be read without its page** (2026112302, no upgrade step;
   the queue page looks and behaves as before). `\enrol_apply\local\queueengine` builds the queue's

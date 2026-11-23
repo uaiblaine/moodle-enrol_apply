@@ -28,7 +28,8 @@ Feature: Application with a group key, sent for review
     # The field set has no generator behind it: without this the method asks for the default fields.
     And the "C1" apply enrolment method asks for ""
 
-  # @javascript: the modal's footer takes its label from the form, and the queue's bulk bar needs it.
+  # @javascript: the modal's footer takes its label from the form, and the queue's grid, its dock and
+  # its decision sheet need it.
   @javascript
   Scenario: A valid key sends the application for review, and approving it joins the key's group
     Given I log in as "student1"
@@ -50,14 +51,15 @@ Feature: Application with a group key, sent for review
     And I log out
     And I log in as "teacher1"
     And I am on the "C1" "enrol_apply > manage applications" page
-    And I should see "Student 1"
-    And I should see "Key accepted, sent for review"
+    And I should see "Student 1" in the "[data-region='enrol_apply-rows']" "css_element"
+    And I should see "Key accepted, sent for review" in the "Student 1" "table_row"
     And I click on "Select all" "checkbox"
-    And I press "Confirm"
+    And I click on "Confirm" "button" in the "[data-region='enrol_apply-dock']" "css_element"
     And I click on "Confirm 1" "button" in the "Confirm 1 application" "dialogue"
     And I should see "The selected enrolment applications have been updated."
     And I am on the "C1" "groups" page logged in as "teacher1"
     And I set the field "groups" to "Turma B (1)"
+    And I wait until "Student 1 (student1@example.com)" "option" exists
     And the "members" select box should contain "Student 1 (student1@example.com)"
     And I log out
     And I log in as "student1"

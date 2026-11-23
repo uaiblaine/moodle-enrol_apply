@@ -95,6 +95,7 @@ classes/local/queueengine.php  one method's queue read headlessly, for classes/e
 classes/bulk/                the participants page's three bulk decisions
 report.php, classes/reportbuilder/  the course report and a custom-report datasource, both over the durable record
 classes/output/report_view.php, js/esm/src/report/  the course report's React view (5.3), its shell and its client
+classes/output/queue_view.php, js/esm/src/queue/  the method queue's grid view (its page; view=table for the table), its shell and its client
 renderer.php                 page rendering plus the notification e-mail body
 templates/                   manage, manage_actions, queue_capacity, queue_chip, queue_filters, review
                              (left column: review_summary, review_rules, review_history,
@@ -1330,6 +1331,84 @@ backup/                      group mappings, comments and the durable trail, see
   the table's, in set and order, for a decider, a narrowed moderator and a viewer over every scope and
   filter; `test_each_facet_count_is_what_choosing_it_lists`), `tests/external/queue_services_test.php`
   (the doors), `tests/table/applications_test.php` (the two-record row). Gates `QE1`-`QE23`, `QE4` and `QE5` retired.
+
+- **The method queue's grid view is a client of the headless queue, opt-in, and read only.**
+  `manage.php` renders `\enrol_apply\output\queue_view` (template `queue_view`) only where
+  `queue_view::wanted()` holds: the queue of one method (`id` > 0; the site-wide and mentee queues keep
+  the table, CQ-D3) and `view=grid` in the address. Today's table stays the default until the grid
+  can decide: stage 4 inverts the second condition to `view=table` there, in that one predicate. The
+  shell's props carry configuration and strings only (mount `queue` in `js/esm/src/views.tsx`); rows
+  and tiles come from `enrol_apply_queue_rows` and `enrol_apply_queue_summary`, and its noscript is
+  `manage_form()`, the table with its decision form. `$PAGE->url` names the grid; `$manageurl`, which
+  the form posts to and a decision redirects to, stays the table's. **Filters live in the address,
+  never in a preference** (CQ-D6): `status` (the scope), `search`, `group`, the identity tokens,
+  `appliedfrom`, `appliedto` are the names `manage.php` reads for the table, and `queue_view::initial()`
+  reads them from manage.php's own cleaning (`request_filters()`, so the group default applies); the
+  facets (`named`, `waited`, `appliedbefore`), `sort`, `dir`, `page` and `perpage` are the view's own.
+  `js/esm/src/queue/address.ts` writes them back with `replaceState` (the search, the first paint) or
+  `pushState` (everything else) and keeps the shell's "Table view" link in step; a released group
+  filter writes `group=all` where the group filter has a default, as the table's chip does. Only the
+  columns and widths are the reader's (`enrol_apply_queue_grid`), and a column change re-reads the rows
+  only after the write resolves. Cells documented as HTML are inserted as HTML; the name, the identity
+  values and the tags are text. The tags' tones mirror `applications::TAG_TONES` by hand. Gates
+  `QV1`-`QV3`; `tests/behat/queue_view.feature` drives the client.
+
+- **The method queue's page is its grid view, a client of the headless queue (CQ-D5).**
+  `manage.php` renders `\enrol_apply\output\queue_view` (template `queue_view`) wherever
+  `queue_view::wanted()` holds: the queue of one method (`id` > 0; the site-wide and mentee queues keep
+  the table, CQ-D3) and no `view=table` in the address. `view=table` is the escape hatch, open to
+  anyone, and without JavaScript the page is the same table inside the shell's noscript
+  (`manage_form()`, with its decision form); the table's page links "Grid view", the grid "Table view".
+  The shell's props carry configuration and strings only (mount `queue` in `js/esm/src/views.tsx`); rows
+  and tiles come from `enrol_apply_queue_rows` and `enrol_apply_queue_summary`. `$listingurl` in
+  `manage.php` is where a listing lives: `$manageurl` for the grid (no view parameter), the same plus
+  `view=table` for the method queue's table, whose form posts there and whose filter form carries
+  `view` as a hidden field (a GET submit replaces the query string). **Filters live in the address,
+  never in a preference** (CQ-D6): `status` (the scope), `search`, `group`, the identity tokens,
+  `appliedfrom`, `appliedto` are the names `manage.php` reads for the table, and `queue_view::initial()`
+  reads them from manage.php's own cleaning (`request_filters()`, so the group default applies); the
+  facets (`named`, `waited`, `appliedbefore`), `sort`, `dir`, `page` and `perpage` are the view's own.
+  `js/esm/src/queue/address.ts` writes them back with `replaceState` (the search, the first paint) or
+  `pushState` (everything else) and keeps the shell's "Table view" link in step; a released group
+  filter writes `group=all` where the group filter has a default, as the table's chip does. Only the
+  columns and widths are the reader's (`enrol_apply_queue_grid`), and a column change re-reads the rows
+  only after the write resolves. Cells documented as HTML are inserted as HTML; the name, the identity
+  values and the tags are text. The tags' tones mirror `applications::TAG_TONES` by hand. Gates
+  `QV1`-`QV3`; `tests/behat/queue_view.feature` drives the client.
+
+  **A decision from the grid is the table's form, posted (CQ-D4). There is no decision web service,
+  and there must never be one.** The client (`js/esm/src/queue/decide.ts`) builds a
+  `<form method="post">` with the table form's own fields - `sesskey`, `formaction`, one
+  `userenrolments[]` per selected row, `outcomemessage`, `decisionnote`, and for an approval offered
+  the choosers `groups[]` and `roleid` - and submits it to its own address, so `manage.php` requires
+  the sesskey and a POST, reads the fields through `decision::posted()` (the one reader of the queue's
+  contract, the table's, the grid's and the review page's alike) and runs `decision::apply()` with every
+  per-row guard it has; nothing the client selected or offered is trusted. The redirect is
+  `queue_view::return_url()`: the scope, search and table filters as manage.php cleaned them, the
+  facets as the queue's own table applied them (`url_params()`), the sort only when the reader's
+  catalogue offers it as sortable, the page size from its vocabulary, defaults left out; never an echo
+  of the request. What the sheet offers comes from `renderer::queue_decision_controls()`, the same call
+  the table form makes (`decision_controls_context()` behind `can_decide()`), mapped to plain text by
+  `queue_view::decision()`: no props at all for a viewer, the groups and role choosers only where the
+  table form offers them (`enrol/apply:choosedecision`), the approval summary otherwise, and the places
+  notice from the same capacity calls; the three decisions are `renderer::queue_actions()`, the table
+  footer's labels and order (Confirm, Defer, then the destructive Cancel last). `tests/local/decision_post_test.php` holds that the grid's field set
+  writes exactly what the table's writes, and that a forged post naming the reader's own application or
+  one outside a narrowed moderator's groups decides neither. Gates `QV4`-`QV9`.
+
+  **The selection belongs to the page on screen.** A box only on a row the rows service marks
+  `selectable` (`applications::selectable()`: never for a viewer, never the reader's own application),
+  only when the props offer a decision and the rows say `candecide`; the page's box selects the
+  selectable rows of the page and nothing else. `QueueView` clears the selection whenever it asks for
+  another set of rows (page, page size, scope, filter, search, sort, the history's back and forward)
+  and keeps, on any other re-read, only ids the new answer still marks selectable, so no row out of
+  sight stays selected; the dock's count says "on this page" for that reason. The boxes sit in real
+  `<label>`s with visually hidden text, which is what Behat's `"checkbox"` locator needs. The dock is
+  drawn only while something is selected (`Rows`' `dock`), and the sheet is the view's own modal in
+  Bootstrap's markup (`modal-content` and `modal-title`, which Moodle's `"dialogue"` locator reads):
+  focus moves to its title and wraps, Escape, Back and the close button close it, and a press outside
+  does too unless a field holds text or a non-default choice, and the focus goes back to the dock button that opened it. Its commit button is the confirmation, worded as
+  the table's sheet ("Cancel 2"); the queue asks nothing beyond it (see "Cancelling asks" below).
 
 - **Both listings order by a unique key as a last resort, and the injection point is the only
   one that works.** Every column either table offers can tie — `applydate` is `ue.timecreated`,

@@ -871,7 +871,8 @@ final class renderer_test extends \advanced_testcase {
             preg_match('~value="([a-z]+)"~', $button, $value);
             $values[] = $value[1];
         }
-        $this->assertSame(['cancel', 'wait', 'confirm'], $values);
+        // The destructive decision comes last.
+        $this->assertSame(['confirm', 'wait', 'cancel'], $values);
         // The select and Go they replaced are gone.
         $this->assertDoesNotMatchRegularExpression('~<select[^>]*name="formaction"~', $html);
     }

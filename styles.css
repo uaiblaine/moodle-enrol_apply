@@ -12,8 +12,9 @@
 .enrol_apply-filters,
 .enrol_apply-sheet,
 .enrol_apply-presets,
+.enrol_apply-qview,
 [data-enrol-apply-report] {
-    --enrol-apply-line: var(--bs-border-color, #dee2e6);
+    --enrol-apply-line: var(--dimensions-line, var(--bs-border-color, #dee2e6));
     --enrol-apply-muted: var(--bs-secondary-color, #6c757d);
     --enrol-apply-fill: var(--bs-primary, #0f6cbf);
     --enrol-apply-warn: var(--bs-warning, #f0ad4e);
@@ -21,7 +22,7 @@
     /* The foreground that pairs with --enrol-apply-track and the surface. Bootstrap designs them
        together, so they are read together: an ancestor that recolours text without moving the
        --bs-* tokens would otherwise put light text on a light fill. */
-    --enrol-apply-ink: var(--bs-body-color, #1d2125);
+    --enrol-apply-ink: var(--dimensions-ink, var(--bs-body-color, #212529));
     --enrol-apply-surface: var(--dimensions-surface, var(--bs-body-bg, #fff));
 }
 
@@ -38,6 +39,7 @@
 .enrol_apply-timeline,
 .enrol_apply-sheet,
 .enrol_apply-presets,
+.enrol_apply-qview,
 [data-enrol-apply-report] {
     --enrol-apply-surface-inset: var(--dimensions-surface-inset, var(--bs-secondary-bg, #e9ecef));
     --enrol-apply-ink-muted: var(--dimensions-ink-muted, var(--bs-secondary-color, rgba(33, 37, 41, .75)));
@@ -658,9 +660,9 @@ body.path-enrol-apply:not(.jsenabled) #page.drawers {
 .enrol_apply-review,
 .enrol_apply-applicationnav,
 .enrol_apply-timeline {
-    --enrol-apply-line: var(--bs-border-color, #dee2e6);
+    --enrol-apply-line: var(--dimensions-line, var(--bs-border-color, #dee2e6));
     --enrol-apply-muted: var(--bs-secondary-color, #6c757d);
-    --enrol-apply-ink: var(--bs-body-color, #1d2125);
+    --enrol-apply-ink: var(--dimensions-ink, var(--bs-body-color, #212529));
     --enrol-apply-surface: var(--bs-card-bg, var(--bs-body-bg, #fff));
     --enrol-apply-fill: var(--bs-primary, var(--primary, #0f6cbf));
     --enrol-apply-warn: var(--bs-warning, var(--warning, #f0ad4e));
@@ -2970,7 +2972,7 @@ body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload + .enrol_apply-rvie
     table-layout: fixed;
 }
 
-.enrol_apply-rview .enrol_apply-rview-grid th {
+.enrol_apply-rview .enrol_apply-rview-grid thead th {
     background: var(--enrol-apply-surface-alt);
     border-bottom: 1px solid var(--enrol-apply-line);
     color: var(--enrol-apply-ink-muted);
@@ -2984,8 +2986,8 @@ body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload + .enrol_apply-rvie
     z-index: 2;
 }
 
-.enrol_apply-rview .enrol_apply-rview-grid th[aria-sort="ascending"],
-.enrol_apply-rview .enrol_apply-rview-grid th[aria-sort="descending"] {
+.enrol_apply-rview .enrol_apply-rview-grid thead th[aria-sort="ascending"],
+.enrol_apply-rview .enrol_apply-rview-grid thead th[aria-sort="descending"] {
     color: var(--enrol-apply-ink);
 }
 
@@ -3058,7 +3060,8 @@ body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload + .enrol_apply-rvie
     outline: none;
 }
 
-.enrol_apply-rview .enrol_apply-rview-grid td {
+.enrol_apply-rview .enrol_apply-rview-grid td,
+.enrol_apply-rview .enrol_apply-rview-grid tbody th {
     color: var(--enrol-apply-ink);
     background: var(--enrol-apply-surface);
     border-bottom: 1px solid var(--enrol-apply-line);
@@ -3066,11 +3069,19 @@ body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload + .enrol_apply-rvie
     vertical-align: top;
 }
 
-.enrol_apply-rview .enrol_apply-rview-grid tbody tr:last-child td {
+.enrol_apply-rview .enrol_apply-rview-grid tbody th {
+    font-size: inherit;
+    font-weight: inherit;
+    text-align: start;
+}
+
+.enrol_apply-rview .enrol_apply-rview-grid tbody tr:last-child td,
+.enrol_apply-rview .enrol_apply-rview-grid tbody tr:last-child th {
     border-bottom: 0;
 }
 
-.enrol_apply-rview .enrol_apply-rview-grid tbody tr:hover td {
+.enrol_apply-rview .enrol_apply-rview-grid tbody tr:hover td,
+.enrol_apply-rview .enrol_apply-rview-grid tbody tr:hover th {
     color: var(--enrol-apply-ink);
     background: var(--enrol-apply-hover);
 }
@@ -3081,7 +3092,7 @@ body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload + .enrol_apply-rvie
     z-index: 1;
 }
 
-.enrol_apply-rview .enrol_apply-rview-grid th.enrol_apply-rview-fixed {
+.enrol_apply-rview .enrol_apply-rview-grid thead th.enrol_apply-rview-fixed {
     z-index: 4;
 }
 
@@ -3396,4 +3407,195 @@ body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload + .enrol_apply-rvie
 
 .enrol_apply-presets .enrol_apply-preset-action {
     margin-top: auto;
+}
+
+/* The method queue's grid view (stage 3, js/esm/src/queue): the report view's parts and classes on a
+   root of its own, .enrol_apply-qview, which also carries .enrol_apply-rview and so the report view's
+   tokens and rules. Only what the queue adds is here. */
+.enrol_apply-queueviewswitch {
+    font-size: 0.875rem;
+    margin: 0 0 0.75rem;
+}
+
+/* The applicant's cell: the picture, the name with its identity lines and labels, the Review link. */
+.enrol_apply-qview .enrol_apply-qview-who {
+    align-items: start;
+    display: grid;
+    flex: 1 1 auto;
+    gap: 0.625rem;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    min-width: 0;
+}
+
+.enrol_apply-qview .enrol_apply-qview-picture {
+    display: block;
+    flex: none;
+    line-height: 0;
+}
+
+.enrol_apply-qview .enrol_apply-qview-whotext {
+    min-width: 0;
+}
+
+.enrol_apply-qview .enrol_apply-qview-name {
+    font-weight: 600;
+}
+
+.enrol_apply-qview .enrol_apply-qview-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    margin-top: 0.25rem;
+}
+
+/* A capacity tile's meter, the table page's panel's measure in the tile's own track. */
+.enrol_apply-qview .enrol_apply-qview-meter {
+    background: var(--enrol-apply-surface-inset);
+    border-radius: var(--enrol-apply-radius-xs);
+    display: block;
+    height: 0.25rem;
+    margin-top: 0.375rem;
+    overflow: hidden;
+}
+
+.enrol_apply-qview .enrol_apply-qview-meter > span {
+    background: var(--enrol-apply-brand-fill);
+    display: block;
+    height: 100%;
+}
+
+.enrol_apply-qview .enrol_apply-qview-meter--warn > span {
+    background: var(--enrol-apply-warning-edge);
+}
+
+/* "Open the report" ends the chips' row (CQ-D11). */
+.enrol_apply-qview .enrol_apply-qview-tolink {
+    font-size: 0.8125rem;
+    margin-inline-start: auto;
+}
+
+/* The selection (stage 4): a box leading the applicant's heading and cells, and each card's first
+   line. The label around the box carries its name in visually hidden text; a row that may not be
+   selected (the reader's own application) keeps the box's place empty, so the names stay aligned. */
+.enrol_apply-qview .enrol_apply-rview-lead {
+    align-items: flex-start;
+    display: flex;
+    gap: 0.5rem;
+    min-width: 0;
+}
+
+.enrol_apply-qview .enrol_apply-rview-lead > :last-child {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.enrol_apply-qview thead th .enrol_apply-rview-lead {
+    align-items: center;
+    gap: 0;
+    padding-inline-start: 0.75rem;
+}
+
+.enrol_apply-qview .enrol_apply-rview-pickwrap {
+    display: inline-flex;
+    flex: none;
+    margin: 0;
+    padding-top: 0.125rem;
+    width: 1rem;
+}
+
+.enrol_apply-qview thead th .enrol_apply-rview-pickwrap {
+    padding-top: 0;
+}
+
+.enrol_apply-qview .enrol_apply-rview-pick {
+    accent-color: var(--enrol-apply-brand-fill);
+    cursor: pointer;
+    height: 1rem;
+    margin: 0;
+    width: 1rem;
+}
+
+.enrol_apply-qview .enrol_apply-rview-pick:disabled {
+    cursor: default;
+}
+
+.enrol_apply-qview .enrol_apply-rview-grid tr.enrol_apply-rview-row--selected td,
+.enrol_apply-qview .enrol_apply-rview-grid tr.enrol_apply-rview-row--selected th,
+.enrol_apply-qview .enrol_apply-rview-card--selected {
+    color: var(--enrol-apply-ink);
+    background: var(--enrol-apply-brand-tint);
+}
+
+.enrol_apply-qview .enrol_apply-rview-card--selected {
+    border-color: var(--enrol-apply-brand-edge);
+}
+
+/* The dock: the selection's count and the three decisions, under the rows and on screen while the
+   rows scroll by. It is drawn only while something is selected. */
+.enrol_apply-qview .enrol_apply-qview-dock {
+    align-items: center;
+    background: var(--enrol-apply-surface);
+    border: 1px solid var(--enrol-apply-line);
+    border-radius: var(--enrol-apply-radius-lg);
+    bottom: 0.75rem;
+    box-shadow: var(--enrol-apply-elevation-md);
+    color: var(--enrol-apply-ink);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    position: sticky;
+    z-index: 5;
+}
+
+.enrol_apply-qview .enrol_apply-qview-dockcount {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.enrol_apply-qview .enrol_apply-qview-dockactions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+/* The decision sheet: Bootstrap's modal markup drawn by the view, inside its root so the plugin's
+   tokens reach it. */
+.enrol_apply-qview .enrol_apply-qview-sheet .modal-content {
+    background: var(--enrol-apply-surface);
+    color: var(--enrol-apply-ink);
+}
+
+.enrol_apply-qview .enrol_apply-qview-sheet .modal-content:focus-visible {
+    outline: var(--enrol-apply-focus-width) solid var(--enrol-apply-focus-ring);
+    outline-offset: 2px;
+}
+
+.enrol_apply-qview .enrol_apply-qview-sheetline {
+    color: var(--enrol-apply-ink-muted);
+}
+
+.enrol_apply-qview .enrol_apply-qview-sheetwho {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+    list-style: none;
+    margin: 0 0 1rem;
+    padding: 0;
+}
+
+.enrol_apply-qview .enrol_apply-qview-sheetwho > li {
+    align-items: center;
+    display: flex;
+    gap: 0.5rem;
+}
+
+.enrol_apply-qview .enrol_apply-qview-sheetmore {
+    color: var(--enrol-apply-ink-muted);
+}
+
+.enrol_apply-qview .enrol_apply-qview-sheetsummary {
+    margin-bottom: 1rem;
 }

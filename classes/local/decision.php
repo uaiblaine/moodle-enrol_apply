@@ -60,6 +60,49 @@ final class decision {
     }
 
     /**
+     * What a queue form posts beside the action and the selection, read and cleaned as manage.php reads it.
+     *
+     * One reader for every surface that posts the queue's contract - the table's form, the grid view's
+     * form (built by its client with the same names, CQ-D4) and the review page's - so none of them can
+     * be read differently; manage.php reads `formaction`, `userenrolments[]` and the sesskey itself.
+     *
+     * The message and the note are PARAM_TEXT and not PARAM_RAW: the message reaches the applicant's
+     * notification, and the only formatting either is allowed is the line breaks the decider typed. The
+     * message is escaped again at the sink in notify_applicant(); cleaning here as well keeps a forged
+     * post from putting markup into the durable record, which outlives the enrolment it belongs to.
+     *
+     * The per-method messages are keyed by an enrol instance id, which the decision sheet asks for when
+     * a selection on the site-wide or mentee queue spans methods (MQ-D15); which method a row belongs
+     * to is read from the database by {@see groups()}, never from these keys, and an empty array is
+     * one call for the whole selection.
+     *
+     * The groups and the role are cleaned to integers here and allowlisted per instance inside
+     * confirm_enrolment(), because a site-wide batch can span courses and a group or role valid for
+     * one application is not necessarily valid for the next. They are read unconditionally, not only
+     * when the form offered a control, so the allowlist runs against whatever a forged post carries.
+     * The note is always in the choice, because the writer tests the key with array_key_exists(): an
+     * empty note clears the previous one, and only a caller omitting the key leaves it alone.
+     *
+     * @return array 'message' and 'note' (trimmed), 'messages' (enrol id => message), and 'decision'
+     *     (groups, roleid and note, as confirm_enrolment() reads them).
+     */
+    public static function posted(): array {
+        $message = trim(optional_param('outcomemessage', '', PARAM_TEXT));
+        $note = trim(optional_param('decisionnote', '', PARAM_TEXT));
+
+        return [
+            'message' => $message,
+            'note' => $note,
+            'messages' => optional_param_array('outcomemessages', [], PARAM_TEXT),
+            'decision' => [
+                'groups' => optional_param_array('groups', [], PARAM_INT),
+                'roleid' => optional_param('roleid', 0, PARAM_INT),
+                'note' => $note,
+            ],
+        ];
+    }
+
+    /**
      * Apply one posted decision.
      *
      * An id that names no {user_enrolments} row lands in the group carrying the plain message, so

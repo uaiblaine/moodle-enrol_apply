@@ -548,6 +548,9 @@ final class bootstrap_compat_test extends \basic_testcase {
             '.enrol_apply-rview .enrol_apply-rview-waitbar' => 'the wait\'s track',
             '.enrol_apply-rview .enrol_apply-rview-waitbar > span' => 'the bar inside it',
             '.enrol_apply-rview .enrol_apply-rview-waitbar--open > span' => 'the same bar, recoloured',
+            '.enrol_apply-qview .enrol_apply-qview-meter' => 'a capacity tile\'s track, drawn empty',
+            '.enrol_apply-qview .enrol_apply-qview-meter > span' => 'the bar inside the track',
+            '.enrol_apply-qview .enrol_apply-qview-meter--warn > span' => 'the same bar, recoloured',
         ];
 
         $offenders = [];

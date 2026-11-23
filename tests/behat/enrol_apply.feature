@@ -37,9 +37,9 @@ Feature: Enrolment upon approval
     And I should not see "New section"
 
   # With JavaScript, because three paths exist only there: the application modal, which is what a
-  # browser with JavaScript gets, the queue's decisions, which start disabled only because
-  # enrol_apply/manage disables them on init, and the decision sheet they open. Only the
-  # @javascript scenarios execute the plugin's JavaScript at all.
+  # browser with JavaScript gets, the method queue's grid (its page, CQ-D5), whose dock is drawn
+  # only once something is selected, and the decision sheet the dock opens, which posts the table's
+  # own form to manage.php. Only the @javascript scenarios execute the plugin's JavaScript at all.
   @javascript
   Scenario: A teacher approves a pending application and the student gains access
     Given I log in as "student1"
@@ -49,15 +49,14 @@ Feature: Enrolment upon approval
     And I log out
     When I log in as "teacher1"
     And I am on the "C1" "enrol_apply > manage applications" page
-    Then I should see "Student 1"
-    # The decisions live in core's sticky footer, and the rows, the header checkbox and the three
-    # buttons are one core/checkbox-toggleall group. Selecting through the header is what proves it.
-    And I should see "Confirm" in the "sticky-footer" "region"
-    And the "Confirm" "button" should be disabled
+    Then I should see "Student 1" in the "[data-region='enrol_apply-rows']" "css_element"
+    # The decisions live in the dock under the rows, drawn once something is selected. Selecting
+    # through the page's box is what proves the box selects the page's rows.
+    And "[data-region='enrol_apply-dock']" "css_element" should not exist
     And I click on "Select all" "checkbox"
-    And the "Confirm" "button" should be enabled
+    And I should see "1 selected on this page" in the "[data-region='enrol_apply-dock']" "css_element"
     # The button opens the decision sheet, which names the selection and holds the options.
-    And I press "Confirm"
+    And I click on "Confirm" "button" in the "[data-region='enrol_apply-dock']" "css_element"
     And I should see "Student 1" in the "Confirm 1 application" "dialogue"
     And I should see "Message to the applicant" in the "Confirm 1 application" "dialogue"
     And I set the field "Message to the applicant" to "Welcome to the course."
@@ -68,26 +67,27 @@ Feature: Enrolment upon approval
     And I am on "Course 1" course homepage
     Then I should see "New section"
 
-  # Cancelling from the queue asks (MQ-D6): with JavaScript the footer's button opens the decision
+  # Cancelling from the queue asks (MQ-D6): with JavaScript the dock's button opens the decision
   # sheet, which says what cancelling removes, and Back posts nothing. It needs @javascript: the
-  # sheet is the module's.
+  # sheet is the grid's.
   @javascript
   Scenario: Cancelling from the queue asks first, and backing out changes nothing
     Given "student1" has applied to "C1" with the key of ""
     When I log in as "teacher1"
     And I am on the "C1" "enrol_apply > manage applications" page
     And I click on "Select all" "checkbox"
-    And I press "Cancel applications"
+    And I click on "Cancel applications" "button" in the "[data-region='enrol_apply-dock']" "css_element"
     Then I should see "Cancelling removes the enrolment and the applicant's comment." in the "Cancel 1 application" "dialogue"
     # Deferring and cancelling choose no group and no role, so the sheet does not offer them.
     And I should see "Note for the record" in the "Cancel 1 application" "dialogue"
     And I click on "Back" "button" in the "Cancel 1 application" "dialogue"
-    And I should see "Student 1"
-    And I should see "1 of 1 applications"
-    And I press "Cancel applications"
+    And "Cancel 1 application" "dialogue" should not exist
+    And I should see "Student 1" in the "[data-region='enrol_apply-rows']" "css_element"
+    And I should see "1 application" in the "[data-region='enrol_apply-total']" "css_element"
+    And I click on "Cancel applications" "button" in the "[data-region='enrol_apply-dock']" "css_element"
     And I click on "Cancel 1" "button" in the "Cancel 1 application" "dialogue"
     And I should see "The selected enrolment applications have been updated."
-    And I should see "Nothing to display"
+    And I should see "No application is awaiting a decision."
 
   # A selection on the site-wide queue that spans two enrolment methods (MQ-D15, MQ-D16): the sheet
   # splits it by method, each with a message box of its own, and the course cell names the method.
@@ -128,7 +128,8 @@ Feature: Enrolment upon approval
     When I log in as "teacher1"
     And I am on the "C1" "enrol_apply > manage applications" page
     And I set the field "Select Student 1" to "1"
-    # Without JavaScript the footer's button posts at once, as the queue always has (MQ-D6).
+    # Without JavaScript the method queue's page is today's table, in the grid's noscript, and the
+    # footer's button posts at once, as the queue always has (MQ-D6).
     And I press "Cancel applications"
     Then I should see "The selected enrolment applications have been updated."
     And I should see "Nothing to display"
@@ -137,9 +138,9 @@ Feature: Enrolment upon approval
     And I am on "Course 1" course homepage
     And I should not see "New section"
 
-  # No @javascript: the filters have to work as a plain GET form. This is also the only test of
-  # manage.php's url threading - the search has to survive the decision's redirect, and a page
-  # script's url assembly has no unit test.
+  # No @javascript: the filters have to work as a plain GET form, in the grid's noscript. This is also
+  # the only test of manage.php's url threading without JavaScript - the search has to survive the
+  # decision's redirect (queue_view::return_url(), whose cleaning queue_view_test holds).
   Scenario: Searching the queue narrows it, and the search survives a decision
     Given the following "users" exist:
       | username | firstname  | lastname    | email                  |
@@ -313,7 +314,8 @@ Feature: Enrolment upon approval
   # cheapest refresh to provoke: the table is a dynamic one, so a column heading replaces the
   # region over AJAX instead of reloading the page.
   #
-  # It needs @javascript: the count and the reset are the module's own behaviour.
+  # It needs @javascript: the count and the reset are the module's own behaviour. On the table view
+  # (view=table): the sticky footer, core's toggle-all group and the dynamic table are the table's.
   @javascript
   Scenario: Selecting rows counts them, and a sort puts the count back
     Given I log in as "student1"
@@ -322,7 +324,7 @@ Feature: Enrolment upon approval
     And I press "Submit application"
     And I log out
     When I log in as "teacher1"
-    And I am on the "C1" "enrol_apply > manage applications" page
+    And I am on the "C1" "enrol_apply > applications queue table" page
     Then I should see "0 selected on this page"
     And I click on "Select all" "checkbox"
     And I should see "1 selected on this page"
@@ -341,6 +343,7 @@ Feature: Enrolment upon approval
   #
   # It also pins how the two interact: a filter change replaces the table region and every
   # checkbox in it, while the bulk bar outside that region must stop claiming the lost selection.
+  # On the table view (view=table): the as-you-type filter bar is enrol_apply/manage's.
   @javascript
   Scenario: The queue narrows as the operator types, and the selection does not survive it
     Given the following "users" exist:
@@ -357,7 +360,7 @@ Feature: Enrolment upon approval
     And I press "Submit application"
     And I log out
     When I log in as "teacher1"
-    And I am on the "C1" "enrol_apply > manage applications" page
+    And I am on the "C1" "enrol_apply > applications queue table" page
     Then I should see "2 of 2 applications"
     And I should see "Showing 1-2 of 2"
     # A selection the operator is about to lose, and the bar that must stop claiming it.
@@ -431,7 +434,8 @@ Feature: Enrolment upon approval
   # The two halves of the applied-date chip must spell the date the same way. The server renders
   # it from PHP and the module redraws it from the input's own value, and no date format is shared
   # by both (Moodle's comes from the language pack, the browser's from the operating system), so
-  # neither side formats it. It needs @javascript: without it only the server's half renders.
+  # neither side formats it. It needs @javascript: without it only the server's half renders. On the
+  # table view (view=table): the filter panel and its chips are enrol_apply/manage's.
   @javascript
   Scenario: The applied-date chip reads the same after a refresh as it did on load
     Given the following "users" exist:
@@ -448,7 +452,7 @@ Feature: Enrolment upon approval
     And I press "Submit application"
     And I log out
     When I log in as "teacher1"
-    And I am on the "C1" "enrol_apply > manage applications" page
+    And I am on the "C1" "enrol_apply > applications queue table" page
     And I open the filters of the applications queue
     And I set the field "Applied from" to "2020-01-01"
     And I press "Apply filters"

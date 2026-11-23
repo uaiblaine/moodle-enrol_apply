@@ -25,8 +25,9 @@
  * when the handle loses the focus; a double click restores the default.
  *
  * What a cell holds is the view's: `renderLead` draws the lead column's cell, `renderCell` every other.
- * A view that selects rows passes a selection, whose boxes lead the lead column's heading and cells; a
- * view without one draws none.
+ * A view that selects rows passes a selection, whose boxes lead the lead column's heading and cells,
+ * each in a label of its own (visually hidden text) so it is named the way a form control is; a view
+ * without one draws none.
  *
  * Strings read from the view's labels: grid, caption, resize.
  *
@@ -99,15 +100,17 @@ const PageBox = <R extends RowBase>({selection, rows}: {selection: Selection<R>,
     }, [picked, all]);
 
     return (
-        <input
-            ref={box}
-            type="checkbox"
-            className="enrol_apply-rview-pick"
-            aria-label={selection.pagelabel}
-            checked={all}
-            disabled={open.length === 0}
-            onChange={(event) => selection.onSelectPage(event.target.checked)}
-        />
+        <label className="enrol_apply-rview-pickwrap">
+            <input
+                ref={box}
+                type="checkbox"
+                className="enrol_apply-rview-pick"
+                checked={all}
+                disabled={open.length === 0}
+                onChange={(event) => selection.onSelectPage(event.target.checked)}
+            />
+            <span className="visually-hidden">{selection.pagelabel}</span>
+        </label>
     );
 };
 
@@ -118,14 +121,16 @@ const PageBox = <R extends RowBase>({selection, rows}: {selection: Selection<R>,
  * @returns {object} The box or its place.
  */
 export const RowBox = <R extends RowBase>({selection, row}: {selection: Selection<R>, row: R}): ReactElement => (
-    selection.locked.has(row.id) ? <span className="enrol_apply-rview-pick enrol_apply-rview-pick--none" /> : (
-        <input
-            type="checkbox"
-            className="enrol_apply-rview-pick"
-            aria-label={selection.label(row)}
-            checked={selection.selected.has(row.id)}
-            onChange={(event) => selection.onSelect(row.id, event.target.checked)}
-        />
+    selection.locked.has(row.id) ? <span className="enrol_apply-rview-pickwrap enrol_apply-rview-pick--none" /> : (
+        <label className="enrol_apply-rview-pickwrap">
+            <input
+                type="checkbox"
+                className="enrol_apply-rview-pick"
+                checked={selection.selected.has(row.id)}
+                onChange={(event) => selection.onSelect(row.id, event.target.checked)}
+            />
+            <span className="visually-hidden">{selection.label(row)}</span>
+        </label>
     )
 );
 
@@ -286,6 +291,18 @@ export const Grid = <R extends RowBase>({labels, columns, lead, rows, widths, si
                         {columns.map((column) => {
                             const order = ariaSort(sort === column.key, direction);
                             const title = <span className="enrol_apply-rview-th-title">{column.title}</span>;
+                            const heading = column.sortable ? (
+                                <button
+                                    type="button"
+                                    className="enrol_apply-rview-sortbtn"
+                                    onClick={() => onSort(column.key)}
+                                >
+                                    {title}
+                                    <span className="enrol_apply-rview-arrow" aria-hidden="true">
+                                        {ARROWS[order]}
+                                    </span>
+                                </button>
+                            ) : <span className="enrol_apply-rview-plain">{title}</span>;
                             return (
                                 <th
                                     key={column.key}
@@ -295,19 +312,12 @@ export const Grid = <R extends RowBase>({labels, columns, lead, rows, widths, si
                                     title={column.title}
                                     data-column={column.key}
                                 >
-                                    {selection && column.key === lead ? <PageBox selection={selection} rows={rows} /> : null}
-                                    {column.sortable ? (
-                                        <button
-                                            type="button"
-                                            className="enrol_apply-rview-sortbtn"
-                                            onClick={() => onSort(column.key)}
-                                        >
-                                            {title}
-                                            <span className="enrol_apply-rview-arrow" aria-hidden="true">
-                                                {ARROWS[order]}
-                                            </span>
-                                        </button>
-                                    ) : <span className="enrol_apply-rview-plain">{title}</span>}
+                                    {selection && column.key === lead ? (
+                                        <div className="enrol_apply-rview-lead">
+                                            <PageBox selection={selection} rows={rows} />
+                                            {heading}
+                                        </div>
+                                    ) : heading}
                                     <span
                                         className="enrol_apply-rview-resize"
                                         role="separator"
@@ -343,10 +353,14 @@ export const Grid = <R extends RowBase>({labels, columns, lead, rows, widths, si
                         >
                             {columns.map((column) => (
                                 column.key === lead ? (
-                                    <td key={column.key} className="enrol_apply-rview-fixed">
-                                        {selection ? <RowBox selection={selection} row={row} /> : null}
-                                        {renderLead(row, column)}
-                                    </td>
+                                    <th key={column.key} scope="row" className="enrol_apply-rview-fixed">
+                                        {selection ? (
+                                            <div className="enrol_apply-rview-lead">
+                                                <RowBox selection={selection} row={row} />
+                                                {renderLead(row, column)}
+                                            </div>
+                                        ) : renderLead(row, column)}
+                                    </th>
                                 ) : (
                                     <td key={column.key}>{renderCell(row, column)}</td>
                                 )

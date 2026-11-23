@@ -39,6 +39,7 @@ Feature: A moderator's approval keeps the method's groups outside their own
     And "student1" has applied to "C1" with the key of "Turma A"
 
   # @javascript: the sentence follows the ticks through enrol_apply/review, which only a browser runs.
+  # The queue is passed through on its page, the grid, whose row carries the same Review link.
   # Turma 2027 is the method's and not the moderator's to choose: it has no card, the sentence
   # names it after the ticked groups, the line under the cards (inside "Adjust") says it stays, and
   # the approval joins it.
@@ -58,4 +59,5 @@ Feature: A moderator's approval keeps the method's groups outside their own
     And I log in as "admin"
     And I am on the "C1" "groups" page
     And I set the field "groups" to "Turma 2027 (1)"
+    And I wait until "Student 1 (student1@example.com)" "option" exists
     And the "members" select box should contain "Student 1 (student1@example.com)"
