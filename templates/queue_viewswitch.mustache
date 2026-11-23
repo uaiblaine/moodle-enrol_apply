@@ -17,15 +17,16 @@
 {{!
     @template enrol_apply/queue_viewswitch
 
-    The discreet link from the method queue's table to its grid view (enrol_apply/queue_view), with
-    the filters the table's address carries. Only on the queue of one method.
+    The discreet link from the method queue's table (view=table) to its grid view
+    (enrol_apply/queue_view), the queue's page, with the filters the table's address carries. Only on
+    the queue of one method.
 
     Context variables required for this template:
-    * url - manage.php with the same filters and view=grid.
+    * url - manage.php with the same filters and no view parameter.
 
     Example context (json):
     {
-        "url": "https://example.com/enrol/apply/manage.php?id=3&view=grid"
+        "url": "https://example.com/enrol/apply/manage.php?id=3"
     }
 }}
 <p class="enrol_apply-queueviewswitch">

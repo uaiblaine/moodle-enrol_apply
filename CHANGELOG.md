@@ -4,10 +4,26 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased (2026112303)
+## Unreleased (2026112304)
 
 ### Added
 
+- **The grid view decides, and is the queue page of a method** (2026112304, no upgrade step). A
+  reader who may decide selects rows with a box per row and one for the page (never their own
+  application, which has none); the selection is cleared when the page, the scope, a filter, the
+  search or the sort changes, and the dock under the rows says how many are selected "on this page"
+  beside the table's three decisions, Cancel applications, Defer and Confirm. Each opens a sheet that
+  names the applicants and asks what the table's sheet asks: the message to the applicant, the note
+  for the record and, for an approval, the groups and the role to a holder of
+  `enrol/apply:choosedecision` (what an approval gives to a decider without it), with the table's
+  warnings. The decision is the table's own form posted to `manage.php` (`formaction`,
+  `userenrolments[]`, `outcomemessage`, `decisionnote`, `groups[]`, `roleid`, `sesskey`), so every
+  check a decision has applies unchanged; no web service decides. It lands back on the grid with the
+  scope, the filters, the search, the sort and the page it was posted from, cleaned again by the
+  server. `manage.php?id=<method>` now shows the grid; `view=table` shows today's table to anyone,
+  and a browser without JavaScript gets the table inside the grid page. A viewer reads the grid with
+  no box, no dock and no sheet. The site-wide and mentee queues are unchanged. Mutation gates
+  `QV1`, `QV2` (inverted) and `QV4`-`QV9`.
 - **The queue of one method has a grid view, read only, on request** (2026112303, no upgrade step;
   the queue page is unchanged and stays the default). `manage.php?id=<method>&view=grid` draws the
   queue as the course report draws its rows, from the queue's own web services: tiles with the

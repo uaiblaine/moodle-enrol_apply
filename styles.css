@@ -3464,3 +3464,127 @@ body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload + .enrol_apply-rvie
     font-size: 0.8125rem;
     margin-inline-start: auto;
 }
+
+/* The selection (stage 4): a box leading the applicant's heading and cells, and each card's first
+   line. The label around the box carries its name in visually hidden text; a row that may not be
+   selected (the reader's own application) keeps the box's place empty, so the names stay aligned. */
+.enrol_apply-qview .enrol_apply-rview-lead {
+    align-items: flex-start;
+    display: flex;
+    gap: 0.5rem;
+    min-width: 0;
+}
+
+.enrol_apply-qview .enrol_apply-rview-lead > :last-child {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.enrol_apply-qview th .enrol_apply-rview-lead {
+    align-items: center;
+    gap: 0;
+    padding-inline-start: 0.75rem;
+}
+
+.enrol_apply-qview .enrol_apply-rview-pickwrap {
+    display: inline-flex;
+    flex: none;
+    margin: 0;
+    padding-top: 0.125rem;
+    width: 1rem;
+}
+
+.enrol_apply-qview th .enrol_apply-rview-pickwrap {
+    padding-top: 0;
+}
+
+.enrol_apply-qview .enrol_apply-rview-pick {
+    accent-color: var(--enrol-apply-brand-fill);
+    cursor: pointer;
+    height: 1rem;
+    margin: 0;
+    width: 1rem;
+}
+
+.enrol_apply-qview .enrol_apply-rview-pick:disabled {
+    cursor: default;
+}
+
+.enrol_apply-qview .enrol_apply-rview-grid tr.enrol_apply-rview-row--selected td,
+.enrol_apply-qview .enrol_apply-rview-card--selected {
+    background: var(--enrol-apply-brand-tint);
+}
+
+.enrol_apply-qview .enrol_apply-rview-card--selected {
+    border-color: var(--enrol-apply-brand-edge);
+}
+
+/* The dock: the selection's count and the three decisions, under the rows and on screen while the
+   rows scroll by. It is drawn only while something is selected. */
+.enrol_apply-qview .enrol_apply-qview-dock {
+    align-items: center;
+    background: var(--enrol-apply-surface);
+    border: 1px solid var(--enrol-apply-line);
+    border-radius: var(--enrol-apply-radius-md);
+    bottom: 0.75rem;
+    box-shadow: var(--enrol-apply-elevation-md);
+    color: var(--enrol-apply-ink);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+    padding: 0.625rem 0.75rem;
+    position: sticky;
+    z-index: 5;
+}
+
+.enrol_apply-qview .enrol_apply-qview-dockcount {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.enrol_apply-qview .enrol_apply-qview-dockactions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+/* The decision sheet: Bootstrap's modal markup drawn by the view, inside its root so the plugin's
+   tokens reach it. */
+.enrol_apply-qview .enrol_apply-qview-sheet .modal-content {
+    background: var(--enrol-apply-surface);
+    color: var(--enrol-apply-ink);
+}
+
+.enrol_apply-qview .enrol_apply-qview-sheet .modal-content:focus-visible {
+    outline: var(--enrol-apply-focus-width) solid var(--enrol-apply-focus-ring);
+    outline-offset: 2px;
+}
+
+.enrol_apply-qview .enrol_apply-qview-sheetline {
+    color: var(--enrol-apply-ink-muted);
+}
+
+.enrol_apply-qview .enrol_apply-qview-sheetwho {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+    list-style: none;
+    margin: 0 0 1rem;
+    padding: 0;
+}
+
+.enrol_apply-qview .enrol_apply-qview-sheetwho > li {
+    align-items: center;
+    display: flex;
+    gap: 0.5rem;
+}
+
+.enrol_apply-qview .enrol_apply-qview-sheetmore {
+    color: var(--enrol-apply-ink-muted);
+}
+
+.enrol_apply-qview .enrol_apply-qview-sheetsummary {
+    margin-bottom: 1rem;
+}

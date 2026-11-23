@@ -13,8 +13,9 @@ import { jsxDEV } from "react/jsx-dev-runtime";
  * when the handle loses the focus; a double click restores the default.
  *
  * What a cell holds is the view's: `renderLead` draws the lead column's cell, `renderCell` every other.
- * A view that selects rows passes a selection, whose boxes lead the lead column's heading and cells; a
- * view without one draws none.
+ * A view that selects rows passes a selection, whose boxes lead the lead column's heading and cells,
+ * each in a label of its own (visually hidden text) so it is named the way a form control is; a view
+ * without one draws none.
  *
  * Strings read from the view's labels: grid, caption, resize.
  *
@@ -43,47 +44,67 @@ const PageBox = /* @__PURE__ */ __name(({ selection, rows }) => {
       box.current.indeterminate = picked > 0 && !all;
     }
   }, [picked, all]);
-  return /* @__PURE__ */ jsxDEV(
+  return /* @__PURE__ */ jsxDEV("label", { className: "enrol_apply-rview-pickwrap", children: [
+    /* @__PURE__ */ jsxDEV(
+      "input",
+      {
+        ref: box,
+        type: "checkbox",
+        className: "enrol_apply-rview-pick",
+        checked: all,
+        disabled: open.length === 0,
+        onChange: (event) => selection.onSelectPage(event.target.checked)
+      },
+      void 0,
+      false,
+      {
+        fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
+        lineNumber: 104,
+        columnNumber: 13
+      }
+    ),
+    /* @__PURE__ */ jsxDEV("span", { className: "visually-hidden", children: selection.pagelabel }, void 0, false, {
+      fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
+      lineNumber: 112,
+      columnNumber: 13
+    })
+  ] }, void 0, true, {
+    fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
+    lineNumber: 103,
+    columnNumber: 9
+  });
+}, "PageBox");
+const RowBox = /* @__PURE__ */ __name(({ selection, row }) => selection.locked.has(row.id) ? /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-pickwrap enrol_apply-rview-pick--none" }, void 0, false, {
+  fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
+  lineNumber: 124,
+  columnNumber: 36
+}) : /* @__PURE__ */ jsxDEV("label", { className: "enrol_apply-rview-pickwrap", children: [
+  /* @__PURE__ */ jsxDEV(
     "input",
     {
-      ref: box,
       type: "checkbox",
       className: "enrol_apply-rview-pick",
-      "aria-label": selection.pagelabel,
-      checked: all,
-      disabled: open.length === 0,
-      onChange: (event) => selection.onSelectPage(event.target.checked)
+      checked: selection.selected.has(row.id),
+      onChange: (event) => selection.onSelect(row.id, event.target.checked)
     },
     void 0,
     false,
     {
       fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
-      lineNumber: 102,
-      columnNumber: 9
+      lineNumber: 126,
+      columnNumber: 13
     }
-  );
-}, "PageBox");
-const RowBox = /* @__PURE__ */ __name(({ selection, row }) => selection.locked.has(row.id) ? /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-pick enrol_apply-rview-pick--none" }, void 0, false, {
-  fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
-  lineNumber: 121,
-  columnNumber: 36
-}) : /* @__PURE__ */ jsxDEV(
-  "input",
-  {
-    type: "checkbox",
-    className: "enrol_apply-rview-pick",
-    "aria-label": selection.label(row),
-    checked: selection.selected.has(row.id),
-    onChange: (event) => selection.onSelect(row.id, event.target.checked)
-  },
-  void 0,
-  false,
-  {
+  ),
+  /* @__PURE__ */ jsxDEV("span", { className: "visually-hidden", children: selection.label(row) }, void 0, false, {
     fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
-    lineNumber: 122,
-    columnNumber: 9
-  }
-), "RowBox");
+    lineNumber: 132,
+    columnNumber: 13
+  })
+] }, void 0, true, {
+  fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
+  lineNumber: 125,
+  columnNumber: 9
+}), "RowBox");
 const Grid = /* @__PURE__ */ __name(({
   labels,
   columns,
@@ -180,24 +201,51 @@ const Grid = /* @__PURE__ */ __name(({
       children: /* @__PURE__ */ jsxDEV("table", { className: "enrol_apply-rview-grid", ref: table, style: { width: `${total}px` }, children: [
         /* @__PURE__ */ jsxDEV("caption", { className: "visually-hidden", children: labels.caption }, void 0, false, {
           fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
-          lineNumber: 278,
+          lineNumber: 283,
           columnNumber: 17
         }),
         /* @__PURE__ */ jsxDEV("colgroup", { children: columns.map((column) => /* @__PURE__ */ jsxDEV("col", { "data-col": column.key, style: { width: `${widthOf(sizing, widths, column.key)}px` } }, column.key, false, {
           fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
-          lineNumber: 281,
+          lineNumber: 286,
           columnNumber: 25
         })) }, void 0, false, {
           fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
-          lineNumber: 279,
+          lineNumber: 284,
           columnNumber: 17
         }),
         /* @__PURE__ */ jsxDEV("thead", { children: /* @__PURE__ */ jsxDEV("tr", { children: columns.map((column) => {
           const order = ariaSort(sort === column.key, direction);
           const title = /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-th-title", children: column.title }, void 0, false, {
             fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
-            lineNumber: 288,
+            lineNumber: 293,
             columnNumber: 43
+          });
+          const heading = column.sortable ? /* @__PURE__ */ jsxDEV(
+            "button",
+            {
+              type: "button",
+              className: "enrol_apply-rview-sortbtn",
+              onClick: () => onSort(column.key),
+              children: [
+                title,
+                /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-arrow", "aria-hidden": "true", children: ARROWS[order] }, void 0, false, {
+                  fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
+                  lineNumber: 301,
+                  columnNumber: 37
+                })
+              ]
+            },
+            void 0,
+            true,
+            {
+              fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
+              lineNumber: 295,
+              columnNumber: 33
+            }
+          ) : /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-plain", children: title }, void 0, false, {
+            fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
+            lineNumber: 305,
+            columnNumber: 33
           });
           return /* @__PURE__ */ jsxDEV(
             "th",
@@ -208,38 +256,18 @@ const Grid = /* @__PURE__ */ __name(({
               title: column.title,
               "data-column": column.key,
               children: [
-                selection && column.key === lead ? /* @__PURE__ */ jsxDEV(PageBox, { selection, rows }, void 0, false, {
-                  fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
-                  lineNumber: 298,
-                  columnNumber: 73
-                }) : null,
-                column.sortable ? /* @__PURE__ */ jsxDEV(
-                  "button",
-                  {
-                    type: "button",
-                    className: "enrol_apply-rview-sortbtn",
-                    onClick: () => onSort(column.key),
-                    children: [
-                      title,
-                      /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-arrow", "aria-hidden": "true", children: ARROWS[order] }, void 0, false, {
-                        fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
-                        lineNumber: 306,
-                        columnNumber: 45
-                      })
-                    ]
-                  },
-                  void 0,
-                  true,
-                  {
+                selection && column.key === lead ? /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-lead", children: [
+                  /* @__PURE__ */ jsxDEV(PageBox, { selection, rows }, void 0, false, {
                     fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
-                    lineNumber: 300,
-                    columnNumber: 41
-                  }
-                ) : /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-plain", children: title }, void 0, false, {
+                    lineNumber: 317,
+                    columnNumber: 45
+                  }),
+                  heading
+                ] }, void 0, true, {
                   fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
-                  lineNumber: 310,
+                  lineNumber: 316,
                   columnNumber: 41
-                }),
+                }) : heading,
                 /* @__PURE__ */ jsxDEV(
                   "span",
                   {
@@ -267,7 +295,7 @@ const Grid = /* @__PURE__ */ __name(({
                   false,
                   {
                     fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
-                    lineNumber: 311,
+                    lineNumber: 321,
                     columnNumber: 37
                   }
                 )
@@ -277,17 +305,17 @@ const Grid = /* @__PURE__ */ __name(({
             true,
             {
               fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
-              lineNumber: 290,
+              lineNumber: 307,
               columnNumber: 33
             }
           );
         }) }, void 0, false, {
           fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
-          lineNumber: 285,
+          lineNumber: 290,
           columnNumber: 21
         }) }, void 0, false, {
           fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
-          lineNumber: 284,
+          lineNumber: 289,
           columnNumber: 17
         }),
         /* @__PURE__ */ jsxDEV("tbody", { children: rows.map((row) => /* @__PURE__ */ jsxDEV(
@@ -295,20 +323,24 @@ const Grid = /* @__PURE__ */ __name(({
           {
             "data-record": row.id,
             className: selection?.selected.has(row.id) ? "enrol_apply-rview-row--selected" : void 0,
-            children: columns.map((column) => column.key === lead ? /* @__PURE__ */ jsxDEV("td", { className: "enrol_apply-rview-fixed", children: [
-              selection ? /* @__PURE__ */ jsxDEV(RowBox, { selection, row }, void 0, false, {
+            children: columns.map((column) => column.key === lead ? /* @__PURE__ */ jsxDEV("td", { className: "enrol_apply-rview-fixed", children: selection ? /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-lead", children: [
+              /* @__PURE__ */ jsxDEV(RowBox, { selection, row }, void 0, false, {
                 fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
-                lineNumber: 347,
-                columnNumber: 54
-              }) : null,
+                lineNumber: 359,
+                columnNumber: 49
+              }),
               renderLead(row, column)
-            ] }, column.key, true, {
+            ] }, void 0, true, {
               fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
-              lineNumber: 346,
+              lineNumber: 358,
+              columnNumber: 45
+            }) : renderLead(row, column) }, column.key, false, {
+              fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
+              lineNumber: 356,
               columnNumber: 37
             }) : /* @__PURE__ */ jsxDEV("td", { children: renderCell(row, column) }, column.key, false, {
               fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
-              lineNumber: 351,
+              lineNumber: 365,
               columnNumber: 37
             }))
           },
@@ -316,17 +348,17 @@ const Grid = /* @__PURE__ */ __name(({
           false,
           {
             fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
-            lineNumber: 339,
+            lineNumber: 349,
             columnNumber: 25
           }
         )) }, void 0, false, {
           fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
-          lineNumber: 337,
+          lineNumber: 347,
           columnNumber: 17
         })
       ] }, void 0, true, {
         fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
-        lineNumber: 277,
+        lineNumber: 282,
         columnNumber: 13
       })
     },
@@ -334,7 +366,7 @@ const Grid = /* @__PURE__ */ __name(({
     false,
     {
       fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
-      lineNumber: 269,
+      lineNumber: 274,
       columnNumber: 9
     }
   );
@@ -345,58 +377,58 @@ const GridSkeleton = /* @__PURE__ */ __name(({ columns, lead, widths, sizing }) 
   return /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-gridframe", "aria-hidden": "true", children: /* @__PURE__ */ jsxDEV("table", { className: "enrol_apply-rview-grid", style: { width: `${total}px` }, children: [
     /* @__PURE__ */ jsxDEV("colgroup", { children: columns.map((column) => /* @__PURE__ */ jsxDEV("col", { style: { width: `${widthOf(sizing, widths, column.key)}px` } }, column.key, false, {
       fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
-      lineNumber: 377,
+      lineNumber: 391,
       columnNumber: 46
-    })) }, void 0, false, {
-      fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
-      lineNumber: 376,
-      columnNumber: 17
-    }),
-    /* @__PURE__ */ jsxDEV("thead", { children: /* @__PURE__ */ jsxDEV("tr", { children: columns.map((column) => /* @__PURE__ */ jsxDEV("th", { className: column.key === lead ? "enrol_apply-rview-fixed" : void 0, children: /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-plain", children: /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-th-title", children: column.title }, void 0, false, {
-      fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
-      lineNumber: 384,
-      columnNumber: 37
-    }) }, void 0, false, {
-      fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
-      lineNumber: 383,
-      columnNumber: 33
-    }) }, column.key, false, {
-      fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
-      lineNumber: 382,
-      columnNumber: 29
-    })) }, void 0, false, {
-      fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
-      lineNumber: 380,
-      columnNumber: 21
-    }) }, void 0, false, {
-      fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
-      lineNumber: 379,
-      columnNumber: 17
-    }),
-    /* @__PURE__ */ jsxDEV("tbody", { children: Array.from({ length: 8 }, (_, i) => /* @__PURE__ */ jsxDEV("tr", { className: "enrol_apply-rview-sk", children: columns.map((column, j) => /* @__PURE__ */ jsxDEV("td", { className: column.key === lead ? "enrol_apply-rview-fixed" : void 0, children: /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-skb " + shapes[(i + j) % 3] }, void 0, false, {
-      fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
-      lineNumber: 395,
-      columnNumber: 37
-    }) }, column.key, false, {
-      fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
-      lineNumber: 394,
-      columnNumber: 33
-    })) }, i, false, {
-      fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
-      lineNumber: 392,
-      columnNumber: 25
     })) }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
       lineNumber: 390,
       columnNumber: 17
+    }),
+    /* @__PURE__ */ jsxDEV("thead", { children: /* @__PURE__ */ jsxDEV("tr", { children: columns.map((column) => /* @__PURE__ */ jsxDEV("th", { className: column.key === lead ? "enrol_apply-rview-fixed" : void 0, children: /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-plain", children: /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-th-title", children: column.title }, void 0, false, {
+      fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
+      lineNumber: 398,
+      columnNumber: 37
+    }) }, void 0, false, {
+      fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
+      lineNumber: 397,
+      columnNumber: 33
+    }) }, column.key, false, {
+      fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
+      lineNumber: 396,
+      columnNumber: 29
+    })) }, void 0, false, {
+      fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
+      lineNumber: 394,
+      columnNumber: 21
+    }) }, void 0, false, {
+      fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
+      lineNumber: 393,
+      columnNumber: 17
+    }),
+    /* @__PURE__ */ jsxDEV("tbody", { children: Array.from({ length: 8 }, (_, i) => /* @__PURE__ */ jsxDEV("tr", { className: "enrol_apply-rview-sk", children: columns.map((column, j) => /* @__PURE__ */ jsxDEV("td", { className: column.key === lead ? "enrol_apply-rview-fixed" : void 0, children: /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-skb " + shapes[(i + j) % 3] }, void 0, false, {
+      fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
+      lineNumber: 409,
+      columnNumber: 37
+    }) }, column.key, false, {
+      fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
+      lineNumber: 408,
+      columnNumber: 33
+    })) }, i, false, {
+      fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
+      lineNumber: 406,
+      columnNumber: 25
+    })) }, void 0, false, {
+      fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
+      lineNumber: 404,
+      columnNumber: 17
     })
   ] }, void 0, true, {
     fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
-    lineNumber: 375,
+    lineNumber: 389,
     columnNumber: 13
   }) }, void 0, false, {
     fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
-    lineNumber: 374,
+    lineNumber: 388,
     columnNumber: 9
   });
 }, "GridSkeleton");

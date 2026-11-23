@@ -17,8 +17,9 @@
 {{!
     @template enrol_apply/queue_view
 
-    The approval queue of one method as a data report, read only (stage 3): one mount point, today's
-    queue for a browser without JavaScript, and the way back to today's table.
+    The approval queue of one method as a data report, the method queue's page (CQ-D5): one mount
+    point, today's queue for a browser without JavaScript, and the way to today's table (view=table).
+    The component decides by posting the table's own form to manage.php (CQ-D4), as the noscript's does.
 
     The mount names the bundle (js/esm/bundle.json), as enrol_apply/report_view does; its props name
     the queue's view in "mount". Its inner content is what the first paint shows until React commits:
@@ -27,20 +28,20 @@
 
     The props arrive already JSON-encoded by enrol_apply\output\queue_view, in one value, through a
     triple stash: nothing between here and React is an HTML context. They carry configuration and
-    strings, never an application.
+    strings, never an application; what the decision sheet may offer is configuration too.
 
     The link to the table carries the filters in the address; the client keeps its href in step with
     the address as the reader changes them (data-enrol-apply-queue="tablelink").
 
     Context variables required for this template:
     * props - the component's props, JSON.
-    * tableurl - manage.php with the same filters and no view parameter.
+    * tableurl - manage.php with the same filters and view=table.
     * noscript - today's queue, HTML.
 
     Example context (json):
     {
         "props": "{\"mount\": \"queue\", \"enrolid\": 3, \"labels\": {\"loading\": \"Loading applications\"}}",
-        "tableurl": "https://example.com/enrol/apply/manage.php?id=3",
+        "tableurl": "https://example.com/enrol/apply/manage.php?id=3&view=table",
         "noscript": "<p>Today's queue</p>"
     }
 }}

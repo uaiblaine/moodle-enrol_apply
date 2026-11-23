@@ -160,13 +160,18 @@ if (!$userenrol) {
 
 $manageurl = new moodle_url('/enrol/apply/manage.php', $manageurlparams);
 
-/* The method queue's grid view (stage 3), read only, on request: queue_view::wanted() is the one rule.
-   $manageurl stays the table's, without the view parameter: the decision form inside the view's
-   noscript posts there, and a decision lands back on the table, which decides. */
+/* The method queue's page is its grid view (CQ-D5); view=table asks for today's table, and the
+   site-wide and mentee queues keep the table (CQ-D3). queue_view::wanted() is the one rule.
+
+   $listingurl is where this listing lives. For the grid it is $manageurl, which the decision form in
+   the view's noscript posts to; a decision from the grid lands on queue_view::return_url() instead,
+   the address it was posted from, cleaned. For the method queue's table it carries view=table, so
+   the table's form posts there and its decisions land back on the table. */
 $gridview = !$userenrol && \enrol_apply\output\queue_view::wanted((int) $id, optional_param('view', '', PARAM_ALPHA));
+$listingurl = $userenrol || $gridview || !$id ? $manageurl : \enrol_apply\output\queue_view::url($manageurl, false);
 
 $PAGE->set_context($context);
-$PAGE->set_url($gridview ? \enrol_apply\output\queue_view::url($manageurl, true) : $manageurl);
+$PAGE->set_url($listingurl);
 $PAGE->set_pagelayout('admin');
 $PAGE->set_heading($pageheading);
 
@@ -204,27 +209,13 @@ if ($formaction !== '' && $userenrolments) {
         throw new moodle_exception('invalidrequest');
     }
 
-    /* PARAM_TEXT and not PARAM_RAW: this reaches the applicant's notification, and the only
-       formatting it is allowed is the line breaks the decider typed. It is escaped again at
-       the sink in notify_applicant(); cleaning here as well keeps a forged post from putting
-       markup into the durable record, which outlives the enrolment it belongs to. */
-    $outcomemessage = trim(optional_param('outcomemessage', '', PARAM_TEXT));
-
-    /* The decider's own note, never sent to the applicant. PARAM_TEXT for the same reason as the
-       message above. */
-    $decisionnote = trim(optional_param('decisionnote', '', PARAM_TEXT));
-
-    /* Cleaned to integers here and allowlisted per instance inside confirm_enrolment(), because
-       a site-wide batch can span courses and a group or role valid for one application is not
-       necessarily valid for the next. Read unconditionally, not only when the form offered a
-       control, so the allowlist runs against whatever a forged post carries. */
-    $decision = [
-        'groups' => optional_param_array('groups', [], PARAM_INT),
-        'roleid' => optional_param('roleid', 0, PARAM_INT),
-        /* Always present, because the writer tests the key with array_key_exists(): an empty
-           note clears the previous one, and only a caller omitting the key leaves it alone. */
-        'note' => $decisionnote,
-    ];
+    /* The message, the note, the per-method messages and the choice, read as every queue form
+       posts them - the table's, the grid's and the review page's - and cleaned there; see
+       decision::posted(), which holds this half of the page so a test can reach it. */
+    $posted = \enrol_apply\local\decision::posted();
+    $outcomemessage = $posted['message'];
+    $decisionnote = $posted['note'];
+    $decision = $posted['decision'];
 
     /* Cancelling is the one decision that destroys something: cancel_enrolment() unenrols, taking
        the {user_enrolments} row and the applicant's comment with it. On the review page the
@@ -245,17 +236,11 @@ if ($formaction !== '' && $userenrolments) {
         exit;
     }
 
-    /* One message per enrolment method, keyed by its id, which the decision sheet asks for when a
-       selection on the site-wide or mentee queue spans methods (MQ-D15). PARAM_TEXT for the same
-       reason as the plain message. Which method a row belongs to is read from the database by
-       decision::apply(), never from these keys; an empty array is today's single call. */
-    $outcomemessages = optional_param_array('outcomemessages', [], PARAM_TEXT);
-
     $decided = \enrol_apply\local\decision::apply(
         $formaction,
         $userenrolments,
         $outcomemessage,
-        $outcomemessages,
+        $posted['messages'],
         $decision
     );
 
@@ -303,8 +288,13 @@ if ($formaction !== '' && $userenrolments) {
         }
     }
 
+    /* Back where the decision was taken: the review page's queue, the grid with the address it posted
+       from (cleaned again there, never echoed), or the listing the table form posted from. */
+    if ($afterdecisionurl === null && $gridview) {
+        $afterdecisionurl = \enrol_apply\output\queue_view::return_url((int) $id, $search, $status, $queuefilters);
+    }
     redirect(
-        $afterdecisionurl ?? $manageurl,
+        $afterdecisionurl ?? $listingurl,
         $decided > 0
             ? get_string('applicationsupdated', 'enrol_apply')
             : get_string('applicationsnonedecided', 'enrol_apply'),
@@ -349,7 +339,8 @@ if ($userenrol) {
    so this page and the web service that refreshes its rows cannot decide them differently. */
 $table = \enrol_apply\table\applications::for_scope((int) $id, $search, $status, $queuefilters);
 if ($gridview) {
-    // The table above is the view's noscript; the rows the view draws come from its web services.
+    /* The table above is the view's noscript; the rows the view draws come from its web services,
+       and its decisions are a form it posts here, as the table's are. */
     $renderer->queue_page(new \enrol_apply\output\queue_view(
         $instance,
         $table,
@@ -358,4 +349,4 @@ if ($gridview) {
     ));
     exit;
 }
-$renderer->manage_page($table, $manageurl, $instance);
+$renderer->manage_page($table, $listingurl, $instance);

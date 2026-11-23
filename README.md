@@ -76,21 +76,28 @@ chosen group.
 
 ![The approval queue: applications awaiting a decision, deferred, places taken and applications held; the search and the filters; one row per application with its group, how long it has waited, the details submitted, the comment and badges for the waiting list and a group key that could not admit](docs/screenshots/queue.png)
 
-The queue for one method. The panel at the top counts what awaits a decision, what is deferred,
-the places taken and the applications held. Each row carries the group its key named or the applicant chose, what the
-applicant submitted, the comment and a badge where there is something to know: on the waiting
-list, applied before (shown to readers of the course report only), or a valid group key that found no place or seat. The queue filters by group
-too. Select rows and decide them together from the bar at
-the foot of the page, choosing the groups and the role an approval gives.
+The queue of one method (`manage.php?id=<method>`) is a grid, as the course report shows its rows:
+the method's places, applications held, what awaits a decision with the oldest wait, and whether it
+accepts applications; All, Pending or Deferred; filters with counts; a choice of columns (every
+answer, a decision at a glance, or the answers alone) remembered for you; a table or cards; each
+applicant's picture, the group its key named or the applicant chose, what they submitted, the comment
+and a label where there is something to know: on the waiting list, applied before (shown to readers
+of the course report only), a valid group key that found no place or seat, or your own application.
+What you filter, search, sort and page by stays in the page's address, so the link can be bookmarked
+or shared. A holder of `enrol/apply:viewreports` also gets a link to the report.
 
-**Grid view** (the link above the queue of one method, or `manage.php?id=<method>&view=grid`) shows
-the same applications as the course report shows its rows, read only for now: the method's places,
-applications held, what awaits a decision with the oldest wait, and whether it accepts applications;
-All, Pending or Deferred; filters with counts; a choice of columns (every answer, a decision at a
-glance, or the answers alone) remembered for you; a table or cards; each applicant's picture and
-labels, and a Review link to decide. What you filter, search, sort and page by stays in the page's
-address, so the link can be bookmarked or shared; **Table view** leads back to the queue above,
-where decisions are taken. A holder of `enrol/apply:viewreports` also gets a link to the report.
+To decide, select rows (a box per row, and one for the whole page; your own application has none)
+and choose **Cancel applications**, **Defer** or **Confirm** in the bar under the rows. A sheet names
+the applicants and asks for the message to them and a note for the record and, for an approval, the
+groups and the role it gives (to a holder of `enrol/apply:choosedecision`; anyone else is told what
+the method gives). Its button takes the decision, and the page comes back with what you had filtered.
+The selection belongs to the page on screen: another page, scope, filter, search or sort clears it.
+A reader who may only view applications sees no boxes and no bar.
+
+**Table view** (`manage.php?id=<method>&view=table`, the link above the grid) shows the same queue
+as a table whose decisions sit in a bar at the foot of the page; a browser without JavaScript gets
+that table on the queue page itself, and the site-wide queue and the queue of a mentor's mentees are
+always tables. Decisions taken there are the same decisions, with the same checks.
 
 ![Reviewing one application whose group key found no seat: the status and key strip, the rules to observe with the full key group flagged over the limit on confirming, the comment and the submitted details, the On confirming card with its sentence and the group cards with their occupancy, the applicant's card, and the three decisions in the bar at the foot](docs/screenshots/review.png)
 

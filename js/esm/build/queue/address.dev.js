@@ -9,13 +9,15 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
  * `page` (from 0) and `perpage`. A value at its default is left out. The server reads the address for
  * the first paint (enrol_apply\output\queue_view::initial()), so a link the table page or the course
  * report builds lands filtered; this module writes it back, and the browser's history carries the
- * query for the back and forward buttons.
+ * query for the back and forward buttons. The grid is the method queue's page (CQ-D5), so its address
+ * carries no view parameter; the table's carries `view=table`. A decision posts to the grid's address
+ * (queue/decide.ts), which manage.php cleans again for the page it lands on.
  *
  * @module     enrol_apply/queue/address
  * @copyright  2026 Anderson Blaine
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-const GRID = "grid";
+const TABLE = "table";
 const STATE_KEY = "enrolApplyQueue";
 const params = /* @__PURE__ */ __name((props, query, grid) => {
   const pairs = [];
@@ -40,7 +42,8 @@ const params = /* @__PURE__ */ __name((props, query, grid) => {
     if (query.perpage !== props.perpage) {
       pairs.push(["perpage", String(query.perpage)]);
     }
-    pairs.push(["view", GRID]);
+  } else {
+    pairs.push(["view", TABLE]);
   }
   return pairs;
 }, "params");
@@ -80,7 +83,7 @@ const queryOf = /* @__PURE__ */ __name((state) => {
   return state[STATE_KEY];
 }, "queryOf");
 export {
-  GRID,
+  TABLE,
   initialQuery,
   queryOf,
   queueUrl,

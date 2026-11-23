@@ -22,7 +22,9 @@
  * `page` (from 0) and `perpage`. A value at its default is left out. The server reads the address for
  * the first paint (enrol_apply\output\queue_view::initial()), so a link the table page or the course
  * report builds lands filtered; this module writes it back, and the browser's history carries the
- * query for the back and forward buttons.
+ * query for the back and forward buttons. The grid is the method queue's page (CQ-D5), so its address
+ * carries no view parameter; the table's carries `view=table`. A decision posts to the grid's address
+ * (queue/decide.ts), which manage.php cleans again for the page it lands on.
  *
  * @module     enrol_apply/queue/address
  * @copyright  2026 Anderson Blaine
@@ -31,8 +33,8 @@
 
 import type {Query, ViewProps} from './types';
 
-/** The view parameter that asks manage.php for this view (queue_view::GRID). */
-export const GRID = 'grid';
+/** The view parameter's value that asks manage.php for today's table (queue_view::TABLE); the grid needs none. */
+export const TABLE = 'table';
 
 /** The key the query is kept under in the history entry's state. */
 const STATE_KEY = 'enrolApplyQueue';
@@ -42,7 +44,7 @@ const STATE_KEY = 'enrolApplyQueue';
  *
  * @param {object} props The view's props: the statuses and the default page size.
  * @param {object} query The query.
- * @param {boolean} grid Whether the address is this view's (the sort and the page) or the table's (filters only).
+ * @param {boolean} grid Whether the address is this view's (the sort and the page) or the table's (filters and view=table).
  * @returns {Array} Name and value pairs, in a stable order.
  */
 const params = (props: ViewProps, query: Query, grid: boolean): [string, string][] => {
@@ -68,7 +70,8 @@ const params = (props: ViewProps, query: Query, grid: boolean): [string, string]
         if (query.perpage !== props.perpage) {
             pairs.push(['perpage', String(query.perpage)]);
         }
-        pairs.push(['view', GRID]);
+    } else {
+        pairs.push(['view', TABLE]);
     }
 
     return pairs;

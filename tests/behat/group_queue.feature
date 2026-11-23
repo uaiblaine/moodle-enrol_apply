@@ -32,11 +32,12 @@ Feature: The approval queue says whose group each application is in, and filters
     And "student2" has applied to "C1" with the key of "Turma B"
     And "student3" has applied to "C1" with the key of ""
 
-  # @javascript: the filter refreshes the table over AJAX, which nothing but Behat executes.
+  # @javascript: the filter refreshes the table over AJAX, which nothing but Behat executes. On the
+  # table view (view=table): the group select, its chips and the count line are the table's filter bar.
   @javascript
   Scenario: Filtering the queue by group, then by no group, and back to every group
     Given I log in as "teacher1"
-    When I am on the "C1" "enrol_apply > manage applications" page
+    When I am on the "C1" "enrol_apply > applications queue table" page
     Then I should see "Student 1"
     And I should see "Student 2"
     And I should see "Student 3"

@@ -15,7 +15,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Tests for the method queue's grid view shell (stage 3 of the queue as a report).
+ * Tests for the method queue's grid view shell (stages 3 and 4 of the queue as a report).
  *
  * @package    enrol_apply
  * @category   test
@@ -32,11 +32,13 @@ use moodle_url;
 use PHPUnit\Framework\Attributes\CoversClass;
 
 /**
- * What the server adds for the queue's grid view: the opt-in view=grid on the method queue only, a
- * shell whose props carry no application, today's queue in the noscript, the address read for the
- * first paint, and "Open the report" only for a reader the report admits.
+ * What the server adds for the queue's grid view: the method queue's page unless view=table asks for the
+ * table, a shell whose props carry no application, today's queue in the noscript, the address read for
+ * the first paint and cleaned again for the page a decision lands on, the decision sheet's offer read
+ * from the table form's own context, and "Open the report" only for a reader the report admits.
  *
- * The client itself has no test runner here; tests/behat/queue_view.feature drives it.
+ * The client itself has no test runner here; tests/behat/queue_view.feature drives it, and
+ * tests/local/decision_post_test.php the POST it sends.
  *
  * @package    enrol_apply
  * @category   test
@@ -115,36 +117,38 @@ final class queue_view_test extends \advanced_testcase {
     }
 
     /**
-     * The view is wanted on the method queue with view=grid, and nowhere else: today's table stays the default.
+     * The view is the method queue's page, and view=table asks for today's table (CQ-D5).
      *
      * Changes that must make it fail: the id condition dropped (the site-wide and mentee queues, id 0,
-     * would mount it); the view condition dropped or inverted (the read-only view would replace the
-     * table that decides, before stage 4 brings the decisions).
+     * would mount it); the view condition dropped (the table could no longer be asked for) or turned
+     * back into the opt-in view=grid.
      *
      * @return void
      */
-    public function test_the_view_is_wanted_only_on_the_method_queue_with_view_grid(): void {
-        $this->assertTrue(queue_view::wanted(5, queue_view::GRID));
+    public function test_the_view_is_the_method_queues_page_and_view_table_asks_for_the_table(): void {
+        $this->assertTrue(queue_view::wanted(5, ''));
+        // An address written before the flip, or any other value, still lands on the grid.
         $this->assertTrue(queue_view::wanted(5, 'grid'));
+        $this->assertTrue(queue_view::wanted(5, 'cards'));
 
-        // The site-wide and mentee queues keep the table (CQ-D3).
-        $this->assertFalse(queue_view::wanted(0, 'grid'));
-        // The default stays the table in this stage.
-        $this->assertFalse(queue_view::wanted(5, ''));
+        // The table, to anyone who asks.
+        $this->assertFalse(queue_view::wanted(5, queue_view::TABLE));
         $this->assertFalse(queue_view::wanted(5, 'table'));
-        $this->assertFalse(queue_view::wanted(5, 'cards'));
+        // The site-wide and mentee queues keep the table (CQ-D3), with or without the parameter.
+        $this->assertFalse(queue_view::wanted(0, ''));
+        $this->assertFalse(queue_view::wanted(0, 'grid'));
 
         // The two addresses differ only by the view parameter, and both keep the filters.
-        $url = new moodle_url('/enrol/apply/manage.php', ['id' => 5, 'status' => 2, 'search' => 'Ann']);
-        $grid = queue_view::url($url, true);
-        $this->assertSame('grid', $grid->get_param('view'));
-        $this->assertSame('2', (string) $grid->get_param('status'));
-        $this->assertSame('Ann', $grid->get_param('search'));
-        $table = queue_view::url($grid, false);
-        $this->assertNull($table->get_param('view'));
+        $url = new moodle_url('/enrol/apply/manage.php', ['id' => 5, 'status' => 2, 'search' => 'Ann', 'view' => 'grid']);
+        $table = queue_view::url($url, false);
+        $this->assertSame('table', $table->get_param('view'));
+        $this->assertSame('2', (string) $table->get_param('status'));
         $this->assertSame('Ann', $table->get_param('search'));
+        $grid = queue_view::url($table, true);
+        $this->assertNull($grid->get_param('view'));
+        $this->assertSame('Ann', $grid->get_param('search'));
         // The address handed in is left alone.
-        $this->assertNull($url->get_param('view'));
+        $this->assertSame('grid', $url->get_param('view'));
     }
 
     /**
@@ -164,7 +168,8 @@ final class queue_view_test extends \advanced_testcase {
         $props = $shell->props();
 
         $this->assertSame([
-            'mount', 'enrolid', 'initial', 'perpage', 'perpages', 'searchmin', 'pageurl', 'statuses', 'reporturl', 'labels',
+            'mount', 'enrolid', 'initial', 'perpage', 'perpages', 'searchmin', 'pageurl', 'statuses', 'reporturl', 'decision',
+            'labels',
         ], array_keys($props));
         $this->assertSame(queue_view::MOUNT, $props['mount']);
         $this->assertSame('queue', $props['mount']);
@@ -206,12 +211,17 @@ final class queue_view_test extends \advanced_testcase {
             'scrollhint', 'range', 'pageof', 'pages', 'previous', 'next', 'perpage', 'review', 'reviewapplicant',
             'placestaken', 'held', 'ofmany', 'awaiting', 'oldest', 'late', 'status', 'open', 'closed', 'closes',
             'openreport', 'preseteverything', 'presetglance', 'presetanswers', 'notingroup', 'narrowed',
+            'selectapplicant', 'selectpage', 'selected', 'dock', 'back', 'close', 'andmore', 'viewonly',
+            'sheetconfirm', 'sheetconfirmone', 'sheetconfirmcommit', 'sheetwait', 'sheetwaitone', 'sheetwaitcommit',
+            'sheetwaitline', 'sheetcancel', 'sheetcancelone', 'sheetcancelcommit', 'sheetcanceldanger',
         ] as $name) {
             $this->assertArrayHasKey($name, $labels);
         }
         // No Download in the queue (CQ-D11).
         $this->assertArrayNotHasKey('download', $labels);
         $this->assertSame('Grid view', get_string('queueviewgrid', 'enrol_apply'));
+        // The page box's name contains the table's "Select all", which the scenarios locate it by.
+        $this->assertStringContainsString(get_string('selectall'), $labels['selectpage']);
     }
 
     /**
@@ -236,8 +246,9 @@ final class queue_view_test extends \advanced_testcase {
         $this->assertNotFalse($at);
         $before = substr($html, 0, $at);
         $noscript = substr($html, $at);
-        // The link back to the table is the table's address: no view parameter.
+        // The link to the table is the table's address: view=table.
         $this->assertStringContainsString('/enrol/apply/manage.php?id=' . $this->instance->id, $before);
+        $this->assertStringContainsString('view=table', $before);
         $this->assertStringNotContainsString('view=grid', $before);
         // Today's queue, its decision form included: a browser without JavaScript can still decide.
         $this->assertStringContainsString('Quintessence', $noscript);
@@ -332,5 +343,143 @@ final class queue_view_test extends \advanced_testcase {
         assign_capability('enrol/apply:viewreports', CAP_ALLOW, $role, $context->id, true);
         accesslib_clear_all_caches_for_unit_testing();
         $this->assertStringContainsString($report, $this->shell()->props()['reporturl']);
+    }
+
+    /**
+     * The address a decision from the grid lands on holds only what a first paint would apply.
+     *
+     * The client posts from its own address, so whatever that address carries reaches manage.php; the
+     * redirect is rebuilt from the queue's own cleaning, never echoed. Forged: a sort the reader's
+     * catalogue does not offer (a withheld field, an unsortable column), a page size outside 30, 50 and
+     * 100, a waited threshold and a naming kind outside their vocabularies, a parameter the queue does
+     * not read. The control posts the same names with valid values, which come back.
+     *
+     * Changes that must make it fail: the sort carried without the catalogue's check; the page size
+     * carried unchecked; the facets carried as the request had them rather than as the table applied
+     * them.
+     *
+     * @return void
+     */
+    public function test_the_address_a_decision_returns_to_holds_only_clean_values(): void {
+        global $PAGE;
+
+        $this->setAdminUser();
+        $this->getDataGenerator()->create_group(['courseid' => $this->course->id, 'name' => 'Evening cohort']);
+        $PAGE->set_context(context_course::instance($this->course->id));
+        $PAGE->set_url(new moodle_url('/enrol/apply/manage.php', ['id' => $this->instance->id]));
+        $enrolid = (int) $this->instance->id;
+
+        $read = function (array $get) use ($enrolid): moodle_url {
+            $_GET = $get;
+            try {
+                return queue_view::return_url($enrolid, 'Zebedee', ENROL_USER_SUSPENDED, []);
+            } finally {
+                $_GET = [];
+            }
+        };
+
+        foreach (['answer:s_password', 'comment', '"><script>'] as $sort) {
+            $forged = $read([
+                'sort' => $sort,
+                'dir' => 'desc',
+                'perpage' => '999',
+                'page' => '2',
+                'waited' => '999',
+                'named' => 'everything',
+                'foo' => 'bar',
+            ]);
+            $params = $forged->params();
+            $this->assertSame('/enrol/apply/manage.php', $forged->get_path(false), $sort);
+            $this->assertSame((string) $enrolid, (string) $params['id'], $sort);
+            $this->assertSame('Zebedee', $params['search'], $sort);
+            $this->assertSame((string) ENROL_USER_SUSPENDED, (string) $params['status'], $sort);
+            $this->assertSame('2', (string) $params['page'], $sort);
+            foreach (['sort', 'dir', 'perpage', 'waited', 'named', 'foo', 'view'] as $name) {
+                $this->assertArrayNotHasKey($name, $params, "{$name} with sort {$sort}");
+            }
+        }
+
+        // The control: the same names with values the view accepts come back as they were posted.
+        $clean = $read([
+            'sort' => 'applicant',
+            'dir' => 'desc',
+            'perpage' => '30',
+            'page' => '1',
+            'waited' => '7',
+            'named' => 'key',
+        ])->params();
+        $this->assertSame('applicant', $clean['sort']);
+        $this->assertSame('desc', $clean['dir']);
+        $this->assertSame('30', (string) $clean['perpage']);
+        $this->assertSame('1', (string) $clean['page']);
+        $this->assertSame('7', (string) $clean['waited']);
+        $this->assertSame('key', $clean['named']);
+
+        // The default sort and page size are left out, as the client leaves them out.
+        $defaults = $read(['sort' => 'wait', 'dir' => 'asc', 'perpage' => '50', 'page' => '0'])->params();
+        foreach (['sort', 'dir', 'perpage', 'page'] as $name) {
+            $this->assertArrayNotHasKey($name, $defaults, $name);
+        }
+    }
+
+    /**
+     * The decision sheet offers what the table form offers: the choosers to a holder of
+     * enrol/apply:choosedecision, the summary of what an approval gives to a decider without it, and
+     * nothing at all to a viewer.
+     *
+     * One editing teacher both ways, then a non-editing teacher who may only view.
+     *
+     * Changes that must make it fail: the props offering a decision to a reader who may not decide; a
+     * group or role chooser offered (even empty) to a decider who may not choose.
+     *
+     * @return void
+     */
+    public function test_the_decision_props_follow_choosedecision_and_a_viewer_gets_none(): void {
+        global $DB;
+
+        $this->getDataGenerator()->create_group(['courseid' => $this->course->id, 'name' => 'R&D Team']);
+        $context = context_course::instance($this->course->id);
+        $teacher = $this->getDataGenerator()->create_and_enrol($this->course, 'editingteacher');
+        $this->setUser($teacher);
+
+        $offer = $this->shell()->props()['decision'];
+        $this->assertNotNull($offer);
+        $this->assertSame(sesskey(), $offer['sesskey']);
+        // The table's three decisions, in its order and under its labels.
+        $this->assertSame(['cancel', 'wait', 'confirm'], array_column($offer['actions'], 'value'));
+        $this->assertSame(['Cancel applications', 'Defer', 'Confirm'], array_column($offer['actions'], 'label'));
+        $this->assertSame(get_string('outcomemessage', 'enrol_apply'), $offer['message']['label']);
+        $this->assertSame(get_string('decisionnote_help', 'enrol_apply'), $offer['note']['help']);
+        // The choosers, with names in the plain spelling the client draws as text.
+        $this->assertNotNull($offer['groups']);
+        $this->assertContains('R&D Team', array_column($offer['groups']['options'], 'name'));
+        $this->assertNotNull($offer['roles']);
+        $this->assertNotEmpty($offer['roles']['options']);
+        foreach ($offer['roles']['options'] as $role) {
+            $this->assertStringNotContainsString('&amp;', $role['name']);
+        }
+        $this->assertNull($offer['summary']);
+        $this->assertSame('', $offer['placesfull']);
+
+        // The same reader without enrol/apply:choosedecision reads what an approval gives instead.
+        $role = (int) $DB->get_field('role', 'id', ['shortname' => 'editingteacher'], MUST_EXIST);
+        assign_capability('enrol/apply:choosedecision', CAP_PROHIBIT, $role, $context->id, true);
+        accesslib_clear_all_caches_for_unit_testing();
+        $offer = $this->shell()->props()['decision'];
+        $this->assertNotNull($offer, 'a decider who may not choose still decides');
+        $this->assertNull($offer['groups']);
+        $this->assertNull($offer['roles']);
+        $this->assertNotNull($offer['summary']);
+        $this->assertSame(get_string('decisionsummarygroups', 'enrol_apply'), $offer['summary']['groupslabel']);
+
+        // A viewer: the queue opens, and nothing is offered.
+        $viewer = $this->getDataGenerator()->create_and_enrol($this->course, 'teacher');
+        $teacherrole = (int) $DB->get_field('role', 'id', ['shortname' => 'teacher'], MUST_EXIST);
+        assign_capability('enrol/apply:viewapplications', CAP_ALLOW, $teacherrole, $context->id, true);
+        accesslib_clear_all_caches_for_unit_testing();
+        $this->setUser($viewer);
+        $this->assertTrue(\enrol_apply\local\queue::listing_scope((int) $this->instance->id)->allowed);
+        $this->assertFalse(applications::for_scope((int) $this->instance->id)->can_decide());
+        $this->assertNull($this->shell()->props()['decision']);
     }
 }

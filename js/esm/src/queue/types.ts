@@ -47,7 +47,10 @@ export type Query = {
     perpage: number,
 };
 
-/** The props enrol_apply\output\queue_view::props() writes into the page: configuration and strings, never a row. */
+/**
+ * The props enrol_apply\output\queue_view::props() writes into the page: configuration and strings, never
+ * a row.
+ */
 export type ViewProps = {
     mount: 'queue',
     enrolid: number,
@@ -69,7 +72,36 @@ export type ViewProps = {
     statuses: {pending: number, deferred: number},
     /** The course report, '' for a reader who may not open it. */
     reporturl: string,
+    /** What the decision sheet may offer, from the table form's own context; null for a reader who may not decide. */
+    decision: DecisionProps | null,
     labels: Record<string, string>,
+};
+
+/** One of the queue's three decisions: its formaction, and the table's label and button style for it. */
+export type Action = {value: Decision, label: string, classes: string};
+
+/** A decision, as manage.php's formaction names it. */
+export type Decision = 'confirm' | 'wait' | 'cancel';
+
+/** A field's label and its help, as the table's decision controls word them. */
+export type Wording = {label: string, help: string};
+
+/**
+ * What the sheet may offer, all plain text: queue_view::decision(), which reads the table form's
+ * decision controls (renderer::queue_decision_controls()). The groups and the role are offered only
+ * where that form offers them (enrol/apply:choosedecision); a decider who may not choose reads the
+ * summary of what an approval gives instead.
+ */
+export type DecisionProps = {
+    sesskey: string,
+    actions: Action[],
+    message: Wording,
+    note: Wording,
+    groups: (Wording & {options: {id: number, name: string, selected: boolean}[]}) | null,
+    roles: (Wording & {default: string, options: {id: number, name: string}[]}) | null,
+    summary: {groupslabel: string, groups: string, rolelabel: string, role: string, help: string, note: string} | null,
+    /** The table page's notice that every place on the method is taken, '' while some are left. */
+    placesfull: string,
 };
 
 /** A label under the applicant's name: deferred, key (its outcome), appliedbefore or own. */

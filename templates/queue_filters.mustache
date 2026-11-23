@@ -72,6 +72,8 @@
     * formaction string - url the GET form submits to
     * hasscope boolean - whether a scope id must ride along
     * scopeid int - the enrol instance id
+    * hasviewtable boolean - whether the page is the method queue's table view (view=table), which
+      the submit must keep, the grid being that queue's default page
     * searchlabel string - label of the search field, visually hidden, and its placeholder
     * searchvalue string - the term currently applied
     * searchhelp string - rendered help icon for the search field
@@ -108,6 +110,7 @@
         "formaction": "https://example.com/enrol/apply/manage.php",
         "hasscope": true,
         "scopeid": 140,
+        "hasviewtable": true,
         "searchlabel": "Search",
         "searchvalue": "goncalves",
         "searchhelp": "",
@@ -189,6 +192,7 @@
 }}
 <form method="get" action="{{formaction}}" class="enrol_apply-filters mb-3" data-region="queuefilters">
     {{#hasscope}}<input type="hidden" name="id" value="{{scopeid}}">{{/hasscope}}
+    {{#hasviewtable}}<input type="hidden" name="view" value="table">{{/hasviewtable}}
     <div class="enrol_apply-filterbar">
         <div class="enrol_apply-seg" role="group" aria-label="{{statuslabel}}">
             {{#statuscells}}

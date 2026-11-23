@@ -14,13 +14,14 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * The approval queue of one method as a data report, read only (stage 3 of
- * docs/design/confirm-queue-as-report-plan.md).
+ * The approval queue of one method as a data report: the method queue's page (stages 3 and 4 of
+ * docs/design/confirm-queue-as-report-plan.md, CQ-D5).
  *
- * manage.php?id=<method>&view=grid renders the shell (enrol_apply\output\queue_view) with configuration
- * and strings; the rows and the tiles come from the plugin's web services, which read the queue's own
- * table (classes/local/queueengine.php), so access, the separate-groups narrowing, the masking of the
- * answers and the filters are the table page's. Two regions load on their own:
+ * manage.php?id=<method> renders the shell (enrol_apply\output\queue_view) with configuration and
+ * strings, unless view=table asks for today's table; the rows and the tiles come from the plugin's web
+ * services, which read the queue's own table (classes/local/queueengine.php), so access, the
+ * separate-groups narrowing, the masking of the answers and the filters are the table page's. Two
+ * regions load on their own:
  *
  * - the rows (enrol_apply_queue_rows): the scope, a filter, the search, a sort or a page reloads them,
  *   and they come with the panel's counts each time;
@@ -34,7 +35,14 @@
  * per region: core's ajax cannot abort, so each region numbers its requests and drops any answer but the
  * newest. Every wait holds Behat's pending counter until the answer it waited for is drawn.
  *
- * Nothing here decides: no selection, no decisions (stage 4). Each row links to its review page.
+ * Deciding (stage 4): a reader who may decide selects rows of the page - only the rows the rows service
+ * marks selectable, never their own application - with a box per row and one for the page; the
+ * selection is cleared whenever the page, the scope, a filter, the search or the sort changes, so no row
+ * out of sight stays selected, and the dock's count says "on this page". The dock under the rows holds
+ * the table's three decisions; each opens the decision sheet (queue/Sheet), whose commit submits a real
+ * form to manage.php with the table form's fields (queue/decide, CQ-D4). The server decides nothing on
+ * the strength of what this view selected or offered: decision::apply() checks every row again. A
+ * viewer gets no box, no dock and no sheet. Each row links to its review page.
  *
  * @module     enrol_apply/queue/QueueView
  * @copyright  2026 Anderson Blaine
@@ -50,12 +58,20 @@ import {rememberView, storedView, useNarrow} from '../datareport/layout';
 import {Pager} from '../datareport/Pager';
 import {hold} from '../datareport/pending';
 import {RowsRegion} from '../datareport/Rows';
+import {fill} from '../datareport/str';
+import type {Selection} from '../datareport/types';
 import {initialQuery, queryOf, queueUrl, writeAddress} from './address';
 import {ANY_GROUP, Bar, GROUP} from './Bar';
 import {ApplicantCell, CellLine, SIZING, cellHtml} from './cells';
+import {decide} from './decide';
+import {Dock} from './Dock';
 import {getRows, getSummary, setPreference} from './repository';
+import {Sheet} from './Sheet';
+import type {SheetValues} from './Sheet';
 import {Tiles} from './Tiles';
-import type {Column, Preference, Preset, Query, Row, RowsAnswer, Scope, SummaryAnswer, ViewMode, ViewProps} from './types';
+import type {
+    Column, Decision, Preference, Preset, Query, Row, RowsAnswer, Scope, SummaryAnswer, ViewMode, ViewProps,
+} from './types';
 
 /** The wait before the search is sent, after the last key. */
 const SEARCH_DELAY = 300;
@@ -133,6 +149,11 @@ const QueueView = (props: ViewProps): ReactElement => {
     const pendingwidths = useRef<Record<string, number> | null>(null);
     const flushref = useRef<() => void>(() => undefined);
 
+    // The rows selected on this page, by user enrolment id; the sheet's decision while it is open.
+    const [selected, setSelected] = useState<ReadonlySet<number>>(() => new Set());
+    const [sheet, setSheet] = useState<Decision | null>(null);
+    const opener = useRef<HTMLButtonElement | null>(null);
+
     /**
      * Read a page of rows; an answer to an older request than the newest is dropped.
      *
@@ -160,6 +181,13 @@ const QueueView = (props: ViewProps): ReactElement => {
                 writeAddress(config, query.current, false);
             }
             setRows(answer);
+            // Only rows of this answer that may be selected stay selected: none out of sight.
+            setSelected((before) => {
+                const open = new Set(answer.rows.filter((row) => row.selectable).map((row) => row.userenrolmentid));
+                const kept = Array.from(before).filter((id) => open.has(id));
+
+                return kept.length === before.size ? before : new Set(kept);
+            });
             setRowserror(false);
             setRowsloading(false);
             return;
@@ -207,6 +235,8 @@ const QueueView = (props: ViewProps): ReactElement => {
     const run = useCallback((change: Partial<Query>, push: boolean): void => {
         query.current = {...query.current, ...change};
         setCurrent(query.current);
+        // Another page, scope, filter, search or sort is another set of rows: the selection goes.
+        setSelected(new Set());
         writeAddress(config, query.current, push);
         loadRows(query.current);
     }, [loadRows, config]);
@@ -248,6 +278,7 @@ const QueueView = (props: ViewProps): ReactElement => {
             query.current = restored;
             setCurrent(restored);
             setSearchtext(restored.search);
+            setSelected(new Set());
             loadRows(restored);
         };
         window.addEventListener('popstate', popped);
@@ -492,6 +523,90 @@ const QueueView = (props: ViewProps): ReactElement => {
     const cards = view === 'cards' || (view === 'auto' && narrow);
     const list: Row[] = (rows?.rows ?? []).map((row) => ({...row, id: row.userenrolmentid}));
 
+    // The focus goes back to the dock button that opened the sheet, once the sheet has closed.
+    useEffect(() => {
+        if (sheet === null && opener.current) {
+            opener.current.focus();
+            opener.current = null;
+        }
+    }, [sheet]);
+
+    /* A reader decides here when the props offer the table form's controls (a viewer's carry none) and
+       the rows service agrees; either one false, and there is no box, no dock and no sheet. */
+    const offer = config.decision;
+    const decides = offer !== null && rows !== null && rows.candecide;
+    const locked = new Set(list.filter((row) => !row.selectable).map((row) => row.id));
+    const chosen = list.filter((row) => selected.has(row.id));
+    /**
+     * A row box's name: "Select" and the applicant.
+     *
+     * @param {object} row The row.
+     * @returns {string} The name.
+     */
+    const boxLabel = (row: Row): string => fill(labels.selectapplicant, row.applicant.fullname);
+
+    /**
+     * Select or release one row; a row that may not be selected is never added.
+     *
+     * @param {number} id The row's user enrolment id.
+     * @param {boolean} on Whether to select it.
+     * @returns {void}
+     */
+    const onSelect = (id: number, on: boolean): void => setSelected((before) => {
+        const next = new Set(before);
+        if (on && !locked.has(id)) {
+            next.add(id);
+        } else {
+            next.delete(id);
+        }
+        return next;
+    });
+
+    /**
+     * Select every selectable row of this page, and no other, or release them all.
+     *
+     * @param {boolean} on Whether to select them.
+     * @returns {void}
+     */
+    const onSelectPage = (on: boolean): void => setSelected(
+        on ? new Set(list.filter((row) => !locked.has(row.id)).map((row) => row.id)) : new Set()
+    );
+
+    const selection: Selection<Row> | undefined = decides
+        ? {selected, locked, label: boxLabel, pagelabel: labels.selectpage, onSelect, onSelectPage}
+        : undefined;
+
+    /**
+     * Open the sheet for one of the dock's decisions.
+     *
+     * @param {string} decision confirm, wait or cancel.
+     * @param {object} button The dock button pressed, which takes the focus back when the sheet closes.
+     * @returns {void}
+     */
+    const onDecide = (decision: Decision, button: HTMLButtonElement): void => {
+        opener.current = button;
+        setSheet(decision);
+    };
+
+    /**
+     * Post the sheet's decision for the rows selected on this page, from the view's own address.
+     *
+     * @param {object} values The message, the note and the choosers' values.
+     * @returns {void}
+     */
+    const onCommit = (values: SheetValues): void => {
+        if (offer === null || sheet === null) {
+            return;
+        }
+        decide({
+            action: queueUrl(config, query.current, true),
+            sesskey: offer.sesskey,
+            decision: sheet,
+            userenrolments: chosen.map((row) => row.id),
+            ...values,
+        });
+    };
+
     // The rows as the reader views them; the region draws them only once an answer has some.
     let body: ReactElement | null = null;
     if (rows !== null) {
@@ -500,6 +615,7 @@ const QueueView = (props: ViewProps): ReactElement => {
                 labels={labels}
                 rows={list}
                 single={narrow}
+                selection={selection}
                 renderCard={(row) => ({
                     head: <ApplicantCell labels={labels} row={row} />,
                     lines: (
@@ -531,6 +647,7 @@ const QueueView = (props: ViewProps): ReactElement => {
                 sizing={SIZING}
                 sort={rows.sort}
                 direction={rows.direction}
+                selection={selection}
                 renderLead={(row) => <ApplicantCell labels={labels} row={row} />}
                 renderCell={(row, column) => <CellLine html={cellHtml(row, column.key)} />}
                 onSort={onSort}
@@ -554,6 +671,9 @@ const QueueView = (props: ViewProps): ReactElement => {
             {rows?.notingroup ? <p className="enrol_apply-rview-narrowed">{labels.notingroup}</p> : (
                 <>
                     {rows?.narrowed ? <p className="enrol_apply-rview-narrowed">{labels.narrowed}</p> : null}
+                    {rows !== null && !decides ? (
+                        <div className="alert alert-info" role="status">{labels.viewonly}</div>
+                    ) : null}
                     <Bar
                         labels={labels}
                         narrow={narrow}
@@ -601,6 +721,9 @@ const QueueView = (props: ViewProps): ReactElement => {
                         cards={cards}
                         narrow={narrow}
                         skeleton={{columns: skeleton, lead: 'applicant', widths, sizing: SIZING}}
+                        dock={offer !== null && decides && chosen.length > 0 ? (
+                            <Dock labels={labels} count={chosen.length} actions={offer.actions} onDecide={onDecide} />
+                        ) : null}
                         onRetry={() => loadRows(query.current)}
                     >
                         {body}
@@ -620,6 +743,16 @@ const QueueView = (props: ViewProps): ReactElement => {
                     ) : null}
                 </>
             )}
+            {offer !== null && sheet !== null && chosen.length > 0 ? (
+                <Sheet
+                    labels={labels}
+                    decision={sheet}
+                    rows={chosen}
+                    offer={offer}
+                    onClose={() => setSheet(null)}
+                    onCommit={onCommit}
+                />
+            ) : null}
         </div>
     );
 };
