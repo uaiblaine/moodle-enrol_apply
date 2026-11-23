@@ -2,7 +2,7 @@
     "entry": "src/views.tsx",
     "outfile": "build/bundle.js",
     "sources": {
-        "src/datareport/Bar.tsx": "06f53c1c97a3be96e8f4e5aa804f7101cb4a6a12",
+        "src/datareport/Bar.tsx": "adffbc8e5669871f80d102b3122c03f7f737bf27",
         "src/datareport/Cards.tsx": "1329cdfdb2dc646d79be8984fcc28c64305e6ebd",
         "src/datareport/FilterPanel.tsx": "6c9a7c94a32eacac55fc23d514e01c81119e682c",
         "src/datareport/Grid.tsx": "471d52c81525a0dbafa06911615a5bb411c2bcd0",
@@ -12,7 +12,7 @@
         "src/datareport/cells.tsx": "04462e4daceb4280675623c7ff0d63282407a9ff",
         "src/datareport/icons.tsx": "62c2d719d37bf68b4040f5b9787e4d09e4fa3b2b",
         "src/datareport/layout.ts": "586f2e9d3bdf86bbbf90556dd1db32ea4bc111ea",
-        "src/datareport/menus.tsx": "a2fe85da62947891953cbf850eb79fde6b4b441e",
+        "src/datareport/menus.tsx": "1911b60e0a80c2c0983b6d1c898b9f24106e2dcd",
         "src/datareport/pending.ts": "c0d62a3ee5e007bd91469e8bf8b036d2aecb9b39",
         "src/datareport/sizing.ts": "348419518ba12d6fad33179da593e37db8e30260",
         "src/datareport/str.ts": "feff9e9e488b097405ea2b94afb1b9f4625dc5bf",

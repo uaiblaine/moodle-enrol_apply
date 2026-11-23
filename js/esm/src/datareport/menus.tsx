@@ -24,7 +24,7 @@
 
 import type {KeyboardEvent, ReactElement} from 'react';
 import {Icon} from './icons';
-import type {ColumnSet} from './types';
+import type {ColumnSet, ExtraView, ViewMode} from './types';
 
 /**
  * Move the focus between a menu's items with the arrow keys, Home and End.
@@ -91,5 +91,96 @@ export const SetItems = ({heading, sets, onSet}: {heading: string, sets: ColumnS
             ))}
             <div className="enrol_apply-rview-menu-sep" role="separator" />
         </>
+    );
+};
+
+/**
+ * The icon of the View button: the selected extra view's own, else the built-in choice's.
+ *
+ * @param {string} view The selected view.
+ * @param {Array} extraViews The caller's own views.
+ * @returns {string} The icon's name.
+ */
+export const viewIcon = (view: ViewMode | string, extraViews: ExtraView[] = []): string => (
+    extraViews.find((extra) => extra.value === view)?.icon ?? {auto: 'auto', table: 'table', cards: 'cards'}[view as ViewMode]
+);
+
+/**
+ * The View menu: the built-in choices the caller allows, then its own views behind a separator, then
+ * the link to the view's server table behind another. A press hands the value to onChoose.
+ *
+ * @param {object} props The menu's id, labels, state and callback.
+ * @returns {object} The menu.
+ */
+export const ViewMenu = (props: {
+    id: string,
+    labels: Record<string, string>,
+    hidden: boolean,
+    view: ViewMode | string,
+    views: ViewMode[],
+    extraViews?: ExtraView[],
+    tableurl: string,
+    onChoose: (value: string) => void,
+}): ReactElement => {
+    const {labels} = props;
+    const extraViews = props.extraViews ?? [];
+    const choices = ([['auto', labels.viewauto, labels.viewautohint], ['table', labels.table, ''],
+        ['cards', labels.cards, '']] as [ViewMode, string, string][]).filter(([value]) => props.views.includes(value));
+
+    return (
+        <div
+            className="enrol_apply-rview-menu"
+            id={props.id}
+            role="menu"
+            aria-label={labels.view}
+            hidden={props.hidden}
+            onKeyDown={menuKeys}
+        >
+            {choices.map(([value, label, hint]) => (
+                <button
+                    key={value}
+                    type="button"
+                    className="enrol_apply-rview-menu-item"
+                    role="menuitemradio"
+                    aria-checked={props.view === value}
+                    tabIndex={-1}
+                    onClick={() => props.onChoose(value)}
+                >
+                    <Icon name={value} />
+                    <span className="enrol_apply-rview-menu-label">{label}</span>
+                    {hint !== '' ? <span className="enrol_apply-rview-menu-hint">{hint}</span> : null}
+                    <Icon name="tick" className="enrol_apply-rview-tick" />
+                </button>
+            ))}
+            {extraViews.length > 0 ? (
+                <>
+                    <div className="enrol_apply-rview-menu-sep" role="separator" />
+                    {extraViews.map((extra) => (
+                        <button
+                            key={extra.value}
+                            type="button"
+                            className="enrol_apply-rview-menu-item"
+                            role="menuitemradio"
+                            aria-checked={props.view === extra.value}
+                            tabIndex={-1}
+                            onClick={() => props.onChoose(extra.value)}
+                        >
+                            <Icon name={extra.icon} />
+                            <span className="enrol_apply-rview-menu-label">{extra.label}</span>
+                            <Icon name="tick" className="enrol_apply-rview-tick" />
+                        </button>
+                    ))}
+                </>
+            ) : null}
+            {props.tableurl !== '' ? (
+                <>
+                    <div className="enrol_apply-rview-menu-sep" role="separator" />
+                    <a className="enrol_apply-rview-menu-item" role="menuitem" tabIndex={-1} href={props.tableurl}>
+                        <Icon name="table" />
+                        <span className="enrol_apply-rview-menu-label">{labels.coretable}</span>
+                    </a>
+                </>
+            ) : null}
+        </div>
     );
 };
