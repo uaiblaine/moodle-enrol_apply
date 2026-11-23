@@ -15,7 +15,9 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * The plugin's web services: the course report read headlessly (stage R3).
+ * The plugin's web services: the course report read headlessly (stage R3), and one method's
+ * approval queue read headlessly (stage 1 of the queue as a report). No service decides an
+ * application: decisions stay the form post to manage.php (CQ-D4).
  *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine
@@ -45,5 +47,26 @@ $functions = [
         'type' => 'write',
         'ajax' => true,
         'capabilities' => 'enrol/apply:viewreports',
+    ],
+    'enrol_apply_queue_rows' => [
+        'classname' => \enrol_apply\external\queue_rows::class,
+        'description' => 'A page of one enrolment method\'s approval queue, with its columns, its filters and their counts.',
+        'type' => 'read',
+        'ajax' => true,
+        'capabilities' => 'enrol/apply:manageapplications, enrol/apply:viewapplications',
+    ],
+    'enrol_apply_queue_summary' => [
+        'classname' => \enrol_apply\external\queue_summary::class,
+        'description' => 'The capacity figures above one enrolment method\'s approval queue.',
+        'type' => 'read',
+        'ajax' => true,
+        'capabilities' => 'enrol/apply:manageapplications, enrol/apply:viewapplications',
+    ],
+    'enrol_apply_set_queue_preference' => [
+        'classname' => \enrol_apply\external\set_queue_preference::class,
+        'description' => 'Store the columns and widths the reader chose for the approval queue.',
+        'type' => 'write',
+        'ajax' => true,
+        'capabilities' => 'enrol/apply:manageapplications, enrol/apply:viewapplications',
     ],
 ];

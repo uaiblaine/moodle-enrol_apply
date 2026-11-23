@@ -29,6 +29,7 @@ use enrol_apply\local\queue;
 use enrol_apply\local\coursefilter;
 use enrol_apply\local\groupfilter;
 use enrol_apply\local\groupvisibility;
+use enrol_apply\local\instanceoptions;
 use enrol_apply\local\profilelink;
 use enrol_apply\local\queuefilter;
 use enrol_apply\local\search;
@@ -79,6 +80,32 @@ class applications extends \table_sql implements dynamic_table {
      * does not collide, and nothing else on manage.php renders one.
      */
     public const TOGGLE_GROUP = 'enrol-apply-queue';
+
+    /** @var string The named filter's value for a group given by a key. */
+    public const NAMED_KEY = 'key';
+
+    /** @var string The named filter's value for a group chosen from the method's list. */
+    public const NAMED_CHOSEN = 'chosen';
+
+    /** @var string The named filter's value for an application that named no group. */
+    public const NAMED_NONE = 'none';
+
+    /** @var string[] How the group was named, the named filter's vocabulary, in the order a panel lists it. */
+    public const NAMED = [self::NAMED_CHOSEN, self::NAMED_KEY, self::NAMED_NONE];
+
+    /** @var int[] The "waited more than" filter's thresholds, in days (the course report's, MQ mockup). */
+    public const WAITED_DAYS = [1, 3, 7, 14];
+
+    /**
+     * @var string[] The tone of each kind of tag {@see tags()} gives a row, for the status labels of
+     *     the applicant's cell.
+     */
+    public const TAG_TONES = [
+        'deferred' => 'warning',
+        'key' => 'info',
+        'appliedbefore' => 'neutral',
+        'own' => 'neutral',
+    ];
 
     /** @var stdClass|null Everything this listing is scoped by, from queue::listing_scope(). */
     protected $scope = null;
@@ -154,6 +181,35 @@ class applications extends \table_sql implements dynamic_table {
     /** @var bool Whether define_table_columns() has run; see setup() for why it is deferred. */
     protected $columnsdefined = false;
 
+    /** @var string|null The named filter applied, one of NAMED; null for none. */
+    protected $named = null;
+
+    /** @var int|null The waited filter applied, one of WAITED_DAYS; null for none. */
+    protected $waited = null;
+
+    /** @var bool Whether the listing is narrowed to the applicants who applied to the course before. */
+    protected $appliedbefore = false;
+
+    /** @var bool Whether this listing counts each applicant's earlier applications; see set_filterset(). */
+    protected $history = false;
+
+    /** @var array|null The groups the course report narrows this reader to, for those earlier applications. */
+    protected $reportgroups = null;
+
+    /** @var int The clock's time when the filters were read, which the waited filter counts back from. */
+    protected $now = 0;
+
+    /** @var array The scope's [where fragments, parameters], as build_sql() read them from scope_where(). */
+    protected $scopeparts = [[], []];
+
+    /**
+     * @var array Filter name => [where fragment, parameters], one entry per filter the operator applied.
+     *
+     * Kept apart from the scope so that a count can be taken under every filter but one
+     * ({@see where_without()}): what choosing another value of that filter would list.
+     */
+    protected $narrowing = [];
+
     /**
      * Build the table.
      *
@@ -228,7 +284,7 @@ class applications extends \table_sql implements dynamic_table {
      * @return void
      */
     public function set_filterset(filterset $filterset): void {
-        global $DB;
+        global $DB, $USER;
 
         $filterset->check_validity();
 
@@ -327,6 +383,45 @@ class applications extends \table_sql implements dynamic_table {
         $this->groupcolumn = $this->scope->mentees === null
             && ($this->scope->instance === null
                 || $DB->record_exists('groups', ['courseid' => (int) $this->scope->instance->courseid]));
+
+        $this->now = \core\di::get(\core\clock::class)->time();
+
+        /* Whether this applicant applied to this course before: the "Applied before" label and the
+           count of earlier applications. Only where the review page would show the history, on the
+           same rule (renderer::history_context()): on one instance's queue, to a reader holding
+           enrol/apply:viewreports in that course, narrowed by the report's own groups. It discloses
+           that earlier applications exist, which is what that capability controls, so the mentee
+           and site-wide queues, which span courses no single context can judge, and a reader
+           without it count nothing. Decided here, once, because the select list, the filter and a
+           facet count all read it. */
+        $this->history = false;
+        $this->reportgroups = null;
+        if ($this->scope->enrolid && $this->scope->instance !== null) {
+            $priorcourse = (int) $this->scope->instance->courseid;
+            if (has_capability(groupscope::REPORT, context_course::instance($priorcourse))) {
+                $this->history = true;
+                $this->reportgroups = groupscope::narrowed_to($priorcourse, (int) $USER->id, groupscope::REPORT);
+            }
+        }
+
+        /* How the group was named, on an instance queue with groups only, where a group can have been
+           named at all; a value outside the vocabulary is no filter, as everywhere above. */
+        $this->named = null;
+        if ($this->groupcolumn && $this->scope->instance !== null && $filterset->has_filter('named')) {
+            $named = trim((string) $filterset->get_filter('named')->current());
+            $this->named = in_array($named, self::NAMED, true) ? $named : null;
+        }
+
+        $this->waited = null;
+        if ($filterset->has_filter('waited')) {
+            $days = (int) $filterset->get_filter('waited')->current();
+            $this->waited = in_array($days, self::WAITED_DAYS, true) ? $days : null;
+        }
+
+        // Only where the earlier applications are counted: elsewhere the filter would disclose them.
+        $this->appliedbefore = $this->history
+            && $filterset->has_filter('appliedbefore')
+            && trim((string) $filterset->get_filter('appliedbefore')->current()) === '1';
 
         parent::set_filterset($filterset);
 
@@ -579,7 +674,8 @@ class applications extends \table_sql implements dynamic_table {
     /**
      * Whether the operator has narrowed this listing at all.
      *
-     * @return bool True when a search term, status, field, date, group, course or category filter is applied.
+     * @return bool True when a search term, status, field, date, group, course, category, named,
+     *     waited or applied-before filter is applied.
      */
     public function is_narrowed(): bool {
         return $this->search !== ''
@@ -589,7 +685,10 @@ class applications extends \table_sql implements dynamic_table {
             || $this->appliedto !== null
             || $this->categoryfilter !== null
             || $this->coursefilter !== null
-            || $this->groupfilter !== null;
+            || $this->groupfilter !== null
+            || $this->named !== null
+            || $this->waited !== null
+            || $this->appliedbefore;
     }
 
     /**
@@ -696,6 +795,15 @@ class applications extends \table_sql implements dynamic_table {
         }
         if ($this->coursefilter !== null) {
             $params['course'] = $this->coursefilter;
+        }
+        if ($this->named !== null) {
+            $params['named'] = $this->named;
+        }
+        if ($this->waited !== null) {
+            $params['waited'] = $this->waited;
+        }
+        if ($this->appliedbefore) {
+            $params['appliedbefore'] = 1;
         }
 
         return $params;
@@ -952,12 +1060,15 @@ class applications extends \table_sql implements dynamic_table {
     /**
      * Build the query for the resolved scope.
      *
+     * The WHERE is the scope ({@see scope_where()}) and then one entry of $narrowing per filter the
+     * operator applied, kept apart so that {@see where_without()} can rebuild it without any of them:
+     * the headless reader ({@see \enrol_apply\local\queueengine}) counts its facets that way, over this
+     * same FROM, so the page and its counts cannot list different rows.
+     *
      * @return void
      */
     protected function build_sql(): void {
-        global $DB, $USER;
-
-        [$wheres, $params] = $this->scope_where();
+        $this->scopeparts = $this->scope_where();
 
         /* The identity fields and their SQL were resolved in set_filterset(). Which fields those
            are is core's decision - see \enrol_apply\local\identity - so the queue and the
@@ -973,42 +1084,16 @@ class applications extends \table_sql implements dynamic_table {
 
            Joined on the user enrolment, not on courseid + userid, which is not unique: an
            applicant who was cancelled and applied again has two records for the course. */
-        /* Whether this applicant applied to this course before: a status label prompting the operator
-           to open the review page.
-
-           Shown only where the review page would show the history, on the same rule
-           (renderer::history_context()): on one instance's queue, to a reader holding
-           enrol/apply:viewreports in that course, narrowed by the report's own groups. The badge
-           discloses that earlier applications exist, which is what that capability controls, so
-           the mentee and site-wide queues, which span courses no single context can judge, and a
-           reader without it select a constant.
-
-           A correlated EXISTS rather than a join, so the row count cannot change: (courseid,
+        /* How many times this applicant applied to this course before (see set_filterset() for
+           where it is counted): the "Applied before" label and the earlier applications' column. A
+           correlated subquery rather than a join, so the row count cannot change: (courseid,
            userid) is not unique, and a join would multiply the row per earlier application. It
-           reads the courseuser index.
-
-           `s.id IS NULL OR prior.id <> s.id` excludes the row's own record; the null branch is
-           for applications that predate the durable record and have no s.id. */
+           reads the courseuser index. */
         $priorsql = '0 AS appliedbefore';
-        if ($this->scope->enrolid && $this->scope->instance !== null) {
-            $priorcourse = (int) $this->scope->instance->courseid;
-            if (has_capability(groupscope::REPORT, context_course::instance($priorcourse))) {
-                $priorscope = '';
-                $reportgroups = groupscope::narrowed_to($priorcourse, (int) $USER->id, groupscope::REPORT);
-                if ($reportgroups !== null) {
-                    [$priorwhere, $priorparams] = groupscope::record_where('prior', $reportgroups, 'priorscope');
-                    $priorscope = 'AND ' . $priorwhere;
-                    $params += $priorparams;
-                }
-                $priorsql = "CASE WHEN EXISTS (
-                                SELECT 1
-                                  FROM {enrol_apply_submission} prior
-                                 WHERE prior.courseid = c.id
-                                   AND prior.userid = ue.userid
-                                   AND (s.id IS NULL OR prior.id <> s.id)
-                                   {$priorscope}
-                              ) THEN 1 ELSE 0 END AS appliedbefore";
-            }
+        $selectparams = [];
+        if ($this->history) {
+            [$prior, $selectparams] = $this->prior_sql('priorscope');
+            $priorsql = "(SELECT COUNT(1) {$prior}) AS appliedbefore";
         }
 
         /* s.id names the record whose frozen answers query_db() reads for the whole page. They
@@ -1020,9 +1105,22 @@ class applications extends \table_sql implements dynamic_table {
                    c.fullname AS course,
                    c.id AS courseid, e.id AS enrolid, e.name AS enrolname, e.roleid AS enrolroleid,
                    e.customchar1 AS enrolkeymode, {$priorsql}, {$userfields}{$this->identitysql->selects}";
+
+        /* The record is the NEWEST of the user enrolment, by the NOT EXISTS shape of
+           groupscope::where() and the (timecreated, id) order of application_group(), so a user
+           enrolment carrying two records (a restore, a hand edit) is one row, and every reader of
+           s - the comment, the answers, the key's outcome, the search - reads the record the scope
+           and the group column judge the row by. */
         $from = "{user_enrolments} ue
             LEFT JOIN {enrol_apply_applicationinfo} ai ON ai.userenrolmentid = ue.id
             LEFT JOIN {enrol_apply_submission} s ON s.userenrolmentid = ue.id
+                      AND NOT EXISTS (
+                          SELECT 1
+                            FROM {enrol_apply_submission} snewer
+                           WHERE snewer.userenrolmentid = s.userenrolmentid
+                             AND (snewer.timecreated > s.timecreated
+                                  OR (snewer.timecreated = s.timecreated AND snewer.id > s.id))
+                      )
                  JOIN {user} u ON u.id = ue.userid
                  JOIN {enrol} e ON e.id = ue.enrolid
                  JOIN {course} c ON c.id = e.courseid
@@ -1052,12 +1150,30 @@ class applications extends \table_sql implements dynamic_table {
             LEFT JOIN {groups} kg ON kg.id = {$appgroup}";
         }
 
-        /* The operator's own filters, last: everything above is the scope, everything below the
-           narrowing, which is the split scope_total() counts across. */
+        $this->narrowing = $this->build_narrowing();
+
+        [$where, $params] = $this->where_without([]);
+        $this->set_sql($fields, $from, $where, $selectparams + $params);
+    }
+
+    /**
+     * The operator's own filters, one predicate each: everything scope_where() leaves out.
+     *
+     * The split scope_total() counts across, and the one {@see where_without()} leaves a filter out
+     * of. Placeholder names are prefixed because the scope already binds `now`, `active`, `enrolid`
+     * or `enrol`, `mentee<N>` and the group ids; a collision would make fix_sql_params() throw.
+     *
+     * @return array Filter name => [where fragment, parameters]: search, status, group (the
+     *     group filter's name), one per field filter token, course, appliedfrom, appliedto, named,
+     *     waited, appliedbefore; only the applied ones.
+     */
+    protected function build_narrowing(): array {
+        global $DB;
+
+        $narrowing = [];
+
         if ($this->search !== '') {
-            [$searchwhere, $searchparams] = $this->search_where();
-            $wheres[] = $searchwhere;
-            $params += $searchparams;
+            $narrowing['search'] = $this->search_where();
         }
 
         /* The enrolment's status, not the record's: an approved participant later suspended from
@@ -1065,25 +1181,18 @@ class applications extends \table_sql implements dynamic_table {
            the enrolment, and the queue lists what awaits a decision now. The option labels use the
            record's wording, which the operator reads on the review page. */
         if ($this->status !== null) {
-            $wheres[] = 'ue.status = :statusfilter';
-            $params['statusfilter'] = $this->status;
+            $narrowing['status'] = ['ue.status = :statusfilter', ['statusfilter' => $this->status]];
         }
 
         /* The group filter, AFTER the scope's own group narrowing and never instead of it: the
            value was cleaned against what this reader is offered, and even a value that got
            through could only narrow a narrowed reader's listing further. */
         if ($this->groupfilter !== null) {
-            [$groupwhere, $groupparams] = groupfilter::where($this->scope, $this->groupfilter);
-            $wheres[] = $groupwhere;
-            $params += $groupparams;
+            $narrowing[groupfilter::NAME] = groupfilter::where($this->scope, $this->groupfilter);
         }
 
         /* One predicate per applied field filter, over the expression core's identity mapping
-           produced (see $identitymappings).
-
-           The placeholder names are prefixed because this statement already binds `now`,
-           `active`, `enrolid` or `enrol`, `mentee<N>`, `searchterm<N>` and `statusfilter`; a
-           collision would make fix_sql_params() throw. */
+           produced (see $identitymappings). */
         $unaccent = null;
         $index = 0;
         foreach ($this->fieldfilters as $token => $value) {
@@ -1102,38 +1211,174 @@ class applications extends \table_sql implements dynamic_table {
                    two options differing only by one ("Pais" and "País") are two members of the
                    vocabulary, and accent-insensitive equality is what MySQL and MariaDB alone
                    would give. */
-                $wheres[] = $DB->sql_equal($offered->expression, ':' . $name, false, true);
-                $params[$name] = $value;
+                $narrowing[$token] = [$DB->sql_equal($offered->expression, ':' . $name, false, true), [$name => $value]];
                 continue;
             }
 
             $unaccent = $unaccent ?? search::has_unaccent();
-            $wheres[] = search::like_ai($offered->expression, ':' . $name, $unaccent);
-            $params[$name] = '%' . $DB->sql_like_escape($value) . '%';
+            $narrowing[$token] = [
+                search::like_ai($offered->expression, ':' . $name, $unaccent),
+                [$name => '%' . $DB->sql_like_escape($value) . '%'],
+            ];
         }
 
         /* The course and the category, on indexed columns ({course}.category and {course}.id),
            unlike the search's LIKE, which can only scan. */
         [$coursewheres, $courseparams] = coursefilter::where($this->categoryfilter, $this->coursefilter);
-        foreach ($coursewheres as $coursewhere) {
-            $wheres[] = $coursewhere;
+        if ($coursewheres) {
+            $narrowing['course'] = [implode(' AND ', $coursewheres), $courseparams];
         }
-        $params += $courseparams;
 
         /* The applied-date range, as whole days in the reader's timezone. The upper bound is the
            midnight starting the following day, compared with a strict less-than, so the "to" date
            is inclusive without assuming a day is 86400 seconds. */
         [$fromstamp, $tostamp] = queuefilter::day_bounds($this->appliedfrom, $this->appliedto);
         if ($fromstamp !== null) {
-            $wheres[] = 'ue.timecreated >= :appliedfromstamp';
-            $params['appliedfromstamp'] = $fromstamp;
+            $narrowing['appliedfrom'] = ['ue.timecreated >= :appliedfromstamp', ['appliedfromstamp' => $fromstamp]];
         }
         if ($tostamp !== null) {
-            $wheres[] = 'ue.timecreated < :appliedtostamp';
-            $params['appliedtostamp'] = $tostamp;
+            $narrowing['appliedto'] = ['ue.timecreated < :appliedtostamp', ['appliedtostamp' => $tostamp]];
         }
 
-        $this->set_sql($fields, $from, implode(' AND ', $wheres), $params + $this->identitysql->params);
+        if ($this->named !== null) {
+            $narrowing['named'] = [$this->named_where($this->named), []];
+        }
+
+        /* Waited MORE than the days: submitted strictly before the moment that many days ago, the
+           same comparison queueengine::tally() counts with. */
+        if ($this->waited !== null) {
+            $narrowing['waited'] = ['ue.timecreated < :waitedcut', ['waitedcut' => $this->now - $this->waited * DAYSECS]];
+        }
+
+        if ($this->appliedbefore) {
+            [$prior, $priorparams] = $this->prior_sql('priorfilter');
+            $narrowing['appliedbefore'] = ["EXISTS (SELECT 1 {$prior})", $priorparams];
+        }
+
+        return $narrowing;
+    }
+
+    /**
+     * The FROM and WHERE of the applicant's earlier applications to this course, for a subquery.
+     *
+     * Every record of the applicant in the row's course but the row's own (`s`, the newest record
+     * of the user enrolment; the null branch is for applications that predate the durable record
+     * and have none), narrowed by the course report's groups for a reader it narrows, as the review
+     * page's history is. Only meaningful where $history holds; the caller asks.
+     *
+     * @param string $prefix Placeholder prefix, unique in the caller's statement: the select list,
+     *     the filter and a facet count each take their own.
+     * @return array [SQL from "FROM" on, parameters].
+     */
+    public function prior_sql(string $prefix): array {
+        $priorscope = '';
+        $params = [];
+        if ($this->reportgroups !== null) {
+            [$priorwhere, $params] = groupscope::record_where('prior', $this->reportgroups, $prefix);
+            $priorscope = 'AND ' . $priorwhere;
+        }
+
+        return [
+            "FROM {enrol_apply_submission} prior
+                   WHERE prior.courseid = c.id
+                     AND prior.userid = ue.userid
+                     AND (s.id IS NULL OR prior.id <> s.id)
+                     {$priorscope}",
+            $params,
+        ];
+    }
+
+    /**
+     * How a record named the application's group, as an SQL expression over a record aliased $alias.
+     *
+     * 1 for a key route (any key outcome: the key's group is the application's group), 2 for a group
+     * chosen from the method's list without a key, 0 for neither, and 0 too where $alias found no
+     * record. The two-way choice of {@see groupscope::application_group_sql()}, told apart rather
+     * than merged. Before the upgrade that adds chosengroupid nobody chose.
+     *
+     * @param string $alias Alias of {enrol_apply_submission}, restricted to the newest record by the caller.
+     * @return string An SQL expression taking no parameters.
+     */
+    public static function named_kind_sql(string $alias): string {
+        $chosen = instanceoptions::schema_ready() ? "WHEN {$alias}.chosengroupid > 0 THEN 2 " : '';
+
+        return "(CASE WHEN {$alias}.keyoutcome <> " . submissionrecord::KEY_NONE . " THEN 1 {$chosen}ELSE 0 END)";
+    }
+
+    /**
+     * The kind {@see named_kind_sql()} gives each value of the named filter.
+     *
+     * @param string $value One of NAMED.
+     * @return int 1 key, 2 chosen, 0 none.
+     */
+    public static function named_kind(string $value): int {
+        return match ($value) {
+            self::NAMED_KEY => 1,
+            self::NAMED_CHOSEN => 2,
+            default => 0,
+        };
+    }
+
+    /**
+     * The named filter's predicate, over a user enrolment aliased "ue".
+     *
+     * Judged on the newest record, the NOT EXISTS shape of {@see groupscope::group_where()}; an
+     * application without a record named nothing, so "none" is the complement of the other two and
+     * every row is reached by exactly one value.
+     *
+     * @param string $value One of NAMED.
+     * @return string The where fragment; it takes no parameters.
+     */
+    protected function named_where(string $value): string {
+        $kind = self::named_kind_sql('namedsub');
+        $newest = "SELECT 1
+                      FROM {enrol_apply_submission} namedsub
+                     WHERE namedsub.userenrolmentid = ue.id
+                       AND NOT EXISTS (
+                           SELECT 1
+                             FROM {enrol_apply_submission} namednewer
+                            WHERE namednewer.userenrolmentid = namedsub.userenrolmentid
+                              AND (namednewer.timecreated > namedsub.timecreated
+                                   OR (namednewer.timecreated = namedsub.timecreated AND namednewer.id > namedsub.id))
+                       )";
+
+        if ($value === self::NAMED_NONE) {
+            return "NOT EXISTS ({$newest} AND {$kind} <> 0)";
+        }
+
+        return "EXISTS ({$newest} AND {$kind} = " . self::named_kind($value) . ')';
+    }
+
+    /**
+     * The listing's WHERE with some of the operator's filters left out, the scope always kept.
+     *
+     * What a count under "every other criterion in force" reads: a facet's options are counted
+     * without the facet's own value, so each count is what choosing that option would list. With no
+     * name it is the listing's own WHERE, which build_sql() hands to set_sql().
+     *
+     * @param array $names Filter names to leave out, as {@see applied_filter_names()} lists them.
+     * @return array [where, parameters]: the parameters of the WHERE and of the FROM's identity joins.
+     */
+    public function where_without(array $names): array {
+        [$wheres, $params] = $this->scopeparts;
+        foreach ($this->narrowing as $name => [$where, $whereparams]) {
+            if (in_array($name, $names, true)) {
+                continue;
+            }
+            $wheres[] = $where;
+            $params += $whereparams;
+        }
+
+        return [implode(' AND ', $wheres), $params + $this->identitysql->params];
+    }
+
+    /**
+     * The names of the filters the operator applied, as {@see where_without()} takes them.
+     *
+     * @return array Filter names.
+     */
+    public function applied_filter_names(): array {
+        return array_keys($this->narrowing);
     }
 
     /**
@@ -1357,7 +1602,7 @@ class applications extends \table_sql implements dynamic_table {
     public function col_checkboxcolumn($row) {
         global $OUTPUT;
 
-        if (queue::is_own_application((int) $row->userid)) {
+        if (!$this->selectable($row)) {
             return '';
         }
 
@@ -1370,6 +1615,21 @@ class applications extends \table_sql implements dynamic_table {
             'label' => get_string('selectapplicant', 'enrol_apply', fullname($row)),
             'labelclasses' => 'visually-hidden',
         ]));
+    }
+
+    /**
+     * Whether a row may be selected for a decision.
+     *
+     * Never for a reader who may not decide from this listing (a viewer, S5: their table has no
+     * selection column at all), and never the reader's own application, which
+     * can_manage_application() would skip in silence. The one predicate behind this table's
+     * checkbox and the headless reader's selectable flag.
+     *
+     * @param stdClass $row Row data carrying userid.
+     * @return bool True when the row gets a selection box.
+     */
+    public function selectable(stdClass $row): bool {
+        return $this->can_decide() && !queue::is_own_application((int) $row->userid);
     }
 
     /**
@@ -1425,19 +1685,15 @@ class applications extends \table_sql implements dynamic_table {
      * @return string Rendered cell.
      */
     public function col_fullname($row) {
-        global $CFG, $OUTPUT;
-
-        /* ENROL_APPLY_USER_WAIT is defined in lib.php, which is not autoloaded. manage.php
-           includes it, but the dynamic table service does not, so without this line an AJAX
-           refresh fails. */
-        require_once($CFG->dirroot . '/enrol/apply/lib.php');
+        global $OUTPUT;
 
         $user = user_picture::unalias($row, ['username'], 'userid');
 
         // A link only where user/view.php would open the profile, judged for the page in query_db().
-        $name = isset($this->profilelinks[(int) $row->courseid . ':' . (int) $user->id])
+        $profile = $this->profile_url($row);
+        $name = $profile !== null
             ? html_writer::link(
-                new moodle_url('/user/view.php', ['id' => $user->id, 'course' => $row->courseid]),
+                $profile,
                 s(fullname($user)),
                 ['class' => 'enrol_apply-applicantname']
             )
@@ -1446,37 +1702,13 @@ class applications extends \table_sql implements dynamic_table {
         /* Status labels of the fleet Design System (status-label.md), not Bootstrap badges: a
            static word in a tone, its tint, edge and ink read from one token triple. */
         $labels = [];
-        if ($row->enrolstatus == ENROL_APPLY_USER_WAIT) {
-            // The owner's word for the state, "Deferred", as everywhere else (MQ-D10).
-            $labels[] = $this->status_label(get_string('enrolmentwaiting', 'enrol_apply'), 'warning');
-        }
-        /* What a group key did, by the record's own label and without the group's name: the
-           mentee scope spans courses whose groups a mentor may not see (see the review page's
-           choosers), and the review page names the group to a reader who may. The short form
-           shows (MQ-D11); the full sentence is the label's title and its hidden text. */
-        $keyoutcome = (int) ($row->keyoutcome ?? 0);
-        $keylabel = submissionrecord::key_outcome_label($keyoutcome);
-        if ($keylabel !== '') {
-            $labels[] = $this->status_label(submissionrecord::key_outcome_short_label($keyoutcome), 'info', $keylabel);
-        }
-        if (!empty($row->appliedbefore)) {
-            $labels[] = $this->status_label(get_string('queueappliedbefore', 'enrol_apply'), 'neutral');
-        }
-        // Why a decider's queue offers no selection box on this row (see col_checkboxcolumn()).
-        if ($this->can_decide() && queue::is_own_application((int) $row->userid)) {
-            $labels[] = $this->status_label(
-                get_string('queueownapplication', 'enrol_apply'),
-                'neutral',
-                get_string('ownapplicationnotdecidable', 'enrol_apply')
-            );
+        foreach ($this->tags($row) as $tag) {
+            $labels[] = $this->status_label($tag['text'], self::TAG_TONES[$tag['kind']], $tag['title']);
         }
 
         $identity = [];
-        foreach ($this->extrafields as $field) {
-            $value = (string) ($row->{$field} ?? '');
-            if ($value !== '') {
-                $identity[] = html_writer::span(s($value), 'enrol_apply-identityvalue');
-            }
+        foreach ($this->identity_values($row) as $value) {
+            $identity[] = html_writer::span(s($value), 'enrol_apply-identityvalue');
         }
 
         $lines = html_writer::div($name . ($labels ? ' ' . implode(' ', $labels) : ''), 'enrol_apply-applicantline');
@@ -1524,6 +1756,88 @@ class applications extends \table_sql implements dynamic_table {
             'enrol_apply-applicant',
             $attributes
         );
+    }
+
+    /**
+     * What is unusual about a row's application, as data: the labels under the applicant's name.
+     *
+     * The one definition of which labels a row carries, read by col_fullname() and by the headless
+     * reader. In this order: Deferred (MQ-D10, the owner's word for the waiting list); what a group
+     * key did, by the record's own label and without the group's name (the mentee scope spans
+     * courses whose groups a mentor may not see, and the review page names the group to a reader
+     * who may; the short form shows, MQ-D11, the full sentence is the title); Applied before, only
+     * where the earlier applications are counted ({@see set_filterset()}); and Yours, the reason a
+     * decider's queue offers no selection box on this row ({@see selectable()}).
+     *
+     * @param stdClass $row Row data.
+     * @return array Each: kind (a key of TAG_TONES), text (plain), title (plain, '' for none).
+     */
+    public function tags(stdClass $row): array {
+        global $CFG;
+
+        /* ENROL_APPLY_USER_WAIT is defined in lib.php, which is not autoloaded. manage.php
+           includes it, but the dynamic table service does not, so without this line an AJAX
+           refresh fails. */
+        require_once($CFG->dirroot . '/enrol/apply/lib.php');
+
+        $tags = [];
+        if ($row->enrolstatus == ENROL_APPLY_USER_WAIT) {
+            $tags[] = ['kind' => 'deferred', 'text' => get_string('enrolmentwaiting', 'enrol_apply'), 'title' => ''];
+        }
+        $keyoutcome = (int) ($row->keyoutcome ?? 0);
+        $keylabel = submissionrecord::key_outcome_label($keyoutcome);
+        if ($keylabel !== '') {
+            $tags[] = ['kind' => 'key', 'text' => submissionrecord::key_outcome_short_label($keyoutcome), 'title' => $keylabel];
+        }
+        if (!empty($row->appliedbefore)) {
+            $tags[] = ['kind' => 'appliedbefore', 'text' => get_string('queueappliedbefore', 'enrol_apply'), 'title' => ''];
+        }
+        if ($this->can_decide() && queue::is_own_application((int) $row->userid)) {
+            $tags[] = [
+                'kind' => 'own',
+                'text' => get_string('queueownapplication', 'enrol_apply'),
+                'title' => get_string('ownapplicationnotdecidable', 'enrol_apply'),
+            ];
+        }
+
+        return $tags;
+    }
+
+    /**
+     * The applicant's profile, where user/view.php would open it for this reader.
+     *
+     * Judged for the whole page in {@see prepare_rows()} ({@see profilelink::viewable_ids()}).
+     *
+     * @param stdClass $row Row data carrying userid and courseid.
+     * @return moodle_url|null The profile, or null where the name is not a link.
+     */
+    public function profile_url(stdClass $row): ?moodle_url {
+        if (!isset($this->profilelinks[(int) $row->courseid . ':' . (int) $row->userid])) {
+            return null;
+        }
+
+        return new moodle_url('/user/view.php', ['id' => (int) $row->userid, 'course' => (int) $row->courseid]);
+    }
+
+    /**
+     * The identity fields of a row this reader may see, in core's order, empty ones left out.
+     *
+     * Core's rule ({@see identity}), resolved once for the listing in set_filterset(). Plain
+     * spellings: every caller escapes.
+     *
+     * @param stdClass $row Row data.
+     * @return array Identity field name => value.
+     */
+    public function identity_values(stdClass $row): array {
+        $values = [];
+        foreach ($this->extrafields as $field) {
+            $value = (string) ($row->{$field} ?? '');
+            if ($value !== '') {
+                $values[$field] = $value;
+            }
+        }
+
+        return $values;
     }
 
     /**
@@ -1575,19 +1889,34 @@ class applications extends \table_sql implements dynamic_table {
      * @return string Rendered cell.
      */
     public function col_keygroup($row) {
-        $label = $this->card_label(s(get_string('queuegroup', 'enrol_apply')));
-
-        if ((int) ($row->keygroupoutcome ?? 0) === submissionrecord::KEY_NONE && (int) ($row->keygroupid ?? 0) <= 0) {
-            return $label . s(get_string('queuegroupnone', 'enrol_apply'));
-        }
-        if (($row->keygroupcourseid ?? null) === null) {
-            return $label . s(get_string('keygroupgone', 'enrol_apply'));
-        }
-        if (empty($this->visiblegroups[(int) $row->keygroupid])) {
+        $html = $this->keygroup_html($row);
+        if ($html === null) {
             return '';
         }
 
-        return $label . format_string($row->keygroupname, true, [
+        return $this->card_label(s(get_string('queuegroup', 'enrol_apply'))) . $html;
+    }
+
+    /**
+     * The group cell's content without its card label, null where the reader may not be told it.
+     *
+     * The rules {@see col_keygroup()} documents; read by that cell and by the headless reader.
+     *
+     * @param stdClass $row Row data carrying the group fields col_keygroup() reads.
+     * @return string|null The cell's HTML, escaped; null for a group withheld from this reader.
+     */
+    public function keygroup_html(stdClass $row): ?string {
+        if ((int) ($row->keygroupoutcome ?? 0) === submissionrecord::KEY_NONE && (int) ($row->keygroupid ?? 0) <= 0) {
+            return s(get_string('queuegroupnone', 'enrol_apply'));
+        }
+        if (($row->keygroupcourseid ?? null) === null) {
+            return s(get_string('keygroupgone', 'enrol_apply'));
+        }
+        if (empty($this->visiblegroups[(int) $row->keygroupid])) {
+            return null;
+        }
+
+        return format_string($row->keygroupname, true, [
             'context' => context_course::instance((int) $row->keygroupcourseid),
         ]);
     }
@@ -1630,9 +1959,17 @@ class applications extends \table_sql implements dynamic_table {
      * @return string Rendered cell.
      */
     public function col_applydate($row) {
-        /* How long the applicant has been waiting, with the exact date underneath. */
-        return $this->card_label(s(get_string('applydate', 'enrol_apply')))
-            . html_writer::div(format_time(time() - $row->applydate), 'enrol_apply-applyago')
+        return $this->card_label(s(get_string('applydate', 'enrol_apply'))) . $this->applydate_html($row);
+    }
+
+    /**
+     * How long the applicant has been waiting, with the exact date underneath; no card label.
+     *
+     * @param stdClass $row Row data carrying applydate.
+     * @return string The cell's HTML.
+     */
+    public function applydate_html(stdClass $row): string {
+        return html_writer::div(format_time(time() - $row->applydate), 'enrol_apply-applyago')
             . html_writer::div(
                 userdate($row->applydate, get_string('strftimedatetimeshort', 'langconfig')),
                 'enrol_apply-applyon small text-muted'
@@ -1655,7 +1992,7 @@ class applications extends \table_sql implements dynamic_table {
      * @param int $courseid Course the row's application was made to.
      * @return array|bool What submissionformatter::shows() reads for this reader and course.
      */
-    protected function visible_keys(int $courseid) {
+    public function visible_keys(int $courseid) {
         if (!array_key_exists($courseid, $this->visiblekeys)) {
             $this->visiblekeys[$courseid] = submissionformatter::visible_keys(
                 context_course::instance($courseid)
@@ -1680,18 +2017,33 @@ class applications extends \table_sql implements dynamic_table {
      * @return void
      */
     public function query_db($pagesize, $useinitialsbar = true) {
-        global $USER;
-
         parent::query_db($pagesize, $useinitialsbar);
 
-        $this->snapshots = submissionrecord::read_snapshots(array_column((array) $this->rawdata, 'submissionid'));
+        $this->prepare_rows((array) $this->rawdata);
+    }
+
+    /**
+     * Read what the cells of a page need, in a bounded number of statements whatever its size.
+     *
+     * The answers of every row in one query, the profile links once per course of the page, the
+     * groups' visibility at most once, the methods' facts from the rows themselves. Called by
+     * query_db() for this table's own page and by the headless reader for the page it read over
+     * this table's SQL, so the two draw their cells from the same facts.
+     *
+     * @param array $rows The page's rows, as this table's SQL selects them.
+     * @return void
+     */
+    public function prepare_rows(array $rows): void {
+        global $USER;
+
+        $this->snapshots = submissionrecord::read_snapshots(array_column($rows, 'submissionid'));
 
         /* Whose profile user/view.php would open for this reader, judged once per course of the
            page: per row, core's rule runs three statements. A moderator narrowed by separate
            groups is refused the profile of an applicant who is in no group yet. */
         $this->profilelinks = [];
         $bycourse = [];
-        foreach ((array) $this->rawdata as $row) {
+        foreach ($rows as $row) {
             $bycourse[(int) $row->courseid][(int) $row->userid] = (int) $row->userdeleted;
         }
         foreach ($bycourse as $courseid => $users) {
@@ -1705,7 +2057,7 @@ class applications extends \table_sql implements dynamic_table {
         $this->visiblegroups = [];
         if ($this->groupcolumn) {
             $groups = [];
-            foreach ((array) $this->rawdata as $row) {
+            foreach ($rows as $row) {
                 if (($row->keygroupcourseid ?? null) !== null) {
                     $groups[(int) $row->keygroupid] = (object) [
                         'id' => $row->keygroupid,
@@ -1725,7 +2077,7 @@ class applications extends \table_sql implements dynamic_table {
            role's answer is a capability resolution per call. */
         $this->methods = [];
         if ($this->scope->instance === null) {
-            foreach ((array) $this->rawdata as $row) {
+            foreach ($rows as $row) {
                 $enrolid = (int) $row->enrolid;
                 if (isset($this->methods[$enrolid])) {
                     continue;
@@ -1788,17 +2140,10 @@ class applications extends \table_sql implements dynamic_table {
      * @return string Rendered cell.
      */
     public function col_snapshot($row) {
-        $visible = $this->visible_keys((int) $row->courseid);
-
         $separator = get_string('labelsep', 'langconfig');
         $answers = [];
         $whole = [];
-        foreach ($this->snapshots[(int) ($row->submissionid ?? 0)] ?? [] as $entry) {
-            if (!submissionformatter::shows($entry['key'], $visible)) {
-                // Dropped without a marker; see submissionformatter::visible_keys().
-                continue;
-            }
-
+        foreach ($this->visible_entries($row) as $entry) {
             $label = s($entry['label']);
             $value = s($entry['value']);
             $answers[] = html_writer::span(
@@ -1817,6 +2162,140 @@ class applications extends \table_sql implements dynamic_table {
            (MQ-D8); every answer stays in the markup and the whole set is the title. */
         return $this->card_label(s(get_string('queuesubmitted', 'enrol_apply')))
             . html_writer::div(implode('', $answers), 'enrol_apply-answers', ['title' => implode(' · ', $whole)]);
+    }
+
+    /**
+     * The frozen answers of a row this reader may see, in the order they were submitted.
+     *
+     * Masked in the row's own course ({@see visible_keys()}); read by col_snapshot() and by the
+     * headless reader's per-answer cells, so a key withheld from one is withheld from the other.
+     *
+     * @param stdClass $row Row data carrying courseid and the record's id as `submissionid`.
+     * @return array Each: key, label, value (plain spellings).
+     */
+    public function visible_entries(stdClass $row): array {
+        $visible = $this->visible_keys((int) $row->courseid);
+
+        $entries = [];
+        foreach ($this->snapshots[(int) ($row->submissionid ?? 0)] ?? [] as $entry) {
+            if (!submissionformatter::shows($entry['key'], $visible)) {
+                // Dropped without a marker; see submissionformatter::visible_keys().
+                continue;
+            }
+            $entries[] = $entry;
+        }
+
+        return $entries;
+    }
+
+    /**
+     * Whether this listing carries the application's group (its column, its filter's facets).
+     *
+     * @return bool True where set_filterset() put the group column on.
+     */
+    public function has_group_column(): bool {
+        return $this->groupcolumn;
+    }
+
+    /**
+     * Whether this listing counts each applicant's earlier applications to the course.
+     *
+     * @return bool True on one instance's queue for a holder of enrol/apply:viewreports there.
+     */
+    public function counts_history(): bool {
+        return $this->history;
+    }
+
+    /**
+     * The clock's time the filters were read at, which the waited filter counts back from.
+     *
+     * @return int Unix time.
+     */
+    public function now(): int {
+        return $this->now;
+    }
+
+    /**
+     * The named, waited and applied-before filters applied, as their values travel.
+     *
+     * @return array Filter name => value, only the applied ones.
+     */
+    public function get_facet_filters(): array {
+        $filters = [];
+        if ($this->named !== null) {
+            $filters['named'] = $this->named;
+        }
+        if ($this->waited !== null) {
+            $filters['waited'] = (string) $this->waited;
+        }
+        if ($this->appliedbefore) {
+            $filters['appliedbefore'] = '1';
+        }
+
+        return $filters;
+    }
+
+    /**
+     * The reader's own groups in the scope's course, which the group filter's "mine" selects.
+     *
+     * @return array Group ids; empty off the instance queue.
+     */
+    public function own_groups(): array {
+        if ($this->scope->instance === null) {
+            return [];
+        }
+
+        return groupfilter::own_groups($this->scope);
+    }
+
+    /**
+     * The scope's instance, null on the queues that span methods.
+     *
+     * @return stdClass|null The {enrol} record.
+     */
+    public function get_instance(): ?stdClass {
+        return $this->scope->instance;
+    }
+
+    /**
+     * How many of this operator's applications await a decision, how long the oldest has waited,
+     * how many waited longer than a bound and how many are deferred, before any filter.
+     *
+     * One statement over scope_where(), the predicate scope_total() and scope_deferred() count:
+     * the capacity tiles of a headless client, so a narrowed decider is told about their own
+     * applications, as the page's tiles tell them (V-D3).
+     *
+     * @param int $late Seconds after which an application counts as waiting long.
+     * @return array 'awaiting', 'deferred', 'late' (counts) and 'oldest' (the earliest applied
+     *     time, 0 for none).
+     */
+    public function scope_figures(int $late): array {
+        global $CFG, $DB;
+
+        // ENROL_APPLY_USER_WAIT lives in the plugin's lib.php, which is not autoloaded.
+        require_once($CFG->dirroot . '/enrol/apply/lib.php');
+
+        [$wheres, $params] = $this->scope_where();
+        $params['figuresdeferred'] = ENROL_APPLY_USER_WAIT;
+        $params['figureslate'] = $this->now - $late;
+
+        $record = $DB->get_record_sql(
+            'SELECT COUNT(1) AS awaitingcount,
+                    MIN(ue.timecreated) AS oldestapplied,
+                    SUM(CASE WHEN ue.status = :figuresdeferred THEN 1 ELSE 0 END) AS deferredcount,
+                    SUM(CASE WHEN ue.timecreated < :figureslate THEN 1 ELSE 0 END) AS latecount
+               FROM {user_enrolments} ue
+               JOIN {enrol} e ON e.id = ue.enrolid
+              WHERE ' . implode(' AND ', $wheres),
+            $params
+        );
+
+        return [
+            'awaiting' => (int) $record->awaitingcount,
+            'deferred' => (int) ($record->deferredcount ?? 0),
+            'late' => (int) ($record->latecount ?? 0),
+            'oldest' => (int) ($record->oldestapplied ?? 0),
+        ];
     }
 
     /**

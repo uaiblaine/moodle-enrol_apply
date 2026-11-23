@@ -30,10 +30,18 @@ fork's; it does not list which features are which, so this file does not either.
 
 ## Surfaces
 
-- **No web service of its own**: there is no `db/services.php`. The modal application form is a
-  `core_form\dynamic_form` served by core's dynamic form web service, and the queue is a
-  `core_table\dynamic` table served by core's dynamic table web service; each re-derives its
-  scope and checks the capability itself.
+- **Six web services of its own** (`db/services.php`, all `ajax => true`), each re-deriving its scope and
+  refusing a guest after `validate_context()` on the course the method names, never one the client sends:
+  `enrol_apply_report_rows`, `enrol_apply_report_summary` (read) and `enrol_apply_set_report_preference`
+  (write), standing capability `enrol/apply:viewreports`, checked again in the method's course;
+  `enrol_apply_queue_rows`, `enrol_apply_queue_summary` (read) and `enrol_apply_set_queue_preference`
+  (write), standing capabilities `enrol/apply:manageapplications` or `enrol/apply:viewapplications`, the
+  real check being `queueengine::require_listing()` (the queue page's own question, narrowed by groups),
+  asked by the engine's public readers themselves (`rows()`, `summary()`, `catalogue()`) and by
+  `enrol_apply_set_queue_preference`, which has no engine reader behind it. None decides an application: decisions are the
+  POST to `manage.php`. The modal application form is a `core_form\dynamic_form` served by core's dynamic
+  form web service, and the queue page's table is a `core_table\dynamic` table served by core's dynamic
+  table web service; each re-derives its scope and checks the capability itself.
 - Page scripts: `apply.php` and `applied.php` (applicant, `require_login()`), `profile.php`
   (applicant, sesskey), `unenrolself.php`, `edit.php` (`enrol/apply:config`), `report.php`
   (`enrol/apply:viewreports`), and `manage.php` (queue, one-application review, bulk

@@ -631,11 +631,8 @@ class enrol_apply_renderer extends plugin_renderer_base {
     /**
      * The decision context above a method's queue: how full the method is, and whether it is open.
      *
-     * The open/closed status is not built from allow_apply(), whose cohort clause asks whether
-     * the current user may apply: a manager outside a restricted cohort would be told the method
-     * is closed. It mirrors allow_apply()'s instance-level clauses - status, customint6 and the
-     * enrolment dates - plus capacity::applications_closed(), which every caller of allow_apply()
-     * checks beside it. A new instance-level clause in allow_apply() belongs here as well.
+     * The open/closed status is \enrol_apply\local\capacity::state()'s, which says why it is not
+     * allow_apply(); the headless summary reads the same answer.
      *
      * The counts come from \enrol_apply\local\capacity, as on every other surface, so the queue
      * header and the review page cannot report different numbers. How many applications wait and
@@ -650,8 +647,6 @@ class enrol_apply_renderer extends plugin_renderer_base {
      * @return array Context for the enrol_apply/queue_capacity template.
      */
     protected function queue_capacity_context(stdClass $instance, bool $narrowed = false): array {
-        $capacity = \enrol_apply\local\capacity::class;
-
         $context = [
             'meters' => [],
             'hasstatus' => false,
@@ -660,9 +655,12 @@ class enrol_apply_renderer extends plugin_renderer_base {
         // The method's numbers below are not the queue's when the queue is narrowed; say whose.
         $methodnote = $narrowed ? get_string('queueonthismethod', 'enrol_apply') : '';
 
-        $places = $capacity::places($instance);
+        // Every number and the open/closed status, as the headless summary reads them.
+        $state = \enrol_apply\local\capacity::state($instance);
+
+        $places = $state->places;
         if ($places > 0) {
-            $taken = $capacity::places_taken($instance);
+            $taken = $state->taken;
             $context['meters'][] = [
                 'value' => get_string('reviewofmany', 'enrol_apply', (object) [
                     'taken' => $taken,
@@ -675,9 +673,9 @@ class enrol_apply_renderer extends plugin_renderer_base {
             ];
         }
 
-        $limit = $capacity::applicant_limit($instance);
+        $limit = $state->limit;
         // Counted once for the meter, the open/closed test and the room-left sentence.
-        $held = $limit > 0 ? $capacity::applicants($instance) : 0;
+        $held = $state->held;
         if ($limit > 0) {
             $context['meters'][] = [
                 'value' => get_string('reviewofmany', 'enrol_apply', (object) [
@@ -693,17 +691,8 @@ class enrol_apply_renderer extends plugin_renderer_base {
             ];
         }
 
-        $enddate = (int) ($instance->enrolenddate ?? 0);
-        $startdate = (int) ($instance->enrolstartdate ?? 0);
-        $now = time();
-        $open = $instance->status == ENROL_INSTANCE_ENABLED
-            && !empty($instance->customint6)
-            && !($startdate > 0 && $startdate > $now)
-            && !($enddate > 0 && $enddate < $now)
-            /* capacity::applications_closed() inlined to reuse $held rather than run the same
-               COUNT again; applicant_limit() clamps a negative to 0, so `$limit > 0` is that
-               method's `$limit !== 0`. Keep in step with it. */
-            && !($limit > 0 && $held >= $limit);
+        $enddate = $state->enddate;
+        $open = $state->open;
 
         $remaining = $limit > 0 ? $limit - $held : 0;
 

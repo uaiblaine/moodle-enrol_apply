@@ -1,2 +1,3 @@
 # QG4: an application without a key leaves the cell blank instead of saying it has no group.
-s#return \$label \. s\(get_string\('queuegroupnone', 'enrol_apply'\)\);#return '';#;
+# Re-pointed when the cell's content moved to applications::keygroup_html().
+s#return s\(get_string\('queuegroupnone', 'enrol_apply'\)\);#return '';#;
