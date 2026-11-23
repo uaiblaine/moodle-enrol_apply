@@ -68,7 +68,10 @@ use stdClass;
  * @copyright  2026 Anderson Blaine
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-final class capacity {
+class capacity {
+    /** @var int Instance ids one statement of {@see states()} reads. */
+    protected const BATCH = 5000;
+
     /**
      * How many applications this method will accept in total.
      *
@@ -258,12 +261,13 @@ final class capacity {
     }
 
     /**
-     * What {@see state()} returns for every instance of a set, in at most two statements for the set.
+     * What {@see state()} returns for every instance of a set, in two statements per chunk of ids.
      *
      * The batched twin of state(), for the queues that span methods: one grouped count of the places
      * taken over the instances that have places, one of the applications held over those that have
-     * an applicant limit. Each statement is its single-instance method's predicate clause for clause,
-     * grouped by the method: places_taken() (ACTIVE rows not expired) and applicants() (every
+     * an applicant limit, each read in chunks of BATCH ids so that no statement outgrows a database's
+     * bind-parameter cap (a chunk with nothing to read costs no statement). Each statement is its single-instance
+     * method's predicate clause for clause, grouped by the method: places_taken() (ACTIVE rows not expired) and applicants() (every
      * status, not expired), both with their own full parameter arrays for the reason the class
      * docblock gives, and both reading the clock those methods read (time(), not $now, which only
      * judges the enrolment window, as in state()). Keep the three in step with those two methods;
@@ -292,13 +296,13 @@ final class capacity {
             }
         }
 
-        // The places taken: places_taken()'s predicate, grouped by the method.
+        // The places taken: places_taken()'s predicate, grouped by the method, one statement per chunk.
         $taken = [];
-        if ($withplaces) {
-            [$insql, $params] = $DB->get_in_or_equal($withplaces, SQL_PARAMS_NAMED, 'placesenrol');
+        foreach (array_chunk($withplaces, static::batch_size()) as $chunk) {
+            [$insql, $params] = $DB->get_in_or_equal($chunk, SQL_PARAMS_NAMED, 'placesenrol');
             $params['active'] = ENROL_USER_ACTIVE;
             $params['now'] = time();
-            $taken = $DB->get_records_sql_menu(
+            $taken += $DB->get_records_sql_menu(
                 "SELECT enrolid, COUNT(1) AS taken
                    FROM {user_enrolments}
                   WHERE enrolid {$insql} AND status = :active AND (timeend = 0 OR timeend > :now)
@@ -307,12 +311,12 @@ final class capacity {
             );
         }
 
-        // The applications held: applicants()'s predicate, grouped by the method.
+        // The applications held: applicants()'s predicate, grouped by the method, one statement per chunk.
         $held = [];
-        if ($withlimit) {
-            [$insql, $params] = $DB->get_in_or_equal($withlimit, SQL_PARAMS_NAMED, 'heldenrol');
+        foreach (array_chunk($withlimit, static::batch_size()) as $chunk) {
+            [$insql, $params] = $DB->get_in_or_equal($chunk, SQL_PARAMS_NAMED, 'heldenrol');
             $params['now'] = time();
-            $held = $DB->get_records_sql_menu(
+            $held += $DB->get_records_sql_menu(
                 "SELECT enrolid, COUNT(1) AS held
                    FROM {user_enrolments}
                   WHERE enrolid {$insql} AND (timeend = 0 OR timeend > :now)
@@ -328,6 +332,18 @@ final class capacity {
         }
 
         return $states;
+    }
+
+    /**
+     * How many instance ids one statement of {@see states()} reads.
+     *
+     * A seam for the tests; the databases cap bind parameters (65,535 on PostgreSQL), and a site can
+     * hold more methods than that.
+     *
+     * @return int Ids per statement, at least one.
+     */
+    protected static function batch_size(): int {
+        return static::BATCH;
     }
 
     /**

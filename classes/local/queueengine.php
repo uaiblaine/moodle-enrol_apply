@@ -865,7 +865,7 @@ class queueengine {
             }
         }
         $names[] = 'waited';
-        if ($sitewide) {
+        if ($table->offers_grouped_filter()) {
             $names[] = 'grouped';
         }
         if ($table->counts_history()) {
@@ -1106,8 +1106,11 @@ class queueengine {
             $dims[] = 'c.id AS facetcourse';
             $dims[] = 'c.category AS facetcategory';
             $dims[] = 'e.id AS facetmethod';
-            $dims[] = 'CASE WHEN kg.id IS NULL THEN 0 ELSE 1 END AS facetgrouped';
-            array_push($columns, 'facetcourse', 'facetcategory', 'facetmethod', 'facetgrouped');
+            array_push($columns, 'facetcourse', 'facetcategory', 'facetmethod');
+            if ($table->offers_grouped_filter()) {
+                $dims[] = 'CASE WHEN kg.id IS NULL THEN 0 ELSE 1 END AS facetgrouped';
+                $columns[] = 'facetgrouped';
+            }
         }
         $cases = [];
         foreach (array_reverse(applications::WAITED_DAYS) as $days) {

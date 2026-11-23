@@ -1328,16 +1328,19 @@ backup/                      group mappings, comments and the durable trail, see
   `has_details_column()`: never for a mentor), the generic comment heading, no answer column and no
   earlier applications. A row's `details` is the table's `details_html()`, masked in the row's own
   course; its course and method come from the row (`method_facts()`), with `full` from
-  `capacity::states()` and `queueurl` only where `offers_course_filters()` holds (a site-wide reader;
+  `capacity::states()` (read in chunks of `BATCH` ids, a protected seam, `QW24`) and `queueurl` only where `offers_course_filters()` holds (a site-wide reader;
   `QW7`, `QW8`). The `course`, `category`, `method` and `grouped` filters are the table's clauses,
   applied only where `coursefilter::offered()` holds (`QW10`); a method must be an apply instance
   (`coursefilter::clean_method()`, `QW9`); `grouped` is `groupfilter::where()`'s `none` and its
-  complement, the group column's definition. Their facets are site-wide only: the course and category
+  complement, the group column's definition, and it (with its facet) is offered only where
+  `applications::offers_grouped_filter()` holds: a site-wide reader with `moodle/course:viewhiddengroups`
+  in the system context, since the filter would otherwise select on a group the row's cell withholds
+  (`QW23`); anybody else's posted value is ignored and no tally dimension is read. Their facets are site-wide only: the course and category
   ones capped at `FACET_LIMIT` with an `omitted` count (`QW11`), a category counted over its subtree
   (`subtree_counts()`, the two halves of `coursefilter::where()`), the method one only once a course
   holding two methods' applications is chosen. The wide grid is `enrol_apply_queue_grid_wide`
   (`queuepreference::NAME_WIDE`, SQ-D11), declared and exported beside the method queues'. Tests:
-  `tests/local/wide_queue_test.php`; gates `QW1`-`QW22`.
+  `tests/local/wide_queue_test.php`; gates `QW1`-`QW24`.
 
   **What the services refuse.** `queue_rows`, `queue_summary` and `set_queue_preference` all run
   `queueengine::locate()` (a non-zero id that names no apply method, a negative one included, is

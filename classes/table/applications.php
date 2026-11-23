@@ -369,7 +369,7 @@ class applications extends \table_sql implements dynamic_table {
                     (int) $filterset->get_filter('method')->current()
                 );
             }
-            if ($filterset->has_filter('grouped')) {
+            if ($this->offers_grouped_filter() && $filterset->has_filter('grouped')) {
                 $grouped = trim((string) $filterset->get_filter('grouped')->current());
                 $this->grouped = in_array($grouped, self::GROUPED, true) ? $grouped : null;
             }
@@ -2326,6 +2326,23 @@ class applications extends \table_sql implements dynamic_table {
      */
     public function has_details_column(): bool {
         return $this->scope->identitycontext !== null;
+    }
+
+    /**
+     * Whether this reader is offered the group filter and its facet on the site-wide queue.
+     *
+     * Only a site-wide reader who holds moodle/course:viewhiddengroups in the system context: the
+     * filter selects on whether an application has a group, and a row's group cell is blank for a
+     * group hidden from the reader ({@see groupvisibility}), so the filter would otherwise select
+     * on a group whose name the row withholds. For any other reader a posted value is ignored, as
+     * on a method queue, and the facet is not returned. The one predicate behind the filter and the
+     * facet.
+     *
+     * @return bool True on the site-wide queue for a reader who may see hidden groups.
+     */
+    public function offers_grouped_filter(): bool {
+        return coursefilter::offered($this->scope)
+            && has_capability('moodle/course:viewhiddengroups', \context_system::instance());
     }
 
     /**

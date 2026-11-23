@@ -23,7 +23,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   site-wide reader the courses and methods holding an application and the methods at their limit,
   counted for the whole set in two statements (`capacity::states()`). The columns a reader chooses
   there are kept in a user preference of their own, `enrol_apply_queue_grid_wide`, exported with the
-  user's data. Mutation gates `QW1`-`QW22`.
+  user's data. The group filter and its facet are offered only to a site-wide reader who holds
+  `moodle/course:viewhiddengroups` in the system context (for any other reader a posted `grouped`
+  is ignored and no facet is returned, since the filter would select on a group whose name the row
+  withholds). `capacity::states()` reads the methods in chunks of 5000 ids, so a site with very
+  many methods stays under the databases' bind-parameter caps. Mutation gates `QW1`-`QW24`.
 - **The grid view decides, and is the queue page of a method** (2026112304, no upgrade step). A
   reader who may decide selects rows with a box per row and one for the page (never their own
   application, which has none); the selection is cleared when the page, the scope, a filter, the

@@ -564,8 +564,8 @@ final class capacity_test extends \advanced_testcase {
     }
 
     /**
-     * The batch reads at most two statements whatever the number of methods, and none for an empty
-     * set or a set with no limit at all.
+     * The batch reads at most two statements whatever the number of methods within one chunk, and
+     * none for an empty set or a set with no limit at all.
      *
      * Changes that must make it fail: a count per method; a query for an empty set.
      *
@@ -599,5 +599,57 @@ final class capacity_test extends \advanced_testcase {
         // The control: five methods were answered, each from the two statements.
         $this->assertCount(5, $states);
         $this->assertSame(2, end($states)->held);
+    }
+
+    /**
+     * A set larger than one chunk is read in chunks and answers what state() answers.
+     *
+     * The chunk size is brought down to two through the protected seam. The control: the same set
+     * under the default size runs fewer statements, which proves the seam is the one in force.
+     *
+     * Changes that must make it fail: the chunks' results merged keeping only the last chunk, or
+     * only the first chunk read.
+     *
+     * @return void
+     */
+    public function test_a_set_larger_than_a_chunk_is_read_in_chunks(): void {
+        global $DB;
+
+        $active = [ENROL_USER_ACTIVE, 0];
+        $pending = [ENROL_USER_SUSPENDED, 0];
+        $instances = [
+            $this->method_with(3, 2, [$active, $active, $pending]),
+            $this->method_with(0, 1, [$active]),
+            $this->method_with(2, 0, [$pending, $pending]),
+            $this->method_with(5, 3, [$active, $pending]),
+            $this->method_with(1, 1, [$pending]),
+        ];
+        $small = new class extends capacity {
+            /**
+             * Two ids per statement.
+             *
+             * @return int The chunk size.
+             */
+            protected static function batch_size(): int {
+                return 2;
+            }
+        };
+
+        $now = time();
+        $before = $DB->perf_get_reads();
+        $states = $small::states($instances, $now);
+        $chunked = $DB->perf_get_reads() - $before;
+
+        $before = $DB->perf_get_reads();
+        $whole = capacity::states($instances, $now);
+        $default = $DB->perf_get_reads() - $before;
+
+        $this->assertSame(2, $default);
+        $this->assertGreaterThan($default, $chunked);
+        $this->assertCount(5, $states);
+        $this->assertEquals($whole, $states);
+        foreach ($instances as $instance) {
+            $this->assertEquals(capacity::state($instance, $now), $states[(int) $instance->id]);
+        }
     }
 }

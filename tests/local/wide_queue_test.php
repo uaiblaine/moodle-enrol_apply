@@ -132,7 +132,9 @@ final class wide_queue_test extends \advanced_testcase {
 
         $system = \context_system::instance();
         $this->deciderrole = (int) $generator->create_role(['shortname' => 'widedecider']);
-        foreach (['enrol/apply:manageapplications', 'moodle/site:viewuseridentity'] as $capability) {
+        // The group filter is offered to a reader who may see hidden groups, as the stock roles may.
+        $capabilities = ['enrol/apply:manageapplications', 'moodle/site:viewuseridentity', 'moodle/course:viewhiddengroups'];
+        foreach ($capabilities as $capability) {
             assign_capability($capability, CAP_ALLOW, $this->deciderrole, $system->id, true);
         }
         $this->decider = $generator->create_user(['firstname' => 'Site', 'lastname' => 'Decider']);
@@ -140,6 +142,7 @@ final class wide_queue_test extends \advanced_testcase {
 
         $viewerrole = $generator->create_role(['shortname' => 'wideviewer']);
         assign_capability('enrol/apply:viewapplications', CAP_ALLOW, $viewerrole, $system->id, true);
+        assign_capability('moodle/course:viewhiddengroups', CAP_ALLOW, $viewerrole, $system->id, true);
         $this->viewer = $generator->create_user(['firstname' => 'Site', 'lastname' => 'Viewer']);
         role_assign($viewerrole, $this->viewer->id, $system->id);
 
@@ -941,5 +944,73 @@ final class wide_queue_test extends \advanced_testcase {
         $this->assertSame($slope, $three - $two, "one {$one}, two {$two}, three {$three}");
         $this->assertGreaterThan(0, $slope);
         $this->assertLessThanOrEqual(self::PER_COURSE, $slope, "one {$one}, two {$two}, three {$three}");
+    }
+
+    /**
+     * The group filter and its facet are offered to a site-wide reader who may see hidden groups, and to
+     * nobody else: for a clerk without moodle/course:viewhiddengroups a posted `grouped` is ignored, no
+     * facet is returned and the hidden group's name is nowhere in the answer, through the engine and
+     * through the service.
+     *
+     * The control: the site-wide decider, who holds the capability, gets the facet, `grouped=yes`
+     * narrows to the one application, and the answer carries the group's name in its cell.
+     *
+     * Changes that must make it fail: the filter or its facet offered without the capability (QW23).
+     *
+     * @return void
+     */
+    public function test_the_group_filter_is_offered_only_where_hidden_groups_are_visible(): void {
+        $generator = $this->getDataGenerator();
+        $hidden = $generator->create_group([
+            'courseid' => $this->courses['beta']->id,
+            'name' => 'Secret cell',
+            'visibility' => GROUPS_VISIBILITY_NONE,
+        ]);
+        $grouped = $this->applicant('beta', 'Hal', 'Nice', HOURSECS, ENROL_USER_SUSPENDED, (int) $hidden->id);
+        $plain = $this->applicant('beta', 'Ivy', 'Pau', 2 * HOURSECS);
+
+        $role = $generator->create_role(['shortname' => 'wideclerk']);
+        $system = \context_system::instance();
+        foreach (['enrol/apply:manageapplications', 'moodle/site:viewuseridentity'] as $capability) {
+            assign_capability($capability, CAP_ALLOW, $role, $system->id, true);
+        }
+        $clerk = $generator->create_user();
+        role_assign($role, $clerk->id, $system->id);
+        $this->assertFalse(has_capability('moodle/course:viewhiddengroups', $system, $clerk));
+
+        $filters = [['name' => 'grouped', 'value' => 'yes']];
+        $read = function (array $sent) {
+            $_POST['sesskey'] = sesskey();
+
+            return \core_external\external_api::call_external_function(
+                'enrol_apply_queue_rows',
+                ['enrolid' => 0, 'filters' => $sent],
+                true
+            );
+        };
+
+        $this->setUser($clerk);
+        $this->assertFalse(applications::for_scope(0, '', null, ['grouped' => 'yes'])->offers_grouped_filter());
+        $engine = $this->rows(['filters' => ['grouped' => 'yes']]);
+        $service = $read($filters);
+        $this->assertFalse($service['error']);
+        $this->assertSame([$grouped, $plain], $this->engine_ids());
+        $this->assertSame([$grouped, $plain], array_column($engine['rows'], 'userenrolmentid'));
+        $this->assertEqualsCanonicalizing([$grouped, $plain], array_column($service['data']['rows'], 'userenrolmentid'));
+        $this->assertNotContains('grouped', array_column($engine['facets'], 'name'));
+        $this->assertNotContains('grouped', array_column($service['data']['facets'], 'name'));
+        $this->assertStringNotContainsString('Secret cell', json_encode($engine));
+        $this->assertStringNotContainsString('Secret cell', json_encode($service['data']));
+
+        // The control: the holder of the capability gets the facet and the narrowing.
+        $this->setUser($this->decider);
+        $this->assertTrue(applications::for_scope(0, '', null, [])->offers_grouped_filter());
+        $this->assertSame([$grouped], $this->engine_ids(['filters' => ['grouped' => 'yes']]));
+        $response = $this->rows();
+        $facets = array_column($response['facets'], null, 'name');
+        $this->assertSame(['yes' => 1, 'no' => 1], array_column($facets['grouped']['options'], 'count', 'value'));
+        $this->assertStringContainsString('Secret cell', json_encode($response));
+        $service = $read($filters);
+        $this->assertSame([$grouped], array_column($service['data']['rows'], 'userenrolmentid'));
     }
 }
