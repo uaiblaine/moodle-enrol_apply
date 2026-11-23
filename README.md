@@ -142,7 +142,7 @@ Each filter option says how many applications it would list under the other filt
 
 ### Setting up the method
 
-![The enrolment method's settings: instance name, role, groups, group enrolment keys with the keyed groups and their seats, dates, comment label, maximum applicants and places](docs/screenshots/settings.png)
+![The enrolment method's settings: the summary strip, General, Groups opening with the course's group mode and the groups offered, Who decides and who is notified, and After approval; the other sections are collapsed](docs/screenshots/settings.png)
 
 Per course, in seven sections, after a one-line summary of a saved method (whether it accepts
 applications, the closing date, the places taken and what a group key does): **General** (the
