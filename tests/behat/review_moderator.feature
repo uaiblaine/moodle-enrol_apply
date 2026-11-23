@@ -59,4 +59,5 @@ Feature: A moderator's approval keeps the method's groups outside their own
     And I log in as "admin"
     And I am on the "C1" "groups" page
     And I set the field "groups" to "Turma 2027 (1)"
+    And I wait until "Student 1 (student1@example.com)" "option" exists
     And the "members" select box should contain "Student 1 (student1@example.com)"

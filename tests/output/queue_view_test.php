@@ -390,7 +390,12 @@ final class queue_view_test extends \advanced_testcase {
                 'foo' => 'bar',
             ]);
             $params = $forged->params();
-            $this->assertSame('/enrol/apply/manage.php', $forged->get_path(false), $sort);
+            // The site's wwwroot may carry a path of its own, so compare with the path the page's own URL has.
+            $this->assertSame(
+                (new moodle_url('/enrol/apply/manage.php'))->get_path(false),
+                $forged->get_path(false),
+                $sort
+            );
             $this->assertSame((string) $enrolid, (string) $params['id'], $sort);
             $this->assertSame('Zebedee', $params['search'], $sort);
             $this->assertSame((string) ENROL_USER_SUSPENDED, (string) $params['status'], $sort);

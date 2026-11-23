@@ -46,6 +46,7 @@ Feature: One application read as a decision funnel
     And I should see "The selected enrolment applications have been updated."
     And I am on the "C1" "groups" page
     And I set the field "groups" to "Turma B (1)"
+    And I wait until "Student 1 (student1@example.com)" "option" exists
     And the "members" select box should contain "Student 1 (student1@example.com)"
 
   # No @javascript: a viewer's page is a plain page with nothing to submit.
@@ -96,4 +97,5 @@ Feature: One application read as a decision funnel
     And I should see "The selected enrolment applications have been updated."
     And I am on the "C1" "groups" page
     And I set the field "groups" to "Turma 9 (1)"
+    And I wait until "Student 1 (student1@example.com)" "option" exists
     And the "members" select box should contain "Student 1 (student1@example.com)"

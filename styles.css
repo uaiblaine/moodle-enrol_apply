@@ -3512,6 +3512,7 @@ body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload + .enrol_apply-rvie
 
 .enrol_apply-qview .enrol_apply-rview-grid tr.enrol_apply-rview-row--selected td,
 .enrol_apply-qview .enrol_apply-rview-card--selected {
+    color: var(--enrol-apply-ink);
     background: var(--enrol-apply-brand-tint);
 }
 

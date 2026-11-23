@@ -59,6 +59,7 @@ Feature: Application with a group key, sent for review
     And I should see "The selected enrolment applications have been updated."
     And I am on the "C1" "groups" page logged in as "teacher1"
     And I set the field "groups" to "Turma B (1)"
+    And I wait until "Student 1 (student1@example.com)" "option" exists
     And the "members" select box should contain "Student 1 (student1@example.com)"
     And I log out
     And I log in as "student1"
