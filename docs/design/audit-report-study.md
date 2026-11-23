@@ -631,14 +631,77 @@ counted from navigation start:
 - A keystroke in the name search takes 40 to 48 ms (Event Timing), with 15 ms in the handler.
 - After the 300 ms debounce, the rows dim at 316 ms and the new ones paint at 747 ms.
 
-**Not measured, and why.**
+**R6, second round (2026-11-22, with 2026112108 and 2026112109): the open figures measured, two findings, both fixed.**
+2026112108 added the filter panel's per-option counts to the first rows read, so the round measured them as well.
+The seed and the bench are the first round's. A third script, `moodle-dev/data/enrol-apply-demo/perf_r6.mjs`,
+drives headless Chrome over CDP.
 
-- **MariaDB.** No stack runs it; the CI legs prove only correctness there.
-- **4x CPU throttling.** The in-app browser cannot throttle.
-- **The React Profiler's render time and a resize drag.** No profiling build is shipped.
+**MariaDB 12.3** ran on a site kept up from an `mdl ci` leg: 10,000 applications, 300 groups in 20 groupings,
+the admin. Plans came from Moodle's query log (`dboptions['logall']`), because the slow log stayed empty under
+`log_slow_filter` and performance_schema was off.
 
-These stay open for whoever next profiles the view. **No cache is called for**: the summary is
-under 50 ms at 10,000 decisions, a tenth of its budget, so section 5b's MUC cache stays unbuilt.
+| Case (admin) | 2026112108 p50 / p95 ms | 2026112109 p50 / p95 ms |
+|---|---|---|
+| Rows, page 1, with counts | 548 / 649 | 124 / 154 |
+| Rows, page 1, no counts | 31 / 48 | 26 / 33 |
+| Rows, last page | 516 / 545 | 112 / 128 |
+| Summary, first response | 21 / 22 | 21 / 26 |
+
+**The first finding was on MariaDB: the group facet.** Its count joined every application to every offered
+group (10,000 × 300 CASE and POSITION evaluations). That single statement took 430 ms of a 548 ms call. It
+now reads each record once and tallies in PHP.
+
+A narrowed decider (370 rows) reads every rows case under 153 ms at p95.
+
+**PostgreSQL 18 on m503, admin, 10,000 rows:**
+
+| Case | 2026112108 p50 / p95 ms, statements | 2026112109 p50 / p95 ms, statements |
+|---|---|---|
+| Rows, page 1, with counts | 150 / 168, 38 | 121 / 191, 18 |
+| Rows, page 1, no counts | 54 / 61, 11 | 59 / 124, 11 |
+| Rows, name search, with counts | **318 / 343**, 38 | 113 / 153, 18 |
+| Rows, name search, no counts | 81 / 95 | 89 / 106 |
+
+**The second finding was on PostgreSQL: one query per facet.** Each of about seven facet queries repeated the
+name search over the user join, at about 47 ms each. That put the search case over AR-D16's 300 ms. The facets
+now share one read per distinct WHERE (2026112109), with one more read for each filter in force. The p95 of
+the second run is noisier because another session was using the stack.
+
+On the mini cluster every rows case is under 90 ms p50. The worst p95 is the sort by wait at 148 ms. The
+summary is under 25 ms.
+
+**The browser.** Headless Chrome on the mini cluster, the R6 course, the median of five loads, with CDP CPU
+throttling. "Whole" is the time from the input until the rows region settles.
+
+| | 1x | 4x |
+|---|---|---|
+| First rows, from navigation start | 485 ms (skeleton at 270) | 414 ms (skeleton at 268) |
+| Sort: whole / input delay | 73 / 24 ms | 111 / 64 ms |
+| Page change: whole | 77 ms | 103 ms |
+| Filters panel opened (with counts): whole / input | 67 / 16 ms | 86 / 40 ms |
+| A keystroke in the name search: input delay | 24 ms | 48 ms |
+| A resize drag (20 moves) | 0 React commits, no long frame | 0 React commits, no long frame |
+
+React's own commit time is the `actualDuration` of each root commit, read through a stand-in DevTools hook.
+It is real only where core serves react-dom's development build, so `cachejs` was off for that run and turned
+back on after it.
+
+| React commit time | 1x | 4x |
+|---|---|---|
+| First load, all commits | 11 ms | 45 ms |
+| Sort | 9 ms | 21 ms |
+| Page | 6 ms | 23 ms |
+| Search | 18 ms | 46 ms |
+
+Every figure is inside AR-D16:
+- rows under 300 ms p95 and the summary under 500 ms;
+- first rows under 1 s;
+- a sort, a filter or a keystroke answered within 100 ms;
+- an interaction under 200 ms at 4x.
+
+The drag re-renders nothing in React, as section 5b intended: a width changes only its `<col>` element. **No
+cache is called for.** The summary stays under 50 ms at 10,000 decisions, so section 5b's MUC cache stays
+unbuilt.
 
 ## Sources read
 

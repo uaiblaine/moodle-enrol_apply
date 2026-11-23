@@ -44,41 +44,45 @@ in `.github/workflows/ci.yml` are updated together with `supported`.
 
 ## Screenshots
 
-*Moodle 5.1 with the Boost theme and a demo course: one enrolment method asking for two profile
-fields and two questions of its own, three groups (two with an enrolment key) and a dozen
-fictional applicants. `local_groupdist` is installed, so the groups have seats.*
+*Moodle 5.3 with the Boost theme and a demo course: one enrolment method asking for two profile
+fields and two questions of its own, where applicants may choose one of three groups (two with an
+enrolment key, one of them full), and forty fictional applications in every state, decided over the
+last weeks by two people. `local_groupdist` is installed, so the groups have seats. Moodle 5.1 and
+5.2 look the same except the course report, which is core's table there.*
 
 ### Applying
 
 <table>
 <tr>
 <td valign="top" width="50%"><img src="docs/screenshots/enrol-page.png" alt="The course's enrolment page: the Apply for a place card, mentioning the group enrolment key, and a Start application button"></td>
-<td valign="top" width="50%"><img src="docs/screenshots/application-form.png" alt="The application form in a modal: group enrolment key, the profile details that travel with the application, the method's own questions and the comment"></td>
+<td valign="top" width="50%"><img src="docs/screenshots/application-form.png" alt="The application form in a modal: the group to join, an optional group enrolment key, the profile details that travel with the application, the method's own questions and the comment"></td>
 </tr>
 </table>
 
 The enrolment page offers the method as a card. **Start application** opens the form in a
-modal, or on a page of its own without JavaScript: an optional group enrolment key, the profile
-details the teacher asked for, each confirmed as up to date, the method's own questions and the
-comment.
+modal, or on a page of its own without JavaScript: the **Group** to join, from the groups the
+teacher offered (*No preference* when the choice is optional), an optional group enrolment key, the
+profile details the teacher asked for, each confirmed as up to date, the method's own questions and
+the comment.
 Editing the details here changes the application, not the profile.
 
 ![Enrolled with your group key: the acknowledgement page names the group and offers Go to the course](docs/screenshots/admitted.png)
 
-A valid group key enrols the applicant at once, in that group, with no review.
+A valid group key enrols the applicant at once, in that group, with no review; it wins over a
+chosen group.
 
 ### Deciding
 
-![The approval queue: applications awaiting a decision, deferred, places taken and applications held; filters by search, status, group and application date; one row per application with its group, the details submitted, the comment and badges for the waiting list and a group key that could not admit; the group chooser below shows each group's seats](docs/screenshots/queue.png)
+![The approval queue: applications awaiting a decision, deferred, places taken and applications held; the search and the filters; one row per application with its group, how long it has waited, the details submitted, the comment and badges for the waiting list and a group key that could not admit](docs/screenshots/queue.png)
 
 The queue for one method. The panel at the top counts what awaits a decision, what is deferred,
-the places taken and the applications held. Each row carries the group its key named, what the
+the places taken and the applications held. Each row carries the group its key named or the applicant chose, what the
 applicant submitted, the comment and a badge where there is something to know: on the waiting
 list, applied before (shown to readers of the course report only), or a valid group key that found no place or seat. The queue filters by group
 too. Select rows and decide them together from the bar at
 the foot of the page, choosing the groups and the role an approval gives.
 
-![Reviewing one application: the status and key strip, what weighs on the decision with a full group flagged over the limit, the On confirming card with its sentence and the group cards with their occupancy, the comment and details in a column of their own, and the three decisions in the bar at the foot](docs/screenshots/review.png)
+![Reviewing one application whose group key found no seat: the status and key strip, the rules to observe with the full key group flagged over the limit on confirming, the comment and the submitted details, the On confirming card with its sentence and the group cards with their occupancy, the applicant's card, and the three decisions in the bar at the foot](docs/screenshots/review.png)
 
 **Review** opens one application, with links to the previous and next, and reads top to bottom
 in the order a decision asks its questions:
@@ -118,12 +122,23 @@ signals without the seats or places, and no decision.
 
 ### The record
 
-![The applications report, sorted by admission route: status, submission date, outcome, admission route, the group of the key, the groups the approval joined and the answers to each question](docs/screenshots/report.png)
+![The applications report on Moodle 5.3: the turnaround band (median first response, 90th percentile, still open, not decided by a person, the distribution of waits and the median by group), the bar with the scope, the count, Filters, Columns, View, Download and the search, and the grid of applications with their outcome, submission date, wait, decision, group and comment](docs/screenshots/report.png)
 
 Every application the course has recorded, decided ones included: its outcome, how long it waited,
 who decided it and when, its group and the groups the approval joined, and a Review action on each
-one still awaiting a decision. It filters (by group and by wait too), sorts and downloads as CSV or
-Excel. The screenshot predates the report's columns of version 2026112100.
+one still awaiting a decision. On Moodle 5.3 the report is a view of its own. A band above the grid
+says how long decisions took (the first response or the resolution), what is still open and how
+many were not decided by a person, with the distribution of waits and the median by group. The
+bar narrows the grid to all, awaiting or decided applications, searches by name, and opens the
+filters, the **Columns** menu (with the **Decisions**, **Answers** and **Groups** sets; widths are
+kept per reader), the view (table or cards, automatic on a narrow screen) and **Download**, which
+writes the applications in view as CSV or Excel. A note under the grid says how long application
+records are kept. On Moodle 5.1 and 5.2, and behind **Table view** on 5.3, the same report is
+core's table, with the same columns, filters and downloads.
+
+![The report's filter panel open: status, waited more than, admission route, decided by and group, each option with the number of applications it would list, and the Clear filters and Show 40 buttons](docs/screenshots/report-filters.png)
+
+Each filter option says how many applications it would list under the other filters in force.
 
 ### Setting up the method
 
