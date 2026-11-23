@@ -1,0 +1,47 @@
+{{!
+    This file is part of Moodle - http://moodle.org/
+
+    Moodle is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Moodle is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+}}
+{{!
+    @template enrol_apply/course_group_mode
+
+    The first row of the instance form's Groups section: the course's group mode, what it means for
+    who decides an application, and a link to the course settings where the mode is changed, for a
+    reader who may change them. Every value arrives in its plain spelling: the double stashes
+    escape them.
+
+    Context variables required for this template:
+    * mode string - the group mode's name, as core words it
+    * consequence string - one sentence on who sees an application in that mode
+    * hasurl boolean - whether the reader may open the course settings
+    * url string - the course settings page
+    * linktext string - the link's text
+
+    Example context (json):
+    {
+        "mode": "Separate groups",
+        "consequence": "An application with a group reaches the deciders of that group, and those who see every group.",
+        "hasurl": true,
+        "url": "https://example.com/course/edit.php?id=2",
+        "linktext": "Change it in the course settings"
+    }
+}}
+<div class="enrol_apply-groupmode">
+    <strong>{{mode}}</strong>
+    <div>{{consequence}}</div>
+    {{#hasurl}}
+        <div><a href="{{url}}">{{linktext}}</a></div>
+    {{/hasurl}}
+</div>

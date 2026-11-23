@@ -28,7 +28,12 @@
 defined('MOODLE_INTERNAL') || die();
 
 $string['admissionnotice'] = 'Tell managers about each enrolment with a key';
-$string['admissionnotice_help'] = 'Only for a method that enrols with a group key alone. When set to Yes, whoever is told about new applications on this method also gets a short notice each time somebody enrols with a key. Off by default, because on such a method every enrolment is one. A method that also takes applications always sends the notice.';
+$string['admissionnotice_help'] = 'Only for a method that enrols with a group key alone.
+
+* **No**: nobody is told of each enrolment. This is the default, because on such a method every enrolment is one.
+* **Yes**: whoever is told of new applications to this method also gets a short notice each time somebody enrols with a key.
+
+A method that also takes applications for review always sends the notice.';
 $string['admissionroute'] = 'Admission route';
 $string['admissionroutereview'] = 'Review, no group key';
 $string['admittedbykey'] = 'You are enrolled. Your group key was accepted and you have joined {$a}. No review was needed.';
@@ -119,7 +124,12 @@ $string['canntenrollate'] = 'You cannot apply any more, since applications close
 $string['cantenrol'] = 'Enrolment is disabled or inactive';
 $string['checkyourdetails'] = 'Check your details';
 $string['choicekey'] = 'And with a group key?';
-$string['choicekey_help'] = 'Whether a group enrolment key still counts beside the list. With "A valid key enrols at once", an applicant with a valid key is enrolled at once in the key\'s group, and the group they chose is ignored; everybody else chooses and waits for a decision. The key-only modes are not offered here: there the key decides the group, so a list could only contradict it.';
+$string['choicekey_help'] = 'Whether a group enrolment key still counts beside the list.
+
+* **No**: keys are ignored. Everybody chooses a group and waits for a decision.
+* **A valid key enrols at once**: whoever has a valid key is enrolled at once in the key\'s group, and the group they chose is ignored. Everybody else chooses and waits for a decision.
+
+The key-only modes are not offered here: there the key decides the group, and a list could only contradict it.';
 $string['chosenchip'] = 'Chose: {$a}';
 $string['chosenchipunnamed'] = 'Chose a group';
 $string['chosengroup'] = 'Group';
@@ -143,7 +153,12 @@ $string['chosengroupshow'] = 'Show groups';
 $string['chosengroupunavailable'] = 'This group cannot be chosen. Choose one from the list.';
 $string['cohortnonmemberinfo'] = 'Enrolment in this course is restricted to the members of a specific cohort. If you believe you should have access, contact the course administration.';
 $string['cohortonly'] = 'Only cohort members';
-$string['cohortonly_help'] = 'Applications may be restricted to members of a specified cohort only. Note that changing this setting has no effect on existing applications or enrolments.';
+$string['cohortonly_help'] = 'Restricts applications to the members of one cohort.
+
+* A person outside the cohort is told they cannot apply here, without the cohort being named.
+* Changing this affects neither the applications already sent nor the existing enrolments.
+
+**Example**: a method that recruits moderators takes applications only from the cohort of the people invited.';
 $string['cohortunresolved'] = 'This enrolment method is restricted to a cohort that does not exist on this site, so no applications can be accepted. Please contact the course administrator.';
 $string['comment'] = 'Comment';
 $string['conditionalways'] = 'Always shown';
@@ -187,9 +202,18 @@ $string['confirmmailsubject_default'] = 'Your enrolment application for {$a} was
 $string['confirmmailsubject_desc'] = 'Leave empty to use the wording this plugin ships.';
 $string['confirmusers'] = 'Confirm enrolments';
 $string['confirmusersinstance'] = 'Confirm enrolments: {$a}';
+$string['coursegroupmode'] = 'Course group mode';
+$string['coursegroupmodelink'] = 'Change it in the course settings';
+$string['coursegroupmodeseparate'] = 'An application with a group reaches the deciders of that group, and those who see every group.';
+$string['coursegroupmodeshared'] = 'Everybody who may decide sees every application.';
 $string['coursename'] = 'Course';
 $string['custom_label'] = 'Comment prompt';
-$string['custom_label_help'] = 'Heads the applicant\'s comment box, and the comment column on the approval queue and the review page, so the question you ask and the answers you read carry the same wording. It has no effect unless \'Ask for a comment\' is set to Yes. Leave it empty to use the shipped wording.';
+$string['custom_label_help'] = 'The question that heads the comment box.
+
+* The same wording heads the comment column of the queue and the comment on the review page, so the question asked and the answers read match.
+* Leave it empty to use the standard wording.
+
+**Example**: "Why do you want to take this course?".';
 $string['datasource:applications'] = 'Enrolment applications';
 $string['decideapplication'] = 'Decide this application';
 $string['decided'] = 'Decided';
@@ -200,8 +224,20 @@ $string['decidednotyet'] = 'Not yet';
 $string['deciders'] = 'Who decides applications to this method?';
 $string['deciders_allgroups'] = 'Only those who see every group';
 $string['deciders_group'] = 'The deciders of the application\'s group';
-$string['deciders_help'] = 'In a course in separate groups mode, an application with a group reaches the deciders of that group, such as its non-editing teachers, as well as those who see every group. "Only those who see every group" keeps every application to this method away from the groups\' deciders: use it for a method that recruits moderators, so that a moderator never decides on another. In the other group modes everybody who may decide sees every application, and this setting changes nothing.';
+$string['deciders_help'] = 'It has an effect only in a course in **separate groups** mode. In the other modes, everybody who may decide sees every application.
+
+* **The deciders of the application\'s group**: an application with a group (chosen, or the key\'s) reaches the moderators of that group and those who see every group. An application without a group reaches only those who see every group.
+* **Only those who see every group**: no group moderator sees or decides the applications to this method.
+
+**When to use each one**
+
+* Learners enrol by class, and each moderator approves their own: the first option.
+* Recruiting moderators (the role on approval can decide applications): the second option, so that a moderator never approves another.
+* Approval centralised in the coordination: the second option.
+
+**Learners and moderators in the same course**: create two methods, one for each role. Whoever applied through a moderators\' method cannot apply through the learners\' one.';
 $string['decidersallgroupsinfo'] = 'Only those who see every group decide the applications to this method. The deciders of a group never see them.';
+$string['decidersinert'] = 'This course is not in separate groups mode: everybody who may decide sees every application, and this setting changes nothing.';
 $string['decisiongroupfull'] = '{$a->name} ({$a->members} of {$a->seats} seats taken, full)';
 $string['decisiongroups'] = 'Groups to join on approval';
 $string['decisiongroups_help'] = 'The approved applicants join these groups. Leave it empty to use the groups configured on the enrolment method, plus the group each applicant chose, where they chose one.';
@@ -222,17 +258,31 @@ $string['decisionsummarykey'] = 'An application a group key sent for review also
 $string['decisionsummaryrole'] = 'Role an approval assigns';
 $string['defaultperiod'] = 'Default enrolment duration';
 $string['defaultperiod_desc'] = 'Default length of time that the enrolment is valid. If set to zero, the enrolment duration will be unlimited by default.';
-$string['defaultperiod_help'] = 'Default length of time that the enrolment is valid, starting with the moment the user is enrolled. If disabled, the enrolment duration will be unlimited by default.';
+$string['defaultperiod_help'] = 'How long an approved enrolment lasts, counted from the moment of approval.
+
+* **Disabled**: the enrolment has no end.
+* **Enabled**: when the period ends, the enrolment expires and its place is freed.
+
+The time an application waits for a decision does not count.
+
+**Example**: 180 days gives each approved applicant six months of access, whenever they were approved.';
 $string['defaultrole_desc'] = 'Role assigned to a user when their enrolment application is approved.';
 $string['detailsthattravel'] = 'Details that travel with your application';
 $string['detailsthattravel_desc'] = 'These details are sent to whoever reviews your application. Editing them here does not change your profile.';
 $string['detailsthattravel_desc_required'] = 'These details are kept with your enrolment. Editing them here does not change your profile.';
 $string['detailsthattravel_required'] = 'Your details';
 $string['editdescription'] = 'Text shown to applicants';
-$string['editdescription_help'] = 'Shown at the top of the application form, above the questions, to everybody who opens it. It is HTML: links and formatting are kept. Leave it empty to show nothing there.';
+$string['editdescription_help'] = 'Shown at the top of the application form, above the questions, to everybody who opens it.
+
+* It is HTML: links and formatting are kept.
+* Leave it empty to show nothing.
+
+**Example**: who the course is for, what is assessed in the application and when the answer comes.';
 $string['editenrolmentrefused'] = 'You cannot change this enrolment: it is an application awaiting a decision, and you may not decide it.';
 $string['enrolenddate'] = 'Applications close';
-$string['enrolenddate_help'] = 'If enabled, applications can be submitted until this date only. This is separate from the enrolment duration, which decides how long an approved enrolment lasts.';
+$string['enrolenddate_help'] = 'If enabled, applications can be sent only until this date. Applications sent before it stay in the queue and can be decided afterwards.
+
+This is not when the course access ends: how long an approved enrolment lasts is the "Default enrolment duration".';
 $string['enrolenddaterror'] = 'The date applications close cannot be earlier than the date they open';
 $string['enrolmentactive'] = 'Enrolled';
 $string['enrolmentgone'] = 'No longer enrolled';
@@ -240,7 +290,9 @@ $string['enrolmentsuspended'] = 'Suspended';
 $string['enrolmentunknown'] = 'Unknown';
 $string['enrolmentwaiting'] = 'Deferred';
 $string['enrolstartdate'] = 'Applications open';
-$string['enrolstartdate_help'] = 'If enabled, applications can be submitted from this date onward only. This is separate from the enrolment duration, which decides how long an approved enrolment lasts.';
+$string['enrolstartdate_help'] = 'If enabled, applications can be sent only from this date on. Before it, the method\'s card says when applications open.
+
+This is not when the course access starts: an approved enrolment begins on approval and lasts for the "Default enrolment duration".';
 $string['enrolwithkey'] = 'Enrol with a key';
 $string['entity:answer'] = 'Application answer';
 $string['entity:submission'] = 'Enrolment application';
@@ -264,23 +316,60 @@ $string['expirymessageenrollerbody'] = 'Apply enrolment in the course \'{$a->cou
 
 To extend their enrolment, go to {$a->extendurl}';
 $string['expirymessageenrollersubject'] = 'Apply enrolment expiry notification';
+$string['expirynotify'] = 'Notify before enrolment expires';
+$string['expirynotify_help'] = 'Whether a message is sent before an enrolment expires. It applies only when the enrolment has a duration.
+
+* **No**: no message.
+* **Teacher only**: the teacher responsible for the method gets a list of the enrolments about to expire.
+* **Teacher and enrolled user**: each enrolled user is told of their own enrolment as well.
+
+How long before the end the message goes out is the "Notification threshold".';
 $string['expirynotifyall'] = 'Teacher and enrolled user';
 $string['expirynotifyenroller'] = 'Teacher only';
 $string['expirynotifyhour_desc'] = 'Hour of the day at which the enrolment expiry notifications are sent.';
+$string['expirythreshold'] = 'Notification threshold';
+$string['expirythreshold_help'] = 'How long before an enrolment expires the message is sent.
+
+**Example**: with 7 days, a person whose enrolment ends on the 30th is told on the 23rd.';
 $string['fieldrequired'] = 'Required';
 $string['fieldtypenotallowed'] = 'This type of question cannot be asked on an application form.';
 $string['gotocourse'] = 'Go to the course';
 $string['gotoprofile'] = 'Go to my profile';
 $string['group'] = 'Groups joined on approval';
-$string['group_help'] = 'Every approved applicant joins these groups. Applying joins no group: membership follows the approval. A decider who may choose the decision can change the groups on the review page. With a group enrolment key, the key\'s group is joined as well.';
+$string['group_help'] = 'Every approved applicant joins these groups, whatever group they chose or typed a key for.
+
+* **Besides the applicant\'s group**: the group chosen from the list, or the key\'s group, is joined as well.
+* **On the review page**: a decider who may choose the decision can change the groups.
+* **Removed with the enrolment**: the memberships belong to this method.
+
+**Example**: a method that recruits moderators joins everybody to a "Moderators" control group, and each one also joins the class they chose to moderate.
+
+**Keep a control group out of every list**: in a course in separate groups mode, a moderator decides the applications of all the groups this method put them in. Use a group that no method offers and that carries no enrolment key.';
 $string['groupchoicerequired'] = 'The applicant must choose';
-$string['groupchoicerequired_help'] = 'Yes: no application without a group. No: the list starts with "No preference", and whoever approves places the applicant.';
+$string['groupchoicerequired_help'] = 'Whether an application can be sent without a group.
+
+* **Yes**: no application without a group.
+* **No**: the list starts with "No preference", and whoever approves places the applicant in a group.
+
+In a course in separate groups mode, an application with "No preference" reaches only those who see every group.';
 $string['groupchoicerequired_no'] = 'No: they may answer "No preference"';
 $string['groupchoicerequired_yes'] = 'Yes: no application without a group';
 $string['groupdecided'] = 'How is an applicant\'s group decided?';
 $string['groupdecided_choice'] = 'The applicant chooses from a list';
 $string['groupdecided_decider'] = 'A decider chooses on approval';
-$string['groupdecided_help'] = 'A decider chooses on approval: the applicant names no group, and whoever approves picks the groups to join. The applicant chooses from a list: the method offers groups and the applicant picks one when applying; whoever approves sees the choice and may change it. The applicant types a group enrolment key: the key set on a group\'s own page decides the group, and the key mode says whether it enrols at once or sends the application for review. In a course in separate groups mode, an application with a group reaches the deciders of that group.';
+$string['groupdecided_help'] = 'Who names the group of an application.
+
+* **A decider chooses on approval**: the applicant names no group, and whoever approves picks the groups to join.
+* **The applicant chooses from a list**: the method offers groups and the applicant picks one when applying. Whoever approves sees the choice and may change it.
+* **The applicant types a group enrolment key**: the key set on the group\'s own page decides the group. The key mode says whether it enrols at once or sends the application for review.
+
+**When to use each one**
+
+* No classes, or the coordination distributes people: a decider chooses.
+* Classes the applicant knows, such as a city or a shift: the list.
+* Classes closed in advance, with the key handed out by each teacher: the key.
+
+In a course in separate groups mode, an application with a group reaches the deciders of that group.';
 $string['groupdecided_key'] = 'The applicant types a group enrolment key';
 $string['groupkey'] = 'Group enrolment key';
 $string['groupkey_help'] = 'If your teacher gave you a key for your group, enter it to be enrolled straight away and join that group. Without one, your application is reviewed first. The key is optional.';
@@ -302,14 +391,19 @@ $string['groupkeyreview_help'] = 'Enter the key your teacher gave you for your g
 $string['groupkeys'] = 'What a group enrolment key does';
 $string['groupkeys_any'] = 'A valid key enrols at once; without one, the application is reviewed';
 $string['groupkeys_desc'] = 'What the enrolment key of a course group does on a new enrolment method: nothing, enrol at once while every other application is reviewed, enrol at once with nobody able to enrol without one, or send the application for review with nobody able to apply without one.';
-$string['groupkeys_help'] = 'Keys are set on each group\'s settings page by whoever may manage groups, and any group of the course counts.
+$string['groupkeys_help'] = 'Keys are set on each group\'s settings page by whoever may manage groups, and the key of any group of the course counts.
 
-* Nothing: every application is reviewed, and keys are ignored.
-* A valid key enrols at once: an applicant who enters the key of one of the course\'s groups is enrolled straight away and joins that group, without waiting for a review. Without a key, or with a wrong one, the application is reviewed as usual; when no place or seat is left, it waits for a review instead.
-* Key only: a valid key enrols at once, and nobody can enrol through this method without one. Nothing ever waits for a decision: without a valid key, or with no place or seat left, the enrolment is refused and nothing is kept.
-* Key only, reviewed: a valid key sends the application for review, and nobody can apply through this method without one. The key\'s group is recorded with the application, and the applicant joins it when the application is approved. Without a valid key, or with no place or seat left, the application is refused and nothing is kept.
+* **A valid key enrols at once; without one, the application is reviewed**: the applicant who types a valid key is enrolled straight away and joins that group. Without a key, with a wrong one or with no place left, the application waits for a review.
+* **Key only**: a valid key enrols at once, and nobody can enrol through this method without one. Nothing waits for a decision: without a valid key, or with no place or seat left, the enrolment is refused and nothing is kept.
+* **Key only, reviewed**: a valid key sends the application for review, and nobody can apply without one. The key\'s group is recorded with the application, and the applicant joins it on approval.
 
-In every mode the required details and questions are still asked, and the enrolment window, the cohort restriction, the applicant limit and the places still apply. Except in the reviewed key-only mode, anybody holding a key skips the review.';
+**When to use each one**
+
+* The teacher hands the key to the class, and latecomers ask for a place: the first mode.
+* Only people holding a key may come in, with no review: key only.
+* The key says which class, and the coordination still approves each person: key only, reviewed.
+
+In every mode the required details and the questions are still asked, and the application period, the cohort restriction, the applicant limit and the places still apply.';
 $string['groupkeys_off'] = 'Nothing: every application is reviewed';
 $string['groupkeys_required'] = 'Key only: a valid key enrols at once, and nobody can enrol without one';
 $string['groupkeys_review'] = 'Key only, reviewed: a valid key sends the application for review, and nobody can apply without one';
@@ -325,10 +419,21 @@ $string['groupkeysshowall'] = 'Show all {$a} groups';
 $string['groupkeyuntypable'] = 'Its key starts or ends with a space, which nobody can type into the application form.';
 $string['groupkeyunusualspace'] = 'Your key starts or ends with an unusual space, as a copied key often does. Type it again, or paste it without the space.';
 $string['groupoffer'] = 'Groups offered';
-$string['groupoffer_help'] = 'The groups an applicant may choose from. A group that only its members can see is never offered to an applicant, though it stays in this list. Where group seats apply, a full group is listed but cannot be chosen.';
+$string['groupoffer_help'] = 'The groups the applicant can choose from.
+
+* A group only its members can see is never offered, though it stays in this list.
+* Where group seats apply, a full group is listed but cannot be chosen.
+* An application takes no seat until it is approved.
+
+**Do not offer a control group**: a group that a recruitment method of this course joins on approval would put every application made to it in front of all the people that method approved.';
 $string['groupofferempty'] = 'Offer at least one group: the applicant must choose one.';
 $string['groupoffergrouping'] = 'Add the groups of a grouping';
-$string['groupoffergrouping_help'] = 'Adds every group of the grouping to the groups offered when you save. They are copied once: a group added to the grouping later is not offered until you add it here.';
+$string['groupoffergrouping_help'] = 'Adds every group of the grouping to the groups offered when you save.
+
+* The groups are copied once, at that moment.
+* A group added to the grouping later is offered only after you add it here.
+
+**Example**: the course has a "2026 classes" grouping with twelve groups. Choose it here instead of picking the twelve one by one.';
 $string['groupofferhidden'] = '{$a} (never offered: hidden from non-members)';
 $string['groupscopekeyless'] = 'Applications without a key reach only those who can access all groups.';
 $string['groupscopenopreference'] = 'Applications with "No preference" reach only those who can access all groups.';
@@ -336,11 +441,25 @@ $string['groupseatsexceeded'] = 'The group {$a->group} now has {$a->members} mem
 $string['groupseatsnolimit'] = '{$a} members, no limit';
 $string['groupseatsof'] = '{$a->members} of {$a->seats} seats taken';
 $string['groupseatsoption'] = 'Group seats apply to this method';
-$string['groupseatsoption_help'] = 'With local_groupdist, a group may declare seats, and every member takes one, whatever their role. On, the list shows each group\'s places left and refuses a full group. Off, this method neither shows nor checks seats: switch it off for a method that recruits moderators, who should not take a learner\'s seat. An approval still adds the member, and the seats warning after it still reports a group past its seats.';
+$string['groupseatsoption_help'] = 'With local_groupdist, a group can declare seats, and every member takes one, whatever their role.
+
+* **Yes**: the list shows the seats left in each group and refuses a full group.
+* **No**: this method neither shows nor checks seats.
+
+In both cases an approval still adds the member, and the seats warning after it still reports a group past its seats.
+
+**Example**: choose No on a method that recruits moderators, who should not take a learner\'s seat.';
 $string['groupseatsoption_no'] = 'No: ignore seats';
 $string['groupseatsoption_yes'] = 'Yes: show the places left and refuse a full group';
+$string['groupselectchoice'] = 'The group the applicant chose is joined as well.';
+$string['groupselectkey'] = 'The key\'s group is joined as well.';
 $string['hidecard'] = 'Hide this card from people outside the cohort';
-$string['hidecard_help'] = 'Off, everybody who can reach the course\'s enrolment page sees this method\'s card, and people outside the cohort are told they may not apply. On, they do not see the card at all; somebody who already applied always sees theirs. Useful for a method that recruits moderators: its candidates reach it through the cohort, or through the link to the method\'s own form that the coordination sends them.';
+$string['hidecard_help'] = 'What people outside the cohort see on the course\'s enrolment page.
+
+* **No**: everybody sees this method\'s card, and a person outside the cohort is told they cannot apply.
+* **Yes**: those people do not see the card at all. Whoever has already applied always sees their own.
+
+**Example**: on a method that recruits moderators, choose Yes. The people invited reach it through the cohort, or through the link to the method\'s own form that the coordination sends them, and learners never see it.';
 $string['hidecard_no'] = 'No: show it, saying the method is restricted';
 $string['hidecard_yes'] = 'Yes: only cohort members see this method';
 $string['invalidformaction'] = 'Unknown action requested for the selected enrolment applications.';
@@ -382,7 +501,15 @@ $string['mailtoteacher_keyreview'] = 'Applied with the enrolment key of the grou
 $string['mailtoteacher_keyreviewnogroup'] = 'Applied with a group enrolment key. The application is waiting for review.';
 $string['mailtoteacher_subject'] = 'New Enrolment request!';
 $string['maxapplicants'] = 'Maximum applicants';
-$string['maxapplicants_help'] = 'The largest number of applications this enrolment method will accept. Pending, deferred and approved applications all count towards it; an enrolment whose period has ended does not, so this number will not match the Users column on the enrolment methods page. 0 means no limit. Applicants are never shown this number - once it is reached they are simply told that applications are closed. On a method that enrols with a group key only, every enrolment is approved at once, so this number and the places count nearly the same people, and the lower one is the limit.';
+$string['maxapplicants_help'] = 'The largest number of applications this method takes. 0 means no limit.
+
+* **What counts**: pending, deferred and approved applications. An enrolment whose period has ended does not count, so this number differs from the Users column of the enrolment methods page.
+* **When it is reached**: applicants are told only that applications are closed. They never see the number.
+* **A deferred application keeps counting** until it is approved or cancelled.
+
+**Example**: 30 here and 10 in "Places" takes thirty applications to choose ten people from.
+
+On a method that enrols with a group key alone, every enrolment is approved at once, so this number and the places count almost the same people, and the lower one applies.';
 $string['maxenrolled'] = 'Max enrolled users';
 $string['maxenrolled_help'] = 'Specifies the maximum number of users that can apply for this course. 0 means no limit.';
 $string['maxenrolledreached'] = 'No more applications are being accepted.';
@@ -394,7 +521,12 @@ $string['messageprovider:waitinglist'] = 'Course enrolment application deferral 
 $string['newapplicationnotification'] = 'There is a new course enrolment application awaiting review.';
 $string['newenrols'] = 'Accept new applications';
 $string['newenrols_desc'] = 'Allow users to apply for an enrolment in new instances by default.';
-$string['newenrols_help'] = 'Whether people can submit a new application through this method. Applications already submitted stay in the queue and can still be decided, and enrolments already approved are not affected.';
+$string['newenrols_help'] = 'Whether a new application can be sent through this method.
+
+* **Yes**: the method\'s card on the enrolment page takes applications.
+* **No**: nobody can apply. Applications already sent stay in the queue and can still be decided, and approved enrolments are not affected.
+
+**Example**: the class is complete but some applications are still waiting. Set No and finish deciding them.';
 $string['nocohortsavailable'] = 'No cohort is available to restrict this method to.';
 $string['nofieldsoffered'] = 'The administrator does not currently allow any profile field to be collected with an application.';
 $string['nothingtoprovide'] = 'There is nothing to fill in. Submit to apply for {$a}.';
@@ -402,14 +534,33 @@ $string['notification'] = 'Enrolment application successfully sent. You will be 
 $string['notify'] = 'Notify of new applications';
 $string['notify_desc'] = 'Define who gets notified about new enrolment applications.';
 $string['notify_heading'] = 'Notification settings';
-$string['notify_help'] = 'Who gets a message when somebody applies through this method. "Everyone who can ..." follows whoever holds the capability in the course as that changes; a person picked by name is told only while they still hold it. People the administrator chose for the whole site are told as well.';
+$string['notify_help'] = 'Who gets a message when somebody applies through this method.
+
+* **Nobody**: no message from this method.
+* **Everyone who can "Manage apply enrolment"**: whoever holds the capability in the course with an active enrolment, at the moment the application arrives. A moderator who joins later is included without editing this method.
+* **The deciders of the application\'s group**: only the moderators of that group. When the application has no group, or its group has no moderator, those who see every group are told instead, so an application never goes unannounced.
+* **People picked by name**: a fixed list, which can be combined with the option above. Each one is told only while they still hold the capability.
+
+**When to use each one**
+
+* Each class has its moderators, and the coordination does not want a message for every class: the deciders of the application\'s group.
+* A small course where everybody follows every application: everyone.
+* The coordinator wants every application beside the moderators: the deciders of the group, plus the coordinator by name.
+
+Nobody is told of an application they cannot decide: in a course in separate groups mode, a moderator hears only of their own groups. The applicant\'s mentors and the people the administration chose for the whole site are told as well.';
 $string['notifyapprovaltask'] = 'Apply enrolment send approval notification task';
 $string['notifycoursebased'] = 'New enrolment application notification (instance based, eg. course teachers)';
 $string['notifycoursebased_desc'] = 'Default for new instances: Notify everyone who have the \'Manage apply enrolment\' capability for the corresponding course (eg. teachers and managers)';
 $string['notifyglobal'] = 'New enrolment application notification (global, eg. global managers and admins)';
 $string['notifyglobal_desc'] = 'Define who gets notified about new enrolment applications for any course.';
+$string['notifygroupdeciders'] = 'The deciders of the application\'s group';
 $string['opt_commentaryzone'] = 'Ask for a comment';
-$string['opt_commentaryzone_help'] = 'Adds a free text box to the application form. The decider reads the comment in the applications queue and on the review page.';
+$string['opt_commentaryzone_help'] = 'Adds a free text box to the application form.
+
+* The deciders read the comment in the applications queue and on the review page.
+* The box is headed by the "Comment prompt" below.
+
+**Example**: ask why the applicant wants to take the course. For answers with a fixed format, use the method\'s own questions instead.';
 $string['outcomeapproved'] = 'Approved, enrolled';
 $string['outcomeawaiting'] = 'Awaiting a decision';
 $string['outcomecancelled'] = 'Cancelled';
@@ -431,7 +582,13 @@ $string['outcomeunenrolled'] = 'Approved, then unenrolled';
 $string['outcomewaiting'] = 'Deferred';
 $string['ownapplicationnotdecidable'] = 'Your own application: another decider must decide it.';
 $string['places'] = 'Places';
-$string['places_help'] = 'How many applicants this enrolment method may have approved at one time. Only approved enrolments count, so the method can accept more applications than it has places - which is the point, since not every applicant is approved. An enrolment whose period has ended releases its place. 0 means no limit. Reaching it does not block an approval: the manager is warned and decides. On a method that enrols with a group key only, a valid key is refused once no place is left.';
+$string['places_help'] = 'How many applicants this method can have approved at the same time. 0 means no limit.
+
+* **What counts**: approved enrolments only. An enrolment whose period has ended frees its place.
+* **When it is reached**: an approval is not blocked. The decider is warned and decides.
+* **With a group key that enrols at once**: a valid key is refused when no place is left.
+
+**Example**: a method can take more applications than it has places, which is the point, since not every applicant is approved. Limit the applications with "Maximum applicants".';
 $string['placesfull'] = 'All {$a} places on this enrolment method are taken.';
 $string['placestaken'] = '{$a->taken} of {$a->limit}';
 $string['placestakenlabel'] = 'Places taken';
@@ -440,6 +597,22 @@ $string['pluginname'] = 'Course enrol confirmation';
 $string['pluginname_desc'] = 'With this plug-in users can apply to be enrolled in a course. A teacher or site manager will then have to approve the enrolment before the user gets enroled.';
 $string['pluginname_keyonly'] = 'Enrolment with a group key';
 $string['pluginname_keyreview'] = 'Application with a group key';
+$string['presetchosen'] = 'Chosen';
+$string['presetclasses'] = 'Classes with moderators';
+$string['presetclasseswhen'] = 'When applicants pick their class and each class has moderators who decide its applications.';
+$string['presetclear'] = 'Start from the site defaults';
+$string['presetkey'] = 'Group enrolment key';
+$string['presetkeywhen'] = 'When each group hands out its own enrolment key, and a valid key should enrol at once.';
+$string['presetmoderators'] = 'Moderator recruitment';
+$string['presetmoderatorsnote'] = 'Add a second method for learners: whoever applied through this one cannot apply as a learner in this course.';
+$string['presetmoderatorswhen'] = 'When this method recruits the people who will moderate the groups and decide their applications.';
+$string['presetneedsseparate'] = 'This scenario needs separate groups.';
+$string['presetreview'] = 'Simple review';
+$string['presetreviewwhen'] = 'When a decider reads every application and places each approved applicant in a group.';
+$string['presetrolemissing'] = 'Choose a role that decides applications';
+$string['presets'] = 'Start from a scenario';
+$string['presetsintro'] = 'A scenario only fills in the form below: everything can still be changed before saving.';
+$string['presetuse'] = 'Use this scenario';
 $string['privacy:applicationpath'] = 'Enrolment application';
 $string['privacy:metadata:core_group'] = 'An approval adds the applicant to the groups chosen for the enrolment method or by the decider; the plugin exports and deletes the memberships it added.';
 $string['privacy:metadata:core_message'] = 'An approval adds the applicant to groups, and the plugin exports and deletes the conversations of the groups whose memberships it added.';
@@ -656,7 +829,13 @@ $string['reportviewwaitedmore'] = 'Waited more than';
 $string['reportviewwithoutperson'] = 'Not decided by a person';
 $string['reportviewwithoutpersonsub'] = 'Key admissions and records without a decider, out of the turnaround';
 $string['requestedfields'] = 'Profile fields requested';
-$string['requestedfields_help'] = 'The profile fields the applicant is asked to fill in. Only fields the administrator allows site wide are offered here. Marking a field as required means an application cannot be submitted without it.';
+$string['requestedfields_help'] = 'The profile fields the applicant fills in on the application form.
+
+* Only the fields the site administration allows are offered here.
+* A field marked as required must be filled in before the application can be sent.
+* What the applicant types goes with the application to the deciders. It changes the profile only if the applicant accepts the offer in "After approval".
+
+**Example**: ask for the institution and the department to check that the applicant belongs to the course\'s audience.';
 $string['requestedfieldsintro'] = 'Tick a field to ask for it, and Required as well to refuse an application without it.';
 $string['requiredtoapply'] = 'This is required to apply';
 $string['resolutiontime'] = 'Wait for a resolution';
@@ -764,32 +943,57 @@ $string['reviewwaitshort'] = 'Defer';
 $string['reviewwrite'] = 'Write to the applicant or add a note for the record';
 $string['reviewwritehelp'] = 'Optional. The message goes to the applicant with the decision; the note stays on the record only.';
 $string['roleonapproval'] = 'Role on approval';
-$string['roleonapproval_help'] = 'The role an approved applicant gets in the course. Applying gives no role: it is assigned when the application is approved. A decider who may choose the decision can give another role on the review page, among the roles they may assign. The assignment belongs to this method, so it is removed with the enrolment.';
+$string['roleonapproval_help'] = 'The role an approved applicant receives in the course.
+
+* Applying gives no role: it is assigned when the application is approved.
+* A decider who may choose the decision can give another role on the review page, among the roles they may assign.
+* The role belongs to this method, so it is removed together with the enrolment.
+
+**One method per role**: to take learners and moderators in the same course, create two methods, one for each role. A role that can decide applications makes this a recruitment method: see "Who decides applications to this method?".';
 $string['saveandeditfields'] = 'Save and edit application fields';
 $string['saveforfuture'] = 'Save these details for next time?';
 $string['saveforfuture_desc'] = 'Nothing has been saved to your profile yet. Saving these means you will not have to enter them again for your next application.';
 $string['saveforfutureinstance'] = 'Offer to save details to the profile';
-$string['saveforfutureinstance_help'] = 'After submitting an application, offer the applicant the chance to save the details they entered to their own profile. Only fields the applicant is allowed to edit are ever written, and only when they accept the offer. This is only available while the site administrator allows it.';
+$string['saveforfutureinstance_help'] = 'After sending an application, the applicant is offered to save in their own profile the details they typed.
+
+* Only the fields the applicant can edit are written, and only when they accept the offer.
+* An empty answer never erases what the profile already holds.
+* Available only while the site administration allows it.
+
+**Example**: the form asks for the department. An applicant who accepts the offer does not have to type it again in the next course.';
 $string['sectionafter'] = 'After approval';
-$string['sectionafter_help'] = 'How long an approved enrolment lasts, whether anybody is told before it ends, and whether the applicant is offered to save the details they typed to their profile.';
+$string['sectionafter_help'] = 'What follows an approval: how long the enrolment lasts, whether somebody is told before it ends, and whether the applicant is offered to save in their profile the details they typed.';
+$string['sectiondeciders'] = 'Who decides and who is notified';
+$string['sectiondeciders_help'] = 'Who decides the applications to this method, and who gets a message when one arrives.
+
+The two follow the same rule: in a course in separate groups mode, a moderator of a group decides, and is told of, the applications of that group only.';
 $string['sectionform'] = 'Application form';
-$string['sectionform_help'] = 'What the applicant reads and fills in: the text above the form, a comment box, profile fields and the method\'s own questions. Each method has its own form, so two methods in one course can ask different things.';
+$string['sectionform_help'] = 'What the applicant reads and fills in: the text above the form, a comment box, profile fields and the method\'s own questions.
+
+Each method has its own form, so two methods of the same course can ask for different things.';
 $string['sectiongeneral'] = 'General';
-$string['sectiongeneral_help'] = 'The method\'s name, whether it is in use and accepts applications, and the role an approved applicant gets.';
+$string['sectiongeneral_help'] = 'The basics of this enrolment method: the name shown on the course\'s enrolment page, whether it is in use and takes new applications, and the role an approved applicant receives.';
 $string['sectiongroups'] = 'Groups';
-$string['sectiongroups_help'] = 'How an applicant\'s group is decided, who decides the applications, and the groups an approved applicant joins.';
+$string['sectiongroups_help'] = 'How an applicant\'s group is decided and the groups an approved applicant joins.
+
+Applying joins no group: membership follows the approval. The course group mode, stated first, says whether the groups also separate who decides each application.';
 $string['sectionnotify'] = 'Notifications';
 $string['sectionnotify_help'] = 'Who is told when a new application arrives.';
 $string['sectionwhen'] = 'When and how many';
-$string['sectionwhen_help'] = 'When applications are accepted, and how many. These limits belong to this method alone: another method in the course counts its own applicants and places.';
+$string['sectionwhen_help'] = 'When applications are taken, and how many. These limits belong to this method alone: another method of the course counts its own applicants and places.';
 $string['sectionwho'] = 'Who may apply';
-$string['sectionwho_help'] = 'Restricts who may apply through this method. Without a restriction, anybody who can reach the course\'s enrolment page may apply.';
+$string['sectionwho_help'] = 'Restricts who can apply through this method. With no restriction, anybody who reaches the course\'s enrolment page can apply.';
 $string['selectapplicant'] = 'Select {$a}';
 $string['sendexpirynotificationstask'] = 'Apply enrolment send expiry notifications task';
 $string['startapplication'] = 'Start application';
 $string['status'] = 'Allow existing enrolments';
 $string['status_desc'] = 'Allow course access of internally enrolled users.';
-$string['status_help'] = 'When set to No, every enrolment made by this method is suspended and nobody can apply. To stop new applications but keep the people already enrolled, set \'Accept new applications\' to No instead.';
+$string['status_help'] = 'Switches the whole method on or off.
+
+* **Yes**: approved enrolments give access to the course, and applications can be sent and decided.
+* **No**: every enrolment made through this method is suspended, and nobody can apply.
+
+**Example**: to stop taking applications without affecting the people already enrolled, leave this on Yes and set "Accept new applications" to No.';
 $string['submissiondecidedby'] = 'Decided by';
 $string['submissionenrolment'] = 'Enrolment now';
 $string['submissionmethod'] = 'Enrolment method';
@@ -814,6 +1018,7 @@ $string['summaryclosed'] = 'Applications closed on {$a}';
 $string['summarydecidersallgroups'] = 'Decided only by those who see every group';
 $string['summarydisabled'] = 'Method disabled: nobody can apply';
 $string['summaryfull'] = 'Not accepting applications: the applicant limit is reached';
+$string['summarygroupmode'] = 'Course group mode: {$a}';
 $string['summarykeysany'] = 'A valid group key enrols at once; other applications are reviewed';
 $string['summarykeysoff'] = 'Group enrolment keys are not used';
 $string['summarykeysrequired'] = 'Key only: a valid group key enrols at once';

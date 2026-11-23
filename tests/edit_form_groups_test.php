@@ -422,12 +422,72 @@ final class edit_form_groups_test extends \advanced_testcase {
     }
 
     /**
-     * A method granting a role that decides, decided by each group's deciders, is warned that a
-     * moderator could approve another moderator; a learner method is not, nor is any method
-     * outside separate groups.
+     * The element names of a form under one section header, in form order.
      *
-     * Changes that must make it fail: the warning dropped, shown for a learner method, or shown in
-     * a course where no group narrows anybody.
+     * @param \MoodleQuickForm $mform The form.
+     * @param string $header The section's header name.
+     * @return string[] The names, the header's own left out.
+     */
+    private function section(\MoodleQuickForm $mform, string $header): array {
+        $names = [];
+        $current = '';
+        foreach ($mform->_elements as $element) {
+            if ($element->getType() === 'header') {
+                $current = $element->getName();
+                continue;
+            }
+            // Formslib adds a hidden expand-state element after every collapsible header.
+            if (
+                $current === $header
+                && (string) $element->getName() !== ''
+                && strpos((string) $element->getName(), 'mform_isexpanded_') !== 0
+            ) {
+                $names[] = $element->getName();
+            }
+        }
+        return $names;
+    }
+
+    /**
+     * The elements a hideIf hides under one condition on one element.
+     *
+     * @param \MoodleQuickForm $mform The form.
+     * @param string $dependenton The element the condition reads.
+     * @param string $condition The operator.
+     * @return array The hidden element names, keyed by the condition's value as a string.
+     */
+    private function hidden_by(\MoodleQuickForm $mform, string $dependenton, string $condition): array {
+        $hidden = [];
+        // Protected on MoodleQuickForm: read it the way conditions_test.php does.
+        $hideifs = (new \ReflectionProperty(\MoodleQuickForm::class, '_hideifs'))->getValue($mform);
+        foreach ($hideifs[$dependenton][$condition] ?? [] as $value => $names) {
+            $hidden[(string) $value] = $names;
+        }
+        return $hidden;
+    }
+
+    /**
+     * Deny the deciding capability to every role in the course, so no role offered decides.
+     *
+     * @return void
+     */
+    private function no_role_decides(): void {
+        $context = \context_course::instance($this->course->id);
+        foreach (\enrol_apply\local\decidingrole::roles((int) $this->course->id) as $roleid) {
+            assign_capability(\enrol_apply\local\groupscope::DECIDE, CAP_PROHIBIT, $roleid, $context->id, true);
+        }
+        accesslib_clear_all_caches_for_unit_testing();
+        $this->assertSame([], \enrol_apply\local\decidingrole::roles((int) $this->course->id), 'the precondition');
+    }
+
+    /**
+     * In separate groups the warning that a moderator could approve another moderator is on the
+     * form whenever "Role on approval" offers a role that decides, whatever role is saved (the
+     * browser hides it for the others, see the next test); it is absent outside separate groups,
+     * and when no offered role decides.
+     *
+     * Changes that must make it fail: the warning dropped, read from the saved role, given when no
+     * offered role decides, or given in a course where no group narrows anybody.
      *
      * @return void
      */
@@ -438,10 +498,173 @@ final class edit_form_groups_test extends \advanced_testcase {
         $recruit = $this->method($this->role('editingteacher'));
 
         $this->assertStringContainsString($warning, $this->render($recruit));
-        $this->assertStringNotContainsString($warning, $this->render($this->instance));
+        $this->assertStringContainsString($warning, $this->render($this->instance), 'a learner method may switch role');
 
         $DB->set_field('course', 'groupmode', NOGROUPS, ['id' => $this->course->id]);
         $this->assertStringNotContainsString($warning, $this->render($recruit));
+
+        $DB->set_field('course', 'groupmode', SEPARATEGROUPS, ['id' => $this->course->id]);
+        $this->no_role_decides();
+        $this->assertStringNotContainsString($warning, $this->render($recruit));
+    }
+
+    /**
+     * The warning follows the role being edited: it is hidden while "Role on approval" holds any of
+     * the offered roles that do not decide (the select's own option values), and still hidden under
+     * "Only those who see every group".
+     *
+     * Changes that must make it fail: the role condition dropped, or built from other ids than the
+     * select offers.
+     *
+     * @return void
+     */
+    public function test_the_deciding_warning_follows_the_role_being_edited(): void {
+        $mform = $this->quickform($this->form());
+        $this->assertTrue($mform->elementExists('decidingbygroups'));
+
+        $offered = [];
+        foreach ($mform->getElement('roleid')->_options as $option) {
+            $offered[] = (int) $option['attr']['value'];
+        }
+        $learner = array_values(array_diff($offered, \enrol_apply\local\decidingrole::roles((int) $this->course->id)));
+        sort($learner);
+        $this->assertContains($this->role('student'), $learner, 'the precondition: a learner role is offered');
+        $this->assertNotContains($this->role('editingteacher'), $learner);
+
+        $byrole = array_filter(
+            $this->hidden_by($mform, 'roleid', 'in'),
+            static fn(array $names): bool => in_array('decidingbygroups', $names, true)
+        );
+        $this->assertSame([implode('|', $learner)], array_map('strval', array_keys($byrole)));
+
+        $allgroups = (string) instanceoptions::DECIDERS_ALLGROUPS;
+        $this->assertContains('decidingbygroups', $this->hidden_by($mform, 'deciders', 'eq')[$allgroups] ?? []);
+    }
+
+    /**
+     * Who decides and who is notified holds "Who decides", every notice about deciders under it,
+     * then the recipients; in separate groups "Who decides" is not frozen and carries no inert note.
+     *
+     * Changes that must make it fail: a notice left in Groups, the recipients before a notice, or the
+     * section placed after After approval.
+     *
+     * @return void
+     */
+    public function test_who_decides_holds_the_deciders_notices_and_the_recipients(): void {
+        $mform = $this->quickform($this->form($this->method($this->role('editingteacher'))));
+
+        $this->assertSame([
+            'deciders',
+            'decidersallgroups',
+            'groupscopekeyless',
+            'groupscopekeylesskey',
+            'groupscopenopreference',
+            'decidingbygroups',
+            'notify',
+        ], $this->section($mform, 'sectiondeciders'));
+        $this->assertFalse($mform->getElement('deciders')->isFrozen());
+
+        $headers = [];
+        foreach ($mform->_elements as $element) {
+            if ($element->getType() === 'header') {
+                $headers[] = $element->getName();
+            }
+        }
+        $this->assertSame(['sectiongroups', 'sectiondeciders', 'sectionafter'], array_slice($headers, 4));
+        $this->assertFalse($mform->_collapsibleElements['sectiondeciders'], 'separate groups open it');
+    }
+
+    /**
+     * Under "Groups joined on approval", one line says the chosen group is joined as well, shown for
+     * a choice alone, and one says the key's group is, shown for a key alone.
+     *
+     * Changes that must make it fail: either line dropped, or shown under the other answer.
+     *
+     * @return void
+     */
+    public function test_the_joined_groups_say_what_the_answer_adds(): void {
+        $mform = $this->quickform($this->form());
+
+        $groups = $this->section($mform, 'sectiongroups');
+        $this->assertSame(['groupselect', 'groupselectchoice', 'groupselectkey'], array_slice($groups, -3));
+        $this->assertStringContainsString(
+            s(get_string('groupselectchoice', 'enrol_apply')),
+            $mform->getElement('groupselectchoice')->_text
+        );
+        $this->assertStringContainsString(
+            s(get_string('groupselectkey', 'enrol_apply')),
+            $mform->getElement('groupselectkey')->_text
+        );
+
+        $neq = $this->hidden_by($mform, 'groupdecided', 'neq');
+        $this->assertContains('groupselectchoice', $neq[groupquestion::CHOICE]);
+        $this->assertNotContains('groupselectchoice', $neq[groupquestion::KEY]);
+        $this->assertContains('groupselectkey', $neq[groupquestion::KEY]);
+        $this->assertNotContains('groupselectkey', $neq[groupquestion::CHOICE]);
+    }
+
+    /**
+     * The group modes, with the strings the line names each one with.
+     *
+     * @return array The mode, the core string id of its name and this plugin's consequence string id.
+     */
+    public static function group_mode_provider(): array {
+        return [
+            'no groups' => [NOGROUPS, 'groupsnone', 'coursegroupmodeshared'],
+            'separate groups' => [SEPARATEGROUPS, 'groupsseparate', 'coursegroupmodeseparate'],
+            'visible groups' => [VISIBLEGROUPS, 'groupsvisible', 'coursegroupmodeshared'],
+        ];
+    }
+
+    /**
+     * The first row of Groups names the course's group mode and what it does to who sees an
+     * application, and the summary strip states the mode too.
+     *
+     * @param int $mode The course's group mode.
+     * @param string $name The core string id of its name.
+     * @param string $consequence The consequence string id.
+     * @return void
+     */
+    #[DataProvider('group_mode_provider')]
+    public function test_the_group_mode_line_names_the_mode_and_what_it_means(int $mode, string $name, string $consequence): void {
+        global $DB;
+
+        $DB->set_field('course', 'groupmode', $mode, ['id' => $this->course->id]);
+        $mform = $this->quickform($this->form());
+
+        $this->assertSame('coursegroupmode', $this->section($mform, 'sectiongroups')[0]);
+        $line = $mform->getElement('coursegroupmode');
+        $this->assertSame(get_string('coursegroupmode', 'enrol_apply'), $line->getLabel());
+        $this->assertStringContainsString(s(get_string($name, 'group')), $line->_text);
+        $this->assertStringContainsString(s(get_string($consequence, 'enrol_apply')), $line->_text);
+        $other = $consequence === 'coursegroupmodeseparate' ? 'coursegroupmodeshared' : 'coursegroupmodeseparate';
+        $this->assertStringNotContainsString(s(get_string($other, 'enrol_apply')), $line->_text);
+
+        $method = new \ReflectionMethod(\enrol_apply_edit_form::class, 'summary_facts');
+        $facts = $method->invoke($this->form(), $this->instance);
+        $this->assertContains(get_string('summarygroupmode', 'enrol_apply', get_string($name, 'group')), $facts);
+    }
+
+    /**
+     * The line links the course settings, where the mode is changed, only for a reader who may
+     * change them.
+     *
+     * Changes that must make it fail: the link offered without moodle/course:update.
+     *
+     * @return void
+     */
+    public function test_the_course_settings_are_linked_only_for_who_may_change_them(): void {
+        $link = '/course/edit.php?id=' . $this->course->id;
+        $name = s(get_string('groupsseparate', 'group'));
+
+        $text = $this->quickform($this->form())->getElement('coursegroupmode')->_text;
+        $this->assertStringContainsString($link, $text, 'the control: an administrator may change them');
+
+        $this->setUser($this->getDataGenerator()->create_and_enrol($this->course, 'teacher'));
+        $this->assertFalse(has_capability('moodle/course:update', \context_course::instance($this->course->id)));
+        $text = $this->quickform($this->form())->getElement('coursegroupmode')->_text;
+        $this->assertStringContainsString($name, $text);
+        $this->assertStringNotContainsString($link, $text);
     }
 
     /**
@@ -468,6 +691,10 @@ final class edit_form_groups_test extends \advanced_testcase {
 
         $DB->set_field('enrol', 'roleid', $this->role('editingteacher'), ['id' => $other->id]);
         $this->assertStringContainsString($named, $this->render($this->instance));
+
+        // Directly after the offer it is about.
+        $groups = $this->section($this->quickform($this->form()), 'sectiongroups');
+        $this->assertSame('offerleak', $groups[array_search('groupoffergrouping', $groups, true) + 1] ?? null);
     }
 
     /**

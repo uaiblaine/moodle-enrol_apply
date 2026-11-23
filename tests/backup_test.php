@@ -1600,6 +1600,81 @@ final class backup_test extends \advanced_testcase {
     }
 
     /**
+     * Three methods of one course, each with its own notification setting, named after it.
+     *
+     * @param int $userid The id the settings name.
+     * @return \stdClass The course.
+     */
+    protected function course_with_notification_settings(int $userid): \stdClass {
+        global $DB;
+
+        $recipients = \enrol_apply\local\notifyrecipients::class;
+        [$course, $instance] = $this->create_course_with_application();
+        $DB->update_record('enrol', (object) [
+            'id' => $instance->id,
+            'name' => 'Group',
+            'customtext3' => $recipients::GROUP . ',' . $userid,
+        ]);
+        foreach (['Everyone' => $recipients::ALL, 'Named' => (string) $userid] as $name => $value) {
+            $id = $this->plugin->add_instance($course, $this->plugin->get_instance_defaults());
+            $DB->update_record('enrol', (object) ['id' => $id, 'name' => $name, 'customtext3' => $value]);
+        }
+
+        return $course;
+    }
+
+    /**
+     * The notification setting of each restored method, keyed by the method's name.
+     *
+     * @param int $courseid The restored course.
+     * @return array customtext3 by method name.
+     */
+    protected function restored_notification_settings(int $courseid): array {
+        global $DB;
+
+        return $DB->get_records_menu('enrol', ['courseid' => $courseid, 'enrol' => 'apply'], 'name', 'name, customtext3');
+    }
+
+    /**
+     * A restore into another site keeps the notification markers and drops the ids, which name
+     * other people there: the group marker loses the person picked beside it.
+     *
+     * Changes that must make it fail: the group marker dropped with the ids, or the ids kept.
+     *
+     * @return void
+     */
+    public function test_a_restore_from_another_site_keeps_the_notification_markers(): void {
+        $recipients = \enrol_apply\local\notifyrecipients::class;
+        $teacher = $this->getDataGenerator()->create_user();
+        $course = $this->course_with_notification_settings((int) $teacher->id);
+
+        $restored = $this->restored_notification_settings($this->backup_and_restore($course, false, true));
+
+        $this->assertSame($recipients::GROUP, $restored['Group']);
+        $this->assertSame($recipients::ALL, $restored['Everyone']);
+        $this->assertSame('', (string) $restored['Named']);
+    }
+
+    /**
+     * On the same site the notification settings come back exactly as they were, ids included.
+     *
+     * The control for the test above.
+     *
+     * @return void
+     */
+    public function test_a_restore_on_the_same_site_keeps_the_notification_settings(): void {
+        $recipients = \enrol_apply\local\notifyrecipients::class;
+        $teacher = $this->getDataGenerator()->create_user();
+        $course = $this->course_with_notification_settings((int) $teacher->id);
+
+        $restored = $this->restored_notification_settings($this->backup_and_restore($course, false));
+
+        $this->assertSame($recipients::GROUP . ',' . $teacher->id, $restored['Group']);
+        $this->assertSame($recipients::ALL, $restored['Everyone']);
+        $this->assertSame((string) $teacher->id, $restored['Named']);
+    }
+
+    /**
      * The application window travels with the course, because core backs both columns up itself.
      *
      * @return void

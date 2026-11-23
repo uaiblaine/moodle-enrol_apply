@@ -63,20 +63,18 @@ if ($instanceid) {
     $instance->courseid = $course->id;
 }
 
-$mform = new enrol_apply_edit_form(null, [$instance, $plugin, $context]);
+/* A scenario to start a new method from (\enrol_apply\local\preset): its values fill in the form
+   and nothing else. The form reads it only for a new method and only as one of its keys, and carries
+   it in a hidden element, so the post that saves reads it again from there. */
+$preset = optional_param('preset', '', PARAM_ALPHA);
+
+$mform = new enrol_apply_edit_form(null, [$instance, $plugin, $context, $preset]);
 
 if ($mform->is_cancelled()) {
     redirect($return);
 } else if ($data = $mform->get_data()) {
-    /* Notification recipients are stored in customtext3 the same way
-       admin_setting_users_with_capability::write_setting() stores them: the "everyone"
-       marker wins over any explicit pick, and "nobody" is represented by an empty value. */
-    $notify = $data->notify;
-    if (in_array('$@ALL@$', $notify)) {
-        $notify = ['$@ALL@$'];
-    }
-    $notify = array_diff($notify, ['$@NONE@$']);
-    $data->customtext3 = implode(',', $notify);
+    // Notification recipients, stored in customtext3 by the one writer of that value.
+    $data->customtext3 = \enrol_apply\local\notifyrecipients::from_form((array) ($data->notify ?? []));
 
     /* Collect the picked field set into its envelope. The pool is read again here rather
        than trusted from the submission: hideIf is a browser behaviour, and a "required" flag

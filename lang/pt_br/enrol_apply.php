@@ -26,7 +26,12 @@
 defined('MOODLE_INTERNAL') || die();
 
 $string['admissionnotice'] = 'Avisar os gestores a cada inscrição com chave';
-$string['admissionnotice_help'] = 'Só para um método que inscreve apenas com a chave de grupo. Com Sim, quem é avisado das novas inscrições deste método também recebe um aviso curto cada vez que alguém se inscreve com uma chave. Desligado por padrão, porque nesse método toda inscrição é uma delas. Um método que também recebe inscrições para análise sempre envia o aviso.';
+$string['admissionnotice_help'] = 'Só para um método que inscreve apenas com a chave de grupo.
+
+* **Não**: ninguém é avisado de cada inscrição. É o padrão, porque nesse método toda inscrição é uma delas.
+* **Sim**: quem é avisado das novas solicitações deste método também recebe um aviso curto cada vez que alguém se inscreve com uma chave.
+
+Um método que também recebe solicitações para análise sempre envia o aviso.';
 $string['admissionroute'] = 'Via de admissão';
 $string['admissionroutereview'] = 'Análise, sem chave de grupo';
 $string['admittedbykey'] = 'Você está inscrito. Sua chave de grupo foi aceita e você entrou no grupo {$a}. Não foi necessária análise.';
@@ -117,7 +122,12 @@ $string['canntenrollate'] = 'Você não pode mais solicitar inscrição, pois as
 $string['cantenrol'] = 'A inscrição está desativada ou inativa';
 $string['checkyourdetails'] = 'Confira seus dados';
 $string['choicekey'] = 'E com uma chave de grupo?';
-$string['choicekey_help'] = 'Se a chave de inscrição de grupo ainda vale ao lado da lista. Com "Uma chave válida inscreve na hora", quem tem uma chave válida é inscrito na hora no grupo da chave, e o grupo escolhido é ignorado; os demais escolhem e aguardam uma decisão. Os modos só com chave não aparecem aqui: neles a chave decide o grupo, e uma lista só poderia contradizê-la.';
+$string['choicekey_help'] = 'Se a chave de inscrição de grupo ainda vale ao lado da lista.
+
+* **Não**: as chaves são ignoradas. Todos escolhem um grupo e aguardam uma decisão.
+* **Uma chave válida inscreve na hora**: quem tem uma chave válida é inscrito na hora no grupo da chave, e o grupo escolhido é ignorado. Os demais escolhem e aguardam uma decisão.
+
+Os modos só com chave não aparecem aqui: neles a chave decide o grupo, e uma lista só poderia contradizê-la.';
 $string['chosenchip'] = 'Escolheu: {$a}';
 $string['chosenchipunnamed'] = 'Escolheu um grupo';
 $string['chosengroup'] = 'Grupo';
@@ -141,7 +151,12 @@ $string['chosengroupshow'] = 'Mostrar grupos';
 $string['chosengroupunavailable'] = 'Este grupo não pode ser escolhido. Escolha um da lista.';
 $string['cohortnonmemberinfo'] = 'A inscrição neste curso é restrita aos membros de um coorte específico. Se você acredita que deveria ter acesso, entre em contato com a administração do curso.';
 $string['cohortonly'] = 'Somente membros do coorte';
-$string['cohortonly_help'] = 'As solicitações podem ser restritas somente aos membros de um coorte específico. Alterar esta configuração não afeta as solicitações nem as inscrições existentes.';
+$string['cohortonly_help'] = 'Restringe as solicitações aos membros de um coorte.
+
+* Quem não é do coorte é informado de que não pode solicitar aqui, sem que o coorte seja nomeado.
+* Alterar esta opção não afeta as solicitações já enviadas nem as inscrições existentes.
+
+**Exemplo**: um método que recruta moderadores recebe solicitações apenas do coorte das pessoas convidadas.';
 $string['cohortunresolved'] = 'Este método de inscrição está restrito a um coorte que não existe neste site, portanto nenhuma solicitação pode ser aceita. Entre em contato com a administração do curso.';
 $string['comment'] = 'Comentário';
 $string['conditionalways'] = 'Sempre exibida';
@@ -185,9 +200,18 @@ $string['confirmmailsubject_default'] = 'Sua solicitação de inscrição em {$a
 $string['confirmmailsubject_desc'] = 'Deixe em branco para usar o texto que este plugin já traz.';
 $string['confirmusers'] = 'Confirmar inscrições';
 $string['confirmusersinstance'] = 'Confirmar inscrições: {$a}';
+$string['coursegroupmode'] = 'Modalidade de grupo do curso';
+$string['coursegroupmodelink'] = 'Alterar nas configurações do curso';
+$string['coursegroupmodeseparate'] = 'Uma solicitação com grupo chega a quem decide por esse grupo e a quem vê todos os grupos.';
+$string['coursegroupmodeshared'] = 'Todos que podem decidir veem todas as solicitações.';
 $string['coursename'] = 'Curso';
 $string['custom_label'] = 'Pergunta do comentário';
-$string['custom_label_help'] = 'Encabeça a caixa de comentário do solicitante e a coluna de comentário na fila de aprovação e na página de revisão, de modo que a pergunta feita e as respostas lidas usem a mesma redação. Não tem efeito a menos que \'Pedir um comentário\' esteja como Sim. Deixe em branco para usar a redação padrão.';
+$string['custom_label_help'] = 'A pergunta que encabeça a caixa de comentário.
+
+* A mesma redação encabeça a coluna de comentário da fila e o comentário na página de revisão, de modo que a pergunta feita e as respostas lidas coincidam.
+* Deixe em branco para usar a redação padrão.
+
+**Exemplo**: "Por que você quer fazer este curso?".';
 $string['datasource:applications'] = 'Solicitações de inscrição';
 $string['decideapplication'] = 'Decidir esta solicitação';
 $string['decided'] = 'Decisão';
@@ -198,8 +222,20 @@ $string['decidednotyet'] = 'Ainda não';
 $string['deciders'] = 'Quem decide as solicitações deste método?';
 $string['deciders_allgroups'] = 'Somente quem vê todos os grupos';
 $string['deciders_group'] = 'Quem decide pelo grupo da solicitação';
-$string['deciders_help'] = 'Num curso em modo de grupos separados, uma solicitação com grupo chega a quem decide por esse grupo, como seus professores sem direito de edição, além de quem vê todos os grupos. "Somente quem vê todos os grupos" mantém todas as solicitações deste método longe de quem decide pelos grupos: use-a num método que recruta moderadores, para que um moderador nunca decida sobre outro. Nos demais modos de grupo, todos que podem decidir veem todas as solicitações, e esta opção não muda nada.';
+$string['deciders_help'] = 'Só tem efeito em cursos com **grupos separados**. Nas outras modalidades, todos que podem decidir veem todas as solicitações.
+
+* **Quem decide pelo grupo da solicitação**: a solicitação com grupo (escolhido, ou o da chave) chega aos moderadores daquele grupo e a quem vê todos os grupos. A solicitação sem grupo chega só a quem vê todos os grupos.
+* **Somente quem vê todos os grupos**: nenhum moderador de grupo vê ou decide as solicitações deste método.
+
+**Quando usar cada uma**
+
+* Estudantes se inscrevem por turma, e cada moderador aprova a sua: a primeira opção.
+* Recrutamento de moderadores (o papel na aprovação pode decidir solicitações): a segunda opção, para que um moderador nunca aprove outro.
+* Aprovação centralizada na coordenação: a segunda opção.
+
+**Estudantes e moderadores no mesmo curso**: crie dois métodos, um para cada papel. Quem solicitou por um método de moderadores não pode solicitar pelo de estudantes.';
 $string['decidersallgroupsinfo'] = 'Somente quem vê todos os grupos decide as solicitações deste método. Quem decide por um grupo nunca as vê.';
+$string['decidersinert'] = 'Este curso não está no modo de grupos separados: todos que podem decidir veem todas as solicitações, e esta opção não muda nada.';
 $string['decisiongroupfull'] = '{$a->name} ({$a->members} de {$a->seats} vagas ocupadas, lotado)';
 $string['decisiongroups'] = 'Grupos para ingressar na aprovação';
 $string['decisiongroups_help'] = 'Os solicitantes aprovados entram nestes grupos. Deixe em branco para usar os grupos configurados no método de inscrição, mais o grupo que cada solicitante escolheu, quando escolheu um.';
@@ -220,17 +256,31 @@ $string['decisionsummarykey'] = 'Uma solicitação que uma chave de grupo enviou
 $string['decisionsummaryrole'] = 'Papel que uma aprovação atribui';
 $string['defaultperiod'] = 'Duração padrão da inscrição';
 $string['defaultperiod_desc'] = 'Tempo padrão de validade da inscrição. Se for zero, a duração da inscrição será ilimitada por padrão.';
-$string['defaultperiod_help'] = 'Tempo padrão de validade da inscrição, contado a partir do momento em que o usuário é inscrito. Se desativado, a duração da inscrição será ilimitada por padrão.';
+$string['defaultperiod_help'] = 'Quanto tempo dura uma inscrição aprovada, contado a partir do momento da aprovação.
+
+* **Desativado**: a inscrição não tem fim.
+* **Ativado**: ao fim do período, a inscrição expira e a vaga é liberada.
+
+O tempo que a solicitação espera por uma decisão não conta.
+
+**Exemplo**: 180 dias dá a cada solicitante aprovado seis meses de acesso, seja qual for a data da aprovação.';
 $string['defaultrole_desc'] = 'Papel atribuído ao usuário quando a solicitação de inscrição é aprovada.';
 $string['detailsthattravel'] = 'Dados que acompanham sua solicitação';
 $string['detailsthattravel_desc'] = 'Estes dados são enviados a quem analisar sua solicitação. Editá-los aqui não altera o seu perfil.';
 $string['detailsthattravel_desc_required'] = 'Estes dados ficam registrados com a sua inscrição. Alterá-los aqui não muda o seu perfil.';
 $string['detailsthattravel_required'] = 'Seus dados';
 $string['editdescription'] = 'Texto exibido aos solicitantes';
-$string['editdescription_help'] = 'Exibido no alto do formulário de solicitação, acima das perguntas, a todos que o abrem. É HTML: links e formatação são mantidos. Deixe em branco para não exibir nada.';
+$string['editdescription_help'] = 'Exibido no alto do formulário de solicitação, acima das perguntas, a todos que o abrem.
+
+* É HTML: links e formatação são mantidos.
+* Deixe em branco para não exibir nada.
+
+**Exemplo**: a quem o curso se destina, o que é avaliado na solicitação e quando sai a resposta.';
 $string['editenrolmentrefused'] = 'Você não pode alterar esta inscrição: ela é uma solicitação aguardando decisão, e você não pode decidi-la.';
 $string['enrolenddate'] = 'Encerramento das solicitações';
-$string['enrolenddate_help'] = 'Se ativado, as solicitações só poderão ser enviadas até esta data. Isso é diferente da duração da inscrição, que define por quanto tempo uma inscrição aprovada permanece válida.';
+$string['enrolenddate_help'] = 'Se ativado, as solicitações só podem ser enviadas até esta data. As solicitações enviadas antes dela continuam na fila e podem ser decididas depois.
+
+Não é o fim do acesso ao curso: quanto tempo dura uma inscrição aprovada é a "Duração padrão da inscrição".';
 $string['enrolenddaterror'] = 'A data de encerramento das solicitações não pode ser anterior à data de abertura';
 $string['enrolmentactive'] = 'Inscrito';
 $string['enrolmentgone'] = 'Não está mais inscrito';
@@ -238,7 +288,9 @@ $string['enrolmentsuspended'] = 'Suspenso';
 $string['enrolmentunknown'] = 'Desconhecido';
 $string['enrolmentwaiting'] = 'Adiada';
 $string['enrolstartdate'] = 'Abertura das solicitações';
-$string['enrolstartdate_help'] = 'Se ativado, as solicitações só poderão ser enviadas a partir desta data. Isso é diferente da duração da inscrição, que define por quanto tempo uma inscrição aprovada permanece válida.';
+$string['enrolstartdate_help'] = 'Se ativado, as solicitações só podem ser enviadas a partir desta data. Antes dela, o cartão do método informa quando as solicitações abrem.
+
+Não é o início do acesso ao curso: a inscrição aprovada começa na aprovação e dura a "Duração padrão da inscrição".';
 $string['enrolwithkey'] = 'Inscrever-se com chave';
 $string['entity:answer'] = 'Resposta da solicitação';
 $string['entity:submission'] = 'Solicitação de inscrição';
@@ -262,23 +314,60 @@ $string['expirymessageenrollerbody'] = 'As inscrições no curso \'{$a->course}\
 
 Para estender as inscrições, acesse {$a->extendurl}';
 $string['expirymessageenrollersubject'] = 'Notificação de expiração de inscrição';
+$string['expirynotify'] = 'Avisar antes de a inscrição expirar';
+$string['expirynotify_help'] = 'Se uma mensagem é enviada antes de uma inscrição expirar. Só vale quando a inscrição tem duração.
+
+* **Não**: nenhuma mensagem.
+* **Somente o professor**: o professor responsável pelo método recebe a lista das inscrições prestes a expirar.
+* **Professor e usuário inscrito**: cada usuário inscrito também é avisado da própria inscrição.
+
+Com quanta antecedência a mensagem sai é o "Limite para notificação".';
 $string['expirynotifyall'] = 'Professor e usuário inscrito';
 $string['expirynotifyenroller'] = 'Somente o professor';
 $string['expirynotifyhour_desc'] = 'Hora do dia em que as notificações de expiração de inscrição são enviadas.';
+$string['expirythreshold'] = 'Limite para notificação';
+$string['expirythreshold_help'] = 'Com quanta antecedência do fim da inscrição a mensagem é enviada.
+
+**Exemplo**: com 7 dias, quem tem a inscrição terminando no dia 30 é avisado no dia 23.';
 $string['fieldrequired'] = 'Obrigatório';
 $string['fieldtypenotallowed'] = 'Este tipo de pergunta não pode ser feito no formulário de solicitação.';
 $string['gotocourse'] = 'Ir para o curso';
 $string['gotoprofile'] = 'Ir para o meu perfil';
 $string['group'] = 'Grupos atribuídos na aprovação';
-$string['group_help'] = 'Todo solicitante aprovado entra nestes grupos. Solicitar não coloca ninguém em grupo: a participação segue a aprovação. Quem decide e pode escolher a decisão pode mudar os grupos na página de revisão. Com uma chave de inscrição de grupo, o grupo da chave também é atribuído.';
+$string['group_help'] = 'Todo solicitante aprovado entra nestes grupos, qualquer que seja o grupo que escolheu ou para o qual digitou uma chave.
+
+* **Além do grupo do solicitante**: o grupo escolhido na lista, ou o grupo da chave, também é atribuído.
+* **Na página de revisão**: quem decide e pode escolher a decisão pode mudar os grupos.
+* **Removidos com a inscrição**: as participações pertencem a este método.
+
+**Exemplo**: um método que recruta moderadores coloca todos num grupo de controle "Moderadores", e cada um entra também na turma que escolheu moderar.
+
+**Mantenha o grupo de controle fora de toda lista**: num curso em modo de grupos separados, o moderador decide as solicitações de todos os grupos em que este método o colocou. Use um grupo que nenhum método oferece e que não tem chave de inscrição.';
 $string['groupchoicerequired'] = 'O solicitante precisa escolher';
-$string['groupchoicerequired_help'] = 'Sim: nenhuma solicitação sem grupo. Não: a lista começa com "Sem preferência", e quem aprova coloca o solicitante num grupo.';
+$string['groupchoicerequired_help'] = 'Se uma solicitação pode ser enviada sem grupo.
+
+* **Sim**: nenhuma solicitação sem grupo.
+* **Não**: a lista começa com "Sem preferência", e quem aprova coloca o solicitante num grupo.
+
+Num curso em modo de grupos separados, uma solicitação com "Sem preferência" chega somente a quem vê todos os grupos.';
 $string['groupchoicerequired_no'] = 'Não: pode responder "Sem preferência"';
 $string['groupchoicerequired_yes'] = 'Sim: nenhuma solicitação sem grupo';
 $string['groupdecided'] = 'Como o grupo do solicitante é decidido?';
 $string['groupdecided_choice'] = 'O solicitante escolhe numa lista';
 $string['groupdecided_decider'] = 'Quem decide escolhe na aprovação';
-$string['groupdecided_help'] = 'Quem decide escolhe na aprovação: o solicitante não indica grupo, e quem aprova escolhe os grupos em que ele entra. O solicitante escolhe numa lista: o método oferece grupos e o solicitante escolhe um ao se candidatar; quem aprova vê a escolha e pode alterá-la. O solicitante digita uma chave de inscrição de grupo: a chave definida na página do grupo decide o grupo, e o modo da chave diz se ela inscreve na hora ou envia a solicitação para análise. Num curso em modo de grupos separados, uma solicitação com grupo chega a quem decide por esse grupo.';
+$string['groupdecided_help'] = 'Quem indica o grupo de uma solicitação.
+
+* **Quem decide escolhe na aprovação**: o solicitante não indica grupo, e quem aprova escolhe os grupos em que ele entra.
+* **O solicitante escolhe numa lista**: o método oferece grupos e o solicitante escolhe um ao solicitar. Quem aprova vê a escolha e pode alterá-la.
+* **O solicitante digita uma chave de inscrição de grupo**: a chave definida na página do grupo decide o grupo. O modo da chave diz se ela inscreve na hora ou envia a solicitação para análise.
+
+**Quando usar cada uma**
+
+* Sem turmas, ou a coordenação distribui as pessoas: quem decide escolhe.
+* Turmas que o solicitante conhece, como uma cidade ou um turno: a lista.
+* Turmas fechadas de antemão, com a chave entregue por cada professor: a chave.
+
+Num curso em modo de grupos separados, uma solicitação com grupo chega a quem decide por esse grupo.';
 $string['groupdecided_key'] = 'O solicitante digita uma chave de inscrição de grupo';
 $string['groupkey'] = 'Chave de inscrição do grupo';
 $string['groupkey_help'] = 'Se o seu professor lhe deu uma chave do seu grupo, informe-a para ser inscrito imediatamente e entrar nesse grupo. Sem a chave, sua inscrição passa por análise. A chave é opcional.';
@@ -300,14 +389,19 @@ $string['groupkeyreview_help'] = 'Digite a chave que seu professor forneceu para
 $string['groupkeys'] = 'O que a chave de inscrição do grupo faz';
 $string['groupkeys_any'] = 'Uma chave válida inscreve na hora; sem ela, a inscrição passa por análise';
 $string['groupkeys_desc'] = 'O que a chave de inscrição de um grupo do curso faz num novo método de inscrição: nada, inscrever na hora enquanto as demais inscrições passam por análise, inscrever na hora sem que ninguém consiga se inscrever sem ela, ou enviar a inscrição para análise sem que ninguém consiga se inscrever sem ela.';
-$string['groupkeys_help'] = 'As chaves são definidas na página de configurações de cada grupo por quem pode gerenciar grupos, e vale qualquer grupo do curso.
+$string['groupkeys_help'] = 'As chaves são definidas na página de configurações de cada grupo por quem pode gerenciar grupos, e vale a chave de qualquer grupo do curso.
 
-* Nada: toda inscrição passa por análise, e as chaves são ignoradas.
-* Uma chave válida inscreve na hora: o solicitante que informar a chave de um dos grupos do curso é inscrito imediatamente e entra nesse grupo, sem aguardar análise. Sem chave, ou com uma chave errada, a inscrição é analisada normalmente; quando não há vaga, ela aguarda análise.
-* Só com chave: uma chave válida inscreve na hora, e ninguém consegue se inscrever por este método sem ela. Nada fica aguardando decisão: sem uma chave válida, ou sem vaga, a inscrição é recusada e nada é guardado.
-* Só com chave, com análise: uma chave válida envia a inscrição para análise, e ninguém consegue se inscrever por este método sem ela. O grupo da chave fica registrado com a solicitação, e o solicitante entra nele quando a inscrição é aprovada. Sem uma chave válida, ou sem vaga, a inscrição é recusada e nada é guardado.
+* **Uma chave válida inscreve na hora; sem ela, a inscrição passa por análise**: o solicitante que digita uma chave válida é inscrito imediatamente e entra nesse grupo. Sem chave, com uma chave errada ou sem vaga, a solicitação aguarda análise.
+* **Só com chave**: uma chave válida inscreve na hora, e ninguém se inscreve por este método sem ela. Nada fica aguardando decisão: sem uma chave válida, ou sem vaga, a inscrição é recusada e nada é guardado.
+* **Só com chave, com análise**: uma chave válida envia a solicitação para análise, e ninguém solicita sem ela. O grupo da chave fica registrado com a solicitação, e o solicitante entra nele na aprovação.
 
-Em qualquer modo os dados obrigatórios e as perguntas continuam sendo pedidos, e o período de inscrição, a restrição por coorte, o limite de solicitantes e as vagas continuam valendo. Exceto no modo só com chave com análise, quem tem uma chave dispensa a análise.';
+**Quando usar cada uma**
+
+* O professor entrega a chave à turma, e os atrasados pedem uma vaga: o primeiro modo.
+* Só entra quem tem uma chave, sem análise: só com chave.
+* A chave diz qual é a turma, e a coordenação ainda aprova cada pessoa: só com chave, com análise.
+
+Em qualquer modo os dados obrigatórios e as perguntas continuam sendo pedidos, e o período de solicitação, a restrição por coorte, o limite de solicitações e as vagas continuam valendo.';
 $string['groupkeys_off'] = 'Nada: toda inscrição passa por análise';
 $string['groupkeys_required'] = 'Só com chave: uma chave válida inscreve na hora, e ninguém se inscreve sem ela';
 $string['groupkeys_review'] = 'Só com chave: uma chave válida envia a inscrição para análise';
@@ -323,10 +417,21 @@ $string['groupkeysshowall'] = 'Ver os {$a} grupos';
 $string['groupkeyuntypable'] = 'A chave começa ou termina com espaço, que ninguém consegue digitar no formulário de inscrição.';
 $string['groupkeyunusualspace'] = 'Sua chave começa ou termina com um espaço incomum, como costuma acontecer com uma chave copiada. Digite-a de novo, ou cole sem o espaço.';
 $string['groupoffer'] = 'Grupos oferecidos';
-$string['groupoffer_help'] = 'Os grupos entre os quais o solicitante pode escolher. Um grupo que só seus membros veem nunca é oferecido a um solicitante, embora continue nesta lista. Onde as vagas dos grupos valem, um grupo lotado aparece mas não pode ser escolhido.';
+$string['groupoffer_help'] = 'Os grupos entre os quais o solicitante pode escolher.
+
+* Um grupo que só seus membros veem nunca é oferecido, embora continue nesta lista.
+* Onde as vagas dos grupos valem, um grupo lotado aparece, mas não pode ser escolhido.
+* A solicitação não ocupa vaga até ser aprovada.
+
+**Não ofereça um grupo de controle**: um grupo que um método de recrutamento deste curso atribui na aprovação colocaria todas as solicitações feitas a ele diante de todas as pessoas que aquele método aprovou.';
 $string['groupofferempty'] = 'Ofereça ao menos um grupo: o solicitante precisa escolher um.';
 $string['groupoffergrouping'] = 'Adicionar os grupos de um agrupamento';
-$string['groupoffergrouping_help'] = 'Adiciona todos os grupos do agrupamento aos grupos oferecidos ao salvar. Eles são copiados uma vez: um grupo adicionado depois ao agrupamento só é oferecido quando você o adicionar aqui.';
+$string['groupoffergrouping_help'] = 'Adiciona todos os grupos do agrupamento aos grupos oferecidos ao salvar.
+
+* Os grupos são copiados uma vez, naquele momento.
+* Um grupo adicionado depois ao agrupamento só é oferecido quando você o adicionar aqui.
+
+**Exemplo**: o curso tem um agrupamento "Turmas 2026" com doze grupos. Escolha-o aqui em vez de selecionar os doze um a um.';
 $string['groupofferhidden'] = '{$a} (nunca oferecido: oculto para quem não é membro)';
 $string['groupscopekeyless'] = 'As solicitações sem chave chegam apenas a quem pode acessar todos os grupos.';
 $string['groupscopenopreference'] = 'As solicitações com "Sem preferência" chegam apenas a quem pode acessar todos os grupos.';
@@ -334,11 +439,25 @@ $string['groupseatsexceeded'] = 'O grupo {$a->group} agora tem {$a->members} mem
 $string['groupseatsnolimit'] = '{$a} membros, sem limite';
 $string['groupseatsof'] = '{$a->members} de {$a->seats} vagas ocupadas';
 $string['groupseatsoption'] = 'As vagas dos grupos valem para este método';
-$string['groupseatsoption_help'] = 'Com o local_groupdist, um grupo pode declarar vagas, e cada membro ocupa uma, qualquer que seja seu papel. Ligada, a lista mostra as vagas restantes de cada grupo e recusa um grupo lotado. Desligada, este método não mostra nem confere vagas: desligue-a num método que recruta moderadores, que não devem ocupar a vaga de um estudante. A aprovação continua adicionando o membro, e o aviso de vagas depois dela continua apontando um grupo acima das suas vagas.';
+$string['groupseatsoption_help'] = 'Com o local_groupdist, um grupo pode declarar vagas, e cada membro ocupa uma, qualquer que seja o seu papel.
+
+* **Sim**: a lista mostra as vagas restantes de cada grupo e recusa um grupo lotado.
+* **Não**: este método não mostra nem confere vagas.
+
+Nos dois casos a aprovação continua adicionando o membro, e o aviso de vagas depois dela continua apontando um grupo acima das suas vagas.
+
+**Exemplo**: escolha Não num método que recruta moderadores, que não devem ocupar a vaga de um estudante.';
 $string['groupseatsoption_no'] = 'Não: ignorar as vagas';
 $string['groupseatsoption_yes'] = 'Sim: mostrar as vagas restantes e recusar um grupo lotado';
+$string['groupselectchoice'] = 'O solicitante também entra no grupo que escolheu.';
+$string['groupselectkey'] = 'O solicitante também entra no grupo da chave.';
 $string['hidecard'] = 'Ocultar este cartão de quem não é do coorte';
-$string['hidecard_help'] = 'Desligada, todos que chegam à página de inscrição do curso veem o cartão deste método, e quem não é do coorte é informado de que não pode se candidatar. Ligada, essas pessoas nem veem o cartão; quem já se candidatou sempre vê o seu. Útil num método que recruta moderadores: os candidatos chegam a ele pelo coorte, ou pelo link para o formulário do próprio método que a coordenação lhes envia.';
+$string['hidecard_help'] = 'O que as pessoas de fora do coorte veem na página de inscrição do curso.
+
+* **Não**: todos veem o cartão deste método, e quem não é do coorte é informado de que não pode solicitar.
+* **Sim**: essas pessoas nem veem o cartão. Quem já solicitou sempre vê o seu.
+
+**Exemplo**: num método que recruta moderadores, escolha Sim. Os convidados chegam a ele pelo coorte, ou pelo link para o formulário do próprio método que a coordenação lhes envia, e os estudantes nunca o veem.';
 $string['hidecard_no'] = 'Não: mostrar, dizendo que o método é restrito';
 $string['hidecard_yes'] = 'Sim: só membros da coorte veem este método';
 $string['invalidformaction'] = 'Ação desconhecida solicitada para as inscrições selecionadas.';
@@ -380,7 +499,15 @@ $string['mailtoteacher_keyreview'] = 'Solicitação feita com a chave de inscri�
 $string['mailtoteacher_keyreviewnogroup'] = 'Solicitação feita com uma chave de inscrição de grupo. A inscrição aguarda análise.';
 $string['mailtoteacher_subject'] = 'Nova solicitação de inscrição!';
 $string['maxapplicants'] = 'Número máximo de solicitações';
-$string['maxapplicants_help'] = 'O maior número de solicitações que este método de inscrição aceita. Solicitações pendentes, adiadas e aprovadas contam para este limite; uma inscrição cujo período terminou não conta, então este número não coincide com a coluna Usuários da página de métodos de inscrição. 0 significa sem limite. Os solicitantes nunca veem este número - ao ser atingido, apenas são informados de que as solicitações estão encerradas. Num método que inscreve só com chave de grupo, toda inscrição é aprovada na hora, então este número e as vagas contam quase as mesmas pessoas, e vale o menor.';
+$string['maxapplicants_help'] = 'O maior número de solicitações que este método recebe. 0 significa sem limite.
+
+* **O que conta**: solicitações pendentes, adiadas e aprovadas. Uma inscrição cujo período terminou não conta, então este número difere da coluna Usuários da página de métodos de inscrição.
+* **Ao ser atingido**: os solicitantes são informados apenas de que as solicitações estão encerradas. Eles nunca veem o número.
+* **Uma solicitação adiada continua contando** até ser aprovada ou cancelada.
+
+**Exemplo**: 30 aqui e 10 em "Vagas" recebe trinta solicitações para escolher dez pessoas.
+
+Num método que inscreve só com chave de grupo, toda inscrição é aprovada na hora, então este número e as vagas contam quase as mesmas pessoas, e vale o menor.';
 $string['maxenrolled'] = 'Número máximo de usuários inscritos';
 $string['maxenrolled_help'] = 'Define o número máximo de usuários que podem solicitar inscrição neste curso. 0 significa sem limite.';
 $string['maxenrolledreached'] = 'Não estamos mais aceitando solicitações de inscrição.';
@@ -392,7 +519,12 @@ $string['messageprovider:waitinglist'] = 'Notificações de adiamento de solicit
 $string['newapplicationnotification'] = 'Há uma nova solicitação de inscrição aguardando análise.';
 $string['newenrols'] = 'Aceitar novas solicitações';
 $string['newenrols_desc'] = 'Permitir, por padrão, que usuários solicitem inscrição em novas instâncias.';
-$string['newenrols_help'] = 'Se é possível enviar uma nova solicitação por este método. As solicitações já enviadas continuam na fila e ainda podem ser decididas, e as inscrições já aprovadas não são afetadas.';
+$string['newenrols_help'] = 'Se é possível enviar uma nova solicitação por este método.
+
+* **Sim**: o cartão do método na página de inscrição recebe solicitações.
+* **Não**: ninguém consegue solicitar. As solicitações já enviadas continuam na fila e ainda podem ser decididas, e as inscrições aprovadas não são afetadas.
+
+**Exemplo**: a turma fechou, mas ainda há solicitações aguardando. Coloque Não e termine de decidi-las.';
 $string['nocohortsavailable'] = 'Não há coorte disponível para restringir este método.';
 $string['nofieldsoffered'] = 'No momento a administração não permite coletar nenhum campo de perfil junto com a solicitação.';
 $string['nothingtoprovide'] = 'Não há nada a preencher. Envie para solicitar inscrição em {$a}.';
@@ -400,14 +532,33 @@ $string['notification'] = 'Solicitação de inscrição enviada com sucesso. Voc
 $string['notify'] = 'Avisar sobre novas solicitações';
 $string['notify_desc'] = 'Defina quem é notificado sobre novas solicitações de inscrição.';
 $string['notify_heading'] = 'Configurações de notificação';
-$string['notify_help'] = 'Quem recebe uma mensagem quando alguém envia uma solicitação por este método. "Todos que podem ..." acompanha quem tem a capacidade no curso à medida que isso muda; uma pessoa escolhida pelo nome só é avisada enquanto ainda tiver a capacidade. As pessoas que a administração escolheu para o site todo também são avisadas.';
+$string['notify_help'] = 'Quem recebe uma mensagem quando alguém solicita por este método.
+
+* **Ninguém**: nenhuma mensagem deste método.
+* **Todos que podem "Gerenciar solicitações de inscrição"**: quem tem a capacidade no curso, com inscrição ativa, no momento em que a solicitação chega. Um moderador que entra depois é incluído sem editar este método.
+* **Quem decide pelo grupo da solicitação**: só os moderadores daquele grupo. Quando a solicitação não tem grupo, ou o grupo não tem moderador, quem vê todos os grupos é avisado no lugar, de modo que nenhuma solicitação fica sem aviso.
+* **Pessoas escolhidas pelo nome**: uma lista fixa, que pode ser combinada com a opção acima. Cada uma só é avisada enquanto ainda tiver a capacidade.
+
+**Quando usar cada uma**
+
+* Cada turma tem seus moderadores, e a coordenação não quer uma mensagem por turma: quem decide pelo grupo da solicitação.
+* Um curso pequeno em que todos acompanham todas as solicitações: todos.
+* O coordenador quer todas as solicitações, além dos moderadores: quem decide pelo grupo, mais o coordenador pelo nome.
+
+Ninguém é avisado de uma solicitação que não pode decidir: num curso em modo de grupos separados, o moderador só recebe as dos próprios grupos. Os mentores do solicitante e as pessoas que a administração escolheu para o site todo também são avisados.';
 $string['notifyapprovaltask'] = 'Envio de notificação de aprovação de inscrição';
 $string['notifycoursebased'] = 'Notificação de nova solicitação de inscrição (por instância, ex.: professores do curso)';
 $string['notifycoursebased_desc'] = 'Padrão para novas instâncias: notificar todos que possuem a capacidade \'Gerenciar solicitações de inscrição\' no curso correspondente (ex.: professores e gerentes)';
 $string['notifyglobal'] = 'Notificação de nova solicitação de inscrição (global, ex.: gerentes e administradores)';
 $string['notifyglobal_desc'] = 'Defina quem é notificado sobre novas solicitações de inscrição em qualquer curso.';
+$string['notifygroupdeciders'] = 'Quem decide pelo grupo da solicitação';
 $string['opt_commentaryzone'] = 'Pedir um comentário';
-$string['opt_commentaryzone_help'] = 'Acrescenta uma caixa de texto livre ao formulário de solicitação. Quem decide lê o comentário na fila de solicitações e na página de revisão.';
+$string['opt_commentaryzone_help'] = 'Acrescenta uma caixa de texto livre ao formulário de solicitação.
+
+* Quem decide lê o comentário na fila de solicitações e na página de revisão.
+* A caixa é encabeçada pela "Pergunta do comentário", abaixo.
+
+**Exemplo**: pergunte por que o solicitante quer fazer o curso. Para respostas com formato definido, use as perguntas próprias do método.';
 $string['outcomeapproved'] = 'Aprovado, inscrito';
 $string['outcomeawaiting'] = 'Aguardando decisão';
 $string['outcomecancelled'] = 'Cancelado';
@@ -429,7 +580,13 @@ $string['outcomeunenrolled'] = 'Aprovado e depois teve a inscrição removida';
 $string['outcomewaiting'] = 'Adiada';
 $string['ownapplicationnotdecidable'] = 'Sua própria solicitação: outra pessoa que decide solicitações deve decidi-la.';
 $string['places'] = 'Vagas';
-$string['places_help'] = 'Quantos solicitantes este método de inscrição pode ter aprovados ao mesmo tempo. Apenas inscrições aprovadas contam, então o método pode aceitar mais solicitações do que tem vagas - que é justamente a intenção, já que nem todo solicitante é aprovado. Uma inscrição cujo período terminou libera sua vaga. 0 significa sem limite. Atingir o limite não bloqueia uma aprovação: o gestor é avisado e decide. Num método que inscreve só com chave de grupo, uma chave válida é recusada quando não há mais vagas.';
+$string['places_help'] = 'Quantos solicitantes este método pode ter aprovados ao mesmo tempo. 0 significa sem limite.
+
+* **O que conta**: apenas inscrições aprovadas. Uma inscrição cujo período terminou libera a vaga.
+* **Ao ser atingido**: a aprovação não é bloqueada. Quem decide é avisado e decide.
+* **Com chave de grupo que inscreve na hora**: uma chave válida é recusada quando não há mais vagas.
+
+**Exemplo**: um método pode receber mais solicitações do que tem vagas, e essa é a intenção, já que nem todo solicitante é aprovado. Limite as solicitações em "Número máximo de solicitações".';
 $string['placesfull'] = 'Todas as {$a} vagas deste método de inscrição estão ocupadas.';
 $string['placestaken'] = '{$a->taken} de {$a->limit}';
 $string['placestakenlabel'] = 'Vagas ocupadas';
@@ -438,6 +595,22 @@ $string['pluginname'] = 'Inscrição mediante aprovação';
 $string['pluginname_desc'] = 'Com este plugin os usuários podem solicitar inscrição em um curso. Um professor ou gerente do site precisa aprovar a solicitação antes de o usuário ser inscrito.';
 $string['pluginname_keyonly'] = 'Inscrição com chave de grupo';
 $string['pluginname_keyreview'] = 'Inscrição com chave de grupo e análise';
+$string['presetchosen'] = 'Escolhido';
+$string['presetclasses'] = 'Turmas com moderadores';
+$string['presetclasseswhen'] = 'Quando o solicitante escolhe a sua turma e cada turma tem moderadores que decidem as suas solicitações.';
+$string['presetclear'] = 'Começar dos padrões do site';
+$string['presetkey'] = 'Chave de inscrição do grupo';
+$string['presetkeywhen'] = 'Quando cada grupo distribui a sua própria chave de inscrição, e uma chave válida deve inscrever na hora.';
+$string['presetmoderators'] = 'Recrutamento de moderadores';
+$string['presetmoderatorsnote'] = 'Crie um segundo método para os estudantes: quem fez uma solicitação por este não pode fazer outra como estudante neste curso.';
+$string['presetmoderatorswhen'] = 'Quando este método recruta as pessoas que vão moderar os grupos e decidir as solicitações deles.';
+$string['presetneedsseparate'] = 'Este cenário precisa de grupos separados.';
+$string['presetreview'] = 'Análise simples';
+$string['presetreviewwhen'] = 'Quando quem decide lê cada solicitação e coloca cada solicitante aprovado num grupo.';
+$string['presetrolemissing'] = 'Escolha um papel que decide solicitações';
+$string['presets'] = 'Começar de um cenário';
+$string['presetsintro'] = 'Um cenário só preenche o formulário abaixo: tudo ainda pode ser alterado antes de salvar.';
+$string['presetuse'] = 'Usar este cenário';
 $string['privacy:applicationpath'] = 'Solicitação de inscrição';
 $string['privacy:metadata:core_group'] = 'Uma aprovação adiciona o solicitante aos grupos escolhidos para o método de inscrição ou por quem decidiu; o plugin exporta e exclui as participações em grupo que adicionou.';
 $string['privacy:metadata:core_message'] = 'Uma aprovação adiciona o solicitante a grupos, e o plugin exporta e exclui as conversas dos grupos cujas participações adicionou.';
@@ -654,7 +827,13 @@ $string['reportviewwaitedmore'] = 'Esperou mais de';
 $string['reportviewwithoutperson'] = 'Não decididas por uma pessoa';
 $string['reportviewwithoutpersonsub'] = 'Admissões por chave e registros sem responsável, fora do tempo de resposta';
 $string['requestedfields'] = 'Campos de perfil solicitados';
-$string['requestedfields_help'] = 'Os campos de perfil que o solicitante deve preencher. Somente os campos permitidos pela administração do site são oferecidos aqui. Marcar um campo como obrigatório impede o envio da solicitação sem ele.';
+$string['requestedfields_help'] = 'Os campos de perfil que o solicitante preenche no formulário de solicitação.
+
+* Somente os campos permitidos pela administração do site são oferecidos aqui.
+* Um campo marcado como obrigatório precisa ser preenchido para a solicitação ser enviada.
+* O que o solicitante digita acompanha a solicitação até quem decide. Só altera o perfil se o solicitante aceitar a oferta de "Após a aprovação".
+
+**Exemplo**: peça a instituição e o departamento para conferir se o solicitante pertence ao público do curso.';
 $string['requestedfieldsintro'] = 'Marque um campo para pedi-lo, e também Obrigatório para recusar uma solicitação sem ele.';
 $string['requiredtoapply'] = 'Este dado é obrigatório para solicitar';
 $string['resolutiontime'] = 'Espera pela resolução';
@@ -762,32 +941,57 @@ $string['reviewwaitshort'] = 'Adiar';
 $string['reviewwrite'] = 'Escrever ao solicitante ou anotar para o registro';
 $string['reviewwritehelp'] = 'Opcional. A mensagem vai para o solicitante com a decisão; a anotação fica só no registro.';
 $string['roleonapproval'] = 'Papel na aprovação';
-$string['roleonapproval_help'] = 'O papel que o solicitante aprovado recebe no curso. Solicitar não dá papel nenhum: ele é atribuído quando a solicitação é aprovada. Quem decide e pode escolher a decisão pode dar outro papel na página de revisão, entre os papéis que pode atribuir. A atribuição pertence a este método, por isso é removida junto com a inscrição.';
+$string['roleonapproval_help'] = 'O papel que o solicitante aprovado recebe no curso.
+
+* Solicitar não dá papel nenhum: ele é atribuído quando a solicitação é aprovada.
+* Quem decide e pode escolher a decisão pode dar outro papel na página de revisão, entre os papéis que pode atribuir.
+* O papel pertence a este método, por isso é removido junto com a inscrição.
+
+**Um método por papel**: para receber estudantes e moderadores no mesmo curso, crie dois métodos, um para cada papel. Um papel que pode decidir solicitações torna este um método de recrutamento: veja "Quem decide as solicitações deste método?".';
 $string['saveandeditfields'] = 'Salvar e editar campos da solicitação';
 $string['saveforfuture'] = 'Salvar estes dados para a próxima vez?';
 $string['saveforfuture_desc'] = 'Nada foi salvo no seu perfil ainda. Ao salvar, você não precisará informar estes dados novamente na próxima solicitação.';
 $string['saveforfutureinstance'] = 'Oferecer salvar os dados no perfil';
-$string['saveforfutureinstance_help'] = 'Depois de enviar uma solicitação, oferecer ao solicitante a opção de salvar no próprio perfil os dados informados. Somente os campos que o solicitante pode editar são gravados, e apenas quando ele aceita a oferta. Isso só fica disponível enquanto a administração do site permitir.';
+$string['saveforfutureinstance_help'] = 'Depois de enviar uma solicitação, o solicitante recebe a oferta de salvar no próprio perfil os dados que digitou.
+
+* Somente os campos que o solicitante pode editar são gravados, e apenas quando ele aceita a oferta.
+* Uma resposta vazia nunca apaga o que o perfil já tem.
+* Disponível apenas enquanto a administração do site permitir.
+
+**Exemplo**: o formulário pede o departamento. O solicitante que aceita a oferta não precisa digitá-lo de novo no próximo curso.';
 $string['sectionafter'] = 'Após a aprovação';
-$string['sectionafter_help'] = 'Por quanto tempo dura uma inscrição aprovada, se alguém é avisado antes de ela terminar, e se o solicitante recebe a oferta de salvar no perfil os dados que digitou.';
+$string['sectionafter_help'] = 'O que vem depois de uma aprovação: quanto tempo dura a inscrição, se alguém é avisado antes de ela terminar, e se o solicitante recebe a oferta de salvar no perfil os dados que digitou.';
+$string['sectiondeciders'] = 'Quem decide e quem é avisado';
+$string['sectiondeciders_help'] = 'Quem decide as solicitações deste método, e quem recebe uma mensagem quando chega uma.
+
+As duas coisas seguem a mesma regra: num curso em modo de grupos separados, o moderador de um grupo decide, e é avisado, apenas das solicitações desse grupo.';
 $string['sectionform'] = 'Formulário de solicitação';
-$string['sectionform_help'] = 'O que o solicitante lê e preenche: o texto acima do formulário, uma caixa de comentário, campos de perfil e as perguntas próprias do método. Cada método tem o seu formulário, então dois métodos no mesmo curso podem pedir coisas diferentes.';
+$string['sectionform_help'] = 'O que o solicitante lê e preenche: o texto acima do formulário, uma caixa de comentário, campos de perfil e as perguntas próprias do método.
+
+Cada método tem o seu formulário, então dois métodos do mesmo curso podem pedir coisas diferentes.';
 $string['sectiongeneral'] = 'Geral';
-$string['sectiongeneral_help'] = 'O nome do método, se ele está em uso e aceita solicitações, e o papel que o solicitante aprovado recebe.';
+$string['sectiongeneral_help'] = 'O básico deste método de inscrição: o nome exibido na página de inscrição do curso, se ele está em uso e recebe novas solicitações, e o papel que o solicitante aprovado recebe.';
 $string['sectiongroups'] = 'Grupos';
-$string['sectiongroups_help'] = 'Como o grupo do solicitante é decidido, quem decide as solicitações e os grupos em que o solicitante aprovado entra.';
+$string['sectiongroups_help'] = 'Como o grupo do solicitante é decidido e os grupos em que o solicitante aprovado entra.
+
+Solicitar não coloca ninguém em grupo: a participação segue a aprovação. A modalidade de grupo do curso, informada primeiro, diz se os grupos também separam quem decide cada solicitação.';
 $string['sectionnotify'] = 'Notificações';
 $string['sectionnotify_help'] = 'Quem é avisado quando chega uma nova solicitação.';
 $string['sectionwhen'] = 'Quando e quantos';
-$string['sectionwhen_help'] = 'Quando as solicitações são aceitas, e quantas. Estes limites são só deste método: outro método no curso conta os próprios solicitantes e vagas.';
+$string['sectionwhen_help'] = 'Quando as solicitações são recebidas, e quantas. Estes limites são só deste método: outro método do curso conta os próprios solicitantes e vagas.';
 $string['sectionwho'] = 'Quem pode solicitar';
-$string['sectionwho_help'] = 'Restringe quem pode enviar solicitação por este método. Sem restrição, qualquer pessoa que chegue à página de inscrição do curso pode solicitar.';
+$string['sectionwho_help'] = 'Restringe quem pode solicitar por este método. Sem restrição, qualquer pessoa que chegue à página de inscrição do curso pode solicitar.';
 $string['selectapplicant'] = 'Selecionar {$a}';
 $string['sendexpirynotificationstask'] = 'Envio de notificações de expiração de inscrição';
 $string['startapplication'] = 'Iniciar solicitação';
 $string['status'] = 'Permitir as inscrições existentes';
 $string['status_desc'] = 'Permitir o acesso ao curso a usuários inscritos internamente.';
-$string['status_help'] = 'Quando está em Não, toda inscrição feita por este método fica suspensa e ninguém pode enviar solicitação. Para parar de receber solicitações sem afetar quem já está inscrito, coloque \'Aceitar novas solicitações\' em Não.';
+$string['status_help'] = 'Liga ou desliga o método inteiro.
+
+* **Sim**: as inscrições aprovadas dão acesso ao curso, e as solicitações podem ser enviadas e decididas.
+* **Não**: toda inscrição feita por este método fica suspensa, e ninguém pode enviar solicitação.
+
+**Exemplo**: para parar de receber solicitações sem afetar quem já está inscrito, deixe aqui em Sim e coloque "Aceitar novas solicitações" em Não.';
 $string['submissiondecidedby'] = 'Decidido por';
 $string['submissionenrolment'] = 'Inscrição agora';
 $string['submissionmethod'] = 'Método de inscrição';
@@ -812,6 +1016,7 @@ $string['summaryclosed'] = 'Solicitações encerradas em {$a}';
 $string['summarydecidersallgroups'] = 'Decidido somente por quem vê todos os grupos';
 $string['summarydisabled'] = 'Método desativado: ninguém pode solicitar';
 $string['summaryfull'] = 'Não aceita solicitações: o limite de solicitações foi atingido';
+$string['summarygroupmode'] = 'Modalidade de grupo do curso: {$a}';
 $string['summarykeysany'] = 'Uma chave de grupo válida inscreve na hora; as demais solicitações passam por análise';
 $string['summarykeysoff'] = 'Chaves de inscrição de grupo não são usadas';
 $string['summarykeysrequired'] = 'Só com chave: uma chave de grupo válida inscreve na hora';

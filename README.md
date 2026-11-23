@@ -150,17 +150,34 @@ name, **Allow existing enrolments**, **Accept new applications**, **Role on appr
 and how many** (the application window, the maximum applicants, the places and the places taken);
 **Who may apply** (the cohort); **Application form** (the **Text shown to applicants**, **Ask for
 a comment** and its **Comment prompt**, the profile fields to ask for, and how many questions the
-method asks); **Groups** (see below); **After approval** (the enrolment
-duration, the expiry notice, the offer to save details to the profile); **Notifications**
-(**Notify of new applications**). Who may apply and the last two stay closed unless they hold
-something other than the default. **Save and edit application fields** leads on to the method's
-own questions.
+method asks); **Groups** (see below); **Who decides and who is notified** (**Who decides
+applications to this method?**, the notices about deciders, and **Notify of new applications**);
+**After approval** (the enrolment duration, the expiry notice, the offer to save details to the
+profile). Who may apply, Who decides and who is notified, and After approval stay closed unless
+they hold something other than the default; Who decides and who is notified also opens in a
+separate-groups course. The summary strip names the course's group mode too. **Save and edit
+application fields** leads on to the method's own questions.
+
+A method being added starts with four scenarios above its first section, each a card saying when to
+use it and what it sets: **Simple review** (a decider places the applicant in a group on approval;
+everyone who may decide is notified), **Classes with moderators** (the applicant must choose a
+group from a list, group seats apply, the deciders of the application's group decide and are
+notified), **Group enrolment key** (a valid key enrols at once; the group's deciders decide and are
+notified) and **Moderator recruitment** (the applicant chooses from a list, seats do not apply, only
+those who see every group decide, everyone is notified, and the role on approval is one that decides
+applications, a non-editing teacher's when there is one). The two built on groups say the course's
+group mode, and that they need separate groups when the course is not in them. **Use this
+scenario** fills in the form with those values on top of the site defaults; everything can still be
+changed, nothing is saved until the method is added, and the scenario itself is not stored. **Start
+from the site defaults** clears it. Editing a saved method shows no scenarios.
 
 **Who may apply** also offers, once a cohort is chosen, **Hide this card from people outside the
 cohort**: they then see no card for the method on the course's enrolment page (somebody who already
 applied always sees theirs). Without it they see the card and are told they may not apply.
 
-**Groups** starts with one question, **How is an applicant's group decided?**
+**Groups** starts with the course's group mode, what it means for who sees an application, and a
+link to the course settings for whoever may change them. Then one question, **How is an applicant's
+group decided?**
 
 - **A decider chooses on approval**: the applicant names no group; whoever approves picks the groups.
 - **The applicant chooses from a list**: **Groups offered** (a group only its members can see is
@@ -175,14 +192,33 @@ applied always sees theirs). Without it they see the card and are told they may 
   review; key only; key only, reviewed), with the groups that carry a key and their seats, never
   the keys.
 
-Then, whatever the answer, **Who decides applications to this method?** ("The deciders of the
-application's group", or "Only those who see every group", see [Separate groups](#separate-groups))
-and **Groups joined on approval**. In a separate-groups course the section warns when a method
-granting a role that decides applications is decided by each group's deciders (a moderator of a
-group could approve another moderator), when a group offered here is joined on approval, through
-another method of the course, with a role that decides, and which applications reach only those
-who see every group (without a group, or with "No preference"). The summary strip says how many
-groups the applicants choose among, and when only those who see every group decide.
+Then, whatever the answer, **Groups joined on approval**, with a line saying that the chosen group,
+or the key's group, is joined as well. In a separate-groups course the section warns, beside the
+offer, when a group offered here is joined on approval, through another method of the course, with
+a role that decides.
+
+**Who decides and who is notified** holds **Who decides applications to this method?** ("The
+deciders of the application's group", or "Only those who see every group", see
+[Separate groups](#separate-groups)), the notices about deciders, then **Notify of new
+applications**. Outside separate groups the answer narrows nobody, so it is shown but cannot be
+changed, with a note saying so, and a save keeps the stored answer. In a separate-groups course the
+section says which applications reach only those who see every group (without a group, or with "No
+preference"), and warns when a role "Role on approval" may grant decides applications while each
+group's deciders decide them (a moderator of a group could approve another moderator): the warning
+follows the role being edited, before a save. The summary strip says how many groups the applicants
+choose among, and when only those who see every group decide.
+
+**Notify of new applications** offers *Nobody*, everyone who can manage applications in the
+course, *The deciders of the application's group*, and each of those people by name. *The deciders
+of the application's group* tells, of each new application or admission by key, only the deciders
+narrowed to its group by [Separate groups](#separate-groups), so the people who see every group are
+not told of every class's applications. When the application has no deciders of its own (it has no
+group, nobody narrowed decides its group, the method is decided only by those who see every group,
+or the course is not in separate groups), it tells those who see every group instead, exactly whom
+"everyone" would tell: it never tells nobody where "everyone" would tell somebody. People picked by
+name beside it are told as well, each only of the applications they may decide. A course restored
+from another site keeps the choice and drops the people picked by name, who are other people there.
+Mentors and the site-wide recipients (`notifyglobal`) are told as before.
 
 ## Installation
 
@@ -411,7 +447,8 @@ the mode lets keyless applications in: *Nothing* and *A valid key enrols at once
 sees only their groups' applications in the queue and in the previous/next links. The review page
 of any other application is refused to them, and they cannot approve, defer or cancel one. Only
 their own groups are offered to choose from. They are told of a new application only when it is
-in one of their groups. They get the decision icon on the participants page only for those. A
+in one of their groups, and **Notify of new applications** can tell them alone of it (*The deciders
+of the application's group*). They get the decision icon on the participants page only for those. A
 decider in no group gets core's "you need to be part of a group" notice instead of a queue. Core's
 **Edit enrolment** screen (`enrol/apply:manage`) is refused to them too when it would approve, or
 change the dates of, an application outside their groups, and so is core's **Unenrol** route for a
@@ -487,8 +524,8 @@ confirmation** method beside the students' one, set differently in five places:
    this method** off, so a moderator takes no student's seat.
 4. **Who decides applications to this method?**: *Only those who see every group*, so no moderator
    decides on another (the form warns until it is set).
-5. **Groups joined on approval**: the moderators' own group, if they have one. **Notifications**:
-   the coordination only.
+5. **Groups joined on approval**: the moderators' own group, if they have one. **Notify of new
+   applications** (under **Who decides and who is notified**): the coordination only.
 
 The two methods hold each other in check. Somebody with a moderator application waiting, or
 approved, cannot apply through the students' method ("You have applied to take part in this course

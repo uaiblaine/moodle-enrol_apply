@@ -1,0 +1,128 @@
+{{!
+    This file is part of Moodle - http://moodle.org/
+
+    Moodle is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Moodle is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+}}
+{{!
+    @template enrol_apply/instance_presets
+
+    The scenarios a new method's settings form can start from, above its first section: one card
+    each, linking to the same form filled in with that scenario's values. Every value arrives in its
+    plain spelling: the double stashes escape them. The chosen card's link carries aria-current and
+    reads "Chosen", and its card a thicker edge, so the state is not told by colour alone.
+
+    Context variables required for this template:
+    * heading string - the region's heading
+    * intro string - one line saying a scenario only fills in the form
+    * haschosen boolean - whether a scenario is in force
+    * clearurl string - the form with no scenario
+    * clearlabel string - that link's text
+    * cards array - one object per scenario, in order:
+      * key string - the scenario's key
+      * title string - its title
+      * when string - one sentence on when to use it
+      * sets array - what it sets: label (the form's label) and value (the option it picks)
+      * hasprerequisite boolean - whether it needs separate groups
+      * modelabel string - "Course group mode"
+      * mode string - the course's group mode, as core names it
+      * needsseparate boolean - whether the course is not in separate groups
+      * needstext string - the sentence saying the scenario needs separate groups
+      * hassettingsurl boolean - whether to link the course settings
+      * settingsurl string - the course settings page
+      * settingstext string - that link's text
+      * hasnote boolean - whether the card carries a note
+      * note string - the note
+      * url string - the form filled in with this scenario
+      * chosen boolean - whether this scenario is in force
+      * buttonlabel string - "Use this scenario", or "Chosen"
+
+    Example context (json):
+    {
+        "heading": "Start from a scenario",
+        "intro": "A scenario only fills in the form below: everything can still be changed before saving.",
+        "haschosen": true,
+        "clearurl": "https://example.com/enrol/apply/edit.php?courseid=2",
+        "clearlabel": "Start from the site defaults",
+        "cards": [
+            {
+                "key": "classes",
+                "title": "Classes with moderators",
+                "when": "When applicants pick their class and each class has moderators who decide its applications.",
+                "sets": [
+                    {"label": "How is an applicant's group decided?", "value": "The applicant chooses from a list"},
+                    {"label": "The applicant must choose", "value": "Yes: no application without a group"}
+                ],
+                "hasprerequisite": true,
+                "modelabel": "Course group mode",
+                "mode": "No groups",
+                "needsseparate": true,
+                "needstext": "This scenario needs separate groups.",
+                "hassettingsurl": true,
+                "settingsurl": "https://example.com/course/edit.php?id=2",
+                "settingstext": "Change it in the course settings",
+                "hasnote": false,
+                "note": "",
+                "url": "https://example.com/enrol/apply/edit.php?courseid=2&preset=classes",
+                "chosen": true,
+                "buttonlabel": "Chosen"
+            }
+        ]
+    }
+}}
+<section class="enrol_apply-presets mb-4" aria-labelledby="{{uniqid}}-presets-heading">
+    <h3 class="h5" id="{{uniqid}}-presets-heading">{{heading}}</h3>
+    <p class="enrol_apply-presets-intro">{{intro}}</p>
+    <ul class="enrol_apply-presets-list">
+        {{#cards}}
+        <li class="enrol_apply-presets-item">
+            <div class="card enrol_apply-preset{{#chosen}} enrol_apply-preset-chosen{{/chosen}}" data-preset="{{key}}">
+                <div class="card-body enrol_apply-preset-body">
+                    <h4 class="card-title h6" id="{{uniqid}}-preset-{{key}}">{{title}}</h4>
+                    <p class="card-text">{{when}}</p>
+                    <ul class="enrol_apply-preset-sets">
+                        {{#sets}}
+                        <li><span class="enrol_apply-preset-label">{{label}}</span> {{value}}</li>
+                        {{/sets}}
+                    </ul>
+                    {{#hasprerequisite}}
+                    <p class="enrol_apply-preset-prerequisite">
+                        <span class="enrol_apply-preset-label">{{modelabel}}</span> {{mode}}
+                        {{#needsseparate}}
+                        <span class="enrol_apply-preset-needs">{{needstext}}</span>
+                        {{/needsseparate}}
+                        {{#hassettingsurl}}
+                        <a href="{{settingsurl}}">{{settingstext}}</a>
+                        {{/hassettingsurl}}
+                    </p>
+                    {{/hasprerequisite}}
+                    {{#hasnote}}
+                    <p class="enrol_apply-preset-note">{{note}}</p>
+                    {{/hasnote}}
+                    <div class="enrol_apply-preset-action">
+                        {{#chosen}}
+                        <a class="btn btn-sm btn-primary" href="{{url}}" aria-current="true" aria-describedby="{{uniqid}}-preset-{{key}}">{{buttonlabel}}</a>
+                        {{/chosen}}
+                        {{^chosen}}
+                        <a class="btn btn-sm btn-outline-secondary" href="{{url}}" aria-describedby="{{uniqid}}-preset-{{key}}">{{buttonlabel}}</a>
+                        {{/chosen}}
+                    </div>
+                </div>
+            </div>
+        </li>
+        {{/cards}}
+    </ul>
+    {{#haschosen}}
+    <p class="enrol_apply-presets-clear"><a href="{{clearurl}}">{{clearlabel}}</a></p>
+    {{/haschosen}}
+</section>
