@@ -873,9 +873,10 @@ final class reportengine {
                 if ($report->get_filter($identifier)->get_filter_class() === group::class && $spec['facet'] === 'choice') {
                     $offered = $offeredsets[$identifier];
                     // The application's group, or any group of the joined list: a whole id, so 11 is never 1.
+                    // A group named twice (the application's group also joined) is counted once below.
                     $groups = array_map('intval', explode(',', (string) $record->{"f{$index}b"}));
                     $groups[] = (int) $first;
-                    foreach (array_unique($groups) as $groupid) {
+                    foreach ($groups as $groupid) {
                         if (isset($offered[$groupid])) {
                             $values[] = (string) $groupid;
                         }
