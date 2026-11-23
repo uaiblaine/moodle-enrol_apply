@@ -18,6 +18,7 @@ namespace enrol_apply\local;
 
 use context_course;
 use core_reportbuilder\local\helpers\database;
+use enrol_apply\reportbuilder\local\filters\group;
 use enrol_apply\reportbuilder\local\systemreports\course_applications;
 use enrol_apply\reportbuilder\local\systemreports\headless_table;
 use moodle_url;
@@ -243,7 +244,7 @@ final class reportengine {
      *
      * The filters come with their facets' counts unless 'facets' is false: a sort or a page turn
      * changes no count, so a client asks for them only when what is counted can have moved
-     * ({@see facet_counts()}).
+     * ({@see facet_tallies()}).
      *
      * @param course_applications $report The report, as {@see report()} returned it.
      * @param array $options 'scope', 'search', 'page' (0-based), 'perpage', 'sort' (a
@@ -644,7 +645,7 @@ final class reportengine {
         /** @var course_applications $report */
         $report = $table->get_report();
         $values = $report->get_filter_values();
-        $filters = [];
+        $items = [];
         foreach ($report->get_active_filters() as $identifier => $filter) {
             $class = $filter->get_filter_class();
             $own = [];
@@ -666,9 +667,42 @@ final class reportengine {
                     $offered[(string) $value] = html_entity_decode((string) $label, ENT_QUOTES | ENT_HTML401, 'UTF-8');
                 }
             }
+            [$sql] = $class::create($filter)->get_sql_filter($values);
+            $items[$identifier] = [
+                'filter' => $filter,
+                'type' => $type,
+                'facet' => $facet,
+                'offered' => $offered,
+                'applied' => $sql !== '',
+                'own' => $own,
+            ];
+        }
 
-            $counts = $counted && $facet !== '' ? self::facet_counts($table, $identifier, $facet, array_keys($offered)) : null;
-            if ($facet === 'decider' && $counts !== null) {
+        // The facets with no value of their own in force share one WHERE, so one read; the others read apart.
+        $tallies = [];
+        if ($counted) {
+            $shared = [];
+            foreach ($items as $identifier => $item) {
+                if ($item['facet'] === '') {
+                    continue;
+                }
+                $spec = ['facet' => $item['facet'], 'offered' => array_keys($item['offered'])];
+                if ($item['applied']) {
+                    $tallies += self::facet_tallies($table, $identifier, [$identifier => $spec]);
+                } else {
+                    $shared[$identifier] = $spec;
+                }
+            }
+            if ($shared) {
+                $tallies += self::facet_tallies($table, '', $shared);
+            }
+        }
+
+        $filters = [];
+        foreach ($items as $identifier => $item) {
+            $offered = $item['offered'];
+            $counts = $tallies[$identifier] ?? null;
+            if ($item['facet'] === 'decider' && $counts !== null) {
                 // The deciders are the values counted: their names are the filter's own field.
                 $offered = array_combine(array_keys($counts), array_map('strval', array_keys($counts)));
             }
@@ -681,16 +715,15 @@ final class reportengine {
                     'count' => $counts === null ? -1 : (int) ($counts[$value] ?? 0),
                 ];
             }
-            [$sql] = $class::create($filter)->get_sql_filter($values);
             $filters[] = [
                 'name' => $identifier,
-                'title' => $filter->get_header(),
-                'type' => $type,
-                'facet' => $facet,
+                'title' => $item['filter']->get_header(),
+                'type' => $item['type'],
+                'facet' => $item['facet'],
                 'options' => $options,
-                'applied' => $sql !== '',
-                'values' => json_encode((object) $own),
-                'groupings' => $counted && $type === 'group' ? self::groupings($report, array_keys($offered)) : [],
+                'applied' => $item['applied'],
+                'values' => json_encode((object) $item['own']),
+                'groupings' => $counted && $item['type'] === 'group' ? self::groupings($report, array_keys($offered)) : [],
             ];
         }
 
@@ -722,121 +755,154 @@ final class reportengine {
     }
 
     /**
-     * How many rows each option of a facet would list, under every other filter in force.
+     * How many rows each option of the facets would list, under every other filter in force.
      *
      * Faceted counts: the rows' own FROM and WHERE ({@see headless_table::where_without()}), so the
      * base conditions (the course, the separate-groups narrowing, S8), the scope, the search and
-     * every stored filter but this facet's own are in force, and the facet's own value is not. Each
-     * count is what the rows' total would be with this option chosen in place of the facet's current
-     * value. One statement per facet, never one per option:
+     * every stored filter but the excluded one are in force. Each count is what the rows' total would
+     * be with that option chosen in place of the facet's current value.
      *
-     * - a choice of core's select: the rows grouped by the filter's field, which the filter compares
-     *   with "=" ({@see \core_reportbuilder\local\filters\select});
-     * - the group filter: the rows joined to the offered groups by the filter's own predicate
-     *   ({@see groupscope::record_group_where()}, tallied in PHP), a record counting once in each group it
-     *   belongs to;
-     * - waited: the rows whose wait, cast as core's duration filter casts it, is at least each
+     * One statement for all the facets given, never one per facet or per option: the rows are read
+     * once, DISTINCT by record, with every facet's value beside the record's id, and tallied here. A
+     * facet whose own filter is applied is read apart, excluding itself; the others share one read,
+     * because without an applied value of their own they share one WHERE. Per facet, each record
+     * counts once per value:
+     *
+     * - a choice of core's select: the filter's field, which the filter compares with "="
+     *   ({@see \core_reportbuilder\local\filters\select});
+     * - the group filter: the record's application group and each group of its joined list, the
+     *   offered ones only, a record counting once in each group it belongs to as
+     *   {@see groupscope::record_group_where()} selects it, a whole id (11 is never 1);
+     * - waited: the records whose wait, cast as core's duration filter casts it, is at least each
      *   threshold;
      * - decider: the decisions by a person (AR-D5: not a key admission, whose recorded decider is
-     *   the applicant) grouped by the decider's name, the field core's text filter compares with
-     *   "is equal to". That filter compares case- and accent-insensitively, so two deciders whose
-     *   names differ only so are one option's count apart from what choosing it lists; and it reaches
-     *   a key admission of the decider's own, which no option counts.
+     *   the applicant) by the decider's name, the field core's text filter compares with "is equal
+     *   to". That filter compares case- and accent-insensitively, so two deciders whose names
+     *   differ only so are one option's count apart from what choosing it lists; and it reaches a
+     *   key admission of the decider's own, which no option counts.
      *
      * Computed per request, never cached: a count is the database's answer now, on whichever node.
      *
      * @param headless_table $table The rows' table.
-     * @param string $identifier The facet's filter.
-     * @param string $facet Its kind ({@see facet()}).
-     * @param array $offered The values offered (group ids for the group filter), unused for a decider.
-     * @return array Option value => rows.
+     * @param string $excluded The filter left out of the WHERE, '' for none.
+     * @param array $facets Filter identifier => ['facet' => its kind ({@see facet()}), 'offered' => the
+     *     values offered, group ids for the group filter, unused for a decider].
+     * @return array Filter identifier => (option value => rows).
      */
-    protected static function facet_counts(headless_table $table, string $identifier, string $facet, array $offered): array {
+    protected static function facet_tallies(headless_table $table, string $excluded, array $facets): array {
         global $DB;
 
         /** @var course_applications $report */
         $report = $table->get_report();
-        $filter = $report->get_filter($identifier);
         $alias = $report->submission_alias();
-        [$where, $params] = $table->where_without($identifier);
+        [$where, $params] = $table->where_without($excluded);
         $params = array_merge($table->sql->params, $params);
-        $from = $table->from_with($filter);
-        [$fieldsql, $fieldparams] = database::sql_replace_parameters(
-            $filter->get_field_sql(),
-            $filter->get_field_params(),
-            static fn(string $name): string => "{$name}_fc"
-        );
-        $params = array_merge($params, $fieldparams);
 
-        $counts = [];
-        if ($facet === 'waited') {
-            $wait = $DB->sql_cast_char2real("({$fieldsql})");
-            $sums = [];
-            foreach (self::WAITED_DAYS as $index => $days) {
-                $sums[] = "SUM(CASE WHEN w.wait >= " . ($days * DAYSECS) . " THEN 1 ELSE 0 END) AS d{$index}";
-            }
-            $record = $DB->get_record_sql(
-                "SELECT " . implode(', ', $sums) . "
-                   FROM (SELECT DISTINCT {$alias}.id, {$wait} AS wait FROM {$from} WHERE {$where}) w",
-                $params
+        $filters = [];
+        $columns = [];
+        $offeredsets = [];
+        $index = 0;
+        foreach ($facets as $identifier => $spec) {
+            $index++;
+            $filter = $report->get_filter($identifier);
+            $offeredsets[$identifier] = array_flip(array_filter(array_map('intval', $spec['offered'])));
+            $filters[] = $filter;
+            [$fieldsql, $fieldparams] = database::sql_replace_parameters(
+                $filter->get_field_sql(),
+                $filter->get_field_params(),
+                static fn(string $name): string => "{$name}_fc{$index}"
             );
-            foreach (self::WAITED_DAYS as $index => $days) {
-                $counts[(string) $days] = (int) ($record->{"d{$index}"} ?? 0);
+            $params = array_merge($params, $fieldparams);
+            if ($spec['facet'] === 'waited') {
+                $columns[] = $DB->sql_cast_char2real("({$fieldsql})") . " AS f{$index}a";
+            } else if ($spec['facet'] === 'choice' && $filter->get_filter_class() === group::class) {
+                $columns[] = groupscope::application_group_sql($alias) . " AS f{$index}a";
+                $columns[] = "COALESCE({$alias}.joinedgroups, {$alias}.decidedgroups, '') AS f{$index}b";
+            } else if ($spec['facet'] === 'decider') {
+                $columns[] = "CASE WHEN {$alias}.decidedby > 0 AND {$alias}.decidedby <> {$alias}.userid THEN ({$fieldsql})"
+                    . " ELSE NULL END AS f{$index}a";
+            } else {
+                $columns[] = "({$fieldsql}) AS f{$index}a";
             }
-
-            return $counts;
         }
+        $from = $table->from_with(...$filters);
 
-        if ($facet === 'choice' && $filter->get_filter_class() === \enrol_apply\reportbuilder\local\filters\group::class) {
-            $ids = array_values(array_filter(array_map('intval', $offered)));
-            if ($ids === []) {
-                return [];
-            }
-            // One read, tallied here: a join of every offered group to every record grows with both.
-            $offeredset = array_flip($ids);
-            $group = groupscope::application_group_sql($alias);
-            $recordset = $DB->get_recordset_sql(
-                "SELECT DISTINCT {$alias}.id AS recordid, {$group} AS appgroup,
-                        COALESCE({$alias}.joinedgroups, {$alias}.decidedgroups, '') AS joined
-                   FROM {$from}
-                  WHERE {$where}",
-                $params
-            );
-            foreach ($recordset as $record) {
-                // The application's group, or any group of the joined list: a whole id, so 11 is never 1.
-                $groups = array_map('intval', explode(',', (string) $record->joined));
-                $groups[] = (int) $record->appgroup;
-                foreach (array_unique($groups) as $groupid) {
-                    if (isset($offeredset[$groupid])) {
-                        $counts[(string) $groupid] = ($counts[(string) $groupid] ?? 0) + 1;
-                    }
+        $tallies = [];
+        $seen = [];
+        foreach ($facets as $identifier => $spec) {
+            $tallies[$identifier] = [];
+            $seen[$identifier] = [];
+            if ($spec['facet'] === 'waited') {
+                foreach (self::WAITED_DAYS as $days) {
+                    $tallies[$identifier][(string) $days] = 0;
                 }
             }
-            $recordset->close();
-
-            return $counts;
-        } else {
-            $person = $facet === 'decider' ? " AND {$alias}.decidedby > 0 AND {$alias}.decidedby <> {$alias}.userid" : '';
-            $sql = "SELECT v.facetvalue, COUNT(1) AS facetcount
-                      FROM (SELECT DISTINCT {$alias}.id, {$fieldsql} AS facetvalue
-                              FROM {$from}
-                             WHERE ({$where}){$person}) v
-                  GROUP BY v.facetvalue";
+        }
+        if (!$facets) {
+            return $tallies;
         }
 
-        $recordset = $DB->get_recordset_sql($sql, $params);
+        $recordset = $DB->get_recordset_sql(
+            "SELECT DISTINCT {$alias}.id AS recordid, " . implode(', ', $columns) . "
+               FROM {$from}
+              WHERE {$where}",
+            $params
+        );
         foreach ($recordset as $record) {
-            if ($record->facetvalue === null || (string) $record->facetvalue === '') {
-                continue;
+            $index = 0;
+            foreach ($facets as $identifier => $spec) {
+                $index++;
+                $first = $record->{"f{$index}a"};
+                $values = [];
+                if ($spec['facet'] === 'waited') {
+                    if ($first === null) {
+                        continue;
+                    }
+                    // Counted once for each record and wait, as the DISTINCT pair it was.
+                    if (isset($seen[$identifier][$record->recordid . '|' . $first])) {
+                        continue;
+                    }
+                    $seen[$identifier][$record->recordid . '|' . $first] = true;
+                    foreach (self::WAITED_DAYS as $days) {
+                        if ((float) $first >= $days * DAYSECS) {
+                            $tallies[$identifier][(string) $days]++;
+                        }
+                    }
+                    continue;
+                }
+                if ($report->get_filter($identifier)->get_filter_class() === group::class && $spec['facet'] === 'choice') {
+                    $offered = $offeredsets[$identifier];
+                    // The application's group, or any group of the joined list: a whole id, so 11 is never 1.
+                    // A group named twice (the application's group also joined) is counted once below.
+                    $groups = array_map('intval', explode(',', (string) $record->{"f{$index}b"}));
+                    $groups[] = (int) $first;
+                    foreach ($groups as $groupid) {
+                        if (isset($offered[$groupid])) {
+                            $values[] = (string) $groupid;
+                        }
+                    }
+                } else if ($first !== null && (string) $first !== '') {
+                    $values[] = (string) $first;
+                }
+                foreach ($values as $value) {
+                    $key = $record->recordid . '|' . $value;
+                    if (isset($seen[$identifier][$key])) {
+                        continue;
+                    }
+                    $seen[$identifier][$key] = true;
+                    $tallies[$identifier][$value] = ($tallies[$identifier][$value] ?? 0) + 1;
+                }
             }
-            $counts[(string) $record->facetvalue] = (int) $record->facetcount;
         }
         $recordset->close();
-        if ($facet === 'decider') {
-            uksort($counts, static fn($a, $b): int => strnatcasecmp((string) $a, (string) $b));
+
+        foreach ($facets as $identifier => $spec) {
+            if ($spec['facet'] === 'decider') {
+                uksort($tallies[$identifier], static fn($a, $b): int => strnatcasecmp((string) $a, (string) $b));
+            }
         }
 
-        return $counts;
+        return $tallies;
     }
 
     /**

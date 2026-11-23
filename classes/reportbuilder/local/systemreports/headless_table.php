@@ -106,19 +106,21 @@ class headless_table extends system_report_table {
     }
 
     /**
-     * The table's FROM with a filter's joins added, those it does not carry yet.
+     * The table's FROM with the filters' joins added, those it does not carry yet.
      *
      * Core joins a filter's tables only while the filter applies, and a facet counts by a filter's
      * field whether it applies or not.
      *
-     * @param \core_reportbuilder\local\report\filter $filter The filter.
+     * @param \core_reportbuilder\local\report\filter ...$filters The filters.
      * @return string The FROM clause.
      */
-    public function from_with(\core_reportbuilder\local\report\filter $filter): string {
+    public function from_with(\core_reportbuilder\local\report\filter ...$filters): string {
         $from = $this->sql->from;
-        foreach (array_unique($filter->get_joins()) as $join) {
-            if (!str_contains($from, $join)) {
-                $from .= ' ' . $join;
+        foreach ($filters as $filter) {
+            foreach (array_unique($filter->get_joins()) as $join) {
+                if (!str_contains($from, $join)) {
+                    $from .= ' ' . $join;
+                }
             }
         }
 
