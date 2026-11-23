@@ -19,10 +19,11 @@ namespace enrol_apply\local;
 use stdClass;
 
 /**
- * Which course, and which category, the site-wide applications queue is narrowed to.
+ * Which course, which category and which method the site-wide applications queue is narrowed to.
  *
  * Offered on the site-wide queue only ({@see offered()}): the `?id=<enrolid>` queue already names
- * one course, and the mentee queue spans only the few courses a mentor's mentees applied to.
+ * one course, and the mentee queue spans only the few courses a mentor's mentees applied to. The
+ * table's method and grouped filters are offered on the same condition.
  *
  * No per-course capability check is needed. queue::listing_scope() returns the site-wide scope only
  * to a holder of enrol/apply:manageapplications at the SYSTEM context, who may manage applications
@@ -157,6 +158,28 @@ final class coursefilter {
         );
 
         return $exists ? $id : null;
+    }
+
+    /**
+     * One apply method's id, as it may be used.
+     *
+     * Like clean_course(): an id that names no apply instance (another plugin's method, one that
+     * never existed, 0) is no filter. Whether the method's course is the course filter's is not
+     * asked: the two filters are ANDed, so a method of another course lists nothing, as the same
+     * two values do on any listing.
+     *
+     * @param int $id What arrived.
+     * @return int|null The id, or null when nothing is applied.
+     */
+    public static function clean_method(int $id): ?int {
+        global $DB;
+
+        if ($id <= 0) {
+            return null;
+        }
+
+        // Existence only, as clean_course(): this runs before validate_context().
+        return $DB->record_exists('enrol', ['id' => $id, 'enrol' => 'apply']) ? $id : null;
     }
 
     /**

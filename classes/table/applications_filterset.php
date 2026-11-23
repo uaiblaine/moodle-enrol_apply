@@ -85,6 +85,8 @@ class applications_filterset extends filterset {
      * `named` (how the group was named), `waited` (more than so many days) and `appliedbefore` are
      * the headless reader's facets (\enrol_apply\local\queueengine), string filters cleaned against
      * their vocabularies by applications::set_filterset(); the page's own controls send none of them.
+     * So are `method` (an apply method's id) and `grouped` (yes or no), the site-wide queue's
+     * (SQ-D4), applied by the table on that queue only.
      *
      * The dates are two filters because core's table filters express no range. The snapshot is
      * not filterable: it is masked per row, and a filter would let an operator recover a withheld
@@ -103,6 +105,8 @@ class applications_filterset extends filterset {
             'appliedto' => string_filter::class,
             'category' => string_filter::class,
             'course' => string_filter::class,
+            'method' => string_filter::class,
+            'grouped' => string_filter::class,
             'group' => string_filter::class,
             'named' => string_filter::class,
             'waited' => string_filter::class,

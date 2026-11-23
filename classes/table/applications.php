@@ -96,6 +96,15 @@ class applications extends \table_sql implements dynamic_table {
     /** @var int[] The "waited more than" filter's thresholds, in days (the course report's, MQ mockup). */
     public const WAITED_DAYS = [1, 3, 7, 14];
 
+    /** @var string The grouped filter's value for an application whose group exists. */
+    public const GROUPED_YES = 'yes';
+
+    /** @var string The grouped filter's value for an application with no group that exists. */
+    public const GROUPED_NO = 'no';
+
+    /** @var string[] The grouped filter's vocabulary, in the order a panel lists it. */
+    public const GROUPED = [self::GROUPED_YES, self::GROUPED_NO];
+
     /**
      * @var string[] The tone of each kind of tag {@see tags()} gives a row, for the status labels of
      *     the applicant's cell.
@@ -133,6 +142,12 @@ class applications extends \table_sql implements dynamic_table {
 
     /** @var int|null Course the listing is narrowed to. */
     protected $coursefilter = null;
+
+    /** @var int|null Apply method the site-wide listing is narrowed to. */
+    protected $methodfilter = null;
+
+    /** @var string|null The grouped filter applied, one of GROUPED; null for none. */
+    protected $grouped = null;
 
     /** @var string|null Lower bound of the applied-date range as YYYY-MM-DD, null for none. */
     protected $appliedfrom = null;
@@ -332,6 +347,8 @@ class applications extends \table_sql implements dynamic_table {
            exist, is no filter. */
         $this->categoryfilter = null;
         $this->coursefilter = null;
+        $this->methodfilter = null;
+        $this->grouped = null;
         if (coursefilter::offered($this->scope)) {
             if ($filterset->has_filter('course')) {
                 $this->coursefilter = coursefilter::clean_course(
@@ -342,6 +359,19 @@ class applications extends \table_sql implements dynamic_table {
                 $this->categoryfilter = coursefilter::clean_category(
                     (int) $filterset->get_filter('category')->current()
                 );
+            }
+            /* The method and whether the application has a group (SQ-D4), on the same site-wide
+               queue: a method that is no apply instance is no filter, as a course with none is; a
+               value outside the vocabulary is no filter either. The headless reader sends them;
+               the page's own controls send neither. */
+            if ($filterset->has_filter('method')) {
+                $this->methodfilter = coursefilter::clean_method(
+                    (int) $filterset->get_filter('method')->current()
+                );
+            }
+            if ($filterset->has_filter('grouped')) {
+                $grouped = trim((string) $filterset->get_filter('grouped')->current());
+                $this->grouped = in_array($grouped, self::GROUPED, true) ? $grouped : null;
             }
         }
 
@@ -674,8 +704,8 @@ class applications extends \table_sql implements dynamic_table {
     /**
      * Whether the operator has narrowed this listing at all.
      *
-     * @return bool True when a search term, status, field, date, group, course, category, named,
-     *     waited or applied-before filter is applied.
+     * @return bool True when a search term, status, field, date, group, course, category, method,
+     *     grouped, named, waited or applied-before filter is applied.
      */
     public function is_narrowed(): bool {
         return $this->search !== ''
@@ -685,6 +715,8 @@ class applications extends \table_sql implements dynamic_table {
             || $this->appliedto !== null
             || $this->categoryfilter !== null
             || $this->coursefilter !== null
+            || $this->methodfilter !== null
+            || $this->grouped !== null
             || $this->groupfilter !== null
             || $this->named !== null
             || $this->waited !== null
@@ -795,6 +827,12 @@ class applications extends \table_sql implements dynamic_table {
         }
         if ($this->coursefilter !== null) {
             $params['course'] = $this->coursefilter;
+        }
+        if ($this->methodfilter !== null) {
+            $params['method'] = $this->methodfilter;
+        }
+        if ($this->grouped !== null) {
+            $params['grouped'] = $this->grouped;
         }
         if ($this->named !== null) {
             $params['named'] = $this->named;
@@ -1223,10 +1261,24 @@ class applications extends \table_sql implements dynamic_table {
         }
 
         /* The course and the category, on indexed columns ({course}.category and {course}.id),
-           unlike the search's LIKE, which can only scan. */
-        [$coursewheres, $courseparams] = coursefilter::where($this->categoryfilter, $this->coursefilter);
+           unlike the search's LIKE, which can only scan. Two entries, so that each facet's count
+           leaves out its own filter and keeps the other. */
+        [$coursewheres, $courseparams] = coursefilter::where(null, $this->coursefilter);
         if ($coursewheres) {
             $narrowing['course'] = [implode(' AND ', $coursewheres), $courseparams];
+        }
+        [$categorywheres, $categoryparams] = coursefilter::where($this->categoryfilter, null);
+        if ($categorywheres) {
+            $narrowing['category'] = [implode(' AND ', $categorywheres), $categoryparams];
+        }
+
+        // The method, an apply instance by set_filterset(); with a course filter of another course it lists nothing.
+        if ($this->methodfilter !== null) {
+            $narrowing['method'] = ['e.id = :queuemethodid', ['queuemethodid' => $this->methodfilter]];
+        }
+
+        if ($this->grouped !== null) {
+            $narrowing['grouped'] = [$this->grouped_where($this->grouped), []];
         }
 
         /* The applied-date range, as whole days in the reader's timezone. The upper bound is the
@@ -1350,6 +1402,25 @@ class applications extends \table_sql implements dynamic_table {
     }
 
     /**
+     * The grouped filter's predicate, over a user enrolment aliased "ue".
+     *
+     * "No" is the group filter's "none" ({@see groupfilter::where()}): no newest record whose
+     * application group ({@see groupscope::application_group_sql()}, the key's group or the chosen
+     * one) is a group that exists. "Yes" is its complement. That is the definition the group column
+     * shows (the kgs and kg joins of build_sql(): the newest record, its application group, joined
+     * to {groups}) and the engine's tally counts (whether kg found a group), so a deleted group's
+     * application is "no", and every row is reached by exactly one value.
+     *
+     * @param string $value One of GROUPED.
+     * @return string The where fragment; it takes no parameters.
+     */
+    protected function grouped_where(string $value): string {
+        [$none] = groupfilter::where($this->scope, groupfilter::NONE);
+
+        return $value === self::GROUPED_NO ? $none : "NOT ({$none})";
+    }
+
+    /**
      * The listing's WHERE with some of the operator's filters left out, the scope always kept.
      *
      * What a count under "every other criterion in force" reads: a facet's options are counted
@@ -1397,10 +1468,21 @@ class applications extends \table_sql implements dynamic_table {
      * land after core's per-driver NULL ordering. Core does the same in tool_policy, mod_quiz and
      * mod_assign. The raw `ue.id` rather than its alias does not depend on the SELECT list.
      *
+     * The course column sorts by the course's name, then the method's stored name and id in the same
+     * direction, so that the applications of one method stay together under a course with two; the
+     * headless reader's course sort is the same order ({@see \enrol_apply\local\queueengine}).
+     *
      * @return array Column name => SORT_ASC or SORT_DESC, ending in a unique key.
      */
     public function get_sort_columns() {
-        $sortcolumns = parent::get_sort_columns();
+        $sortcolumns = [];
+        foreach (parent::get_sort_columns() as $column => $direction) {
+            $sortcolumns[$column] = $direction;
+            if ($column === 'course') {
+                $sortcolumns['e.name'] = $direction;
+                $sortcolumns['e.id'] = $direction;
+            }
+        }
         $sortcolumns['ue.id'] = SORT_ASC;
 
         return $sortcolumns;
@@ -1456,7 +1538,7 @@ class applications extends \table_sql implements dynamic_table {
            these answers are identity data of the same kind (city, institution, custom profile
            fields). visible_keys() could mask them per row there too; leaving them out is a
            product decision, not a technical limit. */
-        if ($this->scope->identitycontext !== null) {
+        if ($this->has_details_column()) {
             $columns[] = 'snapshot';
             $headers[] = get_string('queuesubmitted', 'enrol_apply');
         }
@@ -1481,7 +1563,7 @@ class applications extends \table_sql implements dynamic_table {
             $this->column_class('checkboxcolumn', 'enrol_apply-col-select');
         }
         $this->column_class('fullname', 'enrol_apply-col-applicant');
-        if ($this->scope->identitycontext !== null) {
+        if ($this->has_details_column()) {
             $this->column_class('snapshot', 'enrol_apply-col-answers');
         }
         $this->column_class('applycomment', 'enrol_apply-col-comment');
@@ -2109,7 +2191,7 @@ class applications extends \table_sql implements dynamic_table {
      * @param stdClass $instance The {enrol} record, or the fields of it the listing selects.
      * @return string The name, plain spelling.
      */
-    protected static function method_name(stdClass $instance): string {
+    public static function method_name(stdClass $instance): string {
         if (empty($instance->name)) {
             return enrol_get_plugin('apply')->get_instance_name($instance);
         }
@@ -2140,6 +2222,25 @@ class applications extends \table_sql implements dynamic_table {
      * @return string Rendered cell.
      */
     public function col_snapshot($row) {
+        $html = $this->details_html($row);
+        if ($html === '') {
+            return '';
+        }
+
+        return $this->card_label(s(get_string('queuesubmitted', 'enrol_apply'))) . $html;
+    }
+
+    /**
+     * The submitted answers' cell without its card label: what col_snapshot() draws under it.
+     *
+     * The rules col_snapshot() documents, masked in the row's own course by
+     * {@see visible_entries()}; read by that cell and by the headless reader's "Details submitted"
+     * cell on the queues that span courses, so the two draw the same answers to the same reader.
+     *
+     * @param stdClass $row Row data carrying courseid and the record's id as `submissionid`.
+     * @return string The answers' HTML, escaped; empty when there is nothing to show.
+     */
+    public function details_html(stdClass $row): string {
         $separator = get_string('labelsep', 'langconfig');
         $answers = [];
         $whole = [];
@@ -2160,8 +2261,7 @@ class applications extends \table_sql implements dynamic_table {
 
         /* One flowing line of answers in one element, which styles.css clamps to two lines
            (MQ-D8); every answer stays in the markup and the whole set is the title. */
-        return $this->card_label(s(get_string('queuesubmitted', 'enrol_apply')))
-            . html_writer::div(implode('', $answers), 'enrol_apply-answers', ['title' => implode(' · ', $whole)]);
+        return html_writer::div(implode('', $answers), 'enrol_apply-answers', ['title' => implode(' · ', $whole)]);
     }
 
     /**
@@ -2216,12 +2316,103 @@ class applications extends \table_sql implements dynamic_table {
     }
 
     /**
-     * The named, waited and applied-before filters applied, as their values travel.
+     * Whether this listing carries the submitted answers as one "Details submitted" column.
+     *
+     * Wherever the scope has an identity context: never on the mentee queue, which shows no identity
+     * data, and the answers are identity data of the same kind (see define_table_columns()). The
+     * one predicate behind the table's column and the headless reader's `details` column.
+     *
+     * @return bool True where the answers' column is drawn.
+     */
+    public function has_details_column(): bool {
+        return $this->scope->identitycontext !== null;
+    }
+
+    /**
+     * Which of the queue's three kinds this listing is, for a client to draw it by.
+     *
+     * Derived from the scope queue::listing_scope() resolved for the reader, never from the request.
+     *
+     * @return string method (one method's queue), site (the site-wide queue) or mentees (a mentor's).
+     */
+    public function scope_kind(): string {
+        if ($this->scope->instance !== null) {
+            return 'method';
+        }
+
+        return $this->scope->mentees === null ? 'site' : 'mentees';
+    }
+
+    /**
+     * What the page's rows know about one method, on the queues that span methods.
+     *
+     * Read by {@see prepare_rows()} from the page's own rows: the name col_course() prints and
+     * whether its role decides (MQ-D16).
+     *
+     * @param int $enrolid The method.
+     * @return stdClass|null name (plain) and deciding; null off a page of the queues that span methods.
+     */
+    public function method_facts(int $enrolid): ?stdClass {
+        return $this->methods[$enrolid] ?? null;
+    }
+
+    /**
+     * The apply methods holding at least one application of this reader's scope, before any filter.
+     *
+     * Over scope_where(), the predicate scope_figures() counts, so the summary's methods and the
+     * awaiting figure beside them are one set. Whole {enrol} records, for capacity::states().
+     *
+     * @return array Enrol instance id => {enrol} record.
+     */
+    public function scope_methods(): array {
+        global $DB;
+
+        [$wheres, $params] = $this->scope_where();
+
+        return $DB->get_records_sql(
+            'SELECT scopemethod.*
+               FROM {enrol} scopemethod
+              WHERE scopemethod.id IN (
+                    SELECT ue.enrolid
+                      FROM {user_enrolments} ue
+                      JOIN {enrol} e ON e.id = ue.enrolid
+                     WHERE ' . implode(' AND ', $wheres) . '
+                    )
+           ORDER BY scopemethod.id',
+            $params
+        );
+    }
+
+    /**
+     * The course and the category this listing is narrowed to, by filter name, as their values travel.
+     *
+     * @return array Filter name => value, only the applied ones.
+     */
+    public function get_course_filters(): array {
+        $filters = [];
+        if ($this->coursefilter !== null) {
+            $filters['course'] = (string) $this->coursefilter;
+        }
+        if ($this->categoryfilter !== null) {
+            $filters['category'] = (string) $this->categoryfilter;
+        }
+
+        return $filters;
+    }
+
+    /**
+     * The named, waited, applied-before, method and grouped filters applied, as their values travel.
      *
      * @return array Filter name => value, only the applied ones.
      */
     public function get_facet_filters(): array {
         $filters = [];
+        if ($this->methodfilter !== null) {
+            $filters['method'] = (string) $this->methodfilter;
+        }
+        if ($this->grouped !== null) {
+            $filters['grouped'] = $this->grouped;
+        }
         if ($this->named !== null) {
             $filters['named'] = $this->named;
         }

@@ -24,13 +24,16 @@ use core_external\external_value;
 use enrol_apply\local\queueengine;
 
 /**
- * A page of one method's approval queue, read headlessly (enrol_apply_queue_rows).
+ * A page of an approval queue, read headlessly (enrol_apply_queue_rows): one method's, or with
+ * enrolid 0 the queue that spans courses this reader is given (the site-wide queue, deciding or read
+ * only, or a mentor's).
  *
  * The rows are the queue table's own ({@see queueengine::rows()}): the scope
  * queue::listing_scope() gives the reader, the operator filters as the page's address carries them,
- * the masking of the answers by the course report's rule. The course comes from the method; nothing
- * the request carries chooses the scope. A reader the queue refuses is refused by the engine
- * ({@see queueengine::rows()}), after the method, the context and the guest are checked here.
+ * the masking of the answers by the course report's rule. The course comes from the method, and for
+ * 0 the context is the system's ({@see queueengine::locate()}); nothing the request carries chooses
+ * the scope, and `kind` says which one the reader got. A reader the queue refuses is refused by the
+ * engine ({@see queueengine::rows()}), after the method, the context and the guest are checked here.
  *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine
@@ -44,7 +47,7 @@ class queue_rows extends external_api {
      */
     public static function execute_parameters(): external_function_parameters {
         return new external_function_parameters([
-            'enrolid' => new external_value(PARAM_INT, 'The apply method whose queue is read'),
+            'enrolid' => new external_value(PARAM_INT, 'The apply method whose queue is read, 0 for the queue that spans courses'),
             'scope' => new external_value(PARAM_ALPHA, 'Which applications: all, pending or deferred', VALUE_DEFAULT, 'all'),
             'search' => new external_value(PARAM_TEXT, 'Part of a name, an identity field or the comment', VALUE_DEFAULT, ''),
             'filters' => new external_multiple_structure(
@@ -78,7 +81,7 @@ class queue_rows extends external_api {
      * @param string $sort A column key.
      * @param string $direction asc or desc.
      * @return array The page; see execute_returns().
-     * @throws \moodle_exception When no apply method has this id (0 included), or for a guest.
+     * @throws \moodle_exception When a non-zero id names no apply method, or for a guest.
      * @throws \required_capability_exception When the reader may not open the queue.
      */
     public static function execute(
@@ -139,6 +142,7 @@ class queue_rows extends external_api {
         ]);
 
         return new external_single_structure([
+            'kind' => new external_value(PARAM_ALPHA, 'Which queue the reader got: method, site or mentees'),
             'scope' => new external_value(PARAM_ALPHA, 'Which applications'),
             'search' => new external_value(PARAM_RAW, 'The search applied, empty for none'),
             'sort' => new external_value(PARAM_RAW, 'The column key sorted by'),
@@ -197,6 +201,19 @@ class queue_rows extends external_api {
                     'key' => new external_value(PARAM_RAW, 'Column key'),
                     'html' => new external_value(PARAM_RAW, 'Formatted cell'),
                 ])),
+                'course' => new external_single_structure([
+                    'id' => new external_value(PARAM_INT, 'The course, 0 on a method\'s queue'),
+                    'name' => new external_value(PARAM_RAW, 'Its full name, plain; empty on a method\'s queue'),
+                    'url' => new external_value(PARAM_URL, 'The course page; empty on a method\'s queue'),
+                ]),
+                'method' => new external_single_structure([
+                    'id' => new external_value(PARAM_INT, 'The apply method, 0 on a method\'s queue'),
+                    'name' => new external_value(PARAM_RAW, 'Its name, plain; empty on a method\'s queue'),
+                    'deciding' => new external_value(PARAM_BOOL, 'Whether its role decides applications'),
+                    'full' => new external_value(PARAM_BOOL, 'Whether every place is taken or its applicant limit reached; '
+                        . 'never for a mentor'),
+                    'queueurl' => new external_value(PARAM_URL, 'Its queue, for a site-wide reader only; empty otherwise'),
+                ]),
             ])),
             'facets' => new external_multiple_structure(new external_single_structure([
                 'name' => new external_value(PARAM_ALPHANUM, 'Filter name'),
@@ -207,6 +224,7 @@ class queue_rows extends external_api {
                     'label' => new external_value(PARAM_RAW, 'Label, plain'),
                     'count' => new external_value(PARAM_INT, 'Applications choosing it lists, under every other criterion'),
                 ])),
+                'omitted' => new external_value(PARAM_INT, 'Options that list something and were left out by the limit'),
             ])),
             'fieldfilters' => new external_multiple_structure(new external_single_structure([
                 'name' => new external_value(PARAM_ALPHANUM, 'Filter name, as the address carries it'),

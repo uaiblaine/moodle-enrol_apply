@@ -23,12 +23,15 @@ use core_external\external_value;
 use enrol_apply\local\queueengine;
 
 /**
- * The capacity tiles above one method's approval queue (enrol_apply_queue_summary, CQ-D10).
+ * The tiles above an approval queue (enrol_apply_queue_summary, CQ-D10, SQ-D7).
  *
- * Places taken against the places, applications held against the limit, the reader's applications
- * awaiting a decision with the oldest wait and how many waited long, and whether the method is
- * open ({@see queueengine::summary()}). Behind the same door as the rows: the method, the context and
- * the guest are checked here, a reader the queue refuses is refused by the engine's summary.
+ * One method's: places taken against the places, applications held against the limit, the reader's
+ * applications awaiting a decision with the oldest wait and how many waited long, and whether the
+ * method is open. With enrolid 0, the queue that spans courses: the reader's applications awaiting,
+ * the oldest wait, the late and the deferred ones, and for a site-wide reader the courses and methods
+ * holding an application and the methods at their limit ({@see queueengine::summary()}). Behind the
+ * same door as the rows: the method (or the system context for 0), the context and the guest are
+ * checked here, a reader the queue refuses is refused by the engine's summary.
  *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine
@@ -42,7 +45,7 @@ class queue_summary extends external_api {
      */
     public static function execute_parameters(): external_function_parameters {
         return new external_function_parameters([
-            'enrolid' => new external_value(PARAM_INT, 'The apply method whose queue is read'),
+            'enrolid' => new external_value(PARAM_INT, 'The apply method whose queue is read, 0 for the queue that spans courses'),
         ]);
     }
 
@@ -51,7 +54,7 @@ class queue_summary extends external_api {
      *
      * @param int $enrolid The apply method.
      * @return array The figures; see execute_returns().
-     * @throws \moodle_exception When no apply method has this id (0 included), or for a guest.
+     * @throws \moodle_exception When a non-zero id names no apply method, or for a guest.
      * @throws \required_capability_exception When the reader may not open the queue.
      */
     public static function execute(int $enrolid): array {
@@ -86,6 +89,12 @@ class queue_summary extends external_api {
             'closes' => new external_value(PARAM_INT, 'When applications close, 0 for no date'),
             'narrowed' => new external_value(PARAM_BOOL, 'Whether separate groups narrow this reader'),
             'notingroup' => new external_value(PARAM_BOOL, 'Whether the reader is narrowed to no group'),
+            'sitefigures' => new external_value(PARAM_BOOL, 'Whether the three site figures below are given: '
+                . 'a site-wide reader of the queue that spans courses only'),
+            'courses' => new external_value(PARAM_INT, 'Courses holding an application in the reader\'s scope, 0 where not given'),
+            'methods' => new external_value(PARAM_INT, 'Apply methods holding one, 0 where not given'),
+            'methodsfull' => new external_value(PARAM_INT, 'Of those, the ones with every place taken or their applicant '
+                . 'limit reached, 0 where not given'),
         ]);
     }
 }

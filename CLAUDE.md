@@ -91,7 +91,7 @@ edit.php / edit_form.php     per-course instance configuration
 manage.php                      the approval queue, its bulk actions and the one-application review page
 classes/table/applications.php  the queue's table, a core_table\dynamic one
 classes/local/queue.php      "awaiting a decision", the review lookup, the scopes and the previous/next walk
-classes/local/queueengine.php  one method's queue read headlessly, for classes/external/queue_*.php
+classes/local/queueengine.php  the queue read headlessly (one method's, or id 0: the site-wide or mentee one), for classes/external/queue_*.php
 classes/bulk/                the participants page's three bulk decisions
 report.php, classes/reportbuilder/  the course report and a custom-report datasource, both over the durable record
 classes/output/report_view.php, js/esm/src/report/  the course report's React view (5.3), its shell and its client
@@ -425,7 +425,9 @@ backup/                      group mappings, comments and the durable trail, see
   The two counts are written out separately, with their own full parameter arrays, on purpose. A
   single method taking a status flag is how they get composed — and `fix_sql_params()` tolerates
   surplus named parameters, so a half-refactor sharing one array between them runs clean and
-  reddens nothing.
+  reddens nothing. `capacity::states()`, the batched `state()` the queues that span courses read, is
+  the same two predicates again, each grouped by the method in a statement of its own: change
+  `places_taken()` or `applicants()` and it changes with them (gates `QW14`, `QW15`).
 
   **`places_full()` blocks nothing.** It is advisory by decision: the manager is warned and
   decides, because a hard block would contradict the plugin's premise and would have to be
@@ -1291,11 +1293,11 @@ backup/                      group mappings, comments and the durable trail, see
   rows in view; its parameter names are core-generated (`database::generate_param_name()`, the
   fullname field's own are not), or `add_base_condition_sql()` throws. Gates `FC1`-`FC10`, `DL1`, `DL2`, `PR1`, `RT1`, `RT2`.
 
-- **The approval queue of one method is read headlessly through its own table, never beside it.**
+- **The approval queue is read headlessly through its own table, never beside it.**
   `\enrol_apply\local\queueengine` builds `applications::for_scope()` for the scope
   `queue::listing_scope()` gives (the method, awaiting a decision, the separate-groups narrowing,
-  derived from the course and `$USER`), never from the request: the id names the method and nothing
-  else. It reads that table's SELECT, FROM and WHERE (`where_without()` for a facet's count, which
+  derived from the course and `$USER`), never from the request: the id names the method, or with 0
+  the wide queue, and nothing else. It reads that table's SELECT, FROM and WHERE (`where_without()` for a facet's count, which
   leaves out only that facet's own filter) and fills cells through the table's `prepare_rows()` and
   helpers; it writes no query of its own over what the queue lists. So a scope clause, filter or join
   goes into the table and reaches the engine by construction; one added to the engine alone is a
@@ -1317,17 +1319,41 @@ backup/                      group mappings, comments and the durable trail, see
   nothing. `applications::selectable()` is the one predicate behind the table's checkbox and the
   engine's flag (never for a viewer, never the reader's own application).
 
+  **Id 0 is the wide queue, and its reader is `listing_scope(0)`'s, never the request's.** A site-wide
+  decider, a mentor or a site-wide viewer, in that order (`scope_kind()`: `site` or `mentees`); an
+  editing teacher of one course is refused. Its catalogue is `wide_catalogue()`, the table's own
+  columns for the scope: the course and its method (sortable by the course's name, then the method's
+  stored name and id, the table's `get_sort_columns()` order too, gate `QW20`), the group and the
+  answers as one `details` cell only where the table draws them (`has_group_column()`,
+  `has_details_column()`: never for a mentor), the generic comment heading, no answer column and no
+  earlier applications. A row's `details` is the table's `details_html()`, masked in the row's own
+  course; its course and method come from the row (`method_facts()`), with `full` from
+  `capacity::states()` and `queueurl` only where `offers_course_filters()` holds (a site-wide reader;
+  `QW7`, `QW8`). The `course`, `category`, `method` and `grouped` filters are the table's clauses,
+  applied only where `coursefilter::offered()` holds (`QW10`); a method must be an apply instance
+  (`coursefilter::clean_method()`, `QW9`); `grouped` is `groupfilter::where()`'s `none` and its
+  complement, the group column's definition. Their facets are site-wide only: the course and category
+  ones capped at `FACET_LIMIT` with an `omitted` count (`QW11`), a category counted over its subtree
+  (`subtree_counts()`, the two halves of `coursefilter::where()`), the method one only once a course
+  holding two methods' applications is chosen. The wide grid is `enrol_apply_queue_grid_wide`
+  (`queuepreference::NAME_WIDE`, SQ-D11), declared and exported beside the method queues'. Tests:
+  `tests/local/wide_queue_test.php`; gates `QW1`-`QW22`.
+
   **What the services refuse.** `queue_rows`, `queue_summary` and `set_queue_preference` all run
-  `queueengine::locate()` (an id that names no apply method, 0 included, is refused, so the
-  site-wide and mentee queues have no door here), `validate_context()` and the guest check;
-  `set_queue_preference` then asks `queueengine::require_listing()` itself (`listing_scope()` asked as
-  `manage.php?id=` asks it; QE6), while the two read services rely on the engine, which refuses the
-  reader: `rows()` asks `require_listing()` before it builds the table (QE20), `summary()` and
-  `catalogue()` at their first line (QE21, QE22). The order a caller sees is the same: unknown method,
-  context, guest, listing. None decides: decisions stay the POST to `manage.php`. The summary's places and applications
+  `queueengine::locate()` (a non-zero id that names no apply method, a negative one included, is
+  refused; 0 gives no method and the system context, by its level, `QW1`, `QW2`), `validate_context()`
+  and the guest check; `set_queue_preference` then asks `queueengine::require_listing()` itself
+  (`listing_scope()` asked as `manage.php` asks it; QE6), while the two read services rely on the
+  engine, which refuses the reader: `rows()` asks `require_listing()` before it builds the table
+  (QE20, and for 0 QW3), `summary()` and `catalogue()` at their first line (QE21, QE22, QW4, QW5). The
+  order a caller sees is the same: unknown method, context, guest, listing. None decides: decisions stay the POST to `manage.php`. The summary's places and applications
   held are the method's; its queue figures are the reader's scope before any filter
   (`scope_figures()` over `scope_where()`); open or closed is `capacity::state()`, which the page's
-  panel reads too. Tests: `tests/local/queueengine_test.php`
+  panel reads too. With id 0 it is `wide_summary()`: the same four queue figures, and for a site-wide
+  reader only (`sitefigures`, `QW16`) the courses and methods holding an application
+  (`scope_methods()`, over `scope_where()`) and those at their limit (`capacity::states()`' own
+  `placesfull` and `limitreached`, which `state()` carries too). One return structure: a method's
+  answer is today's plus four neutral fields. Tests: `tests/local/queueengine_test.php`
   (`test_the_rows_are_the_tables_rows_for_every_reader_and_request` compares the engine's rows with
   the table's, in set and order, for a decider, a narrowed moderator and a viewer over every scope and
   filter; `test_each_facet_count_is_what_choosing_it_lists`), `tests/external/queue_services_test.php`

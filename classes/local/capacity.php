@@ -237,16 +237,113 @@ final class capacity {
      * COUNT again; applicant_limit() clamps a negative to 0, so `$limit > 0` is that method's
      * `$limit !== 0`. Keep the two in step.
      *
+     * The two "full" flags are the same two rules as places_full() and applications_closed(), read
+     * off the numbers already counted here: placesfull is every place taken, limitreached is the
+     * applicant limit reached. Either is what a method "at its limit" means to the site-wide queue's
+     * tile and label ({@see states()}).
+     *
      * @param stdClass $instance Course enrol instance.
      * @param int|null $now The time to judge the enrolment window at, now when null.
      * @return stdClass places, taken (0 without places), limit, held (0 without a limit), open,
-     *     startdate and enddate (0 for none).
+     *     startdate and enddate (0 for none), placesfull and limitreached.
      */
     public static function state(stdClass $instance, ?int $now = null): stdClass {
         $now = $now ?? time();
         $places = self::places($instance);
         $limit = self::applicant_limit($instance);
         $held = $limit > 0 ? self::applicants($instance) : 0;
+        $taken = $places > 0 ? self::places_taken($instance) : 0;
+
+        return self::compose($instance, $now, $taken, $held);
+    }
+
+    /**
+     * What {@see state()} returns for every instance of a set, in at most two statements for the set.
+     *
+     * The batched twin of state(), for the queues that span methods: one grouped count of the places
+     * taken over the instances that have places, one of the applications held over those that have
+     * an applicant limit. Each statement is its single-instance method's predicate clause for clause,
+     * grouped by the method: places_taken() (ACTIVE rows not expired) and applicants() (every
+     * status, not expired), both with their own full parameter arrays for the reason the class
+     * docblock gives, and both reading the clock those methods read (time(), not $now, which only
+     * judges the enrolment window, as in state()). Keep the three in step with those two methods;
+     * test_the_batch_is_state_instance_by_instance holds it.
+     *
+     * @param array $instances Course enrol instances, each a full {enrol} record.
+     * @param int|null $now The time to judge the enrolment windows at, now when null.
+     * @return array Instance id => what state() returns for it; empty for an empty set, with no query.
+     */
+    public static function states(array $instances, ?int $now = null): array {
+        global $DB;
+
+        if (!$instances) {
+            return [];
+        }
+
+        $now = $now ?? time();
+        $withplaces = [];
+        $withlimit = [];
+        foreach ($instances as $instance) {
+            if (self::places($instance) > 0) {
+                $withplaces[] = (int) $instance->id;
+            }
+            if (self::applicant_limit($instance) > 0) {
+                $withlimit[] = (int) $instance->id;
+            }
+        }
+
+        // The places taken: places_taken()'s predicate, grouped by the method.
+        $taken = [];
+        if ($withplaces) {
+            [$insql, $params] = $DB->get_in_or_equal($withplaces, SQL_PARAMS_NAMED, 'placesenrol');
+            $params['active'] = ENROL_USER_ACTIVE;
+            $params['now'] = time();
+            $taken = $DB->get_records_sql_menu(
+                "SELECT enrolid, COUNT(1) AS taken
+                   FROM {user_enrolments}
+                  WHERE enrolid {$insql} AND status = :active AND (timeend = 0 OR timeend > :now)
+               GROUP BY enrolid",
+                $params
+            );
+        }
+
+        // The applications held: applicants()'s predicate, grouped by the method.
+        $held = [];
+        if ($withlimit) {
+            [$insql, $params] = $DB->get_in_or_equal($withlimit, SQL_PARAMS_NAMED, 'heldenrol');
+            $params['now'] = time();
+            $held = $DB->get_records_sql_menu(
+                "SELECT enrolid, COUNT(1) AS held
+                   FROM {user_enrolments}
+                  WHERE enrolid {$insql} AND (timeend = 0 OR timeend > :now)
+               GROUP BY enrolid",
+                $params
+            );
+        }
+
+        $states = [];
+        foreach ($instances as $instance) {
+            $id = (int) $instance->id;
+            $states[$id] = self::compose($instance, $now, (int) ($taken[$id] ?? 0), (int) ($held[$id] ?? 0));
+        }
+
+        return $states;
+    }
+
+    /**
+     * The state of one instance from its two counts, the one shape state() and states() return.
+     *
+     * @param stdClass $instance Course enrol instance.
+     * @param int $now The time to judge the enrolment window at.
+     * @param int $taken Places taken; ignored without places.
+     * @param int $held Applications held; ignored without an applicant limit.
+     * @return stdClass See state().
+     */
+    private static function compose(stdClass $instance, int $now, int $taken, int $held): stdClass {
+        $places = self::places($instance);
+        $limit = self::applicant_limit($instance);
+        $held = $limit > 0 ? $held : 0;
+        $taken = $places > 0 ? $taken : 0;
         $startdate = (int) ($instance->enrolstartdate ?? 0);
         $enddate = (int) ($instance->enrolenddate ?? 0);
 
@@ -258,12 +355,16 @@ final class capacity {
 
         return (object) [
             'places' => $places,
-            'taken' => $places > 0 ? self::places_taken($instance) : 0,
+            'taken' => $taken,
             'limit' => $limit,
             'held' => $held,
             'open' => $open,
             'startdate' => $startdate,
             'enddate' => $enddate,
+            // The rule of places_full(): advisory, every place taken.
+            'placesfull' => $places > 0 && $taken >= $places,
+            // The rule of applications_closed(): no further application accepted.
+            'limitreached' => $limit > 0 && $held >= $limit,
         ];
     }
 }

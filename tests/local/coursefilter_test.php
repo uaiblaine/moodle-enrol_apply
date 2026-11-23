@@ -93,6 +93,29 @@ final class coursefilter_test extends \advanced_testcase {
     }
 
     /**
+     * A method filter is an apply method's id; anything else is no filter.
+     *
+     * Changes that must make it fail: the cleaner returning an id without asking whether it names an
+     * apply instance (another plugin's method, an id that never existed).
+     *
+     * @return void
+     */
+    public function test_a_method_that_is_no_apply_instance_is_not_a_filter(): void {
+        global $DB;
+
+        $plugin = enrol_get_plugin('apply');
+        $course = $this->getDataGenerator()->create_course();
+        $apply = (int) $plugin->add_instance($course, $plugin->get_instance_defaults());
+        $manual = (int) $DB->get_field('enrol', 'id', ['courseid' => $course->id, 'enrol' => 'manual'], MUST_EXIST);
+
+        $this->assertSame($apply, coursefilter::clean_method($apply));
+        $this->assertNull(coursefilter::clean_method($manual));
+        $this->assertNull(coursefilter::clean_method($apply + $manual + 1000));
+        $this->assertNull(coursefilter::clean_method(0));
+        $this->assertNull(coursefilter::clean_method(-1));
+    }
+
+    /**
      * A category filter reaches the courses in its whole subtree.
      *
      * Filtering by "Engineering" has to find the courses sitting under "Engineering / Civil", which

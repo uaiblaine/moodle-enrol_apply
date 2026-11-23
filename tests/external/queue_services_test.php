@@ -57,6 +57,9 @@ final class queue_services_test extends \advanced_testcase {
     /** @var \stdClass The apply method. */
     private $instance;
 
+    /** @var \stdClass The applicant of the one application not the teacher's. */
+    private $applicant;
+
     /** @var array The three services, each with the arguments it needs beside the method. */
     private const CALLS = [
         'enrol_apply_queue_rows' => [],
@@ -85,6 +88,7 @@ final class queue_services_test extends \advanced_testcase {
         $this->instance = $DB->get_record('enrol', ['id' => $id], '*', MUST_EXIST);
 
         $user = $this->getDataGenerator()->create_user();
+        $this->applicant = $user;
         $plugin->enrol_user($this->instance, $user->id, null, 0, 0, ENROL_USER_SUSPENDED);
         $ueid = (int) $DB->get_field('user_enrolments', 'id', ['userid' => $user->id, 'enrolid' => $id], MUST_EXIST);
         $DB->insert_record('enrol_apply_submission', (object) [
@@ -197,8 +201,12 @@ final class queue_services_test extends \advanced_testcase {
 
     /**
      * Every door refuses who the queue page refuses: a guest, a user with no capability, a holder
-     * of the REPORT's capability alone, a decider of another course, a call naming no method or
+     * of the REPORT's capability alone, a decider of another course, a call naming a negative id or
      * another enrolment method.
+     *
+     * 0 named no method here until stage W1; it is now the wide queue, whose doors
+     * test_the_wide_queue_answers_its_three_readers_and_no_one_else holds, so the call that used to be
+     * refused for naming no method is a negative id.
      *
      * Changes that must make it fail: the queue's capability not asked (listing_scope()'s allowed
      * ignored); the method looked up without its plugin; the course taken from anything but the
@@ -225,13 +233,83 @@ final class queue_services_test extends \advanced_testcase {
             $this->assertTrue($this->call($function, ['enrolid' => $this->instance->id] + $args)['error'], "{$function} guest");
 
             $this->setAdminUser();
-            $this->assertTrue($this->call($function, ['enrolid' => 0] + $args)['error'], "{$function} no method");
+            $this->assertTrue($this->call($function, ['enrolid' => -1] + $args)['error'], "{$function} no method");
             $this->assertTrue($this->call($function, ['enrolid' => $manual] + $args)['error'], "{$function} manual");
             // The control: the same call by somebody the page admits.
             $this->assertFalse($this->call($function, ['enrolid' => $this->instance->id] + $args)['error'], "{$function} admin");
         }
         foreach ([$student, $reportonly, $elsewhere] as $user) {
             $this->assertNull(get_user_preferences(queuepreference::NAME, null, $user->id));
+        }
+    }
+
+    /**
+     * The wide queue (enrolid 0) answers its three readers - a site-wide decider, a site-wide viewer
+     * and a mentor - and refuses an editing teacher of one course with no mentee, and a guest, with
+     * nothing written.
+     *
+     * The teacher holds the deciding capability in their course, which opens that course's method
+     * queue (the control that the refusal is the wide queue's) and nothing site-wide.
+     *
+     * Changes that must make it fail: a service reading the wide queue without the engine's refusal;
+     * the preference written before the refusal, or into the method queues' preference.
+     *
+     * @return void
+     */
+    public function test_the_wide_queue_answers_its_three_readers_and_no_one_else(): void {
+        $system = \context_system::instance();
+        $generator = $this->getDataGenerator();
+
+        $teacher = $generator->create_and_enrol($this->course, 'editingteacher');
+        $decider = $generator->create_user();
+        $role = $generator->create_role();
+        assign_capability('enrol/apply:manageapplications', CAP_ALLOW, $role, $system->id, true);
+        role_assign($role, $decider->id, $system->id);
+        $viewer = $generator->create_user();
+        $role = $generator->create_role();
+        assign_capability('enrol/apply:viewapplications', CAP_ALLOW, $role, $system->id, true);
+        role_assign($role, $viewer->id, $system->id);
+        $mentor = $generator->create_user();
+        $role = $generator->create_role();
+        set_role_contextlevels($role, [CONTEXT_USER]);
+        assign_capability('enrol/apply:manageapplications', CAP_ALLOW, $role, $system->id, true);
+        role_assign($role, $mentor->id, \context_user::instance($this->applicant->id)->id);
+
+        $this->setUser($teacher);
+        foreach (self::CALLS as $function => $args) {
+            $response = $this->call($function, ['enrolid' => 0] + $args);
+            $this->assertTrue($response['error'], "{$function} teacher");
+            $this->assertSame('nopermissions', $response['exception']->errorcode, "{$function} teacher");
+            // The control: the teacher's own method queue answers them.
+            $this->assertFalse($this->call($function, ['enrolid' => $this->instance->id] + $args)['error'], "{$function} own");
+        }
+        $this->assertNull(get_user_preferences(queuepreference::NAME_WIDE, null, $teacher->id));
+        // The method queue's write above was the control's; the wide one wrote nothing.
+        $this->assertNotNull(get_user_preferences(queuepreference::NAME, null, $teacher->id));
+
+        $this->setGuestUser();
+        foreach (self::CALLS as $function => $args) {
+            $this->assertTrue($this->call($function, ['enrolid' => 0] + $args)['error'], "{$function} guest");
+        }
+
+        foreach (['site' => $decider, 'viewer' => $viewer, 'mentees' => $mentor] as $who => $user) {
+            $this->setUser($user);
+            foreach (self::CALLS as $function => $args) {
+                $response = $this->call($function, ['enrolid' => 0] + $args);
+                $this->assertFalse($response['error'], "{$function} {$who} " . json_encode($response['exception'] ?? null));
+            }
+            $rows = $this->call('enrol_apply_queue_rows', ['enrolid' => 0])['data'];
+            $this->assertSame($who === 'mentees' ? 'mentees' : 'site', $rows['kind'], $who);
+            $this->assertSame(1, $rows['total'], $who);
+            $this->assertSame((int) $this->course->id, $rows['rows'][0]['course']['id'], $who);
+            $this->assertSame((int) $this->instance->id, $rows['rows'][0]['method']['id'], $who);
+            $summary = $this->call('enrol_apply_queue_summary', ['enrolid' => 0])['data'];
+            $this->assertSame(1, $summary['awaiting'], $who);
+            $this->assertSame($who !== 'mentees', $summary['sitefigures'], $who);
+            // The grid was written to the wide queues' preference, never to the method queues'.
+            $stored = get_user_preferences(queuepreference::NAME_WIDE, null, $user->id);
+            $this->assertSame('{"columns":["wait"],"widths":[]}', $stored, $who);
+            $this->assertNull(get_user_preferences(queuepreference::NAME, null, $user->id), $who);
         }
     }
 
