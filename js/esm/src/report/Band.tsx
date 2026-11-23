@@ -32,8 +32,8 @@
 
 import {useState} from 'react';
 import type {ReactElement} from 'react';
-import {Segmented} from './Segmented';
-import {duration, fill, fillObject, num} from './str';
+import {Segmented} from '../datareport/Segmented';
+import {duration, fill, fillObject, num} from '../datareport/str';
 import type {Breakdown, Measure, SummaryAnswer} from './types';
 
 /** Groups shown before "All N groups" (section 5b of the study). */

@@ -33,6 +33,10 @@
  * cannot abort, so each region numbers its requests and drops any answer but the newest. The first
  * load draws skeletons with aria-busy; later ones keep the old rows, dimmed, under a 2 px line.
  *
+ * The bar, the grid, the cards, the rows' region and the pager are the data report's shared parts
+ * (js/esm/src/datareport), which Bar, Grid and Cards here give the report's vocabulary; the band, the
+ * queries and the writes are the report's own.
+ *
  * @module     enrol_apply/report/ReportView
  * @copyright  2026 Anderson Blaine
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -40,19 +44,19 @@
 
 import {useCallback, useEffect, useRef, useState} from 'react';
 import type {ReactElement} from 'react';
+import {rememberView, storedView, useNarrow} from '../datareport/layout';
+import {Pager} from '../datareport/Pager';
+import {hold} from '../datareport/pending';
+import {RowsRegion} from '../datareport/Rows';
 import {Band} from './Band';
 import {Bar} from './Bar';
-import {Cards, CardsSkeleton} from './Cards';
+import {Cards} from './Cards';
+import {SIZING} from './cells';
 import {withChoice, without} from './filters';
-import {Grid, GridSkeleton} from './Grid';
-import {Pager} from './Pager';
-import {hold} from './pending';
+import {Grid} from './Grid';
 import {getRows, getSummary, resetFilters, setFilters, setPreference} from './repository';
 import type {Column, Filter, Measure, Preference, Preset, RowsAnswer, RowsQuery, Scope, SummaryAnswer, ViewMode,
     ViewProps} from './types';
-
-/** Below this container width, in pixels, Automatic draws cards (AR-D9; stylelint refuses a container query). */
-const NARROW = 576;
 
 /** The wait before the search is sent, after the last key (section 5b). */
 const SEARCH_DELAY = 300;
@@ -67,104 +71,6 @@ const VIEW_KEY = 'enrol_apply_report_view';
 const SKELETON_COLUMNS = ['applicant', 'outcome', 'submitted', 'wait', 'decided', 'group'];
 
 /**
- * The view the reader chose last in this browser.
- *
- * @returns {string} auto, table or cards.
- */
-const storedView = (): ViewMode => {
-    try {
-        const value = window.localStorage.getItem(VIEW_KEY);
-        return value === 'table' || value === 'cards' ? value : 'auto';
-    } catch {
-        return 'auto';
-    }
-};
-
-type RowsContentProps = {
-    labels: Record<string, string>,
-    rows: RowsAnswer | null,
-    error: boolean,
-    cards: boolean,
-    narrow: boolean,
-    filtered: boolean,
-    columns: Column[],
-    identity: Column[],
-    widths: Record<string, number>,
-    onRetry: () => void,
-    onSort: (key: string) => void,
-    onWidth: (key: string, width: number | null, defer?: boolean) => void,
-    onWidthCommit: () => void,
-};
-
-/**
- * What the rows region holds: the first load's skeleton, an error with a retry, the empty state, or the rows.
- *
- * @param {object} props See RowsContentProps.
- * @returns {object} The region's content.
- */
-const RowsContent = ({labels, rows, error, cards, narrow, filtered, columns, identity, widths, onRetry, onSort,
-        onWidth, onWidthCommit}: RowsContentProps): ReactElement => {
-    const retry = (
-        <p className="enrol_apply-rview-error">
-            {labels.loaderror}{' '}
-            <button type="button" className="btn btn-sm btn-outline-secondary" onClick={onRetry}>{labels.retry}</button>
-        </p>
-    );
-    if (rows === null && error) {
-        return retry;
-    }
-    if (rows === null) {
-        const skeleton: Column[] = SKELETON_COLUMNS.map((key) => ({
-            key,
-            title: key === 'applicant' ? labels.applicant : '',
-            sortable: false,
-            "default": true,
-            active: true,
-            fixed: key === 'applicant',
-        }));
-        return (
-            <>
-                {cards ? <CardsSkeleton single={narrow} /> : <GridSkeleton columns={skeleton} widths={widths} />}
-                <span className="visually-hidden" role="status">{labels.loading}</span>
-            </>
-        );
-    }
-    if (rows.total === 0) {
-        return (
-            <div className="enrol_apply-rview-empty">
-                <p className="enrol_apply-rview-empty-title">{filtered ? labels.nomatch : labels.empty}</p>
-                {filtered ? <p className="enrol_apply-rview-empty-text">{labels.nomatchhelp}</p> : null}
-            </div>
-        );
-    }
-
-    return (
-        <div className="enrol_apply-rview-dim">
-            {error ? retry : null}
-            {cards ? (
-                <Cards labels={labels} columns={columns} identity={identity} rows={rows.rows} single={narrow} />
-            ) : (
-                <>
-                    <Grid
-                        labels={labels}
-                        columns={columns}
-                        identity={identity}
-                        rows={rows.rows}
-                        widths={widths}
-                        sort={rows.sort}
-                        direction={rows.direction}
-                        onSort={onSort}
-                        onWidth={onWidth}
-                        onWidthCommit={onWidthCommit}
-                    />
-                    <p className="enrol_apply-rview-hint">{labels.scrollhint}</p>
-                </>
-            )}
-        </div>
-    );
-};
-
-/**
  * The report's view.
  *
  * @param {object} props The props report_view::props() wrote; see ViewProps.
@@ -173,8 +79,9 @@ const RowsContent = ({labels, rows, error, cards, narrow, filtered, columns, ide
 const ReportView = (props: ViewProps): ReactElement => {
     const {labels, enrolid, reportid} = props;
     const root = useRef<HTMLDivElement | null>(null);
-    const [narrow, setNarrow] = useState(false);
-    const [view, setViewState] = useState<ViewMode>(storedView);
+    // Automatic is cards under a 576 px container: the report's own width, not the window's.
+    const narrow = useNarrow(root);
+    const [view, setViewState] = useState<ViewMode>(() => storedView(VIEW_KEY));
 
     const initial: RowsQuery = {
         measure: props.measure,
@@ -318,21 +225,6 @@ const ReportView = (props: ViewProps): ReactElement => {
         loadBand(query.current);
     }, [loadRows, loadBand]);
 
-    // Automatic is cards under a 576 px container: the report's own width, not the window's.
-    useEffect(() => {
-        const element = root.current;
-        if (!element || typeof ResizeObserver === 'undefined') {
-            return undefined;
-        }
-        const observer = new ResizeObserver((entries) => {
-            const width = entries[0]?.contentRect.width ?? element.clientWidth;
-            setNarrow(width > 0 && width < NARROW);
-        });
-        observer.observe(element);
-
-        return () => observer.disconnect();
-    }, []);
-
     // A pending search is dropped with the component, and its hold released; a pending width is saved.
     useEffect(() => () => {
         if (searchtimer.current !== null) {
@@ -350,11 +242,7 @@ const ReportView = (props: ViewProps): ReactElement => {
      */
     const setView = (chosen: ViewMode): void => {
         setViewState(chosen);
-        try {
-            window.localStorage.setItem(VIEW_KEY, chosen);
-        } catch {
-            // A browser that keeps nothing keeps the choice for this page only.
-        }
+        rememberView(VIEW_KEY, chosen);
     };
 
     /**
@@ -576,6 +464,34 @@ const ReportView = (props: ViewProps): ReactElement => {
     const identity = allcolumns.filter((column) => column.key.startsWith('identity:'));
     const shown = allcolumns.filter((column) => column.key === 'applicant' || (!column.fixed && column.active));
     const cards = view === 'cards' || (view === 'auto' && narrow);
+    // The rows as the reader views them; the region draws them only once an answer has some.
+    let body: ReactElement | null = null;
+    if (rows !== null) {
+        body = cards ? (
+            <Cards labels={labels} columns={shown} identity={identity} rows={rows.rows} single={narrow} />
+        ) : (
+            <Grid
+                labels={labels}
+                columns={shown}
+                identity={identity}
+                rows={rows.rows}
+                widths={widths}
+                sort={rows.sort}
+                direction={rows.direction}
+                onSort={onSort}
+                onWidth={onWidth}
+                onWidthCommit={() => flushref.current()}
+            />
+        );
+    }
+    const skeleton: Column[] = SKELETON_COLUMNS.map((key) => ({
+        key,
+        title: key === 'applicant' ? labels.applicant : '',
+        sortable: false,
+        "default": true,
+        active: true,
+        fixed: key === 'applicant',
+    }));
 
     return (
         <div className="enrol_apply-rview-root" ref={root} data-region="enrol_apply-reportview">
@@ -642,29 +558,20 @@ const ReportView = (props: ViewProps): ReactElement => {
                 }}
                 onView={setView}
             />
-            <section
-                className="enrol_apply-rview-region"
-                aria-label={labels.caption}
-                aria-busy={rowsloading}
-                data-region="enrol_apply-rows"
+            <RowsRegion
+                labels={labels}
+                loading={rowsloading}
+                loaded={rows !== null}
+                error={rowserror}
+                total={rows?.total ?? 0}
+                filtered={filtered}
+                cards={cards}
+                narrow={narrow}
+                skeleton={{columns: skeleton, lead: 'applicant', widths, sizing: SIZING}}
+                onRetry={() => loadRows(query.current, true)}
             >
-                {rowsloading && rows !== null ? <div className="enrol_apply-rview-progress" /> : null}
-                <RowsContent
-                    labels={labels}
-                    rows={rows}
-                    error={rowserror}
-                    cards={cards}
-                    narrow={narrow}
-                    filtered={filtered}
-                    columns={shown}
-                    identity={identity}
-                    widths={widths}
-                    onRetry={() => loadRows(query.current, true)}
-                    onSort={onSort}
-                    onWidth={onWidth}
-                    onWidthCommit={() => flushref.current()}
-                />
-            </section>
+                {body}
+            </RowsRegion>
             {rows !== null && rows.total > 0 ? (
                 <Pager
                     labels={labels}

@@ -15,7 +15,9 @@ import { Fragment, jsxDEV } from "react/jsx-dev-runtime";
  * @copyright  2026 Anderson Blaine
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-import { plain } from "./str";
+import { Lines, splitLines } from "../datareport/cells";
+import { makeSizing } from "../datareport/sizing";
+import { plain } from "../datareport/str";
 const MULTILINE = ["outcome", "wait", "decided", "group"];
 const WIDTHS = {
   applicant: 260,
@@ -33,41 +35,17 @@ const DEFAULT_WIDTH = 180;
 const MINIMUMS = { applicant: 160, submitted: 104, decided: 104 };
 const MINIMUM = 80;
 const MAXIMUM = 800;
-const defaultWidth = /* @__PURE__ */ __name((key) => WIDTHS[key] ?? DEFAULT_WIDTH, "defaultWidth");
-const minimumWidth = /* @__PURE__ */ __name((key) => MINIMUMS[key] ?? MINIMUM, "minimumWidth");
-const widthOf = /* @__PURE__ */ __name((widths, key) => Math.min(MAXIMUM, Math.max(minimumWidth(key), widths[key] ?? defaultWidth(key))), "widthOf");
+const SIZING = makeSizing(WIDTHS, DEFAULT_WIDTH, MINIMUMS, MINIMUM, MAXIMUM);
 const cellHtml = /* @__PURE__ */ __name((row, key) => row.cells.find((cell) => cell.key === key)?.html ?? "", "cellHtml");
-const lines = /* @__PURE__ */ __name((key, html) => {
-  if (!MULTILINE.includes(key)) {
-    return [html];
-  }
-  return html.split("\n").map((line) => line.trim()).filter((line) => line !== "");
-}, "lines");
-const CellLines = /* @__PURE__ */ __name(({ column, html }) => {
-  const parts = lines(column, html);
-  return /* @__PURE__ */ jsxDEV(Fragment, { children: parts.map((part, index) => /* @__PURE__ */ jsxDEV(
-    "span",
-    {
-      className: index === 0 ? "enrol_apply-rview-c" : "enrol_apply-rview-sub",
-      title: plain(part),
-      dangerouslySetInnerHTML: { __html: part }
-    },
-    index,
-    false,
-    {
-      fileName: "public/enrol/apply/js/esm/src/report/cells.tsx",
-      lineNumber: 126,
-      columnNumber: 17
-    }
-  )) }, void 0, false, {
-    fileName: "public/enrol/apply/js/esm/src/report/cells.tsx",
-    lineNumber: 124,
-    columnNumber: 9
-  });
-}, "CellLines");
+const lines = /* @__PURE__ */ __name((key, html) => splitLines(html, MULTILINE.includes(key)), "lines");
+const CellLines = /* @__PURE__ */ __name(({ column, html }) => /* @__PURE__ */ jsxDEV(Lines, { parts: lines(column, html) }, void 0, false, {
+  fileName: "public/enrol/apply/js/esm/src/report/cells.tsx",
+  lineNumber: 93,
+  columnNumber: 92
+}), "CellLines");
 const ReviewButton = /* @__PURE__ */ __name(({ row, label }) => row.reviewurl === "" ? null : /* @__PURE__ */ jsxDEV("a", { className: "btn btn-sm btn-outline-secondary enrol_apply-rview-review", href: row.reviewurl, children: label }, void 0, false, {
   fileName: "public/enrol/apply/js/esm/src/report/cells.tsx",
-  lineNumber: 146,
+  lineNumber: 104,
   columnNumber: 9
 }), "ReviewButton");
 const IdentityLines = /* @__PURE__ */ __name(({ row, identity }) => /* @__PURE__ */ jsxDEV(Fragment, { children: identity.map((column) => {
@@ -83,24 +61,21 @@ const IdentityLines = /* @__PURE__ */ __name(({ row, identity }) => /* @__PURE__
     false,
     {
       fileName: "public/enrol/apply/js/esm/src/report/cells.tsx",
-      lineNumber: 161,
+      lineNumber: 119,
       columnNumber: 17
     }
   );
 }) }, void 0, false, {
   fileName: "public/enrol/apply/js/esm/src/report/cells.tsx",
-  lineNumber: 157,
+  lineNumber: 115,
   columnNumber: 5
 }), "IdentityLines");
 export {
   CellLines,
   IdentityLines,
-  MAXIMUM,
   ReviewButton,
+  SIZING,
   cellHtml,
-  defaultWidth,
-  lines,
-  minimumWidth,
-  widthOf
+  lines
 };
 //# sourceMappingURL=cells.dev.js.map

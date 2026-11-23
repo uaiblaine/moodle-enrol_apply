@@ -18,8 +18,8 @@ import { Fragment, jsxDEV } from "react/jsx-dev-runtime";
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 import { useState } from "react";
-import { Segmented } from "./Segmented";
-import { duration, fill, fillObject, num } from "./str";
+import { Segmented } from "../datareport/Segmented";
+import { duration, fill, fillObject, num } from "../datareport/str";
 const TOP_GROUPS = 8;
 const LATE_DAYS = 7;
 const Tile = /* @__PURE__ */ __name(({ label, value, sub, warn, link }) => /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-tile" + (warn ? " enrol_apply-rview-tile--warn" : ""), children: [

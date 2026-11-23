@@ -1,4 +1,28 @@
 {
+  "datareport/Bar": {
+    "eject": "prohibited",
+    "wrap": "prohibited"
+  },
+  "datareport/Cards": {
+    "eject": "prohibited",
+    "wrap": "prohibited"
+  },
+  "datareport/FilterPanel": {
+    "eject": "prohibited",
+    "wrap": "prohibited"
+  },
+  "datareport/Grid": {
+    "eject": "prohibited",
+    "wrap": "prohibited"
+  },
+  "datareport/Pager": {
+    "eject": "prohibited",
+    "wrap": "prohibited"
+  },
+  "datareport/Segmented": {
+    "eject": "prohibited",
+    "wrap": "prohibited"
+  },
   "report/Band": {
     "eject": "prohibited",
     "wrap": "prohibited"
@@ -15,15 +39,11 @@
     "eject": "prohibited",
     "wrap": "prohibited"
   },
-  "report/Pager": {
-    "eject": "prohibited",
-    "wrap": "prohibited"
-  },
   "report/ReportView": {
     "eject": "prohibited",
     "wrap": "prohibited"
   },
-  "report/Segmented": {
+  "views": {
     "eject": "prohibited",
     "wrap": "prohibited"
   }

@@ -21,161 +21,35 @@ import { Fragment, jsxDEV } from "react/jsx-dev-runtime";
  * cannot abort, so each region numbers its requests and drops any answer but the newest. The first
  * load draws skeletons with aria-busy; later ones keep the old rows, dimmed, under a 2 px line.
  *
+ * The bar, the grid, the cards, the rows' region and the pager are the data report's shared parts
+ * (js/esm/src/datareport), which Bar, Grid and Cards here give the report's vocabulary; the band, the
+ * queries and the writes are the report's own.
+ *
  * @module     enrol_apply/report/ReportView
  * @copyright  2026 Anderson Blaine
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { rememberView, storedView, useNarrow } from "../datareport/layout";
+import { Pager } from "../datareport/Pager";
+import { hold } from "../datareport/pending";
+import { RowsRegion } from "../datareport/Rows";
 import { Band } from "./Band";
 import { Bar } from "./Bar";
-import { Cards, CardsSkeleton } from "./Cards";
+import { Cards } from "./Cards";
+import { SIZING } from "./cells";
 import { withChoice, without } from "./filters";
-import { Grid, GridSkeleton } from "./Grid";
-import { Pager } from "./Pager";
-import { hold } from "./pending";
+import { Grid } from "./Grid";
 import { getRows, getSummary, resetFilters, setFilters, setPreference } from "./repository";
-const NARROW = 576;
 const SEARCH_DELAY = 300;
 const WIDTH_DELAY = 500;
 const VIEW_KEY = "enrol_apply_report_view";
 const SKELETON_COLUMNS = ["applicant", "outcome", "submitted", "wait", "decided", "group"];
-const storedView = /* @__PURE__ */ __name(() => {
-  try {
-    const value = window.localStorage.getItem(VIEW_KEY);
-    return value === "table" || value === "cards" ? value : "auto";
-  } catch {
-    return "auto";
-  }
-}, "storedView");
-const RowsContent = /* @__PURE__ */ __name(({
-  labels,
-  rows,
-  error,
-  cards,
-  narrow,
-  filtered,
-  columns,
-  identity,
-  widths,
-  onRetry,
-  onSort,
-  onWidth,
-  onWidthCommit
-}) => {
-  const retry = /* @__PURE__ */ jsxDEV("p", { className: "enrol_apply-rview-error", children: [
-    labels.loaderror,
-    " ",
-    /* @__PURE__ */ jsxDEV("button", { type: "button", className: "btn btn-sm btn-outline-secondary", onClick: onRetry, children: labels.retry }, void 0, false, {
-      fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-      lineNumber: 110,
-      columnNumber: 13
-    })
-  ] }, void 0, true, {
-    fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-    lineNumber: 108,
-    columnNumber: 9
-  });
-  if (rows === null && error) {
-    return retry;
-  }
-  if (rows === null) {
-    const skeleton = SKELETON_COLUMNS.map((key) => ({
-      key,
-      title: key === "applicant" ? labels.applicant : "",
-      sortable: false,
-      "default": true,
-      active: true,
-      fixed: key === "applicant"
-    }));
-    return /* @__PURE__ */ jsxDEV(Fragment, { children: [
-      cards ? /* @__PURE__ */ jsxDEV(CardsSkeleton, { single: narrow }, void 0, false, {
-        fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-        lineNumber: 127,
-        columnNumber: 26
-      }) : /* @__PURE__ */ jsxDEV(GridSkeleton, { columns: skeleton, widths }, void 0, false, {
-        fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-        lineNumber: 127,
-        columnNumber: 62
-      }),
-      /* @__PURE__ */ jsxDEV("span", { className: "visually-hidden", role: "status", children: labels.loading }, void 0, false, {
-        fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-        lineNumber: 128,
-        columnNumber: 17
-      })
-    ] }, void 0, true, {
-      fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-      lineNumber: 126,
-      columnNumber: 13
-    });
-  }
-  if (rows.total === 0) {
-    return /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-empty", children: [
-      /* @__PURE__ */ jsxDEV("p", { className: "enrol_apply-rview-empty-title", children: filtered ? labels.nomatch : labels.empty }, void 0, false, {
-        fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-        lineNumber: 135,
-        columnNumber: 17
-      }),
-      filtered ? /* @__PURE__ */ jsxDEV("p", { className: "enrol_apply-rview-empty-text", children: labels.nomatchhelp }, void 0, false, {
-        fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-        lineNumber: 136,
-        columnNumber: 29
-      }) : null
-    ] }, void 0, true, {
-      fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-      lineNumber: 134,
-      columnNumber: 13
-    });
-  }
-  return /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-dim", children: [
-    error ? retry : null,
-    cards ? /* @__PURE__ */ jsxDEV(Cards, { labels, columns, identity, rows: rows.rows, single: narrow }, void 0, false, {
-      fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-      lineNumber: 145,
-      columnNumber: 17
-    }) : /* @__PURE__ */ jsxDEV(Fragment, { children: [
-      /* @__PURE__ */ jsxDEV(
-        Grid,
-        {
-          labels,
-          columns,
-          identity,
-          rows: rows.rows,
-          widths,
-          sort: rows.sort,
-          direction: rows.direction,
-          onSort,
-          onWidth,
-          onWidthCommit
-        },
-        void 0,
-        false,
-        {
-          fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-          lineNumber: 148,
-          columnNumber: 21
-        }
-      ),
-      /* @__PURE__ */ jsxDEV("p", { className: "enrol_apply-rview-hint", children: labels.scrollhint }, void 0, false, {
-        fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-        lineNumber: 160,
-        columnNumber: 21
-      })
-    ] }, void 0, true, {
-      fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-      lineNumber: 147,
-      columnNumber: 17
-    })
-  ] }, void 0, true, {
-    fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-    lineNumber: 142,
-    columnNumber: 9
-  });
-}, "RowsContent");
 const ReportView = /* @__PURE__ */ __name((props) => {
   const { labels, enrolid, reportid } = props;
   const root = useRef(null);
-  const [narrow, setNarrow] = useState(false);
-  const [view, setViewState] = useState(storedView);
+  const narrow = useNarrow(root);
+  const [view, setViewState] = useState(() => storedView(VIEW_KEY));
   const initial = {
     measure: props.measure,
     scope: "all",
@@ -285,18 +159,6 @@ const ReportView = /* @__PURE__ */ __name((props) => {
     loadRows(query.current, true);
     loadBand(query.current);
   }, [loadRows, loadBand]);
-  useEffect(() => {
-    const element = root.current;
-    if (!element || typeof ResizeObserver === "undefined") {
-      return void 0;
-    }
-    const observer = new ResizeObserver((entries) => {
-      const width = entries[0]?.contentRect.width ?? element.clientWidth;
-      setNarrow(width > 0 && width < NARROW);
-    });
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
   useEffect(() => () => {
     if (searchtimer.current !== null) {
       window.clearTimeout(searchtimer.current);
@@ -306,10 +168,7 @@ const ReportView = /* @__PURE__ */ __name((props) => {
   }, []);
   const setView = /* @__PURE__ */ __name((chosen) => {
     setViewState(chosen);
-    try {
-      window.localStorage.setItem(VIEW_KEY, chosen);
-    } catch {
-    }
+    rememberView(VIEW_KEY, chosen);
   }, "setView");
   const onSearch = /* @__PURE__ */ __name((text) => {
     setSearchtext(text);
@@ -442,10 +301,47 @@ const ReportView = /* @__PURE__ */ __name((props) => {
   const identity = allcolumns.filter((column) => column.key.startsWith("identity:"));
   const shown = allcolumns.filter((column) => column.key === "applicant" || !column.fixed && column.active);
   const cards = view === "cards" || view === "auto" && narrow;
+  let body = null;
+  if (rows !== null) {
+    body = cards ? /* @__PURE__ */ jsxDEV(Cards, { labels, columns: shown, identity, rows: rows.rows, single: narrow }, void 0, false, {
+      fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
+      lineNumber: 471,
+      columnNumber: 13
+    }) : /* @__PURE__ */ jsxDEV(
+      Grid,
+      {
+        labels,
+        columns: shown,
+        identity,
+        rows: rows.rows,
+        widths,
+        sort: rows.sort,
+        direction: rows.direction,
+        onSort,
+        onWidth,
+        onWidthCommit: () => flushref.current()
+      },
+      void 0,
+      false,
+      {
+        fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
+        lineNumber: 473,
+        columnNumber: 13
+      }
+    );
+  }
+  const skeleton = SKELETON_COLUMNS.map((key) => ({
+    key,
+    title: key === "applicant" ? labels.applicant : "",
+    sortable: false,
+    "default": true,
+    active: true,
+    fixed: key === "applicant"
+  }));
   return /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-root", ref: root, "data-region": "enrol_apply-reportview", children: [
     rows?.narrowed ? /* @__PURE__ */ jsxDEV("p", { className: "enrol_apply-rview-narrowed", children: labels.narrowed }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-      lineNumber: 582,
+      lineNumber: 498,
       columnNumber: 31
     }) : null,
     /* @__PURE__ */ jsxDEV(
@@ -467,7 +363,7 @@ const ReportView = /* @__PURE__ */ __name((props) => {
       false,
       {
         fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-        lineNumber: 583,
+        lineNumber: 499,
         columnNumber: 13
       }
     ),
@@ -532,55 +428,30 @@ const ReportView = /* @__PURE__ */ __name((props) => {
       false,
       {
         fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-        lineNumber: 596,
+        lineNumber: 512,
         columnNumber: 13
       }
     ),
     /* @__PURE__ */ jsxDEV(
-      "section",
+      RowsRegion,
       {
-        className: "enrol_apply-rview-region",
-        "aria-label": labels.caption,
-        "aria-busy": rowsloading,
-        "data-region": "enrol_apply-rows",
-        children: [
-          rowsloading && rows !== null ? /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-progress" }, void 0, false, {
-            fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-            lineNumber: 651,
-            columnNumber: 49
-          }) : null,
-          /* @__PURE__ */ jsxDEV(
-            RowsContent,
-            {
-              labels,
-              rows,
-              error: rowserror,
-              cards,
-              narrow,
-              filtered,
-              columns: shown,
-              identity,
-              widths,
-              onRetry: () => loadRows(query.current, true),
-              onSort,
-              onWidth,
-              onWidthCommit: () => flushref.current()
-            },
-            void 0,
-            false,
-            {
-              fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-              lineNumber: 652,
-              columnNumber: 17
-            }
-          )
-        ]
+        labels,
+        loading: rowsloading,
+        loaded: rows !== null,
+        error: rowserror,
+        total: rows?.total ?? 0,
+        filtered,
+        cards,
+        narrow,
+        skeleton: { columns: skeleton, lead: "applicant", widths, sizing: SIZING },
+        onRetry: () => loadRows(query.current, true),
+        children: body
       },
       void 0,
-      true,
+      false,
       {
         fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-        lineNumber: 645,
+        lineNumber: 561,
         columnNumber: 13
       }
     ),
@@ -601,7 +472,7 @@ const ReportView = /* @__PURE__ */ __name((props) => {
       false,
       {
         fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-        lineNumber: 669,
+        lineNumber: 576,
         columnNumber: 17
       }
     ) : null,
@@ -611,22 +482,22 @@ const ReportView = /* @__PURE__ */ __name((props) => {
         " ",
         /* @__PURE__ */ jsxDEV("a", { href: props.retentionurl, children: labels.retentionchange }, void 0, false, {
           fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-          lineNumber: 684,
+          lineNumber: 591,
           columnNumber: 57
         })
       ] }, void 0, true, {
         fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-        lineNumber: 684,
+        lineNumber: 591,
         columnNumber: 50
       }) : null
     ] }, void 0, true, {
       fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-      lineNumber: 682,
+      lineNumber: 589,
       columnNumber: 17
     }) : null
   ] }, void 0, true, {
     fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-    lineNumber: 581,
+    lineNumber: 497,
     columnNumber: 9
   });
 }, "ReportView");
