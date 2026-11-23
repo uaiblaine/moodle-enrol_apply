@@ -23,12 +23,13 @@
  * controls, with their labels and help: for an approval the groups and the role where the props offer
  * them (a holder of enrol/apply:choosedecision) or the summary of what an approval gives, then the
  * message to the applicant and the note for the record, which every decision posts. The sheet's commit
- * button is the confirmation, worded as the table's ("Cancel 2"); Back, the close button, Escape and a
- * press outside close it without posting anything.
+ * button is the confirmation, worded as the table's ("Cancel 2"); Back, the close button and Escape close
+ * it without posting anything, and so does a press outside while no field holds typed text or a
+ * non-default choice (core's modal does not hide a dialogue that holds a form either).
  *
  * Bootstrap's modal markup, drawn by React rather than by Bootstrap's script, so Moodle's dialogue
- * locator finds it by its title. The focus moves into the dialog when it opens and stays there (Tab and
- * Shift+Tab wrap); the view gives it back to the dock button that opened it.
+ * locator finds it by its title. The focus moves to the title when the dialog opens and stays inside it
+ * (Tab and Shift+Tab wrap); the view gives it back to the dock button that opened it.
  *
  * @module     enrol_apply/queue/Sheet
  * @copyright  2026 Anderson Blaine
@@ -103,11 +104,13 @@ const Help = ({id, text}: {id: string, text: string}): ReactElement => <div clas
 export const Sheet = ({labels, decision, rows, offer, onClose, onCommit}: SheetProps): ReactElement => {
     const id = useId();
     const dialog = useRef<HTMLDivElement | null>(null);
+    const heading = useRef<HTMLHeadingElement | null>(null);
     const [message, setMessage] = useState('');
     const [note, setNote] = useState('');
-    const [groups, setGroups] = useState<string[]>(
+    const [initialGroups] = useState<string[]>(
         () => (offer.groups?.options ?? []).filter((group) => group.selected).map((group) => String(group.id))
     );
+    const [groups, setGroups] = useState<string[]>(initialGroups);
     const [roleid, setRoleid] = useState('0');
     const [sending, setSending] = useState(false);
 
@@ -115,9 +118,9 @@ export const Sheet = ({labels, decision, rows, offer, onClose, onCommit}: SheetP
     const [title, commit] = wording(labels, decision, count);
     const approval = decision === 'confirm';
 
-    // The dialog takes the focus as it opens, and the page behind it stops scrolling while it is open.
+    // The title takes the focus as the dialog opens, and the page behind it stops scrolling while it is open.
     useEffect(() => {
-        dialog.current?.focus();
+        heading.current?.focus();
         document.body.classList.add('modal-open');
 
         return () => document.body.classList.remove('modal-open');
@@ -149,10 +152,10 @@ export const Sheet = ({labels, decision, rows, offer, onClose, onCommit}: SheetP
         const first = items[0];
         const last = items[items.length - 1];
         const at = document.activeElement;
-        if (event.shiftKey && (at === first || at === dialog.current)) {
+        if (event.shiftKey && (at === first || at === heading.current)) {
             event.preventDefault();
             last.focus();
-        } else if (!event.shiftKey && (at === last || at === dialog.current)) {
+        } else if (!event.shiftKey && (at === last || at === heading.current)) {
             event.preventDefault();
             first.focus();
         }
@@ -176,6 +179,10 @@ export const Sheet = ({labels, decision, rows, offer, onClose, onCommit}: SheetP
         });
     };
 
+    // Typed text or a non-default choice: a press on the backdrop must not throw it away.
+    const dirty = message !== '' || note !== '' || roleid !== '0'
+        || groups.length !== initialGroups.length || groups.some((group) => !initialGroups.includes(group));
+
     const more = count - NAMED;
 
     return (
@@ -185,8 +192,8 @@ export const Sheet = ({labels, decision, rows, offer, onClose, onCommit}: SheetP
                 className="modal show d-block enrol_apply-qview-sheet"
                 role="presentation"
                 onMouseDown={(event) => {
-                    // A press on the dimmed page around the dialog closes it, as core's modals do.
-                    if (event.target === event.currentTarget && !sending) {
+                    // A press on the dimmed page closes the dialog unless it holds input, as core's modals do.
+                    if (event.target === event.currentTarget && !sending && !dirty) {
                         onClose();
                     }
                 }}
@@ -203,7 +210,7 @@ export const Sheet = ({labels, decision, rows, offer, onClose, onCommit}: SheetP
                         data-region="enrol_apply-sheet"
                     >
                         <div className="modal-header">
-                            <h5 className="modal-title" id={`${id}-title`}>{title}</h5>
+                            <h5 className="modal-title" id={`${id}-title`} tabIndex={-1} ref={heading}>{title}</h5>
                             <button
                                 type="button"
                                 className="btn-close"

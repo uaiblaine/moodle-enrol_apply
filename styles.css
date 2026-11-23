@@ -14,7 +14,7 @@
 .enrol_apply-presets,
 .enrol_apply-qview,
 [data-enrol-apply-report] {
-    --enrol-apply-line: var(--bs-border-color, #dee2e6);
+    --enrol-apply-line: var(--dimensions-line, var(--bs-border-color, #dee2e6));
     --enrol-apply-muted: var(--bs-secondary-color, #6c757d);
     --enrol-apply-fill: var(--bs-primary, #0f6cbf);
     --enrol-apply-warn: var(--bs-warning, #f0ad4e);
@@ -22,7 +22,7 @@
     /* The foreground that pairs with --enrol-apply-track and the surface. Bootstrap designs them
        together, so they are read together: an ancestor that recolours text without moving the
        --bs-* tokens would otherwise put light text on a light fill. */
-    --enrol-apply-ink: var(--bs-body-color, #1d2125);
+    --enrol-apply-ink: var(--dimensions-ink, var(--bs-body-color, #212529));
     --enrol-apply-surface: var(--dimensions-surface, var(--bs-body-bg, #fff));
 }
 
@@ -660,9 +660,9 @@ body.path-enrol-apply:not(.jsenabled) #page.drawers {
 .enrol_apply-review,
 .enrol_apply-applicationnav,
 .enrol_apply-timeline {
-    --enrol-apply-line: var(--bs-border-color, #dee2e6);
+    --enrol-apply-line: var(--dimensions-line, var(--bs-border-color, #dee2e6));
     --enrol-apply-muted: var(--bs-secondary-color, #6c757d);
-    --enrol-apply-ink: var(--bs-body-color, #1d2125);
+    --enrol-apply-ink: var(--dimensions-ink, var(--bs-body-color, #212529));
     --enrol-apply-surface: var(--bs-card-bg, var(--bs-body-bg, #fff));
     --enrol-apply-fill: var(--bs-primary, var(--primary, #0f6cbf));
     --enrol-apply-warn: var(--bs-warning, var(--warning, #f0ad4e));
@@ -2972,7 +2972,7 @@ body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload + .enrol_apply-rvie
     table-layout: fixed;
 }
 
-.enrol_apply-rview .enrol_apply-rview-grid th {
+.enrol_apply-rview .enrol_apply-rview-grid thead th {
     background: var(--enrol-apply-surface-alt);
     border-bottom: 1px solid var(--enrol-apply-line);
     color: var(--enrol-apply-ink-muted);
@@ -2986,8 +2986,8 @@ body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload + .enrol_apply-rvie
     z-index: 2;
 }
 
-.enrol_apply-rview .enrol_apply-rview-grid th[aria-sort="ascending"],
-.enrol_apply-rview .enrol_apply-rview-grid th[aria-sort="descending"] {
+.enrol_apply-rview .enrol_apply-rview-grid thead th[aria-sort="ascending"],
+.enrol_apply-rview .enrol_apply-rview-grid thead th[aria-sort="descending"] {
     color: var(--enrol-apply-ink);
 }
 
@@ -3060,7 +3060,8 @@ body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload + .enrol_apply-rvie
     outline: none;
 }
 
-.enrol_apply-rview .enrol_apply-rview-grid td {
+.enrol_apply-rview .enrol_apply-rview-grid td,
+.enrol_apply-rview .enrol_apply-rview-grid tbody th {
     color: var(--enrol-apply-ink);
     background: var(--enrol-apply-surface);
     border-bottom: 1px solid var(--enrol-apply-line);
@@ -3068,11 +3069,19 @@ body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload + .enrol_apply-rvie
     vertical-align: top;
 }
 
-.enrol_apply-rview .enrol_apply-rview-grid tbody tr:last-child td {
+.enrol_apply-rview .enrol_apply-rview-grid tbody th {
+    font-size: inherit;
+    font-weight: inherit;
+    text-align: start;
+}
+
+.enrol_apply-rview .enrol_apply-rview-grid tbody tr:last-child td,
+.enrol_apply-rview .enrol_apply-rview-grid tbody tr:last-child th {
     border-bottom: 0;
 }
 
-.enrol_apply-rview .enrol_apply-rview-grid tbody tr:hover td {
+.enrol_apply-rview .enrol_apply-rview-grid tbody tr:hover td,
+.enrol_apply-rview .enrol_apply-rview-grid tbody tr:hover th {
     color: var(--enrol-apply-ink);
     background: var(--enrol-apply-hover);
 }
@@ -3083,7 +3092,7 @@ body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload + .enrol_apply-rvie
     z-index: 1;
 }
 
-.enrol_apply-rview .enrol_apply-rview-grid th.enrol_apply-rview-fixed {
+.enrol_apply-rview .enrol_apply-rview-grid thead th.enrol_apply-rview-fixed {
     z-index: 4;
 }
 
@@ -3480,7 +3489,7 @@ body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload + .enrol_apply-rvie
     min-width: 0;
 }
 
-.enrol_apply-qview th .enrol_apply-rview-lead {
+.enrol_apply-qview thead th .enrol_apply-rview-lead {
     align-items: center;
     gap: 0;
     padding-inline-start: 0.75rem;
@@ -3494,7 +3503,7 @@ body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload + .enrol_apply-rvie
     width: 1rem;
 }
 
-.enrol_apply-qview th .enrol_apply-rview-pickwrap {
+.enrol_apply-qview thead th .enrol_apply-rview-pickwrap {
     padding-top: 0;
 }
 
@@ -3511,6 +3520,7 @@ body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload + .enrol_apply-rvie
 }
 
 .enrol_apply-qview .enrol_apply-rview-grid tr.enrol_apply-rview-row--selected td,
+.enrol_apply-qview .enrol_apply-rview-grid tr.enrol_apply-rview-row--selected th,
 .enrol_apply-qview .enrol_apply-rview-card--selected {
     color: var(--enrol-apply-ink);
     background: var(--enrol-apply-brand-tint);
@@ -3526,7 +3536,7 @@ body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload + .enrol_apply-rvie
     align-items: center;
     background: var(--enrol-apply-surface);
     border: 1px solid var(--enrol-apply-line);
-    border-radius: var(--enrol-apply-radius-md);
+    border-radius: var(--enrol-apply-radius-lg);
     bottom: 0.75rem;
     box-shadow: var(--enrol-apply-elevation-md);
     color: var(--enrol-apply-ink);
@@ -3535,7 +3545,7 @@ body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload + .enrol_apply-rvie
     gap: 0.5rem 1rem;
     justify-content: space-between;
     margin-bottom: 0.75rem;
-    padding: 0.625rem 0.75rem;
+    padding: 0.5rem 0.75rem;
     position: sticky;
     z-index: 5;
 }

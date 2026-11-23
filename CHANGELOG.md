@@ -12,7 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   reader who may decide selects rows with a box per row and one for the page (never their own
   application, which has none); the selection is cleared when the page, the scope, a filter, the
   search or the sort changes, and the dock under the rows says how many are selected "on this page"
-  beside the table's three decisions, Cancel applications, Defer and Confirm. Each opens a sheet that
+  beside the table's three decisions, Confirm, Defer and Cancel applications (the destructive one
+  last; the grid's first cell on each row is a row header). Each opens a sheet that
   names the applicants and asks what the table's sheet asks: the message to the applicant, the note
   for the record and, for an approval, the groups and the role to a holder of
   `enrol/apply:choosedecision` (what an approval gives to a decider without it), with the table's

@@ -248,20 +248,20 @@ class enrol_apply_renderer extends plugin_renderer_base {
      * The queue's three decisions, in the review page's order and styles (MQ-D4).
      *
      * One list for the table's sticky footer and the grid view's dock, so the two offer the same
-     * decisions under the same labels in the same order. Each value is a formaction manage.php
-     * accepts, so the POST contract is the review page's and a decision is one press without
-     * JavaScript. Each carries a short label too, the one the footer shows below 576 px, where
-     * core's 80 px footer has to keep one line.
+     * decisions under the same labels in the same order: approve, defer, and the destructive one
+     * last. Each value is a formaction manage.php accepts, so the POST contract is the review
+     * page's and a decision is one press without JavaScript. Each carries a short label too, the
+     * one the footer shows below 576 px, where core's 80 px footer has to keep one line.
      *
      * @return array Each: value (the formaction), label, short, classes (the button's style).
      */
     public function queue_actions(): array {
         return [
             [
-                'value' => 'cancel',
-                'label' => get_string('btncancel', 'enrol_apply'),
-                'short' => get_string('btncancelshort', 'enrol_apply'),
-                'classes' => 'btn-outline-danger',
+                'value' => 'confirm',
+                'label' => get_string('btnconfirm', 'enrol_apply'),
+                'short' => get_string('btnconfirmshort', 'enrol_apply'),
+                'classes' => 'btn-primary',
             ],
             [
                 'value' => 'wait',
@@ -270,10 +270,10 @@ class enrol_apply_renderer extends plugin_renderer_base {
                 'classes' => 'btn-outline-secondary',
             ],
             [
-                'value' => 'confirm',
-                'label' => get_string('btnconfirm', 'enrol_apply'),
-                'short' => get_string('btnconfirmshort', 'enrol_apply'),
-                'classes' => 'btn-primary',
+                'value' => 'cancel',
+                'label' => get_string('btncancel', 'enrol_apply'),
+                'short' => get_string('btncancelshort', 'enrol_apply'),
+                'classes' => 'btn-outline-danger',
             ],
         ];
     }

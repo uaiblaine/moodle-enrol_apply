@@ -323,7 +323,7 @@ const Grid = /* @__PURE__ */ __name(({
           {
             "data-record": row.id,
             className: selection?.selected.has(row.id) ? "enrol_apply-rview-row--selected" : void 0,
-            children: columns.map((column) => column.key === lead ? /* @__PURE__ */ jsxDEV("td", { className: "enrol_apply-rview-fixed", children: selection ? /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-lead", children: [
+            children: columns.map((column) => column.key === lead ? /* @__PURE__ */ jsxDEV("th", { scope: "row", className: "enrol_apply-rview-fixed", children: selection ? /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-lead", children: [
               /* @__PURE__ */ jsxDEV(RowBox, { selection, row }, void 0, false, {
                 fileName: "public/enrol/apply/js/esm/src/datareport/Grid.tsx",
                 lineNumber: 359,

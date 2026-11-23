@@ -1392,7 +1392,7 @@ backup/                      group mappings, comments and the durable trail, see
   `queue_view::decision()`: no props at all for a viewer, the groups and role choosers only where the
   table form offers them (`enrol/apply:choosedecision`), the approval summary otherwise, and the places
   notice from the same capacity calls; the three decisions are `renderer::queue_actions()`, the table
-  footer's labels and order. `tests/local/decision_post_test.php` holds that the grid's field set
+  footer's labels and order (Confirm, Defer, then the destructive Cancel last). `tests/local/decision_post_test.php` holds that the grid's field set
   writes exactly what the table's writes, and that a forged post naming the reader's own application or
   one outside a narrowed moderator's groups decides neither. Gates `QV4`-`QV9`.
 
@@ -1406,8 +1406,8 @@ backup/                      group mappings, comments and the durable trail, see
   `<label>`s with visually hidden text, which is what Behat's `"checkbox"` locator needs. The dock is
   drawn only while something is selected (`Rows`' `dock`), and the sheet is the view's own modal in
   Bootstrap's markup (`modal-content` and `modal-title`, which Moodle's `"dialogue"` locator reads):
-  focus moves into it and wraps, Escape, Back, the close button and a press outside close it, and the
-  focus goes back to the dock button that opened it. Its commit button is the confirmation, worded as
+  focus moves to its title and wraps, Escape, Back and the close button close it, and a press outside
+  does too unless a field holds text or a non-default choice, and the focus goes back to the dock button that opened it. Its commit button is the confirmation, worded as
   the table's sheet ("Cancel 2"); the queue asks nothing beyond it (see "Cancelling asks" below).
 
 - **Both listings order by a unique key as a last resort, and the injection point is the only

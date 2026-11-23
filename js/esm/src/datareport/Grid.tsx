@@ -353,14 +353,14 @@ export const Grid = <R extends RowBase>({labels, columns, lead, rows, widths, si
                         >
                             {columns.map((column) => (
                                 column.key === lead ? (
-                                    <td key={column.key} className="enrol_apply-rview-fixed">
+                                    <th key={column.key} scope="row" className="enrol_apply-rview-fixed">
                                         {selection ? (
                                             <div className="enrol_apply-rview-lead">
                                                 <RowBox selection={selection} row={row} />
                                                 {renderLead(row, column)}
                                             </div>
                                         ) : renderLead(row, column)}
-                                    </td>
+                                    </th>
                                 ) : (
                                     <td key={column.key}>{renderCell(row, column)}</td>
                                 )
