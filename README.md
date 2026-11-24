@@ -112,6 +112,8 @@ method's applicants, a *Full* warning where it applies and a link to the method'
 note for all. Each approval uses its own method's role and groups: choosing them happens on the
 method's queue.
 
+![The site-wide queue's By course view filtered to one course category: the same tiles and chip, and one row per enrolment method with its course and name, how many applications await a decision, how many are deferred, the oldest wait, the places taken with a meter (16 of 30, 4 of 4, or a count with no limit), Open or a Full label, and an Open the queue button](docs/screenshots/site-queue-courses.png)
+
 **By course**, in the site-wide queue's View menu (`manage.php?show=methods`), lists one row per
 enrolment method instead of one per application: the course and the method, how many applications
 await a decision and how many of them are deferred, the oldest wait, the places taken (against the
