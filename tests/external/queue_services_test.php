@@ -315,6 +315,54 @@ final class queue_services_test extends \advanced_testcase {
     }
 
     /**
+     * Through the two read doors, a mentor's wide queue lists and counts their mentee's application and not
+     * the other applicant's in the same course and method; the site-wide decider's same calls list and count
+     * both (the control). The mentee grid (W5) reads nothing else: the "By course" door refuses a mentor
+     * (test_the_methods_view_answers_the_site_wide_readers_and_refuses_the_rest).
+     *
+     * Changes that must make it fail: the mentee restriction dropped from the scope the services read (the
+     * mentor would list and count both); the summary counted over another scope than the rows.
+     *
+     * @return void
+     */
+    public function test_a_mentors_wide_answers_list_and_count_only_their_mentees(): void {
+        global $DB;
+
+        $system = \context_system::instance();
+        $generator = $this->getDataGenerator();
+        $other = $generator->create_user();
+        enrol_get_plugin('apply')->enrol_user($this->instance, $other->id, null, 0, 0, ENROL_USER_SUSPENDED);
+        $mine = (int) $DB->get_field('user_enrolments', 'id', ['userid' => $this->applicant->id, 'enrolid' => $this->instance->id]);
+        $theirs = (int) $DB->get_field('user_enrolments', 'id', ['userid' => $other->id, 'enrolid' => $this->instance->id]);
+
+        $mentor = $generator->create_user();
+        $role = $generator->create_role();
+        set_role_contextlevels($role, [CONTEXT_USER]);
+        assign_capability('enrol/apply:manageapplications', CAP_ALLOW, $role, $system->id, true);
+        role_assign($role, $mentor->id, \context_user::instance($this->applicant->id)->id);
+
+        $this->setUser($mentor);
+        $rows = $this->call('enrol_apply_queue_rows', ['enrolid' => 0]);
+        $this->assertFalse($rows['error'], json_encode($rows['exception'] ?? null));
+        $this->assertSame('mentees', $rows['data']['kind']);
+        $this->assertSame([$mine], array_column($rows['data']['rows'], 'userenrolmentid'));
+        $summary = $this->call('enrol_apply_queue_summary', ['enrolid' => 0]);
+        $this->assertFalse($summary['error'], json_encode($summary['exception'] ?? null));
+        $this->assertSame(1, $summary['data']['awaiting']);
+        $this->assertFalse($summary['data']['sitefigures']);
+
+        // The control: the site-wide decider lists and counts both applications of the method.
+        $this->setAdminUser();
+        $rows = $this->call('enrol_apply_queue_rows', ['enrolid' => 0])['data'];
+        $listed = array_column($rows['rows'], 'userenrolmentid');
+        sort($listed);
+        $expected = [$mine, $theirs];
+        sort($expected);
+        $this->assertSame($expected, $listed);
+        $this->assertSame(2, $this->call('enrol_apply_queue_summary', ['enrolid' => 0])['data']['awaiting']);
+    }
+
+    /**
      * The "By course" view's door (enrol_apply_queue_methods, SQ-D9) answers the two site-wide readers and
      * nobody else: a mentor of the one applicant, an editing teacher of the course and a guest are each
      * refused, and nothing comes back but the refusal.

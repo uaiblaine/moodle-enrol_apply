@@ -35,7 +35,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 
 /**
  * What the server adds for the site-wide queue's grid (W3): the id-less page's grid for a site-wide decider
- * or viewer and nobody else (the mentee queue keeps the table until W5), a shell with no row, no report link
+ * or viewer (and, since W5, a mentor: mentee_queue_view_test), never a refused reader, a shell with no row, no report link
  * and the listing's kind, the decision sheet's offer of the table form with no instance (no chooser, SQ-D10;
  * nothing for a viewer), and the address read for the first paint and rebuilt for the page a decision
  * lands on, through the queue's own cleaning. Stage W4 adds the "By course" view's offer (the site-wide
@@ -154,19 +154,19 @@ final class site_queue_view_test extends \advanced_testcase {
         $url = new moodle_url('/enrol/apply/manage.php');
         $table = applications::for_scope(0);
 
-        return new queue_view(null, $table, $url, queue_view::initial('', null, [], true));
+        return new queue_view(null, $table, $url, queue_view::initial('', null, [], queue::listing_scope(0)));
     }
 
     /**
-     * The id-less page is the grid for a site-wide decider and a site-wide viewer, the table under
-     * view=table, and the table for a mentor (stage W5 turns that) and for a reader the page refuses.
+     * The id-less page is the grid for a site-wide decider, a site-wide viewer and a mentor (W5), the table
+     * under view=table, and never the grid for a reader the page refuses.
      *
-     * Changes that must make it fail: the site-wide scope refused the grid; the mentee condition dropped
-     * (a mentor's page would mount it); view=table ignored on the site-wide queue.
+     * Changes that must make it fail: the site-wide scope refused the grid; the allowed condition dropped
+     * (the teacher's refused listing would mount it); view=table ignored on the site-wide queue.
      *
      * @return void
      */
-    public function test_the_site_wide_queue_takes_the_grid_and_the_mentee_queue_keeps_the_table(): void {
+    public function test_the_wide_queues_take_the_grid_and_a_refused_reader_never_does(): void {
         foreach (['decider' => get_admin(), 'viewer' => $this->viewer] as $who => $user) {
             $this->setUser($user);
             $listing = queue::listing_scope(0);
@@ -181,13 +181,14 @@ final class site_queue_view_test extends \advanced_testcase {
             $this->assertFalse(queue_view::wanted($listing, queue_view::TABLE), $who);
         }
 
-        // A mentor opens their mentees' queue, which keeps the table in this stage, asked for or not.
+        // A mentor opens their mentees' queue, which takes the grid too (W5, SQ-D13), and the table on request.
         $this->setUser($this->mentor);
         $listing = queue::listing_scope(0);
         $this->assertTrue($listing->allowed);
         $this->assertNotEmpty($listing->mentees);
-        $this->assertFalse(queue_view::wanted($listing, ''));
-        $this->assertFalse(queue_view::wanted($listing, 'grid'));
+        $this->assertTrue(queue_view::wanted($listing, ''));
+        $this->assertTrue(queue_view::wanted($listing, 'grid'));
+        $this->assertFalse(queue_view::wanted($listing, queue_view::TABLE));
 
         // An editing teacher of one course is refused the id-less page, and is never given its grid.
         $this->setUser($this->teacher);
@@ -300,7 +301,7 @@ final class site_queue_view_test extends \advanced_testcase {
             'course' => (string) $this->courses['none']->id,
         ];
         $filters = applications::request_filters(queue::listing_scope(0));
-        $forged = queue_view::initial('', null, $filters, true);
+        $forged = queue_view::initial('', null, $filters, queue::listing_scope(0));
         $this->assertSame([], $forged['filters']);
         $this->assertSame(50, $forged['perpage']);
 
@@ -313,7 +314,7 @@ final class site_queue_view_test extends \advanced_testcase {
             'course' => (string) $this->courses['one']->id,
         ];
         $filters = applications::request_filters(queue::listing_scope(0));
-        $clean = queue_view::initial('', null, $filters, true);
+        $clean = queue_view::initial('', null, $filters, queue::listing_scope(0));
         $this->assertSame([
             ['name' => 'course', 'value' => (string) $this->courses['one']->id],
             ['name' => 'waited', 'value' => '7'],
@@ -459,18 +460,18 @@ final class site_queue_view_test extends \advanced_testcase {
 
         foreach (['table', 'Methods', 'methods<b>', 'grid', ''] as $forged) {
             $_GET = ['show' => $forged];
-            $this->assertSame('', queue_view::initial('', null, [], true)['show'], $forged);
+            $this->assertSame('', queue_view::initial('', null, [], queue::listing_scope(0))['show'], $forged);
         }
         // The list's own switch to the table is not the view's.
         $_GET = ['view' => 'methods'];
-        $this->assertSame('', queue_view::initial('', null, [], true)['show']);
+        $this->assertSame('', queue_view::initial('', null, [], queue::listing_scope(0))['show']);
         // A method's queue has no such view, whatever its address says.
         $_GET = ['show' => 'methods'];
         $this->assertSame('', queue_view::initial('', null, [])['show']);
 
         // The control: the site-wide queue's address asking for the view, with its sort and page.
         $_GET = ['show' => 'methods', 'sort' => 'oldest', 'dir' => 'desc', 'page' => '1'];
-        $initial = queue_view::initial('', null, [], true);
+        $initial = queue_view::initial('', null, [], queue::listing_scope(0));
         $this->assertSame(queue_view::METHODS, $initial['show']);
         $this->assertSame('oldest', $initial['sort']);
         $this->assertSame('desc', $initial['direction']);
@@ -489,7 +490,7 @@ final class site_queue_view_test extends \advanced_testcase {
         $_GET = ['show' => 'methods', 'course' => (string) $this->courses['one']->id, 'perpage' => '30'];
         $filters = applications::request_filters(queue::listing_scope(0));
         // Precondition: the first paint read the view from the same address.
-        $this->assertSame(queue_view::METHODS, queue_view::initial('', null, $filters, true)['show']);
+        $this->assertSame(queue_view::METHODS, queue_view::initial('', null, $filters, queue::listing_scope(0))['show']);
 
         $params = queue_view::return_url(0, '', null, $filters)->params();
         $this->assertArrayNotHasKey('show', $params);

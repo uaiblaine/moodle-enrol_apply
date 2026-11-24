@@ -122,10 +122,23 @@ search narrow it as they narrow the list; it sorts by course, by what awaits (mo
 or by the oldest application. It selects nothing and decides nothing. It is the site-wide readers':
 a mentor's queue has no such view.
 
+**A mentor's queue** (`manage.php` with no parameter, for a mentor: see "Setting up a mentor") is the
+same grid with what the mentee table shows and nothing more. It lists the applications of the users
+the mentor holds the capability over in their own user contexts, from every course; the applicant
+without identity fields (the queue spans courses, and no single context may judge them), the course
+and the method (the method's name is plain: a mentor may not open its queue, and no method is marked
+*Full*), the wait and the comment. Two tiles: what awaits, with the oldest wait and how many waited
+over a week, and what is deferred with its share. The one filter is how long the application has
+waited; there is no *Details submitted* column, no group column, no course, category or method
+filter, no **By course** view and no report link. The mentor selects and decides as on the site-wide
+queue: a selection over several methods gets one section per method in the sheet, without the link
+to the method's queue. Everything the mentor is not shown is withheld by the server (the rows and
+summary services and the page), not hidden by the browser.
+
 **Table view** (`manage.php?id=<method>&view=table`, or `manage.php?view=table` for the site-wide
 queue, the link above the grid) shows the same queue as a table whose decisions sit in a bar at the
 foot of the page, with a **Grid view** link back; a browser without JavaScript gets that table on the
-queue page itself, and the queue of a mentor's mentees is always a table for now. Decisions taken
+queue page itself; a mentor's queue has the same table under `manage.php?view=table`. Decisions taken
 there are the same decisions, with the same checks.
 
 ![Reviewing one application whose group key found no seat: the status and key strip, the rules to observe with the full key group flagged over the limit on confirming, the comment and the submitted details, the On confirming card with its sentence and the group cards with their occupancy, the applicant's card, and the three decisions in the bar at the foot](docs/screenshots/review.png)
@@ -797,7 +810,8 @@ standard mentor pattern configures this in three steps:
    this user** to give the mentor that role.
 
 The mentor then opens `/enrol/apply/manage.php` with no parameters, sees exactly those users'
-applications there, and can decide on them. (The Site administration menu entry is only shown to
+applications there, in the grid described under "Deciding" (or the table under
+`view=table`), and can decide on them. (The Site administration menu entry is only shown to
 site administrators.)
 
 One limitation is worth knowing before you rely on it. A Moodle capability declares a

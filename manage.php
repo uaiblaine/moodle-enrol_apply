@@ -162,15 +162,16 @@ if (!$userenrol) {
 
 $manageurl = new moodle_url('/enrol/apply/manage.php', $manageurlparams);
 
-/* The grid view is the page of the method queue (CQ-D5) and of the site-wide queue (W3, SQ-D12); view=table
-   asks for today's table, and the mentee queue keeps the table until stage W5. queue_view::wanted() is the
-   one rule, asked of the listing scope resolved above, never of the request.
+/* The grid view is the page of the method queue (CQ-D5), of the site-wide queue (W3, SQ-D12) and of the
+   mentee queue (W5, SQ-D13); view=table asks for today's table. queue_view::wanted() is the one rule, asked of
+   the listing scope resolved above, never of the request; a refused listing never reaches it (the
+   require_capability() above throws), and the rule refuses it the grid on its own anyway.
 
    $listingurl is where this listing lives. For the grid it is $manageurl, which the decision form in the
    view's noscript posts to; a decision from the grid lands on queue_view::return_url() instead, the address
-   it was posted from, cleaned. For the table of a listing that has a grid it carries view=table, so the
-   table's form and its filter form post there and its decisions land back on the table; the mentee queue's
-   table, which has no grid, keeps the plain address. */
+   it was posted from, cleaned. For the table of a listing that has a grid (every listing this page serves)
+   it carries view=table, so the table's form and its filter form post there and its decisions land back on
+   the table. */
 $viewparam = optional_param('view', '', PARAM_ALPHA);
 $gridview = !$userenrol && \enrol_apply\output\queue_view::wanted($listing, $viewparam);
 $tableofgrid = !$userenrol && !$gridview && \enrol_apply\output\queue_view::wanted($listing, '');
@@ -361,7 +362,7 @@ if ($gridview) {
         $instance,
         $table,
         $manageurl,
-        \enrol_apply\output\queue_view::initial($search, $status, $queuefilters, !$id)
+        \enrol_apply\output\queue_view::initial($search, $status, $queuefilters, $listing)
     ));
     exit;
 }

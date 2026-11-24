@@ -3,8 +3,8 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
 import { Fragment, jsxDEV } from "react/jsx-dev-runtime";
 /**
  * The approval queue as a data report: the method queue's page (stages 3 and 4 of
- * docs/design/confirm-queue-as-report-plan.md, CQ-D5) and the site-wide queue's (stage W3 of
- * docs/design/site-queue-as-report-plan.md, SQ-D12).
+ * docs/design/confirm-queue-as-report-plan.md, CQ-D5), the site-wide queue's (stage W3 of
+ * docs/design/site-queue-as-report-plan.md, SQ-D12) and the mentee queue's (stage W5, SQ-D13).
  *
  * One view for both, branching on the listing's kind (the props for the first paint, the rows answer
  * after): the site-wide queue draws its own tiles (SQ-D7), a "Course · method" column (SQ-D2), the course,
@@ -15,7 +15,13 @@ import { Fragment, jsxDEV } from "react/jsx-dev-runtime";
  * selection, no dock and no Columns; the address says `show=methods`, and its sort and page are that view's.
  * The rows are still read while it is shown, at their first page, for the panel's facets and the chips.
  *
- * manage.php?id=<method>, and manage.php for a site-wide reader, render the shell
+ * The mentee queue is the site-wide queue's grid with less (SQ-D13), and nothing here decides what less:
+ * the rows service sends a mentor its catalogue (applicant, course and method, wait, comment), its one
+ * facet, no identity value, no "Full" and no method queue's address; the summary sends no site figures;
+ * the props offer no "By course" view and no report. Each part draws what it is given, so a mentor's page
+ * falls on the reduced side wherever a part branches on what the answer holds.
+ *
+ * manage.php?id=<method>, and manage.php for a site-wide reader or a mentor, render the shell
  * (enrol_apply\output\queue_view) with configuration and strings, unless view=table asks for today's
  * table; the rows and the tiles come from the plugin's web
  * services, which read the queue's own table (classes/local/queueengine.php), so access, the
@@ -407,7 +413,7 @@ const QueueView = /* @__PURE__ */ __name((props) => {
     false,
     {
       fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-      lineNumber: 632,
+      lineNumber: 638,
       columnNumber: 9
     }
   );
@@ -440,7 +446,7 @@ const QueueView = /* @__PURE__ */ __name((props) => {
       false,
       {
         fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-        lineNumber: 659,
+        lineNumber: 665,
         columnNumber: 13
       }
     ),
@@ -461,29 +467,29 @@ const QueueView = /* @__PURE__ */ __name((props) => {
       false,
       {
         fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-        lineNumber: 675,
+        lineNumber: 681,
         columnNumber: 17
       }
     ) : null
   ] }, void 0, true, {
     fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-    lineNumber: 658,
+    lineNumber: 664,
     columnNumber: 9
   });
   return /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-root", ref: root, "data-region": "enrol_apply-queueview", children: [
     /* @__PURE__ */ jsxDEV(Tiles, { labels, kind: config.kind, summary, error: summaryerror, onRetry: loadSummary }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-      lineNumber: 692,
+      lineNumber: 698,
       columnNumber: 13
     }),
     derived.notingroup ? /* @__PURE__ */ jsxDEV("p", { className: "enrol_apply-rview-narrowed", children: labels.notingroup }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-      lineNumber: 693,
+      lineNumber: 699,
       columnNumber: 35
     }) : /* @__PURE__ */ jsxDEV(Fragment, { children: [
       /* @__PURE__ */ jsxDEV(Notices, { labels, narrowed: derived.narrowed, viewonly: derived.viewonly }, void 0, false, {
         fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-        lineNumber: 695,
+        lineNumber: 701,
         columnNumber: 21
       }),
       /* @__PURE__ */ jsxDEV(
@@ -531,7 +537,7 @@ const QueueView = /* @__PURE__ */ __name((props) => {
         false,
         {
           fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-          lineNumber: 696,
+          lineNumber: 702,
           columnNumber: 21
         }
       ),
@@ -554,19 +560,19 @@ const QueueView = /* @__PURE__ */ __name((props) => {
         false,
         {
           fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-          lineNumber: 736,
+          lineNumber: 742,
           columnNumber: 25
         }
       ) : listbody
     ] }, void 0, true, {
       fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-      lineNumber: 694,
+      lineNumber: 700,
       columnNumber: 17
     }),
     sheetFor(labels, offer, sheet, chosen, () => setSheet(null), onCommit)
   ] }, void 0, true, {
     fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-    lineNumber: 691,
+    lineNumber: 697,
     columnNumber: 9
   });
 }, "QueueView");
