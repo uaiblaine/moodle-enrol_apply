@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased (2026112311)
+## Unreleased (2026112312)
 
 ### Added
 
@@ -157,7 +157,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   their headings (170 and 220 px, from 130 and 170). In the decision sheet of a selection that spans
   enrolment methods, the sentence saying groups and a role are chosen on the method's own queue is
   shown for an approval only; the link to the method's queue stays for every decision. The README
-  shows the site-wide queue.
+  shows the site-wide queue. The hint under the "By course" grid says the course and its method stay
+  in view, where it said the applicant does (2026112312, new string `queueviewmethodsscrollhint`).
 
 - **The shared bar's View menu takes a caller's own views** (2026112305, no upgrade step). A view
   may hand the bar extra choices that follow the built-in ones behind a separator; nothing a reader

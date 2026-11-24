@@ -751,6 +751,7 @@ $string['queueviewmethodscaption'] = 'Enrolment methods with applications awaiti
 $string['queueviewmethodsfull'] = 'Methods at their limit';
 $string['queueviewmethodsfullsub'] = 'Every place taken, or no more applications accepted';
 $string['queueviewmethodsnomatch'] = 'No enrolment method matches';
+$string['queueviewmethodsscrollhint'] = 'Scroll sideways for more columns; the course and its method stay in view. Drag the edge of a heading to resize its column, or use the arrow keys on it.';
 $string['queueviewmorefiltersnote'] = 'Filters by a text field or by the date applied are set in the table view.';
 $string['queueviewmountfailed'] = 'The grid view could not be loaded. Use the table view instead.';
 $string['queueviewnocategorymatch'] = 'No category matches.';
