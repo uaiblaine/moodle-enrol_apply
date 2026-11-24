@@ -994,8 +994,9 @@ final class wide_queue_test extends \advanced_testcase {
         $engine = $this->rows(['filters' => ['grouped' => 'yes']]);
         $service = $read($filters);
         $this->assertFalse($service['error']);
-        $this->assertSame([$grouped, $plain], $this->engine_ids());
-        $this->assertSame([$grouped, $plain], array_column($engine['rows'], 'userenrolmentid'));
+        // The same rows as with no filter, in the queue's own order (both applied in the same second).
+        $this->assertEqualsCanonicalizing([$grouped, $plain], $this->engine_ids());
+        $this->assertEqualsCanonicalizing([$grouped, $plain], array_column($engine['rows'], 'userenrolmentid'));
         $this->assertEqualsCanonicalizing([$grouped, $plain], array_column($service['data']['rows'], 'userenrolmentid'));
         $this->assertNotContains('grouped', array_column($engine['facets'], 'name'));
         $this->assertNotContains('grouped', array_column($service['data']['facets'], 'name'));
