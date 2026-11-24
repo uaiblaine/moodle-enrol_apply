@@ -731,6 +731,7 @@ $string['queuestatus'] = 'Situação';
 $string['queuestatusall'] = 'Todas';
 $string['queuesubmitted'] = 'Enviado com a solicitação';
 $string['queueviewbycourse'] = 'Por curso';
+$string['queueviewcapacityhidden'] = 'Capacidade oculta: você não pode abrir este curso';
 $string['queueviewcaption'] = 'Solicitações aguardando decisão';
 $string['queueviewcloses'] = 'As solicitações encerram em {$a}';
 $string['queueviewcourses'] = 'Cursos com solicitações';

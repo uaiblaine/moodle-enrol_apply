@@ -1381,6 +1381,20 @@ backup/                      group mappings, comments and the durable trail, see
   `tests/external/queue_services_test.php`, the shell in `tests/output/site_queue_view_test.php`. Gates
   `QM1`-`QM8`.
 
+  **Capacity facts follow the course's visibility to the reader (security read of W4).** The capacity of a
+  method (places, places taken, applicant limit, applications held, the closing date, "full") is shown on
+  `manage.php?id=`, behind `require_login($course)`, which refuses a hidden course to a reader without
+  `moodle/course:viewhiddencourses`; the wide readers must not hand it out by another route. ONE predicate,
+  `queueengine::shows_capacity()` (visible, or the capability in the course's context), is asked by all three:
+  `rows()` (`method.full` false), `wide_summary()` (`methodsfull` counts the methods it admits; a reader
+  holding the capability in the system context skips the per-course question) and `methods()` (neutral
+  capacity fields and `capacityknown` false, no capacity read for the method). The course's name and the
+  applications stay listed, as the table lists them. A test needs a CUSTOM role without
+  `moodle/course:viewhiddencourses`: stock archetypes that view applications hold it. Gate `QM9`; `QM10` holds
+  that the view asks `capacity::states()` for the places taken of a method without places too (its third
+  argument; `state()` and the default do not change). The view preloads the course contexts of the page's rows
+  after the page is cut, never of the whole result.
+
 - **The method queue's and the site-wide queue's page is the grid view, a client of the headless queue
   (CQ-D5, W3).** `manage.php` renders `\enrol_apply\output\queue_view` (template `queue_view`) wherever
   `queue_view::wanted($listing, $view)` holds, asked of the listing `queue::listing_scope()` resolved,

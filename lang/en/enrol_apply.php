@@ -733,6 +733,7 @@ $string['queuestatus'] = 'Status';
 $string['queuestatusall'] = 'All';
 $string['queuesubmitted'] = 'Submitted with the application';
 $string['queueviewbycourse'] = 'By course';
+$string['queueviewcapacityhidden'] = 'Capacity not shown: you cannot open this course';
 $string['queueviewcaption'] = 'Applications awaiting a decision';
 $string['queueviewcloses'] = 'Applications close on {$a}';
 $string['queueviewcourses'] = 'Courses with applications';

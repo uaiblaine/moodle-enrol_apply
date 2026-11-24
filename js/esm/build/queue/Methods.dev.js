@@ -105,17 +105,35 @@ const methodsDirection = /* @__PURE__ */ __name((answer, key) => {
   return FIRST[key] ?? "asc";
 }, "methodsDirection");
 const Places = /* @__PURE__ */ __name(({ labels, row }) => {
-  if (row.places <= 0) {
-    return /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-c", children: labels.nolimit }, void 0, false, {
+  if (!row.capacityknown) {
+    return /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-c", children: [
+      /* @__PURE__ */ jsxDEV("span", { "aria-hidden": "true", children: "\u2013" }, void 0, false, {
+        fileName: "public/enrol/apply/js/esm/src/queue/Methods.tsx",
+        lineNumber: 185,
+        columnNumber: 17
+      }),
+      /* @__PURE__ */ jsxDEV("span", { className: "visually-hidden", children: labels.capacityhidden }, void 0, false, {
+        fileName: "public/enrol/apply/js/esm/src/queue/Methods.tsx",
+        lineNumber: 186,
+        columnNumber: 17
+      })
+    ] }, void 0, true, {
       fileName: "public/enrol/apply/js/esm/src/queue/Methods.tsx",
-      lineNumber: 183,
+      lineNumber: 184,
+      columnNumber: 13
+    });
+  }
+  if (row.places <= 0) {
+    return /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-c", children: fill(labels.takennolimit, num(row.placestaken)) }, void 0, false, {
+      fileName: "public/enrol/apply/js/esm/src/queue/Methods.tsx",
+      lineNumber: 191,
       columnNumber: 16
     });
   }
   return /* @__PURE__ */ jsxDEV(Fragment, { children: [
     /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-c", children: fillObject(labels.ofmany, { taken: num(row.placestaken), total: num(row.places) }) }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/queue/Methods.tsx",
-      lineNumber: 188,
+      lineNumber: 196,
       columnNumber: 13
     }),
     /* @__PURE__ */ jsxDEV(
@@ -125,7 +143,7 @@ const Places = /* @__PURE__ */ __name(({ labels, row }) => {
         "aria-hidden": "true",
         children: /* @__PURE__ */ jsxDEV("span", { style: { width: `${percent(row.placestaken, row.places)}%` } }, void 0, false, {
           fileName: "public/enrol/apply/js/esm/src/queue/Methods.tsx",
-          lineNumber: 195,
+          lineNumber: 203,
           columnNumber: 17
         })
       },
@@ -133,52 +151,59 @@ const Places = /* @__PURE__ */ __name(({ labels, row }) => {
       false,
       {
         fileName: "public/enrol/apply/js/esm/src/queue/Methods.tsx",
-        lineNumber: 191,
+        lineNumber: 199,
         columnNumber: 13
       }
     )
   ] }, void 0, true, {
     fileName: "public/enrol/apply/js/esm/src/queue/Methods.tsx",
-    lineNumber: 187,
+    lineNumber: 195,
     columnNumber: 9
   });
 }, "Places");
 const Status = /* @__PURE__ */ __name(({ labels, row }) => {
+  if (!row.capacityknown) {
+    return /* @__PURE__ */ jsxDEV("span", { className: "visually-hidden", children: labels.capacityhidden }, void 0, false, {
+      fileName: "public/enrol/apply/js/esm/src/queue/Methods.tsx",
+      lineNumber: 219,
+      columnNumber: 16
+    });
+  }
   if (row.placesfull || row.limitreached) {
     return /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-status enrol_apply-status--neutral", title: labels.methodfullwarn, children: [
       labels.methodfull,
       /* @__PURE__ */ jsxDEV("span", { className: "visually-hidden", children: " " + labels.methodfullwarn }, void 0, false, {
         fileName: "public/enrol/apply/js/esm/src/queue/Methods.tsx",
-        lineNumber: 213,
+        lineNumber: 225,
         columnNumber: 17
       })
     ] }, void 0, true, {
       fileName: "public/enrol/apply/js/esm/src/queue/Methods.tsx",
-      lineNumber: 211,
+      lineNumber: 223,
       columnNumber: 13
     });
   }
   if (!row.open) {
     return /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-c", children: labels.closed }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/queue/Methods.tsx",
-      lineNumber: 218,
+      lineNumber: 230,
       columnNumber: 16
     });
   }
   return /* @__PURE__ */ jsxDEV(Fragment, { children: [
     /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-c", children: labels.open }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/queue/Methods.tsx",
-      lineNumber: 223,
+      lineNumber: 235,
       columnNumber: 13
     }),
     row.closes > 0 ? /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-sub", children: fill(labels.closes, shortDate(row.closes)) }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/queue/Methods.tsx",
-      lineNumber: 225,
+      lineNumber: 237,
       columnNumber: 17
     }) : null
   ] }, void 0, true, {
     fileName: "public/enrol/apply/js/esm/src/queue/Methods.tsx",
-    lineNumber: 222,
+    lineNumber: 234,
     columnNumber: 9
   });
 }, "Status");
@@ -186,17 +211,17 @@ const OpenQueue = /* @__PURE__ */ __name(({ labels, row }) => row.method.queueur
   labels.openqueue,
   /* @__PURE__ */ jsxDEV("span", { className: "visually-hidden", children: " " + row.method.name }, void 0, false, {
     fileName: "public/enrol/apply/js/esm/src/queue/Methods.tsx",
-    lineNumber: 241,
+    lineNumber: 253,
     columnNumber: 13
   })
 ] }, void 0, true, {
   fileName: "public/enrol/apply/js/esm/src/queue/Methods.tsx",
-  lineNumber: 239,
+  lineNumber: 251,
   columnNumber: 9
 }), "OpenQueue");
 const CourseCell = /* @__PURE__ */ __name(({ labels, row }) => /* @__PURE__ */ jsxDEV(CourseMethod, { labels, row: { course: row.course, method: { ...row.method, full: false } } }, void 0, false, {
   fileName: "public/enrol/apply/js/esm/src/queue/Methods.tsx",
-  lineNumber: 254,
+  lineNumber: 266,
   columnNumber: 5
 }), "CourseCell");
 const MethodCell = /* @__PURE__ */ __name(({ labels, row, column }) => {
@@ -204,37 +229,37 @@ const MethodCell = /* @__PURE__ */ __name(({ labels, row, column }) => {
     case "awaiting":
       return /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-qview-figure", "data-figure": "awaiting", children: num(row.awaiting) }, void 0, false, {
         fileName: "public/enrol/apply/js/esm/src/queue/Methods.tsx",
-        lineNumber: 267,
+        lineNumber: 279,
         columnNumber: 20
       });
     case "deferred":
       return /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-qview-figure", "data-figure": "deferred", children: num(row.deferred) }, void 0, false, {
         fileName: "public/enrol/apply/js/esm/src/queue/Methods.tsx",
-        lineNumber: 269,
+        lineNumber: 281,
         columnNumber: 20
       });
     case "oldest":
       return /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-c", children: duration(labels, row.oldestwait) }, void 0, false, {
         fileName: "public/enrol/apply/js/esm/src/queue/Methods.tsx",
-        lineNumber: 271,
+        lineNumber: 283,
         columnNumber: 20
       });
     case "places":
       return /* @__PURE__ */ jsxDEV(Places, { labels, row }, void 0, false, {
         fileName: "public/enrol/apply/js/esm/src/queue/Methods.tsx",
-        lineNumber: 273,
+        lineNumber: 285,
         columnNumber: 20
       });
     case "status":
       return /* @__PURE__ */ jsxDEV(Status, { labels, row }, void 0, false, {
         fileName: "public/enrol/apply/js/esm/src/queue/Methods.tsx",
-        lineNumber: 275,
+        lineNumber: 287,
         columnNumber: 20
       });
     default:
       return /* @__PURE__ */ jsxDEV(OpenQueue, { labels, row }, void 0, false, {
         fileName: "public/enrol/apply/js/esm/src/queue/Methods.tsx",
-        lineNumber: 277,
+        lineNumber: 289,
         columnNumber: 20
       });
   }
@@ -249,41 +274,41 @@ const MethodCards = /* @__PURE__ */ __name(({ labels, columns, rows, single }) =
       head: /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-qview-methodhead", children: [
         /* @__PURE__ */ jsxDEV(CourseCell, { labels, row }, void 0, false, {
           fileName: "public/enrol/apply/js/esm/src/queue/Methods.tsx",
-          lineNumber: 297,
+          lineNumber: 309,
           columnNumber: 21
         }),
         /* @__PURE__ */ jsxDEV(OpenQueue, { labels, row }, void 0, false, {
           fileName: "public/enrol/apply/js/esm/src/queue/Methods.tsx",
-          lineNumber: 298,
+          lineNumber: 310,
           columnNumber: 21
         })
       ] }, void 0, true, {
         fileName: "public/enrol/apply/js/esm/src/queue/Methods.tsx",
-        lineNumber: 296,
+        lineNumber: 308,
         columnNumber: 17
       }),
       lines: /* @__PURE__ */ jsxDEV("dl", { className: "enrol_apply-rview-card-list", children: columns.filter((column) => !["course", "queue"].includes(column.key)).map((column) => /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-card-item", children: [
         /* @__PURE__ */ jsxDEV("dt", { children: column.title }, void 0, false, {
           fileName: "public/enrol/apply/js/esm/src/queue/Methods.tsx",
-          lineNumber: 305,
+          lineNumber: 317,
           columnNumber: 29
         }),
         /* @__PURE__ */ jsxDEV("dd", { children: /* @__PURE__ */ jsxDEV(MethodCell, { labels, row, column: column.key }, void 0, false, {
           fileName: "public/enrol/apply/js/esm/src/queue/Methods.tsx",
-          lineNumber: 306,
+          lineNumber: 318,
           columnNumber: 33
         }) }, void 0, false, {
           fileName: "public/enrol/apply/js/esm/src/queue/Methods.tsx",
-          lineNumber: 306,
+          lineNumber: 318,
           columnNumber: 29
         })
       ] }, column.key, true, {
         fileName: "public/enrol/apply/js/esm/src/queue/Methods.tsx",
-        lineNumber: 304,
+        lineNumber: 316,
         columnNumber: 25
       })) }, void 0, false, {
         fileName: "public/enrol/apply/js/esm/src/queue/Methods.tsx",
-        lineNumber: 302,
+        lineNumber: 314,
         columnNumber: 17
       }),
       fields: []
@@ -293,7 +318,7 @@ const MethodCards = /* @__PURE__ */ __name(({ labels, columns, rows, single }) =
   false,
   {
     fileName: "public/enrol/apply/js/esm/src/queue/Methods.tsx",
-    lineNumber: 290,
+    lineNumber: 302,
     columnNumber: 5
   }
 ), "MethodCards");
@@ -327,7 +352,7 @@ const MethodsView = /* @__PURE__ */ __name((props) => {
         onRetry: props.onRetry,
         children: narrow ? /* @__PURE__ */ jsxDEV(MethodCards, { labels, columns, rows, single: narrow }, void 0, false, {
           fileName: "public/enrol/apply/js/esm/src/queue/Methods.tsx",
-          lineNumber: 376,
+          lineNumber: 388,
           columnNumber: 27
         }) : /* @__PURE__ */ jsxDEV(
           DataGrid,
@@ -342,12 +367,12 @@ const MethodsView = /* @__PURE__ */ __name((props) => {
             direction: answer?.direction ?? "desc",
             renderLead: (row) => /* @__PURE__ */ jsxDEV(CourseCell, { labels, row }, void 0, false, {
               fileName: "public/enrol/apply/js/esm/src/queue/Methods.tsx",
-              lineNumber: 386,
+              lineNumber: 398,
               columnNumber: 46
             }),
             renderCell: (row, column) => /* @__PURE__ */ jsxDEV(MethodCell, { labels, row, column: column.key }, void 0, false, {
               fileName: "public/enrol/apply/js/esm/src/queue/Methods.tsx",
-              lineNumber: 387,
+              lineNumber: 399,
               columnNumber: 54
             }),
             onSort: props.onSort,
@@ -358,7 +383,7 @@ const MethodsView = /* @__PURE__ */ __name((props) => {
           false,
           {
             fileName: "public/enrol/apply/js/esm/src/queue/Methods.tsx",
-            lineNumber: 377,
+            lineNumber: 389,
             columnNumber: 21
           }
         )
@@ -367,7 +392,7 @@ const MethodsView = /* @__PURE__ */ __name((props) => {
       false,
       {
         fileName: "public/enrol/apply/js/esm/src/queue/Methods.tsx",
-        lineNumber: 364,
+        lineNumber: 376,
         columnNumber: 13
       }
     ),
@@ -388,13 +413,13 @@ const MethodsView = /* @__PURE__ */ __name((props) => {
       false,
       {
         fileName: "public/enrol/apply/js/esm/src/queue/Methods.tsx",
-        lineNumber: 395,
+        lineNumber: 407,
         columnNumber: 17
       }
     ) : null
   ] }, void 0, true, {
     fileName: "public/enrol/apply/js/esm/src/queue/Methods.tsx",
-    lineNumber: 363,
+    lineNumber: 375,
     columnNumber: 9
   });
 }, "MethodsView");

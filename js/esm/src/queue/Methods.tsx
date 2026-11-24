@@ -172,15 +172,23 @@ export const methodsDirection = (answer: MethodsAnswer | null, key: string): 'as
 };
 
 /**
- * The places taken: "taken of places" with the meter where the method has places, "No limit" where it has
- * none (capacity::state() counts no place taken there).
+ * The places taken: "taken of places" with the meter where the method has places, "taken, no limit" where it
+ * has none, a dash where the reader could not enter the method's course and so is not told its capacity.
  *
  * @param {object} props The strings and the row.
  * @returns {object} The cell's content.
  */
 const Places = ({labels, row}: {labels: Record<string, string>, row: MethodRow}): ReactElement => {
+    if (!row.capacityknown) {
+        return (
+            <span className="enrol_apply-rview-c">
+                <span aria-hidden="true">{'\u2013'}</span>
+                <span className="visually-hidden">{labels.capacityhidden}</span>
+            </span>
+        );
+    }
     if (row.places <= 0) {
-        return <span className="enrol_apply-rview-c">{labels.nolimit}</span>;
+        return <span className="enrol_apply-rview-c">{fill(labels.takennolimit, num(row.placestaken))}</span>;
     }
 
     return (
@@ -199,13 +207,17 @@ const Places = ({labels, row}: {labels: Record<string, string>, row: MethodRow})
 };
 
 /**
- * Whether the method takes applications: "Full" where every place is taken or its applicant limit is
- * reached, else open (with the closing date, as the method's tiles word it) or closed.
+ * Whether the method takes applications: nothing where the capacity is not the reader's to see, "Full" where
+ * every place is taken or its applicant limit is reached, else open (with the closing date, as the method's
+ * tiles word it) or closed.
  *
  * @param {object} props The strings and the row.
  * @returns {object} The cell's content.
  */
 const Status = ({labels, row}: {labels: Record<string, string>, row: MethodRow}): ReactElement => {
+    if (!row.capacityknown) {
+        return <span className="visually-hidden">{labels.capacityhidden}</span>;
+    }
     if (row.placesfull || row.limitreached) {
         return (
             <span className="enrol_apply-status enrol_apply-status--neutral" title={labels.methodfullwarn}>

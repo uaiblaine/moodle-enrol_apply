@@ -377,6 +377,149 @@ final class methods_view_test extends \advanced_testcase {
     }
 
     /**
+     * A method without places says how many are enrolled, and that it has no limit: the view asks for the
+     * places taken of every method of the page, and the row carries the count.
+     *
+     * Changes that must make it fail: the view asking capacity::states() without the flag (the count of
+     * Beta's three active enrolments reads 0).
+     *
+     * @return void
+     */
+    public function test_a_method_without_places_carries_its_enrolled_count(): void {
+        $this->setUser($this->viewer);
+        $beta = $this->methods['beta'];
+        $before = $this->row_of((int) $beta->id);
+        $this->assertSame(0, $before['placestaken']);
+
+        foreach (range(1, 3) as $ignored) {
+            $this->plugin->enrol_user($beta, $this->getDataGenerator()->create_user()->id, null, 0, 0, ENROL_USER_ACTIVE);
+        }
+        $row = $this->row_of((int) $beta->id);
+        $this->assertSame(0, $row['places']);
+        $this->assertSame(3, $row['placestaken']);
+        $this->assertFalse($row['placesfull']);
+        // The control: a method with places counts as before.
+        $this->assertSame(1, $this->row_of((int) $this->methods['morning']->id)['placestaken']);
+    }
+
+    /**
+     * One row of the view by method id.
+     *
+     * @param int $id The method.
+     * @return array The row.
+     */
+    private function row_of(int $id): array {
+        foreach (queueengine::methods(['perpage' => 100])['rows'] as $row) {
+            if ($row['method']['id'] === $id) {
+                return $row;
+            }
+        }
+        $this->fail("No row for method {$id}");
+    }
+
+    /**
+     * One web service of the site-wide queue, as a client calls it.
+     *
+     * @param string $function The service.
+     * @param array $args Its arguments.
+     * @return array The answer's data.
+     */
+    private function call(string $function, array $args): array {
+        $_POST['sesskey'] = sesskey();
+        $response = \core_external\external_api::call_external_function($function, $args, true);
+        $this->assertFalse($response['error'], json_encode($response['exception'] ?? null));
+
+        return $response['data'];
+    }
+
+    /**
+     * A method's capacity is told to a wide reader only where the reader could see the course: a hidden
+     * course's method at its limit shows neutral facts, no "full" label and no count in the tile, to a reader
+     * without moodle/course:viewhiddencourses, and everything to one who holds it.
+     *
+     * Two courses, one hidden, each with a method at its limit (a place taken, an application awaiting). The
+     * reader holds viewapplications at the system and nothing else (stock archetypes hold the capability too).
+     * Through the three services, as a client calls them.
+     *
+     * Changes that must make it fail: the predicate answering true for a hidden course (gate QM9); a reader
+     * of the same site holding the capability still refused the facts.
+     *
+     * @return void
+     */
+    public function test_the_capacity_of_a_hidden_course_is_not_told_to_a_reader_who_could_not_enter_it(): void {
+        $generator = $this->getDataGenerator();
+        $hidden = $generator->create_course(['fullname' => 'Hidden course', 'visible' => 0]);
+        $visible = $generator->create_course(['fullname' => 'Visible course']);
+        $limits = ['customint3' => 2, 'customint4' => 1];
+        $this->methods['hid'] = $this->method($hidden, 'Hidden intake', $limits);
+        $this->methods['vis'] = $this->method($visible, 'Visible intake', $limits);
+        foreach (['hid', 'vis'] as $key) {
+            $this->applicant($key, 'Pat' . $key, DAYSECS);
+            $this->plugin->enrol_user($this->methods[$key], $generator->create_user()->id, null, 0, 0, ENROL_USER_ACTIVE);
+        }
+        $hid = (int) $this->methods['hid']->id;
+        $vis = (int) $this->methods['vis']->id;
+
+        $clerk = $generator->create_user();
+        $role = $generator->create_role(['shortname' => 'methodsclerk']);
+        assign_capability('enrol/apply:viewapplications', CAP_ALLOW, $role, \context_system::instance()->id, true);
+        assign_capability('moodle/course:viewhiddencourses', CAP_ALLOW, $role, \context_system::instance()->id, true);
+        role_assign($role, $clerk->id, \context_system::instance()->id);
+
+        $read = function () use ($hid, $vis): array {
+            $methods = [];
+            foreach ($this->call('enrol_apply_queue_methods', ['perpage' => 100])['rows'] as $row) {
+                $methods[$row['method']['id']] = $row;
+            }
+            $full = [];
+            foreach ($this->call('enrol_apply_queue_rows', ['enrolid' => 0, 'perpage' => 100])['rows'] as $row) {
+                $full[$row['method']['id']] = $row['method']['full'];
+            }
+            $summary = $this->call('enrol_apply_queue_summary', ['enrolid' => 0]);
+
+            return [$methods, $full, $summary['methodsfull']];
+        };
+
+        // The reader who could not enter the hidden course.
+        $this->setUser($this->viewer);
+        [$methods, $full, $methodsfull] = $read();
+        $this->assertFalse($methods[$hid]['capacityknown']);
+        $this->assertSame(0, $methods[$hid]['places']);
+        $this->assertSame(0, $methods[$hid]['placestaken']);
+        $this->assertSame(0, $methods[$hid]['applicantlimit']);
+        $this->assertSame(0, $methods[$hid]['applicants']);
+        $this->assertFalse($methods[$hid]['placesfull']);
+        $this->assertFalse($methods[$hid]['limitreached']);
+        $this->assertFalse($methods[$hid]['open']);
+        $this->assertSame(0, $methods[$hid]['closes']);
+        // The course and its applications stay listed.
+        $this->assertSame('Hidden course', $methods[$hid]['course']['name']);
+        $this->assertSame(1, $methods[$hid]['awaiting']);
+        $this->assertFalse($full[$hid]);
+        $this->assertTrue($methods[$vis]['capacityknown']);
+        $this->assertSame(1, $methods[$vis]['places']);
+        $this->assertSame(1, $methods[$vis]['placestaken']);
+        $this->assertTrue($methods[$vis]['placesfull']);
+        $this->assertTrue($full[$vis]);
+        // Morning, at its place, and the visible method: the hidden one is not counted.
+        $this->assertSame(2, $methodsfull);
+
+        // The control: the same calls by a reader holding the capability give the facts.
+        $this->setUser($clerk);
+        [$methods, $full, $methodsfull] = $read();
+        $this->assertTrue($methods[$hid]['capacityknown']);
+        $this->assertSame(1, $methods[$hid]['places']);
+        $this->assertSame(1, $methods[$hid]['placestaken']);
+        $this->assertSame(2, $methods[$hid]['applicantlimit']);
+        $this->assertSame(2, $methods[$hid]['applicants']);
+        $this->assertTrue($methods[$hid]['placesfull']);
+        $this->assertTrue($methods[$hid]['limitreached']);
+        $this->assertTrue($full[$hid]);
+        $this->assertTrue($full[$vis]);
+        $this->assertSame(3, $methodsfull);
+    }
+
+    /**
      * Capacity is read for the page's methods alone, and a page is read in a number of statements that does
      * not grow with the methods on it: a page of four methods costs what a page of eight does when they share
      * the same four courses.
@@ -401,17 +544,22 @@ final class methods_view_test extends \advanced_testcase {
             /** @var array The method ids page_states() was last given. */
             public static array $seen = [];
 
+            /** @var bool Whether page_states() was last asked to count places taken for every method. */
+            public static bool $flag = false;
+
             /**
              * Record the methods, then read their capacity.
              *
              * @param array $instances The page's methods.
              * @param int $now The clock's time.
+             * @param bool $alwaystaken Whether places taken are counted for a method without places too.
              * @return array What the engine's own seam returns.
              */
-            protected static function page_states(array $instances, int $now): array {
+            protected static function page_states(array $instances, int $now, bool $alwaystaken = false): array {
                 static::$seen = array_map('intval', array_keys($instances));
+                static::$flag = $alwaystaken;
 
-                return parent::page_states($instances, $now);
+                return parent::page_states($instances, $now, $alwaystaken);
             }
         };
         $ids = static fn(array $answer): array => array_map(static fn(array $row): int => $row['method']['id'], $answer['rows']);
@@ -420,6 +568,8 @@ final class methods_view_test extends \advanced_testcase {
         $first = $engine::methods([]);
         $this->assertSame([(int) $this->methods['beta']->id, (int) $this->methods['evening']->id], $ids($first));
         $this->assertSame($ids($first), $engine::$seen);
+        // The view asks for the places taken of a method without places too.
+        $this->assertTrue($engine::$flag);
         $second = $engine::methods(['page' => 1]);
         $this->assertSame([(int) $this->methods['morning']->id], $ids($second));
         $this->assertSame($ids($second), $engine::$seen);

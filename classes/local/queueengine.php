@@ -319,7 +319,9 @@ class queueengine {
      * a page past the end is the last one. The page's methods alone then cost: their capacity, through
      * {@see capacity::states()} (at most two grouped counts), and whether each grants a deciding role
      * (one read per distinct course of the page, {@see decidingrole::methods_decide()}); their courses'
-     * contexts come with the grouped read. So a page costs the same whatever the number of methods on it.
+     * contexts come with the page's rows ({@see method_tallies()}). The capacity is read only for the methods whose
+     * course the reader could enter ({@see shows_capacity()}); the others answer neutral facts and
+     * capacityknown false. So a page costs the same whatever the number of methods on it.
      *
      * Computed per request and never cached (SQ-D8): the capacity is read as it stands.
      *
@@ -354,13 +356,23 @@ class queueengine {
         // Past the last page (a filter shrank the result): the last page, as rows() answers it; 0 for nothing.
         $page = $total > 0 ? min($page, intdiv($total - 1, $perpage)) : 0;
         $records = array_slice($tallies, $page * $perpage, $perpage, true);
+        // The page's own course contexts only: core's context cache holds 2,500 entries, and a result with more
+        // methods than that would evict the page's own before method_row() read them.
+        foreach ($records as $record) {
+            \context_helper::preload_from_record($record);
+        }
 
         $now = $table->now();
-        $states = static::page_states($records, $now);
+        // The capacity of a method is read only where this reader could see its course ({@see shows_capacity()}).
+        $known = array_filter(
+            $records,
+            static fn(stdClass $record): bool => static::shows_capacity((int) $record->courseid, (bool) $record->coursevisible)
+        );
+        $states = static::page_states($known, $now, true);
         $deciding = decidingrole::methods_decide($records);
         $rows = [];
         foreach ($records as $id => $record) {
-            $rows[] = self::method_row($record, $states[$id], $deciding[$id], $now);
+            $rows[] = self::method_row($record, $states[$id] ?? null, $deciding[$id], $now);
         }
 
         return [
@@ -380,7 +392,7 @@ class queueengine {
      *
      * The table's FROM and WHERE ({@see applications::where_without()} with nothing left out: the listing's
      * own), grouped by the method in a derived table; outside it, the method's {enrol} record whole (for
-     * capacity::states() and the method's name), its course's full name and the course context's preload
+     * capacity::states() and the method's name), its course's full name and visibility and the course context's preload
      * columns. Deferred is the deferred status within what the list holds, the predicate the list's deferred
      * scope applies. Every order ends in the method's id, so no two methods trade places between requests:
      * the course's full name then the method's stored name, the table's own course order
@@ -390,7 +402,8 @@ class queueengine {
      * @param string $sort One of METHOD_SORTS.
      * @param int $direction SORT_ASC or SORT_DESC.
      * @return array Enrol instance id => its {enrol} record, with methodcourse (the course's full name),
-     *     awaitingcount, deferredcount and oldestapplied, in order; the course's context is preloaded.
+     *     awaitingcount, deferredcount, oldestapplied and coursevisible, in order, with the course context's
+     *     preload columns, which methods() preloads for the page's rows alone.
      */
     protected static function method_tallies(applications $table, string $sort, int $direction): array {
         global $CFG, $DB;
@@ -412,7 +425,8 @@ class queueengine {
         };
 
         $records = $DB->get_records_sql(
-            "SELECT me.*, mc.fullname AS methodcourse, tally.awaitingcount, tally.deferredcount, tally.oldestapplied,
+            "SELECT me.*, mc.fullname AS methodcourse, mc.visible AS coursevisible,
+                    tally.awaitingcount, tally.deferredcount, tally.oldestapplied,
                     {$ctxselect}
                FROM (SELECT e.id AS methodid,
                             COUNT(1) AS awaitingcount,
@@ -427,11 +441,25 @@ class queueengine {
            ORDER BY {$order}, me.id {$last}",
             $params
         );
-        foreach ($records as $record) {
-            \context_helper::preload_from_record($record);
-        }
 
         return $records;
+    }
+
+    /**
+     * Whether a wide reader may be told a method's capacity: the course is visible, or the reader holds
+     * moodle/course:viewhiddencourses in it.
+     *
+     * Mirrors manage.php?id=<method>, whose require_login($course) refuses a hidden course to a reader without
+     * that capability, and which is the one other page that shows places, applications held, the closing date
+     * and "full". The wide readers ({@see rows()}, {@see wide_summary()}, {@see methods()}) ask this alone,
+     * so the rule has one definition; the course's name and the applications stay listed, as the table lists them.
+     *
+     * @param int $courseid The method's course.
+     * @param bool $visible The course's visible flag.
+     * @return bool Whether its capacity facts may be given to the current reader.
+     */
+    protected static function shows_capacity(int $courseid, bool $visible): bool {
+        return $visible || has_capability('moodle/course:viewhiddencourses', context_course::instance($courseid));
     }
 
     /**
@@ -441,10 +469,11 @@ class queueengine {
      *
      * @param array $instances The page's methods, full {enrol} records by id.
      * @param int $now The clock's time.
+     * @param bool $alwaystaken Whether places taken are counted for a method without places too.
      * @return array Instance id => what capacity::state() returns for it.
      */
-    protected static function page_states(array $instances, int $now): array {
-        return capacity::states($instances, $now);
+    protected static function page_states(array $instances, int $now, bool $alwaystaken = false): array {
+        return capacity::states($instances, $now, $alwaystaken);
     }
 
     /**
@@ -455,12 +484,12 @@ class queueengine {
      * the three counts, and capacity::state()'s facts under the names the summary gives them.
      *
      * @param stdClass $record The method's {enrol} record with its tallies, from method_tallies().
-     * @param stdClass $state Its capacity, from capacity::states().
+     * @param stdClass|null $state Its capacity, from capacity::states(); null where the reader may not see it.
      * @param bool $deciding Whether its role decides applications in its course.
      * @param int $now The clock's time.
      * @return array See \enrol_apply\external\queue_methods::execute_returns().
      */
-    protected static function method_row(stdClass $record, stdClass $state, bool $deciding, int $now): array {
+    protected static function method_row(stdClass $record, ?stdClass $state, bool $deciding, int $now): array {
         $courseid = (int) $record->courseid;
         $enrolid = (int) $record->id;
         $oldest = (int) $record->oldestapplied;
@@ -483,14 +512,15 @@ class queueengine {
             'awaiting' => (int) $record->awaitingcount,
             'deferred' => (int) $record->deferredcount,
             'oldestwait' => $oldest > 0 ? max(0, $now - $oldest) : 0,
-            'places' => $state->places,
-            'placestaken' => $state->taken,
-            'applicantlimit' => $state->limit,
-            'applicants' => $state->held,
-            'placesfull' => $state->placesfull,
-            'limitreached' => $state->limitreached,
-            'open' => $state->open,
-            'closes' => $state->enddate,
+            'capacityknown' => $state !== null,
+            'places' => $state->places ?? 0,
+            'placestaken' => $state->taken ?? 0,
+            'applicantlimit' => $state->limit ?? 0,
+            'applicants' => $state->held ?? 0,
+            'placesfull' => $state->placesfull ?? false,
+            'limitreached' => $state->limitreached ?? false,
+            'open' => $state->open ?? false,
+            'closes' => $state->enddate ?? 0,
         ];
     }
 
@@ -553,7 +583,8 @@ class queueengine {
      * any filter, as on the method queue. The site figures are read over the same scope
      * ({@see applications::scope_methods()}), so a method counted holds an application this reader
      * lists; "at its limit" is {@see capacity::states()}'s own two flags, every place taken or the
-     * applicant limit reached, computed on this request and never cached (SQ-D8). A mentor gets the
+     * applicant limit reached, computed on this request and never cached (SQ-D8), over the methods whose
+     * capacity this reader may see ({@see shows_capacity()}). A mentor gets the
      * four figures, sitefigures false and zeroes: the methods their mentees applied to are not a
      * site's figures, and the capacity of a course they hold nothing in is not theirs to read.
      *
@@ -574,7 +605,16 @@ class queueengine {
             $instances = $table->scope_methods();
             $methods = count($instances);
             $courses = count(array_unique(array_map(static fn(stdClass $instance): int => (int) $instance->courseid, $instances)));
-            foreach (capacity::states($instances, $now) as $state) {
+            // A reader holding the capability site-wide sees every course; otherwise only hidden courses are asked.
+            $everywhere = has_capability('moodle/course:viewhiddencourses', context_system::instance());
+            $shown = $everywhere ? $instances : array_filter(
+                $instances,
+                static fn(stdClass $instance): bool => static::shows_capacity(
+                    (int) $instance->courseid,
+                    (bool) $instance->coursevisible
+                )
+            );
+            foreach (capacity::states($shown, $now) as $state) {
                 if ($state->placesfull || $state->limitreached) {
                     $methodsfull++;
                 }
@@ -605,8 +645,9 @@ class queueengine {
     /**
      * The methods of a page at their limit, for the rows' "full" label.
      *
-     * {@see capacity::states()} over the page's distinct methods: one read of their {enrol} records
-     * and at most two grouped counts, whatever the page's size.
+     * {@see capacity::states()} over the page's distinct methods whose capacity the reader may see
+     * ({@see shows_capacity()}): one read of their {enrol} records with their courses' visibility and at most
+     * two grouped counts, whatever the page's size.
      *
      * @param array $records The page's rows, as the table's SQL selects them.
      * @param int $now The clock's time.
@@ -621,8 +662,22 @@ class queueengine {
             return [];
         }
 
+        [$insql, $params] = $DB->get_in_or_equal($ids, SQL_PARAMS_NAMED, 'fullenrol');
+        $methods = $DB->get_records_sql(
+            "SELECT fe.*, fc.visible AS coursevisible
+               FROM {enrol} fe
+               JOIN {course} fc ON fc.id = fe.courseid
+              WHERE fe.id {$insql}",
+            $params
+        );
+        // A method whose capacity this reader may not see is never labelled full ({@see shows_capacity()}).
+        $methods = array_filter(
+            $methods,
+            static fn(stdClass $method): bool => static::shows_capacity((int) $method->courseid, (bool) $method->coursevisible)
+        );
+
         $full = [];
-        foreach (capacity::states($DB->get_records_list('enrol', 'id', $ids), $now) as $id => $state) {
+        foreach (capacity::states($methods, $now) as $id => $state) {
             if ($state->placesfull || $state->limitreached) {
                 $full[(int) $id] = true;
             }

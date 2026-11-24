@@ -275,9 +275,12 @@ class capacity {
      *
      * @param array $instances Course enrol instances, each a full {enrol} record.
      * @param int|null $now The time to judge the enrolment windows at, now when null.
+     * @param bool $alwaystaken Whether the places-taken count covers every instance of the set rather than
+     *     the ones with places: a method with no places then reports how many active enrolments it holds,
+     *     with placesfull still false. The default is state()'s own answer.
      * @return array Instance id => what state() returns for it; empty for an empty set, with no query.
      */
-    public static function states(array $instances, ?int $now = null): array {
+    public static function states(array $instances, ?int $now = null, bool $alwaystaken = false): array {
         global $DB;
 
         if (!$instances) {
@@ -288,7 +291,7 @@ class capacity {
         $withplaces = [];
         $withlimit = [];
         foreach ($instances as $instance) {
-            if (self::places($instance) > 0) {
+            if ($alwaystaken || self::places($instance) > 0) {
                 $withplaces[] = (int) $instance->id;
             }
             if (self::applicant_limit($instance) > 0) {
@@ -328,7 +331,13 @@ class capacity {
         $states = [];
         foreach ($instances as $instance) {
             $id = (int) $instance->id;
-            $states[$id] = self::compose($instance, $now, (int) ($taken[$id] ?? 0), (int) ($held[$id] ?? 0));
+            $states[$id] = self::compose(
+                $instance,
+                $now,
+                (int) ($taken[$id] ?? 0),
+                (int) ($held[$id] ?? 0),
+                $alwaystaken
+            );
         }
 
         return $states;
@@ -353,13 +362,14 @@ class capacity {
      * @param int $now The time to judge the enrolment window at.
      * @param int $taken Places taken; ignored without places.
      * @param int $held Applications held; ignored without an applicant limit.
+     * @param bool $keeptaken Whether the places taken stay as counted for a method without places.
      * @return stdClass See state().
      */
-    private static function compose(stdClass $instance, int $now, int $taken, int $held): stdClass {
+    private static function compose(stdClass $instance, int $now, int $taken, int $held, bool $keeptaken = false): stdClass {
         $places = self::places($instance);
         $limit = self::applicant_limit($instance);
         $held = $limit > 0 ? $held : 0;
-        $taken = $places > 0 ? $taken : 0;
+        $taken = ($places > 0 || $keeptaken) ? $taken : 0;
         $startdate = (int) ($instance->enrolstartdate ?? 0);
         $enddate = (int) ($instance->enrolenddate ?? 0);
 

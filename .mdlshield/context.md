@@ -49,7 +49,10 @@ fork's; it does not list which features are which, so this file does not either.
   is the system's, then the guest check, then `queueengine::methods()`, which asks `require_listing(0)`
   first and then refuses any listing that is not the site-wide one (a mentor included, with the same
   exception), and reads one grouped count over the list's own table, with the capacity of the page's
-  methods alone. Same standing capabilities as the queue services. None decides an application: decisions are the
+  methods alone, and only of those whose course the reader could enter (visible, or
+  `moodle/course:viewhiddencourses` there; `queueengine::shows_capacity()`, also asked by the rows' "full"
+  label and the summary's methods at their limit); the others return neutral capacity fields and
+  `capacityknown` false. Same standing capabilities as the queue services. None decides an application: decisions are the
   POST to `manage.php`. The modal application form is a `core_form\dynamic_form` served by core's dynamic
   form web service, and the queue page's table is a `core_table\dynamic` table served by core's dynamic
   table web service; each re-derives its scope and checks the capability itself.

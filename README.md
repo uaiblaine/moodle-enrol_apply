@@ -114,7 +114,10 @@ method's queue.
 enrolment method instead of one per application: the course and the method, how many applications
 await a decision and how many of them are deferred, the oldest wait, the places taken (against the
 places where the method has some, with a meter) and whether the method is full, open (and until when)
-or closed, with **Open the queue** leading to that method's own queue. The scope, the filters and the
+or closed, with **Open the queue** leading to that method's own queue. A method with no places shows how many
+are enrolled and that it has no limit. A method of a course the reader could not open (hidden, and the
+reader without `moodle/course:viewhiddencourses`) shows a dash and no status, and is not counted as full
+in the tiles or labelled so in the list: the same course facts `manage.php?id=` would refuse them. The scope, the filters and the
 search narrow it as they narrow the list; it sorts by course, by what awaits (most first, the default)
 or by the oldest application. It selects nothing and decides nothing. It is the site-wide readers':
 a mentor's queue has no such view.
@@ -722,7 +725,8 @@ decides an application; decisions are taken on the queue page as before.
   decides, its queue's address), its course, how many applications await a decision, how many of them
   are deferred, how long the oldest has waited, and the method's places, places taken, applicant limit,
   applications held, whether every place is taken or the limit reached, whether it accepts applications
-  now and when it closes. Sorted by what awaits (most first), by the oldest application or by the
+  now and when it closes; for a method whose course the reader could not enter (hidden, without
+  `moodle/course:viewhiddencourses`) those capacity fields are neutral and `capacityknown` is false. Sorted by what awaits (most first), by the oldest application or by the
   course. Refused to anybody but a holder of `enrol/apply:manageapplications` or
   `enrol/apply:viewapplications` at the site level: a mentor and an editing teacher of one course are
   refused, and so is a guest.

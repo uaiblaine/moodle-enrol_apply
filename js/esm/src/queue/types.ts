@@ -258,6 +258,8 @@ export type MethodRow = {
     awaiting: number,
     deferred: number,
     oldestwait: number,
+    /** False where the reader could not enter the method's course: the capacity facts are then neutral. */
+    capacityknown: boolean,
     places: number,
     placestaken: number,
     applicantlimit: number,

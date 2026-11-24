@@ -146,8 +146,12 @@ class queue_methods extends external_api {
                 'awaiting' => new external_value(PARAM_INT, 'Its applications the list holds'),
                 'deferred' => new external_value(PARAM_INT, 'Of those, the deferred ones'),
                 'oldestwait' => new external_value(PARAM_INT, 'Seconds the oldest of them has waited'),
+                'capacityknown' => new external_value(
+                    PARAM_BOOL,
+                    'Whether the capacity facts below are the method\'s: false where the reader could not enter its course'
+                ),
                 'places' => new external_value(PARAM_INT, 'The method\'s places, 0 for no limit'),
-                'placestaken' => new external_value(PARAM_INT, 'Places taken by approved applicants, 0 without places'),
+                'placestaken' => new external_value(PARAM_INT, 'Active enrolments, the places taken where the method has places'),
                 'applicantlimit' => new external_value(PARAM_INT, 'Applications the method accepts, 0 for no limit'),
                 'applicants' => new external_value(PARAM_INT, 'Applications it holds, 0 without a limit'),
                 'placesfull' => new external_value(PARAM_BOOL, 'Whether every place is taken'),

@@ -17,6 +17,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   read-only web service `enrol_apply_queue_methods` serves it to the site-wide readers alone (a
   mentor, an editing teacher of one course and a guest are refused); it reads one grouped count over
   the list's own table and the capacity of the page's methods only. Mutation gates `QM1`-`QM8`.
+  A wide reader is told a method's capacity (places, places taken, applicant limit, applications held,
+  the closing date, "Full") only where the course is visible to them or they hold
+  `moodle/course:viewhiddencourses` in it, as `manage.php?id=` has always required: otherwise the
+  "Full" label and the tile's count leave that method out, and the view draws a dash and says the
+  capacity is not shown (the new return field `capacityknown`, gate `QM9`). A method with no places
+  now shows how many are enrolled, "8,155, no limit" (`capacity::states()` takes an optional third
+  argument for it; `state()` and the default are unchanged; gate `QM10`). The view preloads the
+  course contexts of its page's methods only, so a site with more methods than core's context cache
+  holds keeps a constant number of reads per page.
 
 - **The site-wide queue is a grid, and decides across enrolment methods** (2026112307, no upgrade
   step). `manage.php` with no id opens the grid view for a holder of

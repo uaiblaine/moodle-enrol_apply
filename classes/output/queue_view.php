@@ -355,6 +355,7 @@ class queue_view implements renderable, templatable {
     public static function methods_labels(): array {
         return [
             'label' => get_string('queueviewbycourse', 'enrol_apply'),
+            'capacityhidden' => get_string('queueviewcapacityhidden', 'enrol_apply'),
             'caption' => get_string('queueviewmethodscaption', 'enrol_apply'),
             'coursemethod' => get_string('queuecoursemethod', 'enrol_apply'),
             // The grid's frame is named by what it holds, as the caption names the table.
@@ -364,6 +365,8 @@ class queue_view implements renderable, templatable {
             'oldestwait' => get_string('queueviewoldestwait', 'enrol_apply'),
             'openqueue' => get_string('queueviewopenqueue', 'enrol_apply'),
             'queue' => get_string('queueviewqueue', 'enrol_apply'),
+            // The count and the placeholder, as the method form's places row words it.
+            'takennolimit' => get_string('placestakennolimit', 'enrol_apply'),
         ];
     }
 
