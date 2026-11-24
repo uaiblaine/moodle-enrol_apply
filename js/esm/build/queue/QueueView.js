@@ -1,7 +1,7 @@
 import{useCallback as Q,useEffect as E,useRef as c,useState as a}from"react";import{rememberView as Je,storedView as Xe,useNarrow as $e}from"../datareport/layout";import{Pager as er}from"../datareport/Pager";import{hold as D}from"../datareport/pending";import{RowsRegion as rr}from"../datareport/Rows";import{METHODS as y,initialQuery as tr,queryOf as nr,queueUrl as Ee,writeAddress as ue}from"./address";import{ANY_GROUP as ie,Bar as or,GROUP as I}from"./Bar";import{SIZING as sr}from"./cells";import{decide as lr}from"./decide";import{chooseRows as ur,derive as cr}from"./derive";import{MethodsView as ir,methodsDirection as ar,useMethods as dr}from"./Methods";import{Notices as mr,RowsBody as pr,dockFor as fr,sheetFor as wr}from"./Parts";import{getRows as hr,getSummary as gr,setPreference as yr}from"./repository";import{Tiles as vr}from"./Tiles";import{Fragment as _e,jsx as p,jsxs as ce}from"react/jsx-runtime";/**
  * The approval queue as a data report: the method queue's page (stages 3 and 4 of
- * docs/design/confirm-queue-as-report-plan.md, CQ-D5) and the site-wide queue's (stage W3 of
- * docs/design/site-queue-as-report-plan.md, SQ-D12).
+ * docs/design/confirm-queue-as-report-plan.md, CQ-D5), the site-wide queue's (stage W3 of
+ * docs/design/site-queue-as-report-plan.md, SQ-D12) and the mentee queue's (stage W5, SQ-D13).
  *
  * One view for both, branching on the listing's kind (the props for the first paint, the rows answer
  * after): the site-wide queue draws its own tiles (SQ-D7), a "Course · method" column (SQ-D2), the course,
@@ -12,7 +12,13 @@ import{useCallback as Q,useEffect as E,useRef as c,useState as a}from"react";imp
  * selection, no dock and no Columns; the address says `show=methods`, and its sort and page are that view's.
  * The rows are still read while it is shown, at their first page, for the panel's facets and the chips.
  *
- * manage.php?id=<method>, and manage.php for a site-wide reader, render the shell
+ * The mentee queue is the site-wide queue's grid with less (SQ-D13), and nothing here decides what less:
+ * the rows service sends a mentor its catalogue (applicant, course and method, wait, comment), its one
+ * facet, no identity value, no "Full" and no method queue's address; the summary sends no site figures;
+ * the props offer no "By course" view and no report. Each part draws what it is given, so a mentor's page
+ * falls on the reduced side wherever a part branches on what the answer holds.
+ *
+ * manage.php?id=<method>, and manage.php for a site-wide reader or a mentor, render the shell
  * (enrol_apply\output\queue_view) with configuration and strings, unless view=table asks for today's
  * table; the rows and the tiles come from the plugin's web
  * services, which read the queue's own table (classes/local/queueengine.php), so access, the

@@ -2353,11 +2353,25 @@ class applications extends \table_sql implements dynamic_table {
      * @return string method (one method's queue), site (the site-wide queue) or mentees (a mentor's).
      */
     public function scope_kind(): string {
-        if ($this->scope->instance !== null) {
+        return self::kind_of($this->scope);
+    }
+
+    /**
+     * Which of the queue's three kinds a listing scope is, before any table is built for it.
+     *
+     * The one definition behind {@see scope_kind()}, for a caller that holds the scope and no table yet
+     * (\enrol_apply\output\queue_view::initial()). A refused listing names an empty mentee list and so reads
+     * as `mentees`, the kind that reads least; nothing is listed for it either way.
+     *
+     * @param \stdClass $scope The scope, from \enrol_apply\local\queue::listing_scope().
+     * @return string method (one method's queue), site (the site-wide queue) or mentees (a mentor's).
+     */
+    public static function kind_of(\stdClass $scope): string {
+        if ($scope->instance !== null) {
             return 'method';
         }
 
-        return $this->scope->mentees === null ? 'site' : 'mentees';
+        return $scope->mentees === null ? 'site' : 'mentees';
     }
 
     /**

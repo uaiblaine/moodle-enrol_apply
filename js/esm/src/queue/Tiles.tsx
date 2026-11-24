@@ -23,9 +23,9 @@
  * any has; open or closed, with the closing date while open. The summary does not move with a filter,
  * so the tiles load once.
  *
- * The site-wide queue's tiles are its own (SQ-D7, {@link WideTiles}): what awaits, what is deferred and its
- * share of what awaits, and for a site-wide reader the courses (and methods) holding an application and the
- * methods at their limit.
+ * The queues that span courses draw their own tiles (SQ-D7, {@link WideTiles}): what awaits, what is deferred
+ * and its share of what awaits, and for a site-wide reader the courses (and methods) holding an application
+ * and the methods at their limit; the mentee queue draws the first two alone (SQ-D13).
  *
  * @module     enrol_apply/queue/Tiles
  * @copyright  2026 Anderson Blaine
@@ -35,6 +35,12 @@
 import type {ReactElement} from 'react';
 import {duration, fill, fillObject, num} from '../datareport/str';
 import type {Kind, SummaryAnswer} from './types';
+
+/**
+ * How many tiles the skeleton draws while the summary loads, by the queue's kind: the mentee queue draws
+ * two (SQ-D13), the others up to four.
+ */
+const SKELETON_TILES: Record<Kind, number> = {method: 4, site: 4, mentees: 2};
 
 type TilesProps = {
     labels: Record<string, string>,
@@ -112,7 +118,9 @@ const AwaitingTile = ({labels, summary}: {labels: Record<string, string>, summar
 
 /**
  * The tiles of the queues that span courses (SQ-D7): awaiting, deferred, and for a site-wide reader the
- * courses with applications and the methods at their limit. They do not follow the filters.
+ * courses with applications and the methods at their limit. A mentor's summary carries no site figures
+ * (`sitefigures` false, the server's decision), so the mentee queue draws the first two alone (SQ-D13).
+ * They do not follow the filters.
  *
  * @param {object} props The strings and the summary.
  * @returns {object} The band of tiles.
@@ -166,7 +174,7 @@ export const Tiles = ({labels, kind, summary, error, onRetry}: TilesProps): Reac
     if (summary === null) {
         return (
             <div className="enrol_apply-rview-band" aria-busy="true">
-                {Array.from({length: 4}, (_, i) => (
+                {Array.from({length: SKELETON_TILES[kind]}, (_, i) => (
                     <div key={i} className="enrol_apply-rview-tile enrol_apply-rview-sk">
                         <span className="enrol_apply-rview-skb enrol_apply-rview-skb--w60" />
                         <span className="enrol_apply-rview-skb enrol_apply-rview-skb--big" />

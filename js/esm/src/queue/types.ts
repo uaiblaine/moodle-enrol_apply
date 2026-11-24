@@ -31,7 +31,8 @@ export type {Column, ViewMode};
 
 /**
  * Which queue a listing is: one method's, the site-wide one (enrolid 0, a site-wide reader), or a mentor's
- * mentees' (enrolid 0, which keeps the table until stage W5).
+ * mentees' (enrolid 0, W5): the same grid with what the mentee table shows, which the server alone decides
+ * (no identity, details or group column, no site facet or figure, no "Full", no method queue address).
  */
 export type Kind = 'method' | 'site' | 'mentees';
 

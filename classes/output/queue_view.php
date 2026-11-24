@@ -20,6 +20,7 @@ use context_course;
 use enrol_apply\local\capacity;
 use enrol_apply\local\coursefilter;
 use enrol_apply\local\groupscope;
+use enrol_apply\local\queue;
 use enrol_apply\local\queueengine;
 use enrol_apply\table\applications;
 use moodle_url;
@@ -31,9 +32,11 @@ use templatable;
 /**
  * The approval queue as a data report: the page of the method queue (CQ-D5) and of the site-wide queue (W3).
  *
- * The shell manage.php renders for `?id=<method>`, and for the id-less page when its reader's listing is
- * the site-wide queue (a site-wide decider or viewer, {@see wanted()}), unless `view=table` asks for
- * today's table. The mentee queue keeps the table until stage W5. The
+ * The shell manage.php renders for `?id=<method>`, and for the id-less page whatever its reader's listing
+ * is there (the site-wide queue for a site-wide decider or viewer, the mentee queue for a mentor, W5;
+ * {@see wanted()}), unless `view=table` asks for today's table. The mentee queue shows what the mentee table
+ * shows and nothing more (SQ-D13): the server withholds the rest (the catalogue, the facets, the summary,
+ * a method's queue address and "Full" are queueengine's, the props are {@see props()}), never the client. The
  * page carries configuration and strings only; every row and every number arrives through the
  * plugin's web services (enrol_apply_queue_rows, enrol_apply_queue_summary), which read the queue's
  * own table ({@see queueengine}). So nothing here may put an application into the props: the
@@ -76,6 +79,9 @@ class queue_view implements renderable, templatable {
     /** @var string[] The site-wide queue's own facets read here; its course and category are manage.php's. */
     public const WIDE_FACETS = ['waited', 'method', 'grouped'];
 
+    /** @var string[] The mentee queue's own facets read here: the one its table and the rows service offer a mentor. */
+    public const MENTEE_FACETS = ['waited'];
+
     /**
      * @var string The address parameter that asks the site-wide queue for its "By course" view (SQ-D9). Its own
      *     name, so that it is never read as `view`, which stays the server's switch to the table.
@@ -85,7 +91,7 @@ class queue_view implements renderable, templatable {
     /** @var string The one value SHOW takes: the "By course" view. */
     public const METHODS = 'methods';
 
-    /** @var stdClass|null The apply method whose queue this is; null for the site-wide queue. */
+    /** @var stdClass|null The apply method whose queue this is; null for the site-wide and mentee queues. */
     protected ?stdClass $instance;
 
     /** @var applications Today's queue for the same request, for the noscript. */
@@ -100,7 +106,7 @@ class queue_view implements renderable, templatable {
     /**
      * Build the shell.
      *
-     * @param stdClass|null $instance The apply method; null for the site-wide queue.
+     * @param stdClass|null $instance The apply method; null for the site-wide and mentee queues.
      * @param applications $table Today's queue as manage.php built it for this request.
      * @param moodle_url $manageurl The queue's address with its filters, without the view parameter.
      * @param array $initial What the address asks for, from {@see initial()}.
@@ -115,24 +121,22 @@ class queue_view implements renderable, templatable {
     /**
      * Whether manage.php renders this view for a listing request, rather than today's table.
      *
-     * One predicate for every listing (CQ-D5, SQ-D12): the queue of one method and the site-wide queue,
-     * deciding or viewing, take the grid, unless the address asks for the table with `view=table`, which
-     * anyone may. The scope is the reader's listing as queue::listing_scope() resolved it, never the
-     * request: for the id-less page it is the site-wide queue or the mentee queue by what the reader
-     * holds.
+     * One predicate for every listing (CQ-D5, SQ-D12, SQ-D13): the queue of one method, the site-wide queue
+     * (deciding or viewing) and the mentee queue take the grid, unless the address asks for the table with
+     * `view=table`, which anyone may. The scope is the reader's listing as queue::listing_scope() resolved
+     * it, never the request: for the id-less page it is the site-wide queue or the mentee queue by what the
+     * reader holds.
      *
-     * The mentee scope keeps the table in this stage (W3): its grid (SQ-D13) is stage W5, which drops the
-     * `mentees` condition here and nowhere else. A listing names its mentees only in that scope; a method
-     * queue and the site-wide queue name none (null), and a refused listing names an empty list, so it
-     * never mounts the grid either (manage.php refuses that reader before asking). Asked on the listing
-     * path only: manage.php serves `userenrol=` before it reads `id`.
+     * A refused listing (`allowed` false) never takes the grid, by its own condition here: manage.php
+     * refuses that reader before asking, and the predicate does not lean on it. Asked on the listing path
+     * only: manage.php serves `userenrol=` before it reads `id`.
      *
      * @param stdClass $listing The reader's listing scope, from queue::listing_scope().
      * @param string $view The request's view parameter.
-     * @return bool True for the method queue or the site-wide queue without view=table.
+     * @return bool True for an allowed listing without view=table.
      */
     public static function wanted(stdClass $listing, string $view): bool {
-        return $view !== self::TABLE && $listing->mentees === null;
+        return $view !== self::TABLE && $listing->allowed;
     }
 
     /**
@@ -166,12 +170,13 @@ class queue_view implements renderable, templatable {
      * depends on the outcome), so an address can never fail a decision already applied; a page past the end is
      * the rows service's to bring back.
      *
-     * With 0 it is the site-wide queue's address (manage.php with no id), rebuilt through the same table
-     * for the listing queue::listing_scope(0) gives this reader: its course, category, method and grouped
-     * filters as the table applied them, its own catalogue's sort. Never the "By course" view's SHOW: a
-     * decision is made from the list, so it lands on the list.
+     * With 0 it is the id-less page's address, rebuilt through the same table for the listing
+     * queue::listing_scope(0) gives this reader and read as that listing's first paint ({@see initial()}): on
+     * the site-wide queue its course, category, method and grouped filters as the table applied them, on the
+     * mentee queue none of them (its table applies none), and its own catalogue's sort. Never the "By course"
+     * view's SHOW: a decision is made from the list, so it lands on the list.
      *
-     * @param int $enrolid The method, already authorised by manage.php; 0 for the site-wide queue.
+     * @param int $enrolid The method, already authorised by manage.php; 0 for the site-wide or mentee queue.
      * @param string $search The search manage.php read.
      * @param int|null $status The status manage.php read, null for every application.
      * @param array $filters The filters manage.php read, name => value.
@@ -179,7 +184,9 @@ class queue_view implements renderable, templatable {
      * @throws \required_capability_exception When the reader may not open the queue.
      */
     public static function return_url(int $enrolid, string $search, ?int $status, array $filters): moodle_url {
-        $initial = self::initial($search, $status, $filters, $enrolid === 0);
+        // The id-less page is read as the listing this reader has there; a method's queue needs none.
+        $listing = $enrolid === 0 ? queue::listing_scope(0) : null;
+        $initial = self::initial($search, $status, $filters, $listing);
         $table = queueengine::table(
             $enrolid,
             $initial['scope'],
@@ -213,20 +220,28 @@ class queue_view implements renderable, templatable {
      * builds lands filtered here too. The facets, the sort and the page are read here; the rows
      * service cleans every one of them again against what this reader is offered.
      *
-     * The site-wide queue ($wide) reads its own facets (WIDE_FACETS), each cleaned to its vocabulary
+     * Which queue the address is read for is the listing's kind (applications::kind_of()), the scope
+     * queue::listing_scope() resolved for the reader, never a request parameter; no listing is a method's
+     * queue. The site-wide queue reads its own facets (WIDE_FACETS), each cleaned to its vocabulary
      * here, as the table cleans it ({@see wide_facet()}); its course and category are manage.php's. It also
      * reads which view the address asks for (SHOW), cleaned to METHODS or nothing; whether this reader is
      * offered that view at all is the props' question ({@see offers_methods()}), and the view's own service
      * refuses anybody else. The sort, the direction and the page are then the "By course" view's, under the
      * same names as the list's; its service cleans them against its own vocabulary.
      *
+     * The mentee queue (SQ-D13) reads what the mentee table reads and nothing else: its one facet
+     * (MENTEE_FACETS), cleaned the same way, the sort, the direction, the page and the page size. Its
+     * course, category, method, grouped and SHOW are ignored whatever the address carries: the course and
+     * the category never reach $filters (applications::request_filters() reads them where
+     * coursefilter::offered() holds), and the rest are not read here.
+     *
      * @param string $search The search manage.php read.
      * @param int|null $status The status manage.php read, null for every application.
      * @param array $filters The filters manage.php read, name => value.
-     * @param bool $wide Whether the address is the site-wide queue's.
+     * @param stdClass|null $listing The reader's listing scope, from queue::listing_scope(); null for a method's queue.
      * @return array scope, search, filters (each: name, value), sort, direction, page, perpage, show (METHODS or '').
      */
-    public static function initial(string $search, ?int $status, array $filters, bool $wide = false): array {
+    public static function initial(string $search, ?int $status, array $filters, ?stdClass $listing = null): array {
         global $CFG;
 
         // ENROL_APPLY_USER_WAIT lives in the plugin's lib.php, which is not autoloaded.
@@ -238,9 +253,15 @@ class queue_view implements renderable, templatable {
             default => 'all',
         };
 
-        foreach ($wide ? self::WIDE_FACETS : self::FACETS as $name) {
+        $kind = $listing === null ? 'method' : applications::kind_of($listing);
+        $facets = match ($kind) {
+            'site' => self::WIDE_FACETS,
+            'mentees' => self::MENTEE_FACETS,
+            default => self::FACETS,
+        };
+        foreach ($facets as $name) {
             $value = trim(optional_param($name, '', PARAM_ALPHANUM));
-            if ($wide) {
+            if ($kind !== 'method') {
                 $value = self::wide_facet($name, $value);
             }
             if ($value !== '') {
@@ -263,19 +284,19 @@ class queue_view implements renderable, templatable {
             'direction' => optional_param('dir', '', PARAM_ALPHA) === 'desc' ? 'desc' : 'asc',
             'page' => max(0, optional_param('page', 0, PARAM_INT)),
             'perpage' => in_array($perpage, queueengine::PERPAGES, true) ? $perpage : queueengine::PERPAGE,
-            'show' => $wide && optional_param(self::SHOW, '', PARAM_ALPHA) === self::METHODS ? self::METHODS : '',
+            'show' => $kind === 'site' && optional_param(self::SHOW, '', PARAM_ALPHA) === self::METHODS ? self::METHODS : '',
         ];
     }
 
     /**
-     * One facet of the site-wide queue's address, cleaned to the value the table would apply.
+     * One facet of the address of a queue that spans courses, cleaned to the value the table would apply.
      *
      * The same vocabularies as the table's set_filterset(): a waited threshold of
      * applications::WAITED_DAYS, a method that is an apply instance (coursefilter::clean_method()), a
      * grouped value of applications::GROUPED. Whether this reader is offered the grouped filter at all is
      * the rows service's question, which drops it again for anybody else.
      *
-     * @param string $name One of WIDE_FACETS.
+     * @param string $name One of WIDE_FACETS or MENTEE_FACETS.
      * @param string $value What the address carries, alphanumeric.
      * @return string The value, '' for none.
      */
@@ -301,8 +322,8 @@ class queue_view implements renderable, templatable {
         $enrolid = (int) ($this->instance->id ?? 0);
 
         /* "Open the report" only for a reader the report admits (CQ-D11), as the review page's
-           earlier applications are shown: the capability in the method's course. The site-wide queue
-           has none: the report belongs to a course. */
+           earlier applications are shown: the capability in the method's course. The site-wide and mentee
+           queues have none: the report belongs to a course. */
         $reporturl = '';
         if ($this->instance !== null) {
             $context = context_course::instance((int) $this->instance->courseid);
@@ -314,7 +335,7 @@ class queue_view implements renderable, templatable {
         return [
             'mount' => self::MOUNT,
             'enrolid' => $enrolid,
-            // Which queue the listing is (method, site); the rows answer says it again.
+            // Which queue the listing is (method, site, mentees); the rows answer says it again.
             'kind' => $this->table->scope_kind(),
             'initial' => $this->initial,
             'perpage' => queueengine::PERPAGE,
@@ -386,9 +407,10 @@ class queue_view implements renderable, templatable {
      * the posted choice is allowlisted again by confirm_enrolment(), row by row, whatever the sheet
      * offered.
      *
-     * On the site-wide queue the table form's call is made with no instance, as manage_form() makes it
-     * there: no chooser and no summary (SQ-D10, each approval uses its own method's role and groups), and
-     * no places notice, which belongs to one method (each row says "Full" instead).
+     * On the site-wide and mentee queues the table form's call is made with no instance, as manage_form()
+     * makes it there: no chooser and no summary (SQ-D10, each approval uses its own method's role and
+     * groups), and no places notice, which belongs to one method (each row of the site-wide queue says
+     * "Full" instead; the mentee queue says neither, as its table does not).
      *
      * @return array|null sesskey, actions, message, note, groups, roles, summary, placesfull; null for a viewer.
      */

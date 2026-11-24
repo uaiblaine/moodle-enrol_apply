@@ -57,18 +57,17 @@ class enrol_apply_renderer extends plugin_renderer_base {
      *
      * @param \enrol_apply\table\applications $table Table listing the applications.
      * @param moodle_url $manageurl Url the decision form posts back to: on a listing that has a grid view
-     *     (the method queue, the site-wide queue), the table's own address (view=table), so a decision
-     *     lands back on the table.
+     *     (the method queue, the site-wide queue, the mentee queue), the table's own address (view=table), so a
+     *     decision lands back on the table.
      * @param stdClass|null $instance Enrol instance when the page is scoped to one, null otherwise.
      * @return void
      */
     public function manage_page($table, $manageurl, $instance) {
         echo $this->header();
         echo $this->heading(get_string('confirmusers', 'enrol_apply'));
-        /* The way to the grid view, the page of the method queue and of the site-wide queue, with the
-           filters in force: wherever this table is a grid's table, which manage.php says by giving it the
-           address with view=table (the mentee queue's table has no grid until stage W5, and its address no
-           view). Outside manage_form(), which is also the grid view's noscript, where it would lead back. */
+        /* The way to the grid view, the page of the method, site-wide and mentee queues, with the filters in
+           force: wherever this table is a grid's table, which manage.php says by giving it the address with
+           view=table. Outside manage_form(), which is also the grid view's noscript, where it would lead back. */
         if ($manageurl->get_param('view') === \enrol_apply\output\queue_view::TABLE) {
             echo $this->render_from_template('enrol_apply/queue_viewswitch', [
                 'url' => \enrol_apply\output\queue_view::url($manageurl, true)->out(false),
@@ -79,7 +78,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
     }
 
     /**
-     * Render the method queue's grid view, its page (CQ-D5): the React shell, today's queue in its noscript.
+     * Render a queue's grid view, its page (CQ-D5, SQ-D12, SQ-D13): the React shell, today's queue in its noscript.
      *
      * @param \enrol_apply\output\queue_view $view The shell.
      * @return void

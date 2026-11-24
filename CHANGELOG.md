@@ -4,9 +4,22 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased (2026112308)
+## Unreleased (2026112309)
 
 ### Added
+
+- **A mentor's queue is a grid too, with what its table shows** (2026112309, no upgrade step).
+  `manage.php` with no id opens the grid view for a mentor (a holder of
+  `enrol/apply:manageapplications` through a role assigned in their mentees' own user contexts), as it
+  does for a site-wide reader; `view=table` and a browser without JavaScript keep the table. The grid
+  shows what the mentee table shows and no more: the applicant without identity fields, the course
+  and the method (the method's name is not a link to its queue, and no method is marked "Full"), the
+  wait and the comment; two tiles (what awaits, with the oldest wait and the late ones, and what is
+  deferred); the waited filter alone; no "By course" view and no report link. A mentor selects and
+  decides as on the site-wide queue, one sheet section per method when the selection spans several,
+  through the table's own form, so every per-row check applies unchanged. Everything withheld is
+  withheld by the server. An address carrying the site-wide queue's course, category, method, grouped
+  or `show` is read without them for a mentor. Mutation gates `QT1`-`QT5`; `QS2` retired.
 
 - **The site-wide queue reads by course** (2026112308, no upgrade step). Its View menu adds
   **By course**: one row per enrolment method of what the list holds under the scope, the filters and

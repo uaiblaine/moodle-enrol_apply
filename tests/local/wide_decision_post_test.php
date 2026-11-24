@@ -341,6 +341,109 @@ final class wide_decision_post_test extends \advanced_testcase {
     }
 
     /**
+     * A mentor of the given applicants, holding the deciding capability in their user contexts alone.
+     *
+     * @param array $applicants The applicants they mentor.
+     * @return \stdClass The mentor.
+     */
+    private function mentor(array $applicants): \stdClass {
+        $generator = $this->getDataGenerator();
+        $role = $generator->create_role();
+        set_role_contextlevels($role, [CONTEXT_USER]);
+        assign_capability('enrol/apply:manageapplications', CAP_ALLOW, $role, \context_system::instance()->id, true);
+        $mentor = $generator->create_user();
+        foreach ($applicants as $applicant) {
+            role_assign($role, $mentor->id, \context_user::instance($applicant->id)->id);
+        }
+
+        return $mentor;
+    }
+
+    /**
+     * A mentor's decision over two methods posted as the mentee grid posts it writes exactly what the mentee
+     * table's post writes (W5, SQ-D13).
+     *
+     * The mentor mentors four applicants, two per method. The table's form posts from the id-less page, the
+     * grid's from its own address, which for a mentor carries the scope, the search, the waited facet, the
+     * sort and the page, plus a forged course and method the mentee table never reads; neither decides
+     * anything. Each method's applicant gets that method's message, and the decider recorded is the mentor.
+     *
+     * Changes that must make it fail: the grid's post handled apart from the table's; a carried address
+     * parameter reaching the decision; the mentor's per-row grant (the applicant's user context) refused.
+     *
+     * @param string $action confirm, wait or cancel.
+     * @return void
+     */
+    #[DataProvider('actions')]
+    public function test_a_mentors_grid_post_over_two_methods_writes_what_the_tables_post_writes(string $action): void {
+        [$tablea, $tableapplicanta] = $this->apply_to('a');
+        [$tableb, $tableapplicantb] = $this->apply_to('b');
+        [$grida, $gridapplicanta] = $this->apply_to('a');
+        [$gridb, $gridapplicantb] = $this->apply_to('b');
+        $mentor = $this->mentor([$tableapplicanta, $tableapplicantb, $gridapplicanta, $gridapplicantb]);
+        $this->setUser($mentor);
+        // Precondition: the mentor's listing is the mentee queue, deciding.
+        $listing = queue::listing_scope(0);
+        $this->assertCount(4, $listing->mentees);
+        $this->assertTrue($listing->candecide);
+
+        $address = [
+            'status' => (string) ENROL_USER_SUSPENDED,
+            'search' => 'Nobody by this name',
+            'course' => (string) $this->courses['c']->id,
+            'method' => (string) $this->methods['c']->id,
+            'waited' => '14',
+            'sort' => 'course',
+            'dir' => 'desc',
+            'page' => '3',
+        ];
+        $this->assertSame(2, $this->post($this->fields($action, [$tablea, $tableb]), []));
+        $this->assertSame(2, $this->post($this->fields($action, [$grida, $gridb]), $address));
+
+        $expecteda = $this->written($tablea, $tableapplicanta, 'a');
+        $expectedb = $this->written($tableb, $tableapplicantb, 'b');
+        $this->assertSame($expecteda, $this->written($grida, $gridapplicanta, 'a'));
+        $this->assertSame($expectedb, $this->written($gridb, $gridapplicantb, 'b'));
+        // The control: the decision was taken by the mentor, each method's applicant with that method's message.
+        $this->assertNotSame(submission::STATUS_PENDING, $expecteda['status']);
+        $this->assertNotSame(submission::STATUS_PENDING, $expectedb['status']);
+        $this->assertSame((int) $mentor->id, $expecteda['decidedby']);
+        $this->assertSame('Welcome to course a.', $expecteda['outcomemessage']);
+        $this->assertSame('Welcome to course b.', $expectedb['outcomemessage']);
+    }
+
+    /**
+     * A mentor's post naming an application of somebody they do not mentor decides nothing for that row,
+     * which stays as it was; the mentee's row in the same post is decided.
+     *
+     * The grid lists the mentees' applications alone and posts only their ids; a post built by hand reaches
+     * the decision methods, whose per-row check grants a mentor only in their mentees' user contexts.
+     *
+     * Changes that must make it fail: the per-row check trusting the posted list; the mentor's grant read in
+     * a context other than the applicant's own.
+     *
+     * @param string $action confirm, wait or cancel.
+     * @return void
+     */
+    #[DataProvider('actions')]
+    public function test_a_mentors_forged_post_for_a_non_mentee_decides_nothing_for_them(string $action): void {
+        global $DB;
+
+        [$mine, $mentee] = $this->apply_to('a');
+        [$theirs] = $this->apply_to('b');
+        $this->setUser($this->mentor([$mentee]));
+
+        $this->assertSame(1, $this->post($this->fields($action, [$mine, $theirs]), []));
+        $this->assertSame(ENROL_USER_SUSPENDED, $this->enrolment_status($theirs));
+        $record = $DB->get_record('enrol_apply_submission', ['userenrolmentid' => $theirs], '*', MUST_EXIST);
+        $this->assertSame(submission::STATUS_PENDING, (int) $record->status);
+        $this->assertSame('', (string) $record->outcomemessage);
+        $this->assertSame(0, (int) $record->decidedby);
+        // The control: the mentee's application, in the same post, was decided.
+        $this->assertNotSame(ENROL_USER_SUSPENDED, $this->enrolment_status($mine));
+    }
+
+    /**
      * A message keyed by a method none of the selection belongs to reaches nobody.
      *
      * The keys of `outcomemessages[]` only choose a message for the rows the database says belong to that

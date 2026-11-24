@@ -11,44 +11,45 @@ import { Fragment, jsxDEV } from "react/jsx-dev-runtime";
  * any has; open or closed, with the closing date while open. The summary does not move with a filter,
  * so the tiles load once.
  *
- * The site-wide queue's tiles are its own (SQ-D7, {@link WideTiles}): what awaits, what is deferred and its
- * share of what awaits, and for a site-wide reader the courses (and methods) holding an application and the
- * methods at their limit.
+ * The queues that span courses draw their own tiles (SQ-D7, {@link WideTiles}): what awaits, what is deferred
+ * and its share of what awaits, and for a site-wide reader the courses (and methods) holding an application
+ * and the methods at their limit; the mentee queue draws the first two alone (SQ-D13).
  *
  * @module     enrol_apply/queue/Tiles
  * @copyright  2026 Anderson Blaine
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 import { duration, fill, fillObject, num } from "../datareport/str";
+const SKELETON_TILES = { method: 4, site: 4, mentees: 2 };
 const percent = /* @__PURE__ */ __name((value, total) => Math.min(100, Math.max(0, Math.round(value * 100 / total))), "percent");
 const Tile = /* @__PURE__ */ __name(({ label, value, sub, meter, warn }) => /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-tile" + (warn ? " enrol_apply-rview-tile--warn" : ""), role: "listitem", children: [
   /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-tile-label", children: label }, void 0, false, {
     fileName: "public/enrol/apply/js/esm/src/queue/Tiles.tsx",
-    lineNumber: 66,
+    lineNumber: 72,
     columnNumber: 9
   }),
   /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-tile-value", children: value }, void 0, false, {
     fileName: "public/enrol/apply/js/esm/src/queue/Tiles.tsx",
-    lineNumber: 67,
+    lineNumber: 73,
     columnNumber: 9
   }),
   meter !== null ? /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-qview-meter" + (warn ? " enrol_apply-qview-meter--warn" : ""), "aria-hidden": "true", children: /* @__PURE__ */ jsxDEV("span", { style: { width: `${meter}%` } }, void 0, false, {
     fileName: "public/enrol/apply/js/esm/src/queue/Tiles.tsx",
-    lineNumber: 70,
+    lineNumber: 76,
     columnNumber: 17
   }) }, void 0, false, {
     fileName: "public/enrol/apply/js/esm/src/queue/Tiles.tsx",
-    lineNumber: 69,
+    lineNumber: 75,
     columnNumber: 13
   }) : null,
   sub !== "" ? /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-tile-sub", children: sub }, void 0, false, {
     fileName: "public/enrol/apply/js/esm/src/queue/Tiles.tsx",
-    lineNumber: 73,
+    lineNumber: 79,
     columnNumber: 23
   }) : null
 ] }, void 0, true, {
   fileName: "public/enrol/apply/js/esm/src/queue/Tiles.tsx",
-  lineNumber: 65,
+  lineNumber: 71,
   columnNumber: 5
 }), "Tile");
 const shortDate = /* @__PURE__ */ __name((time) => {
@@ -75,7 +76,7 @@ const AwaitingTile = /* @__PURE__ */ __name(({ labels, summary }) => {
     false,
     {
       fileName: "public/enrol/apply/js/esm/src/queue/Tiles.tsx",
-      lineNumber: 103,
+      lineNumber: 109,
       columnNumber: 9
     }
   );
@@ -83,7 +84,7 @@ const AwaitingTile = /* @__PURE__ */ __name(({ labels, summary }) => {
 const WideTiles = /* @__PURE__ */ __name(({ labels, summary }) => /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-band", role: "list", "data-region": "enrol_apply-tiles", children: [
   /* @__PURE__ */ jsxDEV(AwaitingTile, { labels, summary }, void 0, false, {
     fileName: "public/enrol/apply/js/esm/src/queue/Tiles.tsx",
-    lineNumber: 122,
+    lineNumber: 130,
     columnNumber: 9
   }),
   /* @__PURE__ */ jsxDEV(
@@ -99,7 +100,7 @@ const WideTiles = /* @__PURE__ */ __name(({ labels, summary }) => /* @__PURE__ *
     false,
     {
       fileName: "public/enrol/apply/js/esm/src/queue/Tiles.tsx",
-      lineNumber: 123,
+      lineNumber: 131,
       columnNumber: 9
     }
   ),
@@ -117,7 +118,7 @@ const WideTiles = /* @__PURE__ */ __name(({ labels, summary }) => /* @__PURE__ *
       false,
       {
         fileName: "public/enrol/apply/js/esm/src/queue/Tiles.tsx",
-        lineNumber: 132,
+        lineNumber: 140,
         columnNumber: 17
       }
     ),
@@ -134,18 +135,18 @@ const WideTiles = /* @__PURE__ */ __name(({ labels, summary }) => /* @__PURE__ *
       false,
       {
         fileName: "public/enrol/apply/js/esm/src/queue/Tiles.tsx",
-        lineNumber: 139,
+        lineNumber: 147,
         columnNumber: 17
       }
     )
   ] }, void 0, true, {
     fileName: "public/enrol/apply/js/esm/src/queue/Tiles.tsx",
-    lineNumber: 131,
+    lineNumber: 139,
     columnNumber: 13
   }) : null
 ] }, void 0, true, {
   fileName: "public/enrol/apply/js/esm/src/queue/Tiles.tsx",
-  lineNumber: 121,
+  lineNumber: 129,
   columnNumber: 5
 }), "WideTiles");
 const Tiles = /* @__PURE__ */ __name(({ labels, kind, summary, error, onRetry }) => {
@@ -155,36 +156,7 @@ const Tiles = /* @__PURE__ */ __name(({ labels, kind, summary, error, onRetry })
       " ",
       /* @__PURE__ */ jsxDEV("button", { type: "button", className: "btn btn-sm btn-outline-secondary", onClick: onRetry, children: labels.retry }, void 0, false, {
         fileName: "public/enrol/apply/js/esm/src/queue/Tiles.tsx",
-        lineNumber: 162,
-        columnNumber: 17
-      })
-    ] }, void 0, true, {
-      fileName: "public/enrol/apply/js/esm/src/queue/Tiles.tsx",
-      lineNumber: 160,
-      columnNumber: 13
-    });
-  }
-  if (summary === null) {
-    return /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-band", "aria-busy": "true", children: [
-      Array.from({ length: 4 }, (_, i) => /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-tile enrol_apply-rview-sk", children: [
-        /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-skb enrol_apply-rview-skb--w60" }, void 0, false, {
-          fileName: "public/enrol/apply/js/esm/src/queue/Tiles.tsx",
-          lineNumber: 171,
-          columnNumber: 25
-        }),
-        /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-skb enrol_apply-rview-skb--big" }, void 0, false, {
-          fileName: "public/enrol/apply/js/esm/src/queue/Tiles.tsx",
-          lineNumber: 172,
-          columnNumber: 25
-        })
-      ] }, i, true, {
-        fileName: "public/enrol/apply/js/esm/src/queue/Tiles.tsx",
         lineNumber: 170,
-        columnNumber: 21
-      })),
-      /* @__PURE__ */ jsxDEV("span", { className: "visually-hidden", role: "status", children: labels.loadsummary }, void 0, false, {
-        fileName: "public/enrol/apply/js/esm/src/queue/Tiles.tsx",
-        lineNumber: 175,
         columnNumber: 17
       })
     ] }, void 0, true, {
@@ -193,10 +165,39 @@ const Tiles = /* @__PURE__ */ __name(({ labels, kind, summary, error, onRetry })
       columnNumber: 13
     });
   }
+  if (summary === null) {
+    return /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-band", "aria-busy": "true", children: [
+      Array.from({ length: SKELETON_TILES[kind] }, (_, i) => /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-tile enrol_apply-rview-sk", children: [
+        /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-skb enrol_apply-rview-skb--w60" }, void 0, false, {
+          fileName: "public/enrol/apply/js/esm/src/queue/Tiles.tsx",
+          lineNumber: 179,
+          columnNumber: 25
+        }),
+        /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-skb enrol_apply-rview-skb--big" }, void 0, false, {
+          fileName: "public/enrol/apply/js/esm/src/queue/Tiles.tsx",
+          lineNumber: 180,
+          columnNumber: 25
+        })
+      ] }, i, true, {
+        fileName: "public/enrol/apply/js/esm/src/queue/Tiles.tsx",
+        lineNumber: 178,
+        columnNumber: 21
+      })),
+      /* @__PURE__ */ jsxDEV("span", { className: "visually-hidden", role: "status", children: labels.loadsummary }, void 0, false, {
+        fileName: "public/enrol/apply/js/esm/src/queue/Tiles.tsx",
+        lineNumber: 183,
+        columnNumber: 17
+      })
+    ] }, void 0, true, {
+      fileName: "public/enrol/apply/js/esm/src/queue/Tiles.tsx",
+      lineNumber: 176,
+      columnNumber: 13
+    });
+  }
   if (kind !== "method") {
     return /* @__PURE__ */ jsxDEV(WideTiles, { labels, summary }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/queue/Tiles.tsx",
-      lineNumber: 181,
+      lineNumber: 189,
       columnNumber: 16
     });
   }
@@ -215,7 +216,7 @@ const Tiles = /* @__PURE__ */ __name(({ labels, kind, summary, error, onRetry })
       false,
       {
         fileName: "public/enrol/apply/js/esm/src/queue/Tiles.tsx",
-        lineNumber: 189,
+        lineNumber: 197,
         columnNumber: 17
       }
     ) : null,
@@ -232,13 +233,13 @@ const Tiles = /* @__PURE__ */ __name(({ labels, kind, summary, error, onRetry })
       false,
       {
         fileName: "public/enrol/apply/js/esm/src/queue/Tiles.tsx",
-        lineNumber: 198,
+        lineNumber: 206,
         columnNumber: 17
       }
     ) : null,
     /* @__PURE__ */ jsxDEV(AwaitingTile, { labels, summary }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/queue/Tiles.tsx",
-      lineNumber: 207,
+      lineNumber: 215,
       columnNumber: 13
     }),
     /* @__PURE__ */ jsxDEV(
@@ -254,13 +255,13 @@ const Tiles = /* @__PURE__ */ __name(({ labels, kind, summary, error, onRetry })
       false,
       {
         fileName: "public/enrol/apply/js/esm/src/queue/Tiles.tsx",
-        lineNumber: 208,
+        lineNumber: 216,
         columnNumber: 13
       }
     )
   ] }, void 0, true, {
     fileName: "public/enrol/apply/js/esm/src/queue/Tiles.tsx",
-    lineNumber: 187,
+    lineNumber: 195,
     columnNumber: 9
   });
 }, "Tiles");

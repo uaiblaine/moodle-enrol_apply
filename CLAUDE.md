@@ -95,7 +95,7 @@ classes/local/queueengine.php  the queue read headlessly (one method's, or id 0:
 classes/bulk/                the participants page's three bulk decisions
 report.php, classes/reportbuilder/  the course report and a custom-report datasource, both over the durable record
 classes/output/report_view.php, js/esm/src/report/  the course report's React view (5.3), its shell and its client
-classes/output/queue_view.php, js/esm/src/queue/  the grid view of the method and site-wide queues (their page; view=table for the table), its shell and its client
+classes/output/queue_view.php, js/esm/src/queue/  the grid view of the method, site-wide and mentee queues (their page; view=table for the table), its shell and its client
 renderer.php                 page rendering plus the notification e-mail body
 templates/                   manage, manage_actions, queue_capacity, queue_chip, queue_filters, review
                              (left column: review_summary, review_rules, review_history,
@@ -1395,22 +1395,24 @@ backup/                      group mappings, comments and the durable trail, see
   argument; `state()` and the default do not change). The view preloads the course contexts of the page's rows
   after the page is cut, never of the whole result.
 
-- **The method queue's and the site-wide queue's page is the grid view, a client of the headless queue
-  (CQ-D5, W3).** `manage.php` renders `\enrol_apply\output\queue_view` (template `queue_view`) wherever
+- **Every queue's page is the grid view, a client of the headless queue (CQ-D5, W3, W5).** `manage.php`
+  renders `\enrol_apply\output\queue_view` (template `queue_view`) wherever
   `queue_view::wanted($listing, $view)` holds, asked of the listing `queue::listing_scope()` resolved,
-  never of the request: a method's queue and the site-wide queue (a site-wide decider or viewer), and no
-  `view=table` in the address. **The mentee scope keeps the table until stage W5**, by one condition in
-  that one predicate (`$listing->mentees === null`; a refused listing names an empty list, so it never
-  mounts either); W5 drops it there and nowhere else. `view=table` is the escape hatch, open to
+  never of the request: a method's queue, the site-wide queue (a site-wide decider or viewer) and the
+  mentee queue (a mentor), and no `view=table` in the address. **A refused listing never takes the grid,
+  by the predicate's own `$listing->allowed` condition** (gate `QT1`), not by its mentee list being
+  empty: `manage.php` refuses that reader before asking, and the predicate does not lean on it (its
+  capability sequence for a mentor, which skips the system-level `require_capability`, is untouched
+  by W5). `view=table` is the escape hatch, open to
   anyone, and without JavaScript the page is the same table inside the shell's noscript
   (`manage_form()`, with its decision form); the table's page links "Grid view" (drawn where its address
   carries `view=table`), the grid "Table view". The shell's props carry configuration and strings only
-  (mount `queue` in `js/esm/src/views.tsx`; `enrolid` 0 and `kind` `site` on the site-wide queue, no
+  (mount `queue` in `js/esm/src/views.tsx`; `enrolid` 0 and `kind` `site` on the site-wide queue, `mentees` on a mentor's, no
   report link there: the report belongs to a course); rows and tiles come from
   `enrol_apply_queue_rows` and `enrol_apply_queue_summary`. `$listingurl` in `manage.php` is where a
   listing lives: `$manageurl` for the grid (no view parameter), the same plus `view=table` for the
   table of a listing that has a grid, whose form posts there and whose filter form carries `view` as a
-  hidden field (a GET submit replaces the query string); the mentee table keeps the plain address. **Filters live in the address,
+  hidden field (a GET submit replaces the query string); every listing has a grid now. **Filters live in the address,
   never in a preference** (CQ-D6): `status` (the scope), `search`, `group`, the identity tokens,
   `appliedfrom`, `appliedto` are the names `manage.php` reads for the table, and `queue_view::initial()`
   reads them from manage.php's own cleaning (`request_filters()`, so the group default applies); the
@@ -1426,7 +1428,8 @@ backup/                      group mappings, comments and the durable trail, see
   values and the tags are text; so are the course's and the method's names of the "Course · method"
   cell, which the client draws from the row's `course` and `method` (the service sends no cell for it).
   The tags' tones mirror `applications::TAG_TONES` by hand. Gates `QV3`, `QS1`-`QS8` (`QV1`, `QV2`
-  retired into `QS2`, `QS3`); `tests/behat/queue_view.feature` and `site_queue_view.feature` drive the
+  retired into `QS2`, `QS3`; `QS2` retired by W5, `QT1` holds the refusal); `tests/behat/queue_view.feature`,
+  `site_queue_view.feature` and `mentee_queue_view.feature` drive the
   client.
 
   **A decision from the grid is the table's form, posted (CQ-D4). There is no decision web service,
@@ -1463,6 +1466,25 @@ backup/                      group mappings, comments and the durable trail, see
   exactly as for the table's post: the grid adds no rule and removes none. Each section links to its
   method's queue, the one place groups and a role are chosen. `tests/local/wide_decision_post_test.php`
   holds the four (equal writes, the viewer, the stray key, the forged chooser).
+
+  **The mentee grid shows what the mentee table shows, and every withheld thing is withheld by the server
+  (SQ-D13, W5).** One code path serves the site-wide and the mentee queues, so the difference must never
+  live in a client branch: the client draws what it is given and falls on the reduced side wherever a part
+  branches on what the answer holds. Where each thing is withheld: identity values, the `details` and
+  `group` columns, the site facets, `full` and `queueurl` in the rows service (`queueengine`: the scope's
+  `identitycontext` null, `has_details_column()`, `has_group_column()`, `coursefilter::offered()`,
+  `offers_course_filters()`; tests `wide_queue_test`); the site figures in the summary (`sitefigures`,
+  `QW16`); the "By course" view in the props (`offers_methods()`, `QM7`) and in its service (`QM1`); the
+  report link in the props (`instance !== null`, `QT5`); the chooser in the props (`decision()` asks the
+  table form's call with no instance). The address a mentor's page reads is the mentee table's:
+  `queue_view::initial()` takes the listing and reads by `applications::kind_of()` (`MENTEE_FACETS`, no
+  `show`: `QT2`, `QT3`), and the course and category never reach it (`request_filters()` reads them where
+  `coursefilter::offered()` holds, `QT4`); `return_url(0, ...)` reads the reader's own listing the same
+  way. A mentor's sheet over several methods has a section per method without the link to the method's
+  queue or the sentence about choosing there, because their rows carry no `queueurl`. A mentor's post
+  decides only their mentees' rows: `can_manage_application()` per row, the mentee's user context
+  (`wide_decision_post_test`: a forged id of a non-mentee decides nothing). Tests:
+  `tests/output/mentee_queue_view_test.php`, `tests/behat/mentee_queue_view.feature`.
 
   **The selection belongs to the page on screen.** A box only on a row the rows service marks
   `selectable` (`applications::selectable()`: never for a viewer, never the reader's own application),

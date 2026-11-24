@@ -23,7 +23,8 @@
  * message box for them, posted as outcomemessages[<the method's id>]; the id is the one the rows service
  * gave the row, and the server groups the posted rows by the method the database names whatever the key
  * says. Each section links to the method's own queue where the reader may open it, the one place groups
- * and a role are chosen.
+ * and a role are chosen; a mentor may open none (the rows service sends them no address), so their
+ * sections carry neither the link nor the sentence about choosing there.
  *
  * @module     enrol_apply/queue/SheetMethods
  * @copyright  2026 Anderson Blaine
