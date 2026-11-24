@@ -1363,6 +1363,24 @@ backup/                      group mappings, comments and the durable trail, see
   filter; `test_each_facet_count_is_what_choosing_it_lists`), `tests/external/queue_services_test.php`
   (the doors), `tests/table/applications_test.php` (the two-record row). Gates `QE1`-`QE23`, `QE4` and `QE5` retired.
 
+  **The site-wide queue's "By course" view (W4, SQ-D9) is a fourth reader of the same table, never a query
+  of its own.** `queueengine::methods()` (service `enrol_apply_queue_methods`, which takes no method id)
+  asks `require_listing(0)` first and then refuses any listing `coursefilter::offered()` does not hold, so
+  a mentor, whom the wide queue answers, is refused with the same exception as a teacher: the view would
+  tell them a method's applications beyond their mentees' and its capacity. It builds the table as `rows()`
+  does for 0 and makes ONE grouped read over its FROM and `where_without([])` (`method_tallies()`), so a
+  clause added to the table reaches the view by construction and each method's count is what `rows()`
+  lists under `method=<id>`; deferred is `ue.status = ENROL_APPLY_USER_WAIT` inside that WHERE. The page is
+  cut from that read in PHP; only the page's methods then reach `capacity::states()` (through the
+  `page_states()` seam) and `decidingrole::methods_decide()` (one read per course of the page), so a page
+  costs no read per method. Sorts `awaiting` (default, descending), `oldest`, `course`, each ending in the
+  method id; a key outside them is the default in the default's direction. The shell offers it where
+  `queue_view::offers_methods()` holds (the table's `scope_kind()` is `site`) and reads it from the
+  address as `show=methods` (`initial()`, the site-wide queue only), never from `view`; `return_url()`
+  never carries it. Tests: `tests/local/methods_view_test.php`, the doors in
+  `tests/external/queue_services_test.php`, the shell in `tests/output/site_queue_view_test.php`. Gates
+  `QM1`-`QM8`.
+
 - **The method queue's and the site-wide queue's page is the grid view, a client of the headless queue
   (CQ-D5, W3).** `manage.php` renders `\enrol_apply\output\queue_view` (template `queue_view`) wherever
   `queue_view::wanted($listing, $view)` holds, asked of the listing `queue::listing_scope()` resolved,

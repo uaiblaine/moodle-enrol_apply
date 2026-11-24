@@ -2334,6 +2334,11 @@ body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload + .enrol_apply-rvie
     position: relative;
 }
 
+/* A view drawing a body of its own leaves a menu out (the queue's "By course" view has no Columns). */
+.enrol_apply-rview .enrol_apply-rview-anchor[hidden] {
+    display: none;
+}
+
 .enrol_apply-rview .enrol_apply-rview-bar-cluster {
     color: var(--enrol-apply-ink-muted);
     align-items: center;
@@ -3620,6 +3625,23 @@ body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload + .enrol_apply-rvie
 
 .enrol_apply-qview .enrol_apply-qview-methodline .enrol_apply-qview-tags {
     margin-top: 0;
+}
+
+/* The site-wide queue's "By course" view (W4): a method's counts in tabular figures, and on a card the
+   course and its method beside the link to the method's queue. */
+.enrol_apply-qview .enrol_apply-qview-figure {
+    color: var(--enrol-apply-ink);
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+}
+
+.enrol_apply-qview .enrol_apply-qview-methodhead {
+    align-items: flex-start;
+    display: flex;
+    flex: 1 1 auto;
+    gap: 0.5rem;
+    justify-content: space-between;
+    min-width: 0;
 }
 
 .enrol_apply-qview .enrol_apply-qview-dockmethods {

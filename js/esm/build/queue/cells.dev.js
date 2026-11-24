@@ -43,7 +43,7 @@ const TONES = {
 const cellHtml = /* @__PURE__ */ __name((row, key) => row.cells.find((cell) => cell.key === key)?.html ?? "", "cellHtml");
 const CellLine = /* @__PURE__ */ __name(({ html }) => /* @__PURE__ */ jsxDEV(Lines, { parts: [html] }, void 0, false, {
   fileName: "public/enrol/apply/js/esm/src/queue/cells.tsx",
-  lineNumber: 90,
+  lineNumber: 93,
   columnNumber: 67
 }), "CellLine");
 const StatusLabel = /* @__PURE__ */ __name(({ tag }) => {
@@ -53,22 +53,22 @@ const StatusLabel = /* @__PURE__ */ __name(({ tag }) => {
     tag.text,
     long ? /* @__PURE__ */ jsxDEV("span", { className: "visually-hidden", children: " " + tag.title }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/queue/cells.tsx",
-      lineNumber: 105,
+      lineNumber: 108,
       columnNumber: 21
     }) : null
   ] }, void 0, true, {
     fileName: "public/enrol/apply/js/esm/src/queue/cells.tsx",
-    lineNumber: 103,
+    lineNumber: 106,
     columnNumber: 9
   });
 }, "StatusLabel");
 const Name = /* @__PURE__ */ __name(({ row }) => row.applicant.profileurl === "" ? /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-qview-name", children: row.applicant.fullname }, void 0, false, {
   fileName: "public/enrol/apply/js/esm/src/queue/cells.tsx",
-  lineNumber: 118,
+  lineNumber: 121,
   columnNumber: 11
 }) : /* @__PURE__ */ jsxDEV("a", { className: "enrol_apply-qview-name", href: row.applicant.profileurl, children: row.applicant.fullname }, void 0, false, {
   fileName: "public/enrol/apply/js/esm/src/queue/cells.tsx",
-  lineNumber: 119,
+  lineNumber: 122,
   columnNumber: 11
 }), "Name");
 const ReviewLink = /* @__PURE__ */ __name(({ labels, row }) => /* @__PURE__ */ jsxDEV(
@@ -83,64 +83,64 @@ const ReviewLink = /* @__PURE__ */ __name(({ labels, row }) => /* @__PURE__ */ j
   false,
   {
     fileName: "public/enrol/apply/js/esm/src/queue/cells.tsx",
-    lineNumber: 129,
+    lineNumber: 132,
     columnNumber: 5
   }
 ), "ReviewLink");
 const Who = /* @__PURE__ */ __name(({ row }) => /* @__PURE__ */ jsxDEV(Fragment, { children: [
   /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-qview-picture", "aria-hidden": "true", dangerouslySetInnerHTML: { __html: row.applicant.picture } }, void 0, false, {
     fileName: "public/enrol/apply/js/esm/src/queue/cells.tsx",
-    lineNumber: 147,
+    lineNumber: 150,
     columnNumber: 9
   }),
   /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-qview-whotext", children: [
     /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-c", children: /* @__PURE__ */ jsxDEV(Name, { row }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/queue/cells.tsx",
-      lineNumber: 149,
+      lineNumber: 152,
       columnNumber: 51
     }) }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/queue/cells.tsx",
-      lineNumber: 149,
+      lineNumber: 152,
       columnNumber: 13
     }),
     row.applicant.identity.map((field) => /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-sub", title: field.value, children: field.value }, field.name, false, {
       fileName: "public/enrol/apply/js/esm/src/queue/cells.tsx",
-      lineNumber: 151,
+      lineNumber: 154,
       columnNumber: 17
     })),
     row.applicant.tags.length > 0 ? /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-qview-tags", children: row.applicant.tags.map((tag) => /* @__PURE__ */ jsxDEV(StatusLabel, { tag }, tag.kind, false, {
       fileName: "public/enrol/apply/js/esm/src/queue/cells.tsx",
-      lineNumber: 155,
+      lineNumber: 158,
       columnNumber: 54
     })) }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/queue/cells.tsx",
-      lineNumber: 154,
+      lineNumber: 157,
       columnNumber: 17
     }) : null
   ] }, void 0, true, {
     fileName: "public/enrol/apply/js/esm/src/queue/cells.tsx",
-    lineNumber: 148,
+    lineNumber: 151,
     columnNumber: 9
   })
 ] }, void 0, true, {
   fileName: "public/enrol/apply/js/esm/src/queue/cells.tsx",
-  lineNumber: 145,
+  lineNumber: 148,
   columnNumber: 5
 }), "Who");
 const ApplicantCell = /* @__PURE__ */ __name(({ labels, row }) => /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-qview-who", children: [
   /* @__PURE__ */ jsxDEV(Who, { row }, void 0, false, {
     fileName: "public/enrol/apply/js/esm/src/queue/cells.tsx",
-    lineNumber: 170,
+    lineNumber: 173,
     columnNumber: 9
   }),
   /* @__PURE__ */ jsxDEV(ReviewLink, { labels, row }, void 0, false, {
     fileName: "public/enrol/apply/js/esm/src/queue/cells.tsx",
-    lineNumber: 171,
+    lineNumber: 174,
     columnNumber: 9
   })
 ] }, void 0, true, {
   fileName: "public/enrol/apply/js/esm/src/queue/cells.tsx",
-  lineNumber: 169,
+  lineNumber: 172,
   columnNumber: 5
 }), "ApplicantCell");
 const MethodTags = /* @__PURE__ */ __name(({ labels, row }) => {
@@ -156,56 +156,56 @@ const MethodTags = /* @__PURE__ */ __name(({ labels, row }) => {
   }
   return /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-qview-tags", children: tags.map((tag) => /* @__PURE__ */ jsxDEV(StatusLabel, { tag }, tag.kind, false, {
     fileName: "public/enrol/apply/js/esm/src/queue/cells.tsx",
-    lineNumber: 194,
+    lineNumber: 197,
     columnNumber: 72
   })) }, void 0, false, {
     fileName: "public/enrol/apply/js/esm/src/queue/cells.tsx",
-    lineNumber: 194,
+    lineNumber: 197,
     columnNumber: 12
   });
 }, "MethodTags");
 const MethodName = /* @__PURE__ */ __name(({ row }) => row.method.queueurl === "" ? /* @__PURE__ */ jsxDEV("span", { children: row.method.name }, void 0, false, {
   fileName: "public/enrol/apply/js/esm/src/queue/cells.tsx",
-  lineNumber: 205,
+  lineNumber: 208,
   columnNumber: 11
 }) : /* @__PURE__ */ jsxDEV("a", { href: row.method.queueurl, children: row.method.name }, void 0, false, {
   fileName: "public/enrol/apply/js/esm/src/queue/cells.tsx",
-  lineNumber: 206,
+  lineNumber: 209,
   columnNumber: 11
 }), "MethodName");
 const CourseMethod = /* @__PURE__ */ __name(({ labels, row }) => /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-qview-course", children: [
   /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-c", title: row.course.name, children: /* @__PURE__ */ jsxDEV("a", { className: "enrol_apply-qview-coursename", href: row.course.url, children: row.course.name }, void 0, false, {
     fileName: "public/enrol/apply/js/esm/src/queue/cells.tsx",
-    lineNumber: 219,
+    lineNumber: 222,
     columnNumber: 13
   }) }, void 0, false, {
     fileName: "public/enrol/apply/js/esm/src/queue/cells.tsx",
-    lineNumber: 218,
+    lineNumber: 221,
     columnNumber: 9
   }),
   /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-qview-methodline", children: [
     /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-sub", title: row.method.name, children: /* @__PURE__ */ jsxDEV(MethodName, { row }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/queue/cells.tsx",
-      lineNumber: 222,
+      lineNumber: 225,
       columnNumber: 77
     }) }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/queue/cells.tsx",
-      lineNumber: 222,
+      lineNumber: 225,
       columnNumber: 13
     }),
     /* @__PURE__ */ jsxDEV(MethodTags, { labels, row }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/queue/cells.tsx",
-      lineNumber: 223,
+      lineNumber: 226,
       columnNumber: 13
     })
   ] }, void 0, true, {
     fileName: "public/enrol/apply/js/esm/src/queue/cells.tsx",
-    lineNumber: 221,
+    lineNumber: 224,
     columnNumber: 9
   })
 ] }, void 0, true, {
   fileName: "public/enrol/apply/js/esm/src/queue/cells.tsx",
-  lineNumber: 217,
+  lineNumber: 220,
   columnNumber: 5
 }), "CourseMethod");
 export {

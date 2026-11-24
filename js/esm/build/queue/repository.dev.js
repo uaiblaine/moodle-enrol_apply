@@ -26,12 +26,25 @@ const getRows = /* @__PURE__ */ __name((enrolid, query) => fetchOne({
     direction: query.direction
   }
 }), "getRows");
+const getMethods = /* @__PURE__ */ __name((query) => fetchOne({
+  methodname: "enrol_apply_queue_methods",
+  args: {
+    scope: query.scope,
+    search: query.search,
+    filters: Object.entries(query.filters).map(([name, value]) => ({ name, value })),
+    page: query.page,
+    perpage: query.perpage,
+    sort: query.sort,
+    direction: query.direction
+  }
+}), "getMethods");
 const getSummary = /* @__PURE__ */ __name((enrolid) => fetchOne({ methodname: "enrol_apply_queue_summary", args: { enrolid } }), "getSummary");
 const setPreference = /* @__PURE__ */ __name((enrolid, preference) => fetchOne({
   methodname: "enrol_apply_set_queue_preference",
   args: { enrolid, usedefault: preference.usedefault, columns: preference.columns, widths: preference.widths }
 }), "setPreference");
 export {
+  getMethods,
   getRows,
   getSummary,
   setPreference

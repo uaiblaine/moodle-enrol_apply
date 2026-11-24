@@ -38,7 +38,8 @@ use PHPUnit\Framework\Attributes\CoversClass;
  * or viewer and nobody else (the mentee queue keeps the table until W5), a shell with no row, no report link
  * and the listing's kind, the decision sheet's offer of the table form with no instance (no chooser, SQ-D10;
  * nothing for a viewer), and the address read for the first paint and rebuilt for the page a decision
- * lands on, through the queue's own cleaning.
+ * lands on, through the queue's own cleaning. Stage W4 adds the "By course" view's offer (the site-wide
+ * readers only) and its `show` parameter, read cleaned and never carried after a decision.
  *
  * Two courses, each with one apply method and one pending application; a third course has no apply method.
  * The readers: the administrator (a site-wide decider), a site-wide viewer (a role holding
@@ -407,5 +408,93 @@ final class site_queue_view_test extends \advanced_testcase {
         foreach (['sort', 'dir', 'perpage', 'page'] as $name) {
             $this->assertArrayNotHasKey($name, $defaults, $name);
         }
+    }
+
+    /**
+     * The "By course" view (SQ-D9) is offered on the site-wide queue to its two readers, with its label and its
+     * table's strings, and to nobody else: never on a method's queue, never to a mentor.
+     *
+     * Changes that must make it fail: the view offered on a method's queue; the view offered to a mentor.
+     *
+     * @return void
+     */
+    public function test_the_methods_view_is_offered_to_the_site_wide_readers_only(): void {
+        foreach (['decider' => get_admin(), 'viewer' => $this->viewer] as $who => $user) {
+            $this->setUser($user);
+            $shell = $this->shell();
+            $this->assertTrue($shell->offers_methods(), $who);
+            $offer = $shell->props()['methods'];
+            $this->assertSame(get_string('queueviewbycourse', 'enrol_apply'), $offer['label'], $who);
+            $this->assertSame(get_string('queueviewopenqueue', 'enrol_apply'), $offer['openqueue'], $who);
+            $this->assertSame(queue_view::methods_labels(), $offer, $who);
+        }
+
+        // A method's queue, read by the same administrator, offers none.
+        $this->setAdminUser();
+        $one = $this->methods['one'];
+        $url = new moodle_url('/enrol/apply/manage.php', ['id' => $one->id]);
+        $method = new queue_view($one, applications::for_scope((int) $one->id), $url, queue_view::initial('', null, []));
+        $this->assertFalse($method->offers_methods());
+        $this->assertNull($method->props()['methods']);
+
+        // A mentor, whose wide queue is their mentees', is offered none.
+        $this->setUser($this->mentor);
+        // Precondition: the mentor's shell is the wide queue's, of the mentees kind.
+        $shell = $this->shell();
+        $this->assertSame('mentees', $shell->props()['kind']);
+        $this->assertFalse($shell->offers_methods());
+        $this->assertNull($shell->props()['methods']);
+    }
+
+    /**
+     * The first paint reads which view the address asks for under `show`, cleaned to the one value the
+     * "By course" view answers to, and only on the site-wide queue; `view` is never read for it.
+     *
+     * Changes that must make it fail: `show` taken as sent; `show` read on a method's queue.
+     *
+     * @return void
+     */
+    public function test_the_first_paint_reads_show_cleaned(): void {
+        $this->setAdminUser();
+
+        foreach (['table', 'Methods', 'methods<b>', 'grid', ''] as $forged) {
+            $_GET = ['show' => $forged];
+            $this->assertSame('', queue_view::initial('', null, [], true)['show'], $forged);
+        }
+        // The list's own switch to the table is not the view's.
+        $_GET = ['view' => 'methods'];
+        $this->assertSame('', queue_view::initial('', null, [], true)['show']);
+        // A method's queue has no such view, whatever its address says.
+        $_GET = ['show' => 'methods'];
+        $this->assertSame('', queue_view::initial('', null, [])['show']);
+
+        // The control: the site-wide queue's address asking for the view, with its sort and page.
+        $_GET = ['show' => 'methods', 'sort' => 'oldest', 'dir' => 'desc', 'page' => '1'];
+        $initial = queue_view::initial('', null, [], true);
+        $this->assertSame(queue_view::METHODS, $initial['show']);
+        $this->assertSame('oldest', $initial['sort']);
+        $this->assertSame('desc', $initial['direction']);
+        $this->assertSame(1, $initial['page']);
+    }
+
+    /**
+     * The address a decision lands on never carries the "By course" view: a decision is made from the list.
+     *
+     * Changes that must make it fail: `show` carried into the address after a decision.
+     *
+     * @return void
+     */
+    public function test_the_address_a_decision_returns_to_drops_show(): void {
+        $this->setAdminUser();
+        $_GET = ['show' => 'methods', 'course' => (string) $this->courses['one']->id, 'perpage' => '30'];
+        $filters = applications::request_filters(queue::listing_scope(0));
+        // Precondition: the first paint read the view from the same address.
+        $this->assertSame(queue_view::METHODS, queue_view::initial('', null, $filters, true)['show']);
+
+        $params = queue_view::return_url(0, '', null, $filters)->params();
+        $this->assertArrayNotHasKey('show', $params);
+        // The control: what the list carries in the same address comes back.
+        $this->assertSame((string) $this->courses['one']->id, (string) $params['course']);
+        $this->assertSame('30', (string) $params['perpage']);
     }
 }

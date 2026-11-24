@@ -81,4 +81,26 @@ final class decidingrole {
     public static function method_decides(stdClass $instance): bool {
         return self::decides((int) ($instance->roleid ?? 0), (int) $instance->courseid);
     }
+
+    /**
+     * Whether each of a set of methods is a deciding method: {@see method_decides()} for each one, with the
+     * deciding roles read once per course of the set rather than once per method.
+     *
+     * Kept within the call, never across calls (see the class docblock), for the queue's "By course" view,
+     * whose page may hold several methods of one course.
+     *
+     * @param array $instances {enrol} records, each with id, courseid and roleid.
+     * @return array Instance id => true for a deciding method, false for a learner method.
+     */
+    public static function methods_decide(array $instances): array {
+        $roles = [];
+        $decides = [];
+        foreach ($instances as $instance) {
+            $courseid = (int) $instance->courseid;
+            $roles[$courseid] ??= self::roles($courseid);
+            $decides[(int) $instance->id] = in_array((int) ($instance->roleid ?? 0), $roles[$courseid], true);
+        }
+
+        return $decides;
+    }
 }

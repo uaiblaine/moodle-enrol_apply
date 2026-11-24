@@ -31,7 +31,10 @@ import type {ReactElement} from 'react';
 import {Lines} from '../datareport/cells';
 import {makeSizing} from '../datareport/sizing';
 import {fill} from '../datareport/str';
-import type {Row, Tag} from './types';
+import type {Row, RowCourse, RowMethod, Tag} from './types';
+
+/** What the "Course · method" cell reads of a row: its course and its method (a list's row, or a method's). */
+type CourseAndMethod = {course: RowCourse, method: RowMethod};
 
 /** Default widths, in pixels, by column key; anything else (an answer, mostly) takes DEFAULT_WIDTH. */
 const WIDTHS: Record<string, number> = {
@@ -179,7 +182,7 @@ export const ApplicantCell = ({labels, row}: {labels: Record<string, string>, ro
  * @param {object} props The strings and the row.
  * @returns {object} The labels, or nothing.
  */
-export const MethodTags = ({labels, row}: {labels: Record<string, string>, row: Row}): ReactElement | null => {
+export const MethodTags = ({labels, row}: {labels: Record<string, string>, row: CourseAndMethod}): ReactElement | null => {
     const tags: Tag[] = [];
     if (row.method.deciding) {
         tags.push({kind: 'deciding', text: labels.grantsdeciding, title: ''});
@@ -200,7 +203,7 @@ export const MethodTags = ({labels, row}: {labels: Record<string, string>, row: 
  * @param {object} props The row.
  * @returns {object} The name.
  */
-const MethodName = ({row}: {row: Row}): ReactElement => (
+const MethodName = ({row}: {row: CourseAndMethod}): ReactElement => (
     row.method.queueurl === ''
         ? <span>{row.method.name}</span>
         : <a href={row.method.queueurl}>{row.method.name}</a>
@@ -213,7 +216,7 @@ const MethodName = ({row}: {row: Row}): ReactElement => (
  * @param {object} props The strings and the row.
  * @returns {object} The cell's content.
  */
-export const CourseMethod = ({labels, row}: {labels: Record<string, string>, row: Row}): ReactElement => (
+export const CourseMethod = ({labels, row}: {labels: Record<string, string>, row: CourseAndMethod}): ReactElement => (
     <div className="enrol_apply-qview-course">
         <span className="enrol_apply-rview-c" title={row.course.name}>
             <a className="enrol_apply-qview-coursename" href={row.course.url}>{row.course.name}</a>

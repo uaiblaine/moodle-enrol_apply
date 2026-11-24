@@ -112,3 +112,31 @@ Feature: The site-wide approval queue in its grid view
     And "Select Student 1" "checkbox" should not exist
     And "Select all on this page" "checkbox" should not exist
     And "[data-region='enrol_apply-dock']" "css_element" should not exist
+
+  Scenario: The By course view lists each enrolment method with its counts and leads to its queue
+    Given the following "users" exist:
+      | username | firstname | lastname | email                |
+      | student3 | Student   | 3        | student3@example.com |
+    And "student3" has applied to "C1" with the key of ""
+    And I log in as "admin"
+    And I am on the "enrol_apply > applications queue grid" page
+    And I should see "3 applications" in the "[data-region='enrol_apply-total']" "css_element"
+    When I click on "View" "button" in the "[data-region='enrol_apply-bar']" "css_element"
+    And I click on "By course" "button" in the "[data-region='enrol_apply-bar']" "css_element"
+    Then I should see "2 enrolment methods" in the "[data-region='enrol_apply-total']" "css_element"
+    And I should see "Apply for this course" in the "Course 1" "table_row"
+    And I should see "Moderator recruitment" in the "Course 2" "table_row"
+    And I should see "2" in the "//tr[contains(., 'Apply for this course')]//*[@data-figure='awaiting']" "xpath_element"
+    And I should see "1" in the "//tr[contains(., 'Moderator recruitment')]//*[@data-figure='awaiting']" "xpath_element"
+    And I should see "0" in the "//tr[contains(., 'Apply for this course')]//*[@data-figure='deferred']" "xpath_element"
+    And "Select all on this page" "checkbox" should not exist
+    And "Columns" "button" should not be visible
+    # The view is the address's show=methods: the same address, loaded again, lands on it.
+    When I reload the page
+    Then I should see "2 enrolment methods" in the "[data-region='enrol_apply-total']" "css_element"
+    And I should see "Moderator recruitment" in the "Course 2" "table_row"
+    When I click on "Open the queue" "link" in the "Course 1" "table_row"
+    Then I should see "Student 1" in the "[data-region='enrol_apply-rows']" "css_element"
+    And I should see "Student 3" in the "[data-region='enrol_apply-rows']" "css_element"
+    And I should not see "Student 2" in the "[data-region='enrol_apply-rows']" "css_element"
+    And I should see "2 applications" in the "[data-region='enrol_apply-total']" "css_element"

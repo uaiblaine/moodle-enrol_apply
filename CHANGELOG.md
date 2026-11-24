@@ -4,9 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased (2026112307)
+## Unreleased (2026112308)
 
 ### Added
+
+- **The site-wide queue reads by course** (2026112308, no upgrade step). Its View menu adds
+  **By course**: one row per enrolment method of what the list holds under the scope, the filters and
+  the search, with how many applications await a decision, how many are deferred, the oldest wait,
+  the places taken and whether the method is full, open (until when) or closed, and **Open the queue**
+  to that method's queue; sortable by course, by what awaits and by the oldest application, paged as
+  the list, and kept in the address as `show=methods`. No selection and no Columns there. The new
+  read-only web service `enrol_apply_queue_methods` serves it to the site-wide readers alone (a
+  mentor, an editing teacher of one course and a guest are refused); it reads one grouped count over
+  the list's own table and the capacity of the page's methods only. Mutation gates `QM1`-`QM8`.
 
 - **The site-wide queue is a grid, and decides across enrolment methods** (2026112307, no upgrade
   step). `manage.php` with no id opens the grid view for a holder of

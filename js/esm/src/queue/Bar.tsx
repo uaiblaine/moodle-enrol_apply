@@ -22,8 +22,10 @@
  * is chosen, and with or without a group) and the identity fields the reader may filter
  * by from a list, which the service does not count; the text fields and the dates are set in the
  * table view, which the panel's note links, and show here as chips that remove them. Columns starts
- * with the three sets (CQ-D7). View is Automatic, Table or Cards, and the table view. No Download
- * (CQ-D11): "Open the report" ends the chips' row for a reader the report admits.
+ * with the three sets (CQ-D7). View is Automatic, Table or Cards, and the table view; the site-wide queue
+ * adds "By course" (SQ-D9), whose body the queue view draws itself: while it is shown Columns is left out and
+ * the count states the enrolment methods, while the panel's "Show" still states the applications the filters
+ * list. No Download (CQ-D11): "Open the report" ends the chips' row for a reader the report admits.
  *
  * @module     enrol_apply/queue/Bar
  * @copyright  2026 Anderson Blaine
@@ -33,7 +35,7 @@
 import type {ReactElement} from 'react';
 import {Bar as DataBar} from '../datareport/Bar';
 import {fill, fillObject, num} from '../datareport/str';
-import type {Chip, ColumnSet, FacetDefinition} from '../datareport/types';
+import type {Chip, ColumnSet, ExtraView, FacetDefinition} from '../datareport/types';
 import type {Column, Facet, Preset, Query, RowsAnswer, Scope, ViewMode} from './types';
 
 /** The group filter's value for every group, explicitly (groupfilter::ANY). */
@@ -52,6 +54,10 @@ type BarProps = {
     usedefault: boolean,
     haswidths: boolean,
     view: ViewMode,
+    /** The caller's own views after the built-in ones: "By course" on the site-wide queue, none elsewhere. */
+    extraViews: ExtraView[],
+    /** The "By course" view's methods while it is shown (null while they load), undefined while the list is. */
+    methods?: number | null,
     search: string,
     searchmin: number,
     searching: boolean,
@@ -66,7 +72,7 @@ type BarProps = {
     onPreset: (preset: Preset) => void,
     onDefaultColumns: () => void,
     onResetWidths: () => void,
-    onView: (view: ViewMode) => void,
+    onView: (view: ViewMode | string) => void,
 };
 
 /** Every view the queue offers. */
@@ -192,6 +198,8 @@ const chip = (labels: Record<string, string>, rows: RowsAnswer, name: string, va
  */
 export const Bar = (props: BarProps): ReactElement => {
     const {labels, rows, query} = props;
+    // The "By course" view is shown: its value is the View menu's choice, and the count is of its methods.
+    const bycourse = props.methods !== undefined;
     const sets: ColumnSet[] = props.presets.map((preset) => ({
         name: preset.name,
         label: presetLabel(labels, preset.name),
@@ -230,8 +238,12 @@ export const Bar = (props: BarProps): ReactElement => {
             sets={sets}
             usedefault={props.usedefault}
             haswidths={props.haswidths}
-            view={props.view}
+            view={bycourse ? query.show : props.view}
             views={VIEWS}
+            extraViews={props.extraViews}
+            hidecolumns={bycourse}
+            countkey={bycourse ? 'methods' : 'count'}
+            counted={props.methods}
             tableurl={props.tableurl}
             downloads={[]}
             search={props.search}

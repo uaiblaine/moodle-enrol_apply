@@ -52,7 +52,7 @@ type TilesProps = {
  * @param {number} total The limit, above zero.
  * @returns {number} 0 to 100.
  */
-const percent = (value: number, total: number): number => Math.min(100, Math.max(0, Math.round(value * 100 / total)));
+export const percent = (value: number, total: number): number => Math.min(100, Math.max(0, Math.round(value * 100 / total)));
 
 /**
  * One tile.
@@ -80,7 +80,7 @@ const Tile = ({label, value, sub, meter, warn}: {label: string, value: string, s
  * @param {number} time Unix time.
  * @returns {string} The date.
  */
-const shortDate = (time: number): string => {
+export const shortDate = (time: number): string => {
     const lang = document.documentElement.lang || undefined;
     try {
         return new Intl.DateTimeFormat(lang, {dateStyle: 'short'}).format(new Date(time * 1000));

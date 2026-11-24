@@ -76,6 +76,15 @@ class queue_view implements renderable, templatable {
     /** @var string[] The site-wide queue's own facets read here; its course and category are manage.php's. */
     public const WIDE_FACETS = ['waited', 'method', 'grouped'];
 
+    /**
+     * @var string The address parameter that asks the site-wide queue for its "By course" view (SQ-D9). Its own
+     *     name, so that it is never read as `view`, which stays the server's switch to the table.
+     */
+    public const SHOW = 'show';
+
+    /** @var string The one value SHOW takes: the "By course" view. */
+    public const METHODS = 'methods';
+
     /** @var stdClass|null The apply method whose queue this is; null for the site-wide queue. */
     protected ?stdClass $instance;
 
@@ -159,7 +168,8 @@ class queue_view implements renderable, templatable {
      *
      * With 0 it is the site-wide queue's address (manage.php with no id), rebuilt through the same table
      * for the listing queue::listing_scope(0) gives this reader: its course, category, method and grouped
-     * filters as the table applied them, its own catalogue's sort.
+     * filters as the table applied them, its own catalogue's sort. Never the "By course" view's SHOW: a
+     * decision is made from the list, so it lands on the list.
      *
      * @param int $enrolid The method, already authorised by manage.php; 0 for the site-wide queue.
      * @param string $search The search manage.php read.
@@ -204,13 +214,17 @@ class queue_view implements renderable, templatable {
      * service cleans every one of them again against what this reader is offered.
      *
      * The site-wide queue ($wide) reads its own facets (WIDE_FACETS), each cleaned to its vocabulary
-     * here, as the table cleans it ({@see wide_facet()}); its course and category are manage.php's.
+     * here, as the table cleans it ({@see wide_facet()}); its course and category are manage.php's. It also
+     * reads which view the address asks for (SHOW), cleaned to METHODS or nothing; whether this reader is
+     * offered that view at all is the props' question ({@see offers_methods()}), and the view's own service
+     * refuses anybody else. The sort, the direction and the page are then the "By course" view's, under the
+     * same names as the list's; its service cleans them against its own vocabulary.
      *
      * @param string $search The search manage.php read.
      * @param int|null $status The status manage.php read, null for every application.
      * @param array $filters The filters manage.php read, name => value.
      * @param bool $wide Whether the address is the site-wide queue's.
-     * @return array scope, search, filters (each: name, value), sort, direction, page, perpage.
+     * @return array scope, search, filters (each: name, value), sort, direction, page, perpage, show (METHODS or '').
      */
     public static function initial(string $search, ?int $status, array $filters, bool $wide = false): array {
         global $CFG;
@@ -249,6 +263,7 @@ class queue_view implements renderable, templatable {
             'direction' => optional_param('dir', '', PARAM_ALPHA) === 'desc' ? 'desc' : 'asc',
             'page' => max(0, optional_param('page', 0, PARAM_INT)),
             'perpage' => in_array($perpage, queueengine::PERPAGES, true) ? $perpage : queueengine::PERPAGE,
+            'show' => $wide && optional_param(self::SHOW, '', PARAM_ALPHA) === self::METHODS ? self::METHODS : '',
         ];
     }
 
@@ -309,7 +324,46 @@ class queue_view implements renderable, templatable {
             'statuses' => ['pending' => ENROL_USER_SUSPENDED, 'deferred' => ENROL_APPLY_USER_WAIT],
             'reporturl' => $reporturl,
             'decision' => $this->decision(),
+            // The "By course" view (SQ-D9): its label and its table's strings, for a site-wide reader alone.
+            'methods' => $this->offers_methods() ? self::methods_labels() : null,
             'labels' => self::labels(),
+        ];
+    }
+
+    /**
+     * Whether this queue offers the "By course" view: the site-wide queue's, and so a site-wide reader's.
+     *
+     * Never a method's queue, which is one method already, and never a mentor's: the view would tell them how
+     * many applications a method holds beyond their mentees' and its capacity, and its service refuses them
+     * ({@see queueengine::methods()}). Read from the listing the table was built for, never from the request.
+     *
+     * @return bool True on the site-wide queue.
+     */
+    public function offers_methods(): bool {
+        return $this->table->scope_kind() === 'site';
+    }
+
+    /**
+     * The "By course" view's own strings, by the name the client reads them under, in the plain spelling.
+     *
+     * What the queue's labels do not already carry, and the two the view words its own way over them (the
+     * caption and the no-match title); the counts, the deferred heading, the status words and the wait's
+     * wording are the queue's.
+     *
+     * @return array Name => string.
+     */
+    public static function methods_labels(): array {
+        return [
+            'label' => get_string('queueviewbycourse', 'enrol_apply'),
+            'caption' => get_string('queueviewmethodscaption', 'enrol_apply'),
+            'coursemethod' => get_string('queuecoursemethod', 'enrol_apply'),
+            // The grid's frame is named by what it holds, as the caption names the table.
+            'grid' => get_string('queueviewmethodscaption', 'enrol_apply'),
+            'nomatch' => get_string('queueviewmethodsnomatch', 'enrol_apply'),
+            'nolimit' => get_string('queueviewnolimit', 'enrol_apply'),
+            'oldestwait' => get_string('queueviewoldestwait', 'enrol_apply'),
+            'openqueue' => get_string('queueviewopenqueue', 'enrol_apply'),
+            'queue' => get_string('queueviewqueue', 'enrol_apply'),
         ];
     }
 

@@ -172,8 +172,10 @@ final class queue_view_test extends \advanced_testcase {
 
         $this->assertSame([
             'mount', 'enrolid', 'kind', 'initial', 'perpage', 'perpages', 'searchmin', 'pageurl', 'statuses', 'reporturl',
-            'decision', 'labels',
+            'decision', 'methods', 'labels',
         ], array_keys($props));
+        // A method's queue offers no "By course" view: it is one method already.
+        $this->assertNull($props['methods']);
         $this->assertSame(queue_view::MOUNT, $props['mount']);
         $this->assertSame('queue', $props['mount']);
         $this->assertSame((int) $this->instance->id, $props['enrolid']);
@@ -281,6 +283,7 @@ final class queue_view_test extends \advanced_testcase {
             'direction' => 'asc',
             'page' => 0,
             'perpage' => 50,
+            'show' => '',
         ], $none);
         $this->assertSame('pending', queue_view::initial('', ENROL_USER_SUSPENDED, [])['scope']);
         $this->assertSame('deferred', queue_view::initial('', ENROL_APPLY_USER_WAIT, [])['scope']);

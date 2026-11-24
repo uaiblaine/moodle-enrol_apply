@@ -13,12 +13,23 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
  * carries no view parameter; the table's carries `view=table`. A decision posts to the grid's address
  * (queue/decide.ts), which manage.php cleans again for the page it lands on.
  *
+ * The site-wide queue's "By course" view (SQ-D9) is `show=methods`, a parameter of its own so that it is
+ * never read as `view`; there `sort`, `dir`, `page` and `perpage` are that view's, written as the list's
+ * are, and its default sort (what awaits, most first) is left out. The table's address never carries it.
+ *
  * @module     enrol_apply/queue/address
  * @copyright  2026 Anderson Blaine
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 const TABLE = "table";
+const METHODS = "methods";
 const STATE_KEY = "enrolApplyQueue";
+const defaultSort = /* @__PURE__ */ __name((query) => {
+  if (query.sort === "") {
+    return true;
+  }
+  return query.show === METHODS ? query.sort === "awaiting" && query.direction === "desc" : query.sort === "wait" && query.direction === "asc";
+}, "defaultSort");
 const params = /* @__PURE__ */ __name((props, query, grid) => {
   const pairs = [];
   if (query.scope !== "all") {
@@ -33,7 +44,10 @@ const params = /* @__PURE__ */ __name((props, query, grid) => {
     }
   });
   if (grid) {
-    if (query.sort !== "" && (query.sort !== "wait" || query.direction !== "asc")) {
+    if (query.show === METHODS) {
+      pairs.push(["show", METHODS]);
+    }
+    if (!defaultSort(query)) {
       pairs.push(["sort", query.sort], ["dir", query.direction]);
     }
     if (query.page > 0) {
@@ -59,7 +73,9 @@ const initialQuery = /* @__PURE__ */ __name((props) => ({
   sort: props.initial.sort,
   direction: props.initial.direction,
   page: props.initial.page,
-  perpage: props.initial.perpage
+  perpage: props.initial.perpage,
+  // The view is drawn only where the props offer it.
+  show: props.methods !== null ? props.initial.show : ""
 }), "initialQuery");
 const writeAddress = /* @__PURE__ */ __name((props, query, push) => {
   const url = queueUrl(props, query, true);
@@ -80,9 +96,11 @@ const queryOf = /* @__PURE__ */ __name((state) => {
   if (state === null || typeof state !== "object" || !(STATE_KEY in state)) {
     return null;
   }
-  return state[STATE_KEY];
+  const query = state[STATE_KEY];
+  return { ...query, show: query.show ?? "" };
 }, "queryOf");
 export {
+  METHODS,
   TABLE,
   initialQuery,
   queryOf,

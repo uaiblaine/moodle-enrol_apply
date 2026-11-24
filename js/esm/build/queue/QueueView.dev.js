@@ -9,8 +9,11 @@ import { Fragment, jsxDEV } from "react/jsx-dev-runtime";
  * One view for both, branching on the listing's kind (the props for the first paint, the rows answer
  * after): the site-wide queue draws its own tiles (SQ-D7), a "Course · method" column (SQ-D2), the course,
  * category, method and grouped facets the service returns (choosing another course releases the method),
- * and a decision sheet that splits a selection spanning methods by method (SQ-D10). Nothing of the
- * "By course" view yet (stage W4).
+ * and a decision sheet that splits a selection spanning methods by method (SQ-D10). The site-wide queue's
+ * View menu adds "By course" (stage W4, SQ-D9, queue/Methods): one row per enrolment method of what the
+ * list holds, read from enrol_apply_queue_methods under the same scope, filters and search, with no
+ * selection, no dock and no Columns; the address says `show=methods`, and its sort and page are that view's.
+ * The rows are still read while it is shown, at their first page, for the panel's facets and the chips.
  *
  * manage.php?id=<method>, and manage.php for a site-wide reader, render the shell
  * (enrol_apply\output\queue_view) with configuration and strings, unless view=table asks for today's
@@ -49,11 +52,12 @@ import { rememberView, storedView, useNarrow } from "../datareport/layout";
 import { Pager } from "../datareport/Pager";
 import { hold } from "../datareport/pending";
 import { RowsRegion } from "../datareport/Rows";
-import { initialQuery, queryOf, queueUrl, writeAddress } from "./address";
+import { METHODS, initialQuery, queryOf, queueUrl, writeAddress } from "./address";
 import { ANY_GROUP, Bar, GROUP } from "./Bar";
 import { SIZING } from "./cells";
 import { decide } from "./decide";
 import { chooseRows, derive } from "./derive";
+import { MethodsView, methodsDirection, useMethods } from "./Methods";
 import { Notices, RowsBody, dockFor, sheetFor } from "./Parts";
 import { getRows, getSummary, setPreference } from "./repository";
 import { Tiles } from "./Tiles";
@@ -67,6 +71,7 @@ const SKELETON_COLUMNS = {
 };
 const METHOD = "method";
 const COURSE = "course";
+const listQuery = /* @__PURE__ */ __name((asked, perpages) => asked.show === METHODS ? { ...asked, sort: "", direction: "asc", page: 0, perpage: perpages[0] } : asked, "listQuery");
 const narrows = /* @__PURE__ */ __name((query) => query.scope !== "all" || query.search !== "" || Object.entries(query.filters).some(([name, value]) => value !== "" && !(name === GROUP && value === ANY_GROUP)), "narrows");
 const QueueView = /* @__PURE__ */ __name((props) => {
   const config = useRef(props).current;
@@ -99,13 +104,19 @@ const QueueView = /* @__PURE__ */ __name((props) => {
   const [selected, setSelected] = useState(() => /* @__PURE__ */ new Set());
   const [sheet, setSheet] = useState(null);
   const opener = useRef(null);
+  const clampPage = useCallback((page) => {
+    query.current = { ...query.current, page };
+    setCurrent(query.current);
+    writeAddress(config, query.current, false);
+  }, [config]);
+  const bycourse = useMethods(clampPage);
   const loadRows = useCallback((asked) => {
     const seq = ++rowsseq.current;
     if (!rowshold.current) {
       rowshold.current = hold("enrol_apply/queue:rows");
     }
     setRowsloading(true);
-    getRows(enrolid, asked).then((answer) => {
+    getRows(enrolid, listQuery(asked, config.perpages)).then((answer) => {
       if (seq !== rowsseq.current) {
         return;
       }
@@ -113,10 +124,8 @@ const QueueView = /* @__PURE__ */ __name((props) => {
         widthsread.current = true;
         setWidths(Object.fromEntries(answer.preference.widths.map((entry) => [entry.key, entry.width])));
       }
-      if (answer.page !== query.current.page) {
-        query.current = { ...query.current, page: answer.page };
-        setCurrent(query.current);
-        writeAddress(config, query.current, false);
+      if (asked.show !== METHODS && answer.page !== query.current.page) {
+        clampPage(answer.page);
       }
       setRows(answer);
       setSelected((before) => {
@@ -133,7 +142,14 @@ const QueueView = /* @__PURE__ */ __name((props) => {
         setRowsloading(false);
       }
     });
-  }, [enrolid, config]);
+  }, [enrolid, config, clampPage]);
+  const loadMethods = bycourse.load;
+  const reload = useCallback((asked) => {
+    loadRows(asked);
+    if (asked.show === METHODS) {
+      loadMethods(asked);
+    }
+  }, [loadRows, loadMethods]);
   const loadSummary = useCallback(() => {
     const seq = ++summaryseq.current;
     if (!summaryhold.current) {
@@ -159,8 +175,8 @@ const QueueView = /* @__PURE__ */ __name((props) => {
     setCurrent(query.current);
     setSelected(/* @__PURE__ */ new Set());
     writeAddress(config, query.current, push);
-    loadRows(query.current);
-  }, [loadRows, config]);
+    reload(query.current);
+  }, [reload, config]);
   useEffect(() => {
     if (!rowsloading && rowshold.current) {
       rowshold.current();
@@ -175,9 +191,9 @@ const QueueView = /* @__PURE__ */ __name((props) => {
   }, [summaryloading, summary, summaryerror]);
   useEffect(() => {
     writeAddress(config, query.current, false);
-    loadRows(query.current);
+    reload(query.current);
     loadSummary();
-  }, [loadRows, loadSummary, config]);
+  }, [reload, loadSummary, config]);
   useEffect(() => {
     const popped = /* @__PURE__ */ __name((event) => {
       const restored = queryOf(event.state);
@@ -188,11 +204,11 @@ const QueueView = /* @__PURE__ */ __name((props) => {
       setCurrent(restored);
       setSearchtext(restored.search);
       setSelected(/* @__PURE__ */ new Set());
-      loadRows(restored);
+      reload(restored);
     }, "popped");
     window.addEventListener("popstate", popped);
     return () => window.removeEventListener("popstate", popped);
-  }, [loadRows]);
+  }, [reload]);
   useEffect(() => () => {
     if (searchtimer.current !== null) {
       window.clearTimeout(searchtimer.current);
@@ -204,6 +220,19 @@ const QueueView = /* @__PURE__ */ __name((props) => {
     setViewState(chosen2);
     rememberView(VIEW_KEY, chosen2);
   }, "setView");
+  const showing = current.show === METHODS;
+  const onView = /* @__PURE__ */ __name((chosen2) => {
+    if (chosen2 === METHODS) {
+      if (!showing) {
+        run({ show: METHODS, sort: "", direction: "asc", page: 0 }, true);
+      }
+      return;
+    }
+    setView(chosen2);
+    if (showing) {
+      run({ show: "", sort: "", direction: "asc", page: 0 }, true);
+    }
+  }, "onView");
   const onSearch = /* @__PURE__ */ __name((text) => {
     setSearchtext(text);
     if (searchtimer.current !== null) {
@@ -331,6 +360,8 @@ const QueueView = /* @__PURE__ */ __name((props) => {
     run({ sort: key, direction, page: 0 }, true);
   }, "onSort");
   const shown = allcolumns.filter((column) => column.active);
+  const extraViews = config.methods === null ? [] : [{ value: METHODS, label: config.methods.label, icon: "queue" }];
+  const methodlabels = { ...labels, ...config.methods ?? {} };
   const cards = view === "cards" || view === "auto" && narrow;
   useEffect(() => {
     if (sheet === null && opener.current) {
@@ -376,7 +407,7 @@ const QueueView = /* @__PURE__ */ __name((props) => {
     false,
     {
       fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-      lineNumber: 563,
+      lineNumber: 632,
       columnNumber: 9
     }
   );
@@ -388,20 +419,71 @@ const QueueView = /* @__PURE__ */ __name((props) => {
     active: true,
     fixed: key === "applicant"
   }));
+  const listbody = /* @__PURE__ */ jsxDEV(Fragment, { children: [
+    /* @__PURE__ */ jsxDEV(
+      RowsRegion,
+      {
+        labels,
+        loading: rowsloading,
+        loaded: rows !== null,
+        error: rowserror,
+        total: derived.total,
+        filtered: narrows(current),
+        cards,
+        narrow,
+        skeleton: { columns: skeleton, lead: "applicant", widths, sizing: SIZING },
+        dock: dockFor(labels, offer, decides, chosen, onDecide),
+        onRetry: () => loadRows(query.current),
+        children: body
+      },
+      void 0,
+      false,
+      {
+        fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
+        lineNumber: 659,
+        columnNumber: 13
+      }
+    ),
+    rows !== null && rows.total > 0 ? /* @__PURE__ */ jsxDEV(
+      Pager,
+      {
+        labels,
+        page: current.page,
+        perpage: current.perpage,
+        perpages: config.perpages,
+        total: rows.total,
+        shown: rows.rows.length,
+        narrow,
+        onPage: (page) => run({ page }, true),
+        onPerpage: (perpage) => run({ perpage, page: 0 }, true)
+      },
+      void 0,
+      false,
+      {
+        fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
+        lineNumber: 675,
+        columnNumber: 17
+      }
+    ) : null
+  ] }, void 0, true, {
+    fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
+    lineNumber: 658,
+    columnNumber: 9
+  });
   return /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-root", ref: root, "data-region": "enrol_apply-queueview", children: [
     /* @__PURE__ */ jsxDEV(Tiles, { labels, kind: config.kind, summary, error: summaryerror, onRetry: loadSummary }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-      lineNumber: 589,
+      lineNumber: 692,
       columnNumber: 13
     }),
     derived.notingroup ? /* @__PURE__ */ jsxDEV("p", { className: "enrol_apply-rview-narrowed", children: labels.notingroup }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-      lineNumber: 590,
+      lineNumber: 693,
       columnNumber: 35
     }) : /* @__PURE__ */ jsxDEV(Fragment, { children: [
       /* @__PURE__ */ jsxDEV(Notices, { labels, narrowed: derived.narrowed, viewonly: derived.viewonly }, void 0, false, {
         fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-        lineNumber: 592,
+        lineNumber: 695,
         columnNumber: 21
       }),
       /* @__PURE__ */ jsxDEV(
@@ -416,6 +498,8 @@ const QueueView = /* @__PURE__ */ __name((props) => {
           usedefault,
           haswidths: Object.keys(widths).length > 0,
           view,
+          extraViews,
+          methods: showing ? bycourse.answer?.total ?? null : void 0,
           search: searchtext,
           searchmin: config.searchmin,
           searching: rowsloading,
@@ -441,70 +525,48 @@ const QueueView = /* @__PURE__ */ __name((props) => {
             setWidths({});
             writePreference({ usedefault, columns: usedefault ? [] : chosenkeys, widths: [] }, false);
           },
-          onView: setView
+          onView
         },
         void 0,
         false,
         {
           fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-          lineNumber: 593,
+          lineNumber: 696,
           columnNumber: 21
         }
       ),
-      /* @__PURE__ */ jsxDEV(
-        RowsRegion,
+      showing ? /* @__PURE__ */ jsxDEV(
+        MethodsView,
         {
-          labels,
-          loading: rowsloading,
-          loaded: rows !== null,
-          error: rowserror,
-          total: derived.total,
+          labels: methodlabels,
+          answer: bycourse.answer,
+          loading: bycourse.loading,
+          error: bycourse.error,
           filtered: narrows(current),
-          cards,
           narrow,
-          skeleton: { columns: skeleton, lead: "applicant", widths, sizing: SIZING },
-          dock: dockFor(labels, offer, decides, chosen, onDecide),
-          onRetry: () => loadRows(query.current),
-          children: body
-        },
-        void 0,
-        false,
-        {
-          fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-          lineNumber: 630,
-          columnNumber: 21
-        }
-      ),
-      rows !== null && rows.total > 0 ? /* @__PURE__ */ jsxDEV(
-        Pager,
-        {
-          labels,
-          page: current.page,
-          perpage: current.perpage,
           perpages: config.perpages,
-          total: rows.total,
-          shown: rows.rows.length,
-          narrow,
+          onSort: (key) => run({ sort: key, direction: methodsDirection(bycourse.answer, key), page: 0 }, true),
           onPage: (page) => run({ page }, true),
-          onPerpage: (perpage) => run({ perpage, page: 0 }, true)
+          onPerpage: (perpage) => run({ perpage, page: 0 }, true),
+          onRetry: () => loadMethods(query.current)
         },
         void 0,
         false,
         {
           fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-          lineNumber: 646,
+          lineNumber: 736,
           columnNumber: 25
         }
-      ) : null
+      ) : listbody
     ] }, void 0, true, {
       fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-      lineNumber: 591,
+      lineNumber: 694,
       columnNumber: 17
     }),
     sheetFor(labels, offer, sheet, chosen, () => setSheet(null), onCommit)
   ] }, void 0, true, {
     fileName: "public/enrol/apply/js/esm/src/queue/QueueView.tsx",
-    lineNumber: 588,
+    lineNumber: 691,
     columnNumber: 9
   });
 }, "QueueView");

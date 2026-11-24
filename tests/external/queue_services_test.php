@@ -15,7 +15,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Tests for the approval queue's web services (stage 1 of the queue as a report).
+ * Tests for the approval queue's web services (stage 1 of the queue as a report, and the By course view of W4).
  *
  * @package    enrol_apply
  * @category   test
@@ -47,6 +47,7 @@ require_once($CFG->dirroot . '/enrol/apply/lib.php');
  * @copyright  2026 Anderson Blaine
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+#[CoversClass(queue_methods::class)]
 #[CoversClass(queue_rows::class)]
 #[CoversClass(queue_summary::class)]
 #[CoversClass(set_queue_preference::class)]
@@ -311,6 +312,97 @@ final class queue_services_test extends \advanced_testcase {
             $this->assertSame('{"columns":["wait"],"widths":[]}', $stored, $who);
             $this->assertNull(get_user_preferences(queuepreference::NAME, null, $user->id), $who);
         }
+    }
+
+    /**
+     * The "By course" view's door (enrol_apply_queue_methods, SQ-D9) answers the two site-wide readers and
+     * nobody else: a mentor of the one applicant, an editing teacher of the course and a guest are each
+     * refused, and nothing comes back but the refusal.
+     *
+     * The mentor is refused although the wide queue answers them (the control below shows it): the view
+     * would tell them how many applications a method holds beyond their mentees' and its capacity. The
+     * teacher's own method queue answers them, so the refusal is the view's. The site-wide decider and the
+     * site-wide viewer are the controls: the same call is answered, with the method's row.
+     *
+     * Changes that must make it fail: the engine's reader asked without require_listing() first (the
+     * teacher answered); the site-wide condition dropped (the mentor answered, with the method's counts);
+     * the guest check removed.
+     *
+     * @return void
+     */
+    public function test_the_methods_view_answers_the_site_wide_readers_and_refuses_the_rest(): void {
+        $system = \context_system::instance();
+        $generator = $this->getDataGenerator();
+        // A second application on the same method, of somebody the mentor does not mentor.
+        $other = $generator->create_user();
+        enrol_get_plugin('apply')->enrol_user($this->instance, $other->id, null, 0, 0, ENROL_USER_SUSPENDED);
+
+        $teacher = $generator->create_and_enrol($this->course, 'editingteacher');
+        $decider = $generator->create_user();
+        $role = $generator->create_role();
+        assign_capability('enrol/apply:manageapplications', CAP_ALLOW, $role, $system->id, true);
+        role_assign($role, $decider->id, $system->id);
+        $viewer = $generator->create_user();
+        $role = $generator->create_role();
+        assign_capability('enrol/apply:viewapplications', CAP_ALLOW, $role, $system->id, true);
+        role_assign($role, $viewer->id, $system->id);
+        $mentor = $generator->create_user();
+        $role = $generator->create_role();
+        set_role_contextlevels($role, [CONTEXT_USER]);
+        assign_capability('enrol/apply:manageapplications', CAP_ALLOW, $role, $system->id, true);
+        role_assign($role, $mentor->id, \context_user::instance($this->applicant->id)->id);
+
+        foreach (['mentor' => $mentor, 'teacher' => $teacher] as $who => $user) {
+            $this->setUser($user);
+            $response = $this->call('enrol_apply_queue_methods', []);
+            $this->assertTrue($response['error'], $who);
+            $this->assertSame('nopermissions', $response['exception']->errorcode, $who);
+            $this->assertArrayNotHasKey('data', $response, $who);
+        }
+        // The controls of the refusals: the mentor reads their mentee's application on the wide queue, the
+        // teacher their own method's queue.
+        $this->setUser($mentor);
+        $rows = $this->call('enrol_apply_queue_rows', ['enrolid' => 0]);
+        $this->assertFalse($rows['error'], json_encode($rows['exception'] ?? null));
+        $this->assertSame('mentees', $rows['data']['kind']);
+        $this->assertSame(1, $rows['data']['total']);
+        $this->setUser($teacher);
+        $this->assertFalse($this->call('enrol_apply_queue_rows', ['enrolid' => $this->instance->id])['error']);
+
+        $this->setGuestUser();
+        $response = $this->call('enrol_apply_queue_methods', []);
+        $this->assertTrue($response['error']);
+        $this->assertArrayNotHasKey('data', $response);
+
+        foreach (['decider' => $decider, 'viewer' => $viewer] as $who => $user) {
+            $this->setUser($user);
+            $response = $this->call('enrol_apply_queue_methods', []);
+            $this->assertFalse($response['error'], $who . ' ' . json_encode($response['exception'] ?? null));
+            $this->assertSame(1, $response['data']['total'], $who);
+            $row = $response['data']['rows'][0];
+            $this->assertSame((int) $this->instance->id, $row['method']['id'], $who);
+            $this->assertSame((int) $this->course->id, $row['course']['id'], $who);
+            $this->assertSame(2, $row['awaiting'], $who);
+            $this->assertStringContainsString('manage.php?id=' . $this->instance->id, $row['method']['queueurl'], $who);
+        }
+    }
+
+    /**
+     * The "By course" view's door takes no enrolment method: the view exists for the site-wide queue alone,
+     * so a call naming one is refused by the parameters' validation before anything is read.
+     *
+     * Changes that must make it fail: an enrolid parameter added to the service.
+     *
+     * @return void
+     */
+    public function test_the_methods_view_takes_no_method(): void {
+        $this->setAdminUser();
+
+        $response = $this->call('enrol_apply_queue_methods', ['enrolid' => $this->instance->id]);
+        $this->assertTrue($response['error']);
+        $this->assertArrayNotHasKey('data', $response);
+        // The control: the same call without the method is answered.
+        $this->assertFalse($this->call('enrol_apply_queue_methods', [])['error']);
     }
 
     /**

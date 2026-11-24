@@ -35,6 +35,9 @@
  * view as the reader's choice, then lists the catalogue, a fixed column always shown, and ends with
  * the default columns and "Reset column widths". A view may put a link of its own at the end of the
  * chips' row (`aside`: the queue's "Open the report"), which then shows with no chip in force too.
+ * A view drawing a body of its own (an extra view) may hide Columns (`hidecolumns`) and have the count
+ * state another number in another string (`counted`, `countkey`: the queue's "N enrolment methods"); the
+ * panel's "Show" still states `total`, the rows the filters list.
  *
  * Strings read from the view's labels: scope, count (and count_one), filters, filterson, columns,
  * presets, always, defaultcolumns, resetwidths, view, viewauto, viewautohint, table, cards, coretable,
@@ -74,6 +77,12 @@ type BarProps = {
     view: ViewMode | string,
     views: ViewMode[],
     extraViews?: ExtraView[],
+    /** Whether Columns is left out, for a view whose body has no chosen columns. */
+    hidecolumns?: boolean,
+    /** The string the count states its number in (with `<key>_one`), `count` when absent. */
+    countkey?: string,
+    /** The number the count states, `total` when absent. */
+    counted?: number | null,
     tableurl: string,
     downloads: DownloadLink[],
     search: string,
@@ -102,6 +111,31 @@ type BarProps = {
 const barClass = (narrow: boolean, searching: boolean): string => 'enrol_apply-rview-bar'
     + (narrow ? ' enrol_apply-rview-bar--narrow' : '')
     + (searching ? ' enrol_apply-rview-bar--searching' : '');
+
+/**
+ * The count on the bar: the sentence, or at the narrow step the bare number with the sentence kept for
+ * assistive technology.
+ *
+ * @param {object} props The strings, the string's name (count by default), the rows' total, the number the
+ *     count states instead when a view gives one, and the narrow step.
+ * @returns {object} The count.
+ */
+const Count = ({labels, countkey = 'count', total, counted, narrow}: {labels: Record<string, string>, countkey?: string,
+        total: number | null, counted?: number | null, narrow: boolean}): ReactElement => {
+    const stated = counted === undefined ? total : counted;
+    const fullcount = stated === null ? '…' : fillCount(labels, countkey, stated, num(stated));
+
+    return (
+        <span className="enrol_apply-rview-bar-count" data-region="enrol_apply-total" aria-live="polite">
+            {stated !== null && narrow ? (
+                <>
+                    <span aria-hidden="true">{num(stated)}</span>
+                    <span className="visually-hidden">{fullcount}</span>
+                </>
+            ) : fullcount}
+        </span>
+    );
+};
 
 /**
  * The bar.
@@ -242,15 +276,6 @@ export const Bar = (props: BarProps): ReactElement => {
     const searchchip = searched && !searchopen;
     const chipcount = chips.length + (searchchip ? 1 : 0);
 
-    // At the narrow step the visible count is the bare number; the full sentence stays for assistive technology.
-    const fullcount = props.total === null ? '…' : fillCount(labels, 'count', props.total, num(props.total));
-    const countText = props.total !== null && props.narrow ? (
-        <>
-            <span aria-hidden="true">{num(props.total)}</span>
-            <span className="visually-hidden">{fullcount}</span>
-        </>
-    ) : fullcount;
-
     /**
      * One icon button of the capsule.
      *
@@ -298,12 +323,16 @@ export const Bar = (props: BarProps): ReactElement => {
             {/* The row of controls: the panel and, at the narrow step, the menus hang under it. */}
             <div className="enrol_apply-rview-bar-controls">
                 <div className="enrol_apply-rview-bar-cluster">
-                    <span className="enrol_apply-rview-bar-count" data-region="enrol_apply-total" aria-live="polite">
-                        {countText}
-                    </span>
+                    <Count
+                        labels={labels}
+                        countkey={props.countkey}
+                        total={props.total}
+                        counted={props.counted}
+                        narrow={props.narrow}
+                    />
                     <div className="enrol_apply-rview-capsule">
                         {iconbutton('filters', 'filter', filtersname, badge)}
-                        <div className="enrol_apply-rview-anchor">
+                        <div className="enrol_apply-rview-anchor" hidden={props.hidecolumns}>
                             {iconbutton('columns', 'columns', labels.columns, chevron)}
                             <div
                                 className="enrol_apply-rview-menu"

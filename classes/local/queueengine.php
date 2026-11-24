@@ -58,10 +58,14 @@ use user_picture;
  * reader, one read of the page's methods and at most two grouped counts of their capacity
  * ({@see capacity::states()}); test_a_wide_page_grows_with_its_courses_not_its_rows holds it.
  *
+ * The site-wide queue's "By course" view ({@see methods()}, SQ-D9) is one grouped read over the same
+ * table's FROM and WHERE, by method, refused to anybody but a site-wide reader.
+ *
  * Computed per request and never cached: what a reader may see depends on capabilities, groups and
  * the live enrolments, on whichever node.
  *
- * Not final: a test narrows FACET_LIMIT through a subclass (every read of it is static::).
+ * Not final: a test narrows FACET_LIMIT through a subclass (every read of it is static::), and the page
+ * sizes and the capacity seam of methods() the same way.
  *
  * @package    enrol_apply
  * @copyright  2026 Anderson Blaine
@@ -76,6 +80,12 @@ class queueengine {
 
     /** @var string[] Which applications: every one awaiting a decision, the pending ones, the deferred ones. */
     public const SCOPES = ['all', 'pending', 'deferred'];
+
+    /**
+     * @var string[] The "By course" view's sort keys (SQ-D9): what awaits (the default, most first), the
+     *     oldest application (its applied date, as the list's wait), the course's full name then the method's.
+     */
+    public const METHOD_SORTS = ['awaiting', 'oldest', 'course'];
 
     /** @var int Seconds after which an application counts as waiting long, in the summary. */
     public const LATE = 7 * DAYSECS;
@@ -290,6 +300,197 @@ class queueengine {
             'fieldfilters' => self::field_filters($table),
             'filters' => self::applied($table),
             'preference' => queuepreference::export($stored),
+        ];
+    }
+
+    /**
+     * The site-wide queue's "By course" view (SQ-D9): one row per enrolment method of what the list holds.
+     *
+     * The reader is refused first, by {@see require_listing()} (who the queue refuses), then by the scope's
+     * kind: only the site-wide queue has this view. A mentor, whom the wide queue answers, is refused with the
+     * same exception, because the view would tell them how many applications a method holds beyond their
+     * mentees' and its capacity, which the mentee list never does.
+     *
+     * The table is the list's own, built as rows() builds it for 0 (the scope vocabulary, the search, the
+     * declared filters, each cleaned by the table), and the counts are ONE grouped read over its FROM and its
+     * WHERE ({@see method_tallies()}), so a clause added to the table reaches this view by construction and a
+     * method's awaiting count is what the list lists under the method filter. That read returns one small row
+     * per method of the result, sorted; the page is cut from it here, so its total is the number of methods and
+     * a page past the end is the last one. The page's methods alone then cost: their capacity, through
+     * {@see capacity::states()} (at most two grouped counts), and whether each grants a deciding role
+     * (one read per distinct course of the page, {@see decidingrole::methods_decide()}); their courses'
+     * contexts come with the grouped read. So a page costs the same whatever the number of methods on it.
+     *
+     * Computed per request and never cached (SQ-D8): the capacity is read as it stands.
+     *
+     * @param array $options 'scope' (one of SCOPES), 'search', 'filters' (name => value), 'page' (0-based),
+     *     'perpage' (one of PERPAGES), 'sort' (one of METHOD_SORTS), 'direction' ('asc' or 'desc'; of the
+     *     applied date for 'oldest').
+     * @return array See \enrol_apply\external\queue_methods::execute_returns().
+     * @throws \required_capability_exception When the reader may not open the queue, or is not a site-wide reader.
+     */
+    public static function methods(array $options): array {
+        $listing = self::require_listing(0);
+        if (!coursefilter::offered($listing)) {
+            throw new \required_capability_exception($listing->context, groupscope::DECIDE, 'nopermissions', '');
+        }
+
+        $scope = in_array($options['scope'] ?? '', self::SCOPES, true) ? $options['scope'] : 'all';
+        // The queue's page sizes, read through static:: so that a test can narrow them.
+        $perpage = (int) ($options['perpage'] ?? 0);
+        $perpage = in_array($perpage, static::PERPAGES, true) ? $perpage : static::PERPAGE;
+        $page = max(0, (int) ($options['page'] ?? 0));
+        // A key outside the vocabulary is the default sort, in the default's own direction.
+        $sort = (string) ($options['sort'] ?? '');
+        $direction = ($options['direction'] ?? '') === 'desc' ? SORT_DESC : SORT_ASC;
+        if (!in_array($sort, self::METHOD_SORTS, true)) {
+            $sort = 'awaiting';
+            $direction = SORT_DESC;
+        }
+
+        $table = self::table(0, $scope, trim((string) ($options['search'] ?? '')), (array) ($options['filters'] ?? []));
+        $tallies = self::method_tallies($table, $sort, $direction);
+        $total = count($tallies);
+        // Past the last page (a filter shrank the result): the last page, as rows() answers it; 0 for nothing.
+        $page = $total > 0 ? min($page, intdiv($total - 1, $perpage)) : 0;
+        $records = array_slice($tallies, $page * $perpage, $perpage, true);
+
+        $now = $table->now();
+        $states = static::page_states($records, $now);
+        $deciding = decidingrole::methods_decide($records);
+        $rows = [];
+        foreach ($records as $id => $record) {
+            $rows[] = self::method_row($record, $states[$id], $deciding[$id], $now);
+        }
+
+        return [
+            'scope' => $scope,
+            'search' => $table->get_search(),
+            'sort' => $sort,
+            'direction' => $direction === SORT_DESC ? 'desc' : 'asc',
+            'page' => $page,
+            'perpage' => $perpage,
+            'total' => $total,
+            'rows' => $rows,
+        ];
+    }
+
+    /**
+     * The methods of the list in one grouped read, sorted: each one's applications, deferred ones, oldest.
+     *
+     * The table's FROM and WHERE ({@see applications::where_without()} with nothing left out: the listing's
+     * own), grouped by the method in a derived table; outside it, the method's {enrol} record whole (for
+     * capacity::states() and the method's name), its course's full name and the course context's preload
+     * columns. Deferred is the deferred status within what the list holds, the predicate the list's deferred
+     * scope applies. Every order ends in the method's id, so no two methods trade places between requests:
+     * the course's full name then the method's stored name, the table's own course order
+     * ({@see applications::get_sort_columns()}); the count of what awaits; the oldest applied date.
+     *
+     * @param applications $table The list's table, its SQL built.
+     * @param string $sort One of METHOD_SORTS.
+     * @param int $direction SORT_ASC or SORT_DESC.
+     * @return array Enrol instance id => its {enrol} record, with methodcourse (the course's full name),
+     *     awaitingcount, deferredcount and oldestapplied, in order; the course's context is preloaded.
+     */
+    protected static function method_tallies(applications $table, string $sort, int $direction): array {
+        global $CFG, $DB;
+
+        // ENROL_APPLY_USER_WAIT lives in the plugin's lib.php, which is not autoloaded.
+        require_once($CFG->dirroot . '/enrol/apply/lib.php');
+
+        [$where, $params] = $table->where_without([]);
+        $params['methodsdeferred'] = ENROL_APPLY_USER_WAIT;
+        $params['methodscourselevel'] = CONTEXT_COURSE;
+        $ctxselect = \context_helper::get_preload_record_columns_sql('mctx');
+
+        $last = $direction === SORT_DESC ? 'DESC' : 'ASC';
+        $order = match ($sort) {
+            'course' => $DB->sql_order_by_null('mc.fullname', $direction) . ', '
+                . $DB->sql_order_by_null('me.name', $direction),
+            'oldest' => "tally.oldestapplied {$last}",
+            default => "tally.awaitingcount {$last}",
+        };
+
+        $records = $DB->get_records_sql(
+            "SELECT me.*, mc.fullname AS methodcourse, tally.awaitingcount, tally.deferredcount, tally.oldestapplied,
+                    {$ctxselect}
+               FROM (SELECT e.id AS methodid,
+                            COUNT(1) AS awaitingcount,
+                            SUM(CASE WHEN ue.status = :methodsdeferred THEN 1 ELSE 0 END) AS deferredcount,
+                            MIN(ue.timecreated) AS oldestapplied
+                       FROM {$table->sql->from}
+                      WHERE {$where}
+                   GROUP BY e.id) tally
+               JOIN {enrol} me ON me.id = tally.methodid
+               JOIN {course} mc ON mc.id = me.courseid
+               JOIN {context} mctx ON mctx.instanceid = mc.id AND mctx.contextlevel = :methodscourselevel
+           ORDER BY {$order}, me.id {$last}",
+            $params
+        );
+        foreach ($records as $record) {
+            \context_helper::preload_from_record($record);
+        }
+
+        return $records;
+    }
+
+    /**
+     * The capacity of the page's methods, {@see capacity::states()}.
+     *
+     * A seam for the tests, which watch that only the page's methods reach it.
+     *
+     * @param array $instances The page's methods, full {enrol} records by id.
+     * @param int $now The clock's time.
+     * @return array Instance id => what capacity::state() returns for it.
+     */
+    protected static function page_states(array $instances, int $now): array {
+        return capacity::states($instances, $now);
+    }
+
+    /**
+     * One row of the "By course" view.
+     *
+     * The method as rows() gives it to a site-wide reader (its plain name, whether its role decides, its
+     * queue's address; this view has no other reader), the course as rows() gives it (the col_course() link),
+     * the three counts, and capacity::state()'s facts under the names the summary gives them.
+     *
+     * @param stdClass $record The method's {enrol} record with its tallies, from method_tallies().
+     * @param stdClass $state Its capacity, from capacity::states().
+     * @param bool $deciding Whether its role decides applications in its course.
+     * @param int $now The clock's time.
+     * @return array See \enrol_apply\external\queue_methods::execute_returns().
+     */
+    protected static function method_row(stdClass $record, stdClass $state, bool $deciding, int $now): array {
+        $courseid = (int) $record->courseid;
+        $enrolid = (int) $record->id;
+        $oldest = (int) $record->oldestapplied;
+
+        return [
+            'method' => [
+                'id' => $enrolid,
+                'name' => applications::method_name($record),
+                'deciding' => $deciding,
+                'queueurl' => (new moodle_url('/enrol/apply/manage.php', ['id' => $enrolid]))->out(false),
+            ],
+            'course' => [
+                'id' => $courseid,
+                'name' => format_string($record->methodcourse, true, [
+                    'context' => context_course::instance($courseid),
+                    'escape' => false,
+                ]),
+                'url' => (new moodle_url('/course/view.php', ['id' => $courseid]))->out(false),
+            ],
+            'awaiting' => (int) $record->awaitingcount,
+            'deferred' => (int) $record->deferredcount,
+            'oldestwait' => $oldest > 0 ? max(0, $now - $oldest) : 0,
+            'places' => $state->places,
+            'placestaken' => $state->taken,
+            'applicantlimit' => $state->limit,
+            'applicants' => $state->held,
+            'placesfull' => $state->placesfull,
+            'limitreached' => $state->limitreached,
+            'open' => $state->open,
+            'closes' => $state->enddate,
         ];
     }
 

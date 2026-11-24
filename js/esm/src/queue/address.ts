@@ -26,6 +26,10 @@
  * carries no view parameter; the table's carries `view=table`. A decision posts to the grid's address
  * (queue/decide.ts), which manage.php cleans again for the page it lands on.
  *
+ * The site-wide queue's "By course" view (SQ-D9) is `show=methods`, a parameter of its own so that it is
+ * never read as `view`; there `sort`, `dir`, `page` and `perpage` are that view's, written as the list's
+ * are, and its default sort (what awaits, most first) is left out. The table's address never carries it.
+ *
  * @module     enrol_apply/queue/address
  * @copyright  2026 Anderson Blaine
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -36,8 +40,28 @@ import type {Query, ViewProps} from './types';
 /** The view parameter's value that asks manage.php for today's table (queue_view::TABLE); the grid needs none. */
 export const TABLE = 'table';
 
+/** The value of `show` that asks for the site-wide queue's "By course" view (queue_view::METHODS). */
+export const METHODS = 'methods';
+
 /** The key the query is kept under in the history entry's state. */
 const STATE_KEY = 'enrolApplyQueue';
+
+/**
+ * Whether a query's sort is its view's default, which the address leaves out: the applied date, oldest
+ * first, for the list; what awaits, most first, for the "By course" view.
+ *
+ * @param {object} query The query.
+ * @returns {boolean} True for the default sort.
+ */
+const defaultSort = (query: Query): boolean => {
+    if (query.sort === '') {
+        return true;
+    }
+
+    return query.show === METHODS
+        ? query.sort === 'awaiting' && query.direction === 'desc'
+        : query.sort === 'wait' && query.direction === 'asc';
+};
 
 /**
  * The query's parameters in the address, in the table's vocabulary.
@@ -61,7 +85,10 @@ const params = (props: ViewProps, query: Query, grid: boolean): [string, string]
         }
     });
     if (grid) {
-        if (query.sort !== '' && (query.sort !== 'wait' || query.direction !== 'asc')) {
+        if (query.show === METHODS) {
+            pairs.push(['show', METHODS]);
+        }
+        if (!defaultSort(query)) {
             pairs.push(['sort', query.sort], ['dir', query.direction]);
         }
         if (query.page > 0) {
@@ -106,6 +133,8 @@ export const initialQuery = (props: ViewProps): Query => ({
     direction: props.initial.direction,
     page: props.initial.page,
     perpage: props.initial.perpage,
+    // The view is drawn only where the props offer it.
+    show: props.methods !== null ? props.initial.show : '',
 });
 
 /**
@@ -148,5 +177,8 @@ export const queryOf = (state: unknown): Query | null => {
         return null;
     }
 
-    return (state as Record<string, Query>)[STATE_KEY];
+    const query = (state as Record<string, Query>)[STATE_KEY];
+
+    // An entry written before the "By course" view existed holds no view: the list's.
+    return {...query, show: query.show ?? ''};
 };

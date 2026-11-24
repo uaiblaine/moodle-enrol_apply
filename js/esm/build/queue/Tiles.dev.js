@@ -265,6 +265,8 @@ const Tiles = /* @__PURE__ */ __name(({ labels, kind, summary, error, onRetry })
   });
 }, "Tiles");
 export {
-  Tiles
+  Tiles,
+  percent,
+  shortDate
 };
 //# sourceMappingURL=Tiles.dev.js.map

@@ -64,6 +64,14 @@ $functions = [
         'ajax' => true,
         'capabilities' => 'enrol/apply:manageapplications, enrol/apply:viewapplications',
     ],
+    'enrol_apply_queue_methods' => [
+        'classname' => \enrol_apply\external\queue_methods::class,
+        'description' => 'The site-wide approval queue by enrolment method: what awaits, what is deferred, the oldest wait '
+            . 'and the capacity of each method.',
+        'type' => 'read',
+        'ajax' => true,
+        'capabilities' => 'enrol/apply:manageapplications, enrol/apply:viewapplications',
+    ],
     'enrol_apply_set_queue_preference' => [
         'classname' => \enrol_apply\external\set_queue_preference::class,
         'description' => 'Store the columns and widths the reader chose for the approval queue.',

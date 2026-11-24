@@ -10,8 +10,10 @@ import { jsxDEV } from "react/jsx-dev-runtime";
  * is chosen, and with or without a group) and the identity fields the reader may filter
  * by from a list, which the service does not count; the text fields and the dates are set in the
  * table view, which the panel's note links, and show here as chips that remove them. Columns starts
- * with the three sets (CQ-D7). View is Automatic, Table or Cards, and the table view. No Download
- * (CQ-D11): "Open the report" ends the chips' row for a reader the report admits.
+ * with the three sets (CQ-D7). View is Automatic, Table or Cards, and the table view; the site-wide queue
+ * adds "By course" (SQ-D9), whose body the queue view draws itself: while it is shown Columns is left out and
+ * the count states the enrolment methods, while the panel's "Show" still states the applications the filters
+ * list. No Download (CQ-D11): "Open the report" ends the chips' row for a reader the report admits.
  *
  * @module     enrol_apply/queue/Bar
  * @copyright  2026 Anderson Blaine
@@ -90,6 +92,7 @@ const chip = /* @__PURE__ */ __name((labels, rows, name, value) => {
 }, "chip");
 const Bar = /* @__PURE__ */ __name((props) => {
   const { labels, rows, query } = props;
+  const bycourse = props.methods !== void 0;
   const sets = props.presets.map((preset) => ({
     name: preset.name,
     label: presetLabel(labels, preset.name),
@@ -116,26 +119,30 @@ const Bar = /* @__PURE__ */ __name((props) => {
         " ",
         /* @__PURE__ */ jsxDEV("a", { href: props.tableurl, children: labels.morefilters }, void 0, false, {
           fileName: "public/enrol/apply/js/esm/src/queue/Bar.tsx",
-          lineNumber: 222,
+          lineNumber: 230,
           columnNumber: 21
         })
       ] }, void 0, true, {
         fileName: "public/enrol/apply/js/esm/src/queue/Bar.tsx",
-        lineNumber: 220,
+        lineNumber: 228,
         columnNumber: 17
       }),
       chips,
       aside: props.reporturl !== "" ? /* @__PURE__ */ jsxDEV("a", { className: "enrol_apply-qview-tolink", href: props.reporturl, children: labels.openreport }, void 0, false, {
         fileName: "public/enrol/apply/js/esm/src/queue/Bar.tsx",
-        lineNumber: 227,
+        lineNumber: 235,
         columnNumber: 17
       }) : null,
       columns: props.columns,
       sets,
       usedefault: props.usedefault,
       haswidths: props.haswidths,
-      view: props.view,
+      view: bycourse ? query.show : props.view,
       views: VIEWS,
+      extraViews: props.extraViews,
+      hidecolumns: bycourse,
+      countkey: bycourse ? "methods" : "count",
+      counted: props.methods,
       tableurl: props.tableurl,
       downloads: [],
       search: props.search,
@@ -162,7 +169,7 @@ const Bar = /* @__PURE__ */ __name((props) => {
     false,
     {
       fileName: "public/enrol/apply/js/esm/src/queue/Bar.tsx",
-      lineNumber: 207,
+      lineNumber: 215,
       columnNumber: 9
     }
   );

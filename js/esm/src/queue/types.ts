@@ -16,8 +16,8 @@
 /**
  * The shapes the approval queue's view reads: its props and the three web services' answers.
  *
- * The answers are the allowlists of classes/external/queue_rows.php, queue_summary.php and
- * preference_structure.php, field for field, and the props are enrol_apply\output\queue_view::props();
+ * The answers are the allowlists of classes/external/queue_rows.php, queue_summary.php, queue_methods.php
+ * and preference_structure.php, field for field, and the props are enrol_apply\output\queue_view::props();
  * keep them in step.
  *
  * @module     enrol_apply/queue/types
@@ -38,6 +38,9 @@ export type Kind = 'method' | 'site' | 'mentees';
 /** Which applications: every one awaiting a decision, the pending ones, the deferred ones. */
 export type Scope = 'all' | 'pending' | 'deferred';
 
+/** Which view of the rows the address asks for: the list (''), or the site-wide queue's "By course" view. */
+export type Show = '' | 'methods';
+
 /** One filter as the address and the rows service carry it. */
 export type NamedValue = {name: string, value: string};
 
@@ -51,6 +54,11 @@ export type Query = {
     direction: 'asc' | 'desc',
     page: number,
     perpage: number,
+    /**
+     * The view the address asks for; in the "By course" view the sort, the direction and the page are that
+     * view's (queue_methods), under the same names.
+     */
+    show: Show,
 };
 
 /**
@@ -71,6 +79,7 @@ export type ViewProps = {
         direction: 'asc' | 'desc',
         page: number,
         perpage: number,
+        show: Show,
     },
     perpage: number,
     perpages: number[],
@@ -83,6 +92,11 @@ export type ViewProps = {
     reporturl: string,
     /** What the decision sheet may offer, from the table form's own context; null for a reader who may not decide. */
     decision: DecisionProps | null,
+    /**
+     * The "By course" view's own strings (label, caption, nomatch, nolimit, oldestwait, openqueue, queue), for a
+     * site-wide reader; null where the view is not offered (a method's queue, a mentor).
+     */
+    methods: Record<string, string> | null,
     labels: Record<string, string>,
 };
 
@@ -229,4 +243,39 @@ export type SummaryAnswer = {
     courses: number,
     methods: number,
     methodsfull: number,
+};
+
+/** A method as the "By course" view gives it: its plain name, whether its role decides, and its queue. */
+export type MethodFacts = {id: number, name: string, deciding: boolean, queueurl: string};
+
+/**
+ * One row of the "By course" view: a method of what the list holds, its counts, and capacity::state()'s
+ * facts under the summary's names.
+ */
+export type MethodRow = {
+    method: MethodFacts,
+    course: RowCourse,
+    awaiting: number,
+    deferred: number,
+    oldestwait: number,
+    places: number,
+    placestaken: number,
+    applicantlimit: number,
+    applicants: number,
+    placesfull: boolean,
+    limitreached: boolean,
+    open: boolean,
+    closes: number,
+};
+
+/** The enrol_apply_queue_methods answer. */
+export type MethodsAnswer = {
+    scope: Scope,
+    search: string,
+    sort: string,
+    direction: 'asc' | 'desc',
+    page: number,
+    perpage: number,
+    total: number,
+    rows: MethodRow[],
 };
