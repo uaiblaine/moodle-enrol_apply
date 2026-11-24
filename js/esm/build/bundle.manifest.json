@@ -30,7 +30,7 @@
         "src/queue/decide.ts": "36aac43d66eb2e406a7e4c4397a51d2be39acab7",
         "src/queue/derive.ts": "c3d96365e4b9d8f3f0ee069b3a8098c65dd8aed6",
         "src/queue/repository.ts": "dd6fabd035b1e3b07477dedd2492f3a24f2074ee",
-        "src/queue/types.ts": "4e4bb27b9bc49a8042bfbd95b0dc2dbe83647e81",
+        "src/queue/types.ts": "00e1b471be39b2ab2ecc5a52464023e2d8dc33b2",
         "src/report/Band.tsx": "21c21cffd5f581e337b8a68470d0eda3422b6aa5",
         "src/report/Bar.tsx": "2ef7b2af78c6515d4ffd099b8ec09296e1320578",
         "src/report/Cards.tsx": "ab4aa85c8b807433f29a089693c31262c767f93a",

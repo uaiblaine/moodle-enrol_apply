@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased (2026112309)
+## Unreleased (2026112310)
 
 ### Added
 
@@ -187,6 +187,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the `moodle` component's, so it raised an invalid-identifier notice and never found the name
   columns in the result; a language that writes the family name first was not followed. Mutation gate
   `QW26`.
+- **The "with a group" filter is written so that the database can plan it** (2026112310, no upgrade
+  step). "Yes" was `NOT (NOT EXISTS ...)` over the "none" clause, which PostgreSQL cannot turn into a
+  semi-join: on a site with 360 methods and 2,023 awaiting applications its count was estimated at
+  cost 2.3 million, crossed `jit_above_cost` and took 159 to 767 ms for 3 rows (26 ms written
+  positively); the whole rows request took 1.1 to 1.5 s. `groupfilter::where_named_group()` is the
+  plain `EXISTS` of the same subquery `none` negates. Mutation gate `QW27`. The unused string
+  `queueviewnolimit` is removed.
 
 ### Removed
 

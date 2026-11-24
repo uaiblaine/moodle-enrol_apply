@@ -1014,4 +1014,51 @@ final class wide_queue_test extends \advanced_testcase {
         $service = $read($filters);
         $this->assertSame([$grouped], array_column($service['data']['rows'], 'userenrolmentid'));
     }
+
+    /**
+     * "With a group" and "without a group" partition the queue: the application filed under an existing
+     * group is under "yes", the one with no group and the one whose group was deleted are under "no" (where
+     * the method queue's "none" puts them), and the two lists share no id and together are the whole queue.
+     *
+     * The control: the exact lists, so that the partition is not two empty ones.
+     *
+     * @return void
+     */
+    public function test_the_grouped_values_partition_the_queue(): void {
+        $this->seed();
+        $this->setUser($this->decider);
+        $u = $this->ue;
+        $all = $this->engine_ids();
+        $yes = $this->engine_ids(['filters' => ['grouped' => 'yes']]);
+        $no = $this->engine_ids(['filters' => ['grouped' => 'no']]);
+
+        $this->assertSame([$u['dan']], $yes);
+        $this->assertContains($u['fay'], $no);
+        $this->assertContains($u['eve'], $no);
+        $this->assertSame([], array_intersect($yes, $no));
+        $this->assertEqualsCanonicalizing($all, array_merge($yes, $no));
+        $this->assertCount(7, $all);
+    }
+
+    /**
+     * The WHERE the table builds for "yes" has no NOT (NOT EXISTS ...).
+     *
+     * The shape is pinned because the database, not the result, is what changes: PostgreSQL turns a
+     * positive EXISTS into a semi-join and cannot do it for a negated NOT EXISTS, which made the count
+     * cost 2.3 million and cross the JIT threshold. The control is "no", which does carry the NOT EXISTS.
+     *
+     * Changes that must make it fail: "yes" written as the negation of "none" again (QW27).
+     *
+     * @return void
+     */
+    public function test_the_grouped_filter_is_written_as_a_positive_exists(): void {
+        $this->setUser($this->decider);
+        $yes = applications::for_scope(0, '', null, ['grouped' => 'yes'])->where_without([])[0];
+        $no = applications::for_scope(0, '', null, ['grouped' => 'no'])->where_without([])[0];
+
+        $subquery = '\s*\(\s*SELECT 1\s+FROM\s+\{?\w*enrol_apply_submission\}?\s+nonesub';
+        $this->assertDoesNotMatchRegularExpression('/NOT\s*\(\s*NOT\s+EXISTS/i', $yes);
+        $this->assertMatchesRegularExpression('/(?<!NOT )EXISTS' . $subquery . '/i', $yes);
+        $this->assertMatchesRegularExpression('/NOT\s+EXISTS' . $subquery . '/i', $no);
+    }
 }

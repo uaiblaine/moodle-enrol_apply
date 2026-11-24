@@ -1406,18 +1406,23 @@ class applications extends \table_sql implements dynamic_table {
      *
      * "No" is the group filter's "none" ({@see groupfilter::where()}): no newest record whose
      * application group ({@see groupscope::application_group_sql()}, the key's group or the chosen
-     * one) is a group that exists. "Yes" is its complement. That is the definition the group column
-     * shows (the kgs and kg joins of build_sql(): the newest record, its application group, joined
-     * to {groups}) and the engine's tally counts (whether kg found a group), so a deleted group's
-     * application is "no", and every row is reached by exactly one value.
+     * one) is a group that exists. "Yes" is its complement, {@see groupfilter::where_named_group()}.
+     * That is the definition the group column shows (the kgs and kg joins of build_sql(): the newest
+     * record, its application group, joined to {groups}) and the engine's tally counts (whether kg
+     * found a group), so a deleted group's application is "no", and every row is reached by exactly
+     * one value.
      *
      * @param string $value One of GROUPED.
      * @return string The where fragment; it takes no parameters.
      */
     protected function grouped_where(string $value): string {
-        [$none] = groupfilter::where($this->scope, groupfilter::NONE);
+        // Both values come from one subquery; "yes" is written as a plain EXISTS because the planner turns
+        // that into a semi-join and cannot do it for NOT (NOT EXISTS ...) (gate QW27).
+        [$where] = $value === self::GROUPED_NO
+            ? groupfilter::where($this->scope, groupfilter::NONE)
+            : groupfilter::where_named_group($this->scope);
 
-        return $value === self::GROUPED_NO ? $none : "NOT ({$none})";
+        return $where;
     }
 
     /**

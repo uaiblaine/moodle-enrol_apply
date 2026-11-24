@@ -755,7 +755,6 @@ $string['queueviewmorefiltersnote'] = 'Filters by a text field or by the date ap
 $string['queueviewmountfailed'] = 'The grid view could not be loaded. Use the table view instead.';
 $string['queueviewnocategorymatch'] = 'No category matches.';
 $string['queueviewnocoursematch'] = 'No course matches.';
-$string['queueviewnolimit'] = 'No limit';
 $string['queueviewoldestwait'] = 'Oldest wait';
 $string['queueviewomittedcategories'] = '{$a} more categories are not listed.';
 $string['queueviewomittedcourses'] = '{$a} more courses are not listed: search the queue by the course\'s name.';
