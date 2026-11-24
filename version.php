@@ -26,7 +26,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'enrol_apply';
-$plugin->version = 2026112310;
+$plugin->version = 2026112311;
 $plugin->requires = 2026100501;   // Requires Moodle 5.3.1 or later.
 $plugin->supported = [503, 503];  // Supported on Moodle 5.3 only.
 $plugin->maturity = MATURITY_STABLE;

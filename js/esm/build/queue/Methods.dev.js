@@ -33,10 +33,10 @@ import { getMethods } from "./repository";
 import { percent, shortDate } from "./Tiles";
 const WIDTHS = {
   course: 300,
-  awaiting: 130,
+  awaiting: 170,
   deferred: 120,
   oldest: 150,
-  places: 170,
+  places: 220,
   status: 190,
   queue: 170
 };
