@@ -54,10 +54,10 @@ type Line = MethodRow & {id: number};
 /** Default widths, in pixels, by column key. */
 const WIDTHS: Record<string, number> = {
     course: 300,
-    awaiting: 130,
+    awaiting: 170,
     deferred: 120,
     oldest: 150,
-    places: 170,
+    places: 220,
     status: 190,
     queue: 170,
 };

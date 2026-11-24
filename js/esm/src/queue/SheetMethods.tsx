@@ -131,8 +131,8 @@ const MethodSection = ({labels, id, group, approval, message, onMessage}: Sectio
             />
             {first.method.queueurl !== '' ? (
                 <p className="enrol_apply-qview-sheetopen">
-                    <a href={first.method.queueurl}>{labels.openmethod}</a>{' '}
-                    <span className="enrol_apply-qview-sheetline">{labels.openmethodline}</span>
+                    <a href={first.method.queueurl}>{labels.openmethod}</a>
+                    {approval ? <>{' '}<span className="enrol_apply-qview-sheetline">{labels.openmethodline}</span></> : null}
                 </p>
             ) : null}
         </section>

@@ -94,6 +94,8 @@ the method gives). Its button takes the decision, and the page comes back with w
 The selection belongs to the page on screen: another page, scope, filter, search or sort clears it.
 A reader who may only view applications sees no boxes and no bar.
 
+![The site-wide queue filtered to one course category: tiles for what awaits a decision across the site, what is deferred, the courses and enrolment methods holding an application and the methods at their limit; a chip for the category; one row per application with the applicant, the Course and method column, the wait, the group, what was submitted and the comment; three rows of two enrolment methods selected, and the bar under the rows saying so beside Confirm, Defer and Cancel applications](docs/screenshots/site-queue.png)
+
 The **site-wide queue** (`manage.php` with no id, for a holder of `enrol/apply:manageapplications`
 or `enrol/apply:viewapplications` at the site) is the same grid over every course. Its tiles give
 what awaits a decision (the oldest wait, how many have waited over a week), what is deferred and its

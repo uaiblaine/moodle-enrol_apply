@@ -143,12 +143,18 @@ const MethodSection = /* @__PURE__ */ __name(({ labels, id, group, approval, mes
         lineNumber: 134,
         columnNumber: 21
       }),
-      " ",
-      /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-qview-sheetline", children: labels.openmethodline }, void 0, false, {
+      approval ? /* @__PURE__ */ jsxDEV(Fragment, { children: [
+        " ",
+        /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-qview-sheetline", children: labels.openmethodline }, void 0, false, {
+          fileName: "public/enrol/apply/js/esm/src/queue/SheetMethods.tsx",
+          lineNumber: 135,
+          columnNumber: 40
+        })
+      ] }, void 0, true, {
         fileName: "public/enrol/apply/js/esm/src/queue/SheetMethods.tsx",
         lineNumber: 135,
-        columnNumber: 21
-      })
+        columnNumber: 33
+      }) : null
     ] }, void 0, true, {
       fileName: "public/enrol/apply/js/esm/src/queue/SheetMethods.tsx",
       lineNumber: 133,
