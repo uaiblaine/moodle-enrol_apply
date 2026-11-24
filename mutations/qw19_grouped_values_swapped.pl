@@ -1,2 +1,2 @@
-# QW19: grouped yes selects the applications without a group, and no the ones with one.
-s#return \$value === self::GROUPED_NO \? \$none : \"NOT \(\{\$none\}\)\";#return \$value === self::GROUPED_YES ? \$none : \"NOT ({\$none})\";#;
+# QW19: the grouped filter's two values are swapped, so "yes" selects what "no" should.
+s#(\[\$where\] = \$value) === (self::GROUPED_NO\n)#$1 !== $2#;

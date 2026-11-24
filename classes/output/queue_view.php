@@ -382,7 +382,6 @@ class queue_view implements renderable, templatable {
             // The grid's frame is named by what it holds, as the caption names the table.
             'grid' => get_string('queueviewmethodscaption', 'enrol_apply'),
             'nomatch' => get_string('queueviewmethodsnomatch', 'enrol_apply'),
-            'nolimit' => get_string('queueviewnolimit', 'enrol_apply'),
             'oldestwait' => get_string('queueviewoldestwait', 'enrol_apply'),
             'openqueue' => get_string('queueviewopenqueue', 'enrol_apply'),
             'queue' => get_string('queueviewqueue', 'enrol_apply'),

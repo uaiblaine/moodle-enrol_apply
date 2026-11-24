@@ -1,0 +1,2 @@
+# QW27: the grouped filter's "yes" is the "none" clause negated again, NOT (NOT EXISTS ...), which the planner cannot make a semi-join.
+s#\[\$where\] = \$value === self::GROUPED_NO\n\s*\? groupfilter::where\(\$this->scope, groupfilter::NONE\)\n\s*: groupfilter::where_named_group\(\$this->scope\);\n\n\s*return \$where;#[\$none] = groupfilter::where(\$this->scope, groupfilter::NONE);\n\n        return \$value === self::GROUPED_NO ? \$none : "NOT (\{\$none\})";#;

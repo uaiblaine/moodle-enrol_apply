@@ -1336,12 +1336,15 @@ backup/                      group mappings, comments and the durable trail, see
   complement, the group column's definition, and it (with its facet) is offered only where
   `applications::offers_grouped_filter()` holds: a site-wide reader with `moodle/course:viewhiddengroups`
   in the system context, since the filter would otherwise select on a group the row's cell withholds
-  (`QW23`); anybody else's posted value is ignored and no tally dimension is read. Their facets are site-wide only: the course and category
+  (`QW23`); anybody else's posted value is ignored and no tally dimension is read. A filter value that is
+  the complement of another is written positively from the same subquery, never as `NOT (NOT EXISTS ...)`
+  (`groupfilter::where_named_group()`): PostgreSQL cannot plan that as a semi-join, and the "yes" count cost
+  160 to 770 ms with JIT on (`QW27`). Their facets are site-wide only: the course and category
   ones capped at `FACET_LIMIT` with an `omitted` count (`QW11`), a category counted over its subtree
   (`subtree_counts()`, the two halves of `coursefilter::where()`), the method one only once a course
   holding two methods' applications is chosen. The wide grid is `enrol_apply_queue_grid_wide`
   (`queuepreference::NAME_WIDE`, SQ-D11), declared and exported beside the method queues'. Tests:
-  `tests/local/wide_queue_test.php`; gates `QW1`-`QW24`.
+  `tests/local/wide_queue_test.php`; gates `QW1`-`QW27`.
 
   **What the services refuse.** `queue_rows`, `queue_summary` and `set_queue_preference` all run
   `queueengine::locate()` (a non-zero id that names no apply method, a negative one included, is

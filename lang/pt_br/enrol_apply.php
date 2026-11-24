@@ -753,7 +753,6 @@ $string['queueviewmorefiltersnote'] = 'Os filtros por um campo de texto ou pela 
 $string['queueviewmountfailed'] = 'Não foi possível carregar a visualização em grade. Use a visualização em tabela.';
 $string['queueviewnocategorymatch'] = 'Nenhuma categoria corresponde.';
 $string['queueviewnocoursematch'] = 'Nenhum curso corresponde.';
-$string['queueviewnolimit'] = 'Sem limite';
 $string['queueviewoldestwait'] = 'Espera mais antiga';
 $string['queueviewomittedcategories'] = 'Mais {$a} categorias não estão listadas.';
 $string['queueviewomittedcourses'] = 'Mais {$a} cursos não estão listados: busque na fila pelo nome do curso.';

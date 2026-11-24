@@ -177,26 +177,53 @@ final class groupfilter {
         }
 
         if ($value === self::NONE) {
-            $group = groupscope::application_group_sql('nonesub');
-            return [
-                "NOT EXISTS (
-                    SELECT 1
-                      FROM {enrol_apply_submission} nonesub
-                      JOIN {groups} nonegroup ON nonegroup.id = {$group}
-                     WHERE nonesub.userenrolmentid = ue.id
-                       AND NOT EXISTS (
-                           SELECT 1
-                             FROM {enrol_apply_submission} nonenewer
-                            WHERE nonenewer.userenrolmentid = nonesub.userenrolmentid
-                              AND (nonenewer.timecreated > nonesub.timecreated
-                                   OR (nonenewer.timecreated = nonesub.timecreated AND nonenewer.id > nonesub.id))
-                       )
-                )",
-                [],
-            ];
+            [$exists, $params] = self::named_group_exists();
+
+            return ["NOT {$exists}", $params];
         }
 
         return groupscope::group_where([(int) $value]);
+    }
+
+    /**
+     * The positive form of {@see NONE}: the newest record names a group that exists.
+     *
+     * The same subquery {@see where()} negates for {@see NONE}, written as a plain EXISTS: a caller that
+     * wants the complement must use this and never wrap the "none" clause in a second NOT, which the
+     * planner cannot turn into a semi-join (a count that took 5 ms took 160 to 770 ms, with JIT on).
+     *
+     * @param stdClass $listing The scope, from {@see queue::listing_scope()}; not read, kept so that both
+     *        values share one signature.
+     * @return array Two elements: the where fragment and its named parameters.
+     */
+    public static function where_named_group(stdClass $listing): array {
+        return self::named_group_exists();
+    }
+
+    /**
+     * The EXISTS that {@see NONE} negates and {@see where_named_group()} returns, built in one place.
+     *
+     * @return array Two elements: the where fragment and its named parameters.
+     */
+    private static function named_group_exists(): array {
+        $group = groupscope::application_group_sql('nonesub');
+
+        return [
+            "EXISTS (
+                SELECT 1
+                  FROM {enrol_apply_submission} nonesub
+                  JOIN {groups} nonegroup ON nonegroup.id = {$group}
+                 WHERE nonesub.userenrolmentid = ue.id
+                   AND NOT EXISTS (
+                       SELECT 1
+                         FROM {enrol_apply_submission} nonenewer
+                        WHERE nonenewer.userenrolmentid = nonesub.userenrolmentid
+                          AND (nonenewer.timecreated > nonesub.timecreated
+                               OR (nonenewer.timecreated = nonesub.timecreated AND nonenewer.id > nonesub.id))
+                   )
+            )",
+            [],
+        ];
     }
 
     /**

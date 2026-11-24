@@ -94,7 +94,7 @@ export type ViewProps = {
     /** What the decision sheet may offer, from the table form's own context; null for a reader who may not decide. */
     decision: DecisionProps | null,
     /**
-     * The "By course" view's own strings (label, caption, nomatch, nolimit, oldestwait, openqueue, queue), for a
+     * The "By course" view's own strings (label, caption, nomatch, oldestwait, openqueue, queue), for a
      * site-wide reader; null where the view is not offered (a method's queue, a mentor).
      */
     methods: Record<string, string> | null,
