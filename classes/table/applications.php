@@ -35,6 +35,7 @@ use enrol_apply\local\queuefilter;
 use enrol_apply\local\search;
 use enrol_apply\local\groupscope;
 use enrol_apply\local\submission as submissionrecord;
+use enrol_apply\output\queue_view;
 use enrol_apply\reportbuilder\local\formatters\submission as submissionformatter;
 use html_writer;
 use moodle_url;
@@ -550,10 +551,15 @@ class applications extends \table_sql implements dynamic_table {
      * The "Show all / Show per page" link is built from $PAGE->url instead, so manage.php has to
      * put the same parameters into $PAGE->set_url(); it takes them from request_filters().
      *
+     * The address asks for the table (view=table): every listing's page is the grid view, so a sort
+     * or paging anchor without it, opened in a new tab or followed without JavaScript, would leave
+     * the table for the grid. url_params() itself never carries the view: the chips and the grid's
+     * return address read it too ({@see queue_view::url()}).
+     *
      * @return void
      */
     public function guess_base_url(): void {
-        $this->baseurl = new moodle_url('/enrol/apply/manage.php', $this->url_params());
+        $this->baseurl = queue_view::url(new moodle_url('/enrol/apply/manage.php', $this->url_params()), false);
     }
 
     /**

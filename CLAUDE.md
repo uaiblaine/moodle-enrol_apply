@@ -1415,7 +1415,8 @@ backup/                      group mappings, comments and the durable trail, see
   `enrol_apply_queue_rows` and `enrol_apply_queue_summary`. `$listingurl` in `manage.php` is where a
   listing lives: `$manageurl` for the grid (no view parameter), the same plus `view=table` for the
   table of a listing that has a grid, whose form posts there and whose filter form carries `view` as a
-  hidden field (a GET submit replaces the query string); every listing has a grid now. **Filters live in the address,
+  hidden field (a GET submit replaces the query string), and the table's own sort and paging anchors carry it
+  too (`guess_base_url()`, gate `QA1`; `url_params()` never does: the chips and `return_url()` read it); every listing has a grid now. The header of a queue that spans courses names the site (`$SITE->fullname`), a method's its course. **Filters live in the address,
   never in a preference** (CQ-D6): `status` (the scope), `search`, `group`, the identity tokens,
   `appliedfrom`, `appliedto` are the names `manage.php` reads for the table, and `queue_view::initial()`
   reads them from manage.php's own cleaning (`request_filters()`, so the group default applies); the

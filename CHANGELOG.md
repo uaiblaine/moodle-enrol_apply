@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased (2026112312)
+## Unreleased (2026112313)
 
 ### Added
 
@@ -184,6 +184,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   keeps its style. The template takes an optional `info` flag per item.
 
 ### Fixed
+
+- **The table view keeps its anchors, and the queues that span courses name the site** (2026112313, no
+  upgrade step). A sort or paging link of the queue's table (`view=table`) did not carry the view, so
+  opened in a new tab or followed without JavaScript it left the table for the grid; the table's base
+  address now asks for the table. The header of the site-wide and mentee queues repeated "Confirm
+  enrolments" above the same content heading; it names the site, as core's own site-level pages do.
+  Mutation gate `QA1`.
 
 - **The review page reads the newest record of an enrolment that carries two** (no upgrade step).
   `queue::application()` joined every record of the user enrolment, so an enrolment with two records
