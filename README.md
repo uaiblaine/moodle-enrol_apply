@@ -652,9 +652,12 @@ no guest):
 The approval queue of one method can be read the same way, through three more AJAX web services.
 Each takes the method's id, derives the course from it, and refuses a reader the queue page
 (`manage.php?id=`) refuses: no guest, access to the course, and `enrol/apply:manageapplications` or
-`enrol/apply:viewapplications` there. An id of no Course enrol confirmation method is refused, so
-the site-wide queue is not read this way. None of them decides an application; decisions are taken
-on the queue page as before.
+`enrol/apply:viewapplications` there. An id of no Course enrol confirmation method is refused. The
+id 0 reads the queue `manage.php` shows with no id: the site-wide queue to a holder of
+`enrol/apply:manageapplications` (deciding) or `enrol/apply:viewapplications` (read only) at the
+site level, a mentor's queue (the applications of the users they hold a role over in their own user
+context) to a mentor, and nobody else: an editing teacher of one course is refused. None of them
+decides an application; decisions are taken on the queue page as before.
 
 - `enrol_apply_queue_rows`: a page of the queue (30, 50 or 100 rows, 50 by default), of every
   application awaiting a decision or only the pending or the deferred ones, searched and filtered as
@@ -667,15 +670,29 @@ on the queue page as before.
   comment, and the number of earlier applications for a holder of `enrol/apply:viewreports`), three
   column sets, the counts of every application, the pending and the deferred ones, and the filters
   group, how the group was named, waited more than 1, 3, 7 or 14 days and applied before, each
-  option with the number of applications it would list under the other filters in force.
+  option with the number of applications it would list under the other filters in force. With id 0
+  the answer says which queue the reader got (`site` or `mentees`), each row gives its course and
+  its enrolment method (whether the method's role decides, and for a site-wide reader whether it is
+  at its limit and the address of its own queue), the columns are the applicant, the course and
+  method, the wait, the group and the details submitted (masked in each row's own course; site-wide
+  only) and the comment, the rows sort by the applied date, the name or the course, and the filters
+  are the course, the course category (counted over its sub-categories), the enrolment method (once
+  a course holding two methods' applications is chosen), waited more than and with or without a
+  group; the course and category lists send at most 200 options, most applications first, and say
+  how many they left out. A mentor gets no identity field, no details, no group and no course,
+  category, method or group filter, as on the page.
 - `enrol_apply_queue_summary`: the method's places taken and applications held against their
   limits, whether it accepts applications now and when it closes, and the applications awaiting a
   decision in the reader's queue, before any filter: how many, how many deferred, how many waiting
   more than seven days, and how long the oldest has waited. A reader narrowed by separate groups
-  gets the method's numbers and their own applications.
+  gets the method's numbers and their own applications. With id 0: the applications awaiting a
+  decision in the reader's queue, the oldest wait, the late and the deferred ones and, for a
+  site-wide reader only, the courses and enrolment methods holding an application and the methods
+  with every place taken or their applicant limit reached.
 - `enrol_apply_set_queue_preference`: stores the columns the reader chose for the queue and the
   widths they gave them, in the user preference `enrol_apply_queue_grid`, the same on every method of
-  the site and apart from the report's. The queue shows only the columns it offers that reader: a
+  the site and apart from the report's; with id 0, in `enrol_apply_queue_grid_wide`, the queues that
+  span courses having columns of their own. The queue shows only the columns it offers that reader: a
   stored column the reader may not see adds nothing. Until a reader chooses, every column but the
   earlier applications is shown.
 
@@ -854,10 +871,11 @@ joins, per method), `enrol_apply_offer` (the groups an applicant may choose from
 method without a row uses the defaults) and `enrol_apply_fieldcond` (when a question is shown). All
 four are deleted with the method.
 
-Two user preferences hold a reader's grid (column names and pixels, never data about anybody
+Three user preferences hold a reader's grid (column names and pixels, never data about anybody
 else): `enrol_apply_report_columns` the columns they chose for the applications report and their
-widths, `enrol_apply_queue_grid` the same for the approval queue. Each is exported with the user's
-data and deleted with the user.
+widths, `enrol_apply_queue_grid` the same for the approval queue of one method, and
+`enrol_apply_queue_grid_wide` the same for the queues that span courses (the site-wide queue and a
+mentor's). Each is exported with the user's data and deleted with the user.
 
 An approval also writes core rows: a role assignment and group memberships stamped with
 `enrol_apply`, and the enrolment itself. The plugin never writes the applicant's profile unless

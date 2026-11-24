@@ -456,6 +456,42 @@ final class queueengine_test extends \advanced_testcase {
     }
 
     /**
+     * The review page's lookup reads the newest record of an enrolment that carries two, and
+     * raises no debugging for a duplicate row.
+     *
+     * Changes that must make it fail: the record joined without its "newest" restriction (core
+     * raises its duplicate-id notice and the lookup keeps whichever row came last).
+     *
+     * @return void
+     */
+    public function test_the_review_lookup_reads_the_newest_of_two_records(): void {
+        global $DB;
+
+        $this->seed();
+        $ueid = $this->ue['dora'];
+        $records = $DB->get_records('enrol_apply_submission', ['userenrolmentid' => $ueid], 'timecreated ASC, id ASC');
+        $this->assertCount(2, $records);
+        [$older, $newer] = array_values($records);
+        $DB->set_field('enrol_apply_submission', 'decisionnote', 'Old note', ['id' => $older->id]);
+        $DB->set_field('enrol_apply_submission', 'decisionnote', 'New note', ['id' => $newer->id]);
+
+        $application = queue::application($ueid);
+        $this->assertDebuggingNotCalled();
+        $this->assertNotNull($application);
+        $this->assertSame((int) $newer->id, (int) $application->submissionid);
+        $this->assertSame('New note', $application->decisionnote);
+        $this->assertSame('Please', $application->applycomment);
+
+        // Control: with one record the same lookup returns that record.
+        $DB->delete_records('enrol_apply_submission', ['id' => $newer->id]);
+        $application = queue::application($ueid);
+        $this->assertDebuggingNotCalled();
+        $this->assertSame((int) $older->id, (int) $application->submissionid);
+        $this->assertSame('Old note', $application->decisionnote);
+        $this->assertSame('Old words', $application->applycomment);
+    }
+
+    /**
      * The applicant cell: the picture, the name, the profile only where it opens, the identity by
      * core's rule and the tags as data.
      *
@@ -706,6 +742,72 @@ final class queueengine_test extends \advanced_testcase {
         $response = $this->rows(['perpage' => 30, 'page' => 7]);
         $this->assertSame(0, $response['page']);
         $this->assertCount(7, $response['rows']);
+    }
+
+    /**
+     * Two applicants whose first and last names sort oppositely, enrolled on the method.
+     *
+     * @return array The user enrolment ids, keyed aaron (Aaron Zimmer) and zack (Zack Allen).
+     */
+    private function opposite_names(): array {
+        $aaron = $this->getDataGenerator()->create_user(['firstname' => 'Aaron', 'lastname' => 'Zimmer']);
+        $zack = $this->getDataGenerator()->create_user(['firstname' => 'Zack', 'lastname' => 'Allen']);
+
+        return [
+            'aaron' => $this->applicant('Aaron', 'Lille', DAYSECS, null, '', '', ENROL_USER_SUSPENDED, $aaron),
+            'zack' => $this->applicant('Zack', 'Lille', DAYSECS, null, '', '', ENROL_USER_SUSPENDED, $zack),
+        ];
+    }
+
+    /**
+     * With the site's name format left on "language", the applicant sort reads core's template for
+     * the language (first name, then last name, in English) and raises no debugging.
+     *
+     * Changes that must make it fail: the template read from a component that does not hold it
+     * (get_string() raises its invalid-identifier debugging and no name is found in the result).
+     *
+     * @return void
+     */
+    public function test_the_applicant_sort_follows_the_language_template(): void {
+        global $CFG;
+
+        $this->resetAfterTest();
+        $this->seed();
+        $this->setUser($this->editing);
+        $both = $this->opposite_names();
+        $CFG->fullnamedisplay = 'language';
+
+        $ids = array_values(array_intersect(
+            array_column($this->rows(['sort' => 'applicant'])['rows'], 'userenrolmentid'),
+            $both
+        ));
+        $this->assertDebuggingNotCalled();
+        $this->assertSame([$both['aaron'], $both['zack']], $ids);
+    }
+
+    /**
+     * With a name format that writes the family name first, the applicant sort orders by last name.
+     *
+     * Changes that must make it fail: the name columns not read from the template (first name
+     * always first).
+     *
+     * @return void
+     */
+    public function test_the_applicant_sort_follows_a_family_name_first_format(): void {
+        global $CFG;
+
+        $this->resetAfterTest();
+        $this->seed();
+        $this->setUser($this->editing);
+        $both = $this->opposite_names();
+        $CFG->fullnamedisplay = 'lastname firstname';
+
+        $ids = array_values(array_intersect(
+            array_column($this->rows(['sort' => 'applicant'])['rows'], 'userenrolmentid'),
+            $both
+        ));
+        $this->assertDebuggingNotCalled();
+        $this->assertSame([$both['zack'], $both['aaron']], $ids);
     }
 
     /**

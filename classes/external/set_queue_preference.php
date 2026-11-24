@@ -28,9 +28,10 @@ use enrol_apply\local\queuepreference;
  * Store the reader's grid on the approval queue (enrol_apply_set_queue_preference, CQ-D7).
  *
  * The columns they chose and the widths they dragged, in one user preference for the whole site
- * ({@see queuepreference}). The rows intersect it with the catalogue they build for the reader, so
- * a stored key can never add a column the reader may not see. Taken from a queue the reader may
- * open, so the write needs the same standing as the read; the method only judges that standing,
+ * ({@see queuepreference}): the method queues' for a method, the wide one (SQ-D11) for enrolid 0. The
+ * rows intersect it with the catalogue they build for the reader, so a stored key can never add a
+ * column the reader may not see. Taken from a queue the reader may open, so the write needs the same
+ * standing as the read; the id only judges that standing (and picks which of the two preferences),
  * the preference is not the method's.
  *
  * No event: a reader's display preference, like core's own table preferences, which log nothing.
@@ -47,7 +48,7 @@ class set_queue_preference extends external_api {
      */
     public static function execute_parameters(): external_function_parameters {
         return new external_function_parameters([
-            'enrolid' => new external_value(PARAM_INT, 'The apply method whose queue the reader is on'),
+            'enrolid' => new external_value(PARAM_INT, 'The apply method whose queue the reader is on, 0 for the wide queue'),
             'usedefault' => new external_value(PARAM_BOOL, 'Show the default columns, forgetting the choice', VALUE_DEFAULT, false),
             'columns' => new external_multiple_structure(
                 new external_value(PARAM_RAW, 'Column key'),
@@ -75,7 +76,7 @@ class set_queue_preference extends external_api {
      * @param array $columns The chosen keys.
      * @param array $widths Each: key, width.
      * @return array What was stored; see execute_returns().
-     * @throws \moodle_exception When no apply method has this id (0 included), or for a guest.
+     * @throws \moodle_exception When a non-zero id names no apply method, or for a guest.
      * @throws \required_capability_exception When the reader may not open the queue.
      */
     public static function execute(int $enrolid, bool $usedefault = false, array $columns = [], array $widths = []): array {
@@ -98,7 +99,12 @@ class set_queue_preference extends external_api {
             $sizes[$width['key']] = $width['width'];
         }
 
-        return queuepreference::export(queuepreference::write($params['usedefault'] ? null : $params['columns'], $sizes));
+        return queuepreference::export(queuepreference::write(
+            $params['usedefault'] ? null : $params['columns'],
+            $sizes,
+            null,
+            $params['enrolid'] === 0
+        ));
     }
 
     /**

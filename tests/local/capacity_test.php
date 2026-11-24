@@ -480,4 +480,176 @@ final class capacity_test extends \advanced_testcase {
         $this->assertSame(1, capacity::deferred($other));
         $this->assertSame(0, capacity::deferred($this->instance));
     }
+
+    /**
+     * A method of its own course for the batch tests, with the given numbers and window, seated with
+     * one user per status given.
+     *
+     * @param int $limit Applicant limit (customint3), 0 for none.
+     * @param int $places Places (customint4), 0 for none.
+     * @param array $seats Each: [status, timeend].
+     * @param array $fields Further {enrol} fields (enrolstartdate, enrolenddate, status, customint6).
+     * @return \stdClass The {enrol} record as the plugin reads it.
+     */
+    protected function method_with(int $limit, int $places, array $seats, array $fields = []): \stdClass {
+        global $DB;
+
+        $course = $this->getDataGenerator()->create_course();
+        $id = $this->plugin->add_instance($course, $this->plugin->get_instance_defaults());
+        $DB->update_record('enrol', (object) (['id' => $id, 'customint3' => $limit, 'customint4' => $places] + $fields));
+        $instance = $DB->get_record('enrol', ['id' => $id], '*', MUST_EXIST);
+        foreach ($seats as [$status, $timeend]) {
+            $user = $this->getDataGenerator()->create_user();
+            $this->plugin->enrol_user($instance, $user->id, null, 0, $timeend, $status);
+        }
+
+        return $instance;
+    }
+
+    /**
+     * The batch answers what state() answers, instance by instance, over every shape a method's
+     * capacity can take: no limit, places only, a limit only, both, an expired row, a deferred row,
+     * a method over its places, a closed window, a disabled method.
+     *
+     * The controls: the set holds both flags true and both false somewhere, an expired row that
+     * would tip a count, and an over-full method, so a batch that dropped a clause, counted another
+     * status or swapped the two numbers answers differently from state() on at least one of them.
+     *
+     * Changes that must make it fail: the batch's places count without its status clause or its
+     * expiry clause, its applicants count without its expiry clause, either count read for a method
+     * whose limit is not set, the flags read off another number.
+     *
+     * @return void
+     */
+    public function test_the_batch_is_state_instance_by_instance(): void {
+        $past = time() - DAYSECS;
+        $active = [ENROL_USER_ACTIVE, 0];
+        $pending = [ENROL_USER_SUSPENDED, 0];
+        $deferred = [ENROL_APPLY_USER_WAIT, 0];
+        $expired = [ENROL_USER_ACTIVE, $past];
+
+        $instances = [
+            'nolimit' => $this->method_with(0, 0, [$active, $pending]),
+            'placesonly' => $this->method_with(0, 2, [$active, $active, $pending, $expired]),
+            'limitonly' => $this->method_with(3, 0, [$pending, $deferred, $active, $expired]),
+            'both' => $this->method_with(5, 1, [$active, $pending, $deferred]),
+            'expiredonly' => $this->method_with(1, 1, [$expired, [ENROL_USER_SUSPENDED, $past]]),
+            'deferredfull' => $this->method_with(2, 0, [$deferred, $deferred]),
+            'overfull' => $this->method_with(0, 1, [$active, $active, $active]),
+            'closedwindow' => $this->method_with(0, 0, [$pending], ['enrolenddate' => $past]),
+            'disabled' => $this->method_with(2, 2, [$active], ['status' => ENROL_INSTANCE_DISABLED]),
+        ];
+
+        $now = time();
+        $states = capacity::states(array_values($instances), $now);
+        $this->assertCount(count($instances), $states);
+        foreach ($instances as $name => $instance) {
+            $this->assertEquals(capacity::state($instance, $now), $states[(int) $instance->id], $name);
+        }
+
+        // The controls: what the comparison compared differs from method to method.
+        $this->assertSame(2, $states[(int) $instances['placesonly']->id]->taken);
+        $this->assertTrue($states[(int) $instances['placesonly']->id]->placesfull);
+        $this->assertSame(3, $states[(int) $instances['limitonly']->id]->held);
+        $this->assertTrue($states[(int) $instances['limitonly']->id]->limitreached);
+        $this->assertSame(0, $states[(int) $instances['expiredonly']->id]->held);
+        $this->assertFalse($states[(int) $instances['expiredonly']->id]->placesfull);
+        $this->assertTrue($states[(int) $instances['deferredfull']->id]->limitreached);
+        $this->assertSame(3, $states[(int) $instances['overfull']->id]->taken);
+        $this->assertFalse($states[(int) $instances['both']->id]->limitreached);
+        $this->assertTrue($states[(int) $instances['both']->id]->placesfull);
+        $this->assertFalse($states[(int) $instances['nolimit']->id]->placesfull);
+        $this->assertFalse($states[(int) $instances['closedwindow']->id]->open);
+        $this->assertTrue($states[(int) $instances['nolimit']->id]->open);
+    }
+
+    /**
+     * The batch reads at most two statements whatever the number of methods within one chunk, and
+     * none for an empty set or a set with no limit at all.
+     *
+     * Changes that must make it fail: a count per method; a query for an empty set.
+     *
+     * @return void
+     */
+    public function test_the_batch_does_not_grow_with_the_methods(): void {
+        global $DB;
+
+        $few = [$this->method_with(2, 1, [[ENROL_USER_ACTIVE, 0]])];
+        $many = $few;
+        foreach (range(1, 4) as $ignored) {
+            $many[] = $this->method_with(3, 2, [[ENROL_USER_SUSPENDED, 0], [ENROL_USER_ACTIVE, 0]]);
+        }
+        $nolimit = [$this->method_with(0, 0, [[ENROL_USER_ACTIVE, 0]])];
+
+        $before = $DB->perf_get_reads();
+        $this->assertSame([], capacity::states([]));
+        $this->assertSame(0, $DB->perf_get_reads() - $before);
+
+        $before = $DB->perf_get_reads();
+        capacity::states($nolimit);
+        $this->assertSame(0, $DB->perf_get_reads() - $before);
+
+        $before = $DB->perf_get_reads();
+        capacity::states($few);
+        $this->assertSame(2, $DB->perf_get_reads() - $before);
+
+        $before = $DB->perf_get_reads();
+        $states = capacity::states($many);
+        $this->assertSame(2, $DB->perf_get_reads() - $before);
+        // The control: five methods were answered, each from the two statements.
+        $this->assertCount(5, $states);
+        $this->assertSame(2, end($states)->held);
+    }
+
+    /**
+     * A set larger than one chunk is read in chunks and answers what state() answers.
+     *
+     * The chunk size is brought down to two through the protected seam. The control: the same set
+     * under the default size runs fewer statements, which proves the seam is the one in force.
+     *
+     * Changes that must make it fail: the chunks' results merged keeping only the last chunk, or
+     * only the first chunk read.
+     *
+     * @return void
+     */
+    public function test_a_set_larger_than_a_chunk_is_read_in_chunks(): void {
+        global $DB;
+
+        $active = [ENROL_USER_ACTIVE, 0];
+        $pending = [ENROL_USER_SUSPENDED, 0];
+        $instances = [
+            $this->method_with(3, 2, [$active, $active, $pending]),
+            $this->method_with(0, 1, [$active]),
+            $this->method_with(2, 0, [$pending, $pending]),
+            $this->method_with(5, 3, [$active, $pending]),
+            $this->method_with(1, 1, [$pending]),
+        ];
+        $small = new class extends capacity {
+            /**
+             * Two ids per statement.
+             *
+             * @return int The chunk size.
+             */
+            protected static function batch_size(): int {
+                return 2;
+            }
+        };
+
+        $now = time();
+        $before = $DB->perf_get_reads();
+        $states = $small::states($instances, $now);
+        $chunked = $DB->perf_get_reads() - $before;
+
+        $before = $DB->perf_get_reads();
+        $whole = capacity::states($instances, $now);
+        $default = $DB->perf_get_reads() - $before;
+
+        $this->assertSame(2, $default);
+        $this->assertGreaterThan($default, $chunked);
+        $this->assertCount(5, $states);
+        $this->assertEquals($whole, $states);
+        foreach ($instances as $instance) {
+            $this->assertEquals(capacity::state($instance, $now), $states[(int) $instance->id]);
+        }
+    }
 }

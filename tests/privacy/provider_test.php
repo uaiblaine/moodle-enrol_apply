@@ -148,7 +148,7 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         $names = array_map(static function ($item): string {
             return $item->get_name();
         }, $items);
-        $this->assertCount(7, $items);
+        $this->assertCount(8, $items);
         $this->assertEqualsCanonicalizing(
             [
                 'enrol_apply_applicationinfo',
@@ -156,6 +156,7 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
                 'enrol_apply_answer',
                 'enrol_apply_report_columns',
                 'enrol_apply_queue_grid',
+                'enrol_apply_queue_grid_wide',
                 'core_group',
                 'core_message',
             ],
@@ -223,7 +224,11 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
                 $names[] = $item->get_name();
             }
         }
-        $this->assertSame([\enrol_apply\local\reportpreference::NAME, \enrol_apply\local\queuepreference::NAME], $names);
+        $this->assertSame([
+            \enrol_apply\local\reportpreference::NAME,
+            \enrol_apply\local\queuepreference::NAME,
+            \enrol_apply\local\queuepreference::NAME_WIDE,
+        ], $names);
 
         $chooser = $this->getDataGenerator()->create_user();
         $other = $this->getDataGenerator()->create_user();
@@ -237,6 +242,46 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         $name = \enrol_apply\local\queuepreference::NAME;
         $this->assertSame('{"columns":["wait","comment"],"widths":{"comment":300}}', $exported->$name->value);
         $this->assertObjectNotHasProperty(\enrol_apply\local\reportpreference::NAME, $exported);
+        $this->assertObjectNotHasProperty(\enrol_apply\local\queuepreference::NAME_WIDE, $exported);
+    }
+
+    /**
+     * The grid of the queues that span courses is declared and exported as a preference of its own,
+     * apart from the method queues' (SQ-D11).
+     *
+     * Changes that must make it fail: the wide preference not declared in get_metadata(), or not
+     * written by export_user_preferences().
+     *
+     * @return void
+     */
+    public function test_the_wide_queue_preference_is_declared_and_exported(): void {
+        $declared = [];
+        foreach (provider::get_metadata(new \core_privacy\local\metadata\collection('enrol_apply'))->get_collection() as $item) {
+            if ($item instanceof \core_privacy\local\metadata\types\user_preference) {
+                $declared[$item->get_name()] = $item->get_summary();
+            }
+        }
+        $this->assertSame(
+            'privacy:metadata:preference:queuegridwide',
+            $declared[\enrol_apply\local\queuepreference::NAME_WIDE] ?? null
+        );
+
+        $chooser = $this->getDataGenerator()->create_user();
+        $other = $this->getDataGenerator()->create_user();
+        \enrol_apply\local\queuepreference::write(['course', 'details'], ['details' => 400], (int) $chooser->id, true);
+        // The other reader keeps a method queue's grid only: nothing of the wide one to export.
+        \enrol_apply\local\queuepreference::write(['wait'], [], (int) $other->id);
+
+        provider::export_user_preferences((int) $other->id);
+        $exported = writer::with_context(\context_system::instance())->get_user_preferences('enrol_apply');
+        $this->assertObjectNotHasProperty(\enrol_apply\local\queuepreference::NAME_WIDE, $exported);
+
+        writer::reset();
+        provider::export_user_preferences((int) $chooser->id);
+        $exported = writer::with_context(\context_system::instance())->get_user_preferences('enrol_apply');
+        $name = \enrol_apply\local\queuepreference::NAME_WIDE;
+        $this->assertSame('{"columns":["course","details"],"widths":{"details":400}}', $exported->$name->value);
+        $this->assertObjectNotHasProperty(\enrol_apply\local\queuepreference::NAME, $exported);
     }
 
     /**

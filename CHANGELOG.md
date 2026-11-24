@@ -4,10 +4,30 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased (2026112305)
+## Unreleased (2026112306)
 
 ### Added
 
+- **The queues that span courses can be read without their page** (2026112306, no upgrade step;
+  nothing a browser shows changes). The queue's three web services take `enrolid` 0 for the queue
+  the reader is given on `manage.php` with no id: the site-wide queue to a holder of
+  `enrol/apply:manageapplications` (deciding) or `enrol/apply:viewapplications` (read only) at the
+  site, a mentor's queue to a mentor, and nobody else (an editing teacher of one course is refused).
+  The rows are the site-wide table's, in set and order, with the course and the method of each row
+  (whether its role decides, whether it is at its limit and its queue's address, the last two for a
+  site-wide reader only), the submitted answers as one "Details submitted" cell masked in each row's
+  own course, and filters and counted facets for the course, the course category, the enrolment
+  method (once a course with two is chosen) and whether the application has a group; a mentor gets
+  none of the identity fields, the answers, the group or the site's facets, as on the page. The
+  summary gives what awaits, the oldest wait, the late and the deferred applications, and for a
+  site-wide reader the courses and methods holding an application and the methods at their limit,
+  counted for the whole set in two statements (`capacity::states()`). The columns a reader chooses
+  there are kept in a user preference of their own, `enrol_apply_queue_grid_wide`, exported with the
+  user's data. The group filter and its facet are offered only to a site-wide reader who holds
+  `moodle/course:viewhiddengroups` in the system context (for any other reader a posted `grouped`
+  is ignored and no facet is returned, since the filter would select on a group whose name the row
+  withholds). `capacity::states()` reads the methods in chunks of 5000 ids, so a site with very
+  many methods stays under the databases' bind-parameter caps. Mutation gates `QW1`-`QW24`.
 - **The grid view decides, and is the queue page of a method** (2026112304, no upgrade step). A
   reader who may decide selects rows with a box per row and one for the page (never their own
   application, which has none); the selection is cleared when the page, the scope, a filter, the
@@ -104,6 +124,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the note that "Who decides" changes nothing outside separate groups state a fact and ask for
   nothing, so they show as the blue information alert instead of the amber one. Every other notice
   keeps its style. The template takes an optional `info` flag per item.
+
+### Fixed
+
+- **The review page reads the newest record of an enrolment that carries two** (no upgrade step).
+  `queue::application()` joined every record of the user enrolment, so an enrolment with two records
+  (a restore, a hand edit) came back as two rows with the same id, raised core's duplicate-id notice
+  and showed the decision, the note and the comment of whichever row came last. It joins the newest
+  record, as the queue's table and `groupscope::where()` do. Mutation gate `QW25`.
+- **The applicant sort reads core's name template** (no upgrade step). With the site's name format
+  on "language", `queueengine::name_fields()` asked the `langconfig` component for a string that is
+  the `moodle` component's, so it raised an invalid-identifier notice and never found the name
+  columns in the result; a language that writes the family name first was not followed. Mutation gate
+  `QW26`.
 
 ### Removed
 

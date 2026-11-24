@@ -38,7 +38,13 @@ fork's; it does not list which features are which, so this file does not either.
   (write), standing capabilities `enrol/apply:manageapplications` or `enrol/apply:viewapplications`, the
   real check being `queueengine::require_listing()` (the queue page's own question, narrowed by groups),
   asked by the engine's public readers themselves (`rows()`, `summary()`, `catalogue()`) and by
-  `enrol_apply_set_queue_preference`, which has no engine reader behind it. None decides an application: decisions are the
+  `enrol_apply_set_queue_preference`, which has no engine reader behind it. For the queue services
+  `enrolid` 0 is the queue `manage.php` shows with no id: `queueengine::locate(0)` gives no method and
+  the system context (a negative id is refused as an unknown method), and `require_listing(0)` admits
+  only `queue::listing_scope(0)`'s three readers (the deciding or viewing capability at the system
+  context, or a mentor through the applicants' user contexts), never a teacher of one course; which of
+  the three it is comes from the reader, never the request. A mentor's answer carries no identity
+  field, no submitted answers, no group, no capacity and no method queue's address. None decides an application: decisions are the
   POST to `manage.php`. The modal application form is a `core_form\dynamic_form` served by core's dynamic
   form web service, and the queue page's table is a `core_table\dynamic` table served by core's dynamic
   table web service; each re-derives its scope and checks the capability itself.

@@ -116,6 +116,7 @@ class provider implements
 
         $items->add_user_preference(reportpreference::NAME, 'privacy:metadata:preference:reportcolumns');
         $items->add_user_preference(queuepreference::NAME, 'privacy:metadata:preference:queuegrid');
+        $items->add_user_preference(queuepreference::NAME_WIDE, 'privacy:metadata:preference:queuegridwide');
 
         $items->add_subsystem_link('core_group', [], 'privacy:metadata:core_group');
         // The group conversations of the memberships it added are exported and erased with them.
@@ -690,8 +691,8 @@ class provider implements
     }
 
     /**
-     * Export the user's grids, on the course report and on the approval queue: the two preferences
-     * this plugin keeps.
+     * Export the user's grids, on the course report, on the approval queue of one method and on the
+     * queues that span courses: the three preferences this plugin keeps.
      *
      * Exported as stored (column keys and pixel widths), which is what each preference is.
      *
@@ -716,6 +717,16 @@ class provider implements
                 queuepreference::NAME,
                 $value,
                 get_string('privacy:request:preference:queuegrid', 'enrol_apply')
+            );
+        }
+
+        $value = get_user_preferences(queuepreference::NAME_WIDE, null, $userid);
+        if ($value !== null) {
+            writer::export_user_preference(
+                'enrol_apply',
+                queuepreference::NAME_WIDE,
+                $value,
+                get_string('privacy:request:preference:queuegridwide', 'enrol_apply')
             );
         }
     }
