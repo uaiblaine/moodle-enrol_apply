@@ -422,6 +422,61 @@ final class decision_events_test extends \advanced_testcase {
     }
 
     /**
+     * Two enrolments expected at once are completed one at a time: the update event of one takes
+     * its own entry and leaves the other's entry, row and effects alone.
+     *
+     * The control is the second delivery, which completes the other approval: the expectation was
+     * live for it too, so "nothing happened to B" was not "nothing can happen".
+     *
+     * Changes that must make it fail: the observer taking or clearing every expectation, or
+     * completing an approval for an enrolment other than the event's.
+     *
+     * @return void
+     */
+    public function test_two_expected_approvals_are_completed_one_event_at_a_time(): void {
+        global $DB;
+
+        [$a, $aueid] = $this->application();
+        [$b, $bueid] = $this->application();
+        $this->setUser($this->teacher);
+        $this->enable_the_log();
+        $deliver = function (\stdClass $user, int $ueid): void {
+            \core\event\user_enrolment_updated::create([
+                'objectid' => $ueid,
+                'courseid' => $this->course->id,
+                'context' => \context_course::instance($this->course->id),
+                'relateduserid' => $user->id,
+                'other' => ['enrol' => 'apply'],
+            ])->trigger();
+        };
+
+        approvalwrite::expect($aueid);
+        approvalwrite::expect($bueid);
+        $DB->set_field('user_enrolments', 'status', ENROL_USER_ACTIVE, ['id' => $aueid]);
+        $brow = $DB->get_record('user_enrolments', ['id' => $bueid], '*', MUST_EXIST);
+
+        $deliver($a, $aueid);
+
+        $this->assertFalse(approvalwrite::is_expected($aueid), 'A\'s entry was consumed');
+        $this->assertTrue(groups_is_member((int) $this->listed->id, (int) $a->id));
+        $approved = $this->logged(application_approved::class);
+        $this->assertCount(1, $approved);
+        $this->assertSame($this->record_id($aueid), (int) $approved[0]->objectid);
+
+        $this->assertTrue(approvalwrite::is_expected($bueid), 'B is still expected');
+        $this->assertFalse(groups_is_member((int) $this->listed->id, (int) $b->id));
+        $this->assertEquals($brow, $DB->get_record('user_enrolments', ['id' => $bueid], '*', MUST_EXIST));
+
+        // The control: B's own event completes B's approval.
+        $DB->set_field('user_enrolments', 'status', ENROL_USER_ACTIVE, ['id' => $bueid]);
+        $deliver($b, $bueid);
+
+        $this->assertFalse(approvalwrite::is_expected($bueid));
+        $this->assertTrue(groups_is_member((int) $this->listed->id, (int) $b->id));
+        $this->assertCount(2, $this->logged(application_approved::class));
+    }
+
+    /**
      * The observer ignores another method's user_enrolment_updated, and leaves the entry expected.
      *
      * Changes that must make it fail: the enrol name filter dropped from the observer.

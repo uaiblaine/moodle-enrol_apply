@@ -404,6 +404,63 @@ final class queue_test extends \advanced_testcase {
     }
 
     /**
+     * The SQL predicate and its row twin select the same enrolments, for every status and timeend.
+     *
+     * Both twins read time() directly, so the instant "now" itself is not tested (a second
+     * boundary between the two reads would flake it): the past is now - 1 and the future is
+     * now + 3600. The query is run the way the queue's own callers run it, aliasing the
+     * user enrolment "ue" and merging the returned parameters.
+     *
+     * @return void
+     */
+    public function test_the_sql_predicate_and_the_row_predicate_agree(): void {
+        global $DB;
+
+        $now = time();
+        $statuses = [
+            'active' => ENROL_USER_ACTIVE,
+            'suspended' => ENROL_USER_SUSPENDED,
+            'waiting' => ENROL_APPLY_USER_WAIT,
+        ];
+        $timeends = ['zero' => 0, 'future' => $now + 3600, 'past' => $now - 1, 'negative' => -1];
+
+        $labels = [];
+        foreach ($statuses as $statuslabel => $status) {
+            foreach ($timeends as $endlabel => $timeend) {
+                [, $ueid] = $this->applicant($status);
+                $DB->update_record('user_enrolments', (object) ['id' => $ueid, 'timeend' => $timeend]);
+                $labels[$ueid] = "status {$statuslabel} ({$status}), timeend {$endlabel} ({$timeend})";
+            }
+        }
+
+        [$wheres, $params] = queue::awaiting_decision_where();
+        $selected = array_map('intval', $DB->get_fieldset_sql(
+            'SELECT ue.id
+               FROM {user_enrolments} ue
+              WHERE ue.enrolid = :enrolid AND ' . implode(' AND ', $wheres),
+            $params + ['enrolid' => $this->instance->id]
+        ));
+
+        $selectedmap = array_flip($selected);
+        $awaitingcount = 0;
+        foreach ($labels as $ueid => $label) {
+            $row = $DB->get_record('user_enrolments', ['id' => $ueid], '*', MUST_EXIST);
+            $viarow = queue::is_awaiting_decision($row);
+            $awaitingcount += $viarow ? 1 : 0;
+            $this->assertSame(
+                $viarow,
+                isset($selectedmap[$ueid]),
+                "The SQL and the row predicate disagree for a row with {$label}"
+            );
+        }
+
+        // The controls: the grid really splits, so agreeing is not agreeing on all or on none.
+        $this->assertSame(count($selected), $awaitingcount);
+        $this->assertGreaterThan(0, $awaitingcount);
+        $this->assertLessThan(count($labels), $awaitingcount);
+    }
+
+    /**
      * A teacher of the course may review an application made to it.
      *
      * A course teacher holds the capability in the course and not in the applicant's user
