@@ -4,9 +4,46 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased (2026112306)
+## Unreleased (2026112308)
 
 ### Added
+
+- **The site-wide queue reads by course** (2026112308, no upgrade step). Its View menu adds
+  **By course**: one row per enrolment method of what the list holds under the scope, the filters and
+  the search, with how many applications await a decision, how many are deferred, the oldest wait,
+  the places taken and whether the method is full, open (until when) or closed, and **Open the queue**
+  to that method's queue; sortable by course, by what awaits and by the oldest application, paged as
+  the list, and kept in the address as `show=methods`. No selection and no Columns there. The new
+  read-only web service `enrol_apply_queue_methods` serves it to the site-wide readers alone (a
+  mentor, an editing teacher of one course and a guest are refused); it reads one grouped count over
+  the list's own table and the capacity of the page's methods only. Mutation gates `QM1`-`QM8`.
+  A wide reader is told a method's capacity (places, places taken, applicant limit, applications held,
+  the closing date, "Full") only where the course is visible to them or they hold
+  `moodle/course:viewhiddencourses` in it, as `manage.php?id=` has always required: otherwise the
+  "Full" label and the tile's count leave that method out, and the view draws a dash and says the
+  capacity is not shown (the new return field `capacityknown`, gate `QM9`). A method with no places
+  now shows how many are enrolled, "8,155, no limit" (`capacity::states()` takes an optional third
+  argument for it; `state()` and the default are unchanged; gate `QM10`). The view preloads the
+  course contexts of its page's methods only, so a site with more methods than core's context cache
+  holds keeps a constant number of reads per page.
+
+- **The site-wide queue is a grid, and decides across enrolment methods** (2026112307, no upgrade
+  step). `manage.php` with no id opens the grid view for a holder of
+  `enrol/apply:manageapplications` or `enrol/apply:viewapplications` at the site, as the queue of one
+  method does; `view=table` keeps today's table, which links "Grid view", and a mentor's queue keeps
+  the table. Its tiles are what awaits (the oldest wait, how many waited over a week), what is
+  deferred and its share, the courses and methods holding an application, and the methods at their
+  limit. A "Course · method" column follows the applicant: the course's name linking to the course,
+  the method's name under it linking to its queue, with the table's "Grants a deciding role" and a
+  "Full" label; it sorts by course. Filters are the course and the category (searched, with how many
+  the list left out), the enrolment method once a course with two is chosen, waited more than, and
+  with or without a group, all kept in the address. A selection that spans methods says so on the
+  dock, and its sheet has a section per method (the course, the method, who, a message for them and
+  a link to that method's queue, where groups and a role are chosen) and one note for all; the
+  decision is the table's form posted to `manage.php`, with one `outcomemessages[<method>]` per
+  method and no group or role chooser, so every per-row check applies unchanged. A site-wide viewer
+  gets no selection and no dock. Mutation gates `QS1`-`QS8`; `QV1` and `QV2` retired into `QS2`,
+  `QS3`.
 
 - **The queues that span courses can be read without their page** (2026112306, no upgrade step;
   nothing a browser shows changes). The queue's three web services take `enrolid` 0 for the queue

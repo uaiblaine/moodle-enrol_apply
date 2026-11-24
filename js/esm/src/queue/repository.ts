@@ -27,7 +27,7 @@
  */
 
 import {fetchOne} from '@moodle/lms/core/ajax';
-import type {Preference, Query, RowsAnswer, SummaryAnswer} from './types';
+import type {MethodsAnswer, Preference, Query, RowsAnswer, SummaryAnswer} from './types';
 
 /**
  * A page of the queue's rows.
@@ -41,6 +41,26 @@ export const getRows = (enrolid: number, query: Query): Promise<RowsAnswer> =>
         methodname: 'enrol_apply_queue_rows',
         args: {
             enrolid,
+            scope: query.scope,
+            search: query.search,
+            filters: Object.entries(query.filters).map(([name, value]) => ({name, value})),
+            page: query.page,
+            perpage: query.perpage,
+            sort: query.sort,
+            direction: query.direction,
+        },
+    });
+
+/**
+ * A page of the site-wide queue's "By course" view: one row per enrolment method of what the list holds.
+ *
+ * @param {object} query What to read: the list's scope, search and filters, the view's sort and page.
+ * @returns {Promise} The answer.
+ */
+export const getMethods = (query: Query): Promise<MethodsAnswer> =>
+    fetchOne<MethodsAnswer>({
+        methodname: 'enrol_apply_queue_methods',
+        args: {
             scope: query.scope,
             search: query.search,
             filters: Object.entries(query.filters).map(([name, value]) => ({name, value})),

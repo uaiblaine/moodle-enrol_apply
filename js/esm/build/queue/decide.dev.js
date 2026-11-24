@@ -13,6 +13,12 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
  * again (queue_view::return_url()) and redirects there with its notifications, so the browser lands
  * on the grid it decided from.
  *
+ * A selection on the site-wide queue that spans methods posts what the site-wide table's sheet posts
+ * (amd/src/manage.js, commit()): the page's own `outcomemessage` empty, and one
+ * `outcomemessages[<enrolid>]` per method, keyed by the method id the rows service gave the rows, which
+ * decision::groups() uses only to look up a message for the rows the database says belong to that method;
+ * and never a chooser, which that sheet does not offer (SQ-D10).
+ *
  * @module     enrol_apply/queue/decide
  * @copyright  2026 Anderson Blaine
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -32,9 +38,10 @@ const decide = /* @__PURE__ */ __name((posted) => {
   field(form, "sesskey", posted.sesskey);
   field(form, "formaction", posted.decision);
   posted.userenrolments.forEach((id) => field(form, "userenrolments[]", String(id)));
-  field(form, "outcomemessage", posted.message);
+  field(form, "outcomemessage", posted.messages === null ? posted.message : "");
+  Object.entries(posted.messages ?? {}).forEach(([method, text]) => field(form, `outcomemessages[${method}]`, text));
   field(form, "decisionnote", posted.note);
-  if (posted.decision === "confirm") {
+  if (posted.decision === "confirm" && posted.messages === null) {
     posted.groups?.forEach((id) => field(form, "groups[]", String(id)));
     if (posted.roleid !== null) {
       field(form, "roleid", String(posted.roleid));

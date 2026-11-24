@@ -9,7 +9,8 @@ import { Fragment, jsxDEV } from "react/jsx-dev-runtime";
  * core's stored filters; a queue keeps its filters in the page's address). Each option carries the rows
  * it would list under every other filter in force; an option no row would list is hidden unless chosen.
  * A facet with more than eight options is a search over a list capped at fifty, the chosen one pinned
- * on top, with a grouping select when the facet has groupings (section 5b).
+ * on top, with a grouping select when the facet has groupings (section 5b). A facet may carry a note of
+ * its caller's, drawn under its options.
  *
  * Strings read from the view's labels: any, filters, clearfilters, show, showcount, grouping,
  * allgroupings, moregroups, moregroupsgrouping.
@@ -26,7 +27,7 @@ const CAP = 50;
 const showLabel = /* @__PURE__ */ __name((labels, total) => total === null ? labels.show : fill(labels.showcount, num(total)), "showLabel");
 const OptionCount = /* @__PURE__ */ __name(({ option }) => option.count >= 0 ? /* @__PURE__ */ jsxDEV("small", { className: "enrol_apply-rview-optcount", children: num(option.count) }, void 0, false, {
   fileName: "public/enrol/apply/js/esm/src/datareport/FilterPanel.tsx",
-  lineNumber: 76,
+  lineNumber: 77,
   columnNumber: 25
 }) : null, "OptionCount");
 const shownOptions = /* @__PURE__ */ __name((facet, value) => facet.options.filter((option) => option.count !== 0 || option.value === value), "shownOptions");
@@ -56,7 +57,7 @@ const SearchedList = /* @__PURE__ */ __name(({ labels, facet, shown, value, head
         false,
         {
           fileName: "public/enrol/apply/js/esm/src/datareport/FilterPanel.tsx",
-          lineNumber: 122,
+          lineNumber: 123,
           columnNumber: 17
         }
       ),
@@ -70,12 +71,12 @@ const SearchedList = /* @__PURE__ */ __name(({ labels, facet, shown, value, head
           children: [
             /* @__PURE__ */ jsxDEV("option", { value: "", children: labels.allgroupings }, void 0, false, {
               fileName: "public/enrol/apply/js/esm/src/datareport/FilterPanel.tsx",
-              lineNumber: 137,
+              lineNumber: 138,
               columnNumber: 25
             }),
             groups.map((entry) => /* @__PURE__ */ jsxDEV("option", { value: String(entry.id), children: entry.name }, entry.id, false, {
               fileName: "public/enrol/apply/js/esm/src/datareport/FilterPanel.tsx",
-              lineNumber: 138,
+              lineNumber: 139,
               columnNumber: 48
             }))
           ]
@@ -84,13 +85,13 @@ const SearchedList = /* @__PURE__ */ __name(({ labels, facet, shown, value, head
         true,
         {
           fileName: "public/enrol/apply/js/esm/src/datareport/FilterPanel.tsx",
-          lineNumber: 131,
+          lineNumber: 132,
           columnNumber: 21
         }
       ) : null
     ] }, void 0, true, {
       fileName: "public/enrol/apply/js/esm/src/datareport/FilterPanel.tsx",
-      lineNumber: 121,
+      lineNumber: 122,
       columnNumber: 13
     }),
     /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-optlist", role: "group", "aria-labelledby": headid, children: [
@@ -104,22 +105,22 @@ const SearchedList = /* @__PURE__ */ __name(({ labels, facet, shown, value, head
           children: [
             /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-box", "aria-hidden": "true", children: /* @__PURE__ */ jsxDEV(Icon, { name: "tick" }, void 0, false, {
               fileName: "public/enrol/apply/js/esm/src/datareport/FilterPanel.tsx",
-              lineNumber: 151,
+              lineNumber: 152,
               columnNumber: 84
             }) }, void 0, false, {
               fileName: "public/enrol/apply/js/esm/src/datareport/FilterPanel.tsx",
-              lineNumber: 151,
+              lineNumber: 152,
               columnNumber: 25
             }),
             /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-optrow-label", children: option.label }, void 0, false, {
               fileName: "public/enrol/apply/js/esm/src/datareport/FilterPanel.tsx",
-              lineNumber: 152,
+              lineNumber: 153,
               columnNumber: 25
             }),
             " ",
             /* @__PURE__ */ jsxDEV(OptionCount, { option }, void 0, false, {
               fileName: "public/enrol/apply/js/esm/src/datareport/FilterPanel.tsx",
-              lineNumber: 153,
+              lineNumber: 154,
               columnNumber: 25
             })
           ]
@@ -128,31 +129,36 @@ const SearchedList = /* @__PURE__ */ __name(({ labels, facet, shown, value, head
         true,
         {
           fileName: "public/enrol/apply/js/esm/src/datareport/FilterPanel.tsx",
-          lineNumber: 144,
+          lineNumber: 145,
           columnNumber: 21
         }
       )),
       rest.length > CAP ? /* @__PURE__ */ jsxDEV("p", { className: "enrol_apply-rview-note", children: fill(more, num(rest.length - CAP)) }, void 0, false, {
         fileName: "public/enrol/apply/js/esm/src/datareport/FilterPanel.tsx",
-        lineNumber: 156,
+        lineNumber: 157,
         columnNumber: 38
       }) : null,
       pinned.length === 0 && rest.length === 0 ? /* @__PURE__ */ jsxDEV("p", { className: "enrol_apply-rview-note", children: facet.find.nomatch }, void 0, false, {
         fileName: "public/enrol/apply/js/esm/src/datareport/FilterPanel.tsx",
-        lineNumber: 157,
+        lineNumber: 158,
         columnNumber: 61
       }) : null
     ] }, void 0, true, {
       fileName: "public/enrol/apply/js/esm/src/datareport/FilterPanel.tsx",
-      lineNumber: 142,
+      lineNumber: 143,
       columnNumber: 13
     })
   ] }, void 0, true, {
     fileName: "public/enrol/apply/js/esm/src/datareport/FilterPanel.tsx",
-    lineNumber: 120,
+    lineNumber: 121,
     columnNumber: 9
   });
 }, "SearchedList");
+const FacetNote = /* @__PURE__ */ __name(({ note }) => note ? /* @__PURE__ */ jsxDEV("p", { className: "enrol_apply-rview-note", children: note }, void 0, false, {
+  fileName: "public/enrol/apply/js/esm/src/datareport/FilterPanel.tsx",
+  lineNumber: 171,
+  columnNumber: 12
+}) : null, "FacetNote");
 const FacetGroup = /* @__PURE__ */ __name(({ labels, facet, value, onChange }) => {
   const headid = useId();
   const shown = shownOptions(facet, value);
@@ -161,17 +167,22 @@ const FacetGroup = /* @__PURE__ */ __name(({ labels, facet, value, onChange }) =
     return /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-fgroup", children: [
       /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-fpanel-head", id: headid, children: facet.title }, void 0, false, {
         fileName: "public/enrol/apply/js/esm/src/datareport/FilterPanel.tsx",
-        lineNumber: 179,
+        lineNumber: 190,
         columnNumber: 17
       }),
       /* @__PURE__ */ jsxDEV(SearchedList, { labels, facet, shown, value, headid, onChange }, void 0, false, {
         fileName: "public/enrol/apply/js/esm/src/datareport/FilterPanel.tsx",
-        lineNumber: 180,
+        lineNumber: 191,
+        columnNumber: 17
+      }),
+      /* @__PURE__ */ jsxDEV(FacetNote, { note: facet.note }, void 0, false, {
+        fileName: "public/enrol/apply/js/esm/src/datareport/FilterPanel.tsx",
+        lineNumber: 192,
         columnNumber: 17
       })
     ] }, void 0, true, {
       fileName: "public/enrol/apply/js/esm/src/datareport/FilterPanel.tsx",
-      lineNumber: 178,
+      lineNumber: 189,
       columnNumber: 13
     });
   }
@@ -197,7 +208,7 @@ const FacetGroup = /* @__PURE__ */ __name(({ labels, facet, value, onChange }) =
   return /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-fgroup", children: [
     /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-fpanel-head", id: headid, children: facet.title }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/datareport/FilterPanel.tsx",
-      lineNumber: 213,
+      lineNumber: 225,
       columnNumber: 13
     }),
     /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-fpanel-opts", role: "radiogroup", "aria-labelledby": headid, onKeyDown: keydown, children: options.map((option) => /* @__PURE__ */ jsxDEV(
@@ -214,7 +225,7 @@ const FacetGroup = /* @__PURE__ */ __name(({ labels, facet, value, onChange }) =
           " ",
           /* @__PURE__ */ jsxDEV(OptionCount, { option }, void 0, false, {
             fileName: "public/enrol/apply/js/esm/src/datareport/FilterPanel.tsx",
-            lineNumber: 226,
+            lineNumber: 238,
             columnNumber: 25
           })
         ]
@@ -223,17 +234,22 @@ const FacetGroup = /* @__PURE__ */ __name(({ labels, facet, value, onChange }) =
       true,
       {
         fileName: "public/enrol/apply/js/esm/src/datareport/FilterPanel.tsx",
-        lineNumber: 216,
+        lineNumber: 228,
         columnNumber: 21
       }
     )) }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/datareport/FilterPanel.tsx",
-      lineNumber: 214,
+      lineNumber: 226,
+      columnNumber: 13
+    }),
+    /* @__PURE__ */ jsxDEV(FacetNote, { note: facet.note }, void 0, false, {
+      fileName: "public/enrol/apply/js/esm/src/datareport/FilterPanel.tsx",
+      lineNumber: 242,
       columnNumber: 13
     })
   ] }, void 0, true, {
     fileName: "public/enrol/apply/js/esm/src/datareport/FilterPanel.tsx",
-    lineNumber: 212,
+    lineNumber: 224,
     columnNumber: 9
   });
 }, "FacetGroup");
@@ -262,35 +278,35 @@ const FilterPanel = /* @__PURE__ */ __name(({
       false,
       {
         fileName: "public/enrol/apply/js/esm/src/datareport/FilterPanel.tsx",
-        lineNumber: 245,
+        lineNumber: 258,
         columnNumber: 17
       }
     )),
     note ?? null
   ] }, void 0, true, {
     fileName: "public/enrol/apply/js/esm/src/datareport/FilterPanel.tsx",
-    lineNumber: 243,
+    lineNumber: 256,
     columnNumber: 9
   }),
   /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-fpanel-foot", children: [
     /* @__PURE__ */ jsxDEV("button", { type: "button", className: "btn btn-sm btn-outline-secondary", onClick: onClear, children: labels.clearfilters }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/datareport/FilterPanel.tsx",
-      lineNumber: 256,
+      lineNumber: 269,
       columnNumber: 13
     }),
     /* @__PURE__ */ jsxDEV("button", { type: "button", className: "btn btn-sm btn-primary", onClick: onShow, children: showLabel(labels, total) }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/datareport/FilterPanel.tsx",
-      lineNumber: 259,
+      lineNumber: 272,
       columnNumber: 13
     })
   ] }, void 0, true, {
     fileName: "public/enrol/apply/js/esm/src/datareport/FilterPanel.tsx",
-    lineNumber: 255,
+    lineNumber: 268,
     columnNumber: 9
   })
 ] }, void 0, true, {
   fileName: "public/enrol/apply/js/esm/src/datareport/FilterPanel.tsx",
-  lineNumber: 242,
+  lineNumber: 255,
   columnNumber: 5
 }), "FilterPanel");
 export {

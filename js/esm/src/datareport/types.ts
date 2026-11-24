@@ -58,7 +58,8 @@ export type Grouping = {id: number, name: string, groups: number[]};
  * One facet the filter panel draws: a heading and its options, one of which may be chosen.
  *
  * Above eight options the facet is a searched list: `find` is that list's search label (a string with
- * {$a}, the number of options) and the note drawn when nothing matches.
+ * {$a}, the number of options) and the note drawn when nothing matches. A caller's `note` is drawn under
+ * the facet's options, in either form.
  */
 export type FacetDefinition = {
     name: string,
@@ -66,6 +67,8 @@ export type FacetDefinition = {
     options: FilterOption[],
     groupings: Grouping[],
     find: {label: string, nomatch: string},
+    /** A line under the facet's options, such as how many options the server left out; absent for none. */
+    note?: string,
 };
 
 /** One chip of what is in force: its text, and the key the removal names. */

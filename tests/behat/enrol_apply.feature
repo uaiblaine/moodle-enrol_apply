@@ -89,8 +89,10 @@ Feature: Enrolment upon approval
     And I should see "The selected enrolment applications have been updated."
     And I should see "No application is awaiting a decision."
 
-  # A selection on the site-wide queue that spans two enrolment methods (MQ-D15, MQ-D16): the sheet
-  # splits it by method, each with a message box of its own, and the course cell names the method.
+  # A selection on the site-wide queue's table (view=table) that spans two enrolment methods (MQ-D15,
+  # MQ-D16): the sheet splits it by method, each with a message box of its own, and the course cell names
+  # the method. The site-wide queue's page is its grid since W3, which tells the same story in
+  # site_queue_view.feature; this keeps the table's own dialog covered.
   @javascript
   Scenario: A selection across enrolment methods is decided method by method
     Given the following "users" exist:
@@ -106,7 +108,7 @@ Feature: Enrolment upon approval
     And "student1" has applied to "C1" with the key of ""
     And "student2" has applied to "C2" with the key of ""
     When I log in as "admin"
-    And I am on the "enrol_apply > manage applications" page
+    And I am on the "enrol_apply > applications queue table" page
     Then I should see "Apply for this course"
     And I should see "Moderator recruitment"
     And I click on "Select all" "checkbox"
@@ -118,6 +120,8 @@ Feature: Enrolment upon approval
     And I click on "Confirm 2" "button" in the "Confirm 2 applications" "dialogue"
     And I should see "The selected enrolment applications have been updated."
     And I should not see "Student 2"
+    # A decision from the table lands back on the table.
+    And "[data-region='enrol_apply-rows']" "css_element" should not exist
 
   Scenario: A teacher cancels a pending application and the student stays out
     Given I log in as "student1"

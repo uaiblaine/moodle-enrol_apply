@@ -23,6 +23,10 @@
  * any has; open or closed, with the closing date while open. The summary does not move with a filter,
  * so the tiles load once.
  *
+ * The site-wide queue's tiles are its own (SQ-D7, {@link WideTiles}): what awaits, what is deferred and its
+ * share of what awaits, and for a site-wide reader the courses (and methods) holding an application and the
+ * methods at their limit.
+ *
  * @module     enrol_apply/queue/Tiles
  * @copyright  2026 Anderson Blaine
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -30,10 +34,12 @@
 
 import type {ReactElement} from 'react';
 import {duration, fill, fillObject, num} from '../datareport/str';
-import type {SummaryAnswer} from './types';
+import type {Kind, SummaryAnswer} from './types';
 
 type TilesProps = {
     labels: Record<string, string>,
+    /** Which queue: the method's draws its capacity, the queues that span courses their own figures. */
+    kind: Kind,
     summary: SummaryAnswer | null,
     error: boolean,
     onRetry: () => void,
@@ -46,7 +52,7 @@ type TilesProps = {
  * @param {number} total The limit, above zero.
  * @returns {number} 0 to 100.
  */
-const percent = (value: number, total: number): number => Math.min(100, Math.max(0, Math.round(value * 100 / total)));
+export const percent = (value: number, total: number): number => Math.min(100, Math.max(0, Math.round(value * 100 / total)));
 
 /**
  * One tile.
@@ -74,7 +80,7 @@ const Tile = ({label, value, sub, meter, warn}: {label: string, value: string, s
  * @param {number} time Unix time.
  * @returns {string} The date.
  */
-const shortDate = (time: number): string => {
+export const shortDate = (time: number): string => {
     const lang = document.documentElement.lang || undefined;
     try {
         return new Intl.DateTimeFormat(lang, {dateStyle: 'short'}).format(new Date(time * 1000));
@@ -84,12 +90,71 @@ const shortDate = (time: number): string => {
 };
 
 /**
+ * The awaiting tile, the same on every queue: how many, the oldest wait and how many have waited long.
+ *
+ * @param {object} props The strings and the summary.
+ * @returns {object} The tile.
+ */
+const AwaitingTile = ({labels, summary}: {labels: Record<string, string>, summary: SummaryAnswer}): ReactElement => {
+    const oldest = summary.awaiting > 0 ? fill(labels.oldest, duration(labels, summary.oldestwait)) : '';
+    const late = summary.late > 0 ? fill(labels.late, num(summary.late)) : '';
+
+    return (
+        <Tile
+            label={labels.awaiting}
+            value={num(summary.awaiting)}
+            sub={[oldest, late].filter((part) => part !== '').join(' · ')}
+            meter={null}
+            warn={summary.late > 0}
+        />
+    );
+};
+
+/**
+ * The tiles of the queues that span courses (SQ-D7): awaiting, deferred, and for a site-wide reader the
+ * courses with applications and the methods at their limit. They do not follow the filters.
+ *
+ * @param {object} props The strings and the summary.
+ * @returns {object} The band of tiles.
+ */
+const WideTiles = ({labels, summary}: {labels: Record<string, string>, summary: SummaryAnswer}): ReactElement => (
+    <div className="enrol_apply-rview-band" role="list" data-region="enrol_apply-tiles">
+        <AwaitingTile labels={labels} summary={summary} />
+        <Tile
+            label={labels.deferred}
+            value={num(summary.deferred)}
+            sub={summary.awaiting > 0 ? fill(labels.deferredshare, num(percent(summary.deferred, summary.awaiting))) : ''}
+            meter={null}
+            warn={false}
+        />
+        {summary.sitefigures ? (
+            <>
+                <Tile
+                    label={labels.courses}
+                    value={num(summary.courses)}
+                    sub={summary.methods === 1 ? labels.methods_one : fill(labels.methods, num(summary.methods))}
+                    meter={null}
+                    warn={false}
+                />
+                <Tile
+                    label={labels.methodsfull}
+                    value={num(summary.methodsfull)}
+                    sub={labels.methodsfullsub}
+                    meter={null}
+                    warn={summary.methodsfull > 0}
+                />
+            </>
+        ) : null}
+    </div>
+);
+
+/**
  * The tiles, their skeleton while the summary loads, or a retry when it failed.
  *
  * @param {object} props See TilesProps.
  * @returns {object} The band of tiles.
  */
-export const Tiles = ({labels, summary, error, onRetry}: TilesProps): ReactElement => {
+export const Tiles = ({labels, kind, summary, error, onRetry}: TilesProps): ReactElement => {
     if (summary === null && error) {
         return (
             <p className="enrol_apply-rview-error">
@@ -112,9 +177,11 @@ export const Tiles = ({labels, summary, error, onRetry}: TilesProps): ReactEleme
         );
     }
 
+    if (kind !== 'method') {
+        return <WideTiles labels={labels} summary={summary} />;
+    }
+
     const methodnote = summary.narrowed ? labels.methodnote : '';
-    const oldest = summary.awaiting > 0 ? fill(labels.oldest, duration(labels, summary.oldestwait)) : '';
-    const late = summary.late > 0 ? fill(labels.late, num(summary.late)) : '';
 
     return (
         <div className="enrol_apply-rview-band" role="list" data-region="enrol_apply-tiles">
@@ -137,13 +204,7 @@ export const Tiles = ({labels, summary, error, onRetry}: TilesProps): ReactEleme
                     warn={summary.applicants * 5 >= summary.applicantlimit * 4}
                 />
             ) : null}
-            <Tile
-                label={labels.awaiting}
-                value={num(summary.awaiting)}
-                sub={[oldest, late].filter((part) => part !== '').join(' · ')}
-                meter={null}
-                warn={summary.late > 0}
-            />
+            <AwaitingTile labels={labels} summary={summary} />
             <Tile
                 label={labels.status}
                 value={summary.open ? labels.open : labels.closed}

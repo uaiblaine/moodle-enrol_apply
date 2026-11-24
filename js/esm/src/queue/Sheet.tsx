@@ -19,7 +19,9 @@
  *
  * Its title names the decision and the count, its list the first five applicants and how many more;
  * a cancellation says what cancelling removes, a deferral where the application stays, an approval
- * that every place is taken when the table page says so. Then the fields of the table's decision
+ * that every place is taken when the table page says so. A selection on the site-wide queue that spans
+ * enrolment methods is listed method by method instead, each with its own message box
+ * (queue/SheetMethods, SQ-D10), and no group or role chooser is offered there. Then the fields of the table's decision
  * controls, with their labels and help: for an approval the groups and the role where the props offer
  * them (a holder of enrol/apply:choosedecision) or the summary of what an approval gives, then the
  * message to the applicant and the note for the record, which every decision posts. The sheet's commit
@@ -37,12 +39,10 @@
  */
 
 import {useEffect, useId, useRef, useState} from 'react';
-import type {KeyboardEvent, ReactElement} from 'react';
+import type {Dispatch, KeyboardEvent, ReactElement, SetStateAction} from 'react';
 import {fill, num} from '../datareport/str';
+import {SheetMethods, WhoList, byMethod} from './SheetMethods';
 import type {Decision, DecisionProps, Row} from './types';
-
-/** How many applicants the sheet names before "and N more", as the table's sheet does. */
-const NAMED = 5;
 
 /** What can take the focus inside the dialog. */
 const FOCUSABLE = 'button:not([disabled]), select:not([disabled]), textarea:not([disabled]), input:not([disabled]), a[href]';
@@ -51,6 +51,11 @@ const FOCUSABLE = 'button:not([disabled]), select:not([disabled]), textarea:not(
 export type SheetValues = {
     message: string,
     note: string,
+    /**
+     * One message per method (its id => the text) when the selection spans methods, posted as
+     * outcomemessages[]; null for a selection of one method, whose message is `message`.
+     */
+    messages: Record<number, string> | null,
     /** The chosen groups, null where no group chooser was offered. */
     groups: number[] | null,
     /** The chosen role (0 for the method's), null where no role chooser was offered. */
@@ -95,6 +100,168 @@ const wording = (labels: Record<string, string>, decision: Decision, count: numb
  */
 const Help = ({id, text}: {id: string, text: string}): ReactElement => <div className="form-text" id={id}>{text}</div>;
 
+type TextProps = {
+    id: string,
+    label: string,
+    help: string,
+    value: string,
+    last: boolean,
+    onChange: (text: string) => void,
+};
+
+/**
+ * A labelled text box with its help: the message or the note.
+ *
+ * @param {object} props See TextProps.
+ * @returns {object} The field.
+ */
+const TextField = ({id, label, help, value, last, onChange}: TextProps): ReactElement => (
+    <div className={last ? 'mb-0' : 'mb-3'}>
+        <label className="form-label" htmlFor={id}>{label}</label>
+        <textarea
+            className="form-control"
+            id={id}
+            rows={3}
+            value={value}
+            aria-describedby={`${id}help`}
+            onChange={(event) => onChange(event.target.value)}
+        />
+        <Help id={`${id}help`} text={help} />
+    </div>
+);
+
+/**
+ * What the decision says before the list: what cancelling removes, where a deferral stays, that every place
+ * of the method is taken.
+ *
+ * @param {object} props The strings, the decision and the offer.
+ * @returns {object} The notices.
+ */
+const Notices = ({labels, decision, offer}: {labels: Record<string, string>, decision: Decision,
+        offer: DecisionProps}): ReactElement => (
+    <>
+        {decision === 'cancel' ? <div className="alert alert-danger">{labels.sheetcanceldanger}</div> : null}
+        {decision === 'wait' ? <p className="enrol_apply-qview-sheetline">{labels.sheetwaitline}</p> : null}
+        {decision === 'confirm' && offer.placesfull !== '' ? (
+            <div className="alert alert-warning">{offer.placesfull}</div>
+        ) : null}
+    </>
+);
+
+type ChooserProps = {
+    id: string,
+    offer: DecisionProps,
+    groups: string[],
+    setGroups: Dispatch<SetStateAction<string[]>>,
+    roleid: string,
+    setRoleid: Dispatch<SetStateAction<string>>,
+};
+
+/**
+ * What an approval offers beside the message: the summary of what it gives a decider who may not choose,
+ * or the group and role choosers where the table form offers them (never on the site-wide queue).
+ *
+ * @param {object} props See ChooserProps.
+ * @returns {object} The summary or the choosers.
+ */
+const Choosers = ({id, offer, groups, setGroups, roleid, setRoleid}: ChooserProps): ReactElement => (
+    <>
+        {offer.summary ? (
+            <div className="enrol_apply-qview-sheetsummary">
+                <dl className="row mb-0">
+                    <dt className="col-sm-4">{offer.summary.groupslabel}</dt>
+                    <dd className="col-sm-8">{offer.summary.groups}</dd>
+                    <dt className="col-sm-4">{offer.summary.rolelabel}</dt>
+                    <dd className="col-sm-8">{offer.summary.role}</dd>
+                </dl>
+                <div className="form-text">
+                    {offer.summary.help}
+                    {offer.summary.note !== '' ? ' ' + offer.summary.note : ''}
+                </div>
+            </div>
+        ) : null}
+        {offer.groups ? (
+            <div className="mb-3">
+                <label className="form-label" htmlFor={`${id}-groups`}>{offer.groups.label}</label>
+                <select
+                    className="form-select"
+                    id={`${id}-groups`}
+                    multiple
+                    value={groups}
+                    aria-describedby={`${id}-groupshelp`}
+                    onChange={(event) => setGroups(Array.from(event.target.selectedOptions, (option) => option.value))}
+                >
+                    {offer.groups.options.map((group) => (
+                        <option key={group.id} value={String(group.id)}>{group.name}</option>
+                    ))}
+                </select>
+                <Help id={`${id}-groupshelp`} text={offer.groups.help} />
+            </div>
+        ) : null}
+        {offer.roles ? (
+            <div className="mb-3">
+                <label className="form-label" htmlFor={`${id}-role`}>{offer.roles.label}</label>
+                <select
+                    className="form-select"
+                    id={`${id}-role`}
+                    value={roleid}
+                    aria-describedby={`${id}-rolehelp`}
+                    onChange={(event) => setRoleid(event.target.value)}
+                >
+                    <option value="0">{offer.roles.default}</option>
+                    {offer.roles.options.map((role) => (
+                        <option key={role.id} value={String(role.id)}>{role.name}</option>
+                    ))}
+                </select>
+                <Help id={`${id}-rolehelp`} text={offer.roles.help} />
+            </div>
+        ) : null}
+    </>
+);
+
+/**
+ * Whether anything typed or chosen would be lost by a press on the backdrop.
+ *
+ * @param {Array} texts The text boxes' values.
+ * @param {string} roleid The chosen role.
+ * @param {Array} groups The chosen groups.
+ * @param {Array} initial The groups chosen when the sheet opened.
+ * @returns {boolean} True when the sheet holds input.
+ */
+const holdsInput = (texts: string[], roleid: string, groups: string[], initial: string[]): boolean =>
+    texts.some((text) => text !== '') || roleid !== '0'
+    || groups.length !== initial.length || groups.some((group) => !initial.includes(group));
+
+/**
+ * Keep the focus inside the dialog: Tab from the last item goes to the first, Shift+Tab from the first to
+ * the last, and either from the title enters the cycle.
+ *
+ * @param {object} event The keyboard event.
+ * @param {HTMLElement|null} dialog The dialog.
+ * @param {HTMLElement|null} heading Its title.
+ * @returns {void}
+ */
+const wrapFocus = (event: KeyboardEvent<HTMLDivElement>, dialog: HTMLElement | null, heading: HTMLElement | null): void => {
+    if (!dialog) {
+        return;
+    }
+    const items = Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE));
+    if (items.length === 0) {
+        event.preventDefault();
+        return;
+    }
+    const first = items[0];
+    const last = items[items.length - 1];
+    const at = document.activeElement;
+    if (event.shiftKey && (at === first || at === heading)) {
+        event.preventDefault();
+        last.focus();
+    } else if (!event.shiftKey && (at === last || at === heading)) {
+        event.preventDefault();
+        first.focus();
+    }
+};
+
 /**
  * The sheet.
  *
@@ -106,6 +273,7 @@ export const Sheet = ({labels, decision, rows, offer, onClose, onCommit}: SheetP
     const dialog = useRef<HTMLDivElement | null>(null);
     const heading = useRef<HTMLHeadingElement | null>(null);
     const [message, setMessage] = useState('');
+    const [messages, setMessages] = useState<Record<number, string>>({});
     const [note, setNote] = useState('');
     const [initialGroups] = useState<string[]>(
         () => (offer.groups?.options ?? []).filter((group) => group.selected).map((group) => String(group.id))
@@ -114,9 +282,11 @@ export const Sheet = ({labels, decision, rows, offer, onClose, onCommit}: SheetP
     const [roleid, setRoleid] = useState('0');
     const [sending, setSending] = useState(false);
 
-    const count = rows.length;
-    const [title, commit] = wording(labels, decision, count);
+    const [title, commit] = wording(labels, decision, rows.length);
     const approval = decision === 'confirm';
+    const methods = byMethod(rows);
+    // A selection of several methods takes a message per method and, as on the table, no chooser (SQ-D10).
+    const spans = methods.length > 1;
 
     // The title takes the focus as the dialog opens, and the page behind it stops scrolling while it is open.
     useEffect(() => {
@@ -141,23 +311,8 @@ export const Sheet = ({labels, decision, rows, offer, onClose, onCommit}: SheetP
             }
             return;
         }
-        if (event.key !== 'Tab' || !dialog.current) {
-            return;
-        }
-        const items = Array.from(dialog.current.querySelectorAll<HTMLElement>(FOCUSABLE));
-        if (items.length === 0) {
-            event.preventDefault();
-            return;
-        }
-        const first = items[0];
-        const last = items[items.length - 1];
-        const at = document.activeElement;
-        if (event.shiftKey && (at === first || at === heading.current)) {
-            event.preventDefault();
-            last.focus();
-        } else if (!event.shiftKey && (at === last || at === heading.current)) {
-            event.preventDefault();
-            first.focus();
+        if (event.key === 'Tab') {
+            wrapFocus(event, dialog.current, heading.current);
         }
     };
 
@@ -171,19 +326,18 @@ export const Sheet = ({labels, decision, rows, offer, onClose, onCommit}: SheetP
             return;
         }
         setSending(true);
+        const choosers = approval && !spans;
         onCommit({
-            message,
+            message: spans ? '' : message,
             note,
-            groups: approval && offer.groups ? groups.map(Number) : null,
-            roleid: approval && offer.roles ? Number(roleid) : null,
+            messages: spans ? Object.fromEntries(methods.map((method) => [method.id, messages[method.id] ?? ''])) : null,
+            groups: choosers && offer.groups ? groups.map(Number) : null,
+            roleid: choosers && offer.roles ? Number(roleid) : null,
         });
     };
 
     // Typed text or a non-default choice: a press on the backdrop must not throw it away.
-    const dirty = message !== '' || note !== '' || roleid !== '0'
-        || groups.length !== initialGroups.length || groups.some((group) => !initialGroups.includes(group));
-
-    const more = count - NAMED;
+    const dirty = holdsInput([message, note, ...Object.values(messages)], roleid, groups, initialGroups);
 
     return (
         <>
@@ -220,103 +374,47 @@ export const Sheet = ({labels, decision, rows, offer, onClose, onCommit}: SheetP
                             />
                         </div>
                         <div className="modal-body">
-                            {decision === 'cancel' ? <div className="alert alert-danger">{labels.sheetcanceldanger}</div> : null}
-                            {decision === 'wait' ? <p className="enrol_apply-qview-sheetline">{labels.sheetwaitline}</p> : null}
-                            {approval && offer.placesfull !== '' ? (
-                                <div className="alert alert-warning">{offer.placesfull}</div>
-                            ) : null}
-                            <ul className="enrol_apply-qview-sheetwho">
-                                {rows.slice(0, NAMED).map((row) => (
-                                    <li key={row.id}>
-                                        {/* Decorative beside the name, as in the row: no link, no alternative text. */}
-                                        <span
-                                            className="enrol_apply-qview-picture"
-                                            aria-hidden="true"
-                                            dangerouslySetInnerHTML={{__html: row.applicant.picture}}
+                            <Notices labels={labels} decision={decision} offer={offer} />
+                            {spans ? (
+                                <SheetMethods
+                                    labels={labels}
+                                    id={id}
+                                    groups={methods}
+                                    approval={approval}
+                                    messages={messages}
+                                    onMessage={(method, text) => setMessages((before) => ({...before, [method]: text}))}
+                                />
+                            ) : (
+                                <>
+                                    <WhoList labels={labels} rows={rows} />
+                                    {approval ? (
+                                        <Choosers
+                                            id={id}
+                                            offer={offer}
+                                            groups={groups}
+                                            setGroups={setGroups}
+                                            roleid={roleid}
+                                            setRoleid={setRoleid}
                                         />
-                                        <span>{row.applicant.fullname}</span>
-                                    </li>
-                                ))}
-                                {more > 0 ? (
-                                    <li className="enrol_apply-qview-sheetmore">{fill(labels.andmore, num(more))}</li>
-                                ) : null}
-                            </ul>
-                            {approval && offer.summary ? (
-                                <div className="enrol_apply-qview-sheetsummary">
-                                    <dl className="row mb-0">
-                                        <dt className="col-sm-4">{offer.summary.groupslabel}</dt>
-                                        <dd className="col-sm-8">{offer.summary.groups}</dd>
-                                        <dt className="col-sm-4">{offer.summary.rolelabel}</dt>
-                                        <dd className="col-sm-8">{offer.summary.role}</dd>
-                                    </dl>
-                                    <div className="form-text">
-                                        {offer.summary.help}
-                                        {offer.summary.note !== '' ? ' ' + offer.summary.note : ''}
-                                    </div>
-                                </div>
-                            ) : null}
-                            {approval && offer.groups ? (
-                                <div className="mb-3">
-                                    <label className="form-label" htmlFor={`${id}-groups`}>{offer.groups.label}</label>
-                                    <select
-                                        className="form-select"
-                                        id={`${id}-groups`}
-                                        multiple
-                                        value={groups}
-                                        aria-describedby={`${id}-groupshelp`}
-                                        onChange={(event) => setGroups(
-                                            Array.from(event.target.selectedOptions, (option) => option.value)
-                                        )}
-                                    >
-                                        {offer.groups.options.map((group) => (
-                                            <option key={group.id} value={String(group.id)}>{group.name}</option>
-                                        ))}
-                                    </select>
-                                    <Help id={`${id}-groupshelp`} text={offer.groups.help} />
-                                </div>
-                            ) : null}
-                            {approval && offer.roles ? (
-                                <div className="mb-3">
-                                    <label className="form-label" htmlFor={`${id}-role`}>{offer.roles.label}</label>
-                                    <select
-                                        className="form-select"
-                                        id={`${id}-role`}
-                                        value={roleid}
-                                        aria-describedby={`${id}-rolehelp`}
-                                        onChange={(event) => setRoleid(event.target.value)}
-                                    >
-                                        <option value="0">{offer.roles.default}</option>
-                                        {offer.roles.options.map((role) => (
-                                            <option key={role.id} value={String(role.id)}>{role.name}</option>
-                                        ))}
-                                    </select>
-                                    <Help id={`${id}-rolehelp`} text={offer.roles.help} />
-                                </div>
-                            ) : null}
-                            <div className="mb-3">
-                                <label className="form-label" htmlFor={`${id}-message`}>{offer.message.label}</label>
-                                <textarea
-                                    className="form-control"
-                                    id={`${id}-message`}
-                                    rows={3}
-                                    value={message}
-                                    aria-describedby={`${id}-messagehelp`}
-                                    onChange={(event) => setMessage(event.target.value)}
-                                />
-                                <Help id={`${id}-messagehelp`} text={offer.message.help} />
-                            </div>
-                            <div className="mb-0">
-                                <label className="form-label" htmlFor={`${id}-note`}>{offer.note.label}</label>
-                                <textarea
-                                    className="form-control"
-                                    id={`${id}-note`}
-                                    rows={3}
-                                    value={note}
-                                    aria-describedby={`${id}-notehelp`}
-                                    onChange={(event) => setNote(event.target.value)}
-                                />
-                                <Help id={`${id}-notehelp`} text={offer.note.help} />
-                            </div>
+                                    ) : null}
+                                    <TextField
+                                        id={`${id}-message`}
+                                        label={offer.message.label}
+                                        help={offer.message.help}
+                                        value={message}
+                                        last={false}
+                                        onChange={setMessage}
+                                    />
+                                </>
+                            )}
+                            <TextField
+                                id={`${id}-note`}
+                                label={offer.note.label}
+                                help={offer.note.help}
+                                value={note}
+                                last={true}
+                                onChange={setNote}
+                            />
                         </div>
                         <div className="modal-footer">
                             <button type="button" className="btn btn-secondary" onClick={onClose} disabled={sending}>

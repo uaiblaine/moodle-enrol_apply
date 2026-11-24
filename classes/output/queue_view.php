@@ -18,6 +18,7 @@ namespace enrol_apply\output;
 
 use context_course;
 use enrol_apply\local\capacity;
+use enrol_apply\local\coursefilter;
 use enrol_apply\local\groupscope;
 use enrol_apply\local\queueengine;
 use enrol_apply\table\applications;
@@ -28,9 +29,11 @@ use stdClass;
 use templatable;
 
 /**
- * The approval queue of one method as a data report: the method queue's page (CQ-D5).
+ * The approval queue as a data report: the page of the method queue (CQ-D5) and of the site-wide queue (W3).
  *
- * The shell manage.php renders for `?id=<method>` unless `view=table` asks for today's table. The
+ * The shell manage.php renders for `?id=<method>`, and for the id-less page when its reader's listing is
+ * the site-wide queue (a site-wide decider or viewer, {@see wanted()}), unless `view=table` asks for
+ * today's table. The mentee queue keeps the table until stage W5. The
  * page carries configuration and strings only; every row and every number arrives through the
  * plugin's web services (enrol_apply_queue_rows, enrol_apply_queue_summary), which read the queue's
  * own table ({@see queueengine}). So nothing here may put an application into the props: the
@@ -70,8 +73,20 @@ class queue_view implements renderable, templatable {
     /** @var string[] The facets the queue's own controls do not send, read from the address here. */
     public const FACETS = ['named', 'waited', 'appliedbefore'];
 
-    /** @var stdClass The apply method whose queue this is. */
-    protected stdClass $instance;
+    /** @var string[] The site-wide queue's own facets read here; its course and category are manage.php's. */
+    public const WIDE_FACETS = ['waited', 'method', 'grouped'];
+
+    /**
+     * @var string The address parameter that asks the site-wide queue for its "By course" view (SQ-D9). Its own
+     *     name, so that it is never read as `view`, which stays the server's switch to the table.
+     */
+    public const SHOW = 'show';
+
+    /** @var string The one value SHOW takes: the "By course" view. */
+    public const METHODS = 'methods';
+
+    /** @var stdClass|null The apply method whose queue this is; null for the site-wide queue. */
+    protected ?stdClass $instance;
 
     /** @var applications Today's queue for the same request, for the noscript. */
     protected applications $table;
@@ -85,12 +100,12 @@ class queue_view implements renderable, templatable {
     /**
      * Build the shell.
      *
-     * @param stdClass $instance The apply method.
+     * @param stdClass|null $instance The apply method; null for the site-wide queue.
      * @param applications $table Today's queue as manage.php built it for this request.
      * @param moodle_url $manageurl The queue's address with its filters, without the view parameter.
      * @param array $initial What the address asks for, from {@see initial()}.
      */
-    public function __construct(stdClass $instance, applications $table, moodle_url $manageurl, array $initial) {
+    public function __construct(?stdClass $instance, applications $table, moodle_url $manageurl, array $initial) {
         $this->instance = $instance;
         $this->table = $table;
         $this->manageurl = $manageurl;
@@ -100,16 +115,24 @@ class queue_view implements renderable, templatable {
     /**
      * Whether manage.php renders this view for a listing request, rather than today's table.
      *
-     * The queue of one method (CQ-D3: the site-wide and mentee queues keep the table), unless the
-     * address asks for the table with `view=table` (CQ-D5), which anyone may. Asked on the listing
+     * One predicate for every listing (CQ-D5, SQ-D12): the queue of one method and the site-wide queue,
+     * deciding or viewing, take the grid, unless the address asks for the table with `view=table`, which
+     * anyone may. The scope is the reader's listing as queue::listing_scope() resolved it, never the
+     * request: for the id-less page it is the site-wide queue or the mentee queue by what the reader
+     * holds.
+     *
+     * The mentee scope keeps the table in this stage (W3): its grid (SQ-D13) is stage W5, which drops the
+     * `mentees` condition here and nowhere else. A listing names its mentees only in that scope; a method
+     * queue and the site-wide queue name none (null), and a refused listing names an empty list, so it
+     * never mounts the grid either (manage.php refuses that reader before asking). Asked on the listing
      * path only: manage.php serves `userenrol=` before it reads `id`.
      *
-     * @param int $enrolid The request's id parameter, 0 for the site-wide or mentee queue.
+     * @param stdClass $listing The reader's listing scope, from queue::listing_scope().
      * @param string $view The request's view parameter.
-     * @return bool True for the method queue without view=table.
+     * @return bool True for the method queue or the site-wide queue without view=table.
      */
-    public static function wanted(int $enrolid, string $view): bool {
-        return $enrolid > 0 && $view !== self::TABLE;
+    public static function wanted(stdClass $listing, string $view): bool {
+        return $view !== self::TABLE && $listing->mentees === null;
     }
 
     /**
@@ -143,15 +166,20 @@ class queue_view implements renderable, templatable {
      * depends on the outcome), so an address can never fail a decision already applied; a page past the end is
      * the rows service's to bring back.
      *
-     * @param int $enrolid The method, already authorised by manage.php.
+     * With 0 it is the site-wide queue's address (manage.php with no id), rebuilt through the same table
+     * for the listing queue::listing_scope(0) gives this reader: its course, category, method and grouped
+     * filters as the table applied them, its own catalogue's sort. Never the "By course" view's SHOW: a
+     * decision is made from the list, so it lands on the list.
+     *
+     * @param int $enrolid The method, already authorised by manage.php; 0 for the site-wide queue.
      * @param string $search The search manage.php read.
      * @param int|null $status The status manage.php read, null for every application.
      * @param array $filters The filters manage.php read, name => value.
-     * @return moodle_url manage.php?id=<method> with the cleaned address, and no view parameter.
+     * @return moodle_url manage.php?id=<method>, or manage.php for 0, with the cleaned address and no view parameter.
      * @throws \required_capability_exception When the reader may not open the queue.
      */
     public static function return_url(int $enrolid, string $search, ?int $status, array $filters): moodle_url {
-        $initial = self::initial($search, $status, $filters);
+        $initial = self::initial($search, $status, $filters, $enrolid === 0);
         $table = queueengine::table(
             $enrolid,
             $initial['scope'],
@@ -185,12 +213,20 @@ class queue_view implements renderable, templatable {
      * builds lands filtered here too. The facets, the sort and the page are read here; the rows
      * service cleans every one of them again against what this reader is offered.
      *
+     * The site-wide queue ($wide) reads its own facets (WIDE_FACETS), each cleaned to its vocabulary
+     * here, as the table cleans it ({@see wide_facet()}); its course and category are manage.php's. It also
+     * reads which view the address asks for (SHOW), cleaned to METHODS or nothing; whether this reader is
+     * offered that view at all is the props' question ({@see offers_methods()}), and the view's own service
+     * refuses anybody else. The sort, the direction and the page are then the "By course" view's, under the
+     * same names as the list's; its service cleans them against its own vocabulary.
+     *
      * @param string $search The search manage.php read.
      * @param int|null $status The status manage.php read, null for every application.
      * @param array $filters The filters manage.php read, name => value.
-     * @return array scope, search, filters (each: name, value), sort, direction, page, perpage.
+     * @param bool $wide Whether the address is the site-wide queue's.
+     * @return array scope, search, filters (each: name, value), sort, direction, page, perpage, show (METHODS or '').
      */
-    public static function initial(string $search, ?int $status, array $filters): array {
+    public static function initial(string $search, ?int $status, array $filters, bool $wide = false): array {
         global $CFG;
 
         // ENROL_APPLY_USER_WAIT lives in the plugin's lib.php, which is not autoloaded.
@@ -202,8 +238,11 @@ class queue_view implements renderable, templatable {
             default => 'all',
         };
 
-        foreach (self::FACETS as $name) {
+        foreach ($wide ? self::WIDE_FACETS : self::FACETS as $name) {
             $value = trim(optional_param($name, '', PARAM_ALPHANUM));
+            if ($wide) {
+                $value = self::wide_facet($name, $value);
+            }
             if ($value !== '') {
                 $filters[$name] = $value;
             }
@@ -224,7 +263,29 @@ class queue_view implements renderable, templatable {
             'direction' => optional_param('dir', '', PARAM_ALPHA) === 'desc' ? 'desc' : 'asc',
             'page' => max(0, optional_param('page', 0, PARAM_INT)),
             'perpage' => in_array($perpage, queueengine::PERPAGES, true) ? $perpage : queueengine::PERPAGE,
+            'show' => $wide && optional_param(self::SHOW, '', PARAM_ALPHA) === self::METHODS ? self::METHODS : '',
         ];
+    }
+
+    /**
+     * One facet of the site-wide queue's address, cleaned to the value the table would apply.
+     *
+     * The same vocabularies as the table's set_filterset(): a waited threshold of
+     * applications::WAITED_DAYS, a method that is an apply instance (coursefilter::clean_method()), a
+     * grouped value of applications::GROUPED. Whether this reader is offered the grouped filter at all is
+     * the rows service's question, which drops it again for anybody else.
+     *
+     * @param string $name One of WIDE_FACETS.
+     * @param string $value What the address carries, alphanumeric.
+     * @return string The value, '' for none.
+     */
+    protected static function wide_facet(string $name, string $value): string {
+        return match ($name) {
+            'waited' => in_array((int) $value, applications::WAITED_DAYS, true) ? (string) (int) $value : '',
+            'method' => (string) (coursefilter::clean_method((int) $value) ?? ''),
+            'grouped' => in_array($value, applications::GROUPED, true) ? $value : '',
+            default => '',
+        };
     }
 
     /**
@@ -237,28 +298,75 @@ class queue_view implements renderable, templatable {
 
         require_once($CFG->dirroot . '/enrol/apply/lib.php');
 
-        $enrolid = (int) $this->instance->id;
-        $context = context_course::instance((int) $this->instance->courseid);
+        $enrolid = (int) ($this->instance->id ?? 0);
 
         /* "Open the report" only for a reader the report admits (CQ-D11), as the review page's
-           earlier applications are shown: the capability in the method's course. */
+           earlier applications are shown: the capability in the method's course. The site-wide queue
+           has none: the report belongs to a course. */
         $reporturl = '';
-        if (has_capability(groupscope::REPORT, $context)) {
-            $reporturl = report_view::url($enrolid)->out(false);
+        if ($this->instance !== null) {
+            $context = context_course::instance((int) $this->instance->courseid);
+            if (has_capability(groupscope::REPORT, $context)) {
+                $reporturl = report_view::url($enrolid)->out(false);
+            }
         }
 
         return [
             'mount' => self::MOUNT,
             'enrolid' => $enrolid,
+            // Which queue the listing is (method, site); the rows answer says it again.
+            'kind' => $this->table->scope_kind(),
             'initial' => $this->initial,
             'perpage' => queueengine::PERPAGE,
             'perpages' => queueengine::PERPAGES,
             'searchmin' => self::SEARCH_MIN,
-            'pageurl' => (new moodle_url('/enrol/apply/manage.php', ['id' => $enrolid]))->out(false),
+            'pageurl' => (new moodle_url('/enrol/apply/manage.php', $enrolid ? ['id' => $enrolid] : []))->out(false),
             'statuses' => ['pending' => ENROL_USER_SUSPENDED, 'deferred' => ENROL_APPLY_USER_WAIT],
             'reporturl' => $reporturl,
             'decision' => $this->decision(),
+            // The "By course" view (SQ-D9): its label and its table's strings, for a site-wide reader alone.
+            'methods' => $this->offers_methods() ? self::methods_labels() : null,
             'labels' => self::labels(),
+        ];
+    }
+
+    /**
+     * Whether this queue offers the "By course" view: the site-wide queue's, and so a site-wide reader's.
+     *
+     * Never a method's queue, which is one method already, and never a mentor's: the view would tell them how
+     * many applications a method holds beyond their mentees' and its capacity, and its service refuses them
+     * ({@see queueengine::methods()}). Read from the listing the table was built for, never from the request.
+     *
+     * @return bool True on the site-wide queue.
+     */
+    public function offers_methods(): bool {
+        return $this->table->scope_kind() === 'site';
+    }
+
+    /**
+     * The "By course" view's own strings, by the name the client reads them under, in the plain spelling.
+     *
+     * What the queue's labels do not already carry, and the two the view words its own way over them (the
+     * caption and the no-match title); the counts, the deferred heading, the status words and the wait's
+     * wording are the queue's.
+     *
+     * @return array Name => string.
+     */
+    public static function methods_labels(): array {
+        return [
+            'label' => get_string('queueviewbycourse', 'enrol_apply'),
+            'capacityhidden' => get_string('queueviewcapacityhidden', 'enrol_apply'),
+            'caption' => get_string('queueviewmethodscaption', 'enrol_apply'),
+            'coursemethod' => get_string('queuecoursemethod', 'enrol_apply'),
+            // The grid's frame is named by what it holds, as the caption names the table.
+            'grid' => get_string('queueviewmethodscaption', 'enrol_apply'),
+            'nomatch' => get_string('queueviewmethodsnomatch', 'enrol_apply'),
+            'nolimit' => get_string('queueviewnolimit', 'enrol_apply'),
+            'oldestwait' => get_string('queueviewoldestwait', 'enrol_apply'),
+            'openqueue' => get_string('queueviewopenqueue', 'enrol_apply'),
+            'queue' => get_string('queueviewqueue', 'enrol_apply'),
+            // The count and the placeholder, as the method form's places row words it.
+            'takennolimit' => get_string('placestakennolimit', 'enrol_apply'),
         ];
     }
 
@@ -277,6 +385,10 @@ class queue_view implements renderable, templatable {
      * role names are escaped for a triple stash and are decoded once here. Nothing here authorises:
      * the posted choice is allowlisted again by confirm_enrolment(), row by row, whatever the sheet
      * offered.
+     *
+     * On the site-wide queue the table form's call is made with no instance, as manage_form() makes it
+     * there: no chooser and no summary (SQ-D10, each approval uses its own method's role and groups), and
+     * no places notice, which belongs to one method (each row says "Full" instead).
      *
      * @return array|null sesskey, actions, message, note, groups, roles, summary, placesfull; null for a viewer.
      */
@@ -337,7 +449,7 @@ class queue_view implements renderable, templatable {
         }
 
         $placesfull = '';
-        if (capacity::places_full($this->instance)) {
+        if ($this->instance !== null && capacity::places_full($this->instance)) {
             $placesfull = get_string('placesfull', 'enrol_apply', capacity::places($this->instance));
         }
 
@@ -385,13 +497,17 @@ class queue_view implements renderable, templatable {
             'coretable' => get_string('reportviewtableview', 'enrol_apply'),
             'count' => get_string('reportviewcount', 'enrol_apply'),
             'count_one' => get_string('reportviewcount_one', 'enrol_apply'),
+            'courses' => get_string('queueviewcourses', 'enrol_apply'),
             'defaultcolumns' => get_string('reportviewdefaultcolumns', 'enrol_apply'),
             'deferred' => get_string('submissionstatuswaiting', 'enrol_apply'),
+            'deferredshare' => get_string('queueviewdeferredshare', 'enrol_apply'),
             'dock' => get_string('queueviewdock', 'enrol_apply'),
+            'dockmethods' => get_string('queueviewdockmethods', 'enrol_apply'),
             'empty' => get_string('queueviewempty', 'enrol_apply'),
             'filterchip' => get_string('reportviewfilterchip', 'enrol_apply'),
             'filters' => get_string('reportviewfilters', 'enrol_apply'),
             'filterson' => get_string('reportviewfilterson', 'enrol_apply'),
+            'grantsdeciding' => get_string('queuegrantsdecidingrole', 'enrol_apply'),
             'grid' => get_string('reportviewgrid', 'enrol_apply'),
             'grouping' => get_string('reportviewgrouping', 'enrol_apply'),
             'held' => get_string('reviewapplicants', 'enrol_apply'),
@@ -401,6 +517,12 @@ class queue_view implements renderable, templatable {
             'loading' => get_string('reportviewloading', 'enrol_apply'),
             'loadsummary' => get_string('queueviewloadsummary', 'enrol_apply'),
             'methodnote' => get_string('queueonthismethod', 'enrol_apply'),
+            'methodfull' => get_string('queueviewmethodfull', 'enrol_apply'),
+            'methodfullwarn' => get_string('queueviewmethodfullwarn', 'enrol_apply'),
+            'methods' => get_string('queueviewmethods', 'enrol_apply'),
+            'methods_one' => get_string('queueviewmethods_one', 'enrol_apply'),
+            'methodsfull' => get_string('queueviewmethodsfull', 'enrol_apply'),
+            'methodsfullsub' => get_string('queueviewmethodsfullsub', 'enrol_apply'),
             'more' => get_string('reportviewmore', 'enrol_apply'),
             'morefilters' => get_string('reportviewtableview', 'enrol_apply'),
             'morefiltershelp' => get_string('queueviewmorefiltersnote', 'enrol_apply'),
@@ -408,13 +530,19 @@ class queue_view implements renderable, templatable {
             'moregroupsgrouping' => get_string('reportviewmoregroupsgrouping', 'enrol_apply'),
             'narrowed' => get_string('reportviewnarrowed', 'enrol_apply'),
             'next' => get_string('reportviewnext', 'enrol_apply'),
+            'nocategorymatch' => get_string('queueviewnocategorymatch', 'enrol_apply'),
+            'nocoursematch' => get_string('queueviewnocoursematch', 'enrol_apply'),
             'nogroupmatch' => get_string('reportviewnogroupmatch', 'enrol_apply'),
             'nomatch' => get_string('reportviewnomatch', 'enrol_apply'),
             'nomatchhelp' => get_string('reportviewnomatch_help', 'enrol_apply'),
             'notingroup' => get_string('notingroup'),
             'ofmany' => get_string('reviewofmany', 'enrol_apply'),
             'oldest' => get_string('reportviewoldest', 'enrol_apply'),
+            'omittedcategories' => get_string('queueviewomittedcategories', 'enrol_apply'),
+            'omittedcourses' => get_string('queueviewomittedcourses', 'enrol_apply'),
             'open' => get_string('queueapplicationsopen', 'enrol_apply'),
+            'openmethod' => get_string('queueviewopenmethod', 'enrol_apply'),
+            'openmethodline' => get_string('queueviewopenmethodline', 'enrol_apply'),
             'openreport' => get_string('queueviewopenreport', 'enrol_apply'),
             'pageof' => get_string('reportviewpageof', 'enrol_apply'),
             'pages' => get_string('reportviewpages', 'enrol_apply'),
@@ -436,7 +564,9 @@ class queue_view implements renderable, templatable {
             'scope' => get_string('reportviewscope', 'enrol_apply'),
             'scrollhint' => get_string('reportviewscrollhint', 'enrol_apply'),
             'search' => get_string('reportviewsearch', 'enrol_apply'),
+            'searchcategories' => get_string('queueviewsearchcategories', 'enrol_apply'),
             'searchchip' => get_string('reportviewsearchchip', 'enrol_apply'),
+            'searchcourses' => get_string('queueviewsearchcourses', 'enrol_apply'),
             'searchgroups' => get_string('reportviewsearchgroups', 'enrol_apply'),
             'selectapplicant' => get_string('selectapplicant', 'enrol_apply'),
             'selected' => get_string('queueselectedonpage', 'enrol_apply'),
@@ -448,10 +578,12 @@ class queue_view implements renderable, templatable {
             'sheetconfirm' => get_string('queuesheetconfirm', 'enrol_apply'),
             'sheetconfirmcommit' => get_string('queuesheetconfirmcommit', 'enrol_apply'),
             'sheetconfirmone' => get_string('queuesheetconfirmone', 'enrol_apply'),
+            'sheetmessage' => get_string('queuesheetmessage', 'enrol_apply'),
             'sheetwait' => get_string('queuesheetwait', 'enrol_apply'),
             'sheetwaitcommit' => get_string('queuesheetwaitcommit', 'enrol_apply'),
             'sheetwaitline' => get_string('queuesheetwaitline', 'enrol_apply'),
             'sheetwaitone' => get_string('queuesheetwaitone', 'enrol_apply'),
+            'spans' => get_string('queuesheetspans', 'enrol_apply'),
             'show' => get_string('reportviewshow', 'enrol_apply'),
             'showcount' => get_string('reportviewshowcount', 'enrol_apply'),
             'status' => get_string('queuestatus', 'enrol_apply'),

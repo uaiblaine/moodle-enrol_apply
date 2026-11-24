@@ -2387,8 +2387,9 @@ class applications extends \table_sql implements dynamic_table {
         [$wheres, $params] = $this->scope_where();
 
         return $DB->get_records_sql(
-            'SELECT scopemethod.*
+            'SELECT scopemethod.*, scopecourse.visible AS coursevisible
                FROM {enrol} scopemethod
+               JOIN {course} scopecourse ON scopecourse.id = scopemethod.courseid
               WHERE scopemethod.id IN (
                     SELECT ue.enrolid
                       FROM {user_enrolments} ue

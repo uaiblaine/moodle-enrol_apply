@@ -94,10 +94,39 @@ the method gives). Its button takes the decision, and the page comes back with w
 The selection belongs to the page on screen: another page, scope, filter, search or sort clears it.
 A reader who may only view applications sees no boxes and no bar.
 
-**Table view** (`manage.php?id=<method>&view=table`, the link above the grid) shows the same queue
-as a table whose decisions sit in a bar at the foot of the page; a browser without JavaScript gets
-that table on the queue page itself, and the site-wide queue and the queue of a mentor's mentees are
-always tables. Decisions taken there are the same decisions, with the same checks.
+The **site-wide queue** (`manage.php` with no id, for a holder of `enrol/apply:manageapplications`
+or `enrol/apply:viewapplications` at the site) is the same grid over every course. Its tiles give
+what awaits a decision (the oldest wait, how many have waited over a week), what is deferred and its
+share of what awaits, the courses and enrolment methods holding an application, and the methods at
+their limit (every place taken, or no more applications accepted). A **Course · method** column
+follows the applicant: the course, linking to it, and the method under it, linking to that method's
+queue, with *Grants a deciding role* and *Full* where they apply; it sorts by course. The answers are
+one *Details submitted* column, masked in each row's own course. Filters are the course and the
+category (searched; a long list says how many it left out, and the search above the grid finds a
+course by its name), the enrolment method once a course with two is chosen, how long the application
+has waited, and with or without a group (to a reader who may see hidden groups). A selection may span
+several methods: the bar under the rows says so, and the sheet asks one message per method, with the
+method's applicants, a *Full* warning where it applies and a link to the method's own queue, plus one
+note for all. Each approval uses its own method's role and groups: choosing them happens on the
+method's queue.
+
+**By course**, in the site-wide queue's View menu (`manage.php?show=methods`), lists one row per
+enrolment method instead of one per application: the course and the method, how many applications
+await a decision and how many of them are deferred, the oldest wait, the places taken (against the
+places where the method has some, with a meter) and whether the method is full, open (and until when)
+or closed, with **Open the queue** leading to that method's own queue. A method with no places shows how many
+are enrolled and that it has no limit. A method of a course the reader could not open (hidden, and the
+reader without `moodle/course:viewhiddencourses`) shows a dash and no status, and is not counted as full
+in the tiles or labelled so in the list: the same course facts `manage.php?id=` would refuse them. The scope, the filters and the
+search narrow it as they narrow the list; it sorts by course, by what awaits (most first, the default)
+or by the oldest application. It selects nothing and decides nothing. It is the site-wide readers':
+a mentor's queue has no such view.
+
+**Table view** (`manage.php?id=<method>&view=table`, or `manage.php?view=table` for the site-wide
+queue, the link above the grid) shows the same queue as a table whose decisions sit in a bar at the
+foot of the page, with a **Grid view** link back; a browser without JavaScript gets that table on the
+queue page itself, and the queue of a mentor's mentees is always a table for now. Decisions taken
+there are the same decisions, with the same checks.
 
 ![Reviewing one application whose group key found no seat: the status and key strip, the rules to observe with the full key group flagged over the limit on confirming, the comment and the submitted details, the On confirming card with its sentence and the group cards with their occupancy, the applicant's card, and the three decisions in the bar at the foot](docs/screenshots/review.png)
 
@@ -649,7 +678,8 @@ no guest):
   that reader: a stored column the reader may not see adds nothing. Until a reader chooses, the
   report shows the columns listed above. **Admission route** is a column a reader can add.
 
-The approval queue of one method can be read the same way, through three more AJAX web services.
+The approval queue of one method can be read the same way, through three more AJAX web services, and the
+site-wide queue's **By course** view through a fourth.
 Each takes the method's id, derives the course from it, and refuses a reader the queue page
 (`manage.php?id=`) refuses: no guest, access to the course, and `enrol/apply:manageapplications` or
 `enrol/apply:viewapplications` there. An id of no Course enrol confirmation method is refused. The
@@ -689,6 +719,17 @@ decides an application; decisions are taken on the queue page as before.
   decision in the reader's queue, the oldest wait, the late and the deferred ones and, for a
   site-wide reader only, the courses and enrolment methods holding an application and the methods
   with every place taken or their applicant limit reached.
+- `enrol_apply_queue_methods`: the site-wide queue's **By course** view, and nothing else (it takes no
+  method's id). For the applications the list holds under the same scope, search and filters, one row
+  per enrolment method (30, 50 or 100 a page, 50 by default): the method (its name, whether its role
+  decides, its queue's address), its course, how many applications await a decision, how many of them
+  are deferred, how long the oldest has waited, and the method's places, places taken, applicant limit,
+  applications held, whether every place is taken or the limit reached, whether it accepts applications
+  now and when it closes; for a method whose course the reader could not enter (hidden, without
+  `moodle/course:viewhiddencourses`) those capacity fields are neutral and `capacityknown` is false. Sorted by what awaits (most first), by the oldest application or by the
+  course. Refused to anybody but a holder of `enrol/apply:manageapplications` or
+  `enrol/apply:viewapplications` at the site level: a mentor and an editing teacher of one course are
+  refused, and so is a guest.
 - `enrol_apply_set_queue_preference`: stores the columns the reader chose for the queue and the
   widths they gave them, in the user preference `enrol_apply_queue_grid`, the same on every method of
   the site and apart from the report's; with id 0, in `enrol_apply_queue_grid_wide`, the queues that

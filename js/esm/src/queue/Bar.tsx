@@ -17,11 +17,15 @@
  * The queue's filter bar: the shared bar (datareport/Bar) with the queue's vocabulary.
  *
  * The scope is All, Pending or Deferred. Filters draws the facets the rows answer counts (group, how
- * the group was named, waited more than, applied before) and the identity fields the reader may filter
+ * the group was named, waited more than, applied before; on the site-wide queue the course and the
+ * category, each searched and capped with a note of what was left out, the method once a course with two
+ * is chosen, and with or without a group) and the identity fields the reader may filter
  * by from a list, which the service does not count; the text fields and the dates are set in the
  * table view, which the panel's note links, and show here as chips that remove them. Columns starts
- * with the three sets (CQ-D7). View is Automatic, Table or Cards, and the table view. No Download
- * (CQ-D11): "Open the report" ends the chips' row for a reader the report admits.
+ * with the three sets (CQ-D7). View is Automatic, Table or Cards, and the table view; the site-wide queue
+ * adds "By course" (SQ-D9), whose body the queue view draws itself: while it is shown Columns is left out and
+ * the count states the enrolment methods, while the panel's "Show" still states the applications the filters
+ * list. No Download (CQ-D11): "Open the report" ends the chips' row for a reader the report admits.
  *
  * @module     enrol_apply/queue/Bar
  * @copyright  2026 Anderson Blaine
@@ -30,9 +34,9 @@
 
 import type {ReactElement} from 'react';
 import {Bar as DataBar} from '../datareport/Bar';
-import {fillObject} from '../datareport/str';
-import type {Chip, ColumnSet, FacetDefinition} from '../datareport/types';
-import type {Column, Preset, Query, RowsAnswer, Scope, ViewMode} from './types';
+import {fill, fillObject, num} from '../datareport/str';
+import type {Chip, ColumnSet, ExtraView, FacetDefinition} from '../datareport/types';
+import type {Column, Facet, Preset, Query, RowsAnswer, Scope, ViewMode} from './types';
 
 /** The group filter's value for every group, explicitly (groupfilter::ANY). */
 export const ANY_GROUP = 'all';
@@ -50,6 +54,10 @@ type BarProps = {
     usedefault: boolean,
     haswidths: boolean,
     view: ViewMode,
+    /** The caller's own views after the built-in ones: "By course" on the site-wide queue, none elsewhere. */
+    extraViews: ExtraView[],
+    /** The "By course" view's methods while it is shown (null while they load), undefined while the list is. */
+    methods?: number | null,
     search: string,
     searchmin: number,
     searching: boolean,
@@ -64,7 +72,7 @@ type BarProps = {
     onPreset: (preset: Preset) => void,
     onDefaultColumns: () => void,
     onResetWidths: () => void,
-    onView: (view: ViewMode) => void,
+    onView: (view: ViewMode | string) => void,
 };
 
 /** Every view the queue offers. */
@@ -91,6 +99,40 @@ const presetLabel = (labels: Record<string, string>, name: string): string => {
 };
 
 /**
+ * A searched facet's search label and no-match line, by the literal keys of each facet's.
+ *
+ * @param {object} labels The strings.
+ * @param {string} name The facet's name.
+ * @returns {object} The label (with the options' count as {$a}) and the no-match line.
+ */
+const finder = (labels: Record<string, string>, name: string): {label: string, nomatch: string} => {
+    switch (name) {
+        case 'course':
+            return {label: labels.searchcourses, nomatch: labels.nocoursematch};
+        case 'category':
+            return {label: labels.searchcategories, nomatch: labels.nocategorymatch};
+        default:
+            return {label: labels.searchgroups, nomatch: labels.nogroupmatch};
+    }
+};
+
+/**
+ * The line under a capped facet (SQ-D6): how many options the server left out, and for the courses that
+ * the bar's search finds a course by its name.
+ *
+ * @param {object} labels The strings.
+ * @param {object} facet The facet as the rows answer counts it.
+ * @returns {string} The line, '' when nothing was left out.
+ */
+const omittedNote = (labels: Record<string, string>, facet: Facet): string => {
+    if (facet.omitted <= 0) {
+        return '';
+    }
+
+    return fill(facet.name === 'category' ? labels.omittedcategories : labels.omittedcourses, num(facet.omitted));
+};
+
+/**
  * The panel's facets: the counted ones, then the identity fields offered as a list, uncounted.
  *
  * @param {object} labels The strings.
@@ -98,14 +140,15 @@ const presetLabel = (labels: Record<string, string>, name: string): string => {
  * @returns {Array} The facets.
  */
 const facets = (labels: Record<string, string>, rows: RowsAnswer): FacetDefinition[] => {
-    const find = {label: labels.searchgroups, nomatch: labels.nogroupmatch};
     const counted: FacetDefinition[] = rows.facets.map((facet) => ({
         name: facet.name,
         title: facet.title,
         options: facet.options,
         groupings: [],
-        find,
+        find: finder(labels, facet.name),
+        note: omittedNote(labels, facet),
     }));
+    const find = finder(labels, '');
     const listed: FacetDefinition[] = rows.fieldfilters.filter((field) => field.control === 'select').map((field) => ({
         name: field.name,
         title: field.title,
@@ -155,6 +198,8 @@ const chip = (labels: Record<string, string>, rows: RowsAnswer, name: string, va
  */
 export const Bar = (props: BarProps): ReactElement => {
     const {labels, rows, query} = props;
+    // The "By course" view is shown: its value is the View menu's choice, and the count is of its methods.
+    const bycourse = props.methods !== undefined;
     const sets: ColumnSet[] = props.presets.map((preset) => ({
         name: preset.name,
         label: presetLabel(labels, preset.name),
@@ -193,8 +238,12 @@ export const Bar = (props: BarProps): ReactElement => {
             sets={sets}
             usedefault={props.usedefault}
             haswidths={props.haswidths}
-            view={props.view}
+            view={bycourse ? query.show : props.view}
             views={VIEWS}
+            extraViews={props.extraViews}
+            hidecolumns={bycourse}
+            countkey={bycourse ? 'methods' : 'count'}
+            counted={props.methods}
             tableurl={props.tableurl}
             downloads={[]}
             search={props.search}

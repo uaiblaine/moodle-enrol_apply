@@ -19,7 +19,8 @@
  * Two kinds of value arrive, and they are drawn differently on purpose. The cells (`cells[].html`) and
  * the picture are the server's formatted HTML, the masking and the escaping already applied there
  * (queueengine::row()), so they are inserted as HTML. Everything the service documents as plain - the
- * applicant's name, the identity values, the tags' words and titles - is drawn as text, never as HTML.
+ * applicant's name, the identity values, the tags' words and titles, the course's and the method's names
+ * on the queues that span courses - is drawn as text, never as HTML.
  *
  * @module     enrol_apply/queue/cells
  * @copyright  2026 Anderson Blaine
@@ -30,14 +31,19 @@ import type {ReactElement} from 'react';
 import {Lines} from '../datareport/cells';
 import {makeSizing} from '../datareport/sizing';
 import {fill} from '../datareport/str';
-import type {Row, Tag} from './types';
+import type {Row, RowCourse, RowMethod, Tag} from './types';
+
+/** What the "Course · method" cell reads of a row: its course and its method (a list's row, or a method's). */
+type CourseAndMethod = {course: RowCourse, method: RowMethod};
 
 /** Default widths, in pixels, by column key; anything else (an answer, mostly) takes DEFAULT_WIDTH. */
 const WIDTHS: Record<string, number> = {
     applicant: 320,
+    course: 240,
     wait: 150,
     group: 180,
     comment: 260,
+    details: 260,
     history: 130,
 };
 
@@ -57,13 +63,16 @@ const MAXIMUM = 800;
 export const SIZING = makeSizing(WIDTHS, DEFAULT_WIDTH, MINIMUMS, MINIMUM, MAXIMUM);
 
 /**
- * The status label's tone of each kind of tag; keep in step with applications::TAG_TONES.
+ * The status label's tone of each kind of tag; keep the applicant's in step with applications::TAG_TONES.
  */
 const TONES: Record<string, string> = {
     deferred: 'enrol_apply-status--warning',
     key: 'enrol_apply-status--info',
     appliedbefore: 'enrol_apply-status--neutral',
     own: 'enrol_apply-status--neutral',
+    // The method's labels on the queues that span courses: the table's tone for a deciding role.
+    deciding: 'enrol_apply-status--warning',
+    full: 'enrol_apply-status--neutral',
 };
 
 /**
@@ -163,5 +172,58 @@ export const ApplicantCell = ({labels, row}: {labels: Record<string, string>, ro
     <div className="enrol_apply-qview-who">
         <Who row={row} />
         <ReviewLink labels={labels} row={row} />
+    </div>
+);
+
+/**
+ * The labels after a method's name: it grants a deciding role (the table's label and tone), and it is at
+ * its limit (every place taken or its applicant limit reached).
+ *
+ * @param {object} props The strings and the row.
+ * @returns {object} The labels, or nothing.
+ */
+export const MethodTags = ({labels, row}: {labels: Record<string, string>, row: CourseAndMethod}): ReactElement | null => {
+    const tags: Tag[] = [];
+    if (row.method.deciding) {
+        tags.push({kind: 'deciding', text: labels.grantsdeciding, title: ''});
+    }
+    if (row.method.full) {
+        tags.push({kind: 'full', text: labels.methodfull, title: labels.methodfullwarn});
+    }
+    if (tags.length === 0) {
+        return null;
+    }
+
+    return <span className="enrol_apply-qview-tags">{tags.map((tag) => <StatusLabel key={tag.kind} tag={tag} />)}</span>;
+};
+
+/**
+ * The method's name: a link to its queue where the reader may open it, its name otherwise.
+ *
+ * @param {object} props The row.
+ * @returns {object} The name.
+ */
+const MethodName = ({row}: {row: CourseAndMethod}): ReactElement => (
+    row.method.queueurl === ''
+        ? <span>{row.method.name}</span>
+        : <a href={row.method.queueurl}>{row.method.name}</a>
+);
+
+/**
+ * The "Course · method" cell of the queues that span courses (SQ-D2): the course's name, a link to the
+ * course, then the method's name under it with its labels. Both names are text.
+ *
+ * @param {object} props The strings and the row.
+ * @returns {object} The cell's content.
+ */
+export const CourseMethod = ({labels, row}: {labels: Record<string, string>, row: CourseAndMethod}): ReactElement => (
+    <div className="enrol_apply-qview-course">
+        <span className="enrol_apply-rview-c" title={row.course.name}>
+            <a className="enrol_apply-qview-coursename" href={row.course.url}>{row.course.name}</a>
+        </span>
+        <div className="enrol_apply-qview-methodline">
+            <span className="enrol_apply-rview-sub" title={row.method.name}><MethodName row={row} /></span>
+            <MethodTags labels={labels} row={row} />
+        </div>
     </div>
 );

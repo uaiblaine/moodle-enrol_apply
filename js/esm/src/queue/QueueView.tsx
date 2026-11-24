@@ -14,11 +14,22 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * The approval queue of one method as a data report: the method queue's page (stages 3 and 4 of
- * docs/design/confirm-queue-as-report-plan.md, CQ-D5).
+ * The approval queue as a data report: the method queue's page (stages 3 and 4 of
+ * docs/design/confirm-queue-as-report-plan.md, CQ-D5) and the site-wide queue's (stage W3 of
+ * docs/design/site-queue-as-report-plan.md, SQ-D12).
  *
- * manage.php?id=<method> renders the shell (enrol_apply\output\queue_view) with configuration and
- * strings, unless view=table asks for today's table; the rows and the tiles come from the plugin's web
+ * One view for both, branching on the listing's kind (the props for the first paint, the rows answer
+ * after): the site-wide queue draws its own tiles (SQ-D7), a "Course · method" column (SQ-D2), the course,
+ * category, method and grouped facets the service returns (choosing another course releases the method),
+ * and a decision sheet that splits a selection spanning methods by method (SQ-D10). The site-wide queue's
+ * View menu adds "By course" (stage W4, SQ-D9, queue/Methods): one row per enrolment method of what the
+ * list holds, read from enrol_apply_queue_methods under the same scope, filters and search, with no
+ * selection, no dock and no Columns; the address says `show=methods`, and its sort and page are that view's.
+ * The rows are still read while it is shown, at their first page, for the panel's facets and the chips.
+ *
+ * manage.php?id=<method>, and manage.php for a site-wide reader, render the shell
+ * (enrol_apply\output\queue_view) with configuration and strings, unless view=table asks for today's
+ * table; the rows and the tiles come from the plugin's web
  * services, which read the queue's own table (classes/local/queueengine.php), so access, the
  * separate-groups narrowing, the masking of the answers and the filters are the table page's. Two
  * regions load on their own:
@@ -55,17 +66,18 @@ import {rememberView, storedView, useNarrow} from '../datareport/layout';
 import {Pager} from '../datareport/Pager';
 import {hold} from '../datareport/pending';
 import {RowsRegion} from '../datareport/Rows';
-import {initialQuery, queryOf, queueUrl, writeAddress} from './address';
+import {METHODS, initialQuery, queryOf, queueUrl, writeAddress} from './address';
 import {ANY_GROUP, Bar, GROUP} from './Bar';
 import {SIZING} from './cells';
 import {decide} from './decide';
 import {chooseRows, derive} from './derive';
+import {MethodsView, methodsDirection, useMethods} from './Methods';
 import {Notices, RowsBody, dockFor, sheetFor} from './Parts';
 import {getRows, getSummary, setPreference} from './repository';
 import type {SheetValues} from './Sheet';
 import {Tiles} from './Tiles';
 import type {
-    Column, Decision, Preference, Preset, Query, RowsAnswer, Scope, SummaryAnswer, ViewMode, ViewProps,
+    Column, Decision, Kind, Preference, Preset, Query, RowsAnswer, Scope, SummaryAnswer, ViewMode, ViewProps,
 } from './types';
 
 /** The wait before the search is sent, after the last key. */
@@ -77,8 +89,30 @@ const WIDTH_DELAY = 500;
 /** The browser key the reader's view choice is remembered under: a convenience of this browser alone. */
 const VIEW_KEY = 'enrol_apply_queue_view';
 
-/** The columns the first skeleton draws, before the server has said which it shows. */
-const SKELETON_COLUMNS = ['applicant', 'wait', 'group', 'comment'];
+/** The columns the first skeleton draws, by the listing's kind, before the server has said which it shows. */
+const SKELETON_COLUMNS: Record<Kind, string[]> = {
+    method: ['applicant', 'wait', 'group', 'comment'],
+    site: ['applicant', 'course', 'wait', 'details'],
+    mentees: ['applicant', 'course', 'wait', 'comment'],
+};
+
+/** The method filter's name: it narrows within the course filter's course, so another course releases it. */
+const METHOD = 'method';
+
+/** The course filter's name. */
+const COURSE = 'course';
+
+/**
+ * What the rows service is asked: the query itself on the list; in the "By course" view, its scope, filters
+ * and search at the first page of the smallest size and the default sort, for the panel's counts and the chips.
+ *
+ * @param {object} asked The query.
+ * @param {Array} perpages The page sizes.
+ * @returns {object} The rows' query.
+ */
+const listQuery = (asked: Query, perpages: number[]): Query => (asked.show === METHODS
+    ? {...asked, sort: '', direction: 'asc', page: 0, perpage: perpages[0]}
+    : asked);
 
 /**
  * Whether a query narrows the queue at all: a scope, a filter (every group excepted) or a search.
@@ -135,6 +169,21 @@ const QueueView = (props: ViewProps): ReactElement => {
     const opener = useRef<HTMLButtonElement | null>(null);
 
     /**
+     * Past the last page (a filter shrank the queue): the server answered the last one, which the address takes.
+     *
+     * @param {number} page The page the server answered.
+     * @returns {void}
+     */
+    const clampPage = useCallback((page: number): void => {
+        query.current = {...query.current, page};
+        setCurrent(query.current);
+        writeAddress(config, query.current, false);
+    }, [config]);
+
+    // The "By course" view's reader (stage W4).
+    const bycourse = useMethods(clampPage);
+
+    /**
      * Read a page of rows; an answer to an older request than the newest is dropped.
      *
      * @param {object} asked What to read.
@@ -146,7 +195,7 @@ const QueueView = (props: ViewProps): ReactElement => {
             rowshold.current = hold('enrol_apply/queue:rows');
         }
         setRowsloading(true);
-        getRows(enrolid, asked).then((answer) => {
+        getRows(enrolid, listQuery(asked, config.perpages)).then((answer) => {
             if (seq !== rowsseq.current) {
                 return;
             }
@@ -154,11 +203,9 @@ const QueueView = (props: ViewProps): ReactElement => {
                 widthsread.current = true;
                 setWidths(Object.fromEntries(answer.preference.widths.map((entry) => [entry.key, entry.width])));
             }
-            if (answer.page !== query.current.page) {
-                // Past the last page (a filter shrank the queue): the server answered the last one.
-                query.current = {...query.current, page: answer.page};
-                setCurrent(query.current);
-                writeAddress(config, query.current, false);
+            // In the "By course" view the page is that view's, which its own answer clamps.
+            if (asked.show !== METHODS && answer.page !== query.current.page) {
+                clampPage(answer.page);
             }
             setRows(answer);
             // Only rows of this answer that may be selected stay selected: none out of sight.
@@ -177,7 +224,22 @@ const QueueView = (props: ViewProps): ReactElement => {
                 setRowsloading(false);
             }
         });
-    }, [enrolid, config]);
+    }, [enrolid, config, clampPage]);
+
+    const loadMethods = bycourse.load;
+
+    /**
+     * Read what a query shows: the rows always, and the "By course" view's methods while it is shown.
+     *
+     * @param {object} asked What to read.
+     * @returns {void}
+     */
+    const reload = useCallback((asked: Query): void => {
+        loadRows(asked);
+        if (asked.show === METHODS) {
+            loadMethods(asked);
+        }
+    }, [loadRows, loadMethods]);
 
     /**
      * Read the tiles' figures; an answer to an older request than the newest is dropped.
@@ -218,8 +280,8 @@ const QueueView = (props: ViewProps): ReactElement => {
         // Another page, scope, filter, search or sort is another set of rows: the selection goes.
         setSelected(new Set());
         writeAddress(config, query.current, push);
-        loadRows(query.current);
-    }, [loadRows, config]);
+        reload(query.current);
+    }, [reload, config]);
 
     // Behat waits on these holds: each is released once the answer it waited for has been drawn.
     useEffect(() => {
@@ -238,9 +300,9 @@ const QueueView = (props: ViewProps): ReactElement => {
     // The first load: the address says what the server read, then both regions, each in a request of its own.
     useEffect(() => {
         writeAddress(config, query.current, false);
-        loadRows(query.current);
+        reload(query.current);
         loadSummary();
-    }, [loadRows, loadSummary, config]);
+    }, [reload, loadSummary, config]);
 
     // The back and forward buttons: an entry this view wrote holds its query.
     useEffect(() => {
@@ -259,12 +321,12 @@ const QueueView = (props: ViewProps): ReactElement => {
             setCurrent(restored);
             setSearchtext(restored.search);
             setSelected(new Set());
-            loadRows(restored);
+            reload(restored);
         };
         window.addEventListener('popstate', popped);
 
         return () => window.removeEventListener('popstate', popped);
-    }, [loadRows]);
+    }, [reload]);
 
     // A pending search is dropped with the component, and its hold released; a pending width is saved.
     useEffect(() => () => {
@@ -284,6 +346,28 @@ const QueueView = (props: ViewProps): ReactElement => {
     const setView = (chosen: ViewMode): void => {
         setViewState(chosen);
         rememberView(VIEW_KEY, chosen);
+    };
+
+    const showing = current.show === METHODS;
+
+    /**
+     * A choice of the View menu. "By course" is the address's (show=methods), with that view's default sort
+     * and its first page; a built-in view is the browser's, and leaves "By course" for the list's defaults.
+     *
+     * @param {string} chosen auto, table, cards or methods.
+     * @returns {void}
+     */
+    const onView = (chosen: ViewMode | string): void => {
+        if (chosen === METHODS) {
+            if (!showing) {
+                run({show: METHODS, sort: '', direction: 'asc', page: 0}, true);
+            }
+            return;
+        }
+        setView(chosen as ViewMode);
+        if (showing) {
+            run({show: '', sort: '', direction: 'asc', page: 0}, true);
+        }
     };
 
     /**
@@ -329,7 +413,8 @@ const QueueView = (props: ViewProps): ReactElement => {
     /**
      * Set one filter, or release it with ''. A released group filter where the group filter has a
      * default reads "every group" explicitly, as the table page's chip writes it, so the default does not
-     * come back on the next visit.
+     * come back on the next visit. Another course, or none, releases the method filter, which only ever
+     * offers the chosen course's methods.
      *
      * @param {string} name The filter's name, as the address names it.
      * @param {string} value Its value, or ''.
@@ -343,6 +428,9 @@ const QueueView = (props: ViewProps): ReactElement => {
             filters[GROUP] = ANY_GROUP;
         } else {
             delete filters[name];
+        }
+        if (name === COURSE) {
+            delete filters[METHOD];
         }
         run({filters, page: 0}, true);
     };
@@ -492,6 +580,9 @@ const QueueView = (props: ViewProps): ReactElement => {
     };
 
     const shown = allcolumns.filter((column) => column.active);
+    // The "By course" view is in the View menu of the site-wide queue alone (the props offer it there).
+    const extraViews = config.methods === null ? [] : [{value: METHODS, label: config.methods.label, icon: 'queue'}];
+    const methodlabels = {...labels, ...(config.methods ?? {})};
     const cards = view === 'cards' || (view === 'auto' && narrow);
 
     // The focus goes back to the dock button that opened the sheet, once the sheet has closed.
@@ -553,7 +644,7 @@ const QueueView = (props: ViewProps): ReactElement => {
             onWidthCommit={() => flushref.current()}
         />
     );
-    const skeleton: Column[] = SKELETON_COLUMNS.map((key) => ({
+    const skeleton: Column[] = SKELETON_COLUMNS[config.kind].map((key) => ({
         key,
         title: key === 'applicant' ? labels.applicant : '',
         sortable: false,
@@ -562,9 +653,43 @@ const QueueView = (props: ViewProps): ReactElement => {
         fixed: key === 'applicant',
     }));
 
+    // The list's rows and its pager; the "By course" view draws its own in their place.
+    const listbody = (
+        <>
+            <RowsRegion
+                labels={labels}
+                loading={rowsloading}
+                loaded={rows !== null}
+                error={rowserror}
+                total={derived.total}
+                filtered={narrows(current)}
+                cards={cards}
+                narrow={narrow}
+                skeleton={{columns: skeleton, lead: 'applicant', widths, sizing: SIZING}}
+                dock={dockFor(labels, offer, decides, chosen, onDecide)}
+                onRetry={() => loadRows(query.current)}
+            >
+                {body}
+            </RowsRegion>
+            {rows !== null && rows.total > 0 ? (
+                <Pager
+                    labels={labels}
+                    page={current.page}
+                    perpage={current.perpage}
+                    perpages={config.perpages}
+                    total={rows.total}
+                    shown={rows.rows.length}
+                    narrow={narrow}
+                    onPage={(page) => run({page}, true)}
+                    onPerpage={(perpage) => run({perpage, page: 0}, true)}
+                />
+            ) : null}
+        </>
+    );
+
     return (
         <div className="enrol_apply-rview-root" ref={root} data-region="enrol_apply-queueview">
-            <Tiles labels={labels} summary={summary} error={summaryerror} onRetry={loadSummary} />
+            <Tiles labels={labels} kind={config.kind} summary={summary} error={summaryerror} onRetry={loadSummary} />
             {derived.notingroup ? <p className="enrol_apply-rview-narrowed">{labels.notingroup}</p> : (
                 <>
                     <Notices labels={labels} narrowed={derived.narrowed} viewonly={derived.viewonly} />
@@ -578,6 +703,8 @@ const QueueView = (props: ViewProps): ReactElement => {
                         usedefault={usedefault}
                         haswidths={Object.keys(widths).length > 0}
                         view={view}
+                        extraViews={extraViews}
+                        methods={showing ? (bycourse.answer?.total ?? null) : undefined}
                         search={searchtext}
                         searchmin={config.searchmin}
                         searching={rowsloading}
@@ -603,36 +730,23 @@ const QueueView = (props: ViewProps): ReactElement => {
                             setWidths({});
                             writePreference({usedefault, columns: usedefault ? [] : chosenkeys, widths: []}, false);
                         }}
-                        onView={setView}
+                        onView={onView}
                     />
-                    <RowsRegion
-                        labels={labels}
-                        loading={rowsloading}
-                        loaded={rows !== null}
-                        error={rowserror}
-                        total={derived.total}
-                        filtered={narrows(current)}
-                        cards={cards}
-                        narrow={narrow}
-                        skeleton={{columns: skeleton, lead: 'applicant', widths, sizing: SIZING}}
-                        dock={dockFor(labels, offer, decides, chosen.length, onDecide)}
-                        onRetry={() => loadRows(query.current)}
-                    >
-                        {body}
-                    </RowsRegion>
-                    {rows !== null && rows.total > 0 ? (
-                        <Pager
-                            labels={labels}
-                            page={current.page}
-                            perpage={current.perpage}
-                            perpages={config.perpages}
-                            total={rows.total}
-                            shown={rows.rows.length}
+                    {showing ? (
+                        <MethodsView
+                            labels={methodlabels}
+                            answer={bycourse.answer}
+                            loading={bycourse.loading}
+                            error={bycourse.error}
+                            filtered={narrows(current)}
                             narrow={narrow}
+                            perpages={config.perpages}
+                            onSort={(key) => run({sort: key, direction: methodsDirection(bycourse.answer, key), page: 0}, true)}
                             onPage={(page) => run({page}, true)}
                             onPerpage={(perpage) => run({perpage, page: 0}, true)}
+                            onRetry={() => loadMethods(query.current)}
                         />
-                    ) : null}
+                    ) : listbody}
                 </>
             )}
             {sheetFor(labels, offer, sheet, chosen, () => setSheet(null), onCommit)}

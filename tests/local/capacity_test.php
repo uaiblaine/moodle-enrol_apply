@@ -564,6 +564,40 @@ final class capacity_test extends \advanced_testcase {
     }
 
     /**
+     * With the third argument the places taken are counted for a method without places too, with placesfull
+     * still false there; without it the answer is state()'s own, instance by instance.
+     *
+     * The controls: a method with places answers the same either way, a pending row and an expired one are
+     * no place taken, and the default call reads 0 for the method without places.
+     *
+     * Changes that must make it fail: the flag ignored; the flag making a method without places "full"; the
+     * default changed.
+     *
+     * @return void
+     */
+    public function test_places_taken_can_be_counted_for_a_method_without_places(): void {
+        $past = time() - DAYSECS;
+        $active = [ENROL_USER_ACTIVE, 0];
+        $set = [
+            $this->method_with(0, 0, [$active, $active, $active, [ENROL_USER_SUSPENDED, 0], [ENROL_USER_ACTIVE, $past]]),
+            $this->method_with(0, 2, [$active, [ENROL_USER_SUSPENDED, 0]]),
+        ];
+        $now = time();
+
+        $counted = capacity::states($set, $now, true);
+        $this->assertSame(3, $counted[(int) $set[0]->id]->taken);
+        $this->assertFalse($counted[(int) $set[0]->id]->placesfull);
+        $this->assertSame(1, $counted[(int) $set[1]->id]->taken);
+
+        $default = capacity::states($set, $now);
+        foreach ($set as $instance) {
+            $this->assertEquals(capacity::state($instance, $now), $default[(int) $instance->id]);
+        }
+        $this->assertSame(0, $default[(int) $set[0]->id]->taken);
+        $this->assertEquals($default[(int) $set[1]->id], $counted[(int) $set[1]->id]);
+    }
+
+    /**
      * The batch reads at most two statements whatever the number of methods within one chunk, and
      * none for an empty set or a set with no limit at all.
      *

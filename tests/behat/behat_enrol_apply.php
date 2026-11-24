@@ -80,6 +80,12 @@ class behat_enrol_apply extends behat_base {
     /**
      * Resolve non-instance page URLs for this plugin.
      *
+     * Recognised pages:
+     *   "manage applications"        the id-less queue: the site-wide queue's grid for a site-wide reader,
+     *                                the mentee queue's table for a mentor
+     *   "applications queue grid"    the same page, named for the view a site-wide reader lands on
+     *   "applications queue table"   the same queue as today's table (view=table)
+     *
      * @param string $page Page name.
      * @return moodle_url The resolved URL.
      * @throws Exception When the page name is not recognised.
@@ -88,6 +94,12 @@ class behat_enrol_apply extends behat_base {
         switch (strtolower($page)) {
             case 'manage applications':
                 return new moodle_url('/enrol/apply/manage.php');
+
+            case 'applications queue grid':
+                return new moodle_url('/enrol/apply/manage.php');
+
+            case 'applications queue table':
+                return new moodle_url('/enrol/apply/manage.php', ['view' => 'table']);
 
             default:
                 throw new Exception("Unrecognised enrol_apply page '{$page}'.");

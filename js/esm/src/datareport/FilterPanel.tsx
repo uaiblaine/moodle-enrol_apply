@@ -21,7 +21,8 @@
  * core's stored filters; a queue keeps its filters in the page's address). Each option carries the rows
  * it would list under every other filter in force; an option no row would list is hidden unless chosen.
  * A facet with more than eight options is a search over a list capped at fifty, the chosen one pinned
- * on top, with a grouping select when the facet has groupings (section 5b).
+ * on top, with a grouping select when the facet has groupings (section 5b). A facet may carry a note of
+ * its caller's, drawn under its options.
  *
  * Strings read from the view's labels: any, filters, clearfilters, show, showcount, grouping,
  * allgroupings, moregroups, moregroupsgrouping.
@@ -161,6 +162,16 @@ const SearchedList = ({labels, facet, shown, value, headid, onChange}: ListProps
 };
 
 /**
+ * A caller's line under a facet's options, or nothing.
+ *
+ * @param {object} props The note, absent or '' for none.
+ * @returns {object|null} The line.
+ */
+const FacetNote = ({note}: {note?: string}): ReactElement | null => (
+    note ? <p className="enrol_apply-rview-note">{note}</p> : null
+);
+
+/**
  * One facet's group in the panel: a radio group of its options with their counts, or a searched list
  * above eight options.
  *
@@ -178,6 +189,7 @@ const FacetGroup = ({labels, facet, value, onChange}: {labels: Record<string, st
             <div className="enrol_apply-rview-fgroup">
                 <span className="enrol_apply-rview-fpanel-head" id={headid}>{facet.title}</span>
                 <SearchedList labels={labels} facet={facet} shown={shown} value={value} headid={headid} onChange={onChange} />
+                <FacetNote note={facet.note} />
             </div>
         );
     }
@@ -227,6 +239,7 @@ const FacetGroup = ({labels, facet, value, onChange}: {labels: Record<string, st
                     </button>
                 ))}
             </div>
+            <FacetNote note={facet.note} />
         </div>
     );
 };
