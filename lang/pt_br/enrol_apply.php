@@ -749,6 +749,7 @@ $string['queueviewmethodscaption'] = 'Métodos de inscrição com solicitações
 $string['queueviewmethodsfull'] = 'Métodos no limite';
 $string['queueviewmethodsfullsub'] = 'Todas as vagas ocupadas, ou nenhuma solicitação nova aceita';
 $string['queueviewmethodsnomatch'] = 'Nenhum método de inscrição corresponde';
+$string['queueviewmethodsscrollhint'] = 'Role para o lado para ver mais colunas; o curso e o método continuam visíveis. Arraste a borda de um cabeçalho para redimensionar a coluna, ou use as setas do teclado sobre ela.';
 $string['queueviewmorefiltersnote'] = 'Os filtros por um campo de texto ou pela data da solicitação ficam na visualização em tabela.';
 $string['queueviewmountfailed'] = 'Não foi possível carregar a visualização em grade. Use a visualização em tabela.';
 $string['queueviewnocategorymatch'] = 'Nenhuma categoria corresponde.';

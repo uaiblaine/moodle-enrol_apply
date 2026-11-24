@@ -385,6 +385,8 @@ class queue_view implements renderable, templatable {
             'oldestwait' => get_string('queueviewoldestwait', 'enrol_apply'),
             'openqueue' => get_string('queueviewopenqueue', 'enrol_apply'),
             'queue' => get_string('queueviewqueue', 'enrol_apply'),
+            // The sticky column here is the course and its method, not an applicant.
+            'scrollhint' => get_string('queueviewmethodsscrollhint', 'enrol_apply'),
             // The count and the placeholder, as the method form's places row words it.
             'takennolimit' => get_string('placestakennolimit', 'enrol_apply'),
         ];
