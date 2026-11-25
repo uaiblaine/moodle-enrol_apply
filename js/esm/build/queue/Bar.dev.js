@@ -59,7 +59,9 @@ const facets = /* @__PURE__ */ __name((labels, rows) => {
     options: facet.options,
     groupings: [],
     find: finder(labels, facet.name),
-    note: omittedNote(labels, facet)
+    note: omittedNote(labels, facet),
+    // The search names every option the facet has, the ones the cap left out included.
+    total: facet.options.length + Math.max(0, facet.omitted)
   }));
   const find = finder(labels, "");
   const listed = rows.fieldfilters.filter((field) => field.control === "select").map((field) => ({
@@ -119,18 +121,18 @@ const Bar = /* @__PURE__ */ __name((props) => {
         " ",
         /* @__PURE__ */ jsxDEV("a", { href: props.tableurl, children: labels.morefilters }, void 0, false, {
           fileName: "public/enrol/apply/js/esm/src/queue/Bar.tsx",
-          lineNumber: 230,
+          lineNumber: 232,
           columnNumber: 21
         })
       ] }, void 0, true, {
         fileName: "public/enrol/apply/js/esm/src/queue/Bar.tsx",
-        lineNumber: 228,
+        lineNumber: 230,
         columnNumber: 17
       }),
       chips,
       aside: props.reporturl !== "" ? /* @__PURE__ */ jsxDEV("a", { className: "enrol_apply-qview-tolink", href: props.reporturl, children: labels.openreport }, void 0, false, {
         fileName: "public/enrol/apply/js/esm/src/queue/Bar.tsx",
-        lineNumber: 235,
+        lineNumber: 237,
         columnNumber: 17
       }) : null,
       columns: props.columns,
@@ -169,7 +171,7 @@ const Bar = /* @__PURE__ */ __name((props) => {
     false,
     {
       fileName: "public/enrol/apply/js/esm/src/queue/Bar.tsx",
-      lineNumber: 215,
+      lineNumber: 217,
       columnNumber: 9
     }
   );

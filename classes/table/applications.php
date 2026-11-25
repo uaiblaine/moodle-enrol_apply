@@ -971,6 +971,20 @@ class applications extends \table_sql implements dynamic_table {
     }
 
     /**
+     * Whether a row's course name is a link to the course.
+     *
+     * For a site-wide reader. A mentor holds nothing in their mentees' courses by design (the delegation
+     * is in the mentee's own user context), so they are given the course's name and no address, as they
+     * are given the method's name and not its queue ({@see self::offers_course_filters()}). Asked by the
+     * table's own cell and by the headless queue, so the two cannot disagree.
+     *
+     * @return bool True on the site-wide queue.
+     */
+    public function links_course(): bool {
+        return $this->offers_course_filters();
+    }
+
+    /**
      * Which parameters the queue reads off a url, and how each one is read.
      *
      * Called by manage.php, which builds both the table and the page url from the result, so the
@@ -2027,9 +2041,10 @@ class applications extends \table_sql implements dynamic_table {
      * @return string Rendered cell.
      */
     public function col_course($row) {
-        $url = new moodle_url('/course/view.php', ['id' => $row->courseid]);
-        $cell = $this->card_label(s(get_string('course')))
-            . html_writer::link($url, format_string($row->course), ['target' => '_blank']);
+        $name = format_string($row->course);
+        $cell = $this->card_label(s(get_string('course'))) . ($this->links_course()
+            ? html_writer::link(new moodle_url('/course/view.php', ['id' => $row->courseid]), $name, ['target' => '_blank'])
+            : html_writer::span($name));
 
         $method = $this->methods[(int) $row->enrolid] ?? null;
         if ($method === null) {

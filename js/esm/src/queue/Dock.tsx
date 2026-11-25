@@ -54,7 +54,7 @@ export const Dock = ({labels, count, methods, actions, onDecide}: DockProps): Re
         <span className="enrol_apply-qview-dockcount" aria-live="polite">
             {fill(labels.selected, num(count))}
             {methods > 1 ? (
-                <small className="enrol_apply-qview-dockmethods">{' ' + fill(labels.dockmethods, num(methods))}</small>
+                <span className="enrol_apply-qview-dockmethods">{' ' + fill(labels.dockmethods, num(methods))}</span>
             ) : null}
         </span>
         <div className="enrol_apply-qview-dockactions">

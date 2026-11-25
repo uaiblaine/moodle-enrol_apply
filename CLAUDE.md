@@ -1492,7 +1492,8 @@ backup/                      group mappings, comments and the durable trail, see
   (SQ-D13, W5).** One code path serves the site-wide and the mentee queues, so the difference must never
   live in a client branch: the client draws what it is given and falls on the reduced side wherever a part
   branches on what the answer holds. Where each thing is withheld: identity values, the `details` and
-  `group` columns, the site facets, `full` and `queueurl` in the rows service (`queueengine`: the scope's
+  `group` columns, the site facets, `full`, `queueurl` and the course's address (`applications::links_course()`,
+  asked by the table's own cell too: `QW28`, `QA2`) in the rows service (`queueengine`: the scope's
   `identitycontext` null, `has_details_column()`, `has_group_column()`, `coursefilter::offered()`,
   `offers_course_filters()`; tests `wide_queue_test`); the site figures in the summary (`sitefigures`,
   `QW16`); the "By course" view in the props (`offers_methods()`, `QM7`) and in its service (`QM1`); the

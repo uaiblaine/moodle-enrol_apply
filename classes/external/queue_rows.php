@@ -204,7 +204,7 @@ class queue_rows extends external_api {
                 'course' => new external_single_structure([
                     'id' => new external_value(PARAM_INT, 'The course, 0 on a method\'s queue'),
                     'name' => new external_value(PARAM_RAW, 'Its full name, plain; empty on a method\'s queue'),
-                    'url' => new external_value(PARAM_URL, 'The course page; empty on a method\'s queue'),
+                    'url' => new external_value(PARAM_URL, 'The course page; empty on a method\'s queue and for a mentor'),
                 ]),
                 'method' => new external_single_structure([
                     'id' => new external_value(PARAM_INT, 'The apply method, 0 on a method\'s queue'),

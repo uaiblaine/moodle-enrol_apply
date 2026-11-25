@@ -114,7 +114,7 @@ const SearchedList = ({labels, facet, shown, value, headid, onChange}: ListProps
     const rest = shown.filter((option) => option.value !== value
         && (folded === '' || option.label.toLocaleLowerCase().includes(folded))
         && (inside === null || inside.includes(option.value)));
-    const searchlabel = fill(facet.find.label, num(facet.options.length));
+    const searchlabel = fill(facet.find.label, num(facet.total ?? facet.options.length));
     const more = groups.length > 0 ? labels.moregroupsgrouping : labels.moregroups;
 
     return (

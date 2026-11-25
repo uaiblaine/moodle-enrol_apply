@@ -39,7 +39,7 @@ const SearchedList = /* @__PURE__ */ __name(({ labels, facet, shown, value, head
   const inside = groups.find((entry) => String(entry.id) === grouping)?.groups.map(String) ?? null;
   const pinned = shown.filter((option) => option.value === value);
   const rest = shown.filter((option) => option.value !== value && (folded === "" || option.label.toLocaleLowerCase().includes(folded)) && (inside === null || inside.includes(option.value)));
-  const searchlabel = fill(facet.find.label, num(facet.options.length));
+  const searchlabel = fill(facet.find.label, num(facet.total ?? facet.options.length));
   const more = groups.length > 0 ? labels.moregroupsgrouping : labels.moregroups;
   return /* @__PURE__ */ jsxDEV(Fragment, { children: [
     /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-find", children: [

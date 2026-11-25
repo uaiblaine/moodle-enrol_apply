@@ -174,38 +174,42 @@ const MethodName = /* @__PURE__ */ __name(({ row }) => row.method.queueurl === "
   columnNumber: 11
 }), "MethodName");
 const CourseMethod = /* @__PURE__ */ __name(({ labels, row }) => /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-qview-course", children: [
-  /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-c", title: row.course.name, children: /* @__PURE__ */ jsxDEV("a", { className: "enrol_apply-qview-coursename", href: row.course.url, children: row.course.name }, void 0, false, {
+  /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-c", title: row.course.name, children: row.course.url === "" ? /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-qview-coursename", children: row.course.name }, void 0, false, {
     fileName: "public/enrol/apply/js/esm/src/queue/cells.tsx",
-    lineNumber: 222,
-    columnNumber: 13
+    lineNumber: 224,
+    columnNumber: 19
+  }) : /* @__PURE__ */ jsxDEV("a", { className: "enrol_apply-qview-coursename", href: row.course.url, children: row.course.name }, void 0, false, {
+    fileName: "public/enrol/apply/js/esm/src/queue/cells.tsx",
+    lineNumber: 225,
+    columnNumber: 19
   }) }, void 0, false, {
     fileName: "public/enrol/apply/js/esm/src/queue/cells.tsx",
-    lineNumber: 221,
+    lineNumber: 222,
     columnNumber: 9
   }),
   /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-qview-methodline", children: [
     /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-rview-sub", title: row.method.name, children: /* @__PURE__ */ jsxDEV(MethodName, { row }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/queue/cells.tsx",
-      lineNumber: 225,
+      lineNumber: 228,
       columnNumber: 77
     }) }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/queue/cells.tsx",
-      lineNumber: 225,
+      lineNumber: 228,
       columnNumber: 13
     }),
     /* @__PURE__ */ jsxDEV(MethodTags, { labels, row }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/queue/cells.tsx",
-      lineNumber: 226,
+      lineNumber: 229,
       columnNumber: 13
     })
   ] }, void 0, true, {
     fileName: "public/enrol/apply/js/esm/src/queue/cells.tsx",
-    lineNumber: 224,
+    lineNumber: 227,
     columnNumber: 9
   })
 ] }, void 0, true, {
   fileName: "public/enrol/apply/js/esm/src/queue/cells.tsx",
-  lineNumber: 220,
+  lineNumber: 221,
   columnNumber: 5
 }), "CourseMethod");
 export {

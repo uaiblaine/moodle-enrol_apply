@@ -20,7 +20,7 @@ import { fill, num } from "../datareport/str";
 const Dock = /* @__PURE__ */ __name(({ labels, count, methods, actions, onDecide }) => /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-qview-dock", role: "region", "aria-label": labels.dock, "data-region": "enrol_apply-dock", children: [
   /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-qview-dockcount", "aria-live": "polite", children: [
     fill(labels.selected, num(count)),
-    methods > 1 ? /* @__PURE__ */ jsxDEV("small", { className: "enrol_apply-qview-dockmethods", children: " " + fill(labels.dockmethods, num(methods)) }, void 0, false, {
+    methods > 1 ? /* @__PURE__ */ jsxDEV("span", { className: "enrol_apply-qview-dockmethods", children: " " + fill(labels.dockmethods, num(methods)) }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/queue/Dock.tsx",
       lineNumber: 57,
       columnNumber: 17
