@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased (2026112313)
+## Unreleased (2026112500)
 
 ### Added
 
@@ -184,6 +184,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   keeps its style. The template takes an optional `info` flag per item.
 
 ### Fixed
+
+- **A filter change in the course report answers at the press** (2026112500, no upgrade step). The React
+  view wrote the new filter to core's store and dimmed the rows only when that call had answered, so a reader
+  waited for the write's round trip with nothing moving; the rows and the band now dim when the filter is
+  pressed and stay dimmed through the write and the read that follows it.
 
 - **The table view keeps its anchors, and the queues that span courses name the site** (2026112313, no
   upgrade step). A sort or paging link of the queue's table (`view=table`) did not carry the view, so
