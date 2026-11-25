@@ -220,7 +220,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **The review page's breadcrumb links the course only for a reader who may open it** (2026112503, no
   upgrade step). A mentor opening an application was given "Courses / category / course" as links, each
   refusing them. Where the reader cannot access the course, the breadcrumb names the course as text and
-  then the plugin's own crumbs; a reader who can keeps core's. Mutation gates `BC1`, `BC2`.
+  then the plugin's own crumbs (the name escaped once); a reader who can keeps core's. Mutation gates `BC1`,
+  `BC2`, `BC3`.
 
 - **The review page's "Already in this course" panel reads a lapsed application as not current**
   (2026112503, no upgrade step). Another of the applicant's applications on this plugin that was no
@@ -317,7 +318,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   reviews in the applicant's user context with no group or role chooser, no group names, earlier
   applications, other enrolments, capacity or identity fields, and an approval they post records an
   empty choice, exactly as for a plain mentor; a capability held in the system context still counts.
-  The course report's set of reviewable rows agrees. Mutation gates `LP1`-`LP26`.
+  The course report's set of reviewable rows agrees. Nor does a reader holding one capability in the
+  system context take another from the lapsed course role: hidden groups' names (the review page, the
+  site-wide queue's group cell, the report), the hidden and private profile fields of the snapshot,
+  the decider's name in "Already in this course", and the roles the lapsed role could assign are read
+  through the same rule; every capability read of the plugin goes through it, which a scanning test
+  holds. Mutation gates `LP1`-`LP26`, `GV7`, `GV8`, `CG1`, `VK1`, `VK2`, `RD1`, `RJ1`, `RJ2`, `BC3`.
 
 - **The site-wide queue's "at their limit" tile honours a course-level prohibit** (2026112503, no
   upgrade step). A reader holding `moodle/course:viewhiddencourses` in the system context was counted

@@ -413,7 +413,7 @@ final class queue {
      * @return bool True when the instance's queue would open for the current user.
      */
     public static function may_list_instance(context_course $context): bool {
-        return has_capability(groupscope::DECIDE, $context) || has_capability(groupscope::VIEW, $context);
+        return groupscope::holds_in_course(groupscope::DECIDE, $context) || groupscope::holds_in_course(groupscope::VIEW, $context);
     }
 
     /**
@@ -484,7 +484,7 @@ final class queue {
 
             /* A viewer (S5) lists the same queue read-only, narrowed by the viewing capability's
                own system exemption; a decider by the deciding one. */
-            $candecide = has_capability(groupscope::DECIDE, $context);
+            $candecide = groupscope::holds_in_course(groupscope::DECIDE, $context);
             $capability = groupscope::reader_capability($context);
 
             return (object) [

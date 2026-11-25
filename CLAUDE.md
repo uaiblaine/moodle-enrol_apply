@@ -316,9 +316,24 @@ backup/                      group mappings, comments and the durable trail, see
   (`visible_keys()`'s identity gate), the notices (`names_group_to()`, which the admission's naming now
   goes through too), `groupseats::overfilled_named_to()`, the bulk menu and `process()`, and the
   fields handler's `can_view()`. Behind `require_login($course)` it answers as `has_capability()`, so
-  shared code may call it. Left as `has_capability()` on purpose: reads reached only after a
-  helper-gated read in the same function (the name format, the panel's decider, `visible_keys()`'s
-  hidden-field and all-details halves, `groupvisibility::visible_to()`). Gates `LP6`-`LP25`.
+  shared code may call it. Gates `LP6`-`LP25`.
+
+  **Nothing reads a course capability bare any more, and `tests/every_door_test.php` says so**
+  (`test_every_capability_read_of_a_course_goes_through_the_helper`): every `has_capability()`,
+  `has_any_capability()`, `has_all_capabilities()` and `require_capability()` outside the tests is a
+  call of the helper or one of the bare reads its `BARE_READS` declares with a reason (the system or a
+  user context, `require_capability()` behind `require_login($course)` or `validate_context()`, the
+  helper's own two, and the two reads whose DIRECTION a lapsed holder must not change:
+  `allow_unenrol_user()` narrows holders, `hook_callbacks::refuses_approval()` judges them). The
+  earlier version left the reads "behind a helper-gated read" bare, and that argument fails for the
+  very reader the helper is for: the exemption is per capability, so a reader holding capability A
+  in the system context passes A's gate and then read B through the lapsed course role
+  (`moodle/course:viewhiddengroups` in `groupvisibility`, the hidden-field and all-details halves of
+  `visible_keys()`, the panel's decider). Core's helpers that read the course themselves are fed the
+  plugin's rule too: `groupscope::judging_context()` (the system context for a lapsed reader) for
+  `get_identity_fields()` and `get_assignable_roles()`, and `choosable_groups()` keeps only what
+  `groupvisibility::visible_ids()` shows of `groups_get_all_groups()`. Gates `GV7`, `GV8`, `CG1`,
+  `VK1`, `VK2`, `RD1`, `RJ1`, `RJ2`.
   `test_a_mentor_enrolled_in_the_course_still_walks_their_mentees` and
   `test_a_teacher_whose_own_enrolment_is_suspended_opens_no_queue` pin the two halves.
 

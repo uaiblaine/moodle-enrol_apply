@@ -101,7 +101,7 @@ class application_handler extends \core_customfield\handler {
      */
     public function can_configure(): bool {
         $context = $this->get_course_context();
-        return $context !== null && has_capability('enrol/apply:config', $context);
+        return $context !== null && \enrol_apply\local\groupscope::holds_in_course('enrol/apply:config', $context);
     }
 
     /**

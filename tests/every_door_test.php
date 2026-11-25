@@ -45,6 +45,13 @@ use PHPUnit\Framework\Attributes\DataProvider;
  * - submission::decide(), the one writer of a decision on the durable record, is called from the
  *   declared functions and no other: a fifth caller, or one of the four gone, fails
  *   {@see test_the_durable_decision_has_its_declared_callers_only()}.
+ * - every capability read (has_capability(), has_any_capability(), has_all_capabilities(),
+ *   require_capability()) in a file outside the tests is a call of groupscope::holds_in_course(),
+ *   or one of the bare reads this test declares, with its reason: a read of the system or a user
+ *   context, a read behind require_login($course), a read whose direction a lapsed reader must not
+ *   change, the helper's own. A new bare read anywhere, or one more in a declared function, fails
+ *   {@see test_every_capability_read_of_a_course_goes_through_the_helper()} until somebody declares
+ *   why it is not a course read off a guarded path; a declared one that is gone fails it too.
  *
  * @package    enrol_apply
  * @category   test
@@ -112,6 +119,129 @@ final class every_door_test extends \basic_testcase {
         'lib.php::admit' => 'A group key\'s admission: the applicant presenting a valid key is the recorded '
             . 'decider (G11).',
     ];
+
+    /** @var array The capability readers the bare-read rule is about. */
+    private const CAPABILITY_READERS = [
+        'has_capability',
+        'has_any_capability',
+        'has_all_capabilities',
+        'require_capability',
+    ];
+
+    /**
+     * The bare capability reads, as "file::function" (the top level of a script as "(script)") => how
+     * many there are and why each is not a course read off a guarded path. Every other read is a call
+     * of groupscope::holds_in_course(), which counts a course-level grant only while the reader's own
+     * enrolment in the course has not lapsed.
+     */
+    private const BARE_READS = [
+        'report.php::(script)' => [1, 'require_capability() after require_login($course).'],
+        'fields.php::(script)' => [1, 'require_capability() after require_login($course).'],
+        'condition.php::(script)' => [1, 'require_capability() after require_login($course).'],
+        'edit.php::(script)' => [2, 'require_capability() after require_login($course).'],
+        'manage.php::(script)' => [1, 'require_capability() in the course after require_login($course), or in the system context.'],
+        'classes/external/report_rows.php::execute' => [1, 'require_capability() after validate_context() on the course.'],
+        'classes/external/report_summary.php::execute' => [1, 'require_capability() after validate_context() on the course.'],
+        'classes/external/set_report_preference.php::execute' => [
+            1,
+            'require_capability() after validate_context() on the course.',
+        ],
+        'classes/local/queue.php::require_review_access' => [1, 'The refusal is raised in the applicant\'s user context.'],
+        'classes/local/queue.php::scope' => [2, 'The system context.'],
+        'classes/local/queue.php::listing_scope' => [2, 'The system context.'],
+        'lib.php::can_manage_application' => [1, 'The applicant\'s user context: the mentor level.'],
+        'classes/local/applications.php::get_mentees' => [1, 'The mentee\'s user context: the mentor level.'],
+        'classes/local/profilelink.php::viewable' => [1, 'The applicant\'s user context: core\'s "parent" branch.'],
+        'classes/local/profilelink.php::viewable_ids' => [1, 'The applicant\'s user context: core\'s "parent" branch.'],
+        'classes/local/profilewriter.php::write' => [1, 'The system context.'],
+        'classes/local/reportengine.php::retention' => [1, 'The system context.'],
+        'classes/table/applications.php::offers_grouped_filter' => [1, 'The system context.'],
+        'classes/reportbuilder/local/formatters/submission.php::decided' => [1, 'The system context.'],
+        'classes/reportbuilder/local/formatters/submission.php::visible_keys' => [1, 'The system context.'],
+        'classes/reportbuilder/datasource/applications.php::restrict_submitted_data' => [
+            1,
+            'A custom report\'s context, which is the system context.',
+        ],
+        'classes/local/groupscope.php::system_exempt' => [1, 'The system context: the helper\'s own exemption.'],
+        'classes/local/groupscope.php::holds_in_course' => [1, 'The helper\'s own definition.'],
+        'lib.php::allow_unenrol_user' => [
+            1,
+            'Chooses whom to narrow: a holder is narrowed to their groups, so the helper would exempt a lapsed holder.',
+        ],
+        'classes/hook_callbacks.php::refuses_approval' => [
+            1,
+            'Chooses whom to judge: a holder is judged, so the helper would let a lapsed holder pass unjudged.',
+        ],
+    ];
+
+    /**
+     * Each call of one of these functions in a file's code, keyed "file::enclosing function".
+     *
+     * Read from PHP's own tokens, comments being tokens of their own: a name followed by "(" and not
+     * preceded by "->", "?->", "::", "function" or "new" is a call of the global function. The
+     * enclosing function is tracked by brace depth, so a closure counts towards the function it sits
+     * in and code outside every function towards "(script)".
+     *
+     * @param string $relative Path relative to the plugin root.
+     * @param array $names The functions looked for.
+     * @return array "file::function" => how many calls.
+     */
+    private static function calls_by_function(string $relative, array $names): array {
+        $tokens = array_values(array_filter(
+            token_get_all(file_get_contents(dirname(__DIR__) . '/' . $relative)),
+            static fn($token): bool => !is_array($token) || !in_array($token[0], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)
+        ));
+        $calls = [];
+        $stack = [];
+        $pending = null;
+        $depth = 0;
+        foreach ($tokens as $i => $token) {
+            $text = is_array($token) ? $token[1] : $token;
+            $type = is_array($token) ? $token[0] : null;
+            if ($type === T_FUNCTION) {
+                $next = $tokens[$i + 1] ?? null;
+                if (is_array($next) && $next[0] === T_STRING) {
+                    $pending = $next[1];
+                } else if ($next === '&' && is_array($tokens[$i + 2] ?? null) && $tokens[$i + 2][0] === T_STRING) {
+                    $pending = $tokens[$i + 2][1];
+                }
+                continue;
+            }
+            if ($text === ';') {
+                // An abstract or interface method ends its declaration with no body.
+                $pending = null;
+                continue;
+            }
+            if ($text === '{' || $type === T_CURLY_OPEN || $type === T_DOLLAR_OPEN_CURLY_BRACES) {
+                if ($text === '{' && $pending !== null) {
+                    $stack[] = [$pending, $depth];
+                    $pending = null;
+                }
+                $depth++;
+                continue;
+            }
+            if ($text === '}') {
+                $depth--;
+                if ($stack && end($stack)[1] === $depth) {
+                    array_pop($stack);
+                }
+                continue;
+            }
+            $name = in_array($type, [T_STRING, T_NAME_FULLY_QUALIFIED], true) ? ltrim($text, '\\') : null;
+            if ($name === null || !in_array($name, $names, true) || ($tokens[$i + 1] ?? null) !== '(') {
+                continue;
+            }
+            $before = $tokens[$i - 1] ?? null;
+            $notacall = [T_OBJECT_OPERATOR, T_NULLSAFE_OBJECT_OPERATOR, T_DOUBLE_COLON, T_FUNCTION, T_NEW];
+            if (is_array($before) && in_array($before[0], $notacall, true)) {
+                continue;
+            }
+            $key = $relative . '::' . ($stack ? end($stack)[0] : '(script)');
+            $calls[$key] = ($calls[$key] ?? 0) + 1;
+        }
+
+        return $calls;
+    }
 
     /**
      * A file's code with its comments removed, by PHP's own tokenizer.
@@ -374,5 +504,34 @@ final class every_door_test extends \basic_testcase {
         $declared = array_keys(self::DECIDE_CALLERS);
         sort($declared);
         $this->assertSame($declared, $callers, 'A new writer of a decision is declared in DECIDE_CALLERS with its reason.');
+    }
+
+    /**
+     * Every capability read in the plugin's code goes through groupscope::holds_in_course(), but for
+     * the bare reads BARE_READS declares, each with its reason.
+     *
+     * A role assignment survives the suspension or the end of the enrolment that gave it, so a bare
+     * read of a course capability answers yes through a course role a lapsed reader can no longer use,
+     * on any path that does not pass require_login($course); the helper does not, and answers as
+     * has_capability() everywhere else.
+     *
+     * @return void
+     */
+    public function test_every_capability_read_of_a_course_goes_through_the_helper(): void {
+        $bare = [];
+        foreach (self::production_files() as $relative) {
+            $bare += self::calls_by_function($relative, self::CAPABILITY_READERS);
+        }
+        ksort($bare);
+        $declared = array_map(static fn(array $entry): int => $entry[0], self::BARE_READS);
+        ksort($declared);
+
+        $this->assertArrayHasKey('report.php::(script)', $bare, 'the control: the scan finds a script\'s read');
+        $this->assertArrayHasKey('lib.php::can_manage_application', $bare, 'the control: and a method\'s');
+        $this->assertSame(
+            $declared,
+            $bare,
+            'A bare capability read: call groupscope::holds_in_course(), or declare it in BARE_READS with its reason.'
+        );
     }
 }

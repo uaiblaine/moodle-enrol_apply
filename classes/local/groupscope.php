@@ -100,7 +100,7 @@ final class groupscope {
             return false;
         }
 
-        return !has_capability('moodle/site:accessallgroups', $context, $userid);
+        return !self::holds_in_course('moodle/site:accessallgroups', $context, $userid);
     }
 
     /**
@@ -236,6 +236,28 @@ final class groupscope {
     }
 
     /**
+     * The context core's own helpers judge a reader in for a course, on a path that does not pass
+     * require_login($course).
+     *
+     * Core's helpers read capabilities in the context they are handed, with has_capability(), so
+     * handed the course they count a course role the reader's lapsed enrolment left behind:
+     * get_identity_fields() (moodle/site:viewuseridentity, moodle/course:viewhiddenuserfields),
+     * get_assignable_roles() (the roles that course role may assign). For a reader {@see lapsed()} in
+     * the course they are handed the system context instead, so only what the reader holds there
+     * counts, as {@see holds_in_course()} counts a system-level grant and nothing else for them;
+     * anybody else is judged in the course, as before.
+     *
+     * @param context_course $context The course.
+     * @param int|null $userid The reader, null for the current user.
+     * @return \context The course context, or the system context for a lapsed reader.
+     */
+    public static function judging_context(context_course $context, ?int $userid = null): \context {
+        global $USER;
+
+        return self::lapsed($context, $userid ?? (int) $USER->id) ? context_system::instance() : $context;
+    }
+
+    /**
      * The capability the current user exercises when they read applications in a context.
      *
      * Deciding when they hold enrol/apply:manageapplications there, looking without deciding
@@ -249,7 +271,7 @@ final class groupscope {
      * @return string {@see DECIDE} or {@see VIEW}.
      */
     public static function reader_capability(\context $context): string {
-        return has_capability(self::DECIDE, $context) ? self::DECIDE : self::VIEW;
+        return self::holds_in_course(self::DECIDE, $context) ? self::DECIDE : self::VIEW;
     }
 
     /**
@@ -649,10 +671,13 @@ final class groupscope {
     /**
      * The groups of this course the current user may choose for an approval (S6).
      *
-     * Every group of the course groups_get_all_groups() lists to $USER, narrowed to their own
-     * for a narrowed decider, and to none on a method only those who see every group decide
-     * (C-D20), whose applications a narrowed decider decides none of. The group choosers (the
-     * queue, the review page, the participants page's bulk form) offer this list and
+     * Every group of the course groups_get_all_groups() lists to $USER, kept to the ones
+     * {@see groupvisibility::visible_ids()} lets them see (core's helper reads
+     * moodle/course:viewhiddengroups with has_capability(), so a course role their lapsed enrolment
+     * left behind would list hidden groups; the plugin's copy of the clause reads it through
+     * {@see holds_in_course()}), narrowed to their own for a narrowed decider, and to none on a
+     * method only those who see every group decide (C-D20), whose applications a narrowed decider
+     * decides none of. The group choosers (the queue, the review page, the participants page's bulk form) offer this list and
      * confirm_enrolment() allowlists the posted ids against it, so a control cannot offer a group
      * the decision would drop, and a forged post naming a foreign group joins nothing.
      *
@@ -665,6 +690,8 @@ final class groupscope {
         global $USER;
 
         $groups = groups_get_all_groups($courseid);
+        $visible = groupvisibility::visible_ids($groups, (int) $USER->id);
+        $groups = array_intersect_key($groups, array_flip($visible));
         $own = self::narrowed_to($courseid, (int) $USER->id);
         if ($own === null) {
             return $groups;

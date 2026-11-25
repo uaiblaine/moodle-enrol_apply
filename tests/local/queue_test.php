@@ -1520,4 +1520,25 @@ final class queue_test extends \advanced_testcase {
             $texts($children->getValue($navbar))
         );
     }
+
+    /**
+     * The course's short name in a mentor's crumb is escaped once, as core's own course crumb is: the
+     * navbar renders a node's text raw.
+     *
+     * Changes that must make it fail: the short name added without format_string() (gate BC3).
+     *
+     * @return void
+     */
+    public function test_the_course_crumb_is_escaped_once(): void {
+        [$course, $instance] = $this->course_with_instance(['shortname' => 'A&B']);
+        [$applicant, $ueid] = $this->applicant_on($instance);
+        $this->instance = $instance;
+        $this->setUser($this->mentor($applicant));
+
+        $items = $this->review_navbar($ueid)->get_items();
+
+        $this->assertSame('A&amp;B', (string) $items[1]->text);
+        $this->assertNull($items[1]->action);
+        $this->assertSame((int) $course->id, (int) queue::application($ueid)->courseid, 'the premise: the crumb names this course');
+    }
 }

@@ -561,7 +561,7 @@ class enrol_apply_edit_form extends moodleform {
             $roleids,
             $this->group_mode_name($mode),
             $mode === SEPARATEGROUPS,
-            has_capability('moodle/course:update', $context)
+            \enrol_apply\local\groupscope::holds_in_course('moodle/course:update', $context)
         ));
     }
 
@@ -1270,7 +1270,7 @@ class enrol_apply_edit_form extends moodleform {
         global $OUTPUT;
 
         $mode = $this->group_mode($courseid);
-        $canupdate = has_capability('moodle/course:update', $context);
+        $canupdate = \enrol_apply\local\groupscope::holds_in_course('moodle/course:update', $context);
 
         return $OUTPUT->render_from_template('enrol_apply/course_group_mode', [
             'mode' => $this->group_mode_name($mode),

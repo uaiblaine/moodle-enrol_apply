@@ -868,7 +868,8 @@ class enrol_apply_renderer extends plugin_renderer_base {
                returns a bare get_string() for one without, which covers every role a stock site
                ships, so the list mixes both spellings. format_string() is idempotent on the
                escaped half, because the ampersand rule skips an existing entity. */
-            foreach (get_assignable_roles($coursecontext) as $roleid => $rolename) {
+            $assignable = get_assignable_roles(\enrol_apply\local\groupscope::judging_context($coursecontext));
+            foreach ($assignable as $roleid => $rolename) {
                 $roles[] = [
                     'id' => $roleid,
                     'name' => format_string($rolename, true, ['context' => $coursecontext]),
@@ -1144,12 +1145,13 @@ class enrol_apply_renderer extends plugin_renderer_base {
      */
     protected function identity_context($applicant, $coursecontext): array {
         $rows = [];
-        /* Core's helper reads moodle/site:viewuseridentity in the course itself; a reader whose own
-           enrolment there lapsed (a mentor admitted by the user context) is told no more than a
-           mentor is. */
-        $values = \enrol_apply\local\groupscope::holds_in_course('moodle/site:viewuseridentity', $coursecontext)
-            ? \enrol_apply\local\identity::values($coursecontext, (int) $applicant->id)
-            : [];
+        /* Core's helper reads moodle/site:viewuseridentity and the hidden fields' capability in the
+           context it is handed: a reader whose own enrolment in the course lapsed is judged in the
+           system context, so only what they hold there counts (groupscope::judging_context()). */
+        $values = \enrol_apply\local\identity::values(
+            \enrol_apply\local\groupscope::judging_context($coursecontext),
+            (int) $applicant->id
+        );
         foreach ($values as $field => $value) {
             $rows[] = [
                 /* Labelled, because these run together on one line and several are opaque on
@@ -1276,7 +1278,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
         $deciders = $deciderids
             ? $DB->get_records_list('user', 'id', $deciderids, '', 'id, ' . implode(', ', \core_user\fields::get_name_fields()))
             : [];
-        $viewfullnames = has_capability('moodle/site:viewfullnames', $coursecontext);
+        $viewfullnames = \enrol_apply\local\groupscope::holds_in_course('moodle/site:viewfullnames', $coursecontext);
         $short = get_string('strftimedatetimeshort', 'langconfig');
 
         $rows = [];
@@ -1393,8 +1395,8 @@ class enrol_apply_renderer extends plugin_renderer_base {
 
         $instances = enrol_get_instances($courseid, false);
         $namesgroups = self::reads_course_groups($coursecontext);
-        $namesdecider = has_capability('enrol/apply:viewreports', $coursecontext);
-        $viewfullnames = has_capability('moodle/site:viewfullnames', $coursecontext);
+        $namesdecider = \enrol_apply\local\groupscope::holds_in_course('enrol/apply:viewreports', $coursecontext);
+        $viewfullnames = \enrol_apply\local\groupscope::holds_in_course('moodle/site:viewfullnames', $coursecontext);
         $short = get_string('strftimedatetimeshort', 'langconfig');
         $now = time();
 

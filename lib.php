@@ -410,7 +410,10 @@ class enrol_apply_plugin extends enrol_plugin {
     public function get_newinstance_link($courseid) {
         $context = context_course::instance($courseid, MUST_EXIST);
 
-        if (!has_capability('moodle/course:enrolconfig', $context) || !has_capability('enrol/apply:config', $context)) {
+        if (
+            !\enrol_apply\local\groupscope::holds_in_course('moodle/course:enrolconfig', $context)
+            || !\enrol_apply\local\groupscope::holds_in_course('enrol/apply:config', $context)
+        ) {
             return null;
         }
         return new moodle_url('/enrol/apply/edit.php', ['courseid' => $courseid]);
@@ -1602,7 +1605,7 @@ class enrol_apply_plugin extends enrol_plugin {
             return $actions;
         }
 
-        if (!has_capability('enrol/apply:manageapplications', $manager->get_context())) {
+        if (!\enrol_apply\local\groupscope::holds_in_course('enrol/apply:manageapplications', $manager->get_context())) {
             return $actions;
         }
 
@@ -1641,7 +1644,7 @@ class enrol_apply_plugin extends enrol_plugin {
 
         $icons = [];
 
-        if (has_capability('enrol/apply:config', $context)) {
+        if (\enrol_apply\local\groupscope::holds_in_course('enrol/apply:config', $context)) {
             $editlink = new moodle_url('/enrol/apply/edit.php', [
                 'courseid' => $instance->courseid,
                 'id' => $instance->id,
@@ -1658,7 +1661,10 @@ class enrol_apply_plugin extends enrol_plugin {
         }
 
         // A viewer (S5) reaches the same queue, read-only.
-        if (has_any_capability(['enrol/apply:manageapplications', 'enrol/apply:viewapplications'], $context)) {
+        if (
+            \enrol_apply\local\groupscope::holds_in_course('enrol/apply:manageapplications', $context)
+            || \enrol_apply\local\groupscope::holds_in_course('enrol/apply:viewapplications', $context)
+        ) {
             $managelink = new moodle_url('/enrol/apply/manage.php', ['id' => $instance->id]);
             $icons[] = $OUTPUT->action_icon(
                 $managelink,
@@ -1669,7 +1675,7 @@ class enrol_apply_plugin extends enrol_plugin {
         /* Its own capability, checked separately: the report shows the frozen profile snapshot
            of every applicant the course has ever had, which is a wider disclosure than deciding
            on the applications currently in the queue. */
-        if (has_capability('enrol/apply:viewreports', $context)) {
+        if (\enrol_apply\local\groupscope::holds_in_course('enrol/apply:viewreports', $context)) {
             $reportlink = new moodle_url('/enrol/apply/report.php', ['id' => $instance->id]);
             $icons[] = $OUTPUT->action_icon(
                 $reportlink,
@@ -1693,7 +1699,7 @@ class enrol_apply_plugin extends enrol_plugin {
      */
     public function can_hide_show_instance($instance) {
         $context = context_course::instance($instance->courseid);
-        return has_capability('enrol/apply:config', $context);
+        return \enrol_apply\local\groupscope::holds_in_course('enrol/apply:config', $context);
     }
 
     /**
@@ -1704,7 +1710,7 @@ class enrol_apply_plugin extends enrol_plugin {
      */
     public function can_delete_instance($instance) {
         $context = context_course::instance($instance->courseid);
-        return has_capability('enrol/apply:config', $context);
+        return \enrol_apply\local\groupscope::holds_in_course('enrol/apply:config', $context);
     }
 
     /**
@@ -1790,7 +1796,7 @@ class enrol_apply_plugin extends enrol_plugin {
         }
 
         $context = context_course::instance($instance->courseid);
-        if (has_capability('enrol/apply:config', $context)) {
+        if (\enrol_apply\local\groupscope::holds_in_course('enrol/apply:config', $context)) {
             $managelink = new moodle_url('/enrol/apply/edit.php', [
                 'courseid' => $instance->courseid,
                 'id' => $instance->id,
@@ -1807,7 +1813,7 @@ class enrol_apply_plugin extends enrol_plugin {
            from enrol_apply_extend_navigation_course() (the queue's Reports link), which fires for every
            course whether or not it has an apply instance. *_extend_settings_navigation() is
            not dispatched for enrol plugins at all. */
-        if (has_capability('enrol/apply:viewreports', $context)) {
+        if (\enrol_apply\local\groupscope::holds_in_course('enrol/apply:viewreports', $context)) {
             $reportlink = new moodle_url('/enrol/apply/report.php', ['id' => $instance->id]);
             $instancesnode->add(
                 get_string('report:course_applications', 'enrol_apply'),
@@ -2034,7 +2040,10 @@ class enrol_apply_plugin extends enrol_plugin {
                deliberately not allowlisted: filtering it would stop an instance configured with a
                role its teacher may not assign from granting any role at all. */
             if ($rowdecision !== null && array_key_exists('roleid', $rowdecision)) {
-                $assignable = get_assignable_roles(context_course::instance($instance->courseid));
+                // Judged as the chooser is: a lapsed course role assigns nothing (groupscope::judging_context()).
+                $assignable = get_assignable_roles(
+                    \enrol_apply\local\groupscope::judging_context(context_course::instance($instance->courseid))
+                );
                 $chosenrole = (int) $rowdecision['roleid'];
                 \enrol_apply\local\submission::record_decided_role(
                     (int) $userenrolment->id,
@@ -3094,7 +3103,7 @@ function enrol_apply_extend_navigation_course(navigation_node $parentnode, stdCl
 
     $reports = $parentnode->get('coursereports', navigation_node::TYPE_CONTAINER);
     if (!$reports) {
-        if (!has_capability('moodle/site:viewreports', $context)) {
+        if (!\enrol_apply\local\groupscope::holds_in_course('moodle/site:viewreports', $context)) {
             return;
         }
         $reports = $parentnode->add(

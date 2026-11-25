@@ -37,7 +37,7 @@ $context = context_course::instance($course->id, MUST_EXIST);
 
 require_login();
 
-if (!$course->visible && !has_capability('moodle/course:viewhiddencourses', $context)) {
+if (!$course->visible && !\enrol_apply\local\groupscope::holds_in_course('moodle/course:viewhiddencourses', $context)) {
     throw new moodle_exception('coursehidden');
 }
 

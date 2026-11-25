@@ -163,7 +163,7 @@ class bulk_decision_form extends moodleform {
         $mform = $this->_form;
         $coursecontext = context_course::instance($courseid);
 
-        if (!has_capability('enrol/apply:choosedecision', $coursecontext)) {
+        if (!\enrol_apply\local\groupscope::holds_in_course('enrol/apply:choosedecision', $coursecontext)) {
             $mform->addElement(
                 'static',
                 'decisionsummary',
@@ -199,7 +199,7 @@ class bulk_decision_form extends moodleform {
         }
 
         $roles = [0 => get_string('decisionroledefault', 'enrol_apply')];
-        foreach (get_assignable_roles($coursecontext) as $roleid => $rolename) {
+        foreach (get_assignable_roles(\enrol_apply\local\groupscope::judging_context($coursecontext)) as $roleid => $rolename) {
             $roles[$roleid] = format_string($rolename, true, ['context' => $coursecontext]);
         }
         if (count($roles) > 1) {

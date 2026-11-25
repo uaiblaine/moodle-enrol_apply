@@ -945,4 +945,231 @@ final class lapsed_decider_test extends \advanced_testcase {
         $this->lapsed_teacher('suspended');
         $this->assertFalse($handler->can_view($field, (int) $this->instance->id));
     }
+
+    /**
+     * A reader of the course holding one capability in the system context and a course role their
+     * lapsed enrolment left behind: enrolled as an editing teacher, the enrolment then suspended or not.
+     *
+     * @param string $shortname The system role's short name, unique in the test.
+     * @param array $capabilities The capabilities the system role holds.
+     * @param bool $lapsed Whether the course enrolment is suspended.
+     * @return \stdClass The reader.
+     */
+    private function site_reader(string $shortname, array $capabilities, bool $lapsed): \stdClass {
+        global $DB;
+
+        $system = \context_system::instance()->id;
+        $role = (int) ($DB->get_field('role', 'id', ['shortname' => $shortname])
+            ?: $this->getDataGenerator()->create_role(['shortname' => $shortname]));
+        foreach ($capabilities as $capability) {
+            assign_capability($capability, CAP_ALLOW, $role, $system, true);
+        }
+        $reader = $this->getDataGenerator()->create_and_enrol($this->course, 'editingteacher');
+        role_assign($role, $reader->id, $system);
+        if ($lapsed) {
+            $this->lapse($reader, 'suspended');
+        }
+
+        return $reader;
+    }
+
+    /**
+     * A group whose visibility hides it from non-members is not named, through the lapsed course
+     * role's moodle/course:viewhiddengroups, to a site-wide decider: neither on the review page (the
+     * chip, the group facts and the summary) nor in the wide queue's group cell. The control is the
+     * same reader with an active enrolment, who is shown it in both.
+     *
+     * Changes that must make it fail: groupvisibility::visible_to() (gate GV7) or visible_ids() (gate
+     * GV8) reading the capability with has_capability() alone, or choosable_groups() listing what core's
+     * groups_get_all_groups() lists without the plugin's own visibility rule (gate CG1).
+     *
+     * @return void
+     */
+    public function test_a_hidden_group_is_not_named_through_a_lapsed_course_role(): void {
+        $hidden = $this->getDataGenerator()->create_group([
+            'courseid' => $this->course->id,
+            'name' => 'Hidden tutorial',
+            'visibility' => GROUPS_VISIBILITY_MEMBERS,
+        ]);
+        $applicant = $this->getDataGenerator()->create_user();
+        $this->setAdminUser();
+        $sink = $this->redirectMessages();
+        $written = (new \ReflectionMethod(\enrol_apply_plugin::class, 'apply'))->invoke(
+            $this->plugin,
+            $this->instance,
+            (int) $applicant->id,
+            (object) ['applydescription' => 'Please'],
+            0,
+            submission::KEY_NONE,
+            (int) $hidden->id
+        );
+        $sink->close();
+        $ueid = (int) $written['userenrolmentid'];
+
+        $named = function (\stdClass $reader) use ($ueid, $applicant): array {
+            $this->setUser($reader);
+            $context = queue::require_review_access(queue::application($ueid));
+            $review = $this->review_html($ueid, $applicant, $context);
+            $wide = json_encode(\enrol_apply\local\queueengine::rows(0, []));
+
+            return [str_contains($review, 'Hidden tutorial'), str_contains($wide, 'Hidden tutorial')];
+        };
+
+        $lapsed = $this->site_reader('hiddengroupsdecider', [groupscope::DECIDE], true);
+        $this->assertTrue(has_capability('moodle/course:viewhiddengroups', $this->context, $lapsed), 'the premise');
+        $this->assertSame([false, false], $named($lapsed));
+        $active = $this->site_reader('hiddengroupsdecider', [groupscope::DECIDE], false);
+        $this->assertSame([true, true], $named($active), 'the control: an active enrolment');
+    }
+
+    /**
+     * The snapshot's masking reads the hidden fields' capability and moodle/user:viewalldetails through
+     * a live course role only, for a reader whose moodle/site:viewuseridentity is held in the system
+     * context: a field in hiddenuserfields and a private custom field are withheld through the lapsed
+     * role, shown through the same role active.
+     *
+     * Changes that must make it fail: visible_keys() reading the hidden fields' capability (gate VK1)
+     * or moodle/user:viewalldetails (gate VK2) with has_capability() alone.
+     *
+     * @return void
+     */
+    public function test_the_masking_reads_the_further_capabilities_through_a_live_course_role(): void {
+        global $CFG, $DB;
+
+        require_once($CFG->dirroot . '/user/profile/lib.php');
+        set_config('hiddenuserfields', 'city');
+        $private = $this->getDataGenerator()->create_custom_profile_field([
+            'shortname' => 'lapsedprivate',
+            'name' => 'Private detail',
+            'datatype' => 'text',
+            'visible' => PROFILE_VISIBLE_PRIVATE,
+        ]);
+        $editingteacher = (int) $DB->get_field('role', 'id', ['shortname' => 'editingteacher'], MUST_EXIST);
+        assign_capability('moodle/user:viewalldetails', CAP_ALLOW, $editingteacher, \context_system::instance()->id, true);
+        $formatter = \enrol_apply\reportbuilder\local\formatters\submission::class;
+        $keys = [
+            \enrol_apply\local\fields::standard_key('city'),
+            \enrol_apply\local\fields::custom_key((int) $private->id),
+        ];
+        $shown = function (\stdClass $reader) use ($formatter, $keys): array {
+            $visible = $formatter::visible_keys($this->context, (int) $reader->id);
+
+            return array_map(static fn(string $key): bool => $formatter::shows($key, $visible), $keys);
+        };
+
+        $lapsed = $this->site_reader('identitysite', ['moodle/site:viewuseridentity'], true);
+        $this->assertTrue(has_capability('moodle/course:viewhiddenuserfields', $this->context, $lapsed), 'the premise');
+        $this->assertSame([false, false], $shown($lapsed));
+        $active = $this->site_reader('identitysite', ['moodle/site:viewuseridentity'], false);
+        $this->assertSame([true, true], $shown($active), 'the control: an active enrolment');
+    }
+
+    /**
+     * The review page's "Already in this course" panel, shown to a site-wide reader holding
+     * moodle/course:enrolreview in the system context, names who approved another enrolment only through
+     * a live course role holding enrol/apply:viewreports; the date is said either way.
+     *
+     * Changes that must make it fail: enrolments_context() reading enrol/apply:viewreports with
+     * has_capability() alone (gate RD1).
+     *
+     * @return void
+     */
+    public function test_the_panel_names_the_decider_only_through_a_live_course_role(): void {
+        global $DB;
+
+        $editingteacher = (int) $DB->get_field('role', 'id', ['shortname' => 'editingteacher'], MUST_EXIST);
+        assign_capability(groupscope::REPORT, CAP_ALLOW, $editingteacher, \context_system::instance()->id, true);
+        $decider = $this->getDataGenerator()->create_user(['firstname' => 'Dora', 'lastname' => 'Decider']);
+        [$ueid, $applicant] = $this->apply_for();
+        $otherid = $this->plugin->add_instance(
+            $this->course,
+            ['name' => 'Earlier intake'] + $this->plugin->get_instance_defaults()
+        );
+        $other = $DB->get_record('enrol', ['id' => $otherid], '*', MUST_EXIST);
+        $this->plugin->enrol_user($other, $applicant->id, null, time() - DAYSECS, 0, ENROL_USER_ACTIVE);
+        $DB->insert_record('enrol_apply_submission', (object) [
+            'courseid' => $this->course->id,
+            'userid' => $applicant->id,
+            'enrolid' => $otherid,
+            'userenrolmentid' => (int) $DB->get_field('user_enrolments', 'id', ['enrolid' => $otherid, 'userid' => $applicant->id]),
+            'comment' => '',
+            'status' => submission::STATUS_APPROVED,
+            'timecreated' => time() - DAYSECS,
+            'timedecided' => time() - HOURSECS,
+            'decidedby' => $decider->id,
+            'joinedgroups' => '',
+        ]);
+        $named = function (\stdClass $reader) use ($ueid, $applicant, $decider): bool {
+            $this->setUser($reader);
+            $context = queue::require_review_access(queue::application($ueid));
+            $html = $this->review_html($ueid, $applicant, $context);
+            $this->assertStringContainsString('data-region="review-enrolments"', $html, 'the panel is shown');
+
+            return str_contains($html, fullname($decider));
+        };
+
+        $capabilities = [groupscope::DECIDE, 'moodle/course:enrolreview'];
+        $this->assertFalse($named($this->site_reader('panelsite', $capabilities, true)));
+        $this->assertTrue($named($this->site_reader('panelsite', $capabilities, false)), 'the control: an active enrolment');
+    }
+
+    /**
+     * A site-wide chooser (enrol/apply:choosedecision in the system context) whose enrolment in the
+     * course lapsed is offered, and may post, no role their lapsed editing teacher role could assign:
+     * core's get_assignable_roles() is judged in the system context for them. The control: with an
+     * active enrolment the role chooser is offered and the posted role given.
+     *
+     * Changes that must make it fail: the review page's role chooser (gate RJ1) or confirm_enrolment()'s
+     * allowlist (gate RJ2) judged in the course context for a lapsed reader.
+     *
+     * @return void
+     */
+    public function test_a_lapsed_course_role_assigns_no_role_for_a_site_wide_chooser(): void {
+        global $DB;
+
+        $teacherrole = (int) $DB->get_field('role', 'id', ['shortname' => 'teacher'], MUST_EXIST);
+        $capabilities = [groupscope::DECIDE, 'enrol/apply:choosedecision'];
+        $decide = function (\stdClass $reader) use ($teacherrole): array {
+            [$ueid, $applicant] = $this->apply_for();
+            $this->setUser($reader);
+            $context = queue::require_review_access(queue::application($ueid));
+            $offered = str_contains($this->review_html($ueid, $applicant, $context), 'name="roleid"');
+            $this->assertSame(1, $this->post([
+                'sesskey' => sesskey(),
+                'formaction' => 'confirm',
+                'userenrolments' => [$ueid],
+                'roleid' => $teacherrole,
+            ]));
+
+            return [$offered, $this->holds_role('teacher', $applicant)];
+        };
+
+        $this->assertSame([false, false], $decide($this->site_reader('rolechooser', $capabilities, true)));
+        $this->assertSame([true, true], $decide($this->site_reader('rolechooser', $capabilities, false)), 'the control');
+    }
+
+    /**
+     * A category role without moodle/course:view counts in the course for a reader enrolled nowhere and
+     * for one whose enrolment is active, and not for one whose enrolment lapsed.
+     *
+     * @return void
+     */
+    public function test_a_category_role_counts_only_while_the_enrolment_has_not_lapsed(): void {
+        $role = $this->getDataGenerator()->create_role(['shortname' => 'lapsedcategory']);
+        assign_capability(groupscope::DECIDE, CAP_ALLOW, $role, \context_system::instance()->id, true);
+        $category = \context_coursecat::instance($this->course->category)->id;
+        $nowhere = $this->getDataGenerator()->create_user();
+        $active = $this->getDataGenerator()->create_and_enrol($this->course, 'student');
+        $lapsed = $this->getDataGenerator()->create_and_enrol($this->course, 'student');
+        foreach ([$nowhere, $active, $lapsed] as $user) {
+            role_assign($role, $user->id, $category);
+        }
+        $this->lapse($lapsed, 'suspended');
+        $this->assertFalse(is_viewing($this->context, $lapsed->id), 'the premise: the role does not view the course');
+
+        $holds = fn(\stdClass $user): bool => groupscope::holds_in_course(groupscope::DECIDE, $this->context, (int) $user->id);
+        $this->assertTrue($holds($nowhere));
+        $this->assertTrue($holds($active));
+        $this->assertFalse($holds($lapsed));
+    }
 }
