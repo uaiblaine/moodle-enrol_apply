@@ -54,8 +54,8 @@ const WIDTHS: Record<string, number> = {
 /** The width of a column the table above does not name (a question, mostly). */
 const DEFAULT_WIDTH = 180;
 
-/** Minimum widths: the applicant 160 px, a date 104 px (section 5b), anything else 80 px. */
-const MINIMUMS: Record<string, number> = {applicant: 160, submitted: 104, decided: 104};
+/** Minimum widths: the applicant 200 px, with its Review action; a date 104 px (section 5b); anything else 80 px. */
+const MINIMUMS: Record<string, number> = {applicant: 200, submitted: 104, decided: 104};
 
 /** The narrowest any column may be dragged. */
 const MINIMUM = 80;

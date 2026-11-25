@@ -177,8 +177,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   table: a mentor holds nothing in the course, as they already got the method's name without its queue
   (the site-wide readers keep both links). The search of a course or category filter that the server
   cut names every option it has ("Search 340 courses"), not the 200 sent. The bar's "in N enrolment
-  methods" is set at the type scale's small size. A selected row and card take an outline under forced
-  colours, where the tint is dropped. Mutation gates `QW28`, `QA2`.
+  methods" is set at the size of the grid's sub-line (0.8125rem). A selected row and card take an
+  outline under forced colours, where the tint is dropped. A method's "Places taken" tile turns to the
+  warning tone once every place is taken, as the "By course" meter does. The first column may be dragged
+  down to 200 px where it carries a box, a picture or an action (the course report's applicant, as the
+  queue's) and to 160 px where it carries none (the "By course" view's course). Mutation gates `QW28`,
+  `QA2`.
 
 - **Two adjustments from the browser pass of the site-wide queue** (2026112311, no upgrade step). In the
   "By course" view the "Awaiting decision" and "Places taken (approved)" columns open wide enough for

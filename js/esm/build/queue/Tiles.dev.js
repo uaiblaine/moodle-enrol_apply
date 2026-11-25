@@ -210,7 +210,7 @@ const Tiles = /* @__PURE__ */ __name(({ labels, kind, summary, error, onRetry })
         value: fillObject(labels.ofmany, { taken: num(summary.placestaken), total: num(summary.places) }),
         sub: methodnote,
         meter: percent(summary.placestaken, summary.places),
-        warn: false
+        warn: summary.placestaken >= summary.places
       },
       void 0,
       false,
@@ -233,13 +233,13 @@ const Tiles = /* @__PURE__ */ __name(({ labels, kind, summary, error, onRetry })
       false,
       {
         fileName: "public/enrol/apply/js/esm/src/queue/Tiles.tsx",
-        lineNumber: 206,
+        lineNumber: 207,
         columnNumber: 17
       }
     ) : null,
     /* @__PURE__ */ jsxDEV(AwaitingTile, { labels, summary }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/queue/Tiles.tsx",
-      lineNumber: 215,
+      lineNumber: 216,
       columnNumber: 13
     }),
     /* @__PURE__ */ jsxDEV(
@@ -255,7 +255,7 @@ const Tiles = /* @__PURE__ */ __name(({ labels, kind, summary, error, onRetry })
       false,
       {
         fileName: "public/enrol/apply/js/esm/src/queue/Tiles.tsx",
-        lineNumber: 216,
+        lineNumber: 217,
         columnNumber: 13
       }
     )
