@@ -148,12 +148,13 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         $names = array_map(static function ($item): string {
             return $item->get_name();
         }, $items);
-        $this->assertCount(8, $items);
+        $this->assertCount(9, $items);
         $this->assertEqualsCanonicalizing(
             [
                 'enrol_apply_applicationinfo',
                 'enrol_apply_submission',
                 'enrol_apply_answer',
+                'reportbuilder_user_filter',
                 'enrol_apply_report_columns',
                 'enrol_apply_queue_grid',
                 'enrol_apply_queue_grid_wide',

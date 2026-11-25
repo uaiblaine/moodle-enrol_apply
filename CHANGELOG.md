@@ -4,9 +4,29 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased (2026112500)
+## Unreleased (2026112501)
 
 ### Added
+
+- **The applications report's stored filters are the plugin's personal data, and an uninstall
+  removes them** (2026112501, a data-only upgrade step; Design System D146). The filter values a reader
+  applies to the course report are rows core's report builder writes (`reportbuilder_user_filter`)
+  under the report's persistent, and core's own privacy provider covers custom reports only. The
+  privacy provider now declares that table, finds a reader's rows in their own user context, exports
+  them with the course and the enrolment method each report is of, and deletes them for the user,
+  for a list of users and for the context. Deleting the account deletes them (the `user_deleted`
+  observer: the user context is gone by then), deleting an enrolment method deletes its report, and
+  deleting a course sweeps every report of the plugin whose context is gone (a disabled method's
+  included). A new `db/uninstall.php` deletes the plugin's report persistents through core's model,
+  with every reader's stored filters on them, and the three user preferences
+  (`enrol_apply_report_columns`, `enrol_apply_queue_grid`, `enrol_apply_queue_grid_wide`). The
+  upgrade step removes what earlier versions left: the reports of courses already deleted and the
+  stored filters of accounts already deleted. A report is the plugin's when its source is one of the
+  plugin's system report classes, whatever its component: core's
+  `core_reportbuilder_retrieve_system_report` and `_can_view_system_report` build a report for any
+  component a client sends, the plugin's own report under another one and another plugin's report
+  under this one. Custom reports on the plugin's datasource stay their authors'. One definition,
+  `\enrol_apply\local\reportpersistents`.
 
 - **A mentor's queue is a grid too, with what its table shows** (2026112309, no upgrade step).
   `manage.php` with no id opens the grid view for a mentor (a holder of

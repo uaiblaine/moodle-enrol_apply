@@ -936,6 +936,18 @@ widths, `enrol_apply_queue_grid` the same for the approval queue of one method, 
 `enrol_apply_queue_grid_wide` the same for the queues that span courses (the site-wide queue and a
 mentor's). Each is exported with the user's data and deleted with the user.
 
+The filter values a reader applies to the applications report are kept by Moodle's report builder
+for that reader, in core's table `reportbuilder_user_filter`, under the report core keeps for each
+enrolment method the report was opened for (`reportbuilder_report`). They
+can name an outcome, a group, dates or a name the reader typed, so the plugin declares, exports and
+deletes them as its own (core's privacy provider covers custom reports only). They are kept until the
+reader changes or clears them, and deleted with the reader's account, with the enrolment method and
+with the course.
+
+Uninstalling the plugin removes, beyond what Moodle removes itself, the reports the report builder
+kept for the applications report, every reader's filter values on them, and the three user
+preferences above.
+
 An approval also writes core rows: a role assignment and group memberships stamped with
 `enrol_apply`, and the enrolment itself. The plugin never writes the applicant's profile unless
 the site allows it (`enrol_apply/allowprofilewrite`) and the applicant accepts the offer. A custom
@@ -945,23 +957,27 @@ unique and was taken by somebody else in the meantime is not written.
 ## Privacy
 
 The plugin implements the full privacy API — metadata, data export, and deletion for a
-user, for a list of users, and for a whole context — over its three personal-data tables and
-the group memberships its approvals add.
+user, for a list of users, and for a whole context — over its three personal-data tables,
+the group memberships its approvals add and the filter values a reader stored on the applications
+report (in the reader's own user context).
 
 - **A data export** includes the user's choice of columns for the applications report and for the
-  approval queue, and gives
+  approval queue, and the filter values they stored on the applications report with the course and
+  the enrolment method each is of, and gives
   the applicant their pending comment, every application record they
   submitted with the details and answers it carried and the decision taken on it, and the groups
   an approval added them to. Somebody who decided applications gets each decision they took,
   never the applicant's comment or answers.
 - **A deletion** removes the applicant's comments, records and answers and the group memberships
   approvals gave them in the course; for a decider it only clears their name from the records,
-  which stay the applicant's. Role assignments and the enrolment itself are core's, covered by
-  core's own privacy providers.
+  which stay the applicant's. A deletion in the user's own context removes the filter values they
+  stored on the applications report. Role assignments and the enrolment itself are core's, covered
+  by core's own privacy providers.
 - **A deleted user** is pseudonymised at once, without waiting for the retention period: core's
   `delete_user()` calls no privacy provider, so the plugin observes the deletion and gives the
   applicant's records no user, no comment, no messages and no frozen answers, keeping the status,
-  the dates and the course. Records the user decided only lose their name.
+  the dates and the course. Records the user decided only lose their name, and the filter values
+  the user stored on the applications report are deleted.
 
 The decision events (see "Audit trail") are rows of the site's log store, declared by the log
 store's own privacy provider, so the plugin declares nothing for them. Core's standard log store
