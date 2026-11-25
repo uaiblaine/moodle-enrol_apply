@@ -293,6 +293,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Security
 
+- **A course that grants guest access no longer lets a reader whose enrolment lapsed open the queue,
+  the report and its services through the course role the enrolment left behind** (2026112503, no
+  upgrade step). Core's `require_login($course)` admits such a reader as a temporary guest, so the
+  bare `require_capability()` after it passed on the role a suspended or ended enrolment keeps. The
+  report page, the fields, condition and method pages and the three report services now ask
+  `groupscope::require_in_course()`, and `manage.php?id=` raises the refusal its resolver already
+  reached instead of reading the capability a second time. Mutation gates `GA1`-`GA4`.
+
 - **An accepted group key gives no wrong keys back** (2026112503, no upgrade step). The wrong-key
   throttle allows five wrong keys in fifteen minutes per applicant and course, and an admission by a
   key (or an application a key sent for review) used to reset the count. A student who knew one valid

@@ -132,11 +132,12 @@ if ($userenrol) {
     $instance = $listing->instance;
 
     if (!$listing->allowed) {
-        /* Raised here rather than inside the resolver, because the dynamic table's
-           has_capability() must answer with a bool: the resolver reports, each caller raises.
-           The context is the one listing_scope() checked - the course for ?id=, the system
-           context otherwise. */
-        require_capability('enrol/apply:manageapplications', $context);
+        /* The resolver reports (the dynamic table's has_capability() must answer with a bool) and the
+           page raises. Thrown outright, with no second read of the capability: a bare
+           require_capability() passes for a lapsed reader of a course that grants guest access, whom
+           the resolver has already refused. The context is the one listing_scope() checked - the course
+           for ?id=, the system context otherwise. */
+        throw new \required_capability_exception($context, 'enrol/apply:manageapplications', 'nopermissions', '');
     }
 }
 
@@ -169,7 +170,7 @@ $manageurl = new moodle_url('/enrol/apply/manage.php', $manageurlparams);
 /* The grid view is the page of the method queue (CQ-D5), of the site-wide queue (W3, SQ-D12) and of the
    mentee queue (W5, SQ-D13); view=table asks for today's table. queue_view::wanted() is the one rule, asked of
    the listing scope resolved above, never of the request; a refused listing never reaches it (the
-   require_capability() above throws), and the rule refuses it the grid on its own anyway.
+   refusal above throws), and the rule refuses it the grid on its own anyway.
 
    $listingurl is where this listing lives. For the grid it is $manageurl, which the decision form in the
    view's noscript posts to; a decision from the grid lands on queue_view::return_url() instead, the address

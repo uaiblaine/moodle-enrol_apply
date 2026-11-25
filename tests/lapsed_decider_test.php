@@ -48,7 +48,9 @@ require_once($CFG->dirroot . '/enrol/locallib.php');
  * The second half: a reader admitted by another level (a lapsed teacher who mentors the applicant, a
  * site-wide decider) uses no course capability their lapsed course role still carries, on any path
  * that does not pass require_login($course) ({@see groupscope::holds_in_course()}); a capability held
- * in the system context still counts.
+ * in the system context still counts. In a course that grants guest access require_login($course) admits
+ * the lapsed reader as a temporary guest, so the report's pages and services ask
+ * {@see groupscope::require_in_course()}.
  *
  * @package    enrol_apply
  * @category   test
@@ -1171,5 +1173,147 @@ final class lapsed_decider_test extends \advanced_testcase {
         $this->assertTrue($holds($nowhere));
         $this->assertTrue($holds($active));
         $this->assertFalse($holds($lapsed));
+    }
+
+    /**
+     * The course grants guest access, the report is granted to its editing teachers, and one of them is
+     * enrolled with a suspended enrolment, logged in.
+     *
+     * The preconditions are asserted: core admits this reader as a temporary guest, and the course role
+     * the enrolment left behind still answers yes, so a bare require_capability() would pass.
+     *
+     * @return \stdClass The teacher.
+     */
+    private function lapsed_teacher_of_a_guest_course(): \stdClass {
+        global $DB;
+
+        $enabled = enrol_get_plugins(true);
+        $enabled['guest'] = true;
+        set_config('enrol_plugins_enabled', implode(',', array_keys($enabled)));
+        $guest = $DB->get_record('enrol', ['courseid' => $this->course->id, 'enrol' => 'guest']);
+        if ($guest) {
+            $DB->update_record('enrol', (object) ['id' => $guest->id, 'status' => ENROL_INSTANCE_ENABLED, 'password' => '']);
+        } else {
+            enrol_get_plugin('guest')->add_instance($this->course, ['status' => ENROL_INSTANCE_ENABLED, 'password' => '']);
+        }
+        $role = (int) $DB->get_field('role', 'id', ['shortname' => 'editingteacher']);
+        assign_capability('enrol/apply:viewreports', CAP_ALLOW, $role, $this->context->id, true);
+
+        $teacher = $this->getDataGenerator()->create_and_enrol($this->course, 'editingteacher');
+        $this->lapse($teacher, 'suspended');
+        $this->setUser($teacher);
+
+        $this->assertTrue(can_access_course($this->course, null, '', true), 'guest access admits the reader');
+        $this->assertTrue(has_capability('enrol/apply:viewreports', $this->context), 'the role survives');
+        $this->assertTrue(groupscope::lapsed($this->context, (int) $teacher->id), 'the enrolment has lapsed');
+
+        return $teacher;
+    }
+
+    /**
+     * Give a reader their enrolment back and log them in again, as the control of a refusal.
+     *
+     * @param \stdClass $teacher The reader.
+     * @return void
+     */
+    private function reinstate(\stdClass $teacher): void {
+        global $DB;
+
+        $this->setAdminUser();
+        $manual = $DB->get_record('enrol', ['courseid' => $this->course->id, 'enrol' => 'manual'], '*', MUST_EXIST);
+        enrol_get_plugin('manual')->update_user_enrol($manual, (int) $teacher->id, ENROL_USER_ACTIVE);
+        $this->setUser($teacher);
+        $this->assertFalse(groupscope::lapsed($this->context, (int) $teacher->id), 'the control: enrolled again');
+    }
+
+    /**
+     * Call a web service as a client does.
+     *
+     * @param string $function The function.
+     * @param array $args Its arguments.
+     * @return array The response: error, data or exception.
+     */
+    private function call(string $function, array $args): array {
+        $_POST['sesskey'] = sesskey();
+
+        return \core_external\external_api::call_external_function($function, $args, true);
+    }
+
+    /**
+     * A reader whose enrolment lapsed in a course that grants guest access gets no report rows.
+     *
+     * @return void
+     */
+    public function test_the_report_rows_refuse_a_lapsed_reader_of_a_guest_course(): void {
+        $teacher = $this->lapsed_teacher_of_a_guest_course();
+        $args = ['enrolid' => (int) $this->instance->id];
+
+        $response = $this->call('enrol_apply_report_rows', $args);
+        $this->assertTrue($response['error']);
+        $this->assertSame('nopermissions', $response['exception']->errorcode);
+
+        $this->reinstate($teacher);
+        $response = $this->call('enrol_apply_report_rows', $args);
+        $this->assertFalse($response['error'], json_encode($response['exception'] ?? null));
+    }
+
+    /**
+     * A reader whose enrolment lapsed in a course that grants guest access gets no report summary.
+     *
+     * @return void
+     */
+    public function test_the_report_summary_refuses_a_lapsed_reader_of_a_guest_course(): void {
+        $teacher = $this->lapsed_teacher_of_a_guest_course();
+        $args = ['enrolid' => (int) $this->instance->id];
+
+        $response = $this->call('enrol_apply_report_summary', $args);
+        $this->assertTrue($response['error']);
+        $this->assertSame('nopermissions', $response['exception']->errorcode);
+
+        $this->reinstate($teacher);
+        $response = $this->call('enrol_apply_report_summary', $args);
+        $this->assertFalse($response['error'], json_encode($response['exception'] ?? null));
+    }
+
+    /**
+     * A reader whose enrolment lapsed in a course that grants guest access stores no report preference.
+     *
+     * @return void
+     */
+    public function test_the_report_preference_is_not_stored_for_a_lapsed_reader_of_a_guest_course(): void {
+        $teacher = $this->lapsed_teacher_of_a_guest_course();
+        $args = ['enrolid' => (int) $this->instance->id, 'columns' => ['outcome']];
+        $name = \enrol_apply\local\reportpreference::NAME;
+        $this->assertNull(get_user_preferences($name, null, $teacher->id));
+
+        $response = $this->call('enrol_apply_set_report_preference', $args);
+        $this->assertTrue($response['error']);
+        $this->assertSame('nopermissions', $response['exception']->errorcode);
+        $this->assertNull(get_user_preferences($name, null, $teacher->id), 'nothing was written');
+
+        $this->reinstate($teacher);
+        $response = $this->call('enrol_apply_set_report_preference', $args);
+        $this->assertFalse($response['error'], json_encode($response['exception'] ?? null));
+        $this->assertNotNull(get_user_preferences($name, null, $teacher->id), 'the control writes');
+    }
+
+    /**
+     * The helper itself answers through the lapse and not through has_capability() alone.
+     *
+     * @return void
+     */
+    public function test_require_in_course_refuses_a_lapsed_reader_and_admits_the_active_one(): void {
+        $teacher = $this->lapsed_teacher_of_a_guest_course();
+
+        try {
+            groupscope::require_in_course('enrol/apply:viewreports', $this->context);
+            $this->fail('A lapsed reader was admitted.');
+        } catch (\required_capability_exception $e) {
+            $this->assertSame('nopermissions', $e->errorcode);
+        }
+
+        $this->reinstate($teacher);
+        groupscope::require_in_course('enrol/apply:viewreports', $this->context);
+        $this->assertTrue(true, 'the control passes');
     }
 }

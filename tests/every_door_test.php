@@ -48,7 +48,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
  * - every capability read (has_capability(), has_any_capability(), has_all_capabilities(),
  *   require_capability()) in a file outside the tests is a call of groupscope::holds_in_course(),
  *   or one of the bare reads this test declares, with its reason: a read of the system or a user
- *   context, a read behind require_login($course), a read whose direction a lapsed reader must not
+ *   context, a read whose direction a lapsed reader must not
  *   change, the helper's own. A new bare read anywhere, or one more in a declared function, fails
  *   {@see test_every_capability_read_of_a_course_goes_through_the_helper()} until somebody declares
  *   why it is not a course read off a guarded path; a declared one that is gone fails it too.
@@ -61,7 +61,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 #[CoversNothing]
 final class every_door_test extends \basic_testcase {
     /** @var string The check every entry script makes after require_login(), unless it declares another. */
-    private const CAPABILITY_CHECK = '~\brequire_capability\s*\(~';
+    private const CAPABILITY_CHECK = '~\b(?:require_capability|require_in_course|required_capability_exception)\b~';
 
     /**
      * The entry scripts that check something else than a capability after require_login(), each with
@@ -135,17 +135,6 @@ final class every_door_test extends \basic_testcase {
      * enrolment in the course has not lapsed.
      */
     private const BARE_READS = [
-        'report.php::(script)' => [1, 'require_capability() after require_login($course).'],
-        'fields.php::(script)' => [1, 'require_capability() after require_login($course).'],
-        'condition.php::(script)' => [1, 'require_capability() after require_login($course).'],
-        'edit.php::(script)' => [2, 'require_capability() after require_login($course).'],
-        'manage.php::(script)' => [1, 'require_capability() in the course after require_login($course), or in the system context.'],
-        'classes/external/report_rows.php::execute' => [1, 'require_capability() after validate_context() on the course.'],
-        'classes/external/report_summary.php::execute' => [1, 'require_capability() after validate_context() on the course.'],
-        'classes/external/set_report_preference.php::execute' => [
-            1,
-            'require_capability() after validate_context() on the course.',
-        ],
         'classes/local/queue.php::require_review_access' => [1, 'The refusal is raised in the applicant\'s user context.'],
         'classes/local/queue.php::scope' => [2, 'The system context.'],
         'classes/local/queue.php::listing_scope' => [2, 'The system context.'],
@@ -512,8 +501,8 @@ final class every_door_test extends \basic_testcase {
      *
      * A role assignment survives the suspension or the end of the enrolment that gave it, so a bare
      * read of a course capability answers yes through a course role a lapsed reader can no longer use,
-     * on any path that does not pass require_login($course); the helper does not, and answers as
-     * has_capability() everywhere else.
+     * on any path that does not pass require_login($course), and on one that does in a course that
+     * grants guest access, which admits the lapsed reader as a temporary guest; the helper does not.
      *
      * @return void
      */
@@ -526,7 +515,11 @@ final class every_door_test extends \basic_testcase {
         $declared = array_map(static fn(array $entry): int => $entry[0], self::BARE_READS);
         ksort($declared);
 
-        $this->assertArrayHasKey('report.php::(script)', $bare, 'the control: the scan finds a script\'s read');
+        $this->assertArrayHasKey(
+            'report.php::(script)',
+            self::calls_by_function('report.php', ['require_login']),
+            'the control: the scan finds a call at the top level of a script'
+        );
         $this->assertArrayHasKey('lib.php::can_manage_application', $bare, 'the control: and a method\'s');
         $this->assertSame(
             $declared,

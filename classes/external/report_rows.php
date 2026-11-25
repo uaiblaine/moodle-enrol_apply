@@ -21,6 +21,7 @@ use core_external\external_function_parameters;
 use core_external\external_multiple_structure;
 use core_external\external_single_structure;
 use core_external\external_value;
+use enrol_apply\local\groupscope;
 use enrol_apply\local\reportengine;
 
 /**
@@ -100,7 +101,7 @@ class report_rows extends external_api {
         if (isguestuser()) {
             throw new \moodle_exception('noguest');
         }
-        require_capability('enrol/apply:viewreports', $context);
+        groupscope::require_in_course('enrol/apply:viewreports', $context);
 
         return reportengine::rows(reportengine::report($instance, $params['measure']), $params);
     }

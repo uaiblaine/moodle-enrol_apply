@@ -36,7 +36,7 @@ $course = get_course($instance->courseid);
 $context = context_course::instance($course->id);
 
 require_login($course);
-require_capability('enrol/apply:config', $context);
+\enrol_apply\local\groupscope::require_in_course('enrol/apply:config', $context);
 
 $PAGE->set_url('/enrol/apply/fields.php', ['id' => $instance->id]);
 $PAGE->set_pagelayout('admin');

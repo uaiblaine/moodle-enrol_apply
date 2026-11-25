@@ -302,6 +302,13 @@ backup/                      group mappings, comments and the durable trail, see
   mentor levels are untouched. Gates `LP1`-`LP5`, `tests/lapsed_decider_test.php`. `queue::scope()`
   is unchanged: it still sends that operator to no queue.
 
+  **A page or service of a course asks `groupscope::require_in_course()`, never a bare
+  `require_capability()` behind `require_login($course)` or `validate_context()`**: a course that
+  grants guest access (an enabled guest method with no password) admits a reader whose enrolment
+  lapsed as a temporary guest, and the bare read then passes on the course role the enrolment left
+  behind. `manage.php?id=` raises `required_capability_exception` itself when the resolver refuses
+  (`$listing->allowed`), with no second read. Gates `GA1`-`GA4`.
+
   **On every path that does not pass `require_login($course)`, a course capability is read through
   `groupscope::holds_in_course()`**, which is `has_capability()` minus a course-level grant the
   reader's lapsed enrolment left behind (a system-level holder keeps theirs, `system_exempt()`). The
@@ -315,15 +322,14 @@ backup/                      group mappings, comments and the durable trail, see
   `enrolments_context()`, `capacity_context()`, `identity_context()`), the snapshot masking
   (`visible_keys()`'s identity gate), the notices (`names_group_to()`, which the admission's naming now
   goes through too), `groupseats::overfilled_named_to()`, the bulk menu and `process()`, and the
-  fields handler's `can_view()`. Behind `require_login($course)` it answers as `has_capability()`, so
-  shared code may call it. Gates `LP6`-`LP25`.
+  fields handler's `can_view()`. Behind `require_login($course)` it answers as `has_capability()` for a
+  reader admitted by enrolment, so shared code may call it. Gates `LP6`-`LP25`.
 
   **Nothing reads a course capability bare any more, and `tests/every_door_test.php` says so**
   (`test_every_capability_read_of_a_course_goes_through_the_helper`): every `has_capability()`,
   `has_any_capability()`, `has_all_capabilities()` and `require_capability()` outside the tests is a
   call of the helper or one of the bare reads its `BARE_READS` declares with a reason (the system or a
-  user context, `require_capability()` behind `require_login($course)` or `validate_context()`, the
-  helper's own two, and the two reads whose DIRECTION a lapsed holder must not change:
+  user context, the helper's own two, and the two reads whose DIRECTION a lapsed holder must not change:
   `allow_unenrol_user()` narrows holders, `hook_callbacks::refuses_approval()` judges them). The
   earlier version left the reads "behind a helper-gated read" bare, and that argument fails for the
   very reader the helper is for: the exemption is per capability, so a reader holding capability A
@@ -2297,6 +2303,17 @@ backup/                      group mappings, comments and the durable trail, see
   looking exactly like something a human did. The dates are the exception and need no record:
   `activate()` hands them to `update_user_enrol()` itself, so the row core writes already holds the
   one answer both passes see.
+
+## Known limits
+
+- A site-wide decider whose own enrolment in the course has lapsed is offered only the roles
+  assignable in the system context (`groupscope::judging_context()`), so the method's default role
+  applies to what they decide.
+- For the same reader the identity fields are judged by core with `moodle/user:viewhiddendetails`
+  in the system context, while the snapshot masking reads `moodle/course:viewhiddenuserfields`, so
+  the two can differ when `showuseridentity` and `hiddenuserfields` overlap.
+- `profilelink::viewable()` leaves the decision to core's `can_view_profile()`, where
+  `viewable_ids()` reads through the helper; the batch is the stricter of the two.
 
 ## The phpcs trap that keeps costing a CI round
 

@@ -209,8 +209,9 @@ final class groupscope {
      * (user/action_redir.php, which calls no require_login()), the notices, and core's callbacks into
      * the plugin. A reader admitted there by another level (the mentor level, a system grant) would
      * otherwise use the powers of a course role their suspended or ended enrolment left behind: the
-     * choosers, the group names, the history, the capacity. Behind require_login($course) the answer is
-     * has_capability()'s, since a lapsed reader never gets there.
+     * choosers, the group names, the history, the capacity. A page or service of a course asks
+     * {@see require_in_course()} instead of a bare require_capability(): behind require_login($course) a
+     * course that grants guest access still admits the lapsed reader, as a temporary guest.
      *
      * A holder of the capability at the system level keeps it whatever their enrolment in the course
      * says ({@see system_exempt()}: not while the current user has switched role in the course). Outside
@@ -233,6 +234,25 @@ final class groupscope {
         $reader = $userid ?? (int) $USER->id;
 
         return self::system_exempt((int) $context->instanceid, $reader, $capability) || !self::lapsed($context, $reader);
+    }
+
+    /**
+     * Require a course capability the reader holds and may use, as {@see holds_in_course()} reads it.
+     *
+     * A bare require_capability() is not enough behind require_login($course) or validate_context(): a
+     * course that grants guest access (an enabled guest method with no password) admits a reader whose
+     * enrolment has lapsed as a temporary guest, and the course role the enrolment left behind then
+     * passes has_capability().
+     *
+     * @param string $capability The capability.
+     * @param \context $context The course context.
+     * @return void
+     * @throws \required_capability_exception When the reader does not hold it there or has lapsed.
+     */
+    public static function require_in_course(string $capability, \context $context): void {
+        if (!self::holds_in_course($capability, $context)) {
+            throw new \required_capability_exception($context, $capability, 'nopermissions', '');
+        }
     }
 
     /**
