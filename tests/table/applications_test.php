@@ -609,6 +609,33 @@ final class applications_test extends \advanced_testcase {
     }
 
     /**
+     * The table's own anchors ask for the table, and nothing else it hands out does.
+     *
+     * Every listing's page is the grid view, so a sort or paging anchor built from a base url without
+     * view=table leaves the table for the grid when it is opened in a new tab or followed without
+     * JavaScript. The control is url_params(), which the filter chips and the grid's return address
+     * read: it must not carry the view, or a decision taken on the grid would land on the table.
+     *
+     * Changes that must make it fail: guess_base_url() built from url_params() alone again (QA1).
+     *
+     * @return void
+     */
+    public function test_the_base_url_asks_for_the_table(): void {
+        $this->setAdminUser();
+
+        foreach ([(int) $this->instance->id, 0] as $enrolid) {
+            $table = applications::for_scope($enrolid);
+
+            ob_start();
+            $table->setup();
+            ob_end_clean();
+
+            $this->assertSame('table', $table->baseurl->param('view'));
+            $this->assertArrayNotHasKey('view', $table->url_params());
+        }
+    }
+
+    /**
      * A mentor sees their mentees' applications and nobody else's, whatever the request says.
      *
      * The scope is recomputed from the logged-in user rather than carried in the request: the

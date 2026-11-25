@@ -41,6 +41,9 @@ Feature: The site-wide approval queue in its grid view
     And I should see "Course 2" in the "Student 2" "table_row"
     And I should see "Moderator recruitment" in the "Student 2" "table_row"
     And I should see "Courses with applications" in the "[data-region='enrol_apply-tiles']" "css_element"
+    # The header names the site; the page's own title is the content heading, once.
+    And I should see "Acceptance test site" in the "#page-header h1" "css_element"
+    And I should not see "Confirm enrolments" in the "#page-header h1" "css_element"
     When I follow "Table view"
     Then I should see "Student 1"
     And "[data-region='enrol_apply-rows']" "css_element" should not exist

@@ -79,7 +79,8 @@ if ($userenrol) {
         $PAGE->set_url(new moodle_url('/enrol/apply/manage.php', ['userenrol' => $userenrol]));
         $PAGE->set_pagelayout('admin');
         $PAGE->set_title(get_string('confirmusers', 'enrol_apply'));
-        $PAGE->set_heading(get_string('confirmusers', 'enrol_apply'));
+        // The header names the site, as core's own site-level pages do; the page's title is its content heading.
+        $PAGE->set_heading(format_string($SITE->fullname, true, ['context' => context_system::instance()]));
         $PAGE->get_renderer('enrol_apply')->no_application_page(
             new moodle_url('/enrol/apply/manage.php')
         );
@@ -121,7 +122,10 @@ if ($userenrol) {
         $manageurlparams['id'] = (int) $found->id;
         $pageheading = format_string($course->fullname);
     } else {
-        $pageheading = get_string('confirmusers', 'enrol_apply');
+        /* A queue that spans courses belongs to the site, so the header names the site, as core's own
+           site-level pages do; "Confirm enrolments" is the content heading under it, once. Escaped,
+           because set_heading() feeds a triple stash. */
+        $pageheading = format_string($SITE->fullname, true, ['context' => context_system::instance()]);
     }
 
     $context = $listing->context;
