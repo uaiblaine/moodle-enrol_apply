@@ -35,7 +35,7 @@
         "src/report/Bar.tsx": "2ef7b2af78c6515d4ffd099b8ec09296e1320578",
         "src/report/Cards.tsx": "ab4aa85c8b807433f29a089693c31262c767f93a",
         "src/report/Grid.tsx": "1a6da56610baa3322b6dde8cb416aab1bc78d3ed",
-        "src/report/ReportView.tsx": "4525709de52a79e6b98f743c8652daf8a3ae89be",
+        "src/report/ReportView.tsx": "e94f15579de7aa84aa38ed6608b265f1fcda105e",
         "src/report/cells.tsx": "c9ca7472861e3b3b0b39a573269eb210e3165727",
         "src/report/filters.ts": "a2354d47acd0b279d8bdcd64aad424c68331030f",
         "src/report/repository.ts": "e6ec92164ab40264a7014499c15993dd82210b10",

@@ -102,8 +102,19 @@ const ReportView = (props: ViewProps): ReactElement => {
     const [summary, setSummary] = useState<SummaryAnswer | null>(null);
     const [bandloading, setBandloading] = useState(true);
     const [banderror, setBanderror] = useState(false);
+    // A write of the stored filters in flight: both regions dim at the press, not when the write has answered.
+    const [writing, setWriting] = useState(false);
+    const writes = useRef(0);
     const [widths, setWidths] = useState<Record<string, number>>({});
     const [counted, setCounted] = useState<Record<string, Filter>>({});
+
+    /**
+     * Whether a region shows as loading: its own read, or a write of the filters, is in flight.
+     *
+     * @param {boolean} loading The region's own read is in flight.
+     * @returns {boolean}
+     */
+    const dimmed = (loading: boolean): boolean => loading || writing;
 
     const rowsseq = useRef(0);
     const bandseq = useRef(0);
@@ -282,19 +293,26 @@ const ReportView = (props: ViewProps): ReactElement => {
     };
 
     /**
-     * Store a new set of filter values in core's store, then read both regions again.
+     * Store a new set of filter values in core's store, then read both regions again. The regions dim at the
+     * press: the write is a round trip of its own, and the reader would otherwise wait for it with nothing moving.
      *
      * @param {Function} write The write: core's set or reset.
      * @returns {void}
      */
     const writeFilters = (write: () => Promise<boolean>): void => {
         const release = hold('enrol_apply/report:filters');
+        writes.current += 1;
+        setWriting(true);
         write().then(() => {
             run({page: 0}, true, true);
             return;
         }).catch(() => {
             setRowserror(true);
-        }).finally(release);
+        }).finally(() => {
+            writes.current -= 1;
+            setWriting(writes.current > 0);
+            release();
+        });
     };
 
     // The panel draws each filter as the rows last counted it, its applied values as they are now.
@@ -499,7 +517,7 @@ const ReportView = (props: ViewProps): ReactElement => {
             <Band
                 labels={labels}
                 summary={summary}
-                loading={bandloading}
+                loading={dimmed(bandloading)}
                 error={banderror}
                 compactHint={rows?.narrowed ?? false}
                 measure={current.measure}
@@ -560,7 +578,7 @@ const ReportView = (props: ViewProps): ReactElement => {
             />
             <RowsRegion
                 labels={labels}
-                loading={rowsloading}
+                loading={dimmed(rowsloading)}
                 loaded={rows !== null}
                 error={rowserror}
                 total={rows?.total ?? 0}

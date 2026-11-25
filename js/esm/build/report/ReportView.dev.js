@@ -68,8 +68,11 @@ const ReportView = /* @__PURE__ */ __name((props) => {
   const [summary, setSummary] = useState(null);
   const [bandloading, setBandloading] = useState(true);
   const [banderror, setBanderror] = useState(false);
+  const [writing, setWriting] = useState(false);
+  const writes = useRef(0);
   const [widths, setWidths] = useState({});
   const [counted, setCounted] = useState({});
+  const dimmed = /* @__PURE__ */ __name((loading) => loading || writing, "dimmed");
   const rowsseq = useRef(0);
   const bandseq = useRef(0);
   const rowshold = useRef(null);
@@ -201,12 +204,18 @@ const ReportView = /* @__PURE__ */ __name((props) => {
   }, "onSearch");
   const writeFilters = /* @__PURE__ */ __name((write) => {
     const release = hold("enrol_apply/report:filters");
+    writes.current += 1;
+    setWriting(true);
     write().then(() => {
       run({ page: 0 }, true, true);
       return;
     }).catch(() => {
       setRowserror(true);
-    }).finally(release);
+    }).finally(() => {
+      writes.current -= 1;
+      setWriting(writes.current > 0);
+      release();
+    });
   }, "writeFilters");
   const filters = (rows?.filters ?? []).map((filter) => counted[filter.name] ? { ...filter, options: counted[filter.name].options, groupings: counted[filter.name].groupings } : filter);
   const writePreference = /* @__PURE__ */ __name((preference, reread) => {
@@ -305,7 +314,7 @@ const ReportView = /* @__PURE__ */ __name((props) => {
   if (rows !== null) {
     body = cards ? /* @__PURE__ */ jsxDEV(Cards, { labels, columns: shown, identity, rows: rows.rows, single: narrow }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-      lineNumber: 471,
+      lineNumber: 489,
       columnNumber: 13
     }) : /* @__PURE__ */ jsxDEV(
       Grid,
@@ -325,7 +334,7 @@ const ReportView = /* @__PURE__ */ __name((props) => {
       false,
       {
         fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-        lineNumber: 473,
+        lineNumber: 491,
         columnNumber: 13
       }
     );
@@ -341,7 +350,7 @@ const ReportView = /* @__PURE__ */ __name((props) => {
   return /* @__PURE__ */ jsxDEV("div", { className: "enrol_apply-rview-root", ref: root, "data-region": "enrol_apply-reportview", children: [
     rows?.narrowed ? /* @__PURE__ */ jsxDEV("p", { className: "enrol_apply-rview-narrowed", children: labels.narrowed }, void 0, false, {
       fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-      lineNumber: 498,
+      lineNumber: 516,
       columnNumber: 31
     }) : null,
     /* @__PURE__ */ jsxDEV(
@@ -349,7 +358,7 @@ const ReportView = /* @__PURE__ */ __name((props) => {
       {
         labels,
         summary,
-        loading: bandloading,
+        loading: dimmed(bandloading),
         error: banderror,
         compactHint: rows?.narrowed ?? false,
         measure: current.measure,
@@ -363,7 +372,7 @@ const ReportView = /* @__PURE__ */ __name((props) => {
       false,
       {
         fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-        lineNumber: 499,
+        lineNumber: 517,
         columnNumber: 13
       }
     ),
@@ -428,7 +437,7 @@ const ReportView = /* @__PURE__ */ __name((props) => {
       false,
       {
         fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-        lineNumber: 512,
+        lineNumber: 530,
         columnNumber: 13
       }
     ),
@@ -436,7 +445,7 @@ const ReportView = /* @__PURE__ */ __name((props) => {
       RowsRegion,
       {
         labels,
-        loading: rowsloading,
+        loading: dimmed(rowsloading),
         loaded: rows !== null,
         error: rowserror,
         total: rows?.total ?? 0,
@@ -451,7 +460,7 @@ const ReportView = /* @__PURE__ */ __name((props) => {
       false,
       {
         fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-        lineNumber: 561,
+        lineNumber: 579,
         columnNumber: 13
       }
     ),
@@ -472,7 +481,7 @@ const ReportView = /* @__PURE__ */ __name((props) => {
       false,
       {
         fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-        lineNumber: 576,
+        lineNumber: 594,
         columnNumber: 17
       }
     ) : null,
@@ -482,22 +491,22 @@ const ReportView = /* @__PURE__ */ __name((props) => {
         " ",
         /* @__PURE__ */ jsxDEV("a", { href: props.retentionurl, children: labels.retentionchange }, void 0, false, {
           fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-          lineNumber: 591,
+          lineNumber: 609,
           columnNumber: 57
         })
       ] }, void 0, true, {
         fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-        lineNumber: 591,
+        lineNumber: 609,
         columnNumber: 50
       }) : null
     ] }, void 0, true, {
       fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-      lineNumber: 589,
+      lineNumber: 607,
       columnNumber: 17
     }) : null
   ] }, void 0, true, {
     fileName: "public/enrol/apply/js/esm/src/report/ReportView.tsx",
-    lineNumber: 497,
+    lineNumber: 515,
     columnNumber: 9
   });
 }, "ReportView");
