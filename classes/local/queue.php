@@ -139,6 +139,10 @@ final class queue {
      * - viewing (S5): the viewing capability in the course, narrowed the same way by its own system
      *   exemption, the reader's own application included, as can_view_application() does.
      *
+     * Both course levels read the capability through {@see groupscope::holds_in_course()}, as the two
+     * branches do: a reader whose own enrolment in the course lapsed gets nothing from them, and keeps
+     * their mentees.
+     *
      * One query per level that applies, three at most beside the mentee lookup.
      * test_the_reviewable_set_agrees_with_can_view_application holds the agreement row by row.
      *
@@ -176,7 +180,7 @@ final class queue {
         if (groupscope::system_exempt($courseid, $userid, groupscope::DECIDE)) {
             $read($notown[0], $notown[1]);
         } else {
-            if (has_capability(groupscope::DECIDE, $context)) {
+            if (groupscope::holds_in_course(groupscope::DECIDE, $context)) {
                 $groups = groupscope::narrowed_to($courseid, $userid, groupscope::DECIDE);
                 [$wheres, $params] = $notown;
                 if ($groups !== null) {
@@ -197,7 +201,7 @@ final class queue {
             }
         }
 
-        if (has_capability(groupscope::VIEW, $context)) {
+        if (groupscope::holds_in_course(groupscope::VIEW, $context)) {
             $groups = groupscope::narrowed_to($courseid, $userid, groupscope::VIEW);
             if ($groups === null) {
                 $read([], []);
@@ -893,6 +897,40 @@ final class queue {
     }
 
     /**
+     * Add the review page's crumbs to its navbar, linking the course only for a reader who may open it.
+     *
+     * $PAGE->set_course() makes core's navbar draw the course's category and the course as links. A
+     * reader the four-argument can_access_course() refuses (a mentor, who holds no course access by
+     * design, or anybody require_login($course) would refuse) gets no link that refuses them: core's
+     * automatic crumbs are dropped (navbar::ignore_active(), which keeps the home crumb) and the course
+     * is named as text, as the mentee queue names it without a link (applications::links_course()).
+     * A reader who may open the course keeps core's crumbs. Either way the plugin's own follow: the
+     * queue the walk belongs to, when there is one, and the applicant.
+     *
+     * @param \core\navigation\navbar $navbar The page's navbar, before the header is printed.
+     * @param stdClass $application Application as application() returns it.
+     * @param moodle_url|null $queueurl The queue the review belongs to, null when the reader may open none.
+     * @param string $applicantname The applicant's full name.
+     * @return void
+     */
+    public static function add_review_crumbs(
+        \core\navigation\navbar $navbar,
+        stdClass $application,
+        ?moodle_url $queueurl,
+        string $applicantname
+    ): void {
+        $course = get_course((int) $application->courseid);
+        if (!can_access_course($course, null, '', true)) {
+            $navbar->ignore_active();
+            $navbar->add(format_string($course->shortname, true, ['context' => context_course::instance((int) $course->id)]));
+        }
+        if ($queueurl !== null) {
+            $navbar->add(get_string('confirmusers', 'enrol_apply'), $queueurl);
+        }
+        $navbar->add($applicantname);
+    }
+
+    /**
      * Refuse anybody who may not decide this application, and say which context let them in.
      *
      * The gate is the plugin's own can_view_application(): can_manage_application(), the
@@ -942,10 +980,12 @@ final class queue {
 
         /* Judged for each capability that can admit a course-level reader, deciding first: a
            decider narrowed away from this application who also views it site-wide (or in a
-           course they view all groups of) still reads it in the course. */
+           course they view all groups of) still reads it in the course. A course role their lapsed
+           enrolment left behind admits nobody here (groupscope::holds_in_course()): a teacher whose
+           enrolment lapsed and who mentors the applicant reads the page as a mentor. */
         foreach ([groupscope::DECIDE, groupscope::VIEW] as $capability) {
             if (
-                has_capability($capability, $coursecontext)
+                groupscope::holds_in_course($capability, $coursecontext)
                 && groupscope::allows((int) $application->courseid, (int) $application->id, (int) $USER->id, $capability)
             ) {
                 return $coursecontext;

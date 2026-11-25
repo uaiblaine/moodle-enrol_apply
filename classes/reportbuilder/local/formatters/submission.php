@@ -919,7 +919,8 @@ class submission {
     public static function visible_keys(\context $context, ?int $userid = null): array|bool {
         global $CFG, $DB;
 
-        if (!has_capability('moodle/site:viewuseridentity', $context, $userid)) {
+        // In a course, not through a course role the reader's lapsed enrolment left behind.
+        if (!\enrol_apply\local\groupscope::holds_in_course('moodle/site:viewuseridentity', $context, $userid)) {
             return self::name_keys();
         }
 

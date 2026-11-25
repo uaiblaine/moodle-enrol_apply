@@ -195,16 +195,20 @@ if ($userenrol) {
        decide this application without being able to enter the course. It sets the page context
        only when none is set yet, so a mentor keeps the user context set_context() gave above.
 
-       The crumbs are built by hand because set_course() alone does not reliably produce them. */
+       The crumbs are built by hand because set_course() alone does not reliably produce them, and
+       a reader who may not open the course is given no link to it or its category
+       (queue::add_review_crumbs()). */
     $PAGE->set_course(get_course($application->courseid));
     $PAGE->set_title(get_string('reviewtitle', 'enrol_apply', (object) [
         'applicant' => fullname($applicant),
         'course' => format_string($application->coursename, true, ['context' => $context]),
     ]));
-    if ($scope->hasqueue) {
-        $PAGE->navbar->add(get_string('confirmusers', 'enrol_apply'), $scope->url);
-    }
-    $PAGE->navbar->add(fullname($applicant));
+    \enrol_apply\local\queue::add_review_crumbs(
+        $PAGE->navbar,
+        $application,
+        $scope->hasqueue ? $scope->url : null,
+        fullname($applicant)
+    );
 } else {
     $PAGE->navbar->add(get_string('confirmusers', 'enrol_apply'));
     $PAGE->set_title(get_string('confirmusers', 'enrol_apply'));

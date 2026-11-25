@@ -217,6 +217,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **The review page's breadcrumb links the course only for a reader who may open it** (2026112503, no
+  upgrade step). A mentor opening an application was given "Courses / category / course" as links, each
+  refusing them. Where the reader cannot access the course, the breadcrumb names the course as text and
+  then the plugin's own crumbs; a reader who can keeps core's. Mutation gates `BC1`, `BC2`.
+
 - **The review page's "Already in this course" panel reads a lapsed application as not current**
   (2026112503, no upgrade step). Another of the applicant's applications on this plugin that was no
   longer active and whose end date had passed was labelled "Awaiting a decision" (or "Deferred"),
@@ -304,7 +309,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   refused them. The course level of the per-row check, and the course level of the viewing check,
   now refuse a reader who is enrolled in the course without access and does not otherwise view it
   (`groupscope::lapsed()`). A category manager, an operator holding the capability through a category
-  role without being enrolled, and a mentor keep deciding. Mutation gates `LP1`-`LP5`.
+  role without being enrolled, and a mentor keep deciding. And a reader admitted by another level (a
+  teacher whose enrolment lapsed and who also mentors the applicant, or a site-wide decider) no longer
+  uses the course role their lapsed enrolment left behind: on the review page and its decision, the
+  participants-page bulk route, the notices, the warning after an approval and the custom fields'
+  view callback, every course capability is read through `groupscope::holds_in_course()`. Such a mentor
+  reviews in the applicant's user context with no group or role chooser, no group names, earlier
+  applications, other enrolments, capacity or identity fields, and an approval they post records an
+  empty choice, exactly as for a plain mentor; a capability held in the system context still counts.
+  The course report's set of reviewable rows agrees. Mutation gates `LP1`-`LP26`.
 
 - **The site-wide queue's "at their limit" tile honours a course-level prohibit** (2026112503, no
   upgrade step). A reader holding `moodle/course:viewhiddencourses` in the system context was counted

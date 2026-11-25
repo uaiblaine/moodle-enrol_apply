@@ -273,7 +273,7 @@ abstract class decision_operation extends enrol_bulk_enrolment_operation {
            looks the operation up in the array that method returns and throws when it is
            absent. This check is the gate for any other caller, because process() is public
            and the base class declares it with no gate of its own. */
-        if (!has_capability('enrol/apply:manageapplications', $manager->get_context())) {
+        if (!\enrol_apply\local\groupscope::holds_in_course('enrol/apply:manageapplications', $manager->get_context())) {
             \core\notification::error(get_string('bulknotpermitted', 'enrol_apply'));
             return false;
         }

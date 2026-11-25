@@ -832,8 +832,10 @@ class enrol_apply_renderer extends plugin_renderer_base {
         $facts = [];
 
         $coursecontext = $instance === null ? null : \context_course::instance($instance->courseid);
-        $decides = $coursecontext && has_capability('enrol/apply:manageapplications', $coursecontext);
-        $chooses = $decides && has_capability('enrol/apply:choosedecision', $coursecontext);
+        // Course-level readings: a reader admitted by another level keeps nothing a lapsed course role gives.
+        $decides = $coursecontext
+            && \enrol_apply\local\groupscope::holds_in_course('enrol/apply:manageapplications', $coursecontext);
+        $chooses = $decides && \enrol_apply\local\groupscope::holds_in_course('enrol/apply:choosedecision', $coursecontext);
         if ($chooses) {
             $facts = $this->group_facts($instance, $coursecontext);
 
@@ -1117,8 +1119,8 @@ class enrol_apply_renderer extends plugin_renderer_base {
      * @return bool True when the reader may see the course's group names here.
      */
     protected static function reads_course_groups(\context_course $coursecontext): bool {
-        return has_capability('enrol/apply:manageapplications', $coursecontext)
-            || has_capability('enrol/apply:viewapplications', $coursecontext);
+        return \enrol_apply\local\groupscope::holds_in_course('enrol/apply:manageapplications', $coursecontext)
+            || \enrol_apply\local\groupscope::holds_in_course('enrol/apply:viewapplications', $coursecontext);
     }
 
     /**
@@ -1142,7 +1144,12 @@ class enrol_apply_renderer extends plugin_renderer_base {
      */
     protected function identity_context($applicant, $coursecontext): array {
         $rows = [];
-        $values = \enrol_apply\local\identity::values($coursecontext, (int) $applicant->id);
+        /* Core's helper reads moodle/site:viewuseridentity in the course itself; a reader whose own
+           enrolment there lapsed (a mentor admitted by the user context) is told no more than a
+           mentor is. */
+        $values = \enrol_apply\local\groupscope::holds_in_course('moodle/site:viewuseridentity', $coursecontext)
+            ? \enrol_apply\local\identity::values($coursecontext, (int) $applicant->id)
+            : [];
         foreach ($values as $field => $value) {
             $rows[] = [
                 /* Labelled, because these run together on one line and several are opaque on
@@ -1244,7 +1251,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
     protected function history_context($application, $coursecontext): array {
         global $DB, $USER;
 
-        if (!has_capability('enrol/apply:viewreports', $coursecontext)) {
+        if (!\enrol_apply\local\groupscope::holds_in_course('enrol/apply:viewreports', $coursecontext)) {
             return ['hashistory' => false, 'history' => []];
         }
 
@@ -1364,7 +1371,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
 
         /* Core's own gate for reading a user's enrolments in a course (the participants page's status
            column): a mentor, who holds nothing in the course, and a moderator without it see no panel. */
-        if (!has_capability('moodle/course:enrolreview', $coursecontext)) {
+        if (!\enrol_apply\local\groupscope::holds_in_course('moodle/course:enrolreview', $coursecontext)) {
             return ['hasenrolments' => false, 'enrolments' => []];
         }
         /* A reader the course report narrows sees, of this plugin's own methods, only the records the
@@ -1703,7 +1710,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
         global $USER;
 
         $coursecontext = \context_course::instance($instance->courseid);
-        if (!has_capability('enrol/apply:manageapplications', $coursecontext)) {
+        if (!\enrol_apply\local\groupscope::holds_in_course('enrol/apply:manageapplications', $coursecontext)) {
             return ['hascapacity' => false];
         }
 

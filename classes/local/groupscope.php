@@ -181,9 +181,9 @@ final class groupscope {
      *
      * Narrower than require_login() on purpose: a reader enrolled nowhere in the course (a category role, a
      * coordinator holding the capability alone) has no enrolment to have lapsed, and keeps what the
-     * capability gives them. Read by the course branch of {@see \enrol_apply_plugin::can_manage_application()}
-     * and the viewer branch of {@see \enrol_apply_plugin::can_view_application()} only; the system level
-     * and the mentor level do not come from the course.
+     * capability gives them. Read through {@see holds_in_course()} only, by every course-level read of a
+     * path that does not pass require_login($course); the system level and the mentor level do not come
+     * from the course.
      *
      * Nothing is memoised here. For the current user core's $USER->enrol cache answers both is_enrolled()
      * calls once the first active answer of the request is known, so an active reader costs at most two
@@ -198,6 +198,41 @@ final class groupscope {
         return !is_viewing($context, $userid)
             && is_enrolled($context, $userid, '', false)
             && !is_enrolled($context, $userid, '', true);
+    }
+
+    /**
+     * Whether a reader holds a capability in a course, counting a course-level grant only while their
+     * own enrolment there is not {@see lapsed()}.
+     *
+     * The one reading of a course capability on the paths that do not pass require_login($course): the
+     * review page (manage.php?userenrol=) and its POST, core's participants-page bulk route
+     * (user/action_redir.php, which calls no require_login()), the notices, and core's callbacks into
+     * the plugin. A reader admitted there by another level (the mentor level, a system grant) would
+     * otherwise use the powers of a course role their suspended or ended enrolment left behind: the
+     * choosers, the group names, the history, the capacity. Behind require_login($course) the answer is
+     * has_capability()'s, since a lapsed reader never gets there.
+     *
+     * A holder of the capability at the system level keeps it whatever their enrolment in the course
+     * says ({@see system_exempt()}: not while the current user has switched role in the course). Outside
+     * a course context the answer is has_capability()'s alone.
+     *
+     * @param string $capability The capability.
+     * @param \context $context The course context (any other context reads has_capability() alone).
+     * @param int|null $userid The reader, null for the current user.
+     * @return bool True when the reader holds the capability there and may use it.
+     */
+    public static function holds_in_course(string $capability, \context $context, ?int $userid = null): bool {
+        global $USER;
+
+        if (!has_capability($capability, $context, $userid)) {
+            return false;
+        }
+        if (!$context instanceof context_course) {
+            return true;
+        }
+        $reader = $userid ?? (int) $USER->id;
+
+        return self::system_exempt((int) $context->instanceid, $reader, $capability) || !self::lapsed($context, $reader);
     }
 
     /**

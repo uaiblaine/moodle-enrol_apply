@@ -211,10 +211,12 @@ final class review_action_test extends \advanced_testcase {
      * their group and neither their own application nor a decided one; a holder of the report
      * capability alone reviews nothing; a viewer who sees every group reviews every application
      * still awaiting a decision, their own included, as can_view_application() admits; a mentor
-     * reviews their mentee's alone.
+     * reviews their mentee's alone, and so does a decider and viewer of the course whose own
+     * enrolment is suspended and who mentors the same applicant.
      *
      * Changes that must make it fail: the set read without the group narrowing, without the
-     * self-decision rule or without "awaiting a decision" (gates RB4A, RB4B, RB4C).
+     * self-decision rule or without "awaiting a decision" (gates RB4A, RB4B, RB4C), or its course
+     * levels read with has_capability() alone (gates LP11, LP12).
      *
      * @return void
      */
@@ -240,6 +242,15 @@ final class review_action_test extends \advanced_testcase {
         $theirsuser = (int) $DB->get_field('user_enrolments', 'userid', ['id' => $this->applications['pending in theirs']]);
         role_assign($mentorrole, $mentor->id, \context_user::instance($theirsuser)->id);
         $this->setUser($mentor);
+        $this->assertSame(['pending in theirs'], $this->reviewable());
+
+        /* A decider and viewer of the course who mentors the same applicant, whose own enrolment is
+           suspended: the course levels give them nothing (groupscope::holds_in_course()), the mentor
+           level their mentee. Suspended before setUser(): is_enrolled() caches on $USER. */
+        $lapsed = $this->reader('r1lapsed', [groupscope::DECIDE, groupscope::VIEW, 'moodle/site:accessallgroups']);
+        role_assign($mentorrole, $lapsed->id, \context_user::instance($theirsuser)->id);
+        $DB->set_field('user_enrolments', 'status', ENROL_USER_SUSPENDED, ['userid' => $lapsed->id]);
+        $this->setUser($lapsed);
         $this->assertSame(['pending in theirs'], $this->reviewable());
 
         $this->setAdminUser();

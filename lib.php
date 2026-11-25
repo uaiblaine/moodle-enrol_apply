@@ -1511,7 +1511,9 @@ class enrol_apply_plugin extends enrol_plugin {
             return [];
         }
 
-        if (!has_capability('enrol/apply:manageapplications', $manager->get_context())) {
+        /* core's dispatch in action_redir.php calls no require_login($course), so a teacher whose own
+           enrolment lapsed is refused here rather than by the page (groupscope::holds_in_course()). */
+        if (!\enrol_apply\local\groupscope::holds_in_course('enrol/apply:manageapplications', $manager->get_context())) {
             return [];
         }
 
@@ -1893,8 +1895,7 @@ class enrol_apply_plugin extends enrol_plugin {
         $coursecontext = context_course::instance($courseid, IGNORE_MISSING);
         if (
             $coursecontext
-            && has_capability('enrol/apply:manageapplications', $coursecontext)
-            && !\enrol_apply\local\groupscope::lapsed($coursecontext, (int) $USER->id)
+            && \enrol_apply\local\groupscope::holds_in_course('enrol/apply:manageapplications', $coursecontext)
             && \enrol_apply\local\groupscope::allows((int) $courseid, $userenrolmentid, (int) $USER->id)
         ) {
             return true;
@@ -1948,8 +1949,7 @@ class enrol_apply_plugin extends enrol_plugin {
 
         // A viewer whose own enrolment grants no access is refused as a decider is (groupscope::lapsed()).
         return $coursecontext
-            && has_capability($view, $coursecontext)
-            && !\enrol_apply\local\groupscope::lapsed($coursecontext, (int) $USER->id)
+            && \enrol_apply\local\groupscope::holds_in_course($view, $coursecontext)
             && \enrol_apply\local\groupscope::allows((int) $courseid, $userenrolmentid, (int) $USER->id, $view);
     }
 
@@ -2013,7 +2013,12 @@ class enrol_apply_plugin extends enrol_plugin {
                applied again by a decider who may not choose at all. The override is per row
                ($rowdecision): a batch spanning courses must not carry one course's refusal into
                the next. */
-            if (!has_capability('enrol/apply:choosedecision', context_course::instance($instance->courseid))) {
+            if (
+                !\enrol_apply\local\groupscope::holds_in_course(
+                    'enrol/apply:choosedecision',
+                    context_course::instance($instance->courseid)
+                )
+            ) {
                 $rowdecision = array_merge((array) $decision, ['groups' => [], 'roleid' => 0]);
             } else {
                 $rowdecision = $decision;
@@ -2726,12 +2731,7 @@ class enrol_apply_plugin extends enrol_plugin {
             $shown,
             match (true) {
                 $admission === null => null,
-                $admission->group !== ''
-                    && has_capability('enrol/apply:manageapplications', $coursecontext, $recipient)
-                    && \enrol_apply\local\groupvisibility::visible_to(
-                        $admission->grouprecord,
-                        (int) $recipient->id
-                    ) => $admission->group,
+                $this->names_group_to($admission, $coursecontext, (int) $recipient->id) => $admission->group,
                 default => '',
             },
             $admission !== null && !$admission->admitted,
@@ -2747,9 +2747,11 @@ class enrol_apply_plugin extends enrol_plugin {
      * Whether a notice may name a group to this recipient.
      *
      * Only to a recipient holding enrol/apply:manageapplications in the course, the gate the review
-     * page's group chooser applies, who may see the group by core's visibility rule
-     * ({@see \enrol_apply\local\groupvisibility::visible_to()}), judged for the recipient rather
-     * than for the applicant whose request sends the notice; and never for a group that is gone.
+     * page's group chooser applies, and not through a course role their lapsed enrolment left behind
+     * ({@see \enrol_apply\local\groupscope::holds_in_course()}: a mentor is a recipient too), who
+     * may see the group by core's visibility rule ({@see \enrol_apply\local\groupvisibility::visible_to()}),
+     * judged for the recipient rather than for the applicant whose request sends the notice; and never
+     * for a group that is gone.
      *
      * @param stdClass $named An object with 'group' (the plain name, empty when the group is gone)
      *     and 'grouprecord' (its {groups} record, or null).
@@ -2760,7 +2762,7 @@ class enrol_apply_plugin extends enrol_plugin {
     protected function names_group_to(stdClass $named, context_course $coursecontext, int $recipientid): bool {
         return $named->group !== ''
             && $named->grouprecord !== null
-            && has_capability('enrol/apply:manageapplications', $coursecontext, $recipientid)
+            && \enrol_apply\local\groupscope::holds_in_course('enrol/apply:manageapplications', $coursecontext, $recipientid)
             && \enrol_apply\local\groupvisibility::visible_to($named->grouprecord, $recipientid);
     }
 

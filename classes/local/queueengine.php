@@ -453,13 +453,15 @@ class queueengine {
      * that capability, and which is the one other page that shows places, applications held, the closing date
      * and "full". The wide readers ({@see rows()}, {@see wide_summary()}, {@see methods()}) ask this alone,
      * so the rule has one definition; the course's name and the applications stay listed, as the table lists them.
+     * The capability is read through {@see groupscope::holds_in_course()}: a role kept from an enrolment that
+     * lapsed opens nothing here either, since require_login($course) would refuse that reader too.
      *
      * @param int $courseid The method's course.
      * @param bool $visible The course's visible flag.
      * @return bool Whether its capacity facts may be given to the current reader.
      */
     protected static function shows_capacity(int $courseid, bool $visible): bool {
-        return $visible || has_capability('moodle/course:viewhiddencourses', context_course::instance($courseid));
+        return $visible || groupscope::holds_in_course('moodle/course:viewhiddencourses', context_course::instance($courseid));
     }
 
     /**

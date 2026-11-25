@@ -1460,4 +1460,64 @@ final class queue_test extends \advanced_testcase {
     public function test_no_users_reports_nothing(): void {
         $this->assertSame([], queue::other_applications((int) $this->course->id, [], []));
     }
+
+    /**
+     * The review page's navbar for the current user: a fresh page in the context the page's gate
+     * chose, the course set as manage.php sets it, and queue::add_review_crumbs() called as
+     * manage.php calls it.
+     *
+     * @param int $ueid User enrolment id of the application.
+     * @return \core\navigation\navbar The navbar.
+     */
+    private function review_navbar(int $ueid): \core\navigation\navbar {
+        $application = queue::application($ueid);
+        $scope = queue::scope($application, $this->instance);
+        $page = new \moodle_page();
+        $page->set_url(new \moodle_url('/enrol/apply/manage.php', ['userenrol' => $ueid]));
+        $page->set_context(queue::require_review_access($application));
+        $page->set_course(get_course((int) $application->courseid));
+        queue::add_review_crumbs($page->navbar, $application, $scope->hasqueue ? $scope->url : null, 'The applicant');
+
+        return $page->navbar;
+    }
+
+    /**
+     * The review page's breadcrumb links the course, and its category, only for a reader who may open
+     * the course. A mentor, who holds no course access, reads the course's short name as text and then
+     * the plugin's own crumbs, read through core's get_items(); core's navbar would have drawn
+     * "Courses / category / course" as links that refuse them. The control: for an administrator the
+     * helper leaves core's automatic crumbs in place and adds only the plugin's own.
+     *
+     * Changes that must make it fail: the crumbs built the same for every reader, whether core's
+     * automatic ones kept for a mentor (gate BC1) or dropped for a reader who may open the course
+     * (gate BC2).
+     *
+     * @return void
+     */
+    public function test_the_review_crumbs_link_the_course_only_for_who_may_open_it(): void {
+        [$applicant, $ueid] = $this->applicant();
+        $ignoreactive = new \ReflectionProperty(\core\navigation\navbar::class, 'ignoreactive');
+        $children = new \ReflectionProperty(\core\navigation\navbar::class, 'children');
+        $texts = static fn(array $nodes): array => array_map(static fn($node): string => (string) $node->text, $nodes);
+
+        $this->setUser($this->mentor($applicant));
+        $this->assertFalse(can_access_course($this->course, null, '', true), 'the premise');
+        $navbar = $this->review_navbar($ueid);
+        $this->assertTrue($ignoreactive->getValue($navbar), 'core\'s automatic crumbs are dropped');
+        $items = $navbar->get_items();
+        $this->assertSame(
+            [$this->course->shortname, get_string('confirmusers', 'enrol_apply'), 'The applicant'],
+            array_slice($texts($items), 1),
+            'home, then the course by name, then the plugin\'s own'
+        );
+        $this->assertNull($items[1]->action, 'the course is named, not linked');
+
+        $this->setAdminUser();
+        $navbar = $this->review_navbar($ueid);
+        $this->assertFalse($ignoreactive->getValue($navbar), 'the control: core links the course and its category');
+        $this->assertSame(
+            [get_string('confirmusers', 'enrol_apply'), 'The applicant'],
+            $texts($children->getValue($navbar))
+        );
+    }
 }

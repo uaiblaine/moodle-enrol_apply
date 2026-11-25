@@ -565,6 +565,60 @@ final class methods_view_test extends \advanced_testcase {
     }
 
     /**
+     * A hidden course's capacity is not told through a role kept from an enrolment that lapsed.
+     *
+     * A site-wide viewer who is also enrolled in the hidden course, with a role that carries
+     * moodle/course:viewhiddencourses there, is told the method's capacity while the enrolment is active
+     * (the control). Once it is suspended the role survives, and with it the capability, but
+     * require_login($course) would refuse them, so the wide readers withhold the capacity too.
+     *
+     * Changes that must make it fail: shows_capacity() reading the bare capability again (LP26).
+     *
+     * @return void
+     */
+    public function test_the_capacity_of_a_hidden_course_is_not_told_through_a_lapsed_course_role(): void {
+        global $DB;
+
+        $generator = $this->getDataGenerator();
+        $hidden = $generator->create_course(['fullname' => 'Lapsed course', 'visible' => 0]);
+        $this->methods['lap'] = $this->method($hidden, 'Lapsed intake', ['customint3' => 2, 'customint4' => 1]);
+        $this->applicant('lap', 'Lap', DAYSECS);
+        $lap = (int) $this->methods['lap']->id;
+
+        $clerk = $generator->create_user();
+        $system = \context_system::instance();
+        $siterole = $generator->create_role(['shortname' => 'lapsedclerk']);
+        assign_capability('enrol/apply:viewapplications', CAP_ALLOW, $siterole, $system->id, true);
+        role_assign($siterole, $clerk->id, $system->id);
+        $courserole = $generator->create_role(['shortname' => 'lapsedhelper']);
+        assign_capability('moodle/course:viewhiddencourses', CAP_ALLOW, $courserole, $system->id, true);
+        $generator->enrol_user($clerk->id, $hidden->id, $courserole, 'manual');
+
+        $known = function () use ($lap): bool {
+            foreach ($this->call('enrol_apply_queue_methods', ['perpage' => 100])['rows'] as $row) {
+                if ((int) $row['method']['id'] === $lap) {
+                    return (bool) $row['capacityknown'];
+                }
+            }
+            $this->fail('the hidden course\'s method is not listed');
+        };
+
+        $this->setUser($clerk);
+        $coursecontext = \context_course::instance($hidden->id);
+        // The premise: the capability comes from the course role alone.
+        $this->assertFalse(has_capability('moodle/course:viewhiddencourses', $system));
+        $this->assertTrue(has_capability('moodle/course:viewhiddencourses', $coursecontext));
+        $this->assertTrue($known(), 'an active enrolment: the capacity is theirs to know');
+
+        $manual = $DB->get_record('enrol', ['courseid' => $hidden->id, 'enrol' => 'manual'], '*', MUST_EXIST);
+        enrol_get_plugin('manual')->update_user_enrol($manual, (int) $clerk->id, ENROL_USER_SUSPENDED);
+        $this->setUser($clerk);
+        $this->assertTrue(has_capability('moodle/course:viewhiddencourses', $coursecontext), 'the role survives');
+        $this->assertFalse(is_enrolled($coursecontext, null, '', true), 'but the enrolment grants no access');
+        $this->assertFalse($known());
+    }
+
+    /**
      * Capacity is read for the page's methods alone, and a page is read in a number of statements that does
      * not grow with the methods on it: a page of four methods costs what a page of eight does when they share
      * the same four courses.

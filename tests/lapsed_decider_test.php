@@ -45,6 +45,11 @@ require_once($CFG->dirroot . '/enrol/locallib.php');
  * is not enrolled, one whose own enrolment lapsed but who views the course by their role, a
  * mentor, and an operator holding only the plugin's capability through a category role.
  *
+ * The second half: a reader admitted by another level (a lapsed teacher who mentors the applicant, a
+ * site-wide decider) uses no course capability their lapsed course role still carries, on any path
+ * that does not pass require_login($course) ({@see groupscope::holds_in_course()}); a capability held
+ * in the system context still counts.
+ *
  * @package    enrol_apply
  * @category   test
  * @copyright  2026 Anderson Blaine
@@ -54,6 +59,8 @@ require_once($CFG->dirroot . '/enrol/locallib.php');
 #[CoversClass(\enrol_apply\local\groupscope::class)]
 #[CoversClass(\enrol_apply\local\queue::class)]
 #[CoversClass(\enrol_apply\bulk\decision_operation::class)]
+#[CoversClass(\enrol_apply\local\groupseats::class)]
+#[CoversClass(\enrol_apply\customfield\application_handler::class)]
 final class lapsed_decider_test extends \advanced_testcase {
     /** @var \enrol_apply_plugin The plugin. */
     private $plugin;
@@ -260,12 +267,12 @@ final class lapsed_decider_test extends \advanced_testcase {
     }
 
     /**
-     * Core's bulk route, user/action_redir.php, which calls no require_login(): the operation's own
-     * capability gate passes for the lapsed teacher (the role survives), and the per-row check inside
-     * the decision method decides nothing; the report says so.
+     * Core's bulk route, user/action_redir.php, which calls no require_login(): the menu the dispatch
+     * looks the operation up in is empty for the lapsed teacher, and process() itself refuses them and
+     * says so, deciding nothing. An active teacher is offered the menu (the control).
      *
-     * Changes that must make it fail: the course branch of can_manage_application() deciding on the
-     * capability alone (gate LP1).
+     * Changes that must make it fail: get_bulk_operations() (gate LP8) or process() (gate LP9) reading
+     * the course capability with has_capability() alone.
      *
      * @param string $how The way the enrolment lapsed.
      * @return void
@@ -276,21 +283,26 @@ final class lapsed_decider_test extends \advanced_testcase {
 
         [$ueid, $applicant] = $this->apply_for();
         $before = $this->state($ueid);
-        $this->lapsed_teacher($how);
 
         $PAGE->set_url('/user/index.php', ['id' => $this->course->id]);
         $manager = new \course_enrolment_manager($PAGE, $this->course, $this->instance->id);
+        $this->setUser($this->getDataGenerator()->create_and_enrol($this->course, 'editingteacher'));
+        $this->assertNotEmpty(enrol_get_plugin('apply')->get_bulk_operations($manager), 'the control: an active teacher');
+
+        $this->lapsed_teacher($how);
+        $this->assertSame([], enrol_get_plugin('apply')->get_bulk_operations($manager));
+
         $users = $manager->get_users_enrolments([(int) $applicant->id]);
         $operation = new \enrol_apply\bulk\confirm_operation($manager, $this->plugin);
         \core\notification::fetch();
 
         $sink = $this->redirectMessages();
-        $this->assertTrue($operation->process($manager, $users, (object) ['outcomemessage' => '']));
+        $this->assertFalse($operation->process($manager, $users, (object) ['outcomemessage' => '']));
         $sink->close();
 
         $this->assertSame($before, $this->state($ueid));
         $messages = array_map(static fn($n): string => $n->get_message(), \core\notification::fetch());
-        $this->assertSame([get_string('bulkunchanged', 'enrol_apply', 1)], $messages);
+        $this->assertSame([get_string('bulknotpermitted', 'enrol_apply')], $messages);
     }
 
     /**
@@ -484,5 +496,453 @@ final class lapsed_decider_test extends \advanced_testcase {
 
         $this->assertInstanceOf(\context_course::class, queue::require_review_access(queue::application($ueid)));
         $this->assert_decides($ueid, (int) $applicant->id);
+    }
+
+    /**
+     * The course of the review tests: three groups, places on the method, an applicant who chose a
+     * group, who holds another enrolment in the course and an earlier application, and the editing
+     * teacher's role granted enrol/apply:viewreports, so every course-gated panel of the review page
+     * has something to show to a reader entitled to it.
+     *
+     * @return array The user enrolment id, the applicant and the groups: listed, chosen, forged.
+     */
+    private function review_fixture(): array {
+        global $DB, $USER;
+
+        $generator = $this->getDataGenerator();
+        set_config('showuseridentity', 'email');
+        $listed = $generator->create_group(['courseid' => $this->course->id, 'name' => 'Listed group']);
+        $chosen = $generator->create_group(['courseid' => $this->course->id, 'name' => 'Chosen group']);
+        $forged = $generator->create_group(['courseid' => $this->course->id, 'name' => 'Forged group']);
+        $DB->insert_record('enrol_apply_groups', (object) ['enrolid' => $this->instance->id, 'groupid' => $listed->id]);
+        $DB->set_field('enrol', 'customint4', 5, ['id' => $this->instance->id]);
+        $this->instance = $DB->get_record('enrol', ['id' => $this->instance->id], '*', MUST_EXIST);
+        $editingteacher = (int) $DB->get_field('role', 'id', ['shortname' => 'editingteacher'], MUST_EXIST);
+        assign_capability(groupscope::REPORT, CAP_ALLOW, $editingteacher, \context_system::instance()->id, true);
+
+        $applicant = $generator->create_user(['email' => 'lapsed.applicant@example.org']);
+        $previous = $USER;
+        $this->setAdminUser();
+        $sink = $this->redirectMessages();
+        $written = (new \ReflectionMethod(\enrol_apply_plugin::class, 'apply'))->invoke(
+            $this->plugin,
+            $this->instance,
+            (int) $applicant->id,
+            (object) ['applydescription' => 'Please'],
+            0,
+            submission::KEY_NONE,
+            (int) $chosen->id
+        );
+        $sink->close();
+        $this->setUser($previous);
+
+        $generator->enrol_user($applicant->id, $this->course->id, 'student');
+        $DB->insert_record('enrol_apply_submission', (object) [
+            'courseid' => $this->course->id,
+            'userid' => $applicant->id,
+            'enrolid' => $this->instance->id,
+            'userenrolmentid' => 0,
+            'comment' => '',
+            'status' => submission::STATUS_CANCELLED,
+            'timecreated' => time() - 10 * DAYSECS,
+            'timedecided' => time() - 9 * DAYSECS,
+            'decidedby' => 0,
+        ]);
+
+        return [(int) $written['userenrolmentid'], $applicant, $listed, $chosen, $forged];
+    }
+
+    /**
+     * An editing teacher of the course who also mentors the applicant (the capability in the
+     * applicant's user context), their own enrolment lapsed or not.
+     *
+     * @param \stdClass $applicant The applicant.
+     * @param string|null $how 'suspended' or 'ended', or null for an active enrolment.
+     * @param string $shortname The mentor role's short name, unique in the test.
+     * @return \stdClass The teacher.
+     */
+    private function teacher_who_mentors(\stdClass $applicant, ?string $how, string $shortname): \stdClass {
+        $teacher = $this->getDataGenerator()->create_and_enrol($this->course, 'editingteacher');
+        if ($how !== null) {
+            $this->lapse($teacher, $how);
+        }
+        $role = $this->getDataGenerator()->create_role(['shortname' => $shortname]);
+        set_role_contextlevels($role, [CONTEXT_USER]);
+        assign_capability(groupscope::DECIDE, CAP_ALLOW, $role, \context_system::instance()->id, true);
+        role_assign($role, $teacher->id, \context_user::instance($applicant->id)->id);
+
+        return $teacher;
+    }
+
+    /**
+     * The review page's form for one application, rendered for the current user in the context the
+     * page's gate chose for them.
+     *
+     * @param int $ueid User enrolment id.
+     * @param \stdClass $applicant The applicant.
+     * @param \context $context What queue::require_review_access() returned.
+     * @return string The rendered form.
+     */
+    private function review_html(int $ueid, \stdClass $applicant, \context $context): string {
+        global $PAGE;
+
+        $url = new \moodle_url('/enrol/apply/manage.php', ['userenrol' => $ueid]);
+        $PAGE->set_url($url);
+        $PAGE->set_context($context);
+
+        return $PAGE->get_renderer('enrol_apply')->review_form(queue::application($ueid), $applicant, $this->instance, $url);
+    }
+
+    /**
+     * Post a decision as manage.php receives it and run its handler's half, as decision_post_test does.
+     *
+     * @param array $post The form's fields.
+     * @return int How many applications were decided.
+     */
+    private function post(array $post): int {
+        $_POST = $post;
+        try {
+            $posted = \enrol_apply\local\decision::posted();
+            $sink = $this->redirectMessages();
+            $decided = \enrol_apply\local\decision::apply(
+                optional_param('formaction', '', PARAM_ALPHA),
+                optional_param_array('userenrolments', [], PARAM_INT),
+                $posted['message'],
+                $posted['messages'],
+                $posted['decision']
+            );
+            $sink->close();
+        } finally {
+            $_POST = [];
+        }
+
+        return $decided;
+    }
+
+    /**
+     * Whether this plugin assigned the applicant the role in the course.
+     *
+     * @param string $shortname The role's short name.
+     * @param \stdClass $applicant The applicant.
+     * @return bool True when the stamped assignment exists.
+     */
+    private function holds_role(string $shortname, \stdClass $applicant): bool {
+        global $DB;
+
+        return $DB->record_exists('role_assignments', [
+            'roleid' => (int) $DB->get_field('role', 'id', ['shortname' => $shortname], MUST_EXIST),
+            'userid' => $applicant->id,
+            'contextid' => $this->context->id,
+            'component' => 'enrol_apply',
+        ]);
+    }
+
+    /**
+     * What the review page shows only to a reader entitled to the course, by what reveals it.
+     *
+     * @param \stdClass $applicant The applicant.
+     * @return array Label => the text that appears when the page shows it.
+     */
+    private static function course_only_parts(\stdClass $applicant): array {
+        return [
+            'the chosen group' => 'Chosen group',
+            'the method\'s group' => 'Listed group',
+            'another group' => 'Forged group',
+            'the group chooser' => 'name="groups[]"',
+            'the role chooser' => 'name="roleid"',
+            'the earlier applications' => 'data-region="history-list"',
+            'the other enrolments' => 'data-region="review-enrolments"',
+            'the capacity' => get_string('reviewmeterplaces', 'enrol_apply'),
+            'the identity fields' => $applicant->email,
+        ];
+    }
+
+    /**
+     * A teacher whose own enrolment lapsed and who also mentors the applicant reviews as a mentor: the
+     * page sits in the applicant's user context and shows nothing the course role would have given
+     * them, neither choosers nor group names, history, other enrolments, capacity or identity fields.
+     *
+     * Changes that must make it fail, each a has_capability() put back where
+     * groupscope::holds_in_course() reads: require_review_access()'s context (LP10), the decider and
+     * group-name readings of the review page (LP13, LP15, LP16), the history (LP17), the other
+     * enrolments (LP18), the capacity (LP19), the identity fields (LP20).
+     *
+     * @return void
+     */
+    public function test_a_lapsed_teacher_who_mentors_reviews_as_a_mentor(): void {
+        [$ueid, $applicant] = $this->review_fixture();
+        $this->setUser($this->teacher_who_mentors($applicant, 'suspended', 'lapsedmentor'));
+        // The premise: the mentor level admits them, and the course role survives.
+        $this->assertTrue($this->plugin->can_manage_application((int) $this->course->id, (int) $applicant->id, $ueid));
+        $this->assertTrue(has_capability(groupscope::DECIDE, $this->context));
+
+        $context = queue::require_review_access(queue::application($ueid));
+        $this->assertInstanceOf(\context_user::class, $context);
+        $this->assertSame((int) $applicant->id, (int) $context->instanceid);
+
+        $html = $this->review_html($ueid, $applicant, $context);
+        $this->assertStringContainsString('enrol_apply_review_form', $html, 'the page rendered');
+        foreach (self::course_only_parts($applicant) as $label => $text) {
+            $this->assertStringNotContainsString($text, $html, $label);
+        }
+    }
+
+    /**
+     * The control for the test above: the same teacher with an active enrolment reviews in the course
+     * and is shown every one of those parts.
+     *
+     * @return void
+     */
+    public function test_an_active_teacher_who_mentors_reviews_in_the_course(): void {
+        [$ueid, $applicant] = $this->review_fixture();
+        $this->setUser($this->teacher_who_mentors($applicant, null, 'activementor'));
+
+        $context = queue::require_review_access(queue::application($ueid));
+        $this->assertInstanceOf(\context_course::class, $context);
+
+        $html = $this->review_html($ueid, $applicant, $context);
+        foreach (self::course_only_parts($applicant) as $label => $text) {
+            $this->assertStringContainsString($text, $html, $label);
+        }
+    }
+
+    /**
+     * A lapsed teacher who mentors the applicant posts an approval with a forged role and group, through
+     * the queue's own contract: the approval records an EMPTY choice and gives the method's own role and
+     * groups, exactly as for a plain mentor. The control is the same post by an active teacher who
+     * mentors, which is honoured.
+     *
+     * Changes that must make it fail: confirm_enrolment() reading enrol/apply:choosedecision with
+     * has_capability() alone (gate LP6).
+     *
+     * @return void
+     */
+    public function test_a_lapsed_teacher_who_mentors_records_an_empty_choice(): void {
+        global $DB;
+
+        [$ueid, $applicant, $listed, $chosen, $forged] = $this->review_fixture();
+        $teacherrole = (int) $DB->get_field('role', 'id', ['shortname' => 'teacher'], MUST_EXIST);
+        $forgedpost = fn(int $id): array => [
+            'sesskey' => sesskey(),
+            'formaction' => 'confirm',
+            'userenrolments' => [$id],
+            'groups' => [(int) $forged->id],
+            'roleid' => $teacherrole,
+        ];
+        $this->setUser($this->teacher_who_mentors($applicant, 'suspended', 'choosingmentor'));
+        $this->assertArrayHasKey($teacherrole, get_assignable_roles($this->context), 'the premise: the role survives');
+
+        $this->assertSame(1, $this->post($forgedpost($ueid)));
+
+        $this->assertNull(submission::chosen_groups($ueid));
+        $this->assertNull(submission::chosen_role($ueid));
+        $this->assertTrue($this->holds_role('student', $applicant), 'the method\'s own role');
+        $this->assertFalse($this->holds_role('teacher', $applicant));
+        $this->assertTrue(groups_is_member($listed->id, $applicant->id), 'the method\'s own group');
+        $this->assertTrue(groups_is_member($chosen->id, $applicant->id), 'the group the applicant chose');
+        $this->assertFalse(groups_is_member($forged->id, $applicant->id));
+
+        // The control: an active teacher who mentors has the same post honoured.
+        [$otherueid, $other] = $this->apply_for();
+        $this->setUser($this->teacher_who_mentors($other, null, 'choosingactive'));
+        $this->assertSame(1, $this->post($forgedpost($otherueid)));
+        $this->assertTrue($this->holds_role('teacher', $other));
+        $this->assertTrue(groups_is_member($forged->id, $other->id));
+    }
+
+    /**
+     * A site-wide decider (the capabilities held in the system context) whose own enrolment in the
+     * course lapsed keeps the course context and the choosers: their grant does not come from the
+     * course. And one whose choosing right comes only from the lapsed course role gets no chooser and
+     * records an empty choice, while still deciding by the system grant.
+     *
+     * Changes that must make it fail: holds_in_course() ignoring the system exemption (the first half,
+     * gate LP25), the review page's chooser (gate LP14) or confirm_enrolment() (gate LP6) reading
+     * enrol/apply:choosedecision with has_capability() alone (the second half).
+     *
+     * @return void
+     */
+    public function test_a_site_wide_decider_keeps_what_the_system_grants_and_nothing_a_lapsed_role_does(): void {
+        [$ueid, $applicant, , , $forged] = $this->review_fixture();
+        $system = \context_system::instance()->id;
+
+        $choosing = $this->getDataGenerator()->create_role(['shortname' => 'sitechooser']);
+        assign_capability(groupscope::DECIDE, CAP_ALLOW, $choosing, $system, true);
+        assign_capability('enrol/apply:choosedecision', CAP_ALLOW, $choosing, $system, true);
+        $sitechooser = $this->getDataGenerator()->create_and_enrol($this->course, 'student');
+        role_assign($choosing, $sitechooser->id, $system);
+        $this->lapse($sitechooser, 'suspended');
+        $this->setUser($sitechooser);
+
+        $context = queue::require_review_access(queue::application($ueid));
+        $this->assertInstanceOf(\context_course::class, $context);
+        $this->assertStringContainsString('name="groups[]"', $this->review_html($ueid, $applicant, $context));
+
+        $deciding = $this->getDataGenerator()->create_role(['shortname' => 'sitedecider']);
+        assign_capability(groupscope::DECIDE, CAP_ALLOW, $deciding, $system, true);
+        $sitedecider = $this->getDataGenerator()->create_and_enrol($this->course, 'editingteacher');
+        role_assign($deciding, $sitedecider->id, $system);
+        $this->lapse($sitedecider, 'suspended');
+        $this->setUser($sitedecider);
+        $this->assertTrue(has_capability('enrol/apply:choosedecision', $this->context), 'the premise: the course role');
+
+        $context = queue::require_review_access(queue::application($ueid));
+        $this->assertInstanceOf(\context_course::class, $context);
+        $html = $this->review_html($ueid, $applicant, $context);
+        $this->assertStringContainsString('Listed group', $html, 'a site-wide decider is told the groups');
+        $this->assertStringNotContainsString('name="groups[]"', $html);
+        $this->assertStringNotContainsString('name="roleid"', $html);
+
+        $this->assertSame(1, $this->post([
+            'sesskey' => sesskey(),
+            'formaction' => 'confirm',
+            'userenrolments' => [$ueid],
+            'groups' => [(int) $forged->id],
+        ]));
+        $this->assertNull(submission::chosen_groups($ueid));
+        $this->assertFalse(groups_is_member($forged->id, $applicant->id));
+    }
+
+    /**
+     * The new-application notice names the chosen group to a recipient who mentors the applicant only
+     * where their course role may be used: not to a teacher whose enrolment lapsed, to an active one.
+     *
+     * Changes that must make it fail: names_group_to() reading the course capability with
+     * has_capability() alone (gate LP7).
+     *
+     * @return void
+     */
+    public function test_the_notice_names_the_group_to_a_mentor_only_through_a_live_course_role(): void {
+        global $DB;
+
+        $chosen = $this->getDataGenerator()->create_group(['courseid' => $this->course->id, 'name' => 'Chosen group']);
+        $DB->set_field('enrol', 'customtext3', '', ['id' => $this->instance->id]);
+        $this->instance = $DB->get_record('enrol', ['id' => $this->instance->id], '*', MUST_EXIST);
+        $applicant = $this->getDataGenerator()->create_user();
+        $lapsed = $this->teacher_who_mentors($applicant, 'suspended', 'noticelapsed');
+        $active = $this->teacher_who_mentors($applicant, null, 'noticeactive');
+
+        $this->setAdminUser();
+        $sink = $this->redirectMessages();
+        (new \ReflectionMethod(\enrol_apply_plugin::class, 'apply'))->invoke(
+            $this->plugin,
+            $this->instance,
+            (int) $applicant->id,
+            (object) ['applydescription' => 'Please'],
+            0,
+            submission::KEY_NONE,
+            (int) $chosen->id
+        );
+        $messages = $sink->get_messages();
+        $sink->close();
+        $to = static fn(\stdClass $user): array => array_values(array_filter(
+            $messages,
+            static fn($m): bool => (int) $m->useridto === (int) $user->id
+        ));
+
+        $this->assertCount(1, $to($lapsed));
+        $this->assertStringNotContainsString('Chosen group', $to($lapsed)[0]->fullmessagehtml);
+        $this->assertCount(1, $to($active));
+        $this->assertStringContainsString('Chosen group', $to($active)[0]->fullmessagehtml, 'the control');
+    }
+
+    /**
+     * The snapshot's masking judges a reader in the course by a live course role only: a teacher whose
+     * enrolment lapsed is masked as a reader holding nothing there; an active one is not.
+     *
+     * Changes that must make it fail: visible_keys() reading moodle/site:viewuseridentity with
+     * has_capability() alone (gate LP21).
+     *
+     * @return void
+     */
+    public function test_the_snapshot_masking_ignores_a_lapsed_course_role(): void {
+        $formatter = \enrol_apply\reportbuilder\local\formatters\submission::class;
+        $nobody = $this->getDataGenerator()->create_user();
+        $lapsed = $this->getDataGenerator()->create_and_enrol($this->course, 'editingteacher');
+        $this->lapse($lapsed, 'suspended');
+        $active = $this->getDataGenerator()->create_and_enrol($this->course, 'editingteacher');
+
+        $nothing = $formatter::visible_keys($this->context, (int) $nobody->id);
+        $this->assertSame($nothing, $formatter::visible_keys($this->context, (int) $lapsed->id));
+        $this->assertNotSame($nothing, $formatter::visible_keys($this->context, (int) $active->id), 'the control');
+    }
+
+    /**
+     * The warning after an approval names an overfilled group only to a reader whose course role is live.
+     *
+     * The overfilled set is stood in for (it needs local_groupdist's seats), so what is judged is the
+     * naming alone.
+     *
+     * Changes that must make it fail: groupseats::overfilled_named_to() reading the course capability
+     * with has_capability() alone (gate LP22).
+     *
+     * @return void
+     */
+    public function test_an_overfilled_group_is_not_named_through_a_lapsed_course_role(): void {
+        $group = $this->getDataGenerator()->create_group(['courseid' => $this->course->id, 'name' => 'Overfilled group']);
+        $seats = new class extends \enrol_apply\local\groupseats {
+            /** @var array What overfilled() answers. */
+            public static $over = [];
+
+            /**
+             * The stood-in answer.
+             *
+             * @param array $userenrolmentids Ignored.
+             * @return array Group id => the overfilled group.
+             */
+            public static function overfilled(array $userenrolmentids): array {
+                return self::$over;
+            }
+        };
+        $seats::$over = [(int) $group->id => (object) [
+            'id' => (int) $group->id,
+            'courseid' => (int) $this->course->id,
+            'name' => $group->name,
+            'visibility' => GROUPS_VISIBILITY_ALL,
+            'members' => 3,
+            'seats' => 2,
+        ]];
+        $lapsed = $this->getDataGenerator()->create_and_enrol($this->course, 'editingteacher');
+        $this->lapse($lapsed, 'suspended');
+        $active = $this->getDataGenerator()->create_and_enrol($this->course, 'editingteacher');
+
+        $this->assertSame([], $seats::overfilled_named_to([], (int) $lapsed->id));
+        $this->assertSame([(int) $group->id], array_keys($seats::overfilled_named_to([], (int) $active->id)), 'the control');
+    }
+
+    /**
+     * Core's callback can_view() on the application's custom fields answers no to a reader whose
+     * course role lapsed, and yes to an active one.
+     *
+     * Changes that must make it fail: application_handler::can_view() reading either course capability
+     * with has_capability() alone (gates LP23, LP24).
+     *
+     * @return void
+     */
+    public function test_the_fields_handler_ignores_a_lapsed_course_role(): void {
+        global $DB;
+
+        /** @var \core_customfield_generator $generator */
+        $generator = $this->getDataGenerator()->get_plugin_generator('core_customfield');
+        $category = $generator->create_category([
+            'component' => 'enrol_apply',
+            'area' => \enrol_apply\customfield\application_handler::AREA,
+            'itemid' => (int) $this->instance->id,
+        ]);
+        $field = $generator->create_field([
+            'categoryid' => $category->get('id'),
+            'type' => 'text',
+            'shortname' => 'lapsedmotivation',
+        ]);
+        $handler = \enrol_apply\customfield\application_handler::create((int) $this->instance->id);
+        // Both capabilities the callback reads come from the course role, so each half is held.
+        $editingteacher = (int) $DB->get_field('role', 'id', ['shortname' => 'editingteacher'], MUST_EXIST);
+        assign_capability(groupscope::REPORT, CAP_ALLOW, $editingteacher, \context_system::instance()->id, true);
+
+        $this->setUser($this->getDataGenerator()->create_and_enrol($this->course, 'editingteacher'));
+        $this->assertTrue($handler->can_view($field, (int) $this->instance->id), 'the control: an active teacher');
+
+        $this->lapsed_teacher('suspended');
+        $this->assertFalse($handler->can_view($field, (int) $this->instance->id));
     }
 }

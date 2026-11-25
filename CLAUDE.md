@@ -301,6 +301,24 @@ backup/                      group mappings, comments and the durable trail, see
   them. Somebody enrolled nowhere (a category role) is not lapsed and keeps deciding; the system and
   mentor levels are untouched. Gates `LP1`-`LP5`, `tests/lapsed_decider_test.php`. `queue::scope()`
   is unchanged: it still sends that operator to no queue.
+
+  **On every path that does not pass `require_login($course)`, a course capability is read through
+  `groupscope::holds_in_course()`**, which is `has_capability()` minus a course-level grant the
+  reader's lapsed enrolment left behind (a system-level holder keeps theirs, `system_exempt()`). The
+  first version applied the lapse to the two branches alone, and a lapsed teacher who also mentored
+  the applicant, admitted by the mentor level, still used the course role downstream: the review page
+  sat in the course, offered the role and group choosers, named the groups, showed the history, the
+  other enrolments, the capacity and the identity fields, and `confirm_enrolment()` honoured their
+  choice. The helper is read by the two branches, `require_review_access()`'s page context,
+  `reviewable_in_course()`, `confirm_enrolment()`'s `choosedecision`, the review renderer
+  (`decision_controls_context()`, `reads_course_groups()`, `history_context()`,
+  `enrolments_context()`, `capacity_context()`, `identity_context()`), the snapshot masking
+  (`visible_keys()`'s identity gate), the notices (`names_group_to()`, which the admission's naming now
+  goes through too), `groupseats::overfilled_named_to()`, the bulk menu and `process()`, and the
+  fields handler's `can_view()`. Behind `require_login($course)` it answers as `has_capability()`, so
+  shared code may call it. Left as `has_capability()` on purpose: reads reached only after a
+  helper-gated read in the same function (the name format, the panel's decider, `visible_keys()`'s
+  hidden-field and all-details halves, `groupvisibility::visible_to()`). Gates `LP6`-`LP25`.
   `test_a_mentor_enrolled_in_the_course_still_walks_their_mentees` and
   `test_a_teacher_whose_own_enrolment_is_suspended_opens_no_queue` pin the two halves.
 
@@ -1528,7 +1546,9 @@ backup/                      group mappings, comments and the durable trail, see
   way. A mentor's sheet over several methods has a section per method without the link to the method's
   queue or the sentence about choosing there, because their rows carry no `queueurl`. A mentor's post
   decides only their mentees' rows: `can_manage_application()` per row, the mentee's user context
-  (`wide_decision_post_test`: a forged id of a non-mentee decides nothing). Tests:
+  (`wide_decision_post_test`: a forged id of a non-mentee decides nothing). The review page a mentor
+  opens from that grid names the course in its breadcrumb without linking it or its category
+  (`queue::add_review_crumbs()`, see "The review page belongs to a COURSE"). Tests:
   `tests/output/mentee_queue_view_test.php`, `tests/behat/mentee_queue_view.feature`.
 
   **The selection belongs to the page on screen.** A box only on a row the rows service marks
@@ -1623,7 +1643,13 @@ backup/                      group mappings, comments and the durable trail, see
   and would otherwise silently replace the applicant's USER context on the mentor path; it applies
   **no access check at all**, which is exactly what makes it safe for a mentor who may decide the
   application without being able to enter the course; and it does not reliably produce a breadcrumb,
-  so the crumbs are built by hand.
+  so the crumbs are built by hand. **When it does, it links the course and its category**
+  ("Courses / category / course"), which refuse a reader who may not open the course: seen in the
+  browser for a mentor. `queue::add_review_crumbs()` therefore drops core's automatic crumbs
+  (`navbar::ignore_active()`, which keeps the home crumb) and names the course as text where the
+  four-argument `can_access_course()` refuses the reader, as the mentee queue names a course without a
+  link (`applications::links_course()`); a reader who may open the course keeps core's crumbs. The
+  plugin's own crumbs (the queue, the applicant) follow either way. Gates `BC1`, `BC2`.
 
 - **One identity rule serves the whole review page**, and the e-mail address is inside it. It used
   to have a row of its own, printed unconditionally, while the snapshot panel beside it masked
