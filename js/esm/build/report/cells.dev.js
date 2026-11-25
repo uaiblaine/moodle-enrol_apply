@@ -32,7 +32,7 @@ const WIDTHS = {
   note: 240
 };
 const DEFAULT_WIDTH = 180;
-const MINIMUMS = { applicant: 160, submitted: 104, decided: 104 };
+const MINIMUMS = { applicant: 200, submitted: 104, decided: 104 };
 const MINIMUM = 80;
 const MAXIMUM = 800;
 const SIZING = makeSizing(WIDTHS, DEFAULT_WIDTH, MINIMUMS, MINIMUM, MAXIMUM);

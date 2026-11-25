@@ -147,6 +147,8 @@ const facets = (labels: Record<string, string>, rows: RowsAnswer): FacetDefiniti
         groupings: [],
         find: finder(labels, facet.name),
         note: omittedNote(labels, facet),
+        // The search names every option the facet has, the ones the cap left out included.
+        total: facet.options.length + Math.max(0, facet.omitted),
     }));
     const find = finder(labels, '');
     const listed: FacetDefinition[] = rows.fieldfilters.filter((field) => field.control === 'select').map((field) => ({

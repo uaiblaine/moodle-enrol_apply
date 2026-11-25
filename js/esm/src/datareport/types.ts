@@ -59,7 +59,8 @@ export type Grouping = {id: number, name: string, groups: number[]};
  *
  * Above eight options the facet is a searched list: `find` is that list's search label (a string with
  * {$a}, the number of options) and the note drawn when nothing matches. A caller's `note` is drawn under
- * the facet's options, in either form.
+ * the facet's options, in either form. A facet whose options were cut by the server says how many it has
+ * in all (`total`), so the search label counts them all and not the ones sent.
  */
 export type FacetDefinition = {
     name: string,
@@ -69,6 +70,8 @@ export type FacetDefinition = {
     find: {label: string, nomatch: string},
     /** A line under the facet's options, such as how many options the server left out; absent for none. */
     note?: string,
+    /** Every option the facet has, the ones the server left out included; absent when all were sent. */
+    total?: number,
 };
 
 /** One chip of what is in force: its text, and the key the removal names. */

@@ -62,8 +62,8 @@ const WIDTHS: Record<string, number> = {
     queue: 170,
 };
 
-/** The view's width policy: the course 200 px at the least, anything else 80 px. */
-const SIZING = makeSizing(WIDTHS, 150, {course: 200}, 80, 800);
+/** The view's width policy: the course 160 px at the least (it carries no box or action), anything else 80 px. */
+const SIZING = makeSizing(WIDTHS, 150, {course: 160}, 80, 800);
 
 /** The sortable columns, each with the direction a first press asks for. */
 const FIRST: Record<string, 'asc' | 'desc'> = {course: 'asc', awaiting: 'desc', oldest: 'asc'};

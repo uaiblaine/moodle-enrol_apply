@@ -211,7 +211,8 @@ const MethodName = ({row}: {row: CourseAndMethod}): ReactElement => (
 
 /**
  * The "Course · method" cell of the queues that span courses (SQ-D2): the course's name, a link to the
- * course, then the method's name under it with its labels. Both names are text.
+ * course where the row carries its address (a mentor's carries none), then the method's name under it
+ * with its labels. Both names are text.
  *
  * @param {object} props The strings and the row.
  * @returns {object} The cell's content.
@@ -219,7 +220,9 @@ const MethodName = ({row}: {row: CourseAndMethod}): ReactElement => (
 export const CourseMethod = ({labels, row}: {labels: Record<string, string>, row: CourseAndMethod}): ReactElement => (
     <div className="enrol_apply-qview-course">
         <span className="enrol_apply-rview-c" title={row.course.name}>
-            <a className="enrol_apply-qview-coursename" href={row.course.url}>{row.course.name}</a>
+            {row.course.url === ''
+                ? <span className="enrol_apply-qview-coursename">{row.course.name}</span>
+                : <a className="enrol_apply-qview-coursename" href={row.course.url}>{row.course.name}</a>}
         </span>
         <div className="enrol_apply-qview-methodline">
             <span className="enrol_apply-rview-sub" title={row.method.name}><MethodName row={row} /></span>

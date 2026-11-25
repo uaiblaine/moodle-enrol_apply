@@ -40,7 +40,7 @@ const WIDTHS = {
   status: 190,
   queue: 170
 };
-const SIZING = makeSizing(WIDTHS, 150, { course: 200 }, 80, 800);
+const SIZING = makeSizing(WIDTHS, 150, { course: 160 }, 80, 800);
 const FIRST = { course: "asc", awaiting: "desc", oldest: "asc" };
 const methodColumns = /* @__PURE__ */ __name((labels) => [
   ["course", labels.coursemethod],

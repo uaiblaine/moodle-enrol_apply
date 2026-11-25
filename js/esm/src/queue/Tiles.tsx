@@ -199,7 +199,8 @@ export const Tiles = ({labels, kind, summary, error, onRetry}: TilesProps): Reac
                     value={fillObject(labels.ofmany, {taken: num(summary.placestaken), total: num(summary.places)})}
                     sub={methodnote}
                     meter={percent(summary.placestaken, summary.places)}
-                    warn={false}
+                    // Warned once every place is taken, as the "By course" view's meter.
+                    warn={summary.placestaken >= summary.places}
                 />
             ) : null}
             {summary.applicantlimit > 0 ? (

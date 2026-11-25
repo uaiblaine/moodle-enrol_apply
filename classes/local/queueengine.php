@@ -1042,8 +1042,10 @@ class queueengine {
                     'context' => context_course::instance($courseid),
                     'escape' => false,
                 ]),
-                // The address col_course() links.
-                'url' => (new moodle_url('/course/view.php', ['id' => $courseid]))->out(false),
+                // The address col_course() links, where it links one: never for a mentor.
+                'url' => $table->links_course()
+                    ? (new moodle_url('/course/view.php', ['id' => $courseid]))->out(false)
+                    : '',
             ];
             $method = [
                 'id' => $enrolid,

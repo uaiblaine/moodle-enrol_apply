@@ -3535,6 +3535,15 @@ body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload + .enrol_apply-rvie
     border-color: var(--enrol-apply-brand-edge);
 }
 
+/* Forced colours drop the tint, so a selected row and card take an outline in the system's own colour. */
+@media (forced-colors: active) {
+    .enrol_apply-qview .enrol_apply-rview-grid tr.enrol_apply-rview-row--selected,
+    .enrol_apply-qview .enrol_apply-rview-card--selected {
+        outline: 2px solid;
+        outline-offset: -2px;
+    }
+}
+
 /* The dock: the selection's count and the three decisions, under the rows and on screen while the
    rows scroll by. It is drawn only while something is selected. */
 .enrol_apply-qview .enrol_apply-qview-dock {
@@ -3646,6 +3655,7 @@ body.jsenabled .enrol_apply-rview .enrol_apply-rview-preload + .enrol_apply-rvie
 
 .enrol_apply-qview .enrol_apply-qview-dockmethods {
     color: var(--enrol-apply-ink-muted);
+    font-size: 0.8125rem;
     font-weight: 400;
 }
 

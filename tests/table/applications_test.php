@@ -636,6 +636,33 @@ final class applications_test extends \advanced_testcase {
     }
 
     /**
+     * A site-wide reader's course cell links the course; a mentor's names it and links nothing.
+     *
+     * A mentor holds the capability in their mentees' own user contexts and nothing in the courses, so
+     * a link to the course leads them to a page they cannot open. The control is the site-wide reader,
+     * whose cell links the same course.
+     *
+     * Changes that must make it fail: col_course() linking the course for every reader again (QA2).
+     *
+     * @return void
+     */
+    public function test_the_course_is_a_link_for_a_site_wide_reader_and_a_name_for_a_mentor(): void {
+        $mentee = $this->applicant();
+        $link = 'course/view.php?id=' . $this->course->id;
+        $name = format_string($this->course->fullname);
+
+        $this->setUser($this->mentor($mentee));
+        $html = $this->rendered(0);
+        $this->assertStringContainsString($name, $html);
+        $this->assertStringNotContainsString($link, $html);
+
+        $this->setAdminUser();
+        $html = $this->rendered(0);
+        $this->assertStringContainsString($name, $html);
+        $this->assertStringContainsString($link, $html);
+    }
+
+    /**
      * A mentor sees their mentees' applications and nobody else's, whatever the request says.
      *
      * The scope is recomputed from the logged-in user rather than carried in the request: the

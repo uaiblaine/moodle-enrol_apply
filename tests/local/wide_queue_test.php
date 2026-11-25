@@ -617,8 +617,10 @@ final class wide_queue_test extends \advanced_testcase {
             $this->assertNotContains('group', array_column($row['cells'], 'key'));
             $this->assertFalse($row['method']['full']);
             $this->assertSame('', $row['method']['queueurl']);
-            // The course and the method are theirs to read: they are in the table's row too.
+            // The course and the method are theirs to read: they are in the table's row too. The course's
+            // address is not: a mentor holds nothing in the course (the site-wide reader above is given it).
             $this->assertNotSame('', $row['course']['name']);
+            $this->assertSame('', $row['course']['url']);
         }
         $json = json_encode($response);
         foreach (['Lille', 'Paris', 'Blue'] as $hidden) {

@@ -1,4 +1,4 @@
-import{fill as n,num as a}from"../datareport/str";import{jsx as t,jsxs as c}from"react/jsx-runtime";/**
+import{fill as a,num as l}from"../datareport/str";import{jsx as t,jsxs as c}from"react/jsx-runtime";/**
  * The dock under the rows: how many applications are selected and the three decisions.
  *
  * The decisions are the table's (renderer::queue_actions(), which the props carry): the same labels,
@@ -12,4 +12,4 @@ import{fill as n,num as a}from"../datareport/str";import{jsx as t,jsxs as c}from
  * @module     enrol_apply/queue/Dock
  * @copyright  2026 Anderson Blaine
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */const d=({labels:o,count:i,methods:l,actions:s,onDecide:r})=>c("div",{className:"enrol_apply-qview-dock",role:"region","aria-label":o.dock,"data-region":"enrol_apply-dock",children:[c("span",{className:"enrol_apply-qview-dockcount","aria-live":"polite",children:[n(o.selected,a(i)),l>1?t("small",{className:"enrol_apply-qview-dockmethods",children:" "+n(o.dockmethods,a(l))}):null]}),t("div",{className:"enrol_apply-qview-dockactions",children:s.map(e=>t("button",{type:"button",className:"btn "+e.classes,onClick:p=>r(e.value,p.currentTarget),children:e.label},e.value))})]});export{d as Dock};
+ */const m=({labels:o,count:i,methods:n,actions:s,onDecide:p})=>c("div",{className:"enrol_apply-qview-dock",role:"region","aria-label":o.dock,"data-region":"enrol_apply-dock",children:[c("span",{className:"enrol_apply-qview-dockcount","aria-live":"polite",children:[a(o.selected,l(i)),n>1?t("span",{className:"enrol_apply-qview-dockmethods",children:" "+a(o.dockmethods,l(n))}):null]}),t("div",{className:"enrol_apply-qview-dockactions",children:s.map(e=>t("button",{type:"button",className:"btn "+e.classes,onClick:r=>p(e.value,r.currentTarget),children:e.label},e.value))})]});export{m as Dock};
