@@ -31,6 +31,12 @@ $instanceid = required_param('instance', PARAM_INT);
 
 require_login();
 require_sesskey();
+/* And only a POST, as manage.php refuses a decision on a link: the offer on applied.php is a plain
+   POST form (templates/profile_offer.mustache), with or without JavaScript, so a link carrying the
+   sesskey is never the applicant accepting it. */
+if (!data_submitted()) {
+    throw new moodle_exception('invalidrequest');
+}
 
 $instance = $DB->get_record('enrol', ['id' => $instanceid, 'enrol' => 'apply'], '*', MUST_EXIST);
 

@@ -169,6 +169,38 @@ final class groupscope {
     }
 
     /**
+     * Whether a reader is enrolled in the course in a way that grants no access, and does not otherwise view it.
+     *
+     * Core's own distinction, as require_login($course) draws it: is_enrolled($context, $user, '', false)
+     * finds any enrolment, suspended, ended or on a disabled method included, is_enrolled(..., true) only one
+     * that is active, in its dates, on an enabled method (enrol_get_enrolment_end()), and is_viewing()
+     * (moodle/course:view) lets a reader in without one. A role assignment survives the suspension or the
+     * end of the enrolment that gave it (core never unassigns on suspend, and under this plugin's default
+     * expiredaction KEEP an ended row stays active with its role), so such a reader still holds the
+     * course's capabilities while every page behind require_login($course) refuses them.
+     *
+     * Narrower than require_login() on purpose: a reader enrolled nowhere in the course (a category role, a
+     * coordinator holding the capability alone) has no enrolment to have lapsed, and keeps what the
+     * capability gives them. Read by the course branch of {@see \enrol_apply_plugin::can_manage_application()}
+     * and the viewer branch of {@see \enrol_apply_plugin::can_view_application()} only; the system level
+     * and the mentor level do not come from the course.
+     *
+     * Nothing is memoised here. For the current user core's $USER->enrol cache answers both is_enrolled()
+     * calls once the first active answer of the request is known, so an active reader costs at most two
+     * statements per course and request, a reader enrolled nowhere one per call, a lapsed one two per call;
+     * is_viewing() is a capability read.
+     *
+     * @param \context_course $context The course.
+     * @param int $userid The reader.
+     * @return bool True when the reader is enrolled without access and does not view the course.
+     */
+    public static function lapsed(\context_course $context, int $userid): bool {
+        return !is_viewing($context, $userid)
+            && is_enrolled($context, $userid, '', false)
+            && !is_enrolled($context, $userid, '', true);
+    }
+
+    /**
      * The capability the current user exercises when they read applications in a context.
      *
      * Deciding when they hold enrol/apply:manageapplications there, looking without deciding

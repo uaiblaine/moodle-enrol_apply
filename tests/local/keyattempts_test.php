@@ -114,18 +114,25 @@ final class keyattempts_test extends \advanced_testcase {
     }
 
     /**
-     * An accepted key clears the count.
+     * Nothing but the window gives the tries back: the class offers no way to forget a count.
+     *
+     * An accepted key used to clear it, which let a holder of one valid key apply, leave and apply
+     * again with a fresh budget of guesses at another group's key. The behaviour is held through the
+     * form by application_form_test::test_an_accepted_key_gives_no_wrong_keys_back; this pins the API,
+     * so a clear() put back for a new caller fails here first.
+     *
+     * Changes that must make it fail: a public method added beside these three, such as clear().
      *
      * @return void
      */
-    public function test_clear_gives_the_tries_back(): void {
-        $this->resetAfterTest();
-        $this->mock_clock_with_frozen(1000000);
+    public function test_nothing_but_the_window_gives_the_tries_back(): void {
+        $public = array_map(
+            static fn(\ReflectionMethod $method): string => $method->getName(),
+            (new \ReflectionClass(keyattempts::class))->getMethods(\ReflectionMethod::IS_PUBLIC)
+        );
+        sort($public);
 
-        $this->wrong_keys(keyattempts::LIMIT);
-        keyattempts::clear(7, 42);
-
-        $this->assertFalse(keyattempts::locked(7, 42));
+        $this->assertSame(['locked', 'record_failure', 'release_all'], $public);
     }
 
     /**

@@ -358,6 +358,72 @@ final class edit_form_test extends \advanced_testcase {
     }
 
     /**
+     * The reviewed mode's count reads "made without a key" from the newest record's key outcome, the
+     * application-group rule (groupscope::application_group_sql()), never from a bare keygroupid on any
+     * record.
+     *
+     * Three applications waiting: one whose OLDER record was sent for review by a key but whose newest
+     * record carries none (made without a key, as the queue files it), one whose only record names a
+     * group with no key outcome (no key route, so no key group), and one sent for review by a key (the
+     * control, which this mode writes and does not count).
+     *
+     * Changes that must make it fail: the count reading keygroupid on any record (gate KP1).
+     *
+     * @return void
+     */
+    public function test_the_reviewed_mode_counts_by_the_newest_records_key_outcome(): void {
+        global $DB;
+
+        $group = $this->getDataGenerator()->create_group([
+            'courseid' => $this->course->id,
+            'name' => 'A',
+            'enrolmentkey' => 'Sekret-A1',
+        ]);
+        $record = function (\stdClass $user, int $keyoutcome, int $when) use ($DB, $group): int {
+            return (int) $DB->insert_record('enrol_apply_submission', (object) [
+                'courseid' => $this->course->id,
+                'userid' => $user->id,
+                'enrolid' => $this->instance->id,
+                'userenrolmentid' => (int) $DB->get_field(
+                    'user_enrolments',
+                    'id',
+                    ['enrolid' => $this->instance->id, 'userid' => $user->id],
+                    MUST_EXIST
+                ),
+                'comment' => '',
+                'status' => \enrol_apply\local\submission::STATUS_PENDING,
+                'timecreated' => $when,
+                'timedecided' => 0,
+                'decidedby' => 0,
+                'keygroupid' => (int) $group->id,
+                'keyoutcome' => $keyoutcome,
+            ]);
+        };
+        [$requeued, $nooutcome, $keyed] = [
+            $this->getDataGenerator()->create_user(),
+            $this->getDataGenerator()->create_user(),
+            $this->getDataGenerator()->create_user(),
+        ];
+        foreach ([$requeued, $nooutcome, $keyed] as $user) {
+            $this->plugin->enrol_user($this->instance, $user->id, null, 0, 0, ENROL_USER_SUSPENDED);
+        }
+        $record($requeued, \enrol_apply\local\submission::KEY_FOR_REVIEW, time() - DAYSECS);
+        $newest = $record($requeued, \enrol_apply\local\submission::KEY_NONE, time());
+        $DB->set_field('enrol_apply_submission', 'keygroupid', 0, ['id' => $newest]);
+        $record($nooutcome, \enrol_apply\local\submission::KEY_NONE, time());
+        $record($keyed, \enrol_apply\local\submission::KEY_FOR_REVIEW, time());
+
+        $html = $this->key_only_warnings(true);
+
+        $this->assertStringContainsString(s(get_string('keyreviewpending', 'enrol_apply', 2)), $html, $html);
+        $this->assertStringContainsString(
+            s(get_string('keyonlypending', 'enrol_apply', 3)),
+            $this->key_only_warnings(),
+            'the control: key only counts every waiting application'
+        );
+    }
+
+    /**
      * The reviewed mode is warned when every keyed group is full, worded for applying.
      *
      * @return void

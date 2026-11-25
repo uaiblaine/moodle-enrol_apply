@@ -1532,7 +1532,9 @@ class enrol_apply_renderer extends plugin_renderer_base {
      * row outside its dates, or on a disabled method). This plugin's own methods add the two
      * states an application can be in, read from the enrolment and its record: on the waiting
      * list (ENROL_APPLY_USER_WAIT, a status core does not know) and awaiting a decision (suspended
-     * while the record is still pending). Literal class pairs, so the badge scan sees each
+     * while the record is still pending), both only while {@see \enrol_apply\local\queue::is_awaiting_decision()}
+     * agrees: a row of this plugin's that is not active and whose end date has passed has left the
+     * queue, and reads as not current. Literal class pairs, so the badge scan sees each
      * background with its text colour.
      *
      * @param stdClass $ue The {user_enrolments} row: status, timestart and timeend.
@@ -1543,6 +1545,10 @@ class enrol_apply_renderer extends plugin_renderer_base {
      */
     protected function enrolment_status(stdClass $ue, stdClass $instance, ?stdClass $record, int $now): array {
         $status = (int) $ue->status;
+        // The queue's own answer first: a lapsed application awaits nothing, whatever its record says.
+        if ($instance->enrol === 'apply' && $status !== ENROL_USER_ACTIVE && !\enrol_apply\local\queue::is_awaiting_decision($ue)) {
+            return [get_string('participationnotcurrent', 'enrol'), 'bg-secondary text-dark'];
+        }
         if ($instance->enrol === 'apply' && $status === ENROL_APPLY_USER_WAIT) {
             return [get_string('outcomewaiting', 'enrol_apply'), 'bg-info text-white'];
         }

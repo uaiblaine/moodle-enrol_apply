@@ -252,8 +252,8 @@ such a site the field appears only when its pages are first used (until then: no
     returns the first `hash_equals()` match. No trimming (K0.2): the comparison is exact.
   - `courses_groups_with_keys(int $courseid): int` for the settings line.
 - `classes/local/keyattempts.php` over a new MUC definition `keyattempts` (application, simple
-  keys, TTL 900): `record_failure()`, `locked()`, `clear()`. `db/caches.php`,
-  `cachedef_keyattempts`.
+  keys, TTL 900): `record_failure()`, `locked()` (`clear()` was removed by the sweep of
+  2026-11-25, see the risk below). `db/caches.php`, `cachedef_keyattempts`.
 - `classes/local/groupseats.php`, the only reader of groupdist in this plugin:
   - `available(): bool` &mdash; `class_exists('\local_groupdist\seats')`.
   - `for_groups(array $groupids): array` &mdash; groupid &rArr; `{seats: ?int, members: int}`;
@@ -434,9 +434,11 @@ belong to the stages that wire the key in, and K4/K5 must close them:
    check seats (`groupseats::full()`, under the group lock) after resolving, and record what it
    actually did (`keyoutcome`) only after the membership is written.
 3. **`keyattempts::record_failure()` is a get-then-set**, so parallel guesses can overshoot the
-   limit, and each account has its own five. Count only after a key has failed, clear only
-   after an admission succeeded, and decide in K5 whether the count also needs a core lock or a
-   per-network bound.
+   limit, and each account has its own five. Count only after a key has failed, and decide in
+   K5 whether the count also needs a core lock or a per-network bound. Never clear it: the plan
+   said "clear only after an admission succeeded", and the sweep of 2026-11-25 removed that
+   clear, because a holder of one valid key could guess four times, be admitted, unenrol
+   themselves and apply again with four fresh guesses, so the limit never bound.
 
 ## Risks worth naming
 

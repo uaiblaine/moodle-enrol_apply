@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased (2026112502)
+## Unreleased (2026112503)
 
 ### Added
 
@@ -217,6 +217,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **The review page's "Already in this course" panel reads a lapsed application as not current**
+  (2026112503, no upgrade step). Another of the applicant's applications on this plugin that was no
+  longer active and whose end date had passed was labelled "Awaiting a decision" (or "Deferred"),
+  although the queue no longer lists it. The panel asks the queue's own `queue::is_awaiting_decision()`
+  first, and such a row reads "Not current". Mutation gate `PN1`.
+
+- **The reviewed key-only mode counts the applications made without a key by the newest record**
+  (2026112503, no upgrade step). The warning on the method's form that applications are still waiting
+  without a key read a bare `keygroupid` on any record of the enrolment, so an application whose older
+  record carried a key, or whose record named a group with no key outcome, was left out. It reads the
+  newest record's key outcome, the application-group rule of `groupscope::application_group_sql()`.
+  Mutation gate `KP1`.
+
+- **A method added through core's generic enrolment page carries the plugin's defaults** (2026112503,
+  no upgrade step). `enrol/editinstance.php?type=apply` builds no form of this plugin's and created a
+  method whose settings were all empty (no new applications accepted, no fields, no comment wording).
+  `add_instance()` now completes every field the caller leaves out from the plugin's defaults, keeps
+  every field it is given, and leaves the status to core (enabled). Mutation gates `NI1`, `NI2`.
+
+- **The record of who writes a decision is held by a scanning test** (2026112503, no upgrade step).
+  `tests/every_door_test.php` enumerates from the tree every entry script (each calls `require_login()`
+  and then a capability check or a declared alternative), every web service (a class under
+  `classes/external/` that validates its parameters, then its context, then refuses a guest, and names
+  no decision: there is no decision web service), every page acting on a post (`manage.php` and
+  `profile.php` require the sesskey and a POST first) and every caller of `submission::decide()` (four:
+  the documentation said three and left out the group key's admission, corrected).
+
 - **A filter change in the course report answers at the press** (2026112500, no upgrade step). The React
   view wrote the new filter to core's store and dimmed the rows only when that call had answered, so a reader
   waited for the write's round trip with nothing moving; the rows and the band now dim when the filter is
@@ -257,6 +284,46 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   tests drop their 5.3-only skips (the stand-in auth plugin, the report shell) and the Behat
   scenarios of the report view their version step. Mutation gate `RX1`, which lowered the branch
   check, is retired with it.
+
+### Security
+
+- **An accepted group key gives no wrong keys back** (2026112503, no upgrade step). The wrong-key
+  throttle allows five wrong keys in fifteen minutes per applicant and course, and an admission by a
+  key (or an application a key sent for review) used to reset the count. A student who knew one valid
+  key could guess four times at another group's key, be admitted with their own, unenrol themselves,
+  apply again and guess four more, as often as they liked, so the limit never bound. The count now
+  only rises inside its window and expires with it; `keyattempts::clear()` is removed. Mutation gates
+  `TK1`, `TK2` (the clear put back); `KW11`, `RV10` and `XA4`, which held the old reset, are retired.
+
+- **A decider whose own enrolment is suspended or has ended no longer decides** (2026112503, no upgrade
+  step). A role assignment survives the suspension or the end of the enrolment that gave it, so such a
+  teacher (or a moderator recruited by a deciding method whose row was suspended) still held
+  `enrol/apply:manageapplications` in the course and decided through the two doors that do not call
+  `require_login($course)`: the one-application review page (`manage.php?userenrol=`, open to mentors on
+  purpose) and core's participants-page bulk decisions. Every other surface of the plugin already
+  refused them. The course level of the per-row check, and the course level of the viewing check,
+  now refuse a reader who is enrolled in the course without access and does not otherwise view it
+  (`groupscope::lapsed()`). A category manager, an operator holding the capability through a category
+  role without being enrolled, and a mentor keep deciding. Mutation gates `LP1`-`LP5`.
+
+- **The site-wide queue's "at their limit" tile honours a course-level prohibit** (2026112503, no
+  upgrade step). A reader holding `moodle/course:viewhiddencourses` in the system context was counted
+  the capacity of every hidden course's method, even one where the capability is prohibited; the rows
+  and the "By course" view already asked per course. The summary now asks the same per course, with
+  the hidden courses' contexts read in one statement. Mutation gate `QM11`.
+
+- **Accepting the profile offer needs a POST** (2026112503, no upgrade step). `profile.php` required the
+  sesskey but took any request; it now refuses anything that is not a POST, as `manage.php` refuses a
+  decision on a link. The offer on the acknowledgement page is a plain POST form, with or without
+  JavaScript. Mutation gate `PO1`.
+
+### Documentation
+
+- What is known and accepted is written down in the README and the developer notes: a pending
+  application is a suspended enrolment to core, so core's participant lists and user searches name
+  pending applicants to anybody who may view the course's participants; the custom-report datasource
+  shows the applicant's comment and the decision note to a report's audience, which its author
+  chooses; the wrong-key throttle is per account.
 
 ## Unreleased (2026112109)
 

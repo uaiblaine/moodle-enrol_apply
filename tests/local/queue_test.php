@@ -987,7 +987,9 @@ final class queue_test extends \advanced_testcase {
      * can_access_course() counts a suspended or expired enrolment as access unless its
      * $onlyactive argument is true, while require_login($course), which manage.php?id= calls
      * before require_capability(), refuses both. Core keeps the role assignment through the
-     * suspension, so this operator still holds the capability and may legitimately decide.
+     * suspension, so this operator still holds the capability, but may not decide either
+     * (groupscope::lapsed(), tests/lapsed_decider_test.php), as the report, the notifications and
+     * the other doors refuse them. The scope must still not send them to a queue that refuses them.
      *
      * @return void
      */

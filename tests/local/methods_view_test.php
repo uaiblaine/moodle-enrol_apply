@@ -520,6 +520,51 @@ final class methods_view_test extends \advanced_testcase {
     }
 
     /**
+     * A reader holding moodle/course:viewhiddencourses in the system context but prohibited it in one
+     * hidden course is not told that course's method is at its limit by the summary's tile, as the
+     * rows and the "By course" view already did not tell them.
+     *
+     * Changes that must make it fail: the summary skipping the per-course question for a reader who
+     * holds the capability in the system context (gate QM11).
+     *
+     * @return void
+     */
+    public function test_the_summary_honours_a_course_level_prohibit_on_hidden_courses(): void {
+        $generator = $this->getDataGenerator();
+        $hidden = $generator->create_course(['fullname' => 'Prohibited course', 'visible' => 0]);
+        $this->methods['hid'] = $this->method($hidden, 'Prohibited intake', ['customint3' => 2, 'customint4' => 1]);
+        $this->applicant('hid', 'Pro', DAYSECS);
+        $this->plugin->enrol_user($this->methods['hid'], $generator->create_user()->id, null, 0, 0, ENROL_USER_ACTIVE);
+        $hid = (int) $this->methods['hid']->id;
+
+        $clerk = $generator->create_user();
+        $role = $generator->create_role(['shortname' => 'prohibitedclerk']);
+        $system = \context_system::instance();
+        assign_capability('enrol/apply:viewapplications', CAP_ALLOW, $role, $system->id, true);
+        assign_capability('moodle/course:viewhiddencourses', CAP_ALLOW, $role, $system->id, true);
+        assign_capability('moodle/course:viewhiddencourses', CAP_PROHIBIT, $role, \context_course::instance($hidden->id)->id, true);
+        role_assign($role, $clerk->id, $system->id);
+        $this->setUser($clerk);
+        // The premise: the capability is held site-wide and refused in that course.
+        $this->assertTrue(has_capability('moodle/course:viewhiddencourses', $system));
+        $this->assertFalse(has_capability('moodle/course:viewhiddencourses', \context_course::instance($hidden->id)));
+
+        $methods = [];
+        foreach ($this->call('enrol_apply_queue_methods', ['perpage' => 100])['rows'] as $row) {
+            $methods[$row['method']['id']] = $row;
+        }
+        $this->assertFalse($methods[$hid]['capacityknown'], 'the view already withholds it');
+        $full = count(array_filter(
+            $methods,
+            static fn(array $row): bool => $row['capacityknown'] && ($row['placesfull'] || $row['limitreached'])
+        ));
+
+        // Morning, at its place, and not the prohibited course's method: the tile agrees with the view.
+        $this->assertSame(1, $full);
+        $this->assertSame($full, $this->call('enrol_apply_queue_summary', ['enrolid' => 0])['methodsfull']);
+    }
+
+    /**
      * Capacity is read for the page's methods alone, and a page is read in a number of statements that does
      * not grow with the methods on it: a page of four methods costs what a page of eight does when they share
      * the same four courses.

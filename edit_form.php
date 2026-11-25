@@ -1008,9 +1008,17 @@ class enrol_apply_edit_form extends moodleform {
             [$where, $params] = \enrol_apply\local\queue::awaiting_decision_where();
             $sql = 'SELECT COUNT(1) FROM {user_enrolments} ue WHERE ue.enrolid = :enrolid AND ' . implode(' AND ', $where);
             if ($review) {
-                // Only the applications made without a key: the keyed ones are what this mode writes.
+                /* Only the applications made without a key: the keyed ones are what this mode writes.
+                   "Keyed" is the newest record's key outcome, the rule of
+                   groupscope::application_group_sql() and the NOT EXISTS shape of group_where(), never
+                   a bare keygroupid on any record: an older record's key does not make a later
+                   application keyed. */
                 $sql .= ' AND NOT EXISTS (SELECT 1 FROM {enrol_apply_submission} s'
-                    . ' WHERE s.userenrolmentid = ue.id AND s.keygroupid <> 0)';
+                    . ' WHERE s.userenrolmentid = ue.id AND s.keyoutcome <> ' . \enrol_apply\local\submission::KEY_NONE
+                    . ' AND NOT EXISTS (SELECT 1 FROM {enrol_apply_submission} newer'
+                    . ' WHERE newer.userenrolmentid = s.userenrolmentid'
+                    . ' AND (newer.timecreated > s.timecreated'
+                    . ' OR (newer.timecreated = s.timecreated AND newer.id > s.id))))';
             }
             $waiting = $DB->count_records_sql($sql, $params + ['enrolid' => $instance->id]);
             if ($waiting) {

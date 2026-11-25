@@ -151,6 +151,11 @@ backup/                      group mappings, comments and the durable trail, see
   `status != ENROL_USER_ACTIVE`, never `status = ENROL_USER_SUSPENDED`, or deferred
   applications vanish from the queue.
 
+  **Known and accepted:** a pending application is a suspended enrolment to core, so core's own user
+  search (`core_enrol_search_users`, `core_enrol_get_enrolled_users` without `onlyactive`, the
+  participants page with its status filter) lists pending applicants by name to anybody who may view
+  the course's participants. The plugin has no hook there; the README says so.
+
 - **An applicant is told about their OWN row first, on all three surfaces, by one describer.**
   `\enrol_apply\local\applicantstate` exists because the enrolment page's panel, `applied.php`
   and `application_form::check_access_for_dynamic_submission()` each branched on nothing but *does
@@ -286,8 +291,16 @@ backup/                      group mappings, comments and the durable trail, see
   operators — active teacher, suspended teacher, expired teacher, category manager, unenrolled
   category teacher — the four-argument form agrees with `require_login()` on every one; the
   three-argument form disagrees on the suspended and the expired one, who kept the capability,
-  decided, and were bounced to `/enrol/index.php`. A role assignment survives a suspension, which
-  is what makes that operator both legitimate and broken.
+  decided, and were bounced to `/enrol/index.php`. A role assignment survives a suspension, so that
+  operator kept the capability; **since the sweep of 2026-11-25 they decide and view nothing either**:
+  `can_manage_application()`'s course branch and `can_view_application()`'s viewer branch refuse a
+  reader enrolled in the course without access who does not otherwise view it
+  (`groupscope::lapsed()`: `is_enrolled(..., false)`, not `is_enrolled(..., true)`, not
+  `is_viewing()`), because `manage.php?userenrol=` and core's bulk route call no
+  `require_login($course)`, while the report, the notifications and the other doors already refused
+  them. Somebody enrolled nowhere (a category role) is not lapsed and keeps deciding; the system and
+  mentor levels are untouched. Gates `LP1`-`LP5`, `tests/lapsed_decider_test.php`. `queue::scope()`
+  is unchanged: it still sends that operator to no queue.
   `test_a_mentor_enrolled_in_the_course_still_walks_their_mentees` and
   `test_a_teacher_whose_own_enrolment_is_suspended_opens_no_queue` pin the two halves.
 
@@ -637,7 +650,9 @@ backup/                      group mappings, comments and the durable trail, see
   two passes agree; NULL is "not known", and only there is the decider's choice read. The report's
   group filter (`reportbuilder/local/filters/group.php`) is `record_where()` for one offered group,
   so the two cannot disagree. Gates `JG1`-`JG22`. The custom-report datasource is
-  deliberately not narrowed (audiences govern it). Gates `SC38`-`SC52`.
+  deliberately not narrowed (audiences govern it). Gates `SC38`-`SC52`. **Known and accepted:** that
+  datasource shows the applicant's comment and the decision note to a custom report's audience with
+  no per-course check; the report's author chooses the audience, as for every core datasource.
 
   **The queue's group column and filter (V2) read the same "newest record" and add to the scope,
   never replace it.** The column joins the newest record's key group (the NOT EXISTS shape of
@@ -857,7 +872,13 @@ backup/                      group mappings, comments and the durable trail, see
   on re-entry in one process. A lock not obtained in time reads as locked (fail closed), and
   `record_failure()` then writes nothing. Tests that drive the form call `release_all()` between
   simulated requests and in `tearDown()`, and `tests/fixtures/fake_lock_factory.php` stands in for
-  another request holding the lock. Gates `KA4`-`KA8`, `XA3`, `XA4`. `submission()` reads a
+  another request holding the lock. Gates `KA4`-`KA8`, `XA3`. **An accepted key gives no tries
+  back** (sweep of 2026-11-25): the count only rises inside its window and expires with it. When an
+  admission or a key-for-review application cleared it, a holder of one valid key could guess four
+  times, be admitted, unenrol through `unenrolself.php`, apply again and guess four more, so the
+  limit never bound; `keyattempts::clear()` is gone (gates `TK1`, `TK2`; `KW11`, `RV10` and `XA4`
+  retired). **Known and accepted:** the throttle is per account, so many accounts get five tries
+  each; a site that fears that keeps keys long. `submission()` reads a
   submission only when the marker equals 1, as formslib does (`XA1`); a posted `withoutkey` gets its
   checkbox for a valid key too (`XA2`).
 
@@ -1225,9 +1246,10 @@ backup/                      group mappings, comments and the durable trail, see
 - **The report reads the LIVE enrolment as well as the record, and the two answer different
   questions.** The durable record holds the last decision this plugin's own state machine took;
   the participants page, course reset, user deletion and the expiry sweep all change an enrolment
-  without touching it. `submission::decide()` is reached from exactly three call sites
-  (`complete_approval()`, `wait_enrolment()`, `cancel_enrolment()`) and nothing else writes a
-  status. So the entity LEFT joins `{user_enrolments}` on `userenrolmentid` and derives an
+  without touching it. `submission::decide()` is reached from exactly four call sites
+  (`complete_approval()`, `wait_enrolment()`, `cancel_enrolment()` and the key admission's
+  `admit()`, which records the applicant as the decider) and nothing else writes a status;
+  `tests/every_door_test.php` enumerates them from the tree, so a fifth fails until it is declared. So the entity LEFT joins `{user_enrolments}` on `userenrolmentid` and derives an
   `outcome` column from the pair.
 
   **The fix for "the report says Pending after an unenrolment" was read-side on purpose.** A
@@ -1406,8 +1428,9 @@ backup/                      group mappings, comments and the durable trail, see
   `manage.php?id=`, behind `require_login($course)`, which refuses a hidden course to a reader without
   `moodle/course:viewhiddencourses`; the wide readers must not hand it out by another route. ONE predicate,
   `queueengine::shows_capacity()` (visible, or the capability in the course's context), is asked by all three:
-  `rows()` (`method.full` false), `wide_summary()` (`methodsfull` counts the methods it admits; a reader
-  holding the capability in the system context skips the per-course question) and `methods()` (neutral
+  `rows()` (`method.full` false), `wide_summary()` (`methodsfull` counts the methods it admits, asked per
+  method's course whatever the reader holds in the system context, so a course-level prohibit wins; the
+  hidden courses' contexts are preloaded in one read, gate `QM11`) and `methods()` (neutral
   capacity fields and `capacityknown` false, no capacity read for the method). The course's name and the
   applications stay listed, as the table lists them. A test needs a CUSTOM role without
   `moodle/course:viewhiddencourses`: stock archetypes that view applications hold it. Gate `QM9`; `QM10` holds

@@ -167,11 +167,12 @@ final class key_admission_test extends \advanced_testcase {
     /**
      * A valid key admits at once: active, in the key's group and the instance's own, recorded as
      * decided by the applicant, the manager told rather than asked to decide, the event raised,
-     * the wrong-key count cleared.
+     * the wrong-key count left as it was: an accepted key gives no tries back.
      *
      * Changes that must make it fail: the admission not recording its groups before activating,
      * the instance's list left out of the groups, the decider left as whoever is logged in, the
-     * "new application" message sent anyway, the event or the throttle reset dropped.
+     * "new application" message sent anyway, the event dropped, or the count cleared after the
+     * admission (gate TK1).
      *
      * @return void
      */
@@ -206,7 +207,7 @@ final class key_admission_test extends \advanced_testcase {
             $told[0]->subject,
             'the manager is told, not asked to decide'
         );
-        $this->assertFalse(keyattempts::locked((int) $this->course->id, (int) $applicant->id));
+        $this->assertTrue(keyattempts::locked((int) $this->course->id, (int) $applicant->id), 'the wrong keys still count');
 
         $admitted = array_values(array_filter(
             $events->get_events(),
