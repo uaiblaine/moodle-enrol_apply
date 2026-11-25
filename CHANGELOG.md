@@ -293,6 +293,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Security
 
+- **The course report's own gate refuses that reader on core's routes too** (the report builder's
+  retrieval and table services, `download.php`): `can_access_course()` handed a capability admits a
+  guest-admitted reader through the course role a lapsed enrolment left behind, so the report, the
+  link to it and the queue a decision returns to ask `groupscope::enters_with()`.
 - **A course that grants guest access no longer lets a reader whose enrolment lapsed open the queue,
   the report and its services through the course role the enrolment left behind** (2026112503, no
   upgrade step). Core's `require_login($course)` admits such a reader as a temporary guest, so the

@@ -19,6 +19,7 @@ namespace enrol_apply;
 use enrol_apply\local\groupscope;
 use enrol_apply\local\queue;
 use enrol_apply\local\submission;
+use enrol_apply\reportbuilder\local\systemreports\course_applications;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 
@@ -1315,5 +1316,53 @@ final class lapsed_decider_test extends \advanced_testcase {
         $this->reinstate($teacher);
         groupscope::require_in_course('enrol/apply:viewreports', $this->context);
         $this->assertTrue(true, 'the control passes');
+    }
+
+    /**
+     * The course report's own gate, which core's report builder routes ask (its retrieval and table
+     * services behind a validate_context() guest access satisfies, download.php behind the site-level
+     * login alone), refuses a reader whose enrolment lapsed in a course that grants guest access.
+     *
+     * Changes that must make it fail: groupscope::enters_with() answering through can_access_course()
+     * alone (gate GA5).
+     *
+     * @return void
+     */
+    public function test_the_course_report_refuses_a_lapsed_reader_of_a_guest_course(): void {
+        $teacher = $this->lapsed_teacher_of_a_guest_course();
+        $this->assertTrue(
+            can_access_course($this->course, null, 'enrol/apply:viewreports', true),
+            'the force: core admits the reader, capability included'
+        );
+
+        $this->assertFalse(course_applications::may_view($this->context));
+        $this->assertFalse(groupscope::enters_with($this->course, 'enrol/apply:viewreports'));
+
+        $this->reinstate($teacher);
+        $this->assertTrue(course_applications::may_view($this->context), 'the control: enrolled again');
+    }
+
+    /**
+     * A reader holding the capability in the system context, whom the lapse rule exempts, still enters a
+     * course only as require_login($course) would let them: not through a suspended enrolment.
+     *
+     * Changes that must make it fail: enters_with() calling can_access_course() without $onlyactive
+     * (gate XA21).
+     *
+     * @return void
+     */
+    public function test_a_site_wide_holder_with_a_suspended_enrolment_enters_as_require_login_does(): void {
+        $reader = $this->site_reader('sitereports', ['enrol/apply:viewreports'], true);
+        $this->setUser($reader);
+        $this->assertTrue(
+            groupscope::holds_in_course('enrol/apply:viewreports', $this->context),
+            'the force: the lapse rule exempts a site-wide holder'
+        );
+        $this->assertFalse(can_access_course($this->course, null, '', true), 'and nothing else admits them');
+
+        $this->assertFalse(course_applications::may_view($this->context));
+
+        $this->reinstate($reader);
+        $this->assertTrue(course_applications::may_view($this->context), 'the control: enrolled again');
     }
 }

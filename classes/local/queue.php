@@ -338,7 +338,7 @@ final class queue {
            listing's own set. */
         $capability = groupscope::reader_capability(context_course::instance((int) $instance->courseid));
         if (
-            can_access_course($course, null, $capability, true)
+            groupscope::enters_with($course, $capability)
             && groupscope::allows((int) $instance->courseid, (int) $application->id, (int) $USER->id, $capability)
         ) {
             return (object) [

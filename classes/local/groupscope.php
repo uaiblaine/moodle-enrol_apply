@@ -256,6 +256,25 @@ final class groupscope {
     }
 
     /**
+     * Whether the current user may enter a course and use a capability there, where no page has asked
+     * require_login($course) for them: core's report builder routes, a link to a course page, the queue
+     * a decision returns to.
+     *
+     * The four-argument can_access_course() agrees with require_login($course) on a suspended or ended
+     * enrolment and on a hidden course, and it reads the capability with has_capability(): where the
+     * course grants guest access it admits a reader whose enrolment lapsed as a temporary guest, through
+     * the course role the enrolment left behind. {@see holds_in_course()} refuses that reader.
+     *
+     * @param \stdClass $course The course.
+     * @param string $capability The capability.
+     * @return bool True when require_login($course) would admit them and they may use the capability.
+     */
+    public static function enters_with(\stdClass $course, string $capability): bool {
+        return can_access_course($course, null, $capability, true)
+            && self::holds_in_course($capability, context_course::instance((int) $course->id));
+    }
+
+    /**
      * The context core's own helpers judge a reader in for a course, on a path that does not pass
      * require_login($course).
      *

@@ -1662,7 +1662,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
     protected function can_open_report($application): bool {
         $course = get_course((int) $application->courseid);
 
-        return can_access_course($course, null, 'enrol/apply:viewreports', true);
+        return \enrol_apply\local\groupscope::enters_with($course, 'enrol/apply:viewreports');
     }
 
     /**

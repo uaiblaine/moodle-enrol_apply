@@ -119,13 +119,14 @@ class course_applications extends system_report {
             return false;
         }
 
-        /* Core's download.php calls only the site-level require_login() before this method, so the
-           course gate lives here. All four arguments matter: $onlyactive set to true makes a
-           suspended or expired enrolment fail as require_login($course) would, and the course
-           check refuses a hidden course to a reader without moodle/course:viewhiddencourses. */
+        /* Core's download.php calls only the site-level require_login() before this method, and its
+           retrieval services a validate_context() that guest access satisfies, so the course gate
+           lives here: a suspended or expired enrolment fails as require_login($course) would, a hidden
+           course is refused to a reader without moodle/course:viewhiddencourses, and a course role a
+           lapsed enrolment left behind counts for nothing. */
         $course = get_course((int) $context->instanceid);
 
-        return can_access_course($course, null, 'enrol/apply:viewreports', true);
+        return groupscope::enters_with($course, 'enrol/apply:viewreports');
     }
 
     /**

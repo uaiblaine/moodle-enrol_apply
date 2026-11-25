@@ -307,7 +307,12 @@ backup/                      group mappings, comments and the durable trail, see
   grants guest access (an enabled guest method with no password) admits a reader whose enrolment
   lapsed as a temporary guest, and the bare read then passes on the course role the enrolment left
   behind. `manage.php?id=` raises `required_capability_exception` itself when the resolver refuses
-  (`$listing->allowed`), with no second read. Gates `GA1`-`GA4`.
+  (`$listing->allowed`), with no second read. Gates `GA1`-`GA4`. **`can_access_course()` handed a
+  capability has the same hole** (it reads the capability bare, then admits through guest access), so
+  where no page asked `require_login($course)` the question is `groupscope::enters_with()`: the course
+  report's `may_view()` (core's report builder services and `download.php` ask it), the history's link
+  to the report and the queue `queue::scope()` returns to. `tests/every_door_test.php` holds that no
+  other call hands `can_access_course()` a capability. Gates `GA5`, `XA20`, `XA21`, `HR1`.
 
   **On every path that does not pass `require_login($course)`, a course capability is read through
   `groupscope::holds_in_course()`**, which is `has_capability()` minus a course-level grant the

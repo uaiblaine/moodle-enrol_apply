@@ -52,6 +52,10 @@ use PHPUnit\Framework\Attributes\DataProvider;
  *   change, the helper's own. A new bare read anywhere, or one more in a declared function, fails
  *   {@see test_every_capability_read_of_a_course_goes_through_the_helper()} until somebody declares
  *   why it is not a course read off a guarded path; a declared one that is gone fails it too.
+ * - can_access_course() reads a capability it is handed with has_capability(), and admits through
+ *   guest access a reader whose enrolment lapsed: it is called with no capability, or inside
+ *   groupscope::enters_with(), which adds the helper
+ *   ({@see test_no_capability_is_read_through_can_access_course()}).
  *
  * @package    enrol_apply
  * @category   test
@@ -525,6 +529,44 @@ final class every_door_test extends \basic_testcase {
             $declared,
             $bare,
             'A bare capability read: call groupscope::holds_in_course(), or declare it in BARE_READS with its reason.'
+        );
+    }
+
+    /**
+     * can_access_course() is asked about access alone; a capability goes through
+     * groupscope::enters_with().
+     *
+     * Handed a capability, core reads it with has_capability() and then admits a reader whose enrolment
+     * lapsed wherever the course grants guest access, through the course role the enrolment left behind.
+     * So every call in the plugin's code is the four-argument form with an empty capability, but for the
+     * one inside enters_with(), which asks the helper beside it.
+     *
+     * @return void
+     */
+    public function test_no_capability_is_read_through_can_access_course(): void {
+        $calls = [];
+        foreach (self::production_files() as $relative) {
+            preg_match_all('~\bcan_access_course\s*\(([^()]*)\)~', self::code($relative), $found);
+            if ($found[1]) {
+                $calls[$relative] = preg_replace('~\s+~', '', $found[1]);
+            }
+        }
+        ksort($calls);
+
+        $this->assertSame(
+            [
+                'classes/local/groupscope.php' => ['$course,null,$capability,true'],
+                'classes/local/profilelink.php' => ['$course,null,\'\',true'],
+                'classes/local/queue.php' => ['$course,null,\'\',true'],
+            ],
+            $calls,
+            'A capability handed to can_access_course(): call groupscope::enters_with() instead.'
+        );
+        $this->assertStringContainsString(
+            'returncan_access_course($course,null,$capability,true)'
+                . '&&self::holds_in_course($capability,context_course::instance((int)$course->id));',
+            preg_replace('~\s+~', '', self::code('classes/local/groupscope.php')),
+            'enters_with() asks the helper beside core\'s answer'
         );
     }
 }
