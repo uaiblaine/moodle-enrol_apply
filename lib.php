@@ -1726,6 +1726,8 @@ class enrol_apply_plugin extends enrol_plugin {
             \enrol_apply\local\instanceoptions::delete((int) $instance->id);
         }
         \enrol_apply\customfield\application_handler::delete_for_instance((int) $instance->id);
+        // The method's course report, with every reader's stored filter values: core deletes no report persistent.
+        \enrol_apply\local\reportpersistents::delete_for_instance((int) $instance->id);
 
         parent::delete_instance($instance);
     }

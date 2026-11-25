@@ -25,7 +25,10 @@ use core_privacy\local\request\contextlist;
 use core_privacy\local\request\transform;
 use core_privacy\local\request\userlist;
 use core_privacy\local\request\writer;
+use core_reportbuilder\local\models\report;
+use core_reportbuilder\local\models\user_filter;
 use enrol_apply\local\queuepreference;
+use enrol_apply\local\reportpersistents;
 use enrol_apply\local\reportpreference;
 use enrol_apply\local\submission;
 
@@ -51,6 +54,12 @@ use enrol_apply\local\submission;
  * assignments it stamps need nothing here: core_role's provider lists, exports and deletes
  * role_assignments whatever their component (tool_cohortroles alone excepted), and core_enrol's
  * covers the user_enrolments rows of every enrolment method.
+ *
+ * A reader's filter values of the course report are rows core writes (reportbuilder_user_filter) under the report's
+ * persistent, and core's own provider covers custom reports only: they are this plugin's to declare, find, export and
+ * delete, in the reader's own user context ({@see reportpersistents} says which reports are the plugin's). The
+ * account's deletion removes them too (\enrol_apply\observers::user_deleted()), since the user context the finder
+ * reads is gone by then.
  *
  * @package    enrol_apply
  * @copyright  2021 Mikhail Golenkov <mikhailgolenkov@catalyst-au.net>
@@ -114,6 +123,20 @@ class provider implements
             'privacy:metadata:enrol_apply_answer'
         );
 
+        // The reader's stored filter values of the plugin's system reports: core writes them, under the plugin's report.
+        $items->add_database_table(
+            user_filter::TABLE,
+            [
+                'reportid' => 'privacy:metadata:reportbuilder_user_filter:reportid',
+                'filterdata' => 'privacy:metadata:reportbuilder_user_filter:filterdata',
+                'usercreated' => 'privacy:metadata:reportbuilder_user_filter:usercreated',
+                'usermodified' => 'privacy:metadata:reportbuilder_user_filter:usermodified',
+                'timecreated' => 'privacy:metadata:reportbuilder_user_filter:timecreated',
+                'timemodified' => 'privacy:metadata:reportbuilder_user_filter:timemodified',
+            ],
+            'privacy:metadata:reportbuilder_user_filter'
+        );
+
         $items->add_user_preference(reportpreference::NAME, 'privacy:metadata:preference:reportcolumns');
         $items->add_user_preference(queuepreference::NAME, 'privacy:metadata:preference:queuegrid');
         $items->add_user_preference(queuepreference::NAME_WIDE, 'privacy:metadata:preference:queuegridwide');
@@ -170,18 +193,42 @@ class provider implements
             ['contextlevel' => CONTEXT_COURSE, 'userid' => $userid, 'component' => 'enrol_apply']
         );
 
+        // The reader's own context, for their stored filter values of the plugin's reports.
+        [$isplugins, $params] = reportpersistents::is_plugins('r');
+        $contextlist->add_from_sql(
+            "SELECT ctx.id
+               FROM {" . user_filter::TABLE . "} f
+               JOIN {" . report::TABLE . "} r ON r.id = f.reportid
+               JOIN {context} ctx ON ctx.instanceid = f.usercreated AND ctx.contextlevel = :userlevel
+              WHERE f.usercreated = :reader AND {$isplugins}",
+            $params + ['userlevel' => CONTEXT_USER, 'reader' => $userid]
+        );
+
         return $contextlist;
     }
 
     /**
      * Users holding an application, named as its decider, or added to a group by an approval, in
-     * the given context.
+     * the given course context; in a user context, its user when they stored filter values of the
+     * plugin's reports.
      *
      * @param userlist $userlist Userlist to add the matching users to.
      * @return void
      */
     public static function get_users_in_context(userlist $userlist) {
         $context = $userlist->get_context();
+        if ($context->contextlevel == CONTEXT_USER) {
+            [$isplugins, $params] = reportpersistents::is_plugins('r');
+            $userlist->add_from_sql(
+                'usercreated',
+                "SELECT f.usercreated
+                   FROM {" . user_filter::TABLE . "} f
+                   JOIN {" . report::TABLE . "} r ON r.id = f.reportid
+                  WHERE f.usercreated = :reader AND {$isplugins}",
+                $params + ['reader' => $context->instanceid]
+            );
+            return;
+        }
         if (!$context instanceof context_course) {
             return;
         }
@@ -212,7 +259,8 @@ class provider implements
 
     /**
      * Export the applications of the given user, and the group memberships an approval gave them,
-     * in the approved contexts.
+     * in the approved contexts; in their own user context, their stored filter values of the plugin's
+     * reports.
      *
      * @param approved_contextlist $contextlist Approved contexts to export.
      * @return void
@@ -225,6 +273,10 @@ class provider implements
         }
 
         $user = $contextlist->get_user();
+        $own = self::own_user_context($contextlist);
+        if ($own) {
+            self::export_stored_filters($own, (int) $user->id);
+        }
         $courseids = self::get_course_ids($contextlist);
         if (!$courseids) {
             return;
@@ -524,7 +576,8 @@ class provider implements
 
     /**
      * Delete every application recorded in the given context, and the group memberships
-     * approvals added there.
+     * approvals added there; in a user context, its user's stored filter values of the plugin's
+     * reports.
      *
      * @param context $context Context to purge.
      * @return void
@@ -532,6 +585,10 @@ class provider implements
     public static function delete_data_for_all_users_in_context(context $context) {
         global $DB;
 
+        if ($context->contextlevel == CONTEXT_USER) {
+            reportpersistents::delete_user_filters((int) $context->instanceid);
+            return;
+        }
         if (!$context instanceof context_course) {
             return;
         }
@@ -553,7 +610,8 @@ class provider implements
 
     /**
      * Delete the applications of one user, and the group memberships approvals gave them, in the
-     * approved contexts.
+     * approved contexts; with their own user context approved, their stored filter values of the
+     * plugin's reports.
      *
      * @param approved_contextlist $contextlist Approved contexts to purge.
      * @return void
@@ -561,6 +619,9 @@ class provider implements
     public static function delete_data_for_user(approved_contextlist $contextlist) {
         global $DB;
 
+        if (self::own_user_context($contextlist)) {
+            reportpersistents::delete_user_filters((int) $contextlist->get_user()->id);
+        }
         $courseids = self::get_course_ids($contextlist);
         if (!$courseids) {
             return;
@@ -584,7 +645,8 @@ class provider implements
 
     /**
      * Delete the applications of several users, and the group memberships approvals gave them, in
-     * one context.
+     * one context; in a user context, its own user's stored filter values of the plugin's reports
+     * when the list names them, and nobody else's.
      *
      * @param approved_userlist $userlist Approved users to purge.
      * @return void
@@ -593,6 +655,12 @@ class provider implements
         global $DB;
 
         $context = $userlist->get_context();
+        if ($context->contextlevel == CONTEXT_USER) {
+            if (in_array((int) $context->instanceid, array_map('intval', $userlist->get_userids()), true)) {
+                reportpersistents::delete_user_filters((int) $context->instanceid);
+            }
+            return;
+        }
         if (!$context instanceof context_course) {
             return;
         }
@@ -688,6 +756,84 @@ class provider implements
 
         [$insql, $params] = $DB->get_in_or_equal($ids, SQL_PARAMS_NAMED, 'id');
         $DB->delete_records_select('enrol_apply_applicationinfo', "id {$insql}", $params);
+    }
+
+    /**
+     * The request's subject's own user context, when it is among the approved contexts.
+     *
+     * Only there are the stored filter values theirs to export or delete: a user context of somebody else names
+     * nobody's stored filters of this plugin but its own user's.
+     *
+     * @param approved_contextlist $contextlist The approved contexts.
+     * @return context|null The subject's user context, or null.
+     */
+    protected static function own_user_context(approved_contextlist $contextlist): ?context {
+        $userid = (int) $contextlist->get_user()->id;
+        foreach ($contextlist->get_contexts() as $context) {
+            if ($context->contextlevel == CONTEXT_USER && (int) $context->instanceid === $userid) {
+                return $context;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Export the user's stored filter values of the plugin's reports, each with the course and the enrolment method
+     * its report is of.
+     *
+     * The method is named only where the report is the one the plugin's page builds for a method of that same course
+     * (component, area, an apply instance of the report's course): a persistent core's services built under another
+     * item names no method. The filter values are exported as stored, decoded.
+     *
+     * @param context $context The user's own context.
+     * @param int $userid The user.
+     * @return void
+     */
+    protected static function export_stored_filters(context $context, int $userid): void {
+        global $DB;
+
+        [$isplugins, $params] = reportpersistents::is_plugins('r');
+        $records = $DB->get_records_sql(
+            "SELECT f.id, f.filterdata, f.timecreated, f.timemodified, r.contextid, e.id AS enrolid
+               FROM {" . user_filter::TABLE . "} f
+               JOIN {" . report::TABLE . "} r ON r.id = f.reportid
+          LEFT JOIN {context} ctx ON ctx.id = r.contextid AND ctx.contextlevel = :courselevel
+          LEFT JOIN {enrol} e ON e.id = r.itemid AND e.enrol = :enrol AND e.courseid = ctx.instanceid
+                    AND r.component = :methodcomponent AND r.area = :methodarea
+              WHERE f.usercreated = :reader AND {$isplugins}
+           ORDER BY f.id",
+            $params + [
+                'courselevel' => CONTEXT_COURSE,
+                'enrol' => 'apply',
+                'methodcomponent' => 'enrol_apply',
+                'methodarea' => 'method',
+                'reader' => $userid,
+            ]
+        );
+        if (!$records) {
+            return;
+        }
+
+        $plugin = enrol_get_plugin('apply');
+        $entries = [];
+        foreach ($records as $record) {
+            $reportcontext = context::instance_by_id((int) $record->contextid, IGNORE_MISSING);
+            $method = '';
+            if ($record->enrolid && ($instance = $DB->get_record('enrol', ['id' => $record->enrolid]))) {
+                $method = $plugin->get_instance_name($instance);
+            }
+            $entries[] = (object) [
+                'course' => $reportcontext ? $reportcontext->get_context_name(false, false, false) : '',
+                'method' => $method,
+                'filters' => json_decode((string) $record->filterdata),
+                'timecreated' => transform::datetime($record->timecreated),
+                'timemodified' => transform::datetime($record->timemodified),
+            ];
+        }
+        writer::with_context($context)->export_data(
+            [get_string('privacy:reportfilterspath', 'enrol_apply')],
+            (object) ['filters' => $entries]
+        );
     }
 
     /**

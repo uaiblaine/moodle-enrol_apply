@@ -120,12 +120,29 @@ classes/local/instanceoptions.php  per-method options (enrol_apply_options), rea
 classes/local/profilelink.php  whether user/view.php would open an applicant's profile for this reader
 classes/observers.php        course_deleted, orphan cleanup for the plugin-disabled case; completes an Edit enrolment approval
 classes/privacy/provider.php full provider: three personal-data tables, two personal-data roles
+classes/local/reportpersistents.php  which report builder persistents are the plugin's; their deletions (D146)
 classes/task/                sync_enrolments, send_expiry_notifications, purge_submissions (scheduled);
                              notify_approval (adhoc: the approval message)
 backup/                      group mappings, comments and the durable trail, see below
 ```
 
 ## Architecture gotchas
+
+- **A reader's stored filters of the course report are this plugin's personal data, and a report
+  persistent is the plugin's by its SOURCE, never by its component** (Design System D146). Core
+  writes them to `reportbuilder_user_filter` under the report's persistent and its own provider
+  covers custom reports only, so the provider declares, finds, exports and deletes them in the
+  reader's user context; `observers::user_deleted()` deletes them with the account,
+  `delete_instance()` with the method, `observers::course_deleted()` sweeps the plugin's reports
+  whose context is gone, and `db/uninstall.php` deletes every report persistent (core's
+  `before_delete()` takes what hangs on it) and the three preferences. All of them go through
+  `\enrol_apply\local\reportpersistents`: core's `core_reportbuilder_retrieve_system_report` and
+  `_can_view_system_report` create a persistent of `course_applications` for any component, area
+  and item a client sends, before `can_view()`, so a cut by `component = 'enrol_apply'` misses the
+  plugin's report built under another component and takes another plugin's report built under this
+  one. A new system report class goes into `reportpersistents::SOURCES` (a scanning test holds it).
+  The upgrade to 2026112501 clears what earlier versions left (`delete_orphans()`,
+  `delete_deleted_users_filters()`). Gates `SF1`-`SF25`.
 
 - **`user_enrolments.status` carries a third value.** `ENROL_APPLY_USER_WAIT = 2` means
   "on the waiting list". Core only knows 0 (active) and 1 (suspended) but tests

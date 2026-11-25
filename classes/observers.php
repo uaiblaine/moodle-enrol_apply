@@ -25,6 +25,7 @@ use core_customfield\event\field_deleted;
 use enrol_apply\customfield\application_handler;
 use enrol_apply\local\conditions;
 use enrol_apply\local\approvalwrite;
+use enrol_apply\local\reportpersistents;
 use enrol_apply\local\submission;
 
 /**
@@ -112,6 +113,10 @@ class observers {
             conditions::TABLE,
             'NOT EXISTS (SELECT 1 FROM {enrol} e WHERE e.id = {' . conditions::TABLE . '}.enrolid)'
         );
+
+        /* The course report's persistents, with every reader's stored filter values: core deletes none with the
+           context, and delete_instance() reaches only an enabled method's, built by the plugin's own page. */
+        reportpersistents::delete_orphans();
     }
 
     /**
@@ -130,10 +135,15 @@ class observers {
      * the rest follows the retention period. Idempotent, and a pair of probes when the user has
      * no record.
      *
+     * The user's stored filter values of the course report go too: core deletes none, and the
+     * privacy finder reads the user context, which is gone by now.
+     *
      * @param user_deleted $event The dispatched event.
      * @return void
      */
     public static function user_deleted(user_deleted $event): void {
+        // First: once the user context is gone nothing else reaches them, whatever throws below.
+        reportpersistents::delete_user_filters((int) $event->objectid);
         self::sweep_orphaned_applicationinfo();
         submission::pseudonymise_user((int) $event->objectid);
     }

@@ -366,9 +366,8 @@ final class decision_events_test extends \advanced_testcase {
         $this->assertSame((int) ENROL_USER_ACTIVE, (int) $DB->get_field('user_enrolments', 'status', ['id' => $ueid]));
         $this->assertSame($this->record_id($ueid), (int) $approved[0]->objectid);
         $this->assertSame((int) $this->teacher->id, (int) $approved[0]->userid);
-        // Either format the store may be set to, by the rule of \tool_log\helper\reader::decode_other().
-        $raw = (string) $approved[0]->other;
-        $other = preg_match('~^.:~', $raw) ? unserialize($raw, ['allowed_classes' => false]) : json_decode($raw, true);
+        // Either format the store may be set to, decoded by the store's own reader.
+        $other = \logstore_standard\log\store::decode_other((string) $approved[0]->other);
         $this->assertSame([(int) $this->listed->id], $other['groups']);
         $this->assertSame($this->role('student'), $other['roleid']);
         $this->assertFalse($other['chosen']);

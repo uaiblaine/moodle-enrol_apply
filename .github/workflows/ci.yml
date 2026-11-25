@@ -21,6 +21,16 @@ on:
       - MOODLE_503_STABLE
   pull_request:
   workflow_dispatch:
+    # `hosted` sends a manual run to GitHub's own runners (Actions credit, every leg in parallel) instead of the
+    # runner the CI_RUNNER variable names: `gh workflow run ci.yml --ref <branch> -f runner=hosted`.
+    inputs:
+      runner:
+        description: Where the jobs run
+        type: choice
+        default: variable
+        options:
+          - variable
+          - hosted
 
 # Supersede a run when new commits arrive on the same pull request: pushing
 # three fixes in a row otherwise leaves three full pipelines running to the end.
@@ -45,7 +55,7 @@ jobs:
     name: Moodle 5.03
     uses: uaiblaine/moodle-workflows/.github/workflows/moodle-plugin-ci.yml@main
     with:
-      runner: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.CI_RUNNER || '' }}
+      runner: ${{ inputs.runner != 'hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.CI_RUNNER || '' }}
       moodle-core-branch: MOODLE_503_STABLE
       # Test-only, both optional: the per-group seats a group enrolment key respects (the
       # local_groupdist branch of the same Moodle version), and

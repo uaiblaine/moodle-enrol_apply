@@ -606,5 +606,15 @@ function xmldb_enrol_apply_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026112101, 'enrol', 'apply');
     }
 
+    if ($oldversion < 2026112501) {
+        /* What this version starts removing as it happens (Design System D146), left by the versions before it: the
+           course report's persistents of deleted courses, and the stored filter values of deleted accounts, which no
+           privacy request reaches once the user context is gone. Data only, no schema. */
+        \enrol_apply\local\reportpersistents::delete_orphans();
+        \enrol_apply\local\reportpersistents::delete_deleted_users_filters();
+
+        upgrade_plugin_savepoint(true, 2026112501, 'enrol', 'apply');
+    }
+
     return true;
 }
