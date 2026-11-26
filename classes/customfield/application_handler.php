@@ -101,7 +101,7 @@ class application_handler extends \core_customfield\handler {
      */
     public function can_configure(): bool {
         $context = $this->get_course_context();
-        return $context !== null && has_capability('enrol/apply:config', $context);
+        return $context !== null && \enrol_apply\local\groupscope::holds_in_course('enrol/apply:config', $context);
     }
 
     /**
@@ -132,8 +132,10 @@ class application_handler extends \core_customfield\handler {
      */
     public function can_view(field_controller $field, int $instanceid): bool {
         $context = $this->get_course_context();
+        // A callback core may call without require_login($course): a lapsed course role counts for nothing.
         return $context !== null
-            && has_any_capability(['enrol/apply:manageapplications', 'enrol/apply:viewreports'], $context);
+            && (\enrol_apply\local\groupscope::holds_in_course('enrol/apply:manageapplications', $context)
+                || \enrol_apply\local\groupscope::holds_in_course('enrol/apply:viewreports', $context));
     }
 
     /**

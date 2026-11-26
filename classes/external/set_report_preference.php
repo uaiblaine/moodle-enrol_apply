@@ -21,6 +21,7 @@ use core_external\external_function_parameters;
 use core_external\external_multiple_structure;
 use core_external\external_single_structure;
 use core_external\external_value;
+use enrol_apply\local\groupscope;
 use enrol_apply\local\reportengine;
 use enrol_apply\local\reportpreference;
 use enrol_apply\reportbuilder\local\systemreports\course_applications;
@@ -92,7 +93,7 @@ class set_report_preference extends external_api {
         if (isguestuser()) {
             throw new \moodle_exception('noguest');
         }
-        require_capability('enrol/apply:viewreports', $context);
+        groupscope::require_in_course('enrol/apply:viewreports', $context);
         /* The report's own access rule, without building the report: built here, core's
            per-request instance would keep the old columns for a rows call batched after this one. */
         if (!course_applications::may_view($context)) {

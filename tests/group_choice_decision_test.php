@@ -928,4 +928,46 @@ final class group_choice_decision_test extends \advanced_testcase {
             $card
         );
     }
+
+    /**
+     * Another of the applicant's applications that has LAPSED (not active, its end date passed) reads
+     * as not current, as the queue treats it, not as awaiting a decision or on the waiting list; one
+     * still in the queue keeps its words.
+     *
+     * Three other methods: a pending application with no end (the control), a pending one and a
+     * deferred one whose end date has passed, which the queue no longer lists.
+     *
+     * Changes that must make it fail: the panel judging an application's state by its status and
+     * record alone, without queue::is_awaiting_decision() (gate PN1).
+     *
+     * @return void
+     */
+    public function test_the_panel_reads_a_lapsed_application_as_not_current(): void {
+        global $DB;
+
+        $applicant = $this->getDataGenerator()->create_user();
+        $method = function (string $name, int $status, int $timeend) use ($applicant, $DB): void {
+            $id = $this->plugin->add_instance($this->course, ['name' => $name] + $this->plugin->get_instance_defaults());
+            $instance = $DB->get_record('enrol', ['id' => $id], '*', MUST_EXIST);
+            $this->plugin->enrol_user($instance, $applicant->id, null, $timeend ? $timeend - DAYSECS : 0, $timeend, $status);
+            submission::create(
+                $instance,
+                (int) $applicant->id,
+                (int) $DB->get_field('user_enrolments', 'id', ['enrolid' => $id, 'userid' => $applicant->id], MUST_EXIST),
+                (object) []
+            );
+        };
+        $method('Still waiting', ENROL_USER_SUSPENDED, 0);
+        $method('Lapsed while pending', ENROL_USER_SUSPENDED, time() - DAYSECS);
+        $method('Lapsed on the list', ENROL_APPLY_USER_WAIT, time() - DAYSECS);
+
+        [$ueid] = $this->choose($this->theirs, $applicant);
+        $this->setAdminUser();
+        $card = $this->enrolments_card($this->review_html($ueid, $applicant));
+
+        $this->assertNotNull($card);
+        $this->assertSame(1, substr_count($card, get_string('outcomeawaiting', 'enrol_apply')), 'the control and nothing else');
+        $this->assertSame(0, substr_count($card, get_string('outcomewaiting', 'enrol_apply')));
+        $this->assertSame(2, substr_count($card, get_string('participationnotcurrent', 'enrol')));
+    }
 }

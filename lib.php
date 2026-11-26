@@ -94,6 +94,27 @@ class enrol_apply_plugin extends enrol_plugin {
     }
 
     /**
+     * Add a new instance, completing every field the caller left out from get_instance_defaults().
+     *
+     * Core's generic enrol/editinstance.php?type=apply builds no form of this plugin's and hands over
+     * id, courseid, type and returnurl alone, which left every setting of the new method NULL. A field
+     * the caller gives is kept as given, null included: edit.php, restore_instance() and
+     * add_default_instance() pass every field and are unchanged by this. The status is not completed:
+     * core's add_instance() makes a new method enabled, which is what that page means by adding one,
+     * where the status default is for methods added to new courses ({@see add_default_instance()}).
+     *
+     * @param stdClass $course Course to add the instance to.
+     * @param array|null $fields Instance fields.
+     * @return int Id of the new instance.
+     */
+    public function add_instance($course, ?array $fields = null) {
+        $defaults = $this->get_instance_defaults();
+        unset($defaults['status']);
+
+        return parent::add_instance($course, (array) $fields + $defaults);
+    }
+
+    /**
      * Users holding the unenrol capability may unenrol other users manually.
      *
      * @param stdClass $instance Course enrol instance.
@@ -389,7 +410,10 @@ class enrol_apply_plugin extends enrol_plugin {
     public function get_newinstance_link($courseid) {
         $context = context_course::instance($courseid, MUST_EXIST);
 
-        if (!has_capability('moodle/course:enrolconfig', $context) || !has_capability('enrol/apply:config', $context)) {
+        if (
+            !\enrol_apply\local\groupscope::holds_in_course('moodle/course:enrolconfig', $context)
+            || !\enrol_apply\local\groupscope::holds_in_course('enrol/apply:config', $context)
+        ) {
             return null;
         }
         return new moodle_url('/enrol/apply/edit.php', ['courseid' => $courseid]);
@@ -878,9 +902,9 @@ class enrol_apply_plugin extends enrol_plugin {
             }
         }
 
-        // After the commit: the cache is not part of the transaction.
-        \enrol_apply\local\keyattempts::clear((int) $instance->courseid, $userid);
-
+        /* The wrong-key count is left as it is: an accepted key gives no tries back, or a holder of
+           one valid key could apply, leave and apply again with a fresh budget of guesses at
+           another group's key ({@see \enrol_apply\local\keyattempts}). */
         return \enrol_apply\local\application_result::created(\enrol_apply\local\submission::KEY_ADMITTED, $keygroupid);
     }
 
@@ -983,9 +1007,8 @@ class enrol_apply_plugin extends enrol_plugin {
             return \enrol_apply\local\application_result::refused($this->group_full_refusal($instance, $keygroupid, $full));
         }
 
+        // The wrong-key count is left as it is, as after an admission: an accepted key gives no tries back.
         $this->apply($instance, $userid, $data, $keygroupid, \enrol_apply\local\submission::KEY_FOR_REVIEW);
-        // A valid key ends the tries, as an admission does.
-        \enrol_apply\local\keyattempts::clear((int) $instance->courseid, $userid);
 
         return \enrol_apply\local\application_result::created(\enrol_apply\local\submission::KEY_FOR_REVIEW, $keygroupid);
     }
@@ -1491,7 +1514,9 @@ class enrol_apply_plugin extends enrol_plugin {
             return [];
         }
 
-        if (!has_capability('enrol/apply:manageapplications', $manager->get_context())) {
+        /* core's dispatch in action_redir.php calls no require_login($course), so a teacher whose own
+           enrolment lapsed is refused here rather than by the page (groupscope::holds_in_course()). */
+        if (!\enrol_apply\local\groupscope::holds_in_course('enrol/apply:manageapplications', $manager->get_context())) {
             return [];
         }
 
@@ -1580,7 +1605,7 @@ class enrol_apply_plugin extends enrol_plugin {
             return $actions;
         }
 
-        if (!has_capability('enrol/apply:manageapplications', $manager->get_context())) {
+        if (!\enrol_apply\local\groupscope::holds_in_course('enrol/apply:manageapplications', $manager->get_context())) {
             return $actions;
         }
 
@@ -1619,7 +1644,7 @@ class enrol_apply_plugin extends enrol_plugin {
 
         $icons = [];
 
-        if (has_capability('enrol/apply:config', $context)) {
+        if (\enrol_apply\local\groupscope::holds_in_course('enrol/apply:config', $context)) {
             $editlink = new moodle_url('/enrol/apply/edit.php', [
                 'courseid' => $instance->courseid,
                 'id' => $instance->id,
@@ -1636,7 +1661,10 @@ class enrol_apply_plugin extends enrol_plugin {
         }
 
         // A viewer (S5) reaches the same queue, read-only.
-        if (has_any_capability(['enrol/apply:manageapplications', 'enrol/apply:viewapplications'], $context)) {
+        if (
+            \enrol_apply\local\groupscope::holds_in_course('enrol/apply:manageapplications', $context)
+            || \enrol_apply\local\groupscope::holds_in_course('enrol/apply:viewapplications', $context)
+        ) {
             $managelink = new moodle_url('/enrol/apply/manage.php', ['id' => $instance->id]);
             $icons[] = $OUTPUT->action_icon(
                 $managelink,
@@ -1647,7 +1675,7 @@ class enrol_apply_plugin extends enrol_plugin {
         /* Its own capability, checked separately: the report shows the frozen profile snapshot
            of every applicant the course has ever had, which is a wider disclosure than deciding
            on the applications currently in the queue. */
-        if (has_capability('enrol/apply:viewreports', $context)) {
+        if (\enrol_apply\local\groupscope::holds_in_course('enrol/apply:viewreports', $context)) {
             $reportlink = new moodle_url('/enrol/apply/report.php', ['id' => $instance->id]);
             $icons[] = $OUTPUT->action_icon(
                 $reportlink,
@@ -1671,7 +1699,7 @@ class enrol_apply_plugin extends enrol_plugin {
      */
     public function can_hide_show_instance($instance) {
         $context = context_course::instance($instance->courseid);
-        return has_capability('enrol/apply:config', $context);
+        return \enrol_apply\local\groupscope::holds_in_course('enrol/apply:config', $context);
     }
 
     /**
@@ -1682,7 +1710,7 @@ class enrol_apply_plugin extends enrol_plugin {
      */
     public function can_delete_instance($instance) {
         $context = context_course::instance($instance->courseid);
-        return has_capability('enrol/apply:config', $context);
+        return \enrol_apply\local\groupscope::holds_in_course('enrol/apply:config', $context);
     }
 
     /**
@@ -1768,7 +1796,7 @@ class enrol_apply_plugin extends enrol_plugin {
         }
 
         $context = context_course::instance($instance->courseid);
-        if (has_capability('enrol/apply:config', $context)) {
+        if (\enrol_apply\local\groupscope::holds_in_course('enrol/apply:config', $context)) {
             $managelink = new moodle_url('/enrol/apply/edit.php', [
                 'courseid' => $instance->courseid,
                 'id' => $instance->id,
@@ -1785,7 +1813,7 @@ class enrol_apply_plugin extends enrol_plugin {
            from enrol_apply_extend_navigation_course() (the queue's Reports link), which fires for every
            course whether or not it has an apply instance. *_extend_settings_navigation() is
            not dispatched for enrol plugins at all. */
-        if (has_capability('enrol/apply:viewreports', $context)) {
+        if (\enrol_apply\local\groupscope::holds_in_course('enrol/apply:viewreports', $context)) {
             $reportlink = new moodle_url('/enrol/apply/report.php', ['id' => $instance->id]);
             $instancesnode->add(
                 get_string('report:course_applications', 'enrol_apply'),
@@ -1831,7 +1859,8 @@ class enrol_apply_plugin extends enrol_plugin {
      *  - the capability held in the course the application belongs to, narrowed in a course
      *    in separate groups mode to the applications of the decider's own groups
      *    ({@see \enrol_apply\local\groupscope}): only this level comes from the course, so
-     *    only this level is narrowed;
+     *    only this level is narrowed, and only this level is refused to a reader whose own
+     *    enrolment in the course grants no access ({@see \enrol_apply\local\groupscope::lapsed()});
      *  - the capability held in the applicant's own user context, which lets a
      *    mentor decide for the users assigned to them regardless of the course.
      *
@@ -1866,10 +1895,13 @@ class enrol_apply_plugin extends enrol_plugin {
             return true;
         }
 
+        /* Not for a reader whose own enrolment in the course grants no access (suspended or ended, the
+           role kept): manage.php?userenrol= and core's bulk route call no require_login($course), so
+           this is where they are refused, as the course's own pages refuse them. */
         $coursecontext = context_course::instance($courseid, IGNORE_MISSING);
         if (
             $coursecontext
-            && has_capability('enrol/apply:manageapplications', $coursecontext)
+            && \enrol_apply\local\groupscope::holds_in_course('enrol/apply:manageapplications', $coursecontext)
             && \enrol_apply\local\groupscope::allows((int) $courseid, $userenrolmentid, (int) $USER->id)
         ) {
             return true;
@@ -1897,7 +1929,8 @@ class enrol_apply_plugin extends enrol_plugin {
      *
      * Everybody can_manage_application() admits, plus a holder of enrol/apply:viewapplications
      * (S5) in the course the application belongs to, under the same group narrowing a decider
-     * gets there ({@see \enrol_apply\local\groupscope}). A system-level grant reaches the course
+     * gets there ({@see \enrol_apply\local\groupscope}) and refused, as a decider is, to a holder
+     * whose own enrolment there grants no access. A system-level grant reaches the course
      * by inheritance and is never narrowed, because the narrowing reads the viewing capability's
      * own system exemption. There is no user-context level: viewing is a coordinator's
      * delegation, and a mentor decides through manageapplications.
@@ -1920,8 +1953,9 @@ class enrol_apply_plugin extends enrol_plugin {
         $view = \enrol_apply\local\groupscope::VIEW;
         $coursecontext = context_course::instance($courseid, IGNORE_MISSING);
 
+        // A viewer whose own enrolment grants no access is refused as a decider is (groupscope::lapsed()).
         return $coursecontext
-            && has_capability($view, $coursecontext)
+            && \enrol_apply\local\groupscope::holds_in_course($view, $coursecontext)
             && \enrol_apply\local\groupscope::allows((int) $courseid, $userenrolmentid, (int) $USER->id, $view);
     }
 
@@ -1985,7 +2019,12 @@ class enrol_apply_plugin extends enrol_plugin {
                applied again by a decider who may not choose at all. The override is per row
                ($rowdecision): a batch spanning courses must not carry one course's refusal into
                the next. */
-            if (!has_capability('enrol/apply:choosedecision', context_course::instance($instance->courseid))) {
+            if (
+                !\enrol_apply\local\groupscope::holds_in_course(
+                    'enrol/apply:choosedecision',
+                    context_course::instance($instance->courseid)
+                )
+            ) {
                 $rowdecision = array_merge((array) $decision, ['groups' => [], 'roleid' => 0]);
             } else {
                 $rowdecision = $decision;
@@ -2001,7 +2040,10 @@ class enrol_apply_plugin extends enrol_plugin {
                deliberately not allowlisted: filtering it would stop an instance configured with a
                role its teacher may not assign from granting any role at all. */
             if ($rowdecision !== null && array_key_exists('roleid', $rowdecision)) {
-                $assignable = get_assignable_roles(context_course::instance($instance->courseid));
+                // Judged as the chooser is: a lapsed course role assigns nothing (groupscope::judging_context()).
+                $assignable = get_assignable_roles(
+                    \enrol_apply\local\groupscope::judging_context(context_course::instance($instance->courseid))
+                );
                 $chosenrole = (int) $rowdecision['roleid'];
                 \enrol_apply\local\submission::record_decided_role(
                     (int) $userenrolment->id,
@@ -2698,12 +2740,7 @@ class enrol_apply_plugin extends enrol_plugin {
             $shown,
             match (true) {
                 $admission === null => null,
-                $admission->group !== ''
-                    && has_capability('enrol/apply:manageapplications', $coursecontext, $recipient)
-                    && \enrol_apply\local\groupvisibility::visible_to(
-                        $admission->grouprecord,
-                        (int) $recipient->id
-                    ) => $admission->group,
+                $this->names_group_to($admission, $coursecontext, (int) $recipient->id) => $admission->group,
                 default => '',
             },
             $admission !== null && !$admission->admitted,
@@ -2719,9 +2756,11 @@ class enrol_apply_plugin extends enrol_plugin {
      * Whether a notice may name a group to this recipient.
      *
      * Only to a recipient holding enrol/apply:manageapplications in the course, the gate the review
-     * page's group chooser applies, who may see the group by core's visibility rule
-     * ({@see \enrol_apply\local\groupvisibility::visible_to()}), judged for the recipient rather
-     * than for the applicant whose request sends the notice; and never for a group that is gone.
+     * page's group chooser applies, and not through a course role their lapsed enrolment left behind
+     * ({@see \enrol_apply\local\groupscope::holds_in_course()}: a mentor is a recipient too), who
+     * may see the group by core's visibility rule ({@see \enrol_apply\local\groupvisibility::visible_to()}),
+     * judged for the recipient rather than for the applicant whose request sends the notice; and never
+     * for a group that is gone.
      *
      * @param stdClass $named An object with 'group' (the plain name, empty when the group is gone)
      *     and 'grouprecord' (its {groups} record, or null).
@@ -2732,7 +2771,7 @@ class enrol_apply_plugin extends enrol_plugin {
     protected function names_group_to(stdClass $named, context_course $coursecontext, int $recipientid): bool {
         return $named->group !== ''
             && $named->grouprecord !== null
-            && has_capability('enrol/apply:manageapplications', $coursecontext, $recipientid)
+            && \enrol_apply\local\groupscope::holds_in_course('enrol/apply:manageapplications', $coursecontext, $recipientid)
             && \enrol_apply\local\groupvisibility::visible_to($named->grouprecord, $recipientid);
     }
 
@@ -3064,7 +3103,7 @@ function enrol_apply_extend_navigation_course(navigation_node $parentnode, stdCl
 
     $reports = $parentnode->get('coursereports', navigation_node::TYPE_CONTAINER);
     if (!$reports) {
-        if (!has_capability('moodle/site:viewreports', $context)) {
+        if (!\enrol_apply\local\groupscope::holds_in_course('moodle/site:viewreports', $context)) {
             return;
         }
         $reports = $parentnode->add(

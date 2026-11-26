@@ -919,7 +919,8 @@ class submission {
     public static function visible_keys(\context $context, ?int $userid = null): array|bool {
         global $CFG, $DB;
 
-        if (!has_capability('moodle/site:viewuseridentity', $context, $userid)) {
+        // In a course, not through a course role the reader's lapsed enrolment left behind.
+        if (!\enrol_apply\local\groupscope::holds_in_course('moodle/site:viewuseridentity', $context, $userid)) {
             return self::name_keys();
         }
 
@@ -931,7 +932,7 @@ class submission {
         $hiddencapability = $context->get_course_context(false)
             ? 'moodle/course:viewhiddenuserfields'
             : 'moodle/user:viewhiddendetails';
-        $canviewhidden = !$hidden || has_capability($hiddencapability, $context, $userid);
+        $canviewhidden = !$hidden || \enrol_apply\local\groupscope::holds_in_course($hiddencapability, $context, $userid);
         foreach (array_unique(array_merge(self::IDENTITY_COLUMNS, $hidden)) as $column) {
             $unlisted = in_array($column, self::IDENTITY_COLUMNS, true) && !in_array($column, $identity, true);
             $hiddenhere = in_array($column, $hidden, true) && !$canviewhidden;
@@ -940,7 +941,7 @@ class submission {
             }
         }
 
-        $viewalldetails = has_capability('moodle/user:viewalldetails', $context, $userid);
+        $viewalldetails = \enrol_apply\local\groupscope::holds_in_course('moodle/user:viewalldetails', $context, $userid);
         // A PROFILE_VISIBLE_NONE field is judged at the system, as core does for a field of a user.
         $viewsystem = $viewalldetails
             && has_capability('moodle/user:viewalldetails', \context_system::instance(), $userid);

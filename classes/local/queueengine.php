@@ -453,13 +453,46 @@ class queueengine {
      * that capability, and which is the one other page that shows places, applications held, the closing date
      * and "full". The wide readers ({@see rows()}, {@see wide_summary()}, {@see methods()}) ask this alone,
      * so the rule has one definition; the course's name and the applications stay listed, as the table lists them.
+     * The capability is read through {@see groupscope::holds_in_course()}: a role kept from an enrolment that
+     * lapsed opens nothing here either, since require_login($course) would refuse that reader too.
      *
      * @param int $courseid The method's course.
      * @param bool $visible The course's visible flag.
      * @return bool Whether its capacity facts may be given to the current reader.
      */
     protected static function shows_capacity(int $courseid, bool $visible): bool {
-        return $visible || has_capability('moodle/course:viewhiddencourses', context_course::instance($courseid));
+        return $visible || groupscope::holds_in_course('moodle/course:viewhiddencourses', context_course::instance($courseid));
+    }
+
+    /**
+     * Preload the course contexts of these courses into core's context cache, in one read.
+     *
+     * So that asking {@see shows_capacity()} of each costs no statement of its own: context_course::instance()
+     * then answers from the cache, and has_capability() from the reader's access data.
+     *
+     * @param array $courseids Course ids; repeats and none at all are allowed.
+     * @return void
+     */
+    protected static function preload_course_contexts(array $courseids): void {
+        global $DB;
+
+        $courseids = array_values(array_unique(array_map('intval', $courseids)));
+        if (!$courseids) {
+            return;
+        }
+
+        [$insql, $params] = $DB->get_in_or_equal($courseids, SQL_PARAMS_NAMED, 'preloadcourse');
+        $params['preloadlevel'] = CONTEXT_COURSE;
+        $ctxselect = \context_helper::get_preload_record_columns_sql('ctx');
+        $records = $DB->get_records_sql(
+            "SELECT ctx.instanceid, {$ctxselect}
+               FROM {context} ctx
+              WHERE ctx.contextlevel = :preloadlevel AND ctx.instanceid {$insql}",
+            $params
+        );
+        foreach ($records as $record) {
+            \context_helper::preload_from_record($record);
+        }
     }
 
     /**
@@ -605,9 +638,14 @@ class queueengine {
             $instances = $table->scope_methods();
             $methods = count($instances);
             $courses = count(array_unique(array_map(static fn(stdClass $instance): int => (int) $instance->courseid, $instances)));
-            // A reader holding the capability site-wide sees every course; otherwise only hidden courses are asked.
-            $everywhere = has_capability('moodle/course:viewhiddencourses', context_system::instance());
-            $shown = $everywhere ? $instances : array_filter(
+            /* Asked per method's course, whatever the reader holds in the system context: a prohibit in one
+               course wins over a site-wide grant there, as it does on rows() and methods(). A visible
+               course answers without a capability read; the hidden ones' contexts are preloaded in one read. */
+            self::preload_course_contexts(array_map(
+                static fn(stdClass $instance): int => (int) $instance->courseid,
+                array_filter($instances, static fn(stdClass $instance): bool => !$instance->coursevisible)
+            ));
+            $shown = array_filter(
                 $instances,
                 static fn(stdClass $instance): bool => static::shows_capacity(
                     (int) $instance->courseid,

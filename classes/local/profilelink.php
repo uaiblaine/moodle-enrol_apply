@@ -181,8 +181,8 @@ final class profilelink {
 
         if (
             !$ids
-            || (!has_capability('moodle/user:viewdetails', $coursecontext)
-                && !has_capability('moodle/user:viewalldetails', $coursecontext))
+            || (!groupscope::holds_in_course('moodle/user:viewdetails', $coursecontext)
+                && !groupscope::holds_in_course('moodle/user:viewalldetails', $coursecontext))
         ) {
             return array_keys($allowed);
         }
@@ -191,7 +191,7 @@ final class profilelink {
         $groupmode = groups_get_course_groupmode($course);
         if (
             $groupmode == NOGROUPS || $groupmode == VISIBLEGROUPS
-            || has_capability('moodle/site:accessallgroups', $coursecontext)
+            || groupscope::holds_in_course('moodle/site:accessallgroups', $coursecontext)
         ) {
             return array_merge(array_keys($allowed), $ids);
         }
@@ -201,7 +201,7 @@ final class profilelink {
            holder of moodle/course:viewhiddengroups. */
         [$insql, $params] = $DB->get_in_or_equal($ids, SQL_PARAMS_NAMED, 'gu');
         $visibility = '';
-        if (!has_capability('moodle/course:viewhiddengroups', $coursecontext)) {
+        if (!groupscope::holds_in_course('moodle/course:viewhiddengroups', $coursecontext)) {
             [$vsql, $vparams] = $DB->get_in_or_equal(
                 [GROUPS_VISIBILITY_ALL, GROUPS_VISIBILITY_MEMBERS, GROUPS_VISIBILITY_OWN],
                 SQL_PARAMS_NAMED,

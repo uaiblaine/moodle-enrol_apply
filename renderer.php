@@ -832,8 +832,10 @@ class enrol_apply_renderer extends plugin_renderer_base {
         $facts = [];
 
         $coursecontext = $instance === null ? null : \context_course::instance($instance->courseid);
-        $decides = $coursecontext && has_capability('enrol/apply:manageapplications', $coursecontext);
-        $chooses = $decides && has_capability('enrol/apply:choosedecision', $coursecontext);
+        // Course-level readings: a reader admitted by another level keeps nothing a lapsed course role gives.
+        $decides = $coursecontext
+            && \enrol_apply\local\groupscope::holds_in_course('enrol/apply:manageapplications', $coursecontext);
+        $chooses = $decides && \enrol_apply\local\groupscope::holds_in_course('enrol/apply:choosedecision', $coursecontext);
         if ($chooses) {
             $facts = $this->group_facts($instance, $coursecontext);
 
@@ -866,7 +868,8 @@ class enrol_apply_renderer extends plugin_renderer_base {
                returns a bare get_string() for one without, which covers every role a stock site
                ships, so the list mixes both spellings. format_string() is idempotent on the
                escaped half, because the ampersand rule skips an existing entity. */
-            foreach (get_assignable_roles($coursecontext) as $roleid => $rolename) {
+            $assignable = get_assignable_roles(\enrol_apply\local\groupscope::judging_context($coursecontext));
+            foreach ($assignable as $roleid => $rolename) {
                 $roles[] = [
                     'id' => $roleid,
                     'name' => format_string($rolename, true, ['context' => $coursecontext]),
@@ -1117,8 +1120,8 @@ class enrol_apply_renderer extends plugin_renderer_base {
      * @return bool True when the reader may see the course's group names here.
      */
     protected static function reads_course_groups(\context_course $coursecontext): bool {
-        return has_capability('enrol/apply:manageapplications', $coursecontext)
-            || has_capability('enrol/apply:viewapplications', $coursecontext);
+        return \enrol_apply\local\groupscope::holds_in_course('enrol/apply:manageapplications', $coursecontext)
+            || \enrol_apply\local\groupscope::holds_in_course('enrol/apply:viewapplications', $coursecontext);
     }
 
     /**
@@ -1142,7 +1145,13 @@ class enrol_apply_renderer extends plugin_renderer_base {
      */
     protected function identity_context($applicant, $coursecontext): array {
         $rows = [];
-        $values = \enrol_apply\local\identity::values($coursecontext, (int) $applicant->id);
+        /* Core's helper reads moodle/site:viewuseridentity and the hidden fields' capability in the
+           context it is handed: a reader whose own enrolment in the course lapsed is judged in the
+           system context, so only what they hold there counts (groupscope::judging_context()). */
+        $values = \enrol_apply\local\identity::values(
+            \enrol_apply\local\groupscope::judging_context($coursecontext),
+            (int) $applicant->id
+        );
         foreach ($values as $field => $value) {
             $rows[] = [
                 /* Labelled, because these run together on one line and several are opaque on
@@ -1244,7 +1253,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
     protected function history_context($application, $coursecontext): array {
         global $DB, $USER;
 
-        if (!has_capability('enrol/apply:viewreports', $coursecontext)) {
+        if (!\enrol_apply\local\groupscope::holds_in_course('enrol/apply:viewreports', $coursecontext)) {
             return ['hashistory' => false, 'history' => []];
         }
 
@@ -1269,7 +1278,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
         $deciders = $deciderids
             ? $DB->get_records_list('user', 'id', $deciderids, '', 'id, ' . implode(', ', \core_user\fields::get_name_fields()))
             : [];
-        $viewfullnames = has_capability('moodle/site:viewfullnames', $coursecontext);
+        $viewfullnames = \enrol_apply\local\groupscope::holds_in_course('moodle/site:viewfullnames', $coursecontext);
         $short = get_string('strftimedatetimeshort', 'langconfig');
 
         $rows = [];
@@ -1364,7 +1373,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
 
         /* Core's own gate for reading a user's enrolments in a course (the participants page's status
            column): a mentor, who holds nothing in the course, and a moderator without it see no panel. */
-        if (!has_capability('moodle/course:enrolreview', $coursecontext)) {
+        if (!\enrol_apply\local\groupscope::holds_in_course('moodle/course:enrolreview', $coursecontext)) {
             return ['hasenrolments' => false, 'enrolments' => []];
         }
         /* A reader the course report narrows sees, of this plugin's own methods, only the records the
@@ -1386,8 +1395,8 @@ class enrol_apply_renderer extends plugin_renderer_base {
 
         $instances = enrol_get_instances($courseid, false);
         $namesgroups = self::reads_course_groups($coursecontext);
-        $namesdecider = has_capability('enrol/apply:viewreports', $coursecontext);
-        $viewfullnames = has_capability('moodle/site:viewfullnames', $coursecontext);
+        $namesdecider = \enrol_apply\local\groupscope::holds_in_course('enrol/apply:viewreports', $coursecontext);
+        $viewfullnames = \enrol_apply\local\groupscope::holds_in_course('moodle/site:viewfullnames', $coursecontext);
         $short = get_string('strftimedatetimeshort', 'langconfig');
         $now = time();
 
@@ -1532,7 +1541,9 @@ class enrol_apply_renderer extends plugin_renderer_base {
      * row outside its dates, or on a disabled method). This plugin's own methods add the two
      * states an application can be in, read from the enrolment and its record: on the waiting
      * list (ENROL_APPLY_USER_WAIT, a status core does not know) and awaiting a decision (suspended
-     * while the record is still pending). Literal class pairs, so the badge scan sees each
+     * while the record is still pending), both only while {@see \enrol_apply\local\queue::is_awaiting_decision()}
+     * agrees: a row of this plugin's that is not active and whose end date has passed has left the
+     * queue, and reads as not current. Literal class pairs, so the badge scan sees each
      * background with its text colour.
      *
      * @param stdClass $ue The {user_enrolments} row: status, timestart and timeend.
@@ -1543,6 +1554,10 @@ class enrol_apply_renderer extends plugin_renderer_base {
      */
     protected function enrolment_status(stdClass $ue, stdClass $instance, ?stdClass $record, int $now): array {
         $status = (int) $ue->status;
+        // The queue's own answer first: a lapsed application awaits nothing, whatever its record says.
+        if ($instance->enrol === 'apply' && $status !== ENROL_USER_ACTIVE && !\enrol_apply\local\queue::is_awaiting_decision($ue)) {
+            return [get_string('participationnotcurrent', 'enrol'), 'bg-secondary text-dark'];
+        }
         if ($instance->enrol === 'apply' && $status === ENROL_APPLY_USER_WAIT) {
             return [get_string('outcomewaiting', 'enrol_apply'), 'bg-info text-white'];
         }
@@ -1647,7 +1662,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
     protected function can_open_report($application): bool {
         $course = get_course((int) $application->courseid);
 
-        return can_access_course($course, null, 'enrol/apply:viewreports', true);
+        return \enrol_apply\local\groupscope::enters_with($course, 'enrol/apply:viewreports');
     }
 
     /**
@@ -1697,7 +1712,7 @@ class enrol_apply_renderer extends plugin_renderer_base {
         global $USER;
 
         $coursecontext = \context_course::instance($instance->courseid);
-        if (!has_capability('enrol/apply:manageapplications', $coursecontext)) {
+        if (!\enrol_apply\local\groupscope::holds_in_course('enrol/apply:manageapplications', $coursecontext)) {
             return ['hascapacity' => false];
         }
 

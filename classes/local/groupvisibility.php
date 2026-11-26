@@ -60,7 +60,7 @@ class groupvisibility {
         if (!$context) {
             return false;
         }
-        if (has_capability('moodle/course:viewhiddengroups', $context, $readerid)) {
+        if (groupscope::holds_in_course('moodle/course:viewhiddengroups', $context, $readerid)) {
             return true;
         }
         if ($visibility !== GROUPS_VISIBILITY_MEMBERS && $visibility !== GROUPS_VISIBILITY_OWN) {
@@ -106,7 +106,7 @@ class groupvisibility {
                 $context = \context_course::instance($courseid, IGNORE_MISSING);
                 // Null for a course that no longer exists: hidden, as in visible_to().
                 $seehidden[$courseid] = $context
-                    ? has_capability('moodle/course:viewhiddengroups', $context, $readerid)
+                    ? groupscope::holds_in_course('moodle/course:viewhiddengroups', $context, $readerid)
                     : null;
             }
             if ($seehidden[$courseid] === null) {

@@ -1086,6 +1086,120 @@ final class application_form_test extends \advanced_testcase {
     }
 
     /**
+     * The two ways a valid key is accepted and then let go, so the applicant may apply again.
+     *
+     * @return array The key mode, keyed by case name.
+     */
+    public static function accepted_key_modes(): array {
+        return [
+            'a key that admits, then unenrolself.php' => [groupkey::MODE_ANY],
+            'a key sent for review, then a cancellation' => [groupkey::MODE_REVIEW],
+        ];
+    }
+
+    /**
+     * Present the group's valid key through the modal, then leave the method again.
+     *
+     * On the mode that admits, the applicant leaves as unenrolself.php does it ($plugin->unenrol_user()
+     * on the instance; the student archetype holds enrol/apply:unenrolself, and core's
+     * get_unenrolself_link() asks only for an active row). On the reviewed mode the application waits,
+     * and a decider's cancellation unenrols it. Either way nothing of the method is left, so the
+     * applicant may apply again.
+     *
+     * @param string $mode groupkey::MODE_ANY or groupkey::MODE_REVIEW.
+     * @return void
+     */
+    protected function present_the_key_and_leave(string $mode): void {
+        global $DB;
+
+        $sink = $this->redirectMessages();
+        $result = $this->submit_through_the_modal(['groupkey' => 'Turma-B-2027']);
+        $this->assertTrue($result['submitted'], 'the valid key was accepted');
+        $ueid = (int) $DB->get_field(
+            'user_enrolments',
+            'id',
+            ['enrolid' => $this->instance->id, 'userid' => $this->applicant->id],
+            MUST_EXIST
+        );
+        if ($mode === groupkey::MODE_ANY) {
+            $this->assertSame(ENROL_USER_ACTIVE, (int) $DB->get_field('user_enrolments', 'status', ['id' => $ueid]), 'admitted');
+            $this->plugin->unenrol_user($this->instance, (int) $this->applicant->id);
+        } else {
+            $this->assertSame(
+                submission::KEY_FOR_REVIEW,
+                (int) $DB->get_field('enrol_apply_submission', 'keyoutcome', ['userenrolmentid' => $ueid], MUST_EXIST),
+                'sent for review'
+            );
+            $this->setAdminUser();
+            $this->assertSame(1, $this->plugin->cancel_enrolment([$ueid]));
+            $this->setUser($this->applicant);
+        }
+        $sink->close();
+
+        $this->assertFalse(
+            $DB->record_exists('user_enrolments', ['enrolid' => $this->instance->id, 'userid' => $this->applicant->id]),
+            'the method holds nothing of the applicant any more'
+        );
+    }
+
+    /**
+     * An accepted key gives no wrong keys back: four wrong keys, the valid key accepted, the method
+     * left again, and ONE more wrong key lock the field.
+     *
+     * The cycle a holder of one valid key could repeat for ever while the acceptance reset the count:
+     * four guesses at another group's key, admitted (or sent for review) with their own, unenrolled
+     * (or cancelled), applying again, four more guesses. The count now only rises inside its window
+     * and expires with it ({@see keyattempts}).
+     *
+     * Changes that must make it fail: the wrong-key count cleared after an admission (gate TK1) or
+     * after an application a key sent for review (gate TK2).
+     *
+     * @param string $mode groupkey::MODE_ANY or groupkey::MODE_REVIEW.
+     * @return void
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('accepted_key_modes')]
+    public function test_an_accepted_key_gives_no_wrong_keys_back(string $mode): void {
+        $this->accept_group_keys($mode);
+        for ($i = 1; $i < keyattempts::LIMIT; $i++) {
+            $this->assertFalse($this->submit_through_the_modal(['groupkey' => 'Turma-Z-2027'])['submitted'], "wrong key {$i}");
+        }
+        $this->assertFalse(
+            keyattempts::locked((int) $this->course->id, (int) $this->applicant->id),
+            'the precondition: one try left'
+        );
+
+        $this->present_the_key_and_leave($mode);
+
+        $wrong = $this->submit_through_the_modal(['groupkey' => 'Turma-Z-2027']);
+        $this->assertFalse($wrong['submitted']);
+        $this->assertTrue(keyattempts::locked((int) $this->course->id, (int) $this->applicant->id));
+        $names = $this->element_names($this->make_form());
+        $this->assertNotContains('groupkey', $names);
+        $this->assertContains('groupkeylocked', $names);
+    }
+
+    /**
+     * The control for the test above: an applicant with no wrong key behind them who is accepted,
+     * leaves and comes back still has the field after one wrong key.
+     *
+     * So the lock above comes from the four earlier tries, not from applying a second time.
+     *
+     * @param string $mode groupkey::MODE_ANY or groupkey::MODE_REVIEW.
+     * @return void
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('accepted_key_modes')]
+    public function test_an_accepted_key_leaves_an_unspent_budget_alone(string $mode): void {
+        $this->accept_group_keys($mode);
+
+        $this->present_the_key_and_leave($mode);
+
+        $wrong = $this->submit_through_the_modal(['groupkey' => 'Turma-Z-2027']);
+        $this->assertFalse($wrong['submitted']);
+        $this->assertFalse(keyattempts::locked((int) $this->course->id, (int) $this->applicant->id));
+        $this->assertContains('groupkey', $this->element_names($this->make_form()));
+    }
+
+    /**
      * Ticking the way out sends an ordinary application for review, with no key recorded and no
      * try counted.
      *

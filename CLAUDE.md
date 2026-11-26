@@ -151,6 +151,11 @@ backup/                      group mappings, comments and the durable trail, see
   `status != ENROL_USER_ACTIVE`, never `status = ENROL_USER_SUSPENDED`, or deferred
   applications vanish from the queue.
 
+  **Known and accepted:** a pending application is a suspended enrolment to core, so core's own user
+  search (`core_enrol_search_users`, `core_enrol_get_enrolled_users` without `onlyactive`, the
+  participants page with its status filter) lists pending applicants by name to anybody who may view
+  the course's participants. The plugin has no hook there; the README says so.
+
 - **An applicant is told about their OWN row first, on all three surfaces, by one describer.**
   `\enrol_apply\local\applicantstate` exists because the enrolment page's panel, `applied.php`
   and `application_form::check_access_for_dynamic_submission()` each branched on nothing but *does
@@ -286,8 +291,60 @@ backup/                      group mappings, comments and the durable trail, see
   operators — active teacher, suspended teacher, expired teacher, category manager, unenrolled
   category teacher — the four-argument form agrees with `require_login()` on every one; the
   three-argument form disagrees on the suspended and the expired one, who kept the capability,
-  decided, and were bounced to `/enrol/index.php`. A role assignment survives a suspension, which
-  is what makes that operator both legitimate and broken.
+  decided, and were bounced to `/enrol/index.php`. A role assignment survives a suspension, so that
+  operator kept the capability; **since the sweep of 2026-11-25 they decide and view nothing either**:
+  `can_manage_application()`'s course branch and `can_view_application()`'s viewer branch refuse a
+  reader enrolled in the course without access who does not otherwise view it
+  (`groupscope::lapsed()`: `is_enrolled(..., false)`, not `is_enrolled(..., true)`, not
+  `is_viewing()`), because `manage.php?userenrol=` and core's bulk route call no
+  `require_login($course)`, while the report, the notifications and the other doors already refused
+  them. Somebody enrolled nowhere (a category role) is not lapsed and keeps deciding; the system and
+  mentor levels are untouched. Gates `LP1`-`LP5`, `tests/lapsed_decider_test.php`. `queue::scope()`
+  is unchanged: it still sends that operator to no queue.
+
+  **A page or service of a course asks `groupscope::require_in_course()`, never a bare
+  `require_capability()` behind `require_login($course)` or `validate_context()`**: a course that
+  grants guest access (an enabled guest method with no password) admits a reader whose enrolment
+  lapsed as a temporary guest, and the bare read then passes on the course role the enrolment left
+  behind. `manage.php?id=` raises `required_capability_exception` itself when the resolver refuses
+  (`$listing->allowed`), with no second read. Gates `GA1`-`GA4`. **`can_access_course()` handed a
+  capability has the same hole** (it reads the capability bare, then admits through guest access), so
+  where no page asked `require_login($course)` the question is `groupscope::enters_with()`: the course
+  report's `may_view()` (core's report builder services and `download.php` ask it), the history's link
+  to the report and the queue `queue::scope()` returns to. `tests/every_door_test.php` holds that no
+  other call hands `can_access_course()` a capability. Gates `GA5`, `XA20`, `XA21`, `HR1`.
+
+  **On every path that does not pass `require_login($course)`, a course capability is read through
+  `groupscope::holds_in_course()`**, which is `has_capability()` minus a course-level grant the
+  reader's lapsed enrolment left behind (a system-level holder keeps theirs, `system_exempt()`). The
+  first version applied the lapse to the two branches alone, and a lapsed teacher who also mentored
+  the applicant, admitted by the mentor level, still used the course role downstream: the review page
+  sat in the course, offered the role and group choosers, named the groups, showed the history, the
+  other enrolments, the capacity and the identity fields, and `confirm_enrolment()` honoured their
+  choice. The helper is read by the two branches, `require_review_access()`'s page context,
+  `reviewable_in_course()`, `confirm_enrolment()`'s `choosedecision`, the review renderer
+  (`decision_controls_context()`, `reads_course_groups()`, `history_context()`,
+  `enrolments_context()`, `capacity_context()`, `identity_context()`), the snapshot masking
+  (`visible_keys()`'s identity gate), the notices (`names_group_to()`, which the admission's naming now
+  goes through too), `groupseats::overfilled_named_to()`, the bulk menu and `process()`, and the
+  fields handler's `can_view()`. Behind `require_login($course)` it answers as `has_capability()` for a
+  reader admitted by enrolment, so shared code may call it. Gates `LP6`-`LP25`.
+
+  **Nothing reads a course capability bare any more, and `tests/every_door_test.php` says so**
+  (`test_every_capability_read_of_a_course_goes_through_the_helper`): every `has_capability()`,
+  `has_any_capability()`, `has_all_capabilities()` and `require_capability()` outside the tests is a
+  call of the helper or one of the bare reads its `BARE_READS` declares with a reason (the system or a
+  user context, the helper's own two, and the two reads whose DIRECTION a lapsed holder must not change:
+  `allow_unenrol_user()` narrows holders, `hook_callbacks::refuses_approval()` judges them). The
+  earlier version left the reads "behind a helper-gated read" bare, and that argument fails for the
+  very reader the helper is for: the exemption is per capability, so a reader holding capability A
+  in the system context passes A's gate and then read B through the lapsed course role
+  (`moodle/course:viewhiddengroups` in `groupvisibility`, the hidden-field and all-details halves of
+  `visible_keys()`, the panel's decider). Core's helpers that read the course themselves are fed the
+  plugin's rule too: `groupscope::judging_context()` (the system context for a lapsed reader) for
+  `get_identity_fields()` and `get_assignable_roles()`, and `choosable_groups()` keeps only what
+  `groupvisibility::visible_ids()` shows of `groups_get_all_groups()`. Gates `GV7`, `GV8`, `CG1`,
+  `VK1`, `VK2`, `RD1`, `RJ1`, `RJ2`.
   `test_a_mentor_enrolled_in_the_course_still_walks_their_mentees` and
   `test_a_teacher_whose_own_enrolment_is_suspended_opens_no_queue` pin the two halves.
 
@@ -637,7 +694,9 @@ backup/                      group mappings, comments and the durable trail, see
   two passes agree; NULL is "not known", and only there is the decider's choice read. The report's
   group filter (`reportbuilder/local/filters/group.php`) is `record_where()` for one offered group,
   so the two cannot disagree. Gates `JG1`-`JG22`. The custom-report datasource is
-  deliberately not narrowed (audiences govern it). Gates `SC38`-`SC52`.
+  deliberately not narrowed (audiences govern it). Gates `SC38`-`SC52`. **Known and accepted:** that
+  datasource shows the applicant's comment and the decision note to a custom report's audience with
+  no per-course check; the report's author chooses the audience, as for every core datasource.
 
   **The queue's group column and filter (V2) read the same "newest record" and add to the scope,
   never replace it.** The column joins the newest record's key group (the NOT EXISTS shape of
@@ -857,7 +916,13 @@ backup/                      group mappings, comments and the durable trail, see
   on re-entry in one process. A lock not obtained in time reads as locked (fail closed), and
   `record_failure()` then writes nothing. Tests that drive the form call `release_all()` between
   simulated requests and in `tearDown()`, and `tests/fixtures/fake_lock_factory.php` stands in for
-  another request holding the lock. Gates `KA4`-`KA8`, `XA3`, `XA4`. `submission()` reads a
+  another request holding the lock. Gates `KA4`-`KA8`, `XA3`. **An accepted key gives no tries
+  back** (sweep of 2026-11-25): the count only rises inside its window and expires with it. When an
+  admission or a key-for-review application cleared it, a holder of one valid key could guess four
+  times, be admitted, unenrol through `unenrolself.php`, apply again and guess four more, so the
+  limit never bound; `keyattempts::clear()` is gone (gates `TK1`, `TK2`; `KW11`, `RV10` and `XA4`
+  retired). **Known and accepted:** the throttle is per account, so many accounts get five tries
+  each; a site that fears that keeps keys long. `submission()` reads a
   submission only when the marker equals 1, as formslib does (`XA1`); a posted `withoutkey` gets its
   checkbox for a valid key too (`XA2`).
 
@@ -1225,9 +1290,10 @@ backup/                      group mappings, comments and the durable trail, see
 - **The report reads the LIVE enrolment as well as the record, and the two answer different
   questions.** The durable record holds the last decision this plugin's own state machine took;
   the participants page, course reset, user deletion and the expiry sweep all change an enrolment
-  without touching it. `submission::decide()` is reached from exactly three call sites
-  (`complete_approval()`, `wait_enrolment()`, `cancel_enrolment()`) and nothing else writes a
-  status. So the entity LEFT joins `{user_enrolments}` on `userenrolmentid` and derives an
+  without touching it. `submission::decide()` is reached from exactly four call sites
+  (`complete_approval()`, `wait_enrolment()`, `cancel_enrolment()` and the key admission's
+  `admit()`, which records the applicant as the decider) and nothing else writes a status;
+  `tests/every_door_test.php` enumerates them from the tree, so a fifth fails until it is declared. So the entity LEFT joins `{user_enrolments}` on `userenrolmentid` and derives an
   `outcome` column from the pair.
 
   **The fix for "the report says Pending after an unenrolment" was read-side on purpose.** A
@@ -1406,8 +1472,9 @@ backup/                      group mappings, comments and the durable trail, see
   `manage.php?id=`, behind `require_login($course)`, which refuses a hidden course to a reader without
   `moodle/course:viewhiddencourses`; the wide readers must not hand it out by another route. ONE predicate,
   `queueengine::shows_capacity()` (visible, or the capability in the course's context), is asked by all three:
-  `rows()` (`method.full` false), `wide_summary()` (`methodsfull` counts the methods it admits; a reader
-  holding the capability in the system context skips the per-course question) and `methods()` (neutral
+  `rows()` (`method.full` false), `wide_summary()` (`methodsfull` counts the methods it admits, asked per
+  method's course whatever the reader holds in the system context, so a course-level prohibit wins; the
+  hidden courses' contexts are preloaded in one read, gate `QM11`) and `methods()` (neutral
   capacity fields and `capacityknown` false, no capacity read for the method). The course's name and the
   applications stay listed, as the table lists them. A test needs a CUSTOM role without
   `moodle/course:viewhiddencourses`: stock archetypes that view applications hold it. Gate `QM9`; `QM10` holds
@@ -1505,7 +1572,9 @@ backup/                      group mappings, comments and the durable trail, see
   way. A mentor's sheet over several methods has a section per method without the link to the method's
   queue or the sentence about choosing there, because their rows carry no `queueurl`. A mentor's post
   decides only their mentees' rows: `can_manage_application()` per row, the mentee's user context
-  (`wide_decision_post_test`: a forged id of a non-mentee decides nothing). Tests:
+  (`wide_decision_post_test`: a forged id of a non-mentee decides nothing). The review page a mentor
+  opens from that grid names the course in its breadcrumb without linking it or its category
+  (`queue::add_review_crumbs()`, see "The review page belongs to a COURSE"). Tests:
   `tests/output/mentee_queue_view_test.php`, `tests/behat/mentee_queue_view.feature`.
 
   **The selection belongs to the page on screen.** A box only on a row the rows service marks
@@ -1600,7 +1669,13 @@ backup/                      group mappings, comments and the durable trail, see
   and would otherwise silently replace the applicant's USER context on the mentor path; it applies
   **no access check at all**, which is exactly what makes it safe for a mentor who may decide the
   application without being able to enter the course; and it does not reliably produce a breadcrumb,
-  so the crumbs are built by hand.
+  so the crumbs are built by hand. **When it does, it links the course and its category**
+  ("Courses / category / course"), which refuse a reader who may not open the course: seen in the
+  browser for a mentor. `queue::add_review_crumbs()` therefore drops core's automatic crumbs
+  (`navbar::ignore_active()`, which keeps the home crumb) and names the course as text where the
+  four-argument `can_access_course()` refuses the reader, as the mentee queue names a course without a
+  link (`applications::links_course()`); a reader who may open the course keeps core's crumbs. The
+  plugin's own crumbs (the queue, the applicant) follow either way. Gates `BC1`, `BC2`.
 
 - **One identity rule serves the whole review page**, and the e-mail address is inside it. It used
   to have a row of its own, printed unconditionally, while the snapshot panel beside it masked
@@ -2233,6 +2308,17 @@ backup/                      group mappings, comments and the durable trail, see
   looking exactly like something a human did. The dates are the exception and need no record:
   `activate()` hands them to `update_user_enrol()` itself, so the row core writes already holds the
   one answer both passes see.
+
+## Known limits
+
+- A site-wide decider whose own enrolment in the course has lapsed is offered only the roles
+  assignable in the system context (`groupscope::judging_context()`), so the method's default role
+  applies to what they decide.
+- For the same reader the identity fields are judged by core with `moodle/user:viewhiddendetails`
+  in the system context, while the snapshot masking reads `moodle/course:viewhiddenuserfields`, so
+  the two can differ when `showuseridentity` and `hiddenuserfields` overlap.
+- `profilelink::viewable()` leaves the decision to core's `can_view_profile()`, where
+  `viewable_ids()` reads through the helper; the batch is the stricter of the two.
 
 ## The phpcs trap that keeps costing a CI round
 

@@ -100,7 +100,7 @@ final class groupscope {
             return false;
         }
 
-        return !has_capability('moodle/site:accessallgroups', $context, $userid);
+        return !self::holds_in_course('moodle/site:accessallgroups', $context, $userid);
     }
 
     /**
@@ -169,6 +169,134 @@ final class groupscope {
     }
 
     /**
+     * Whether a reader is enrolled in the course in a way that grants no access, and does not otherwise view it.
+     *
+     * Core's own distinction, as require_login($course) draws it: is_enrolled($context, $user, '', false)
+     * finds any enrolment, suspended, ended or on a disabled method included, is_enrolled(..., true) only one
+     * that is active, in its dates, on an enabled method (enrol_get_enrolment_end()), and is_viewing()
+     * (moodle/course:view) lets a reader in without one. A role assignment survives the suspension or the
+     * end of the enrolment that gave it (core never unassigns on suspend, and under this plugin's default
+     * expiredaction KEEP an ended row stays active with its role), so such a reader still holds the
+     * course's capabilities while every page behind require_login($course) refuses them.
+     *
+     * Narrower than require_login() on purpose: a reader enrolled nowhere in the course (a category role, a
+     * coordinator holding the capability alone) has no enrolment to have lapsed, and keeps what the
+     * capability gives them. Read through {@see holds_in_course()} only, by every course-level read of a
+     * path that does not pass require_login($course); the system level and the mentor level do not come
+     * from the course.
+     *
+     * Nothing is memoised here. For the current user core's $USER->enrol cache answers both is_enrolled()
+     * calls once the first active answer of the request is known, so an active reader costs at most two
+     * statements per course and request, a reader enrolled nowhere one per call, a lapsed one two per call;
+     * is_viewing() is a capability read.
+     *
+     * @param \context_course $context The course.
+     * @param int $userid The reader.
+     * @return bool True when the reader is enrolled without access and does not view the course.
+     */
+    public static function lapsed(\context_course $context, int $userid): bool {
+        return !is_viewing($context, $userid)
+            && is_enrolled($context, $userid, '', false)
+            && !is_enrolled($context, $userid, '', true);
+    }
+
+    /**
+     * Whether a reader holds a capability in a course, counting a course-level grant only while their
+     * own enrolment there is not {@see lapsed()}.
+     *
+     * The one reading of a course capability on the paths that do not pass require_login($course): the
+     * review page (manage.php?userenrol=) and its POST, core's participants-page bulk route
+     * (user/action_redir.php, which calls no require_login()), the notices, and core's callbacks into
+     * the plugin. A reader admitted there by another level (the mentor level, a system grant) would
+     * otherwise use the powers of a course role their suspended or ended enrolment left behind: the
+     * choosers, the group names, the history, the capacity. A page or service of a course asks
+     * {@see require_in_course()} instead of a bare require_capability(): behind require_login($course) a
+     * course that grants guest access still admits the lapsed reader, as a temporary guest.
+     *
+     * A holder of the capability at the system level keeps it whatever their enrolment in the course
+     * says ({@see system_exempt()}: not while the current user has switched role in the course). Outside
+     * a course context the answer is has_capability()'s alone.
+     *
+     * @param string $capability The capability.
+     * @param \context $context The course context (any other context reads has_capability() alone).
+     * @param int|null $userid The reader, null for the current user.
+     * @return bool True when the reader holds the capability there and may use it.
+     */
+    public static function holds_in_course(string $capability, \context $context, ?int $userid = null): bool {
+        global $USER;
+
+        if (!has_capability($capability, $context, $userid)) {
+            return false;
+        }
+        if (!$context instanceof context_course) {
+            return true;
+        }
+        $reader = $userid ?? (int) $USER->id;
+
+        return self::system_exempt((int) $context->instanceid, $reader, $capability) || !self::lapsed($context, $reader);
+    }
+
+    /**
+     * Require a course capability the reader holds and may use, as {@see holds_in_course()} reads it.
+     *
+     * A bare require_capability() is not enough behind require_login($course) or validate_context(): a
+     * course that grants guest access (an enabled guest method with no password) admits a reader whose
+     * enrolment has lapsed as a temporary guest, and the course role the enrolment left behind then
+     * passes has_capability().
+     *
+     * @param string $capability The capability.
+     * @param \context $context The course context.
+     * @return void
+     * @throws \required_capability_exception When the reader does not hold it there or has lapsed.
+     */
+    public static function require_in_course(string $capability, \context $context): void {
+        if (!self::holds_in_course($capability, $context)) {
+            throw new \required_capability_exception($context, $capability, 'nopermissions', '');
+        }
+    }
+
+    /**
+     * Whether the current user may enter a course and use a capability there, where no page has asked
+     * require_login($course) for them: core's report builder routes, a link to a course page, the queue
+     * a decision returns to.
+     *
+     * The four-argument can_access_course() agrees with require_login($course) on a suspended or ended
+     * enrolment and on a hidden course, and it reads the capability with has_capability(): where the
+     * course grants guest access it admits a reader whose enrolment lapsed as a temporary guest, through
+     * the course role the enrolment left behind. {@see holds_in_course()} refuses that reader.
+     *
+     * @param \stdClass $course The course.
+     * @param string $capability The capability.
+     * @return bool True when require_login($course) would admit them and they may use the capability.
+     */
+    public static function enters_with(\stdClass $course, string $capability): bool {
+        return can_access_course($course, null, $capability, true)
+            && self::holds_in_course($capability, context_course::instance((int) $course->id));
+    }
+
+    /**
+     * The context core's own helpers judge a reader in for a course, on a path that does not pass
+     * require_login($course).
+     *
+     * Core's helpers read capabilities in the context they are handed, with has_capability(), so
+     * handed the course they count a course role the reader's lapsed enrolment left behind:
+     * get_identity_fields() (moodle/site:viewuseridentity, moodle/course:viewhiddenuserfields),
+     * get_assignable_roles() (the roles that course role may assign). For a reader {@see lapsed()} in
+     * the course they are handed the system context instead, so only what the reader holds there
+     * counts, as {@see holds_in_course()} counts a system-level grant and nothing else for them;
+     * anybody else is judged in the course, as before.
+     *
+     * @param context_course $context The course.
+     * @param int|null $userid The reader, null for the current user.
+     * @return \context The course context, or the system context for a lapsed reader.
+     */
+    public static function judging_context(context_course $context, ?int $userid = null): \context {
+        global $USER;
+
+        return self::lapsed($context, $userid ?? (int) $USER->id) ? context_system::instance() : $context;
+    }
+
+    /**
      * The capability the current user exercises when they read applications in a context.
      *
      * Deciding when they hold enrol/apply:manageapplications there, looking without deciding
@@ -182,7 +310,7 @@ final class groupscope {
      * @return string {@see DECIDE} or {@see VIEW}.
      */
     public static function reader_capability(\context $context): string {
-        return has_capability(self::DECIDE, $context) ? self::DECIDE : self::VIEW;
+        return self::holds_in_course(self::DECIDE, $context) ? self::DECIDE : self::VIEW;
     }
 
     /**
@@ -582,10 +710,13 @@ final class groupscope {
     /**
      * The groups of this course the current user may choose for an approval (S6).
      *
-     * Every group of the course groups_get_all_groups() lists to $USER, narrowed to their own
-     * for a narrowed decider, and to none on a method only those who see every group decide
-     * (C-D20), whose applications a narrowed decider decides none of. The group choosers (the
-     * queue, the review page, the participants page's bulk form) offer this list and
+     * Every group of the course groups_get_all_groups() lists to $USER, kept to the ones
+     * {@see groupvisibility::visible_ids()} lets them see (core's helper reads
+     * moodle/course:viewhiddengroups with has_capability(), so a course role their lapsed enrolment
+     * left behind would list hidden groups; the plugin's copy of the clause reads it through
+     * {@see holds_in_course()}), narrowed to their own for a narrowed decider, and to none on a
+     * method only those who see every group decide (C-D20), whose applications a narrowed decider
+     * decides none of. The group choosers (the queue, the review page, the participants page's bulk form) offer this list and
      * confirm_enrolment() allowlists the posted ids against it, so a control cannot offer a group
      * the decision would drop, and a forged post naming a foreign group joins nothing.
      *
@@ -598,6 +729,8 @@ final class groupscope {
         global $USER;
 
         $groups = groups_get_all_groups($courseid);
+        $visible = groupvisibility::visible_ids($groups, (int) $USER->id);
+        $groups = array_intersect_key($groups, array_flip($visible));
         $own = self::narrowed_to($courseid, (int) $USER->id);
         if ($own === null) {
             return $groups;

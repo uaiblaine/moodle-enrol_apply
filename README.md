@@ -774,7 +774,9 @@ this plugin's on it at all: who may read one is decided by Moodle's report capab
 the report's audience.
 
 Two consequences worth knowing before relying on it. A report can be shared with an audience
-wider than the person who built it. And a **scheduled** report is rendered once using its
+wider than the person who built it, and the applicant's comment and the decision note, columns of
+this source, reach that whole audience with no check of this plugin's on each course: whoever builds
+the report chooses who reads them. And a **scheduled** report is rendered once using its
 creator's permissions and then mailed to every recipient, so what arrives in an inbox reflects
 what the creator may see, not what the reader may.
 
@@ -978,6 +980,13 @@ report (in the reader's own user context).
   applicant's records no user, no comment, no messages and no frozen answers, keeping the status,
   the dates and the course. Records the user decided only lose their name, and the filter values
   the user stored on the applications report are deleted.
+
+To Moodle itself a pending application is a suspended enrolment in the course. Core's own
+participant lists and user searches (the participants page with its status filter, and the
+`core_enrol_search_users` and `core_enrol_get_enrolled_users` web services) therefore list pending
+applicants by name to anybody who may view the course's participants, as they list any suspended
+participant. The plugin has no hook in those lists; a course whose applicants must stay unknown to
+its participants restricts who may view participants there (`moodle/course:viewparticipants`).
 
 The decision events (see "Audit trail") are rows of the site's log store, declared by the log
 store's own privacy provider, so the plugin declares nothing for them. Core's standard log store

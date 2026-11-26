@@ -175,7 +175,7 @@ class groupseats {
         foreach (static::overfilled($userenrolmentids) as $groupid => $over) {
             $context = \context_course::instance($over->courseid);
             if (
-                has_capability('enrol/apply:manageapplications', $context, $readerid)
+                groupscope::holds_in_course('enrol/apply:manageapplications', $context, $readerid)
                 && groupvisibility::visible_to($over, $readerid)
                 && groupscope::allows_group($over->courseid, $groupid, $readerid)
             ) {

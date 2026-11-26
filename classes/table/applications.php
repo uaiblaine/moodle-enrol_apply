@@ -429,7 +429,7 @@ class applications extends \table_sql implements dynamic_table {
         $this->reportgroups = null;
         if ($this->scope->enrolid && $this->scope->instance !== null) {
             $priorcourse = (int) $this->scope->instance->courseid;
-            if (has_capability(groupscope::REPORT, context_course::instance($priorcourse))) {
+            if (groupscope::holds_in_course(groupscope::REPORT, context_course::instance($priorcourse))) {
                 $this->history = true;
                 $this->reportgroups = groupscope::narrowed_to($priorcourse, (int) $USER->id, groupscope::REPORT);
             }

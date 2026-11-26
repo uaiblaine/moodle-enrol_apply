@@ -327,7 +327,7 @@ class queue_view implements renderable, templatable {
         $reporturl = '';
         if ($this->instance !== null) {
             $context = context_course::instance((int) $this->instance->courseid);
-            if (has_capability(groupscope::REPORT, $context)) {
+            if (groupscope::holds_in_course(groupscope::REPORT, $context)) {
                 $reporturl = report_view::url($enrolid)->out(false);
             }
         }

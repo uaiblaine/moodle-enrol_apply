@@ -1,2 +1,2 @@
 # GV5: the capability is judged for the session's user instead of the reader.
-s#has_capability\('moodle/course:viewhiddengroups', \$context, \$readerid\)#has_capability('moodle/course:viewhiddengroups', \$context)#;
+s#groupscope::holds_in_course\('moodle/course:viewhiddengroups', \$context, \$readerid\)#groupscope::holds_in_course('moodle/course:viewhiddengroups', \$context)#;

@@ -35,7 +35,7 @@ $course = get_course($courseid);
 $context = context_course::instance($course->id, MUST_EXIST);
 
 require_login($course);
-require_capability('enrol/apply:config', $context);
+\enrol_apply\local\groupscope::require_in_course('enrol/apply:config', $context);
 
 $PAGE->set_url('/enrol/apply/edit.php', ['courseid' => $course->id, 'id' => $instanceid]);
 $PAGE->set_pagelayout('admin');
@@ -55,7 +55,7 @@ if ($instanceid) {
         MUST_EXIST
     );
 } else {
-    require_capability('moodle/course:enrolconfig', $context);
+    \enrol_apply\local\groupscope::require_in_course('moodle/course:enrolconfig', $context);
     // No instance yet, a new one has to be added.
     navigation_node::override_active_url(new moodle_url('/enrol/instances.php', ['id' => $course->id]));
     $instance = (object) $plugin->get_instance_defaults();

@@ -207,11 +207,12 @@ final class key_review_test extends \advanced_testcase {
     /**
      * A valid key writes an ordinary application waiting for a decision, recording the key's
      * group and what the key did; nobody is admitted, no group is joined, no admission event is
-     * raised, the managers are asked to decide, and the wrong-key count is cleared.
+     * raised, the managers are asked to decide, and the wrong-key count is left as it was: an
+     * accepted key gives no tries back.
      *
      * Changes that must make it fail: the key admitting on this mode, the outcome or the group
-     * not recorded, the admission notice sent instead of the application one, or the throttle
-     * left as it was.
+     * not recorded, the admission notice sent instead of the application one, or the count
+     * cleared after the application (gate TK2).
      *
      * @return void
      */
@@ -253,7 +254,7 @@ final class key_review_test extends \advanced_testcase {
         $told = $this->sent_to($messages, $this->teacher);
         $this->assertCount(1, $told);
         $this->assertSame(get_string('mailtoteacher_subject', 'enrol_apply'), $told[0]->subject, 'asked to decide');
-        $this->assertFalse(keyattempts::locked((int) $this->course->id, (int) $applicant->id));
+        $this->assertTrue(keyattempts::locked((int) $this->course->id, (int) $applicant->id), 'the wrong keys still count');
     }
 
     /**

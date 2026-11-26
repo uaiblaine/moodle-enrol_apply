@@ -16,9 +16,11 @@ answer the moment anything outside the plugin's queue could change an enrolment.
 
 ## Every route that changes an apply enrolment
 
-`submission::decide()` is reached from exactly three call sites — `complete_approval()`
-(`lib.php:364`), `wait_enrolment()` (`lib.php:952`) and `cancel_enrolment()` (`lib.php:996`).
-Every other route changes the enrolment and leaves the durable record where it was.
+`submission::decide()` is reached from exactly four call sites — `complete_approval()`,
+`wait_enrolment()`, `cancel_enrolment()` and, since the group key, the key admission's `admit()`,
+which records the applicant as the decider. (This analysis first said three: it predates the key
+route. `tests/every_door_test.php` now enumerates the callers from the tree.) Every other route
+changes the enrolment and leaves the durable record where it was.
 
 | Route | `complete_approval()` | `decide()` | record ends at |
 |---|---|---|---|

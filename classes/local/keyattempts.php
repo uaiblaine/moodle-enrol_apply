@@ -24,6 +24,12 @@ namespace enrol_apply\local;
  * key-or-review mode the application can still be sent without a key, while a locked key-only
  * form cannot be sent at all until the window has passed.
  *
+ * Only the window gives the tries back. The count rises with each wrong key and is forgotten when
+ * WINDOW seconds have passed since the first of them; an accepted key does not clear it. When it
+ * did, a holder of one valid key could guess four times at another group's key, be admitted (or
+ * sent for review) with their own, unenrol themselves through unenrolself.php, apply again and
+ * guess four more, so the limit never bound.
+ *
  * The count is read and written under a core lock on the applicant and the course, held from
  * the first read of a request to its end ({@see self::hold()}). Requests of one session are
  * serialised by the session lock, but several sessions of one account are not; without this lock
@@ -96,17 +102,6 @@ class keyattempts {
         }
         $now = \core\di::get(\core\clock::class)->time();
         return self::current($courseid, $userid, $now)->count >= self::LIMIT;
-    }
-
-    /**
-     * Forget the wrong keys, after a key was accepted.
-     *
-     * @param int $courseid Course id.
-     * @param int $userid Applicant user id.
-     * @return void
-     */
-    public static function clear(int $courseid, int $userid): void {
-        self::cache()->delete(self::key($courseid, $userid));
     }
 
     /**

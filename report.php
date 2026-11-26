@@ -44,7 +44,7 @@ $course = get_course($instance->courseid);
 
 require_login($course);
 $context = context_course::instance($course->id, MUST_EXIST);
-require_capability('enrol/apply:viewreports', $context);
+\enrol_apply\local\groupscope::require_in_course('enrol/apply:viewreports', $context);
 
 $url = report_view::url((int) $instance->id, !$react);
 
