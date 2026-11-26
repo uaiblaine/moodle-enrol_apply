@@ -216,7 +216,8 @@ final class review_action_test extends \advanced_testcase {
      *
      * Changes that must make it fail: the set read without the group narrowing, without the
      * self-decision rule or without "awaiting a decision" (gates RB4A, RB4B, RB4C), or its course
-     * levels read with has_capability() alone (gates LP11, LP12).
+     * levels read with has_capability() alone (in a course without separate groups; here the narrowing
+     * applies the lapse again, and the scan of capability reads holds gates LP11 and LP12).
      *
      * @return void
      */

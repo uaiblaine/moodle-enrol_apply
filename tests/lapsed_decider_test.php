@@ -1021,8 +1021,18 @@ final class lapsed_decider_test extends \advanced_testcase {
         $lapsed = $this->site_reader('hiddengroupsdecider', [groupscope::DECIDE], true);
         $this->assertTrue(has_capability('moodle/course:viewhiddengroups', $this->context, $lapsed), 'the premise');
         $this->assertSame([false, false], $named($lapsed));
+        $this->assertArrayNotHasKey(
+            (int) $hidden->id,
+            groupscope::choosable_groups((int) $this->course->id),
+            'nor is it a group their approval may choose'
+        );
         $active = $this->site_reader('hiddengroupsdecider', [groupscope::DECIDE], false);
         $this->assertSame([true, true], $named($active), 'the control: an active enrolment');
+        $this->assertArrayHasKey(
+            (int) $hidden->id,
+            groupscope::choosable_groups((int) $this->course->id),
+            'the control: the active reader may choose it'
+        );
     }
 
     /**
