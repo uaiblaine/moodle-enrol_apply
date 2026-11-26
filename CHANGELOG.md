@@ -4,7 +4,10 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased (2026112503)
+## v3.0 (2026112503) - 2026-11-25
+
+The release is everything since v2.1: this section and the two below it, which keep the version each
+change was made at.
 
 ### Added
 
@@ -356,7 +359,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   shows the applicant's comment and the decision note to a report's audience, which its author
   chooses; the wrong-key throttle is per account.
 
-## Unreleased (2026112109)
+## 2026112109, released in v3.0 (the last version for Moodle 5.1 and 5.2, kept on `frozen/moodle-501-502`)
 
 ### Added
 
@@ -420,7 +423,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   "Notification threshold" carry the plugin's own label and help (`expirynotify`,
   `expirythreshold`) instead of core's, which describe neither of this method's two options.
 
-## Unreleased (2026112108)
+## 2026112108, released in v3.0
 
 ### Added
 
